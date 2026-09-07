@@ -37,6 +37,12 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If a connector is registered for this service, delegate to it.
+	if connector, ok := s.connectors[serviceID]; ok {
+		connector.HandleProxy(w, r, remainingPath)
+		return
+	}
+
 	if svc.Endpoint == "" {
 		logger.Warn("no upstream endpoint configured")
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("service %q has no upstream endpoint", serviceID))
