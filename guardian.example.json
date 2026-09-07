@@ -1,0 +1,37 @@
+{
+  "sources": [
+    {
+      "id": "internal-kb",
+      "type": "api",
+      "url": "https://kb.internal.example.com/api/v1/search",
+      "headers": {
+        "Authorization": "Bearer ${KB_TOKEN}"
+      },
+      "cache_ttl": "10m",
+      "description": "Internal knowledge base"
+    }
+  ],
+  "rules": [
+    {
+      "id": "enrich-patient-data",
+      "match": {
+        "keywords": ["patient", "medical record", "diagnosis"],
+        "models": ["*"],
+        "users": ["*"]
+      },
+      "source_ids": ["internal-kb"],
+      "action": "inject",
+      "description": "Inject relevant patient data context before LLM processes medical queries"
+    },
+    {
+      "id": "block-pii-export",
+      "match": {
+        "keywords": ["social security", "SSN", "date of birth"],
+        "models": ["*"]
+      },
+      "source_ids": [],
+      "action": "block",
+      "description": "Block requests that may attempt to exfiltrate PII"
+    }
+  ]
+}
