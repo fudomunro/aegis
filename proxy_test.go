@@ -303,6 +303,104 @@ func TestHandleServiceProxy_Unauthorized(t *testing.T) {
 	}
 }
 
+func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var caps ServiceCapabilities
+	json.NewDecoder(w.Body).Decode(&caps)
+
+	if len(caps.DataTypes) == 0 {
+		t.Fatal("expected data types in capabilities")
+	}
+
+	// Find "tracks" and verify it has "read" and "search".
+	var tracksCap *DataTypeCapability
+	for i, dt := range caps.DataTypes {
+		if dt.Name == "tracks" {
+			tracksCap = &caps.DataTypes[i]
+			break
+		}
+	}
+	if tracksCap == nil {
+		t.Fatal("expected tracks data type")
+	}
+	if !stringSliceContains(tracksCap.Operations, "read") {
+		t.Fatal("expected tracks to support read")
+	}
+	if !stringSliceContains(tracksCap.Operations, "search") {
+		t.Fatal("expected tracks to support search")
+	}
+}
+
+func TestHandleServiceProxy_Capabilities_AmazonMusic(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "amazon-music", Name: "Amazon Music", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["amazon-music"] = NewAmazonMusicConnector(srv)
+
+	req := httptest.NewRequest("GET", "/v1/services/amazon-music/capabilities", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+
+	var caps ServiceCapabilities
+	json.NewDecoder(w.Body).Decode(&caps)
+
+	if len(caps.DataTypes) == 0 {
+		t.Fatal("expected data types for amazon music")
+	}
+
+	// Amazon Music should have data types but no operations.
+	for _, dt := range caps.DataTypes {
+		if len(dt.Operations) > 0 {
+			t.Fatalf("amazon music %s should have no operations, got %v", dt.Name, dt.Operations)
+		}
+	}
+}
+
+func TestHandleServiceProxy_Capabilities_NoConnector(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "deezer", Name: "Deezer", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/deezer/capabilities", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
 // testServerWithBase creates a Server with a baseURL for testing.
 // Uses an in-memory token store that doesn't persist to disk.
 func testServerWithBase(cfg *Config, baseURL string) *Server {
@@ -320,4 +418,13 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 // testTokenStore creates an in-memory-only token store for tests.
 func testTokenStore() *TokenStore {
 	return &TokenStore{Tokens: make(map[string]*OAuthToken)}
+}
+
+func stringSliceContains(ss []string, v string) bool {
+	for _, s := range ss {
+		if s == v {
+			return true
+		}
+	}
+	return false
 }

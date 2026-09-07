@@ -22,6 +22,20 @@ func NewYouTubeMusicConnector(srv *Server) *YouTubeMusicConnector {
 	return &YouTubeMusicConnector{server: srv}
 }
 
+// Capabilities returns what YouTube Music data types and operations are supported.
+func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
+	return ServiceCapabilities{
+		DataTypes: []DataTypeCapability{
+			{Name: "user", Description: "Current user's YouTube channel", Operations: []string{"read"}},
+			{Name: "tracks", Description: "Music videos and tracks — liked, search results", Operations: []string{"read", "search"}},
+			{Name: "playlists", Description: "User playlists — list, detail with items", Operations: []string{"read"}},
+			{Name: "channels", Description: "YouTube channels — subscribed music channels", Operations: []string{"read"}},
+			{Name: "search", Description: "Search YouTube Music catalog (defaults to music category)", Operations: []string{"search"}},
+			{Name: "library", Description: "User's liked videos and subscriptions", Operations: []string{"read"}},
+		},
+	}
+}
+
 // SystemInstructions returns the system message injected into LLM requests
 // when YouTube Music is referenced.
 func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
