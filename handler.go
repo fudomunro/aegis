@@ -42,10 +42,12 @@ type GuardrailResponse struct {
 }
 
 type Server struct {
-	apiKey  string
-	baseURL string
-	config  *Config
-	cache   *Cache
+	apiKey      string
+	baseURL     string
+	config      *Config
+	cache       *Cache
+	tokens      *TokenStore
+	oauthStates *StateStore
 }
 
 func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {

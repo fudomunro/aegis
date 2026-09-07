@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 )
 
 func main() {
@@ -12,6 +13,8 @@ func main() {
 	baseURL := flag.String("base-url", "", "public base URL of this Guardian instance (reads GUARDIAN_BASE_URL env if empty)")
 	apiKey := flag.String("api-key", "", "API key for authenticating requests (reads APERTURE_GUARDIAN_API_KEY env if empty)")
 	configPath := flag.String("config", "guardian.json", "path to rules configuration file")
+	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
+	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
 	flag.Parse()
@@ -35,6 +38,14 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *tokenPass == "" {
+		*tokenPass = os.Getenv("GUARDIAN_TOKEN_PASS")
+	}
+	if *tokenPass == "" {
+		slog.Error("token-pass is required (flag or GUARDIAN_TOKEN_PASS env)")
+		os.Exit(1)
+	}
+
 	cfg, err := LoadConfig(*configPath)
 	if err != nil {
 		slog.Error("failed to load config", "path", *configPath, "error", err)
@@ -42,21 +53,54 @@ func main() {
 	}
 	slog.Info("config loaded", "path", *configPath, "services", len(cfg.Services))
 
+	tokens, err := NewTokenStore(*tokenPath, *tokenPass)
+	if err != nil {
+		slog.Error("failed to load token store", "path", *tokenPath, "error", err)
+		os.Exit(1)
+	}
+
 	srv := &Server{
-		apiKey:  *apiKey,
-		baseURL: *baseURL,
-		config:  cfg,
-		cache:   NewCache(),
+		apiKey:      *apiKey,
+		baseURL:     *baseURL,
+		config:      cfg,
+		cache:       NewCache(),
+		tokens:      tokens,
+		oauthStates: NewStateStore(),
 	}
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(srv.HandleServiceProxy))
+	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
+	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
+	mux.HandleFunc("/v1/setup", srv.HandleSetup)
 
 	slog.Info("starting server", "addr", *addr, "base_url", *baseURL)
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
+	}
+}
+
+// handleAuthRoutes dispatches /v1/auth/* to the correct handler.
+// Login and callback are public (no auth) to support OAuth redirects.
+// Status and revoke require auth.
+func (s *Server) handleAuthRoutes(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/v1/auth/")
+
+	switch {
+	case strings.HasSuffix(path, "/login"):
+		s.HandleAuthLogin(w, r)
+	case strings.HasSuffix(path, "/callback"):
+		s.HandleAuthCallback(w, r)
+	case path == "status":
+		s.AuthMiddleware(s.HandleAuthStatus)(w, r)
+	default:
+		if r.Method == http.MethodDelete {
+			s.AuthMiddleware(s.HandleAuthRevoke)(w, r)
+		} else {
+			writeJSONError(w, http.StatusNotFound, "unknown auth endpoint")
+		}
 	}
 }
 
