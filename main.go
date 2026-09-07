@@ -69,9 +69,11 @@ func main() {
 		connectors:  make(map[string]ServiceConnector),
 	}
 
-	// Register the Spotify connector.
+	// Register service connectors.
 	spotifyConn := NewSpotifyConnector(srv)
 	srv.connectors["spotify"] = spotifyConn
+	ytMusicConn := NewYouTubeMusicConnector(srv)
+	srv.connectors["youtube-music"] = ytMusicConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
