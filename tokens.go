@@ -158,7 +158,11 @@ type TokenStatus struct {
 }
 
 // persist writes the encrypted token store to disk. Must be called with ts.mu held.
+// Skips disk writes if no path is configured (in-memory store).
 func (ts *TokenStore) persist() error {
+	if ts.path == "" {
+		return nil
+	}
 	tf := tokenFile{
 		Version: tokenVersion,
 		Salt:    base64.StdEncoding.EncodeToString(ts.salt),

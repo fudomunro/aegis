@@ -304,11 +304,20 @@ func TestHandleServiceProxy_Unauthorized(t *testing.T) {
 }
 
 // testServerWithBase creates a Server with a baseURL for testing.
+// Uses an in-memory token store that doesn't persist to disk.
 func testServerWithBase(cfg *Config, baseURL string) *Server {
 	return &Server{
-		apiKey:  "test-key",
-		baseURL: baseURL,
-		config:  cfg,
-		cache:   NewCache(),
+		apiKey:      "test-key",
+		baseURL:     baseURL,
+		config:      cfg,
+		cache:       NewCache(),
+		tokens:      &TokenStore{Tokens: make(map[string]*OAuthToken)},
+		oauthStates: NewStateStore(),
+		connectors:  make(map[string]ServiceConnector),
 	}
+}
+
+// testTokenStore creates an in-memory-only token store for tests.
+func testTokenStore() *TokenStore {
+	return &TokenStore{Tokens: make(map[string]*OAuthToken)}
 }

@@ -66,7 +66,12 @@ func main() {
 		cache:       NewCache(),
 		tokens:      tokens,
 		oauthStates: NewStateStore(),
+		connectors:  make(map[string]ServiceConnector),
 	}
+
+	// Register the Spotify connector.
+	spotifyConn := NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = spotifyConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))

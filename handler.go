@@ -48,6 +48,16 @@ type Server struct {
 	cache       *Cache
 	tokens      *TokenStore
 	oauthStates *StateStore
+	connectors  map[string]ServiceConnector
+}
+
+// ServiceConnector is an optional interface for services that provide
+// intelligent proxying beyond simple request forwarding.
+type ServiceConnector interface {
+	// SystemInstructions returns the system message for agents referencing this service.
+	SystemInstructions(baseURL string) string
+	// HandleProxy handles a proxied request for this service.
+	HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string)
 }
 
 func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -124,14 +134,19 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		if svc.Action != "inject" {
 			continue
 		}
-		proxyURL := fmt.Sprintf("%s/v1/services/%s", strings.TrimRight(s.baseURL, "/"), svc.ID)
-		instruction := fmt.Sprintf(
-			"When working with %s, you MUST use the Guardian proxy endpoint at %s "+
-				"instead of calling %s directly. All requests through this proxy are "+
-				"authenticated, cached, and audited.",
-			svc.Name, proxyURL, svc.Name,
-		)
-		instructions = append(instructions, instruction)
+		// Use connector-specific instructions if available.
+		if connector, ok := s.connectors[svc.ID]; ok {
+			instructions = append(instructions, connector.SystemInstructions(s.baseURL))
+		} else {
+			proxyURL := fmt.Sprintf("%s/v1/services/%s", strings.TrimRight(s.baseURL, "/"), svc.ID)
+			instruction := fmt.Sprintf(
+				"When working with %s, you MUST use the Guardian proxy endpoint at %s "+
+					"instead of calling %s directly. All requests through this proxy are "+
+					"authenticated, cached, and audited.",
+				svc.Name, proxyURL, svc.Name,
+			)
+			instructions = append(instructions, instruction)
+		}
 	}
 
 	if len(instructions) == 0 {
