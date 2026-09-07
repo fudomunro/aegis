@@ -3,22 +3,14 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
-func testServer(cfg *Config) *Server {
-	return &Server{
-		apiKey: "test-key",
-		config: cfg,
-		cache:  NewCache(),
-	}
-}
-
 func TestAuthMiddleware_ValidBearer(t *testing.T) {
-	srv := testServer(&Config{})
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	called := false
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -41,7 +33,7 @@ func TestAuthMiddleware_ValidBearer(t *testing.T) {
 }
 
 func TestAuthMiddleware_ValidAPIKey(t *testing.T) {
-	srv := testServer(&Config{})
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	called := false
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -60,7 +52,7 @@ func TestAuthMiddleware_ValidAPIKey(t *testing.T) {
 }
 
 func TestAuthMiddleware_InvalidAuth(t *testing.T) {
-	srv := testServer(&Config{})
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("inner handler should not be called")
 	}
@@ -83,7 +75,7 @@ func TestHandlePreRequest_NoServiceMatch(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-1"},
@@ -111,7 +103,7 @@ func TestHandlePreRequest_BlockService(t *testing.T) {
 			{ID: "tidal", Name: "Tidal", Action: "block", Description: "not permitted"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-2"},
@@ -141,17 +133,12 @@ func TestHandlePreRequest_BlockService(t *testing.T) {
 }
 
 func TestHandlePreRequest_InjectService(t *testing.T) {
-	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "User's Spotify library: Jazz Vibes, Morning Coffee, 847 tracks")
-	}))
-	defer mockAPI.Close()
-
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mockAPI.URL},
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	originalReq := map[string]any{
 		"model": "gpt-4",
@@ -181,7 +168,7 @@ func TestHandlePreRequest_InjectService(t *testing.T) {
 		t.Fatalf("action = %q, want %q", resp.Action, ActionModify)
 	}
 
-	// Verify the modified body has the injected system message.
+	// Verify the modified body has proxy instructions.
 	var modified map[string]any
 	json.Unmarshal(resp.Body, &modified)
 
@@ -195,23 +182,21 @@ func TestHandlePreRequest_InjectService(t *testing.T) {
 		t.Fatalf("first message role = %q, want %q", sysMsg["role"], "system")
 	}
 	content := sysMsg["content"].(string)
-	if content == "" {
-		t.Fatal("injected content is empty")
+	if !strings.Contains(content, "https://guardian.example.com/v1/services/spotify") {
+		t.Fatalf("system message missing proxy URL: %q", content)
+	}
+	if !strings.Contains(content, "Spotify") {
+		t.Fatalf("system message missing service name: %q", content)
 	}
 }
 
 func TestHandlePreRequest_AliasMatch(t *testing.T) {
-	mockAPI := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		io.WriteString(w, "YouTube Music data: liked songs, playlists")
-	}))
-	defer mockAPI.Close()
-
 	cfg := &Config{
 		Services: []Service{
-			{ID: "ytm", Name: "YouTube Music", Aliases: []string{"yt music", "ytmusic"}, Action: "inject", Endpoint: mockAPI.URL},
+			{ID: "ytm", Name: "YouTube Music", Aliases: []string{"yt music", "ytmusic"}, Action: "inject"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-4"},
@@ -232,19 +217,28 @@ func TestHandlePreRequest_AliasMatch(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %q, want %q", resp.Action, ActionModify)
 	}
+
+	var modified map[string]any
+	json.Unmarshal(resp.Body, &modified)
+	sysMsg := modified["messages"].([]any)[0].(map[string]any)
+	content := sysMsg["content"].(string)
+	if !strings.Contains(content, "/v1/services/ytm") {
+		t.Fatalf("system message missing ytm proxy URL: %q", content)
+	}
 }
 
-func TestHandlePreRequest_FetchError_FailOpen(t *testing.T) {
+func TestHandlePreRequest_InjectNoEndpoint(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: "http://127.0.0.1:1"},
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-5"},
 		UserMessage: "play Spotify",
+		RequestBody: []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"play Spotify"}]}`),
 	}
 	body, _ := json.Marshal(payload)
 
@@ -257,13 +251,15 @@ func TestHandlePreRequest_FetchError_FailOpen(t *testing.T) {
 	var resp GuardrailResponse
 	json.NewDecoder(w.Body).Decode(&resp)
 
-	if resp.Action != ActionAllow {
-		t.Fatalf("action = %q, want %q (fail open)", resp.Action, ActionAllow)
+	// Even without an endpoint, the handler injects proxy instructions
+	// (the proxy endpoint itself will return 502 if no upstream is configured).
+	if resp.Action != ActionModify {
+		t.Fatalf("action = %q, want %q", resp.Action, ActionModify)
 	}
 }
 
 func TestHandlePreRequest_InvalidPayload(t *testing.T) {
-	srv := testServer(&Config{})
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 
 	req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader([]byte("{bad")))
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -279,13 +275,13 @@ func TestHandlePreRequest_InvalidPayload(t *testing.T) {
 	}
 }
 
-func TestHandlePreRequest_NoEndpoint(t *testing.T) {
+func TestHandlePreRequest_BlockTakesPriorityOverInject(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject"},
+			{ID: "spotify", Name: "Spotify", Action: "block"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-6"},
@@ -299,26 +295,24 @@ func TestHandlePreRequest_NoEndpoint(t *testing.T) {
 
 	srv.HandlePreRequest(w, req)
 
-	var resp GuardrailResponse
-	json.NewDecoder(w.Body).Decode(&resp)
-
-	// No endpoint configured, no data to inject — should fail open.
-	if resp.Action != ActionAllow {
-		t.Fatalf("action = %q, want %q", resp.Action, ActionAllow)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
 	}
 }
 
-func TestHandlePreRequest_BlockTakesPriorityOverInject(t *testing.T) {
+func TestHandlePreRequest_MultipleServices(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "block"},
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+			{ID: "ytm", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServer(cfg)
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-7"},
-		UserMessage: "play Spotify",
+		UserMessage: "compare my Spotify and YouTube Music libraries",
+		RequestBody: []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"compare"}]}`),
 	}
 	body, _ := json.Marshal(payload)
 
@@ -328,8 +322,23 @@ func TestHandlePreRequest_BlockTakesPriorityOverInject(t *testing.T) {
 
 	srv.HandlePreRequest(w, req)
 
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want 403", w.Code)
+	var resp GuardrailResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+
+	if resp.Action != ActionModify {
+		t.Fatalf("action = %q, want %q", resp.Action, ActionModify)
+	}
+
+	var modified map[string]any
+	json.Unmarshal(resp.Body, &modified)
+	sysMsg := modified["messages"].([]any)[0].(map[string]any)
+	content := sysMsg["content"].(string)
+
+	if !strings.Contains(content, "/v1/services/spotify") {
+		t.Fatalf("missing spotify proxy URL: %q", content)
+	}
+	if !strings.Contains(content, "/v1/services/ytm") {
+		t.Fatalf("missing ytm proxy URL: %q", content)
 	}
 }
 
