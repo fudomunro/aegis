@@ -74,6 +74,8 @@ func main() {
 	srv.connectors["spotify"] = spotifyConn
 	ytMusicConn := NewYouTubeMusicConnector(srv)
 	srv.connectors["youtube-music"] = ytMusicConn
+	amzMusicConn := NewAmazonMusicConnector(srv)
+	srv.connectors["amazon-music"] = amzMusicConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
