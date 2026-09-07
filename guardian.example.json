@@ -1,37 +1,40 @@
 {
-  "sources": [
+  "services": [
     {
-      "id": "internal-kb",
-      "type": "api",
-      "url": "https://kb.internal.example.com/api/v1/search",
+      "id": "spotify",
+      "name": "Spotify",
+      "aliases": ["spotify music"],
+      "action": "inject",
+      "endpoint": "https://api.internal.example.com/spotify/context",
       "headers": {
-        "Authorization": "Bearer ${KB_TOKEN}"
+        "Authorization": "Bearer ${SPOTIFY_CONTEXT_TOKEN}"
       },
       "cache_ttl": "10m",
-      "description": "Internal knowledge base"
-    }
-  ],
-  "rules": [
-    {
-      "id": "enrich-patient-data",
-      "match": {
-        "keywords": ["patient", "medical record", "diagnosis"],
-        "models": ["*"],
-        "users": ["*"]
-      },
-      "source_ids": ["internal-kb"],
-      "action": "inject",
-      "description": "Inject relevant patient data context before LLM processes medical queries"
+      "description": "Injects user library and playlist context when agents work with Spotify"
     },
     {
-      "id": "block-pii-export",
-      "match": {
-        "keywords": ["social security", "SSN", "date of birth"],
-        "models": ["*"]
-      },
-      "source_ids": [],
+      "id": "youtube-music",
+      "name": "YouTube Music",
+      "aliases": ["yt music", "ytmusic"],
+      "action": "inject",
+      "endpoint": "https://api.internal.example.com/youtube-music/context",
+      "cache_ttl": "15m",
+      "description": "Injects YouTube Music library context"
+    },
+    {
+      "id": "amazon-music",
+      "name": "Amazon Music",
+      "aliases": ["amazon music unlimited"],
+      "action": "inject",
+      "endpoint": "https://api.internal.example.com/amazon-music/context",
+      "cache_ttl": "15m",
+      "description": "Injects Amazon Music library context"
+    },
+    {
+      "id": "tidal",
+      "name": "Tidal",
       "action": "block",
-      "description": "Block requests that may attempt to exfiltrate PII"
+      "description": "Tidal access is not permitted in this environment"
     }
   ]
 }

@@ -12,42 +12,34 @@ func TestLoadConfig(t *testing.T) {
 	cfgPath := filepath.Join(dir, "test.json")
 
 	cfg := `{
-		"sources": [
+		"services": [
 			{
-				"id": "src1",
-				"type": "api",
-				"url": "https://example.com/data",
+				"id": "spotify",
+				"name": "Spotify",
+				"action": "inject",
+				"endpoint": "https://api.example.com/spotify",
 				"cache_ttl": "5m"
-			}
-		],
-		"rules": [
-			{
-				"id": "rule1",
-				"match": { "keywords": ["patient"], "models": ["*"] },
-				"source_ids": ["src1"],
-				"action": "inject"
 			}
 		]
 	}`
-	if err := os.WriteFile(cfgPath, []byte(cfg), 0644); err != nil {
-		t.Fatal(err)
-	}
+	os.WriteFile(cfgPath, []byte(cfg), 0644)
 
 	loaded, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if len(loaded.Sources) != 1 {
-		t.Fatalf("got %d sources, want 1", len(loaded.Sources))
+	if len(loaded.Services) != 1 {
+		t.Fatalf("got %d services, want 1", len(loaded.Services))
 	}
-	if loaded.Sources[0].ID != "src1" {
-		t.Fatalf("source ID = %q, want %q", loaded.Sources[0].ID, "src1")
+	svc := loaded.Services[0]
+	if svc.ID != "spotify" {
+		t.Fatalf("ID = %q, want %q", svc.ID, "spotify")
 	}
-	if loaded.Sources[0].CacheTTL.Duration != 5*time.Minute {
-		t.Fatalf("cache_ttl = %v, want 5m", loaded.Sources[0].CacheTTL.Duration)
+	if svc.Name != "Spotify" {
+		t.Fatalf("Name = %q, want %q", svc.Name, "Spotify")
 	}
-	if len(loaded.Rules) != 1 {
-		t.Fatalf("got %d rules, want 1", len(loaded.Rules))
+	if svc.CacheTTL.Duration != 5*time.Minute {
+		t.Fatalf("cache_ttl = %v, want 5m", svc.CacheTTL.Duration)
 	}
 }
 
@@ -69,179 +61,106 @@ func TestLoadConfig_MissingFile(t *testing.T) {
 	}
 }
 
-func TestFindMatchingRules_KeywordMatch(t *testing.T) {
+func TestFindMatchingServices_ExactName(t *testing.T) {
 	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Keywords: []string{"patient"}}, Action: "inject"},
-			{ID: "r2", Match: Match{Keywords: []string{"invoice"}}, Action: "block"},
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
 
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "Tell me about the patient record")
-	if len(matched) != 1 || matched[0].ID != "r1" {
-		t.Fatalf("expected r1, got %v", matched)
+	matched := cfg.FindMatchingServices("Play some jazz on Spotify")
+	if len(matched) != 1 || matched[0].ID != "spotify" {
+		t.Fatalf("expected spotify, got %v", matched)
 	}
 }
 
-func TestFindMatchingRules_NoMatch(t *testing.T) {
+func TestFindMatchingServices_CaseInsensitive(t *testing.T) {
 	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Keywords: []string{"patient"}}, Action: "inject"},
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
 
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "Hello world")
+	matched := cfg.FindMatchingServices("play some SPOTIFY music")
+	if len(matched) != 1 {
+		t.Fatalf("expected case-insensitive match, got %d", len(matched))
+	}
+}
+
+func TestFindMatchingServices_Alias(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "ytm", Name: "YouTube Music", Aliases: []string{"yt music", "ytmusic"}, Action: "inject"},
+		},
+	}
+
+	matched := cfg.FindMatchingServices("queue up yt music playlist")
+	if len(matched) != 1 || matched[0].ID != "ytm" {
+		t.Fatalf("expected ytm via alias, got %v", matched)
+	}
+}
+
+func TestFindMatchingServices_Substring(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+
+	// "Spotify" appears as a substring within "Spotify's"
+	matched := cfg.FindMatchingServices("check Spotify's top charts")
+	if len(matched) != 1 {
+		t.Fatalf("expected substring match, got %d", len(matched))
+	}
+}
+
+func TestFindMatchingServices_NoMatch(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+			{ID: "ytm", Name: "YouTube Music", Action: "inject"},
+		},
+	}
+
+	matched := cfg.FindMatchingServices("play some local files")
 	if len(matched) != 0 {
 		t.Fatalf("expected no matches, got %v", matched)
 	}
 }
 
-func TestFindMatchingRules_ModelFilter(t *testing.T) {
+func TestFindMatchingServices_MultipleMatches(t *testing.T) {
 	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Models: []string{"gpt-4"}}, Action: "inject"},
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+			{ID: "ytm", Name: "YouTube Music", Action: "inject"},
 		},
 	}
 
-	// Matching model
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "hello")
-	if len(matched) != 1 {
-		t.Fatalf("expected 1 match for gpt-4, got %d", len(matched))
-	}
-
-	// Non-matching model
-	matched = cfg.FindMatchingRules("claude-3", "alice", "hello")
-	if len(matched) != 0 {
-		t.Fatalf("expected 0 matches for claude-3, got %d", len(matched))
+	matched := cfg.FindMatchingServices("compare my Spotify and YouTube Music playlists")
+	if len(matched) != 2 {
+		t.Fatalf("expected 2 matches, got %d", len(matched))
 	}
 }
 
-func TestFindMatchingRules_WildcardModel(t *testing.T) {
+func TestGetService(t *testing.T) {
 	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Models: []string{"*"}}, Action: "inject"},
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify"},
+			{ID: "ytm", Name: "YouTube Music"},
 		},
 	}
 
-	matched := cfg.FindMatchingRules("any-model", "alice", "hello")
-	if len(matched) != 1 {
-		t.Fatalf("expected wildcard to match, got %d", len(matched))
+	svc := cfg.GetService("spotify")
+	if svc == nil {
+		t.Fatal("expected to find spotify")
 	}
-}
-
-func TestFindMatchingRules_UserFilter(t *testing.T) {
-	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Users: []string{"alice", "bob"}}, Action: "block"},
-		},
+	if svc.Name != "Spotify" {
+		t.Fatalf("Name = %q, want %q", svc.Name, "Spotify")
 	}
 
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "hello")
-	if len(matched) != 1 {
-		t.Fatalf("expected alice to match, got %d", len(matched))
-	}
-
-	matched = cfg.FindMatchingRules("gpt-4", "mallory", "hello")
-	if len(matched) != 0 {
-		t.Fatalf("expected mallory not to match, got %d", len(matched))
-	}
-}
-
-func TestFindMatchingRules_CaseInsensitiveKeywords(t *testing.T) {
-	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Keywords: []string{"Patient"}}, Action: "inject"},
-		},
-	}
-
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "the PATIENT record")
-	if len(matched) != 1 {
-		t.Fatalf("expected case-insensitive keyword match, got %d", len(matched))
-	}
-}
-
-func TestFindMatchingRules_SubstringKeyword(t *testing.T) {
-	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{Keywords: []string{"medical"}}, Action: "inject"},
-		},
-	}
-
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "show me the medical_record table")
-	if len(matched) != 1 {
-		t.Fatalf("expected substring keyword match, got %d", len(matched))
-	}
-}
-
-func TestFindMatchingRules_AllFiltersCombined(t *testing.T) {
-	cfg := &Config{
-		Rules: []Rule{
-			{
-				ID:     "r1",
-				Match:  Match{Keywords: []string{"patient"}, Models: []string{"gpt-4"}, Users: []string{"alice"}},
-				Action: "inject",
-			},
-		},
-	}
-
-	// All match
-	matched := cfg.FindMatchingRules("gpt-4", "alice", "patient info")
-	if len(matched) != 1 {
-		t.Fatalf("expected 1 match, got %d", len(matched))
-	}
-
-	// Wrong user
-	matched = cfg.FindMatchingRules("gpt-4", "bob", "patient info")
-	if len(matched) != 0 {
-		t.Fatalf("expected 0 matches for wrong user, got %d", len(matched))
-	}
-
-	// Wrong model
-	matched = cfg.FindMatchingRules("claude-3", "alice", "patient info")
-	if len(matched) != 0 {
-		t.Fatalf("expected 0 matches for wrong model, got %d", len(matched))
-	}
-
-	// Wrong keyword
-	matched = cfg.FindMatchingRules("gpt-4", "alice", "hello")
-	if len(matched) != 0 {
-		t.Fatalf("expected 0 matches for wrong keyword, got %d", len(matched))
-	}
-}
-
-func TestFindMatchingRules_NilMatchFields(t *testing.T) {
-	// When match fields are nil, they should not filter (match everything).
-	cfg := &Config{
-		Rules: []Rule{
-			{ID: "r1", Match: Match{}, Action: "inject"},
-		},
-	}
-
-	matched := cfg.FindMatchingRules("any-model", "any-user", "any message")
-	if len(matched) != 1 {
-		t.Fatalf("expected nil fields to match all, got %d", len(matched))
-	}
-}
-
-func TestGetSource(t *testing.T) {
-	cfg := &Config{
-		Sources: []Source{
-			{ID: "src1", Type: "api", URL: "https://example.com"},
-			{ID: "src2", Type: "api", URL: "https://other.com"},
-		},
-	}
-
-	src := cfg.GetSource("src1")
-	if src == nil {
-		t.Fatal("expected to find src1")
-	}
-	if src.URL != "https://example.com" {
-		t.Fatalf("URL = %q, want %q", src.URL, "https://example.com")
-	}
-
-	src = cfg.GetSource("missing")
-	if src != nil {
-		t.Fatal("expected nil for missing source")
+	svc = cfg.GetService("missing")
+	if svc != nil {
+		t.Fatal("expected nil for missing service")
 	}
 }
 
@@ -249,25 +168,25 @@ func TestConfig_Reload(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "reload.json")
 
-	initial := `{"sources":[],"rules":[{"id":"r1","match":{"keywords":["old"]},"action":"inject"}]}`
+	initial := `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`
 	os.WriteFile(cfgPath, []byte(initial), 0644)
 
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Rules) != 1 || cfg.Rules[0].ID != "r1" {
+	if len(cfg.Services) != 1 || cfg.Services[0].ID != "spotify" {
 		t.Fatal("initial config wrong")
 	}
 
-	updated := `{"sources":[],"rules":[{"id":"r2","match":{"keywords":["new"]},"action":"block"}]}`
+	updated := `{"services":[{"id":"ytm","name":"YouTube Music","action":"block"}]}`
 	os.WriteFile(cfgPath, []byte(updated), 0644)
 
 	if err := cfg.Reload(); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
-	if len(cfg.Rules) != 1 || cfg.Rules[0].ID != "r2" {
-		t.Fatalf("after reload: rules = %v", cfg.Rules)
+	if len(cfg.Services) != 1 || cfg.Services[0].ID != "ytm" {
+		t.Fatalf("after reload: services = %v", cfg.Services)
 	}
 }
 

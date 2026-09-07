@@ -10,33 +10,22 @@ import (
 )
 
 type Config struct {
-	mu      sync.RWMutex
-	Sources []Source `json:"sources"`
-	Rules   []Rule   `json:"rules"`
-	path    string
+	mu       sync.RWMutex
+	Services []Service `json:"services"`
+	path     string
 }
 
-type Source struct {
-	ID          string            `json:"id"`
-	Type        string            `json:"type"` // "api", "file", "database"
-	URL         string            `json:"url,omitempty"`
+// Service represents a named external service (e.g. Spotify, YouTube Music)
+// that Guardian can intercept and enrich requests for.
+type Service struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Aliases     []string `json:"aliases,omitempty"`
+	Action      string   `json:"action"` // "inject" or "block"
+	Endpoint    string   `json:"endpoint,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	CacheTTL    Duration          `json:"cache_ttl"`
 	Description string            `json:"description,omitempty"`
-}
-
-type Rule struct {
-	ID          string   `json:"id"`
-	Match       Match    `json:"match"`
-	Sources     []string `json:"source_ids"`
-	Action      string   `json:"action"` // "inject", "block"
-	Description string   `json:"description,omitempty"`
-}
-
-type Match struct {
-	Keywords []string `json:"keywords,omitempty"`
-	Models   []string `json:"models,omitempty"`
-	Users    []string `json:"users,omitempty"`
 }
 
 // Duration wraps time.Duration for JSON marshalling.
@@ -84,58 +73,47 @@ func (c *Config) Reload() error {
 	if err := json.Unmarshal(data, &fresh); err != nil {
 		return err
 	}
-	c.Sources = fresh.Sources
-	c.Rules = fresh.Rules
-	slog.Info("config reloaded", "path", c.path, "sources", len(fresh.Sources), "rules", len(fresh.Rules))
+	c.Services = fresh.Services
+	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services))
 	return nil
 }
 
-func (c *Config) FindMatchingRules(model, user, userMessage string) []Rule {
+// FindMatchingServices returns all services whose name or aliases appear
+// as substrings in the user message (case-insensitive).
+func (c *Config) FindMatchingServices(userMessage string) []Service {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
-	var matched []Rule
-	for _, r := range c.Rules {
-		if r.Match.Models != nil && !contains(r.Match.Models, model) && !contains(r.Match.Models, "*") {
-			continue
+	lower := strings.ToLower(userMessage)
+	var matched []Service
+	for _, svc := range c.Services {
+		if matchesService(svc, lower) {
+			matched = append(matched, svc)
 		}
-		if r.Match.Users != nil && !contains(r.Match.Users, user) && !contains(r.Match.Users, "*") {
-			continue
-		}
-		if r.Match.Keywords != nil && !anyKeywordIn(r.Match.Keywords, userMessage) {
-			continue
-		}
-		matched = append(matched, r)
 	}
 	return matched
 }
 
-func (c *Config) GetSource(id string) *Source {
+func matchesService(svc Service, lowerMessage string) bool {
+	if strings.Contains(lowerMessage, strings.ToLower(svc.Name)) {
+		return true
+	}
+	for _, alias := range svc.Aliases {
+		if strings.Contains(lowerMessage, strings.ToLower(alias)) {
+			return true
+		}
+	}
+	return false
+}
+
+// GetService returns the service with the given ID, or nil.
+func (c *Config) GetService(id string) *Service {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	for i := range c.Sources {
-		if c.Sources[i].ID == id {
-			return &c.Sources[i]
+	for i := range c.Services {
+		if c.Services[i].ID == id {
+			return &c.Services[i]
 		}
 	}
 	return nil
-}
-
-func contains(ss []string, v string) bool {
-	for _, s := range ss {
-		if s == v {
-			return true
-		}
-	}
-	return false
-}
-
-func anyKeywordIn(keywords []string, text string) bool {
-	lower := strings.ToLower(text)
-	for _, kw := range keywords {
-		if strings.Contains(lower, strings.ToLower(kw)) {
-			return true
-		}
-	}
-	return false
 }
