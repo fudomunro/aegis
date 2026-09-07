@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Aperture Guardian — Code Walkthrough</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --go-cyan: #00ADD8;
+    --py-yellow: #FFD43B;
+    --code-bg: #0d1117;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+  }
+  .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+  /* Typography */
+  h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; }
+  h2 { font-size: 1.8rem; font-weight: 600; margin: 3rem 0 1rem; color: var(--accent); }
+  h3 { font-size: 1.3rem; font-weight: 600; margin: 2rem 0 0.75rem; color: var(--text); }
+  p { margin-bottom: 1rem; color: var(--text-dim); }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Hero */
+  .hero {
+    text-align: center;
+    padding: 4rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .hero p { font-size: 1.2rem; max-width: 700px; margin: 0.5rem auto; }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    margin: 0 0.2rem;
+  }
+  .badge-go { background: var(--go-cyan); color: #000; }
+  .badge-py { background: var(--py-yellow); color: #000; }
+
+  /* Diagram containers */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 2rem;
+    margin: 1.5rem 0;
+    overflow-x: auto;
+  }
+  .diagram svg { display: block; margin: 0 auto; }
+  .diagram-label {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--text-dim);
+    margin-top: 1rem;
+  }
+
+  /* Code comparison */
+  .code-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  @media (max-width: 800px) {
+    .code-compare { grid-template-columns: 1fr; }
+  }
+  .code-panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  .code-header {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 1px solid var(--border);
+  }
+  .code-header-go { background: rgba(0, 173, 216, 0.1); color: var(--go-cyan); }
+  .code-header-py { background: rgba(255, 212, 59, 0.1); color: var(--py-yellow); }
+  pre {
+    padding: 1rem;
+    overflow-x: auto;
+    font-size: 0.82rem;
+    line-height: 1.5;
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+  }
+  code { font-family: inherit; }
+
+  /* Syntax highlighting */
+  .kw { color: var(--purple); }
+  .fn { color: var(--accent); }
+  .str { color: var(--green); }
+  .cm { color: var(--text-dim); font-style: italic; }
+  .tp { color: var(--orange); }
+  .num { color: var(--orange); }
+
+  /* Single code block */
+  .code-single {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: 1rem 0;
+  }
+  .code-single pre { margin: 0; }
+
+  /* File label */
+  .file-label {
+    display: inline-block;
+    background: var(--border);
+    color: var(--text);
+    padding: 0.15rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-family: monospace;
+    margin-bottom: 0.5rem;
+  }
+
+  /* Explanation blocks */
+  .explain {
+    background: rgba(88, 166, 255, 0.05);
+    border-left: 3px solid var(--accent);
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+    border-radius: 0 6px 6px 0;
+  }
+  .explain p { color: var(--text); margin: 0; }
+
+  /* Table of contents */
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin: 1.5rem 0;
+  }
+  .toc h3 { margin-top: 0; }
+  .toc ol { padding-left: 1.5rem; }
+  .toc li { margin: 0.4rem 0; color: var(--text-dim); }
+  .toc a { color: var(--accent); }
+
+  /* Separator */
+  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
+
+  /* Flow step numbers */
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    background: var(--accent);
+    color: #000;
+    border-radius: 50%;
+    font-weight: 700;
+    font-size: 0.85rem;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+  }
+  .step { display: flex; align-items: flex-start; margin: 1rem 0; }
+  .step p { margin: 0; }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ============================================================ -->
+<div class="hero">
+  <h1>Aperture Guardian</h1>
+  <p>A service proxy that intercepts LLM requests referencing named services (Spotify, YouTube Music, etc.), redirects agents to local proxy endpoints, and enforces access rules with caching.</p>
+  <p>
+    <span class="badge badge-go">Go</span>
+    <span class="badge badge-py">Python equivalent</span>
+  </p>
+</div>
+
+<div class="toc">
+  <h3>Contents</h3>
+  <ol>
+    <li><a href="#architecture">Architecture Overview</a></li>
+    <li><a href="#request-flow">Request Flow</a></li>
+    <li><a href="#entry-point">Entry Point — <code>main.go</code></a></li>
+    <li><a href="#config">Configuration — <code>config.go</code></a></li>
+    <li><a href="#handler">Guardrail Handler — <code>handler.go</code></a></li>
+    <li><a href="#proxy">Service Proxy — <code>proxy.go</code></a></li>
+    <li><a href="#cache">Cache — <code>cache.go</code></a></li>
+    <li><a href="#go-concepts">Key Go Concepts</a></li>
+  </ol>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="architecture">1. Architecture Overview</h2>
+
+<p>Guardian operates as a sidecar to <a href="https://tailscale.com/docs/aperture">Aperture</a>, Tailscale's LLM proxy. It has two faces: a <strong>pre-request hook</strong> that Aperture calls before forwarding requests to LLM providers, and a <strong>service proxy</strong> that agents call instead of external APIs.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 800 340" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="13">
+  <!-- Agent -->
+  <rect x="10" y="130" width="120" height="80" rx="8" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
+  <text x="70" y="165" fill="#58a6ff" text-anchor="middle" font-weight="600">Agent</text>
+  <text x="70" y="185" fill="#8b949e" text-anchor="middle" font-size="11">LLM Client</text>
+
+  <!-- Aperture -->
+  <rect x="200" y="130" width="140" height="80" rx="8" fill="#1f2937" stroke="#d29922" stroke-width="2"/>
+  <text x="270" y="160" fill="#d29922" text-anchor="middle" font-weight="600">Aperture</text>
+  <text x="270" y="180" fill="#8b949e" text-anchor="middle" font-size="11">LLM Gateway</text>
+  <text x="270" y="198" fill="#8b949e" text-anchor="middle" font-size="10">pre_request hook</text>
+
+  <!-- Guardian -->
+  <rect x="420" y="90" width="160" height="160" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+  <text x="500" y="120" fill="#3fb950" text-anchor="middle" font-weight="600">Guardian</text>
+  <line x1="420" y1="135" x2="580" y2="135" stroke="#30363d" stroke-width="1"/>
+  <text x="500" y="155" fill="#8b949e" text-anchor="middle" font-size="11">POST /v1/pre-request</text>
+  <text x="500" y="175" fill="#8b949e" text-anchor="middle" font-size="11">GET  /v1/services/{id}</text>
+  <text x="500" y="195" fill="#8b949e" text-anchor="middle" font-size="11">POST /v1/services/{id}</text>
+  <text x="500" y="220" fill="#8b949e" text-anchor="middle" font-size="10">config + cache</text>
+
+  <!-- External Services -->
+  <rect x="660" y="50" width="130" height="50" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="725" y="80" fill="#bc8cff" text-anchor="middle" font-weight="600">Spotify API</text>
+
+  <rect x="660" y="120" width="130" height="50" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="725" y="145" fill="#bc8cff" text-anchor="middle" font-weight="600">YouTube Music</text>
+  <text x="725" y="160" fill="#8b949e" text-anchor="middle" font-size="10">API</text>
+
+  <rect x="660" y="190" width="130" height="50" rx="8" fill="#1f2937" stroke="#f85149" stroke-width="1.5"/>
+  <text x="725" y="215" fill="#f85149" text-anchor="middle" font-weight="600">Tidal</text>
+  <text x="725" y="230" fill="#f85149" text-anchor="middle" font-size="10">blocked</text>
+
+  <!-- Arrows -->
+  <line x1="130" y1="170" x2="195" y2="170" stroke="#58a6ff" stroke-width="2" marker-end="url(#arrow-blue)"/>
+  <line x1="340" y1="150" x2="415" y2="140" stroke="#d29922" stroke-width="2" marker-end="url(#arrow-orange)" stroke-dasharray="6,3"/>
+  <line x1="500" y1="90" x2="500" y2="70" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <line x1="580" y1="75" x2="655" y2="75" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="580" y1="145" x2="655" y2="145" stroke="#3fb950" stroke-width="1.5" marker-end="url(#arrow-green)"/>
+  <line x1="580" y1="215" x2="655" y2="215" stroke="#f85149" stroke-width="1.5" marker-end="url(#arrow-red)" stroke-dasharray="4,3"/>
+
+  <!-- Labels on arrows -->
+  <text x="155" y="160" fill="#8b949e" font-size="10">request</text>
+  <text x="360" y="130" fill="#d29922" font-size="10">hook</text>
+
+  <!-- Arrow markers -->
+  <defs>
+    <marker id="arrow-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
+    <marker id="arrow-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
+    <marker id="arrow-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
+    <marker id="arrow-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f85149"/></marker>
+  </defs>
+</svg>
+<p class="diagram-label">Guardian sits alongside Aperture: the hook intercepts LLM requests, the proxy mediates service data.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="request-flow">2. Request Flow</h2>
+
+<p>When an agent says <em>"play jazz on Spotify"</em>, here's what happens:</p>
+
+<div class="diagram">
+<svg viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="12">
+  <!-- Columns -->
+  <text x="80" y="25" fill="#58a6ff" text-anchor="middle" font-weight="600">Agent</text>
+  <line x1="80" y1="35" x2="80" y2="510" stroke="#30363d" stroke-width="1"/>
+  <text x="280" y="25" fill="#d29922" text-anchor="middle" font-weight="600">Aperture</text>
+  <line x1="280" y1="35" x2="280" y2="510" stroke="#30363d" stroke-width="1"/>
+  <text x="480" y="25" fill="#3fb950" text-anchor="middle" font-weight="600">Guardian</text>
+  <line x1="480" y1="35" x2="480" y2="510" stroke="#30363d" stroke-width="1"/>
+  <text x="680" y="25" fill="#bc8cff" text-anchor="middle" font-weight="600">Spotify API</text>
+  <line x1="680" y1="35" x2="680" y2="510" stroke="#30363d" stroke-width="1"/>
+
+  <!-- Step 1 -->
+  <text x="10" y="65" fill="#8b949e" font-size="10">1</text>
+  <line x1="80" y1="60" x2="270" y2="60" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a-blue)"/>
+  <text x="175" y="55" fill="#58a6ff" text-anchor="middle" font-size="10">POST /v1/chat/completions</text>
+  <text x="175" y="75" fill="#8b949e" text-anchor="middle" font-size="9">"play jazz on Spotify"</text>
+
+  <!-- Step 2 -->
+  <text x="10" y="110" fill="#8b949e" font-size="10">2</text>
+  <line x1="280" y1="105" x2="470" y2="105" stroke="#d29922" stroke-width="1.5" marker-end="url(#a-orange)" stroke-dasharray="5,3"/>
+  <text x="375" y="100" fill="#d29922" text-anchor="middle" font-size="10">pre_request hook</text>
+
+  <!-- Step 3 -->
+  <text x="10" y="155" fill="#8b949e" font-size="10">3</text>
+  <rect x="430" y="130" width="100" height="40" rx="4" fill="#0d1117" stroke="#30363d"/>
+  <text x="480" y="147" fill="#3fb950" text-anchor="middle" font-size="10">match "Spotify"</text>
+  <text x="480" y="162" fill="#8b949e" text-anchor="middle" font-size="9">action: inject</text>
+
+  <!-- Step 4 -->
+  <text x="10" y="210" fill="#8b949e" font-size="10">4</text>
+  <line x1="470" y1="200" x2="290" y2="200" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <text x="380" y="195" fill="#3fb950" text-anchor="middle" font-size="10">action: modify</text>
+  <text x="380" y="215" fill="#8b949e" text-anchor="middle" font-size="9">inject proxy URL into system message</text>
+
+  <!-- Step 5 -->
+  <text x="10" y="260" fill="#8b949e" font-size="10">5</text>
+  <line x1="270" y1="250" x2="90" y2="250" stroke="#d29922" stroke-width="1.5" marker-end="url(#a-orange)"/>
+  <text x="180" y="245" fill="#d29922" text-anchor="middle" font-size="10">modified request → LLM</text>
+  <text x="180" y="265" fill="#8b949e" text-anchor="middle" font-size="9">system: "use /v1/services/spotify"</text>
+
+  <!-- Step 6 -->
+  <text x="10" y="320" fill="#8b949e" font-size="10">6</text>
+  <line x1="80" y1="310" x2="470" y2="310" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a-blue)"/>
+  <text x="275" y="305" fill="#58a6ff" text-anchor="middle" font-size="10">GET /v1/services/spotify/playlists</text>
+  <text x="275" y="325" fill="#8b949e" text-anchor="middle" font-size="9">agent follows Guardian instruction</text>
+
+  <!-- Step 7 -->
+  <text x="10" y="370" fill="#8b949e" font-size="10">7</text>
+  <line x1="480" y1="360" x2="670" y2="360" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <text x="575" y="355" fill="#3fb950" text-anchor="middle" font-size="10">proxy → upstream + auth headers</text>
+  <line x1="670" y1="380" x2="490" y2="380" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#a-purple)"/>
+  <text x="580" y="395" fill="#bc8cff" text-anchor="middle" font-size="10">response + cache</text>
+
+  <!-- Step 8 -->
+  <text x="10" y="440" fill="#8b949e" font-size="10">8</text>
+  <line x1="470" y1="430" x2="90" y2="430" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <text x="280" y="425" fill="#3fb950" text-anchor="middle" font-size="10">Spotify data → agent → LLM</text>
+  <text x="280" y="445" fill="#8b949e" text-anchor="middle" font-size="9">cached on subsequent calls</text>
+
+  <!-- Step 9 -->
+  <text x="10" y="490" fill="#8b949e" font-size="10">9</text>
+  <line x1="80" y1="480" x2="270" y2="480" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a-blue)"/>
+  <text x="175" y="475" fill="#58a6ff" text-anchor="middle" font-size="10">LLM responds to user</text>
+
+  <defs>
+    <marker id="a-blue" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
+    <marker id="a-orange" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
+    <marker id="a-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
+    <marker id="a-purple" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#bc8cff"/></marker>
+  </defs>
+</svg>
+<p class="diagram-label">9-step sequence: Guardian intercepts, injects proxy instructions, and mediates all service data.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="entry-point">3. Entry Point — <span class="file-label">main.go</span></h2>
+
+<p>The entry point parses flags, loads config, and wires up two HTTP routes: the Aperture hook and the service proxy.</p>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go</div>
+<pre><code><span class="kw">func</span> <span class="fn">main</span>() {
+    addr := flag.<span class="fn">String</span>(<span class="str">"addr"</span>, <span class="str">":8080"</span>, <span class="str">"listen address"</span>)
+    baseURL := flag.<span class="fn">String</span>(<span class="str">"base-url"</span>, <span class="str">""</span>, <span class="str">"..."</span>)
+    apiKey := flag.<span class="fn">String</span>(<span class="str">"api-key"</span>, <span class="str">""</span>, <span class="str">"..."</span>)
+    flag.<span class="fn">Parse</span>()
+
+    cfg, err := <span class="fn">LoadConfig</span>(*configPath)
+    <span class="kw">if</span> err != <span class="kw">nil</span> {
+        slog.<span class="fn">Error</span>(<span class="str">"failed to load config"</span>,
+            <span class="str">"error"</span>, err)
+        os.<span class="fn">Exit</span>(<span class="num">1</span>)
+    }
+
+    srv := &amp;<span class="tp">Server</span>{
+        apiKey:  *apiKey,
+        baseURL: *baseURL,
+        config:  cfg,
+        cache:   <span class="fn">NewCache</span>(),
+    }
+
+    mux := http.<span class="fn">NewServeMux</span>()
+    mux.<span class="fn">HandleFunc</span>(
+        <span class="str">"POST /v1/pre-request"</span>,
+        srv.<span class="fn">AuthMiddleware</span>(
+            srv.<span class="fn">HandlePreRequest</span>))
+    mux.<span class="fn">HandleFunc</span>(
+        <span class="str">"/v1/services/"</span>,
+        srv.<span class="fn">AuthMiddleware</span>(
+            srv.<span class="fn">HandleServiceProxy</span>))
+
+    http.<span class="fn">ListenAndServe</span>(*addr, mux)
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python (FastAPI equivalent)</div>
+<pre><code><span class="kw">import</span> uvicorn
+<span class="kw">from</span> fastapi <span class="kw">import</span> FastAPI, Depends
+
+app = <span class="fn">FastAPI</span>()
+config = <span class="fn">load_config</span>(<span class="str">"guardian.json"</span>)
+cache = <span class="fn">Cache</span>()
+
+<span class="cm"># Dependency injection replaces middleware</span>
+<span class="kw">def</span> <span class="fn">verify_api_key</span>(
+    authorization: <span class="tp">str</span> = <span class="fn">Header</span>(<span class="kw">None</span>),
+    x_api_key: <span class="tp">str</span> = <span class="fn">Header</span>(<span class="kw">None</span>),
+):
+    <span class="kw">if</span> authorization != <span class="kw">f</span><span class="str">"Bearer {API_KEY}"</span> \
+       <span class="kw">and</span> x_api_key != API_KEY:
+        <span class="kw">raise</span> <span class="fn">HTTPException</span>(<span class="num">401</span>)
+
+<span class="kw">@</span>app.post(<span class="str">"/v1/pre-request"</span>)
+<span class="kw">async def</span> <span class="fn">pre_request</span>(
+    payload: <span class="tp">dict</span>,
+    _=<span class="fn">Depends</span>(verify_api_key),
+):
+    <span class="kw">return await</span> <span class="fn">handle_pre_request</span>(
+        payload, config, cache)
+
+<span class="kw">@</span>app.api_route(
+    <span class="str">"/v1/services/{service_id}/{path:path}"</span>,
+    methods=[<span class="str">"GET"</span>, <span class="str">"POST"</span>])
+<span class="kw">async def</span> <span class="fn">service_proxy</span>(
+    service_id: <span class="tp">str</span>,
+    path: <span class="tp">str</span>,
+    request: <span class="tp">Request</span>,
+    _=<span class="fn">Depends</span>(verify_api_key),
+):
+    <span class="kw">return await</span> <span class="fn">handle_proxy</span>(
+        service_id, path, request,
+        config, cache)
+
+uvicorn.<span class="fn">run</span>(app, port=<span class="num">8080</span>)</code></pre>
+</div>
+</div>
+
+<div class="explain">
+  <p><strong>Key difference:</strong> Go uses a <code>flag</code> package for CLI args (similar to Python's <code>argparse</code>) and builds the HTTP mux explicitly. FastAPI uses decorators and dependency injection. Both achieve the same routing: one endpoint for the Aperture hook, one for the service proxy.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="config">4. Configuration — <span class="file-label">config.go</span></h2>
+
+<p>Guardian's config defines named services. Each service has an action (<code>inject</code> or <code>block</code>), an upstream endpoint, and optional caching/auth settings.</p>
+
+<h3>4.1 Data Structures</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — structs with JSON tags</div>
+<pre><code><span class="kw">type</span> <span class="tp">Config</span> <span class="kw">struct</span> {
+    mu       <span class="tp">sync.RWMutex</span>
+    Services []<span class="tp">Service</span> <span class="str">`json:"services"`</span>
+    path     <span class="tp">string</span>
+}
+
+<span class="kw">type</span> <span class="tp">Service</span> <span class="kw">struct</span> {
+    ID       <span class="tp">string</span>            <span class="str">`json:"id"`</span>
+    Name     <span class="tp">string</span>            <span class="str">`json:"name"`</span>
+    Aliases  []<span class="tp">string</span>          <span class="str">`json:"aliases,omitempty"`</span>
+    Action   <span class="tp">string</span>            <span class="str">`json:"action"`</span>
+    Endpoint <span class="tp">string</span>            <span class="str">`json:"endpoint,omitempty"`</span>
+    Headers  <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">string</span> <span class="str">`json:"headers,omitempty"`</span>
+    CacheTTL <span class="tp">Duration</span>          <span class="str">`json:"cache_ttl"`</span>
+}
+
+<span class="cm">// Custom JSON marshalling for time.Duration</span>
+<span class="kw">type</span> <span class="tp">Duration</span> <span class="kw">struct</span>{ time.<span class="tp">Duration</span> }
+
+<span class="kw">func</span> (d *<span class="tp">Duration</span>) <span class="fn">UnmarshalJSON</span>(
+    b []<span class="tp">byte</span>,
+) <span class="tp">error</span> {
+    <span class="kw">var</span> s <span class="tp">string</span>
+    json.<span class="fn">Unmarshal</span>(b, &amp;s)
+    parsed, err := time.<span class="fn">ParseDuration</span>(s)
+    d.Duration = parsed
+    <span class="kw">return</span> err
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — dataclasses</div>
+<pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass, field
+<span class="kw">from</span> datetime <span class="kw">import</span> timedelta
+
+<span class="kw">@dataclass</span>
+<span class="kw">class</span> <span class="tp">Service</span>:
+    id: <span class="tp">str</span>
+    name: <span class="tp">str</span>
+    action: <span class="tp">str</span>  <span class="cm"># "inject" or "block"</span>
+    aliases: <span class="tp">list</span>[<span class="tp">str</span>] = <span class="fn">field</span>(
+        default_factory=<span class="tp">list</span>)
+    endpoint: <span class="tp">str</span> = <span class="str">""</span>
+    headers: <span class="tp">dict</span>[<span class="tp">str</span>, <span class="tp">str</span>] = <span class="fn">field</span>(
+        default_factory=<span class="tp">dict</span>)
+    cache_ttl: <span class="tp">timedelta</span> = <span class="fn">timedelta</span>(
+        minutes=<span class="num">5</span>)
+
+<span class="kw">@dataclass</span>
+<span class="kw">class</span> <span class="tp">Config</span>:
+    services: <span class="tp">list</span>[<span class="tp">Service</span>]
+
+<span class="kw">def</span> <span class="fn">load_config</span>(path: <span class="tp">str</span>) -> <span class="tp">Config</span>:
+    <span class="kw">with</span> <span class="fn">open</span>(path) <span class="kw">as</span> f:
+        data = json.<span class="fn">load</span>(f)
+    <span class="kw">return</span> <span class="tp">Config</span>(
+        services=[
+            <span class="tp">Service</span>(**s)
+            <span class="kw">for</span> s <span class="kw">in</span> data[<span class="str">"services"</span>]
+        ]
+    )</code></pre>
+</div>
+</div>
+
+<div class="explain">
+  <p><strong>Go note:</strong> Struct tags like <code>`json:"id"`</code> tell Go's JSON encoder how to map field names. Python's <code>dataclass</code> + <code>json.load</code> achieves the same with less ceremony. Go requires a custom <code>Duration</code> type because <code>time.Duration</code> doesn't natively marshal to JSON as <code>"10m"</code>.</p>
+</div>
+
+<h3>4.2 Service Matching</h3>
+
+<p>Finding which services are referenced in a user message — case-insensitive substring matching on the service name and aliases:</p>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go</div>
+<pre><code><span class="kw">func</span> (c *<span class="tp">Config</span>) <span class="fn">FindMatchingServices</span>(
+    userMessage <span class="tp">string</span>,
+) []<span class="tp">Service</span> {
+    c.mu.<span class="fn">RLock</span>()
+    <span class="kw">defer</span> c.mu.<span class="fn">RUnlock</span>()
+
+    lower := strings.<span class="fn">ToLower</span>(userMessage)
+    <span class="kw">var</span> matched []<span class="tp">Service</span>
+    <span class="kw">for</span> _, svc := <span class="kw">range</span> c.Services {
+        <span class="kw">if</span> <span class="fn">matchesService</span>(svc, lower) {
+            matched = <span class="fn">append</span>(matched, svc)
+        }
+    }
+    <span class="kw">return</span> matched
+}
+
+<span class="kw">func</span> <span class="fn">matchesService</span>(
+    svc <span class="tp">Service</span>, lowerMsg <span class="tp">string</span>,
+) <span class="tp">bool</span> {
+    <span class="kw">if</span> strings.<span class="fn">Contains</span>(
+        lowerMsg,
+        strings.<span class="fn">ToLower</span>(svc.Name)) {
+        <span class="kw">return true</span>
+    }
+    <span class="kw">for</span> _, alias := <span class="kw">range</span> svc.Aliases {
+        <span class="kw">if</span> strings.<span class="fn">Contains</span>(
+            lowerMsg,
+            strings.<span class="fn">ToLower</span>(alias)) {
+            <span class="kw">return true</span>
+        }
+    }
+    <span class="kw">return false</span>
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python</div>
+<pre><code><span class="kw">def</span> <span class="fn">find_matching_services</span>(
+    config: <span class="tp">Config</span>,
+    user_message: <span class="tp">str</span>,
+) -> <span class="tp">list</span>[<span class="tp">Service</span>]:
+    lower = user_message.<span class="fn">lower</span>()
+    <span class="kw">return</span> [
+        svc <span class="kw">for</span> svc <span class="kw">in</span> config.services
+        <span class="kw">if</span> <span class="fn">matches_service</span>(svc, lower)
+    ]
+
+<span class="kw">def</span> <span class="fn">matches_service</span>(
+    svc: <span class="tp">Service</span>, lower_msg: <span class="tp">str</span>,
+) -> <span class="tp">bool</span>:
+    <span class="kw">if</span> svc.name.<span class="fn">lower</span>() <span class="kw">in</span> lower_msg:
+        <span class="kw">return True</span>
+    <span class="kw">return any</span>(
+        alias.<span class="fn">lower</span>() <span class="kw">in</span> lower_msg
+        <span class="kw">for</span> alias <span class="kw">in</span> svc.aliases
+    )</code></pre>
+</div>
+</div>
+
+<div class="explain">
+  <p><strong>Go note:</strong> <code>c.mu.RLock()</code> / <code>defer c.mu.RUnlock()</code> acquires a read lock for the duration of the function. This allows concurrent reads but blocks writes. Python doesn't need this because of the GIL (though a real service would use <code>asyncio.Lock</code>).</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="handler">5. Guardrail Handler — <span class="file-label">handler.go</span></h2>
+
+<p>The pre-request handler is the brain. It receives Aperture's hook payload, matches services, and either blocks or injects proxy instructions into the LLM request.</p>
+
+<h3>5.1 The Aperture Payload</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — typed struct</div>
+<pre><code><span class="kw">type</span> <span class="tp">PreRequestPayload</span> <span class="kw">struct</span> {
+    Metadata    <span class="tp">RequestMetadata</span>
+    RequestBody json.<span class="tp">RawMessage</span>
+    UserMessage <span class="tp">string</span>
+}
+
+<span class="kw">type</span> <span class="tp">RequestMetadata</span> <span class="kw">struct</span> {
+    LoginName <span class="tp">string</span> <span class="str">`json:"login_name"`</span>
+    Model     <span class="tp">string</span> <span class="str">`json:"model"`</span>
+    RequestID <span class="tp">string</span> <span class="str">`json:"request_id"`</span>
+    <span class="cm">// ... more fields</span>
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — Pydantic model</div>
+<pre><code><span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+
+<span class="kw">class</span> <span class="tp">RequestMetadata</span>(<span class="tp">BaseModel</span>):
+    login_name: <span class="tp">str</span>
+    model: <span class="tp">str</span>
+    request_id: <span class="tp">str</span>
+    <span class="cm"># ... more fields</span>
+
+<span class="kw">class</span> <span class="tp">PreRequestPayload</span>(<span class="tp">BaseModel</span>):
+    metadata: <span class="tp">RequestMetadata</span>
+    request_body: <span class="tp">dict</span> | <span class="kw">None</span> = <span class="kw">None</span>
+    user_message: <span class="tp">str</span> = <span class="str">""</span></code></pre>
+</div>
+</div>
+
+<h3>5.2 The Core Decision Logic</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go</div>
+<pre><code><span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">HandlePreRequest</span>(
+    w http.<span class="tp">ResponseWriter</span>,
+    r *http.<span class="tp">Request</span>,
+) {
+    <span class="cm">// 1. Parse payload</span>
+    <span class="kw">var</span> payload <span class="tp">PreRequestPayload</span>
+    json.<span class="fn">Unmarshal</span>(body, &amp;payload)
+
+    <span class="cm">// 2. Match services</span>
+    matched := s.config.<span class="fn">FindMatchingServices</span>(
+        payload.UserMessage)
+
+    <span class="kw">if</span> <span class="fn">len</span>(matched) == <span class="num">0</span> {
+        <span class="fn">writeGuardrailResponse</span>(w,
+            <span class="tp">GuardrailResponse</span>{
+                Action: <span class="str">"allow"</span>})
+        <span class="kw">return</span>
+    }
+
+    <span class="cm">// 3. Block if any service is blocked</span>
+    <span class="kw">for</span> _, svc := <span class="kw">range</span> matched {
+        <span class="kw">if</span> svc.Action == <span class="str">"block"</span> {
+            <span class="fn">writeGuardrailResponse</span>(w,
+                <span class="tp">GuardrailResponse</span>{
+                    Action: <span class="str">"block"</span>,
+                    Message: <span class="kw">fmt</span>.<span class="fn">Sprintf</span>(
+                        <span class="str">"blocked: %s"</span>,
+                        svc.Name)})
+            <span class="kw">return</span>
+        }
+    }
+
+    <span class="cm">// 4. Build proxy instructions</span>
+    <span class="kw">var</span> instructions []<span class="tp">string</span>
+    <span class="kw">for</span> _, svc := <span class="kw">range</span> matched {
+        <span class="kw">if</span> svc.Action != <span class="str">"inject"</span> {
+            <span class="kw">continue</span>
+        }
+        proxyURL := <span class="kw">fmt</span>.<span class="fn">Sprintf</span>(
+            <span class="str">"%s/v1/services/%s"</span>,
+            s.baseURL, svc.ID)
+        instructions = <span class="fn">append</span>(instructions,
+            <span class="kw">fmt</span>.<span class="fn">Sprintf</span>(
+                <span class="str">"use %s for %s"</span>,
+                proxyURL, svc.Name))
+    }
+
+    <span class="cm">// 5. Inject into LLM request</span>
+    modified := <span class="fn">injectSystemMessage</span>(
+        payload.RequestBody,
+        strings.<span class="fn">Join</span>(instructions, <span class="str">"\n"</span>))
+    <span class="fn">writeGuardrailResponse</span>(w,
+        <span class="tp">GuardrailResponse</span>{
+            Action: <span class="str">"modify"</span>,
+            Body:   modified})
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python</div>
+<pre><code><span class="kw">async def</span> <span class="fn">handle_pre_request</span>(
+    payload: <span class="tp">dict</span>,
+    config: <span class="tp">Config</span>,
+    cache: <span class="tp">Cache</span>,
+) -> <span class="tp">dict</span>:
+    req = <span class="tp">PreRequestPayload</span>(**payload)
+
+    <span class="cm"># 2. Match services</span>
+    matched = <span class="fn">find_matching_services</span>(
+        config, req.user_message)
+
+    <span class="kw">if not</span> matched:
+        <span class="kw">return</span> {<span class="str">"action"</span>: <span class="str">"allow"</span>}
+
+    <span class="cm"># 3. Block if any service is blocked</span>
+    <span class="kw">for</span> svc <span class="kw">in</span> matched:
+        <span class="kw">if</span> svc.action == <span class="str">"block"</span>:
+            <span class="kw">return</span> {
+                <span class="str">"action"</span>: <span class="str">"block"</span>,
+                <span class="str">"message"</span>: <span class="kw">f</span><span class="str">"blocked: {svc.name}"</span>,
+            }
+
+    <span class="cm"># 4. Build proxy instructions</span>
+    instructions = []
+    <span class="kw">for</span> svc <span class="kw">in</span> matched:
+        <span class="kw">if</span> svc.action != <span class="str">"inject"</span>:
+            <span class="kw">continue</span>
+        proxy_url = (
+            <span class="kw">f</span><span class="str">"{BASE_URL}/v1/services/{svc.id}"</span>)
+        instructions.<span class="fn">append</span>(
+            <span class="kw">f</span><span class="str">"use {proxy_url} for {svc.name}"</span>)
+
+    <span class="cm"># 5. Inject into LLM request</span>
+    modified = <span class="fn">inject_system_message</span>(
+        req.request_body,
+        <span class="str">"\n"</span>.<span class="fn">join</span>(instructions))
+    <span class="kw">return</span> {
+        <span class="str">"action"</span>: <span class="str">"modify"</span>,
+        <span class="str">"body"</span>: modified,
+    }</code></pre>
+</div>
+</div>
+
+<h3>5.3 Injecting a System Message</h3>
+
+<p>This function prepends a system message to the LLM request's message array, preserving all other fields (model, temperature, etc.):</p>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go</div>
+<pre><code><span class="kw">func</span> <span class="fn">injectSystemMessage</span>(
+    original []<span class="tp">byte</span>,
+    content <span class="tp">string</span>,
+) (json.<span class="tp">RawMessage</span>, <span class="tp">error</span>) {
+    <span class="kw">var</span> req <span class="kw">struct</span> {
+        Messages []json.<span class="tp">RawMessage</span>
+    }
+    json.<span class="fn">Unmarshal</span>(original, &amp;req)
+
+    sysMsg, _ := json.<span class="fn">Marshal</span>(
+        <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">string</span>{
+            <span class="str">"role"</span>:    <span class="str">"system"</span>,
+            <span class="str">"content"</span>: content,
+        })
+
+    <span class="cm">// Prepend to messages array</span>
+    req.Messages = <span class="fn">append</span>(
+        []json.<span class="tp">RawMessage</span>{sysMsg},
+        req.Messages...)
+
+    <span class="cm">// Rebuild with all original fields</span>
+    <span class="kw">var</span> full <span class="kw">map</span>[<span class="tp">string</span>]json.<span class="tp">RawMessage</span>
+    json.<span class="fn">Unmarshal</span>(original, &amp;full)
+    full[<span class="str">"messages"</span>], _ =
+        json.<span class="fn">Marshal</span>(req.Messages)
+    <span class="kw">return</span> json.<span class="fn">Marshal</span>(full)
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python</div>
+<pre><code><span class="kw">def</span> <span class="fn">inject_system_message</span>(
+    original: <span class="tp">dict</span>,
+    content: <span class="tp">str</span>,
+) -> <span class="tp">dict</span>:
+    <span class="cm"># Deep copy to avoid mutating original</span>
+    modified = json.<span class="fn">loads</span>(
+        json.<span class="fn">dumps</span>(original))
+
+    sys_msg = {
+        <span class="str">"role"</span>: <span class="str">"system"</span>,
+        <span class="str">"content"</span>: content,
+    }
+
+    <span class="cm"># Prepend to messages array</span>
+    modified[<span class="str">"messages"</span>] = (
+        [sys_msg] + modified[<span class="str">"messages"</span>])
+
+    <span class="kw">return</span> modified</code></pre>
+</div>
+</div>
+
+<div class="explain">
+  <p><strong>Go note:</strong> <code>json.RawMessage</code> is a byte slice that holds unparsed JSON. It lets us delay parsing — we can read the <code>messages</code> array without fully parsing every message object. Python doesn't need this because <code>dict</code> is already JSON-native.</p>
+</div>
+
+<h3>5.4 Auth Middleware</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — closure-based middleware</div>
+<pre><code><span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">AuthMiddleware</span>(
+    next http.<span class="tp">HandlerFunc</span>,
+) http.<span class="tp">HandlerFunc</span> {
+    <span class="cm">// Returns a new handler that wraps `next`</span>
+    <span class="kw">return func</span>(
+        w http.<span class="tp">ResponseWriter</span>,
+        r *http.<span class="tp">Request</span>,
+    ) {
+        auth := r.Header.<span class="fn">Get</span>(
+            <span class="str">"Authorization"</span>)
+        <span class="kw">if</span> auth != <span class="str">"Bearer "</span>+s.apiKey {
+            <span class="kw">if</span> r.Header.<span class="fn">Get</span>(
+                <span class="str">"X-Api-Key"</span>) != s.apiKey {
+                http.<span class="fn">Error</span>(w,
+                    <span class="str">`{"error":"unauthorized"}`</span>,
+                    <span class="num">401</span>)
+                <span class="kw">return</span>
+            }
+        }
+        <span class="fn">next</span>(w, r) <span class="cm">// call the real handler</span>
+    }
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — decorator or dependency</div>
+<pre><code><span class="cm"># FastAPI dependency injection approach</span>
+<span class="kw">def</span> <span class="fn">verify_api_key</span>(
+    authorization: <span class="tp">str</span> = <span class="fn">Header</span>(<span class="kw">None</span>),
+    x_api_key: <span class="tp">str</span> = <span class="fn">Header</span>(<span class="kw">None</span>),
+):
+    <span class="kw">if</span> authorization == <span class="kw">f</span><span class="str">"Bearer {API_KEY}"</span>:
+        <span class="kw">return</span>
+    <span class="kw">if</span> x_api_key == API_KEY:
+        <span class="kw">return</span>
+    <span class="kw">raise</span> <span class="fn">HTTPException</span>(
+        status_code=<span class="num">401</span>,
+        detail=<span class="str">"unauthorized"</span>)
+
+<span class="cm"># Applied per-route via Depends()</span>
+<span class="kw">@</span>app.post(<span class="str">"/v1/pre-request"</span>)
+<span class="kw">async def</span> <span class="fn">pre_request</span>(
+    payload: <span class="tp">dict</span>,
+    _=<span class="fn">Depends</span>(verify_api_key),
+):
+    ...</code></pre>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="proxy">6. Service Proxy — <span class="file-label">proxy.go</span></h2>
+
+<p>The proxy is the second half of the architecture. When the LLM agent (following the injected instructions) calls <code>/v1/services/spotify/playlists</code>, Guardian forwards to the real Spotify API with proper auth headers, and caches the response.</p>
+
+<div class="diagram">
+<svg viewBox="0 0 700 280" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="12">
+  <!-- Proxy flow -->
+  <rect x="20" y="30" width="130" height="60" rx="6" fill="#1f2937" stroke="#58a6ff" stroke-width="1.5"/>
+  <text x="85" y="55" fill="#58a6ff" text-anchor="middle" font-weight="600">Agent Request</text>
+  <text x="85" y="72" fill="#8b949e" text-anchor="middle" font-size="10">GET /v1/services/spotify/...</text>
+
+  <rect x="220" y="30" width="130" height="60" rx="6" fill="#1f2937" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="285" y="55" fill="#3fb950" text-anchor="middle" font-weight="600">Guardian Proxy</text>
+  <text x="285" y="72" fill="#8b949e" text-anchor="middle" font-size="10">lookup + cache check</text>
+
+  <rect x="420" y="30" width="130" height="60" rx="6" fill="#1f2937" stroke="#8b949e" stroke-width="1.5"/>
+  <text x="485" y="50" fill="#8b949e" text-anchor="middle" font-weight="600">Cache?</text>
+  <text x="485" y="70" fill="#8b949e" text-anchor="middle" font-size="10">GET responses only</text>
+
+  <!-- Cache hit path -->
+  <rect x="420" y="130" width="130" height="50" rx="6" fill="#0d2818" stroke="#3fb950" stroke-width="1.5"/>
+  <text x="485" y="152" fill="#3fb950" text-anchor="middle" font-weight="600">Cache HIT</text>
+  <text x="485" y="168" fill="#3fb950" text-anchor="middle" font-size="10">return cached data</text>
+
+  <!-- Cache miss path -->
+  <rect x="580" y="130" width="110" height="50" rx="6" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+  <text x="635" y="152" fill="#bc8cff" text-anchor="middle" font-weight="600">Cache MISS</text>
+  <text x="635" y="168" fill="#bc8cff" text-anchor="middle" font-size="10">fetch upstream</text>
+
+  <rect x="530" y="210" width="130" height="50" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+  <text x="595" y="232" fill="#d29922" text-anchor="middle" font-weight="600">Upstream API</text>
+  <text x="595" y="248" fill="#8b949e" text-anchor="middle" font-size="10">+ auth headers</text>
+
+  <!-- Arrows -->
+  <line x1="150" y1="60" x2="215" y2="60" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a-blue)"/>
+  <line x1="350" y1="60" x2="415" y2="60" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <line x1="485" y1="90" x2="485" y2="125" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a-green)"/>
+  <line x1="550" y1="60" x2="625" y2="130" stroke="#d29922" stroke-width="1.5" marker-end="url(#a-orange)"/>
+  <line x1="595" y1="180" x2="595" y2="205" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#a-purple)"/>
+  <line x1="530" y1="235" x2="355" y2="155" stroke="#d29922" stroke-width="1.5" marker-end="url(#a-orange)" stroke-dasharray="5,3"/>
+
+  <!-- Labels -->
+  <text x="490" y="113" fill="#3fb950" font-size="9" text-anchor="middle">hit</text>
+  <text x="590" y="108" fill="#d29922" font-size="9" text-anchor="middle">miss</text>
+</svg>
+<p class="diagram-label">Proxy request flow: cache-first for GET, always forward for POST.</p>
+</div>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — proxy handler</div>
+<pre><code><span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">HandleServiceProxy</span>(
+    w http.<span class="tp">ResponseWriter</span>,
+    r *http.<span class="tp">Request</span>,
+) {
+    <span class="cm">// Extract service ID from URL path</span>
+    parts := strings.<span class="fn">SplitN</span>(
+        strings.<span class="fn">TrimPrefix</span>(
+            r.URL.Path, <span class="str">"/v1/services/"</span>),
+        <span class="str">"/"</span>, <span class="num">2</span>)
+    serviceID := parts[<span class="num">0</span>]
+
+    svc := s.config.<span class="fn">GetService</span>(serviceID)
+    <span class="kw">if</span> svc == <span class="kw">nil</span> {
+        <span class="fn">writeJSONError</span>(w, <span class="num">404</span>, <span class="str">"not found"</span>)
+        <span class="kw">return</span>
+    }
+
+    <span class="cm">// Cache check for GET requests</span>
+    cacheKey := serviceID + <span class="str">":"</span> +
+        r.URL.<span class="fn">RequestURI</span>()
+    <span class="kw">if</span> r.Method == <span class="str">"GET"</span> {
+        <span class="kw">if</span> cached, ok :=
+            s.cache.<span class="fn">Get</span>(cacheKey); ok {
+            w.Header().<span class="fn">Set</span>(
+                <span class="str">"X-Guardian-Cache"</span>, <span class="str">"hit"</span>)
+            io.<span class="fn">WriteString</span>(w, cached)
+            <span class="kw">return</span>
+        }
+    }
+
+    <span class="cm">// Build upstream request</span>
+    upstreamURL := svc.Endpoint + remainingPath
+    req, _ := http.<span class="fn">NewRequestWithContext</span>(
+        r.Context(), r.Method,
+        upstreamURL, r.Body)
+
+    <span class="cm">// Apply service auth headers</span>
+    <span class="kw">for</span> k, v := <span class="kw">range</span> svc.Headers {
+        req.Header.<span class="fn">Set</span>(k, v)
+    }
+
+    resp, _ := http.DefaultClient.<span class="fn">Do</span>(req)
+    data, _ := io.<span class="fn">ReadAll</span>(resp.Body)
+
+    <span class="cm">// Cache GET responses</span>
+    <span class="kw">if</span> r.Method == <span class="str">"GET"</span> {
+        s.cache.<span class="fn">Set</span>(cacheKey,
+            <span class="fn">string</span>(data), svc.CacheTTL.Duration)
+    }
+
+    w.<span class="fn">Write</span>(data)
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — proxy handler</div>
+<pre><code><span class="kw">import</span> httpx
+
+<span class="kw">async def</span> <span class="fn">handle_proxy</span>(
+    service_id: <span class="tp">str</span>,
+    path: <span class="tp">str</span>,
+    request: <span class="tp">Request</span>,
+    config: <span class="tp">Config</span>,
+    cache: <span class="tp">Cache</span>,
+) -> <span class="tp">Response</span>:
+    svc = config.<span class="fn">get_service</span>(service_id)
+    <span class="kw">if not</span> svc:
+        <span class="kw">return</span> <span class="fn">JSONResponse</span>(
+            {<span class="str">"error"</span>: <span class="str">"not found"</span>},
+            status_code=<span class="num">404</span>)
+
+    <span class="cm"># Cache check for GET</span>
+    cache_key = <span class="kw">f</span><span class="str">"{service_id}:{request.url}"</span>
+    <span class="kw">if</span> request.method == <span class="str">"GET"</span>:
+        cached = cache.<span class="fn">get</span>(cache_key)
+        <span class="kw">if</span> cached:
+            <span class="kw">return</span> <span class="fn">JSONResponse</span>(
+                cached,
+                headers={<span class="str">"X-Guardian-Cache"</span>:
+                         <span class="str">"hit"</span>})
+
+    <span class="cm"># Forward to upstream</span>
+    upstream = <span class="kw">f</span><span class="str">"{svc.endpoint}/{path}"</span>
+    <span class="kw">async with</span> httpx.<span class="fn">AsyncClient</span>() <span class="kw">as</span> c:
+        resp = <span class="kw">await</span> c.<span class="fn">request</span>(
+            method=request.method,
+            url=upstream,
+            headers={**request.headers,
+                     **svc.headers},
+            content=<span class="kw">await</span> request.<span class="fn">body</span>())
+
+    <span class="cm"># Cache GET responses</span>
+    <span class="kw">if</span> request.method == <span class="str">"GET"</span>:
+        cache.<span class="fn">set</span>(cache_key,
+               resp.json(),
+               svc.cache_ttl)
+
+    <span class="kw">return</span> <span class="fn">JSONResponse</span>(
+        resp.json(),
+        status_code=resp.status_code,
+        headers={<span class="str">"X-Guardian-Cache"</span>:
+                 <span class="str">"miss"</span>})</code></pre>
+</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="cache">7. Cache — <span class="file-label">cache.go</span></h2>
+
+<p>A simple in-memory TTL cache. Entries expire automatically on read. Protected by a read-write mutex for concurrent access.</p>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — mutex-protected map</div>
+<pre><code><span class="kw">type</span> <span class="tp">Cache</span> <span class="kw">struct</span> {
+    mu    <span class="tp">sync.RWMutex</span>
+    items <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">cacheEntry</span>
+}
+
+<span class="kw">type</span> <span class="tp">cacheEntry</span> <span class="kw">struct</span> {
+    value   <span class="tp">string</span>
+    expires time.<span class="tp">Time</span>
+}
+
+<span class="kw">func</span> (c *<span class="tp">Cache</span>) <span class="fn">Get</span>(key <span class="tp">string</span>) (<span class="tp">string</span>, <span class="tp">bool</span>) {
+    c.mu.<span class="fn">RLock</span>()
+    <span class="kw">defer</span> c.mu.<span class="fn">RUnlock</span>()
+    entry, ok := c.items[key]
+    <span class="kw">if</span> !ok || time.<span class="fn">Now</span>().<span class="fn">After</span>(entry.expires) {
+        <span class="kw">return</span> <span class="str">""</span>, <span class="kw">false</span>
+    }
+    <span class="kw">return</span> entry.value, <span class="kw">true</span>
+}
+
+<span class="kw">func</span> (c *<span class="tp">Cache</span>) <span class="fn">Set</span>(
+    key, value <span class="tp">string</span>, ttl time.<span class="tp">Duration</span>,
+) {
+    c.mu.<span class="fn">Lock</span>()
+    <span class="kw">defer</span> c.mu.<span class="fn">Unlock</span>()
+    c.items[key] = <span class="tp">cacheEntry</span>{
+        value:   value,
+        expires: time.<span class="fn">Now</span>().<span class="fn">Add</span>(ttl),
+    }
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — dict with expiry</div>
+<pre><code><span class="kw">import</span> time
+<span class="kw">from</span> threading <span class="kw">import</span> Lock
+
+<span class="kw">class</span> <span class="tp">Cache</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self):
+        self._items: <span class="tp">dict</span>[<span class="tp">str</span>, <span class="tp">tuple</span>] = {}
+        self._lock = <span class="fn">Lock</span>()
+
+    <span class="kw">def</span> <span class="fn">get</span>(self, key: <span class="tp">str</span>) -> <span class="tp">str</span> | <span class="kw">None</span>:
+        <span class="kw">with</span> self._lock:
+            entry = self._items.<span class="fn">get</span>(key)
+            <span class="kw">if not</span> entry:
+                <span class="kw">return None</span>
+            value, expires = entry
+            <span class="kw">if</span> time.<span class="fn">time</span>() > expires:
+                <span class="kw">del</span> self._items[key]
+                <span class="kw">return None</span>
+            <span class="kw">return</span> value
+
+    <span class="kw">def</span> <span class="fn">set</span>(self, key: <span class="tp">str</span>,
+            value: <span class="tp">str</span>,
+            ttl: <span class="tp">timedelta</span>):
+        <span class="kw">with</span> self._lock:
+            self._items[key] = (
+                value,
+                time.<span class="fn">time</span>() + ttl.total_seconds()
+            )</code></pre>
+</div>
+</div>
+
+<div class="explain">
+  <p><strong>Go note:</strong> <code>sync.RWMutex</code> allows multiple concurrent readers (via <code>RLock</code>) but exclusive writers (via <code>Lock</code>). The <code>defer</code> keyword ensures the lock is released when the function returns, even on error — similar to Python's <code>with</code> statement.</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="go-concepts">8. Key Go Concepts for Python Developers</h2>
+
+<h3>Error Handling</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — explicit error returns</div>
+<pre><code><span class="cm">// Go functions return errors as values</span>
+data, err := os.<span class="fn">ReadFile</span>(path)
+<span class="kw">if</span> err != <span class="kw">nil</span> {
+    <span class="kw">return nil</span>, err  <span class="cm">// propagate</span>
+}
+<span class="cm">// use `data` here</span></code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — exceptions</div>
+<pre><code><span class="cm"># Python uses try/except</span>
+<span class="kw">try</span>:
+    data = Path(path).<span class="fn">read_text</span>()
+<span class="kw">except</span> <span class="tp">FileNotFoundError</span> <span class="kw">as</span> e:
+    <span class="kw">raise</span> e  <span class="cm"># propagate</span>
+<span class="cm"># use `data` here</span></code></pre>
+</div>
+</div>
+
+<h3>Pointers and References</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — explicit pointers</div>
+<pre><code><span class="cm">// &amp; takes address, * dereferences</span>
+srv := &amp;<span class="tp">Server</span>{apiKey: <span class="str">"key"</span>}
+
+<span class="cm">// Methods on pointer receivers</span>
+<span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">Handle</span>(...) { }
+
+<span class="cm">// nil check before use</span>
+<span class="kw">if</span> svc == <span class="kw">nil</span> { <span class="kw">return</span> }</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — everything is a reference</div>
+<pre><code><span class="cm"># Python objects are always references</span>
+srv = <span class="fn">Server</span>(api_key=<span class="str">"key"</span>)
+
+<span class="cm"># Methods are always on references</span>
+<span class="kw">def</span> <span class="fn">handle</span>(self, ...): <span class="kw">pass</span>
+
+<span class="cm"># None check before use</span>
+<span class="kw">if</span> svc <span class="kw">is None</span>: <span class="kw">return</span></code></pre>
+</div>
+</div>
+
+<h3>Concurrency</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — goroutines + channels</div>
+<pre><code><span class="cm">// Lightweight green threads</span>
+<span class="kw">go</span> <span class="fn">fetchData</span>(url)  <span class="cm">// fire and forget</span>
+
+<span class="cm">// Communicate via channels</span>
+ch := <span class="fn">make</span>(<span class="kw">chan</span> <span class="tp">string</span>)
+<span class="kw">go func</span>() {
+    ch &lt;- <span class="fn">fetchData</span>(url)
+}()
+result := &lt;-ch  <span class="cm">// wait</span>
+
+<span class="cm">// sync.Mutex for shared state</span>
+<span class="kw">var</span> mu <span class="tp">sync.Mutex</span>
+mu.<span class="fn">Lock</span>()
+<span class="kw">defer</span> mu.<span class="fn">Unlock</span>()</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — asyncio + threading</div>
+<pre><code><span class="cm"># Async coroutines</span>
+<span class="kw">await</span> <span class="fn">fetch_data</span>(url)
+
+<span class="cm"># Or threads for blocking I/O</span>
+<span class="kw">from</span> concurrent.futures <span class="kw">import</span> (
+    ThreadPoolExecutor)
+<span class="kw">with</span> <span class="fn">ThreadPoolExecutor</span>() <span class="kw">as</span> pool:
+    future = pool.<span class="fn">submit</span>(fetch_data, url)
+    result = future.<span class="fn">result</span>()
+
+<span class="cm"># threading.Lock for shared state</span>
+<span class="kw">from</span> threading <span class="kw">import</span> Lock
+lock = <span class="fn">Lock</span>()
+<span class="kw">with</span> lock:
+    ...</code></pre>
+</div>
+</div>
+
+<h3>Struct Tags vs. Decorators</h3>
+
+<div class="code-compare">
+<div class="code-panel">
+  <div class="code-header code-header-go">Go — struct tags</div>
+<pre><code><span class="kw">type</span> <span class="tp">Service</span> <span class="kw">struct</span> {
+    <span class="cm">// Tag controls JSON field name</span>
+    ID   <span class="tp">string</span> <span class="str">`json:"id"`</span>
+    <span class="cm">// omitempty: skip if zero value</span>
+    Name <span class="tp">string</span> <span class="str">`json:"name,omitempty"`</span>
+    <span class="cm">// Custom type for duration</span>
+    TTL  <span class="tp">Duration</span> <span class="str">`json:"ttl"`</span>
+}</code></pre>
+</div>
+
+<div class="code-panel">
+  <div class="code-header code-header-py">Python — Pydantic fields</div>
+<pre><code><span class="kw">class</span> <span class="tp">Service</span>(<span class="tp">BaseModel</span>):
+    <span class="cm"># Field name is the JSON key</span>
+    id: <span class="tp">str</span>
+    <span class="cm"># Optional with default</span>
+    name: <span class="tp">str</span> = <span class="str">""</span>
+    <span class="cm"># timedelta handles duration</span>
+    ttl: <span class="tp">timedelta</span> = <span class="fn">timedelta</span>(
+        minutes=<span class="num">5</span>)</code></pre>
+</div>
+</div>
+
+<hr>
+
+<h2>File Map</h2>
+
+<div class="diagram" style="padding: 1rem;">
+<svg viewBox="0 0 700 300" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', 'Fira Code', monospace" font-size="12">
+  <rect x="10" y="10" width="680" height="280" rx="8" fill="#0d1117" stroke="#30363d"/>
+  <text x="30" y="40" fill="#3fb950" font-size="14" font-weight="600">aperture-guardian/</text>
+
+  <text x="50" y="70" fill="#58a6ff">main.go</text>
+  <text x="200" y="70" fill="#8b949e">Entry point, CLI flags, route wiring, logger setup</text>
+
+  <text x="50" y="100" fill="#58a6ff">config.go</text>
+  <text x="200" y="100" fill="#8b949e">Service/Config types, JSON loading, service matching, hot reload</text>
+
+  <text x="50" y="130" fill="#58a6ff">handler.go</text>
+  <text x="200" y="130" fill="#8b949e">Pre-request hook: parse Aperture payload, block/modify logic</text>
+
+  <text x="50" y="160" fill="#58a6ff">proxy.go</text>
+  <text x="200" y="160" fill="#8b949e">Service proxy: route, cache-check, forward, auth headers</text>
+
+  <text x="50" y="190" fill="#58a6ff">cache.go</text>
+  <text x="200" y="190" fill="#8b949e">In-memory TTL cache with RWMutex for concurrent access</text>
+
+  <text x="50" y="230" fill="#d29922">guardian.json</text>
+  <text x="200" y="230" fill="#8b949e">Service definitions: names, endpoints, actions, cache TTLs</text>
+
+  <text x="50" y="260" fill="#d29922">*_test.go</text>
+  <text x="200" y="260" fill="#8b949e">41 tests covering config, handler, proxy, cache (httptest mocks)</text>
+</svg>
+</div>
+
+</div>
+</body>
+</html>
