@@ -1,0 +1,314 @@
+package main
+
+import (
+	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+)
+
+func TestHandleServiceProxy_GetForwarding(t *testing.T) {
+	// Mock upstream service.
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			t.Errorf("upstream got method %q, want GET", r.Method)
+		}
+		if r.URL.Path != "/playlists" {
+			t.Errorf("upstream got path %q, want /playlists", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		io.WriteString(w, `{"playlists":["jazz","rock"]}`)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	if w.Header().Get("X-Guardian-Cache") != "miss" {
+		t.Fatalf("cache header = %q, want miss", w.Header().Get("X-Guardian-Cache"))
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "jazz") {
+		t.Fatalf("response body = %q, expected jazz", body)
+	}
+}
+
+func TestHandleServiceProxy_CacheHit(t *testing.T) {
+	callCount := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		io.WriteString(w, `{"cached":true}`)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+
+	// First request — miss.
+	w := httptest.NewRecorder()
+	srv.HandleServiceProxy(w, req)
+	if w.Header().Get("X-Guardian-Cache") != "miss" {
+		t.Fatalf("first request: cache = %q, want miss", w.Header().Get("X-Guardian-Cache"))
+	}
+
+	// Second request — hit.
+	w = httptest.NewRecorder()
+	srv.HandleServiceProxy(w, req)
+	if w.Header().Get("X-Guardian-Cache") != "hit" {
+		t.Fatalf("second request: cache = %q, want hit", w.Header().Get("X-Guardian-Cache"))
+	}
+
+	if callCount != 1 {
+		t.Fatalf("upstream called %d times, want 1", callCount)
+	}
+}
+
+func TestHandleServiceProxy_PostNotCached(t *testing.T) {
+	callCount := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if r.Method != http.MethodPost {
+			t.Errorf("method = %q, want POST", r.Method)
+		}
+		// Echo the body back.
+		body, _ := io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(body)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	postBody := `{"query":"jazz playlists"}`
+	req := httptest.NewRequest("POST", "/v1/services/spotify/search", strings.NewReader(postBody))
+	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Content-Type", "application/json")
+
+	// Two POSTs should both hit upstream.
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		srv.HandleServiceProxy(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("request %d: status = %d", i, w.Code)
+		}
+	}
+
+	if callCount != 2 {
+		t.Fatalf("upstream called %d times, want 2 (POST not cached)", callCount)
+	}
+}
+
+func TestHandleServiceProxy_ServiceNotFound(t *testing.T) {
+	cfg := &Config{Services: []Service{}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/nonexistent/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("status = %d, want 404", w.Code)
+	}
+}
+
+func TestHandleServiceProxy_BlockedService(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "tidal", Name: "Tidal", Action: "block", Description: "not allowed"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/tidal/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+
+	var errResp map[string]string
+	json.NewDecoder(w.Body).Decode(&errResp)
+	if !strings.Contains(errResp["error"], "Tidal") {
+		t.Fatalf("error = %q, expected mention of Tidal", errResp["error"])
+	}
+}
+
+func TestHandleServiceProxy_NoEndpoint(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
+	}
+}
+
+func TestHandleServiceProxy_UpstreamDown(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: "http://127.0.0.1:1"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("status = %d, want 502", w.Code)
+	}
+}
+
+func TestHandleServiceProxy_ServiceHeadersApplied(t *testing.T) {
+	var gotAuth string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		io.WriteString(w, `{"ok":true}`)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID:       "spotify",
+				Name:     "Spotify",
+				Action:   "inject",
+				Endpoint: upstream.URL,
+				Headers:  map[string]string{"Authorization": "Bearer upstream-token"},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if gotAuth != "Bearer upstream-token" {
+		t.Fatalf("upstream got auth %q, want %q", gotAuth, "Bearer upstream-token")
+	}
+}
+
+func TestHandleServiceProxy_QueryParamsForwarded(t *testing.T) {
+	var gotQuery string
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotQuery = r.URL.RawQuery
+		io.WriteString(w, `{"ok":true}`)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/search?q=jazz&limit=10", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if gotQuery != "q=jazz&limit=10" {
+		t.Fatalf("upstream query = %q, want %q", gotQuery, "q=jazz&limit=10")
+	}
+}
+
+func TestHandleServiceProxy_RootPath(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			t.Errorf("upstream path = %q, want /", r.URL.Path)
+		}
+		io.WriteString(w, `{"status":"ok"}`)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+}
+
+func TestHandleServiceProxy_Unauthorized(t *testing.T) {
+	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
+	req.Header.Set("Authorization", "Bearer wrong-key")
+	w := httptest.NewRecorder()
+
+	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}
+
+// testServerWithBase creates a Server with a baseURL for testing.
+func testServerWithBase(cfg *Config, baseURL string) *Server {
+	return &Server{
+		apiKey:  "test-key",
+		baseURL: baseURL,
+		config:  cfg,
+		cache:   NewCache(),
+	}
+}

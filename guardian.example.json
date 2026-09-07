@@ -5,30 +5,36 @@
       "name": "Spotify",
       "aliases": ["spotify music"],
       "action": "inject",
-      "endpoint": "https://api.internal.example.com/spotify/context",
+      "endpoint": "https://api.spotify.com/v1",
       "headers": {
-        "Authorization": "Bearer ${SPOTIFY_CONTEXT_TOKEN}"
+        "Authorization": "Bearer ${SPOTIFY_TOKEN}"
       },
       "cache_ttl": "10m",
-      "description": "Injects user library and playlist context when agents work with Spotify"
+      "description": "Proxies Spotify API calls through Guardian for caching and auditing"
     },
     {
       "id": "youtube-music",
       "name": "YouTube Music",
       "aliases": ["yt music", "ytmusic"],
       "action": "inject",
-      "endpoint": "https://api.internal.example.com/youtube-music/context",
+      "endpoint": "https://music.googleapis.com/v1",
+      "headers": {
+        "Authorization": "Bearer ${YOUTUBE_MUSIC_TOKEN}"
+      },
       "cache_ttl": "15m",
-      "description": "Injects YouTube Music library context"
+      "description": "Proxies YouTube Music API calls through Guardian"
     },
     {
       "id": "amazon-music",
       "name": "Amazon Music",
       "aliases": ["amazon music unlimited"],
       "action": "inject",
-      "endpoint": "https://api.internal.example.com/amazon-music/context",
+      "endpoint": "https://api.amazonmusic.com/v1",
+      "headers": {
+        "Authorization": "Bearer ${AMAZON_MUSIC_TOKEN}"
+      },
       "cache_ttl": "15m",
-      "description": "Injects Amazon Music library context"
+      "description": "Proxies Amazon Music API calls through Guardian"
     },
     {
       "id": "tidal",

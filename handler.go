@@ -7,7 +7,6 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-	"time"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -43,9 +42,10 @@ type GuardrailResponse struct {
 }
 
 type Server struct {
-	apiKey string
-	config *Config
-	cache  *Cache
+	apiKey  string
+	baseURL string
+	config  *Config
+	cache   *Cache
 }
 
 func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
@@ -116,80 +116,42 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Collect data from injectable services.
-	var enrichments []string
+	// Build instructions for the agent to use Guardian's proxy endpoints.
+	var instructions []string
 	for _, svc := range matched {
 		if svc.Action != "inject" {
 			continue
 		}
-		data, err := s.fetchServiceData(svc)
-		if err != nil {
-			logger.Error("service data fetch failed", "service", svc.ID, "error", err)
-			continue
-		}
-		logger.Debug("service data fetched", "service", svc.ID, "bytes", len(data))
-		enrichments = append(enrichments, fmt.Sprintf("[%s] %s", svc.Name, data))
+		proxyURL := fmt.Sprintf("%s/v1/services/%s", strings.TrimRight(s.baseURL, "/"), svc.ID)
+		instruction := fmt.Sprintf(
+			"When working with %s, you MUST use the Guardian proxy endpoint at %s "+
+				"instead of calling %s directly. All requests through this proxy are "+
+				"authenticated, cached, and audited.",
+			svc.Name, proxyURL, svc.Name,
+		)
+		instructions = append(instructions, instruction)
 	}
 
-	if len(enrichments) == 0 {
-		logger.Debug("no enrichments produced, allowing")
+	if len(instructions) == 0 {
+		logger.Debug("no injectable services, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
-	// Inject enrichment data into the request body.
-	modified, err := injectSystemMessage(payload.RequestBody, strings.Join(enrichments, "\n\n"))
+	// Inject instructions into the request body.
+	systemContent := strings.Join(instructions, "\n\n")
+	modified, err := injectSystemMessage(payload.RequestBody, systemContent)
 	if err != nil {
 		logger.Error("failed to inject system message", "error", err)
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
-	logger.Info("request modified", "enrichments", len(enrichments))
+	logger.Info("request modified with proxy instructions", "services", len(instructions))
 	writeGuardrailResponse(w, GuardrailResponse{
 		Action: ActionModify,
 		Body:   modified,
 	})
-}
-
-// fetchServiceData fetches data from a service's endpoint, using the cache when available.
-func (s *Server) fetchServiceData(svc Service) (string, error) {
-	if cached, ok := s.cache.Get(svc.ID); ok {
-		slog.Debug("cache hit", "service", svc.ID)
-		return cached, nil
-	}
-
-	if svc.Endpoint == "" {
-		return "", fmt.Errorf("service %q has no endpoint configured", svc.ID)
-	}
-
-	req, err := http.NewRequest("GET", svc.Endpoint, nil)
-	if err != nil {
-		return "", err
-	}
-	for k, v := range svc.Headers {
-		req.Header.Set(k, v)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", err
-	}
-
-	slog.Debug("service fetch complete", "service", svc.ID, "status", resp.StatusCode, "bytes", len(data))
-
-	ttl := svc.CacheTTL.Duration
-	if ttl == 0 {
-		ttl = 5 * time.Minute
-	}
-	s.cache.Set(svc.ID, string(data), ttl)
-	return string(data), nil
 }
 
 // injectSystemMessage inserts a system message into an OpenAI-compatible request body.
