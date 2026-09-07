@@ -31,6 +31,17 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Handle /capabilities requests — return connector metadata.
+	if remainingPath == "/capabilities" {
+		if connector, ok := s.connectors[serviceID]; ok {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(connector.Capabilities())
+		} else {
+			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q has no connector", serviceID))
+		}
+		return
+	}
+
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)
 		writeJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))

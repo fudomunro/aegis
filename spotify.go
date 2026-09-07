@@ -21,6 +21,23 @@ func NewSpotifyConnector(srv *Server) *SpotifyConnector {
 	return &SpotifyConnector{server: srv}
 }
 
+// Capabilities returns what Spotify data types and operations are supported.
+func (c *SpotifyConnector) Capabilities() ServiceCapabilities {
+	return ServiceCapabilities{
+		DataTypes: []DataTypeCapability{
+			{Name: "user", Description: "Current user profile", Operations: []string{"read"}},
+			{Name: "tracks", Description: "Individual songs — saved tracks, top tracks, audio features", Operations: []string{"read", "search"}},
+			{Name: "albums", Description: "Albums — saved albums, new releases", Operations: []string{"read", "search"}},
+			{Name: "artists", Description: "Artists — followed artists, top tracks, related artists", Operations: []string{"read", "search"}},
+			{Name: "playlists", Description: "User playlists — list, detail with tracks", Operations: []string{"read", "search"}},
+			{Name: "search", Description: "Search across tracks, albums, artists, and playlists", Operations: []string{"search"}},
+			{Name: "player", Description: "Playback state, currently playing, recently played", Operations: []string{"read"}},
+			{Name: "library", Description: "User's saved tracks, albums, and artists", Operations: []string{"read"}},
+			{Name: "recommendations", Description: "Personalized top items by time range", Operations: []string{"read"}},
+		},
+	}
+}
+
 // SystemInstructions returns the system message injected into LLM requests
 // when Spotify is referenced. This tells the agent exactly how to use the proxy.
 func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
