@@ -18,14 +18,24 @@ type Config struct {
 // Service represents a named external service (e.g. Spotify, YouTube Music)
 // that Guardian can intercept and enrich requests for.
 type Service struct {
-	ID          string   `json:"id"`
-	Name        string   `json:"name"`
-	Aliases     []string `json:"aliases,omitempty"`
-	Action      string   `json:"action"` // "inject" or "block"
-	Endpoint    string   `json:"endpoint,omitempty"`
+	ID          string     `json:"id"`
+	Name        string     `json:"name"`
+	Aliases     []string   `json:"aliases,omitempty"`
+	Action      string     `json:"action"` // "inject" or "block"
+	Endpoint    string     `json:"endpoint,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	CacheTTL    Duration          `json:"cache_ttl"`
 	Description string            `json:"description,omitempty"`
+	OAuth       *OAuthConfig      `json:"oauth,omitempty"`
+}
+
+// OAuthConfig holds the OAuth2 credentials and endpoints for a service.
+type OAuthConfig struct {
+	ClientID     string   `json:"client_id"`
+	ClientSecret string   `json:"client_secret"`
+	AuthURL      string   `json:"auth_url"`
+	TokenURL     string   `json:"token_url"`
+	Scopes       []string `json:"scopes"`
 }
 
 // Duration wraps time.Duration for JSON marshalling.

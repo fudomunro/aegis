@@ -6,11 +6,20 @@
       "aliases": ["spotify music"],
       "action": "inject",
       "endpoint": "https://api.spotify.com/v1",
-      "headers": {
-        "Authorization": "Bearer ${SPOTIFY_TOKEN}"
-      },
       "cache_ttl": "10m",
-      "description": "Proxies Spotify API calls through Guardian for caching and auditing"
+      "description": "Proxies Spotify API calls through Guardian for caching and auditing",
+      "oauth": {
+        "client_id": "YOUR_SPOTIFY_CLIENT_ID",
+        "client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
+        "auth_url": "https://accounts.spotify.com/authorize",
+        "token_url": "https://accounts.spotify.com/api/token",
+        "scopes": [
+          "user-read-playback-state",
+          "user-library-read",
+          "playlist-read-private",
+          "playlist-read-collaborative"
+        ]
+      }
     },
     {
       "id": "youtube-music",
@@ -18,11 +27,17 @@
       "aliases": ["yt music", "ytmusic"],
       "action": "inject",
       "endpoint": "https://music.googleapis.com/v1",
-      "headers": {
-        "Authorization": "Bearer ${YOUTUBE_MUSIC_TOKEN}"
-      },
       "cache_ttl": "15m",
-      "description": "Proxies YouTube Music API calls through Guardian"
+      "description": "Proxies YouTube Music API calls through Guardian",
+      "oauth": {
+        "client_id": "YOUR_GOOGLE_CLIENT_ID",
+        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": [
+          "https://www.googleapis.com/auth/youtube.readonly"
+        ]
+      }
     },
     {
       "id": "amazon-music",
@@ -30,11 +45,17 @@
       "aliases": ["amazon music unlimited"],
       "action": "inject",
       "endpoint": "https://api.amazonmusic.com/v1",
-      "headers": {
-        "Authorization": "Bearer ${AMAZON_MUSIC_TOKEN}"
-      },
       "cache_ttl": "15m",
-      "description": "Proxies Amazon Music API calls through Guardian"
+      "description": "Proxies Amazon Music API calls through Guardian",
+      "oauth": {
+        "client_id": "YOUR_LWA_CLIENT_ID",
+        "client_secret": "YOUR_LWA_CLIENT_SECRET",
+        "auth_url": "https://www.amazon.com/ap/oa",
+        "token_url": "https://api.amazon.com/auth/o2/token",
+        "scopes": [
+          "music:user_profile"
+        ]
+      }
     },
     {
       "id": "tidal",

@@ -81,6 +81,12 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		upstreamReq.Header.Set(k, v)
 	}
 
+	// If we have a stored OAuth token for this service, use it.
+	// This overrides any static Authorization header from config.
+	if tok := s.getValidToken(serviceID, logger); tok != "" {
+		upstreamReq.Header.Set("Authorization", "Bearer "+tok)
+	}
+
 	resp, err := http.DefaultClient.Do(upstreamReq)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
@@ -121,4 +127,36 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
+}
+
+// getValidToken returns a valid access token for the service, refreshing if needed.
+// Returns "" if no token is available.
+func (s *Server) getValidToken(serviceID string, logger *slog.Logger) string {
+	if s.tokens == nil {
+		return ""
+	}
+
+	tok := s.tokens.Get(serviceID)
+	if tok == nil {
+		return ""
+	}
+
+	if !tok.IsExpired(30 * time.Second) {
+		return tok.AccessToken
+	}
+
+	// Token is expired or about to expire — try to refresh.
+	if tok.RefreshToken == "" {
+		logger.Warn("OAuth token expired, no refresh token", "service", serviceID)
+		return ""
+	}
+
+	logger.Info("refreshing expired OAuth token", "service", serviceID)
+	refreshed, err := s.RefreshToken(serviceID)
+	if err != nil {
+		logger.Error("token refresh failed", "service", serviceID, "error", err)
+		return tok.AccessToken // try with expired token as fallback
+	}
+
+	return refreshed.AccessToken
 }
