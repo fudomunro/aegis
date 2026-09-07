@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"log/slog"
 	"os"
 	"strings"
 	"sync"
@@ -85,6 +86,7 @@ func (c *Config) Reload() error {
 	}
 	c.Sources = fresh.Sources
 	c.Rules = fresh.Rules
+	slog.Info("config reloaded", "path", c.path, "sources", len(fresh.Sources), "rules", len(fresh.Rules))
 	return nil
 }
 

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -18,22 +18,22 @@ type PreRequestPayload struct {
 }
 
 type RequestMetadata struct {
-	LoginName  string `json:"login_name"`
-	UserAgent  string `json:"user_agent"`
-	URL        string `json:"url"`
-	Model      string `json:"model"`
-	Provider   string `json:"provider"`
-	Tailnet    string `json:"tailnet_name"`
-	NodeID     string `json:"stable_node_id"`
-	RequestID  string `json:"request_id"`
-	SessionID  string `json:"session_id"`
+	LoginName string `json:"login_name"`
+	UserAgent string `json:"user_agent"`
+	URL       string `json:"url"`
+	Model     string `json:"model"`
+	Provider  string `json:"provider"`
+	Tailnet   string `json:"tailnet_name"`
+	NodeID    string `json:"stable_node_id"`
+	RequestID string `json:"request_id"`
+	SessionID string `json:"session_id"`
 }
 
 // Guardrail response actions.
 const (
-	ActionAllow   = "allow"
-	ActionBlock   = "block"
-	ActionModify  = "modify"
+	ActionAllow  = "allow"
+	ActionBlock  = "block"
+	ActionModify = "modify"
 )
 
 type GuardrailResponse struct {
@@ -54,6 +54,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		if auth != "Bearer "+s.apiKey {
 			apiKey := r.Header.Get("X-Api-Key")
 			if apiKey != s.apiKey {
+				slog.Warn("unauthorized request", "remote", r.RemoteAddr)
 				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 				return
 			}
@@ -65,6 +66,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		slog.Error("failed to read request body", "error", err)
 		writeGuardrailResponse(w, GuardrailResponse{
 			Action:  ActionAllow,
 			Message: "failed to read request body",
@@ -74,12 +76,20 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	var payload PreRequestPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
+		slog.Error("failed to parse payload", "error", err)
 		writeGuardrailResponse(w, GuardrailResponse{
 			Action:  ActionAllow,
 			Message: "failed to parse payload",
 		})
 		return
 	}
+
+	logger := slog.With(
+		"request_id", payload.Metadata.RequestID,
+		"user", payload.Metadata.LoginName,
+		"model", payload.Metadata.Model,
+		"provider", payload.Metadata.Provider,
+	)
 
 	matched := s.config.FindMatchingRules(
 		payload.Metadata.Model,
@@ -88,13 +98,21 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	)
 
 	if len(matched) == 0 {
+		logger.Debug("no rules matched, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
+	ruleIDs := make([]string, len(matched))
+	for i, r := range matched {
+		ruleIDs[i] = r.ID
+	}
+	logger.Info("rules matched", "rules", ruleIDs)
+
 	// Check if any rule requires blocking.
 	for _, rule := range matched {
 		if rule.Action == "block" {
+			logger.Warn("request blocked", "rule", rule.ID, "reason", rule.Description)
 			writeGuardrailResponse(w, GuardrailResponse{
 				Action:  ActionBlock,
 				Message: fmt.Sprintf("blocked by rule %s: %s", rule.ID, rule.Description),
@@ -112,26 +130,29 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		for _, sourceID := range rule.Sources {
 			data, err := s.fetchFromSource(sourceID)
 			if err != nil {
-				log.Printf("source %s fetch error: %v", sourceID, err)
+				logger.Error("source fetch failed", "source", sourceID, "error", err)
 				continue
 			}
+			logger.Debug("source fetched", "source", sourceID, "bytes", len(data))
 			enrichments = append(enrichments, fmt.Sprintf("[%s] %s", sourceID, data))
 		}
 	}
 
 	if len(enrichments) == 0 {
+		logger.Debug("no enrichments produced, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
 	// Inject enrichment data into the request body.
-	modified, err := injectSystemMessage(body, strings.Join(enrichments, "\n\n"))
+	modified, err := injectSystemMessage(payload.RequestBody, strings.Join(enrichments, "\n\n"))
 	if err != nil {
-		log.Printf("failed to inject system message: %v", err)
+		logger.Error("failed to inject system message", "error", err)
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
+	logger.Info("request modified", "enrichments", len(enrichments))
 	writeGuardrailResponse(w, GuardrailResponse{
 		Action: ActionModify,
 		Body:   modified,
@@ -140,6 +161,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) fetchFromSource(sourceID string) (string, error) {
 	if cached, ok := s.cache.Get(sourceID); ok {
+		slog.Debug("cache hit", "source", sourceID)
 		return cached, nil
 	}
 
@@ -167,6 +189,7 @@ func (s *Server) fetchFromSource(sourceID string) (string, error) {
 		ttl = 5 * time.Minute
 	}
 	s.cache.Set(sourceID, data, ttl)
+	slog.Debug("cache set", "source", sourceID, "ttl", ttl, "bytes", len(data))
 	return data, nil
 }
 
@@ -189,6 +212,8 @@ func (s *Server) fetchAPI(src *Source) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	slog.Debug("api fetch complete", "source", src.ID, "status", resp.StatusCode, "bytes", len(data))
 	return string(data), nil
 }
 
@@ -225,4 +250,3 @@ func writeGuardrailResponse(w http.ResponseWriter, resp GuardrailResponse) {
 	}
 	json.NewEncoder(w).Encode(resp)
 }
-
