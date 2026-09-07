@@ -31,7 +31,7 @@ func main() {
 		slog.Error("failed to load config", "path", *configPath, "error", err)
 		os.Exit(1)
 	}
-	slog.Info("config loaded", "path", *configPath, "sources", len(cfg.Sources), "rules", len(cfg.Rules))
+	slog.Info("config loaded", "path", *configPath, "services", len(cfg.Services))
 
 	srv := &Server{
 		apiKey: *apiKey,

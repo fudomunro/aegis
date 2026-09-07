@@ -88,54 +88,47 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		"request_id", payload.Metadata.RequestID,
 		"user", payload.Metadata.LoginName,
 		"model", payload.Metadata.Model,
-		"provider", payload.Metadata.Provider,
 	)
 
-	matched := s.config.FindMatchingRules(
-		payload.Metadata.Model,
-		payload.Metadata.LoginName,
-		payload.UserMessage,
-	)
+	matched := s.config.FindMatchingServices(payload.UserMessage)
 
 	if len(matched) == 0 {
-		logger.Debug("no rules matched, allowing")
+		logger.Debug("no services matched, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
-	ruleIDs := make([]string, len(matched))
-	for i, r := range matched {
-		ruleIDs[i] = r.ID
+	serviceIDs := make([]string, len(matched))
+	for i, svc := range matched {
+		serviceIDs[i] = svc.ID
 	}
-	logger.Info("rules matched", "rules", ruleIDs)
+	logger.Info("services matched", "services", serviceIDs)
 
-	// Check if any rule requires blocking.
-	for _, rule := range matched {
-		if rule.Action == "block" {
-			logger.Warn("request blocked", "rule", rule.ID, "reason", rule.Description)
+	// If any matched service is blocked, reject the request.
+	for _, svc := range matched {
+		if svc.Action == "block" {
+			logger.Warn("request blocked by service policy", "service", svc.ID, "reason", svc.Description)
 			writeGuardrailResponse(w, GuardrailResponse{
 				Action:  ActionBlock,
-				Message: fmt.Sprintf("blocked by rule %s: %s", rule.ID, rule.Description),
+				Message: fmt.Sprintf("blocked: access to %s is not allowed. %s", svc.Name, svc.Description),
 			})
 			return
 		}
 	}
 
-	// Collect data from sources referenced by matching rules.
+	// Collect data from injectable services.
 	var enrichments []string
-	for _, rule := range matched {
-		if rule.Action != "inject" && rule.Action != "" {
+	for _, svc := range matched {
+		if svc.Action != "inject" {
 			continue
 		}
-		for _, sourceID := range rule.Sources {
-			data, err := s.fetchFromSource(sourceID)
-			if err != nil {
-				logger.Error("source fetch failed", "source", sourceID, "error", err)
-				continue
-			}
-			logger.Debug("source fetched", "source", sourceID, "bytes", len(data))
-			enrichments = append(enrichments, fmt.Sprintf("[%s] %s", sourceID, data))
+		data, err := s.fetchServiceData(svc)
+		if err != nil {
+			logger.Error("service data fetch failed", "service", svc.ID, "error", err)
+			continue
 		}
+		logger.Debug("service data fetched", "service", svc.ID, "bytes", len(data))
+		enrichments = append(enrichments, fmt.Sprintf("[%s] %s", svc.Name, data))
 	}
 
 	if len(enrichments) == 0 {
@@ -159,46 +152,22 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) fetchFromSource(sourceID string) (string, error) {
-	if cached, ok := s.cache.Get(sourceID); ok {
-		slog.Debug("cache hit", "source", sourceID)
+// fetchServiceData fetches data from a service's endpoint, using the cache when available.
+func (s *Server) fetchServiceData(svc Service) (string, error) {
+	if cached, ok := s.cache.Get(svc.ID); ok {
+		slog.Debug("cache hit", "service", svc.ID)
 		return cached, nil
 	}
 
-	src := s.config.GetSource(sourceID)
-	if src == nil {
-		return "", fmt.Errorf("source %q not found", sourceID)
+	if svc.Endpoint == "" {
+		return "", fmt.Errorf("service %q has no endpoint configured", svc.ID)
 	}
 
-	var data string
-	var err error
-
-	switch src.Type {
-	case "api":
-		data, err = s.fetchAPI(src)
-	default:
-		return "", fmt.Errorf("unsupported source type: %s", src.Type)
-	}
-
+	req, err := http.NewRequest("GET", svc.Endpoint, nil)
 	if err != nil {
 		return "", err
 	}
-
-	ttl := src.CacheTTL.Duration
-	if ttl == 0 {
-		ttl = 5 * time.Minute
-	}
-	s.cache.Set(sourceID, data, ttl)
-	slog.Debug("cache set", "source", sourceID, "ttl", ttl, "bytes", len(data))
-	return data, nil
-}
-
-func (s *Server) fetchAPI(src *Source) (string, error) {
-	req, err := http.NewRequest("GET", src.URL, nil)
-	if err != nil {
-		return "", err
-	}
-	for k, v := range src.Headers {
+	for k, v := range svc.Headers {
 		req.Header.Set(k, v)
 	}
 
@@ -213,7 +182,13 @@ func (s *Server) fetchAPI(src *Source) (string, error) {
 		return "", err
 	}
 
-	slog.Debug("api fetch complete", "source", src.ID, "status", resp.StatusCode, "bytes", len(data))
+	slog.Debug("service fetch complete", "service", svc.ID, "status", resp.StatusCode, "bytes", len(data))
+
+	ttl := svc.CacheTTL.Duration
+	if ttl == 0 {
+		ttl = 5 * time.Minute
+	}
+	s.cache.Set(svc.ID, string(data), ttl)
 	return string(data), nil
 }
 
