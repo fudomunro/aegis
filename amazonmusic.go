@@ -29,14 +29,14 @@ func NewAmazonMusicConnector(srv *Server) *AmazonMusicConnector {
 func (c *AmazonMusicConnector) Capabilities() ServiceCapabilities {
 	return ServiceCapabilities{
 		DataTypes: []DataTypeCapability{
-			{Name: "user", Description: "Current user profile", Operations: nil},
-			{Name: "tracks", Description: "Individual songs", Operations: nil},
-			{Name: "albums", Description: "Albums", Operations: nil},
-			{Name: "artists", Description: "Artists", Operations: nil},
-			{Name: "playlists", Description: "User playlists", Operations: nil},
-			{Name: "search", Description: "Catalog search", Operations: nil},
-			{Name: "library", Description: "User's saved music", Operations: nil},
-			{Name: "recommendations", Description: "Personalized suggestions", Operations: nil},
+			{Name: "user", Description: "Current user profile", Operations: []Operation{}},
+			{Name: "tracks", Description: "Individual songs", Operations: []Operation{}},
+			{Name: "albums", Description: "Albums", Operations: []Operation{}},
+			{Name: "artists", Description: "Artists", Operations: []Operation{}},
+			{Name: "playlists", Description: "User playlists", Operations: []Operation{}},
+			{Name: "search", Description: "Catalog search", Operations: []Operation{}},
+			{Name: "library", Description: "User's saved music", Operations: []Operation{}},
+			{Name: "recommendations", Description: "Personalized suggestions", Operations: []Operation{}},
 		},
 	}
 }

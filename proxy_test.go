@@ -340,11 +340,56 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 	if tracksCap == nil {
 		t.Fatal("expected tracks data type")
 	}
-	if !stringSliceContains(tracksCap.Operations, "read") {
-		t.Fatal("expected tracks to support read")
+
+	// Verify tracks has structured operations.
+	opNames := make([]string, len(tracksCap.Operations))
+	for i, op := range tracksCap.Operations {
+		opNames[i] = op.Name
 	}
-	if !stringSliceContains(tracksCap.Operations, "search") {
-		t.Fatal("expected tracks to support search")
+	if !stringSliceContains(opNames, "read_saved") {
+		t.Fatal("expected tracks to have read_saved operation")
+	}
+	if !stringSliceContains(opNames, "read_top") {
+		t.Fatal("expected tracks to have read_top operation")
+	}
+
+	// Verify read_saved operation has method and path.
+	var readSaved *Operation
+	for i, op := range tracksCap.Operations {
+		if op.Name == "read_saved" {
+			readSaved = &tracksCap.Operations[i]
+			break
+		}
+	}
+	if readSaved == nil {
+		t.Fatal("expected read_saved operation")
+	}
+	if readSaved.Method != "GET" {
+		t.Fatalf("method = %s, want GET", readSaved.Method)
+	}
+	if readSaved.Path != "/me/tracks" {
+		t.Fatalf("path = %s, want /me/tracks", readSaved.Path)
+	}
+	if len(readSaved.Parameters) == 0 {
+		t.Fatal("expected parameters for read_saved")
+	}
+
+	// Verify search data type has the search operation.
+	var searchCap *DataTypeCapability
+	for i, dt := range caps.DataTypes {
+		if dt.Name == "search" {
+			searchCap = &caps.DataTypes[i]
+			break
+		}
+	}
+	if searchCap == nil {
+		t.Fatal("expected search data type")
+	}
+	if len(searchCap.Operations) != 1 || searchCap.Operations[0].Name != "search" {
+		t.Fatalf("search operations = %v", searchCap.Operations)
+	}
+	if searchCap.Operations[0].Method != "GET" {
+		t.Fatalf("search method = %s", searchCap.Operations[0].Method)
 	}
 }
 

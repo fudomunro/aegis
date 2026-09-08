@@ -25,15 +25,133 @@ func NewSpotifyConnector(srv *Server) *SpotifyConnector {
 func (c *SpotifyConnector) Capabilities() ServiceCapabilities {
 	return ServiceCapabilities{
 		DataTypes: []DataTypeCapability{
-			{Name: "user", Description: "Current user profile", Operations: []string{"read"}},
-			{Name: "tracks", Description: "Individual songs — saved tracks, top tracks, audio features", Operations: []string{"read", "search"}},
-			{Name: "albums", Description: "Albums — saved albums, new releases", Operations: []string{"read", "search"}},
-			{Name: "artists", Description: "Artists — followed artists, top tracks, related artists", Operations: []string{"read", "search"}},
-			{Name: "playlists", Description: "User playlists — list, detail with tracks", Operations: []string{"read", "search"}},
-			{Name: "search", Description: "Search across tracks, albums, artists, and playlists", Operations: []string{"search"}},
-			{Name: "player", Description: "Playback state, currently playing, recently played", Operations: []string{"read"}},
-			{Name: "library", Description: "User's saved tracks, albums, and artists", Operations: []string{"read"}},
-			{Name: "recommendations", Description: "Personalized top items by time range", Operations: []string{"read"}},
+			{
+				Name:        "user",
+				Description: "Current user profile",
+				Operations: []Operation{
+					{Name: "read", Description: "Get current user's profile", Method: "GET", Path: "/me",
+						Response: ResponseSpec{Description: "User profile with id, display_name, uri", Fields: []string{"id", "display_name", "uri"}}},
+				},
+			},
+			{
+				Name:        "tracks",
+				Description: "Individual songs — saved tracks, top tracks, search results",
+				Operations: []Operation{
+					{Name: "read_saved", Description: "List user's saved/liked tracks (paginated, auto-fetches all pages)", Method: "GET", Path: "/me/tracks",
+						Parameters: []Parameter{
+							{Name: "limit", In: "query", Type: "integer", Description: "Max tracks per page (1-50)", Default: 20},
+							{Name: "offset", In: "query", Type: "integer", Description: "Index of first track to return", Default: 0},
+						},
+						Response: ResponseSpec{Description: "Saved tracks with name, artists, album, id, uri", Fields: []string{"tracks", "total"}}},
+					{Name: "read_top", Description: "List user's top tracks by time range", Method: "GET", Path: "/me/top/tracks",
+						Parameters: []Parameter{
+							{Name: "time_range", In: "query", Type: "string", Description: "short_term (4 weeks), medium_term (6 months), or long_term (years)", Default: "medium_term"},
+							{Name: "limit", In: "query", Type: "integer", Description: "Max tracks (1-50)", Default: 20},
+						},
+						Response: ResponseSpec{Description: "Top tracks with name, artists, album, id", Fields: []string{"tracks"}}},
+					{Name: "get_by_id", Description: "Get a track by its Spotify ID", Method: "GET", Path: "/tracks/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Spotify track ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Track details with name, artists, album, duration, popularity", Fields: []string{"name", "artists", "album", "duration_ms", "popularity", "id", "uri"}}},
+				},
+			},
+			{
+				Name:        "albums",
+				Description: "Albums — saved albums, album details",
+				Operations: []Operation{
+					{Name: "read_saved", Description: "List user's saved albums (paginated)", Method: "GET", Path: "/me/albums",
+						Parameters: []Parameter{
+							{Name: "limit", In: "query", Type: "integer", Description: "Max albums per page (1-50)", Default: 20},
+						},
+						Response: ResponseSpec{Description: "Saved albums with name, artists, id", Fields: []string{"albums", "total"}}},
+					{Name: "get_by_id", Description: "Get an album by its Spotify ID", Method: "GET", Path: "/albums/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Spotify album ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Album with tracks, artists, release date", Fields: []string{"name", "artists", "tracks", "release_date", "total_tracks"}}},
+				},
+			},
+			{
+				Name:        "artists",
+				Description: "Artists — followed artists, top tracks, related artists",
+				Operations: []Operation{
+					{Name: "read_top", Description: "List user's top artists by time range", Method: "GET", Path: "/me/top/artists",
+						Parameters: []Parameter{
+							{Name: "time_range", In: "query", Type: "string", Description: "short_term, medium_term, or long_term", Default: "medium_term"},
+						},
+						Response: ResponseSpec{Description: "Top artists with name, id, genres", Fields: []string{"artists"}}},
+					{Name: "get_by_id", Description: "Get an artist by its Spotify ID", Method: "GET", Path: "/artists/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Spotify artist ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Artist with name, genres, followers, popularity", Fields: []string{"name", "genres", "followers", "popularity"}}},
+					{Name: "get_top_tracks", Description: "Get an artist's top tracks", Method: "GET", Path: "/artists/{id}/top-tracks",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Spotify artist ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Artist's top tracks", Fields: []string{"tracks"}}},
+				},
+			},
+			{
+				Name:        "playlists",
+				Description: "User playlists — list, detail with tracks",
+				Operations: []Operation{
+					{Name: "read_list", Description: "List user's playlists (paginated)", Method: "GET", Path: "/me/playlists",
+						Parameters: []Parameter{
+							{Name: "limit", In: "query", Type: "integer", Description: "Max playlists per page (1-50)", Default: 20},
+						},
+						Response: ResponseSpec{Description: "Playlists with name, description, track count", Fields: []string{"playlists", "total"}}},
+					{Name: "get_by_id", Description: "Get a playlist by ID with its tracks", Method: "GET", Path: "/playlists/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Spotify playlist ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Playlist detail with name, owner, tracks", Fields: []string{"name", "description", "owner", "tracks", "total_tracks"}}},
+				},
+			},
+			{
+				Name:        "search",
+				Description: "Search the Spotify catalog",
+				Operations: []Operation{
+					{Name: "search", Description: "Search for tracks, albums, artists, or playlists", Method: "GET", Path: "/search",
+						Parameters: []Parameter{
+							{Name: "q", In: "query", Type: "string", Description: "Search query", Required: true},
+							{Name: "type", In: "query", Type: "string", Description: "Comma-separated types: track, album, artist, playlist", Default: "track"},
+							{Name: "limit", In: "query", Type: "integer", Description: "Max results per type (1-50)", Default: 10},
+						},
+						Response: ResponseSpec{Description: "Search results grouped by type", Fields: []string{"tracks", "albums", "artists", "playlists"}}},
+				},
+			},
+			{
+				Name:        "player",
+				Description: "Playback state, currently playing, recently played",
+				Operations: []Operation{
+					{Name: "read_state", Description: "Get current playback state", Method: "GET", Path: "/me/player",
+						Response: ResponseSpec{Description: "Playback state with track, device, is_playing", Fields: []string{"is_playing", "track", "device"}}},
+					{Name: "read_recent", Description: "Get recently played tracks", Method: "GET", Path: "/me/player/recently-played",
+						Response: ResponseSpec{Description: "Recently played tracks with played_at timestamps", Fields: []string{"tracks"}}},
+				},
+			},
+			{
+				Name:        "library",
+				Description: "User's saved tracks, albums, and artists",
+				Operations: []Operation{
+					{Name: "read_tracks", Description: "List saved tracks (alias for tracks.read_saved)", Method: "GET", Path: "/me/tracks",
+						Response: ResponseSpec{Description: "Saved tracks", Fields: []string{"tracks", "total"}}},
+					{Name: "read_albums", Description: "List saved albums (alias for albums.read_saved)", Method: "GET", Path: "/me/albums",
+						Response: ResponseSpec{Description: "Saved albums", Fields: []string{"albums", "total"}}},
+				},
+			},
+			{
+				Name:        "recommendations",
+				Description: "Personalized recommendations based on listening history",
+				Operations: []Operation{
+					{Name: "read_top_tracks", Description: "Top tracks (alias for tracks.read_top)", Method: "GET", Path: "/me/top/tracks",
+						Response: ResponseSpec{Description: "Top tracks", Fields: []string{"tracks"}}},
+					{Name: "read_top_artists", Description: "Top artists (alias for artists.read_top)", Method: "GET", Path: "/me/top/artists",
+						Response: ResponseSpec{Description: "Top artists", Fields: []string{"artists"}}},
+				},
+			},
 		},
 	}
 }

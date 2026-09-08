@@ -26,12 +26,91 @@ func NewYouTubeMusicConnector(srv *Server) *YouTubeMusicConnector {
 func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 	return ServiceCapabilities{
 		DataTypes: []DataTypeCapability{
-			{Name: "user", Description: "Current user's YouTube channel", Operations: []string{"read"}},
-			{Name: "tracks", Description: "Music videos and tracks — liked, search results", Operations: []string{"read", "search"}},
-			{Name: "playlists", Description: "User playlists — list, detail with items", Operations: []string{"read"}},
-			{Name: "channels", Description: "YouTube channels — subscribed music channels", Operations: []string{"read"}},
-			{Name: "search", Description: "Search YouTube Music catalog (defaults to music category)", Operations: []string{"search"}},
-			{Name: "library", Description: "User's liked videos and subscriptions", Operations: []string{"read"}},
+			{
+				Name:        "user",
+				Description: "Current user's YouTube channel",
+				Operations: []Operation{
+					{Name: "read", Description: "Get current user's channel info", Method: "GET", Path: "/me",
+						Response: ResponseSpec{Description: "Channel with id, title, playlists", Fields: []string{"id", "title", "description", "playlists"}}},
+				},
+			},
+			{
+				Name:        "tracks",
+				Description: "Music videos and tracks — liked, search results",
+				Operations: []Operation{
+					{Name: "read_liked", Description: "List liked/favorite music videos (paginated)", Method: "GET", Path: "/me/liked",
+						Parameters: []Parameter{
+							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
+						},
+						Response: ResponseSpec{Description: "Liked videos with title, channel, video_id", Fields: []string{"videos", "total"}}},
+					{Name: "get_by_id", Description: "Get video details by ID", Method: "GET", Path: "/videos/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "YouTube video ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Video with title, channel, duration, stats", Fields: []string{"id", "title", "channel", "duration", "view_count", "like_count"}}},
+				},
+			},
+			{
+				Name:        "playlists",
+				Description: "User playlists — list, detail with items",
+				Operations: []Operation{
+					{Name: "read_list", Description: "List user's playlists (paginated)", Method: "GET", Path: "/me/playlists",
+						Parameters: []Parameter{
+							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
+						},
+						Response: ResponseSpec{Description: "Playlists with title, item_count", Fields: []string{"playlists", "total_results"}}},
+					{Name: "get_by_id", Description: "Get a playlist by ID", Method: "GET", Path: "/playlists/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Playlist with title, channel, item count", Fields: []string{"id", "title", "description", "channel", "item_count"}}},
+					{Name: "read_items", Description: "List items in a playlist (paginated)", Method: "GET", Path: "/playlists/{id}/items",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
+							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
+						},
+						Response: ResponseSpec{Description: "Playlist items with title, channel, video_id", Fields: []string{"videos", "total"}}},
+				},
+			},
+			{
+				Name:        "channels",
+				Description: "YouTube channels — subscribed music channels",
+				Operations: []Operation{
+					{Name: "read_subscriptions", Description: "List subscribed channels (paginated)", Method: "GET", Path: "/me/subscriptions",
+						Parameters: []Parameter{
+							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
+						},
+						Response: ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
+					{Name: "get_by_id", Description: "Get channel details by ID", Method: "GET", Path: "/channels/{id}",
+						Parameters: []Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "YouTube channel ID", Required: true},
+						},
+						Response: ResponseSpec{Description: "Channel with title, description, stats", Fields: []string{"id", "title", "description"}}},
+				},
+			},
+			{
+				Name:        "search",
+				Description: "Search YouTube Music catalog",
+				Operations: []Operation{
+					{Name: "search", Description: "Search YouTube Music (defaults to music videos)", Method: "GET", Path: "/search",
+						Parameters: []Parameter{
+							{Name: "q", In: "query", Type: "string", Description: "Search query", Required: true},
+							{Name: "type", In: "query", Type: "string", Description: "Resource type: video, playlist, channel", Default: "video"},
+							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
+						},
+						Response: ResponseSpec{Description: "Search results with title, channel, type", Fields: []string{"results", "total"}}},
+				},
+			},
+			{
+				Name:        "library",
+				Description: "User's liked videos and subscriptions",
+				Operations: []Operation{
+					{Name: "read_liked", Description: "List liked videos (alias for tracks.read_liked)", Method: "GET", Path: "/me/liked",
+						Response: ResponseSpec{Description: "Liked videos", Fields: []string{"videos", "total"}}},
+					{Name: "read_subscriptions", Description: "List subscriptions (alias for channels.read_subscriptions)", Method: "GET", Path: "/me/subscriptions",
+						Response: ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
+				},
+			},
 		},
 	}
 }
