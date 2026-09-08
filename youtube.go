@@ -207,13 +207,17 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Transform the response.
-	transformed := c.transformResponse(remainingPath, data, logger)
-
-	// Auto-fetch remaining pages for paginated endpoints.
-	if r.Method == http.MethodGet {
-		transformed = c.fetchAllPages(remainingPath, q, transformed, token, logger)
+	// Auto-fetch remaining pages from raw data (before transform strips nextPageToken).
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err == nil {
+		if r.Method == http.MethodGet {
+			raw = c.fetchAllPagesRaw(remainingPath, q, raw, token, logger)
+		}
+		data, _ = json.Marshal(raw)
 	}
+
+	// Transform the (possibly paginated) response.
+	transformed := c.transformResponse(remainingPath, data, logger)
 
 	result, err := json.Marshal(transformed)
 	if err != nil {
@@ -441,8 +445,9 @@ func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) map[st
 		})
 	}
 	return map[string]any{
-		"playlists":     playlists,
-		"total_results": raw["pageInfo"],
+		"playlists":      playlists,
+		"total_results":  raw["pageInfo"],
+		"total_fetched":  raw["total_fetched"],
 	}
 }
 
@@ -473,8 +478,9 @@ func (c *YouTubeMusicConnector) transformPlaylistItems(raw map[string]any) map[s
 		videos = append(videos, video)
 	}
 	return map[string]any{
-		"videos": videos,
-		"total":  raw["pageInfo"],
+		"videos":        videos,
+		"total":         raw["pageInfo"],
+		"total_fetched": raw["total_fetched"],
 	}
 }
 
@@ -499,6 +505,7 @@ func (c *YouTubeMusicConnector) transformSubscriptions(raw map[string]any) map[s
 	return map[string]any{
 		"subscriptions": channels,
 		"total":         raw["pageInfo"],
+		"total_fetched": raw["total_fetched"],
 	}
 }
 
@@ -535,8 +542,9 @@ func (c *YouTubeMusicConnector) transformSearch(raw map[string]any) map[string]a
 		results = append(results, entry)
 	}
 	return map[string]any{
-		"results": results,
-		"total":   raw["pageInfo"],
+		"results":       results,
+		"total":         raw["pageInfo"],
+		"total_fetched": raw["total_fetched"],
 	}
 }
 
@@ -600,6 +608,58 @@ func (c *YouTubeMusicConnector) simplify(raw map[string]any) map[string]any {
 func (c *YouTubeMusicConnector) isPaginated(raw map[string]any) bool {
 	_, ok := raw["nextPageToken"]
 	return ok
+}
+
+// fetchAllPagesRaw follows YouTube's pagination tokens on raw (untransformed) data.
+// It combines items arrays from all pages into the first page's response.
+func (c *YouTubeMusicConnector) fetchAllPagesRaw(path string, query map[string][]string, firstPage map[string]any, token string, logger *slog.Logger) map[string]any {
+	nextToken, _ := firstPage["nextPageToken"].(string)
+	if nextToken == "" {
+		return firstPage
+	}
+
+	allItems, _ := firstPage["items"].([]any)
+
+	svc := c.server.config.GetService("youtube-music")
+	upstreamBase := "https://www.googleapis.com/youtube/v3"
+	if svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	apiPath, extraParams, _ := c.mapPath(path, query)
+
+	maxPages := 10
+	for i := 0; i < maxPages && nextToken != ""; i++ {
+		q := map[string][]string{}
+		for k, v := range query {
+			q[k] = v
+		}
+		for k, v := range extraParams {
+			q[k] = []string{v}
+		}
+		q["pageToken"] = []string{nextToken}
+
+		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
+
+		data, status, err := c.doYouTubeRequest("GET", upstreamURL, nil, token)
+		if err != nil || status != http.StatusOK {
+			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
+			break
+		}
+		var next map[string]any
+		if err := json.Unmarshal(data, &next); err != nil {
+			break
+		}
+		items, _ := next["items"].([]any)
+		allItems = append(allItems, items...)
+		nextToken, _ = next["nextPageToken"].(string)
+	}
+
+	firstPage["items"] = allItems
+	delete(firstPage, "nextPageToken")
+	firstPage["total_fetched"] = len(allItems)
+
+	return firstPage
 }
 
 // fetchAllPages follows YouTube's pagination tokens and combines items.
