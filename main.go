@@ -11,7 +11,10 @@ import (
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
 	baseURL := flag.String("base-url", "", "public base URL of this Guardian instance (reads GUARDIAN_BASE_URL env if empty)")
-	apiKey := flag.String("api-key", "", "API key for authenticating requests (reads APERTURE_GUARDIAN_API_KEY env if empty)")
+	apiKey := flag.String("api-key", "", "API key for authenticating requests (reads APERTURE_GUARDIAN_API_KEY env if empty; optional in tailnet/auto modes)")
+	authMode := flag.String("auth-mode", "", "auth mode: auto, tailnet, or api-key (reads GUARDIAN_AUTH_MODE; default auto)")
+	allowedLogins := flag.String("allowed-logins", "", "comma-separated Tailscale logins allowed to call the API (reads GUARDIAN_ALLOWED_LOGINS; empty allows any tailnet identity)")
+	tsSocket := flag.String("ts-socket", "", "path to tailscaled LocalAPI socket for WhoIs (default: auto-detect /var/run/tailscale/tailscaled.sock)")
 	configPath := flag.String("config", "guardian.json", "path to rules configuration file")
 	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
@@ -25,9 +28,29 @@ func main() {
 	if *apiKey == "" {
 		*apiKey = os.Getenv("APERTURE_GUARDIAN_API_KEY")
 	}
-	if *apiKey == "" {
-		slog.Error("api-key is required (flag or APERTURE_GUARDIAN_API_KEY env)")
+	if *authMode == "" {
+		*authMode = os.Getenv("GUARDIAN_AUTH_MODE")
+	}
+	if *authMode == "" {
+		*authMode = AuthModeAuto
+	}
+	switch *authMode {
+	case AuthModeAuto, AuthModeTailnet, AuthModeAPIKey:
+	default:
+		slog.Error("invalid auth-mode", "value", *authMode, "allowed", "auto, tailnet, api-key")
 		os.Exit(1)
+	}
+
+	if *allowedLogins == "" {
+		*allowedLogins = os.Getenv("GUARDIAN_ALLOWED_LOGINS")
+	}
+
+	if *authMode == AuthModeAPIKey && *apiKey == "" {
+		slog.Error("api-key is required in api-key auth mode (flag or APERTURE_GUARDIAN_API_KEY env)")
+		os.Exit(1)
+	}
+	if *authMode == AuthModeAuto && *apiKey == "" {
+		slog.Warn("no API key configured — only tailnet identity will be accepted")
 	}
 
 	if *baseURL == "" {
@@ -59,14 +82,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	identity := buildIdentityResolver(*authMode, *tsSocket)
+
 	srv := &Server{
-		apiKey:      *apiKey,
-		baseURL:     *baseURL,
-		config:      cfg,
-		cache:       NewCache(),
-		tokens:      tokens,
-		oauthStates: NewStateStore(),
-		connectors:  make(map[string]ServiceConnector),
+		apiKey:        *apiKey,
+		authMode:      *authMode,
+		allowedLogins: parseLoginList(*allowedLogins),
+		identity:      identity,
+		baseURL:       *baseURL,
+		config:        cfg,
+		cache:         NewCache(),
+		tokens:        tokens,
+		oauthStates:   NewStateStore(),
+		connectors:    make(map[string]ServiceConnector),
 	}
 
 	// Register service connectors.
@@ -84,11 +112,40 @@ func main() {
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
 	mux.HandleFunc("/v1/setup", srv.HandleSetup)
 
-	slog.Info("starting server", "addr", *addr, "base_url", *baseURL)
+	slog.Info("starting server",
+		"addr", *addr,
+		"base_url", *baseURL,
+		"auth_mode", *authMode,
+		"api_key_configured", *apiKey != "",
+		"allowed_logins", len(srv.allowedLogins),
+	)
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// buildIdentityResolver wires Serve headers always, plus WhoIs when a
+// tailscaled socket is available (or explicitly configured).
+func buildIdentityResolver(authMode, tsSocket string) IdentityResolver {
+	if authMode == AuthModeAPIKey {
+		return nil
+	}
+	var resolvers []IdentityResolver
+	resolvers = append(resolvers, ServeHeaderResolver{})
+
+	who := WhoIsResolver{SocketPath: tsSocket}
+	sock := tsSocket
+	if sock == "" {
+		sock = defaultTSocketPath()
+	}
+	if sock != "" {
+		resolvers = append(resolvers, who)
+		slog.Info("tailscaled WhoIs enabled", "socket", sock)
+	} else if authMode == AuthModeTailnet {
+		slog.Warn("tailscaled socket not found — tailnet identity will only work via Tailscale Serve headers")
+	}
+	return MultiResolver{Resolvers: resolvers}
 }
 
 // handleAuthRoutes dispatches /v1/auth/* to the correct handler.
