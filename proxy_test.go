@@ -448,9 +448,11 @@ func TestHandleServiceProxy_Capabilities_NoConnector(t *testing.T) {
 
 // testServerWithBase creates a Server with a baseURL for testing.
 // Uses an in-memory token store that doesn't persist to disk.
+// Defaults to API-key auth so existing tests keep using the shared test key.
 func testServerWithBase(cfg *Config, baseURL string) *Server {
 	return &Server{
 		apiKey:      "test-key",
+		authMode:    AuthModeAPIKey,
 		baseURL:     baseURL,
 		config:      cfg,
 		cache:       NewCache(),
