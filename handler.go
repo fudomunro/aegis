@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -41,14 +42,121 @@ type GuardrailResponse struct {
 	Message string          `json:"message,omitempty"` // human-readable reason
 }
 
+// AuthMode selects how Guardian authenticates inbound API requests.
+const (
+	// AuthModeAuto accepts Tailscale identity when present, otherwise an API key.
+	// Recommended default for tailnet-only deployments that also keep a key
+	// for external bridges.
+	AuthModeAuto = "auto"
+	// AuthModeTailnet requires Tailscale identity (Serve headers or WhoIs).
+	// API key is not used. This is the recommended mode when Guardian is
+	// only reachable inside the tailnet.
+	AuthModeTailnet = "tailnet"
+	// AuthModeAPIKey requires the shared API key only (legacy).
+	AuthModeAPIKey = "api-key"
+)
+
 type Server struct {
-	apiKey      string
+	apiKey string
+	// authMode is AuthModeAuto, AuthModeTailnet, or AuthModeAPIKey.
+	authMode string
+	// allowedLogins, when non-empty, restricts which tailnet identities may
+	// call the API. Empty means any authenticated tailnet peer is allowed.
+	allowedLogins []string
+	// identity resolves Tailscale peer identity. Optional in api-key mode.
+	identity    IdentityResolver
 	baseURL     string
 	config      *Config
 	cache       *Cache
 	tokens      *TokenStore
 	oauthStates *StateStore
 	connectors  map[string]ServiceConnector
+}
+
+// AuthMiddleware authenticates requests according to the configured auth mode.
+// Successful tailnet identity is attached to the request context for logging.
+func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		id, idErr := s.resolveIdentity(r)
+
+		switch s.authMode {
+		case AuthModeAPIKey:
+			if !s.checkAPIKey(r) {
+				s.deny(w, r, nil, "missing or invalid API key")
+				return
+			}
+			next(w, r)
+			return
+		case AuthModeTailnet:
+			if id == nil {
+				if idErr != nil {
+					slog.Warn("tailnet identity resolve failed", "error", idErr, "remote", r.RemoteAddr)
+				}
+				s.deny(w, r, nil, "tailnet identity required — connect through Tailscale Serve or run on a tailscaled host")
+				return
+			}
+			if !loginAllowed(id, s.allowedLogins) {
+				s.deny(w, r, id, "identity not in allowed logins")
+				return
+			}
+			next(w, withPeerIdentity(r, id))
+			return
+		default: // AuthModeAuto
+			if id != nil && loginAllowed(id, s.allowedLogins) {
+				next(w, withPeerIdentity(r, id))
+				return
+			}
+			if s.apiKey != "" && s.checkAPIKey(r) {
+				next(w, r)
+				return
+			}
+			if id != nil {
+				s.deny(w, r, id, "identity not in allowed logins")
+				return
+			}
+			s.deny(w, r, nil, "unauthorized: provide a valid API key or connect from the tailnet")
+			return
+		}
+	}
+}
+
+func (s *Server) resolveIdentity(r *http.Request) (*PeerIdentity, error) {
+	if s.identity == nil {
+		return nil, nil
+	}
+	return s.identity.Resolve(r.Context(), r)
+}
+
+func (s *Server) checkAPIKey(r *http.Request) bool {
+	if s.apiKey == "" {
+		return false
+	}
+	if r.Header.Get("Authorization") == "Bearer "+s.apiKey {
+		return true
+	}
+	return r.Header.Get("X-Api-Key") == s.apiKey
+}
+
+func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, reason string) {
+	attrs := []any{"remote", r.RemoteAddr, "path", r.URL.Path, "reason", reason}
+	if id != nil {
+		attrs = append(attrs, "login", id.LoginName, "identity_source", id.Source)
+	}
+	slog.Warn("unauthorized request", attrs...)
+	writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+}
+
+type peerIdentityKey struct{}
+
+func withPeerIdentity(r *http.Request, id *PeerIdentity) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), peerIdentityKey{}, id))
+}
+
+// PeerIdentityFrom returns the Tailscale identity attached by AuthMiddleware,
+// or nil when the request was authenticated with an API key.
+func PeerIdentityFrom(r *http.Request) *PeerIdentity {
+	id, _ := r.Context().Value(peerIdentityKey{}).(*PeerIdentity)
+	return id
 }
 
 // ServiceConnector is an optional interface for services that provide
@@ -76,10 +184,10 @@ type DataTypeCapability struct {
 
 // Operation describes a single callable operation on a data type.
 type Operation struct {
-	Name        string       `json:"name"`                  // "read_saved", "search", "get_by_id"
-	Description string       `json:"description"`           // human-readable
-	Method      string       `json:"method"`                // "GET", "POST", etc.
-	Path        string       `json:"path"`                  // "/me/tracks"
+	Name        string       `json:"name"`        // "read_saved", "search", "get_by_id"
+	Description string       `json:"description"` // human-readable
+	Method      string       `json:"method"`      // "GET", "POST", etc.
+	Path        string       `json:"path"`        // "/me/tracks"
 	Parameters  []Parameter  `json:"parameters,omitempty"`
 	Response    ResponseSpec `json:"response"`
 }
@@ -87,8 +195,8 @@ type Operation struct {
 // Parameter describes a query or path parameter for an operation.
 type Parameter struct {
 	Name        string `json:"name"`
-	In          string `json:"in"`          // "query" or "path"
-	Type        string `json:"type"`        // "string", "integer", "boolean"
+	In          string `json:"in"`   // "query" or "path"
+	Type        string `json:"type"` // "string", "integer", "boolean"
 	Description string `json:"description"`
 	Default     any    `json:"default,omitempty"`
 	Required    bool   `json:"required,omitempty"`
@@ -96,23 +204,8 @@ type Parameter struct {
 
 // ResponseSpec describes what the operation returns.
 type ResponseSpec struct {
-	Description string `json:"description"`
+	Description string   `json:"description"`
 	Fields      []string `json:"fields,omitempty"` // top-level field names in the response
-}
-
-func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Get("Authorization")
-		if auth != "Bearer "+s.apiKey {
-			apiKey := r.Header.Get("X-Api-Key")
-			if apiKey != s.apiKey {
-				slog.Warn("unauthorized request", "remote", r.RemoteAddr)
-				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
-				return
-			}
-		}
-		next(w, r)
-	}
 }
 
 func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {

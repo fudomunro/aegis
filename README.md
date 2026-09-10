@@ -33,7 +33,16 @@ go build -o guardian .
 cp guardian.example.json guardian.json
 # Edit guardian.json with your OAuth client IDs and secrets
 
-# Run
+# Run (recommended: tailnet identity via Tailscale Serve or WhoIs)
+./guardian \
+  -addr :8080 \
+  -base-url https://guardian.your-tailnet.ts.net \
+  -auth-mode tailnet \
+  -allowed-logins you@example.com \
+  -config guardian.json \
+  -token-pass your-encryption-passphrase
+
+# Or keep a shared API key for non-tailnet clients
 ./guardian \
   -addr :8080 \
   -base-url https://guardian.your-tailnet.ts.net \
@@ -47,6 +56,7 @@ Guardian starts with two endpoints:
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
 
+See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 ## Configuration
 
 Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.example.json) for the full format.
@@ -87,7 +97,9 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 
 | Variable | Flag equivalent | Description |
 |----------|----------------|-------------|
-| `APERTURE_GUARDIAN_API_KEY` | `-api-key` | API key for authenticating requests |
+| `APERTURE_GUARDIAN_API_KEY` | `-api-key` | API key for authenticating requests (optional in `auto`/`tailnet` modes) |
+| `GUARDIAN_AUTH_MODE` | `-auth-mode` | `auto` (default), `tailnet`, or `api-key` |
+| `GUARDIAN_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
 | `GUARDIAN_BASE_URL` | `-base-url` | Public URL of this Guardian instance |
 | `GUARDIAN_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
 
@@ -97,12 +109,24 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 |------|---------|-------------|
 | `-addr` | `:8080` | Listen address |
 | `-base-url` | | Public base URL (required) |
-| `-api-key` | | API key for auth (required) |
+| `-auth-mode` | `auto` | `auto`, `tailnet`, or `api-key` — see [SECURITY.md](SECURITY.md) |
+| `-api-key` | | Shared API key (required only for `api-key` mode) |
+| `-allowed-logins` | | Optional allowlist of Tailscale logins |
+| `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
 | `-config` | `guardian.json` | Config file path |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
+
+### Authentication
+
+Guardian can authenticate callers two ways:
+
+1. **Tailscale identity** (recommended) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
+2. **API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools.
+
+Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key. Full policy guidance lives in [SECURITY.md](SECURITY.md).
 
 ## Connecting Services
 
@@ -234,12 +258,14 @@ aperture-guardian/
   main.go           Entry point, CLI flags, route wiring
   config.go         Service/Config types, JSON loading, matching
   handler.go        Pre-request hook: parse payload, block/modify
+  identity.go       Tailscale Serve headers + WhoIs identity resolvers
   proxy.go          Service proxy: cache, forward, inject tokens
   cache.go          In-memory TTL cache with RWMutex
   oauth.go          OAuth2 login/callback/refresh flows
   tokens.go         AES-256-GCM encrypted token storage
   statestore.go     CSRF state validation with TTL
   setup.go          Web-based setup wizard
+  SECURITY.md       Tailnet auth model, ACLs, operational guidance
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```

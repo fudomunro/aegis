@@ -1,0 +1,147 @@
+# Securing Guardian
+
+Guardian holds OAuth tokens for music services and exposes user data (playlists,
+library, search) to LLM agents. This document describes the recommended access
+model when Guardian runs in a [Tailscale](https://tailscale.com) tailnet — the
+same identity layer [Aperture](https://tailscale.com/docs/aperture) uses.
+
+## Trust model
+
+**By default, treat the tailnet as the access boundary.** Anything that can
+reach Guardian was admitted to the tailnet by you (or another admin) via SSO,
+device approval, and ACLs. Guardian does not need a second shared secret for
+every agent on that tailnet.
+
+Tailscale proves *who* is connecting:
+
+- Each connection is bound to a node key; identity comes from the control plane.
+- Applications can resolve the peer with `WhoIs` (LocalAPI) or Tailscale Serve
+  identity headers — not from a header the client invented on a public socket.
+- Aperture itself authenticates this way: login name + device tags, no
+  distributed LLM API keys for tailnet clients.
+
+Guardian extends that idea: **if the peer has a Tailscale identity, allow the
+API** (optionally restricted to an allowlist). A shared API key remains available
+for external bridges and debugging.
+
+## Auth modes
+
+| Mode | Behavior | When to use |
+|------|----------|-------------|
+| `auto` (default) | Prefer Tailscale identity; fall back to API key | Most deployments: tailnet-first, key for bridges |
+| `tailnet` | Require Tailscale identity; ignore API key | Guardian only reachable inside the tailnet |
+| `api-key` | Require `Authorization: Bearer <key>` or `X-Api-Key` | Legacy, tests, or non-Tailscale hosts |
+
+Flags / env:
+
+```bash
+-auth-mode auto|tailnet|api-key     # or GUARDIAN_AUTH_MODE
+-allowed-logins alice@example.com   # or GUARDIAN_ALLOWED_LOGINS
+-ts-socket /var/run/tailscale/tailscaled.sock  # WhoIs LocalAPI (optional)
+-api-key ...                        # optional unless auth-mode=api-key
+```
+
+Empty `-allowed-logins` means *any* authenticated tailnet identity is allowed
+(the “everything I expose is for my tailnet” default). Set it on shared tailnets
+so a guest laptop or tagged CI runner cannot read your Spotify library.
+
+## How identity is resolved
+
+Guardian tries, in order:
+
+1. **Tailscale Serve headers** (`Tailscale-User-Login`, `Tailscale-Node-Tags`, …)  
+   Trustworthy only when clients cannot reach Guardian except through
+   `tailscale serve` (or an equivalent proxy that strips inbound identity
+   headers and sets its own).
+
+2. **WhoIs via tailscaled LocalAPI** (`/var/run/tailscale/tailscaled.sock`)  
+   Works when Guardian shares a host with `tailscaled`. Queries the peer’s
+   `RemoteAddr` and returns login name and tags from the control plane.
+
+Tagged devices without a user login get a synthetic identity (tags joined with
+commas), matching Aperture’s model — e.g. `tag:aperture,tag:ci`.
+
+## Recommended tailnet policy
+
+Tag the Guardian host and deny-by-default who can reach it:
+
+```jsonc
+// tailnet policy file (HuJSON)
+{
+  "tagOwners": {
+    "tag:guardian": ["you@example.com"],
+  },
+  "grants": [
+    {
+      // Only you (or group:family, etc.) can connect to Guardian.
+      "src": ["you@example.com"],
+      "dst": ["tag:guardian"],
+      "ip": ["tcp:443", "tcp:8080"],
+    },
+  ],
+  "ssh": [] // not required; avoid granting SSH unless you need it
+}
+```
+
+Then:
+
+```bash
+# On the Guardian host
+sudo tailscale up --advertise-tags=tag:guardian --ssh=false
+
+# Front the binary with Serve (recommended)
+tailscale serve --bg --set-path / http://127.0.0.1:8080
+```
+
+Or bind Guardian only to the Tailscale IP / localhost so it is not reachable
+from other LAN interfaces.
+
+## Best practices
+
+1. **Do not use Tailscale Funnel** for Guardian. Funnel publishes the service
+   to the public internet; the API is designed for a private tailnet and holds
+   music OAuth tokens.
+2. **Prefer `auth-mode=tailnet`** once Serve or WhoIs is working; drop the
+   shared key so it cannot leak into agent transcripts or shell history.
+3. **Keep an API key** only if you need `ts-unplug` / CLI bridges or tools that
+   are not on the tailnet — and treat that key like a password.
+4. **Allowlist logins** on any tailnet that is not solo.
+5. **Tag the service** (`tag:guardian`) so ACLs survive user device churn.
+6. **Device approval** in the admin console prevents unapproved machines from
+   joining even with a stolen auth key.
+7. **Log identity.** Guardian logs `login` and `identity_source` on denied
+   requests; extend logs on successful proxy calls if you need an audit trail.
+8. **Encrypt tokens at rest** (`-token-pass` / `GUARDIAN_TOKEN_PASS`) as today —
+   tailnet auth does not replace disk encryption of `tokens.json`.
+9. **OAuth login/callback stay public** on purpose (browser redirects from
+   Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
+
+## What “authorized” means for data
+
+After authentication, Guardian is still **single-user** with respect to stored
+OAuth tokens: every authorized caller uses the same Spotify/YouTube/Amazon
+tokens on disk. Tailnet identity controls *who can call the API*; it does not
+yet isolate *whose* music library is returned.
+
+If you need per-user libraries later, store tokens keyed by Tailscale login and
+select the store from `PeerIdentityFrom(r)`. Until then, keep the allowlist
+tight on shared tailnets.
+
+## Deployment checklist
+
+- [ ] Guardian host tagged (`tag:guardian`) and ACL/grant limited to intended users
+- [ ] Not exposed with Funnel
+- [ ] `tailscale serve` in front **or** Guardian bound to localhost/Tailscale IP
+- [ ] `auth-mode=tailnet` (or `auto` while migrating)
+- [ ] `allowed-logins` set if the tailnet is shared
+- [ ] `GUARDIAN_TOKEN_PASS` set and `tokens.json` not world-readable
+- [ ] API key removed or stored outside agent-accessible paths
+
+## References
+
+- [Tailscale identity](https://tailscale.com/docs/concepts/tailscale-identity)
+- [How Aperture works](https://tailscale.com/docs/aperture/how-aperture-works) (WhoIs-based auth)
+- [Access controls / grants](https://tailscale.com/kb/1324/acls)
+- [Tags](https://tailscale.com/kb/1068/tags)
+- [Tailscale Serve](https://tailscale.com/kb/1312/serve) (identity headers)
+- [tsnet](https://github.com/tailscale/tailscale/tree/main/tsnet) (embed Tailscale in Go; optional alternative to system `tailscaled`)
