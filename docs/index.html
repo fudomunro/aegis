@@ -3,602 +3,1311 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aperture Guardian — Code Walkthrough</title>
+<title>Aperture Guardian — Code Walkthrough @ b330531</title>
 <style>
   :root {
-    --bg: #0d1117; --surface: #161b22; --border: #30363d;
-    --text: #e6edf3; --text-dim: #8b949e; --accent: #58a6ff;
-    --green: #3fb950; --orange: #d29922; --red: #f85149;
-    --purple: #bc8cff; --go-cyan: #00ADD8; --py-yellow: #FFD43B;
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2129;
+    --border: #30363d;
+    --text: #e6edf3;
+    --dim: #8b949e;
+    --accent: #58a6ff;
+    --green: #3fb950;
+    --orange: #d29922;
+    --red: #f85149;
+    --purple: #bc8cff;
+    --go: #00ADD8;
+    --py: #FFD43B;
+    --spotify: #1DB954;
   }
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif; background: var(--bg); color: var(--text); line-height: 1.6; }
-  .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem; }
-  h1 { font-size: 2.5rem; font-weight: 700; margin-bottom: 0.5rem; }
-  h2 { font-size: 1.8rem; font-weight: 600; margin: 3rem 0 1rem; color: var(--accent); }
-  h3 { font-size: 1.3rem; font-weight: 600; margin: 2rem 0 0.75rem; }
-  p { margin-bottom: 1rem; color: var(--text-dim); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.65;
+    font-size: 16px;
+  }
   a { color: var(--accent); text-decoration: none; }
-  code { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 0.85em; }
-  pre { padding: 1rem; overflow-x: auto; font-size: 0.82rem; line-height: 1.5; font-family: 'SF Mono', 'Fira Code', monospace; }
-
-  .version-badge {
-    display: inline-block; background: var(--accent); color: #000;
-    padding: 0.2rem 0.8rem; border-radius: 12px; font-size: 0.75rem;
-    font-weight: 700; font-family: monospace; margin-bottom: 1rem;
+  a:hover { text-decoration: underline; }
+  code, pre, .mono {
+    font-family: "SF Mono", ui-monospace, "Cascadia Code", "Fira Code", Menlo, Consolas, monospace;
   }
-  .badge { display: inline-block; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
-  .badge-go { background: var(--go-cyan); color: #000; }
-  .badge-py { background: var(--py-yellow); color: #000; }
+  code { font-size: 0.88em; background: rgba(110,118,129,0.2); padding: 0.12em 0.35em; border-radius: 4px; }
+  pre { overflow-x: auto; font-size: 0.82rem; line-height: 1.55; padding: 1rem 1.1rem; }
+  pre code { background: none; padding: 0; font-size: inherit; }
 
-  .hero { text-align: center; padding: 3rem 0 2rem; border-bottom: 1px solid var(--border); margin-bottom: 2rem; }
-  .hero p { font-size: 1.15rem; max-width: 700px; margin: 0.5rem auto; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 1.25rem 4rem; }
 
-  .diagram { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 2rem; margin: 1.5rem 0; overflow-x: auto; }
-  .diagram svg { display: block; margin: 0 auto; }
-  .diagram-label { text-align: center; font-size: 0.85rem; color: var(--text-dim); margin-top: 1rem; }
+  /* Hero */
+  .hero {
+    padding: 2.75rem 0 2rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 2rem;
+  }
+  .version-row {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem;
+    margin-bottom: 1.1rem;
+  }
+  .version-badge {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    background: linear-gradient(135deg, #1f6feb 0, #388bfd 100%);
+    color: #04121f;
+    padding: 0.35rem 0.9rem;
+    border-radius: 999px;
+    font-family: ui-monospace, monospace;
+    font-size: 0.85rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+  }
+  .version-badge .dot {
+    width: 7px; height: 7px; border-radius: 50%; background: #04121f;
+  }
+  .version-meta {
+    color: var(--dim); font-size: 0.85rem; font-family: ui-monospace, monospace;
+  }
+  .hero h1 {
+    font-size: clamp(1.9rem, 4vw, 2.55rem);
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.65rem;
+  }
+  .hero .lede {
+    color: var(--dim);
+    font-size: 1.08rem;
+    max-width: 720px;
+  }
+  .lang-badges { display: flex; gap: 0.5rem; margin-top: 1rem; }
+  .badge {
+    display: inline-block;
+    padding: 0.2rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 700;
+  }
+  .badge-go { background: var(--go); color: #000; }
+  .badge-py { background: var(--py); color: #000; }
+  .badge-neutral { background: var(--border); color: var(--text); }
 
-  .code-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1rem 0; }
-  @media (max-width: 800px) { .code-compare { grid-template-columns: 1fr; } }
-  .code-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
-  .code-header { padding: 0.5rem 1rem; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border); }
-  .code-header-go { background: rgba(0,173,216,0.1); color: var(--go-cyan); }
-  .code-header-py { background: rgba(255,212,59,0.1); color: var(--py-yellow); }
+  /* Stats */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 0.85rem;
+    margin: 1.75rem 0 0.5rem;
+  }
+  .stat {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 0.95rem 0.75rem;
+    text-align: center;
+  }
+  .stat .v { font-size: 1.7rem; font-weight: 700; color: var(--accent); line-height: 1.15; }
+  .stat .l { font-size: 0.78rem; color: var(--dim); margin-top: 0.25rem; }
 
-  .code-single { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 1rem 0; }
-  .code-single pre { margin: 0; }
-  .file-label { display: inline-block; background: var(--border); color: var(--text); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; font-family: monospace; margin-bottom: 0.5rem; }
-
-  .explain { background: rgba(88,166,255,0.05); border-left: 3px solid var(--accent); padding: 1rem 1.25rem; margin: 1rem 0; border-radius: 0 6px 6px 0; }
-  .explain p { color: var(--text); margin: 0; }
-
-  .toc { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin: 1.5rem 0; }
-  .toc h3 { margin-top: 0; }
-  .toc ol { padding-left: 1.5rem; }
-  .toc li { margin: 0.4rem 0; color: var(--text-dim); }
+  /* TOC */
+  .toc {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.25rem 1.5rem;
+    margin: 1.75rem 0 2.25rem;
+  }
+  .toc h2 { font-size: 1rem; margin-bottom: 0.65rem; color: var(--text); }
+  .toc ol { padding-left: 1.35rem; columns: 2; column-gap: 2rem; }
+  @media (max-width: 700px) { .toc ol { columns: 1; } }
+  .toc li { margin: 0.3rem 0; color: var(--dim); break-inside: avoid; }
   .toc a { color: var(--accent); }
 
-  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
-  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; text-align: center; }
-  .stat-value { font-size: 2rem; font-weight: 700; color: var(--accent); }
-  .stat-label { font-size: 0.85rem; color: var(--text-dim); margin-top: 0.25rem; }
+  /* Sections */
+  section { margin: 2.75rem 0; }
+  h2 {
+    font-size: 1.55rem;
+    font-weight: 650;
+    margin-bottom: 0.75rem;
+    letter-spacing: -0.015em;
+    scroll-margin-top: 1rem;
+  }
+  h2 .n {
+    color: var(--dim);
+    font-weight: 500;
+    margin-right: 0.45rem;
+    font-variant-numeric: tabular-nums;
+  }
+  h3 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin: 1.5rem 0 0.6rem;
+    color: var(--text);
+  }
+  p { margin-bottom: 0.9rem; color: var(--dim); }
+  p strong, li strong { color: var(--text); font-weight: 600; }
+  ul, ol.prose { margin: 0 0 1rem 1.25rem; color: var(--dim); }
+  ul li, ol.prose li { margin: 0.3rem 0; }
 
-  hr { border: none; border-top: 1px solid var(--border); margin: 3rem 0; }
-  .kw { color: var(--purple); } .fn { color: var(--accent); } .str { color: var(--green); }
-  .cm { color: var(--text-dim); font-style: italic; } .tp { color: var(--orange); } .num { color: var(--orange); }
+  /* Code panels */
+  .code-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.9rem;
+    margin: 1rem 0 1.25rem;
+  }
+  @media (max-width: 860px) { .code-compare { grid-template-columns: 1fr; } }
+  .code-panel, .code-single {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+  .code-single { margin: 1rem 0 1.25rem; }
+  .code-header {
+    padding: 0.55rem 1rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    border-bottom: 1px solid var(--border);
+  }
+  .code-header-go { background: rgba(0,173,216,0.12); color: var(--go); }
+  .code-header-py { background: rgba(255,212,59,0.12); color: var(--py); }
+  .code-header-json { background: rgba(188,140,255,0.12); color: var(--purple); }
+  .code-header-note { background: rgba(248,81,73,0.1); color: var(--red); }
+  .code-header-ok { background: rgba(63,185,80,0.1); color: var(--green); }
+
+  .file-label {
+    display: inline-block;
+    background: var(--border);
+    color: var(--text);
+    padding: 0.15rem 0.55rem;
+    border-radius: 5px;
+    font-size: 0.78rem;
+    font-family: ui-monospace, monospace;
+    margin-bottom: 0.55rem;
+  }
+
+  .explain {
+    background: rgba(88,166,255,0.06);
+    border-left: 3px solid var(--accent);
+    padding: 0.9rem 1.15rem;
+    margin: 1rem 0 1.25rem;
+    border-radius: 0 8px 8px 0;
+  }
+  .explain p { color: var(--text); margin: 0; }
+  .explain p + p { margin-top: 0.55rem; }
+  .explain.warn {
+    background: rgba(210,153,34,0.08);
+    border-left-color: var(--orange);
+  }
+  .explain.good {
+    background: rgba(63,185,80,0.07);
+    border-left-color: var(--green);
+  }
+
+  /* Diagrams */
+  .diagram {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.35rem 1rem;
+    margin: 1.25rem 0 0.5rem;
+    overflow-x: auto;
+  }
+  .diagram svg { display: block; margin: 0 auto; max-width: 100%; height: auto; }
+  .diagram-label {
+    text-align: center;
+    font-size: 0.85rem;
+    color: var(--dim);
+    margin: 0.85rem 0 0.5rem;
+  }
+
+  /* Table */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 1rem 0 1.25rem;
+    font-size: 0.92rem;
+  }
+  th, td {
+    text-align: left;
+    padding: 0.55rem 0.7rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  th { color: var(--text); font-weight: 600; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  td { color: var(--dim); }
+  td code { font-size: 0.82em; }
+
+  /* Flow steps */
+  .steps {
+    display: grid;
+    gap: 0.65rem;
+    margin: 1rem 0 1.25rem;
+    counter-reset: step;
+  }
+  .step {
+    display: grid;
+    grid-template-columns: 2.2rem 1fr;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    align-items: start;
+  }
+  .step::before {
+    counter-increment: step;
+    content: counter(step);
+    width: 1.7rem; height: 1.7rem;
+    border-radius: 50%;
+    background: rgba(88,166,255,0.15);
+    color: var(--accent);
+    font-size: 0.8rem;
+    font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 0.1rem;
+  }
+  .step .t { font-weight: 600; color: var(--text); margin-bottom: 0.2rem; }
+  .step .d { color: var(--dim); font-size: 0.92rem; }
+
+  /* Syntax tokens */
+  .kw { color: var(--purple); }
+  .fn { color: var(--accent); }
+  .str { color: var(--green); }
+  .cm { color: var(--dim); font-style: italic; }
+  .tp { color: var(--orange); }
+  .num { color: #ff7b72; }
+
+  hr { border: none; border-top: 1px solid var(--border); margin: 2.5rem 0; }
+  footer {
+    text-align: center;
+    color: var(--dim);
+    font-size: 0.85rem;
+    padding: 1.5rem 0 0.5rem;
+  }
+  footer strong { color: var(--accent); font-family: ui-monospace, monospace; }
+
+  .two-col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin: 1rem 0;
+  }
+  @media (max-width: 800px) { .two-col { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1rem 1.1rem;
+  }
+  .card h4 { font-size: 0.95rem; margin-bottom: 0.45rem; color: var(--text); }
+  .card p { margin: 0; font-size: 0.92rem; }
 </style>
 </head>
 <body>
-<div class="container">
+<div class="wrap">
 
-<div class="hero">
-  <span class="version-badge">67bdb47</span>
+<header class="hero">
+  <div class="version-row">
+    <span class="version-badge" title="git describe --short HEAD"><span class="dot"></span>b330531</span>
+    <span class="version-meta">branch fix/auth-data-consistency · 2026-09-10 · regenerate this page when the code moves</span>
+  </div>
   <h1>Aperture Guardian</h1>
-  <p>A service connector framework for Tailscale Aperture that mediates agent access to named music services with OAuth, caching, and response transformation.</p>
-  <p><span class="badge badge-go">Go</span> <span class="badge badge-py">Python equivalent</span></p>
-</div>
+  <p class="lede">
+    A Go service that sits between Tailscale Aperture and music APIs.
+    When an agent mentions Spotify, YouTube Music, or Amazon Music, Guardian
+    intercepts the LLM request, injects instructions to call its proxy,
+    then mediates real API calls with OAuth, caching, and a neutral playlist model.
+  </p>
+  <div class="lang-badges">
+    <span class="badge badge-go">Go (source of truth)</span>
+    <span class="badge badge-py">Python (side-by-side equivalent)</span>
+    <span class="badge badge-neutral">Walkthrough for Python-leaning readers</span>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="v">~4.7k</div><div class="l">source LOC</div></div>
+    <div class="stat"><div class="v">16</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">3</div><div class="l">service connectors</div></div>
+    <div class="stat"><div class="v">all pass</div><div class="l">go test ./...</div></div>
+  </div>
+</header>
 
-<div class="stat-grid">
-  <div class="stat"><div class="stat-value">~6000</div><div class="stat-label">lines of Go</div></div>
-  <div class="stat"><div class="stat-value">97</div><div class="stat-label">tests passing</div></div>
-  <div class="stat"><div class="stat-value">3</div><div class="stat-label">service connectors</div></div>
-  <div class="stat"><div class="stat-value">13</div><div class="stat-label">Go source files</div></div>
-</div>
-
-<div class="toc">
-  <h3>Contents</h3>
+<nav class="toc" aria-label="Contents">
+  <h2>Contents</h2>
   <ol>
-    <li><a href="#architecture">Architecture Overview</a></li>
-    <li><a href="#connector">The ServiceConnector Interface</a></li>
-    <li><a href="#capabilities">Capabilities &amp; Operations</a></li>
-    <li><a href="#connectors">Service Connectors</a></li>
-    <li><a href="#oauth">OAuth &amp; Token Storage</a></li>
-    <li><a href="#proxy">Proxy Delegation Flow</a></li>
-    <li><a href="#transforms">Response Transformation</a></li>
-    <li><a href="#go-concepts">Go Concepts for Python Devs</a></li>
-    <li><a href="#filemap">File Map</a></li>
+    <li><a href="#why">Why Guardian exists</a></li>
+    <li><a href="#architecture">Architecture at a glance</a></li>
+    <li><a href="#startup">Startup: wiring the Server</a></li>
+    <li><a href="#auth">Two-legged auth</a></li>
+    <li><a href="#prerequest">Pre-request hook flow</a></li>
+    <li><a href="#connector">ServiceConnector interface</a></li>
+    <li><a href="#connectors">Service connectors</a></li>
+    <li><a href="#proxy">Proxy delegation</a></li>
+    <li><a href="#library">Neutral library &amp; playlist sync</a></li>
+    <li><a href="#oauth">OAuth &amp; token storage</a></li>
+    <li><a href="#transforms">Response transforms</a></li>
+    <li><a href="#go-concepts">Go concepts for Python devs</a></li>
+    <li><a href="#filemap">File map</a></li>
+    <li><a href="#regen">Regenerating this page</a></li>
   </ol>
-</div>
+</nav>
 
 <!-- ============================================================ -->
-<h2 id="architecture">1. Architecture Overview</h2>
-
-<p>Guardian has evolved from a simple proxy into a connector framework. The core idea: each music service (Spotify, YouTube Music, Amazon Music) gets its own <strong>connector</strong> that understands the service's API, transforms responses for LLM consumption, and declares what operations it supports.</p>
-
-<div class="diagram">
-<svg viewBox="0 0 850 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="12">
-  <!-- Agent -->
-  <rect x="10" y="150" width="120" height="70" rx="8" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
-  <text x="70" y="182" fill="#58a6ff" text-anchor="middle" font-weight="600">Agent</text>
-  <text x="70" y="200" fill="#8b949e" text-anchor="middle" font-size="10">LLM Client</text>
-
-  <!-- Aperture -->
-  <rect x="200" y="150" width="130" height="70" rx="8" fill="#1f2937" stroke="#d29922" stroke-width="2"/>
-  <text x="265" y="178" fill="#d29922" text-anchor="middle" font-weight="600">Aperture</text>
-  <text x="265" y="198" fill="#8b949e" text-anchor="middle" font-size="10">pre_request hook</text>
-
-  <!-- Guardian core -->
-  <rect x="400" y="110" width="180" height="150" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
-  <text x="490" y="138" fill="#3fb950" text-anchor="middle" font-weight="600">Guardian</text>
-  <line x1="400" y1="148" x2="580" y2="148" stroke="#30363d"/>
-  <text x="490" y="166" fill="#8b949e" text-anchor="middle" font-size="10">handler.go</text>
-  <text x="490" y="182" fill="#8b949e" text-anchor="middle" font-size="10">proxy.go</text>
-  <text x="490" y="198" fill="#8b949e" text-anchor="middle" font-size="10">tokens.go / oauth.go</text>
-  <text x="490" y="218" fill="#8b949e" text-anchor="middle" font-size="10">connectors map</text>
-  <text x="490" y="240" fill="#8b949e" text-anchor="middle" font-size="9">config + cache</text>
-
-  <!-- Connectors -->
-  <rect x="650" y="50" width="170" height="40" rx="6" fill="#0d2818" stroke="#3fb950" stroke-width="1.5"/>
-  <text x="735" y="75" fill="#3fb950" text-anchor="middle" font-weight="600">SpotifyConnector</text>
-
-  <rect x="650" y="110" width="170" height="40" rx="6" fill="#0d2818" stroke="#58a6ff" stroke-width="1.5"/>
-  <text x="735" y="135" fill="#58a6ff" text-anchor="middle" font-weight="600">YouTubeMusicConnector</text>
-
-  <rect x="650" y="170" width="170" height="40" rx="6" fill="#1f2937" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4,3"/>
-  <text x="735" y="195" fill="#8b949e" text-anchor="middle" font-weight="600">AmazonMusicConnector</text>
-
-  <!-- External APIs -->
-  <rect x="650" y="260" width="170" height="40" rx="6" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
-  <text x="735" y="285" fill="#bc8cff" text-anchor="middle">api.spotify.com</text>
-
-  <rect x="650" y="320" width="170" height="40" rx="6" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
-  <text x="735" y="345" fill="#bc8cff" text-anchor="middle">googleapis.com/youtube</text>
-
-  <!-- Arrows -->
-  <line x1="130" y1="185" x2="195" y2="185" stroke="#58a6ff" stroke-width="2" marker-end="url(#ab)"/>
-  <line x1="330" y1="175" x2="395" y2="160" stroke="#d29922" stroke-width="2" marker-end="url(#ao)" stroke-dasharray="5,3"/>
-  <line x1="580" y1="140" x2="645" y2="75" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-  <line x1="580" y1="160" x2="645" y2="130" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-  <line x1="580" y1="180" x2="645" y2="190" stroke="#8b949e" stroke-width="1.5" marker-end="url(#agray)" stroke-dasharray="4,3"/>
-  <line x1="735" y1="90" x2="735" y2="255" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-  <line x1="735" y1="150" x2="735" y2="315" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-
-  <defs>
-    <marker id="ab" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
-    <marker id="ao" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
-    <marker id="ag" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
-    <marker id="agray" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#8b949e"/></marker>
-  </defs>
-</svg>
-<p class="diagram-label">Each service gets its own connector. Guardian's proxy delegates to the right connector based on the service ID in the URL.</p>
-</div>
+<section id="why">
+  <h2><span class="n">01</span>Why Guardian exists</h2>
+  <p>
+    Aperture is Tailscale’s LLM gateway. Its <strong>guardrails</strong> can rewrite or block
+    provider-bound chat requests, but they do <em>not</em> intercept MCP tool calls.
+    So you cannot “guard” an agent’s Spotify API call by sitting in front of the model alone.
+  </p>
+  <p>
+    Guardian uses a <strong>two-component architecture</strong> instead:
+  </p>
+  <div class="two-col">
+    <div class="card">
+      <h4>1. Pre-request hook</h4>
+      <p>
+        Aperture calls <code>POST /v1/pre-request</code> before the LLM sees the user message.
+        Guardian scans the text for service names. If found, it returns
+        <code>{"action":"modify"}</code> with a system message telling the agent
+        <em>“call Guardian’s proxy, not Spotify directly.”</em>
+      </p>
+    </div>
+    <div class="card">
+      <h4>2. Service proxy + library</h4>
+      <p>
+        Agents then call <code>/v1/services/{id}/…</code> or
+        <code>/v1/library/playlists</code>. Guardian attaches the user’s OAuth token,
+        transforms verbose upstream JSON into a compact neutral shape, caches GETs,
+        and never exposes tokens to the agent.
+      </p>
+    </div>
+  </div>
+  <div class="explain good">
+    <p>
+      <strong>Design rule:</strong> agents authenticate to Guardian (Tailscale identity or API key).
+      They never hold Spotify/YouTube/Amazon OAuth credentials.
+    </p>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="connector">2. The ServiceConnector Interface</h2>
+<section id="architecture">
+  <h2><span class="n">02</span>Architecture at a glance</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 860 420" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
+      <defs>
+        <marker id="mB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
+        <marker id="mO" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
+        <marker id="mG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
+        <marker id="mP" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#bc8cff"/></marker>
+      </defs>
+      <!-- Agent -->
+      <rect x="20" y="160" width="130" height="72" rx="10" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
+      <text x="85" y="192" fill="#58a6ff" text-anchor="middle" font-weight="700">LLM Agent</text>
+      <text x="85" y="212" fill="#8b949e" text-anchor="middle" font-size="11">chat client / MCP host</text>
 
-<p>This is the central abstraction. Every service implements these three methods:</p>
+      <!-- Aperture -->
+      <rect x="210" y="160" width="140" height="72" rx="10" fill="#1f2937" stroke="#d29922" stroke-width="2"/>
+      <text x="280" y="190" fill="#d29922" text-anchor="middle" font-weight="700">Aperture</text>
+      <text x="280" y="210" fill="#8b949e" text-anchor="middle" font-size="11">pre_request hook</text>
 
-<div class="code-compare">
-<div class="code-panel">
-  <div class="code-header code-header-go">Go — interface definition</div>
-<pre><code><span class="kw">type</span> <span class="tp">ServiceConnector</span> <span class="kw">interface</span> {
-    <span class="cm">// What data types and operations this connector supports.</span>
-    <span class="fn">Capabilities</span>() <span class="tp">ServiceCapabilities</span>
+      <!-- Guardian -->
+      <rect x="410" y="70" width="200" height="250" rx="12" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="510" y="100" fill="#3fb950" text-anchor="middle" font-weight="700" font-size="14">Guardian</text>
+      <line x1="410" y1="114" x2="610" y2="114" stroke="#30363d"/>
+      <text x="510" y="138" fill="#e6edf3" text-anchor="middle" font-size="11">handler.go · auth + hook</text>
+      <text x="510" y="158" fill="#e6edf3" text-anchor="middle" font-size="11">proxy.go · delegate / forward</text>
+      <text x="510" y="178" fill="#e6edf3" text-anchor="middle" font-size="11">library.go · neutral playlists</text>
+      <text x="510" y="198" fill="#e6edf3" text-anchor="middle" font-size="11">oauth.go · tokens.go</text>
+      <text x="510" y="218" fill="#e6edf3" text-anchor="middle" font-size="11">identity.go · Tailscale</text>
+      <text x="510" y="242" fill="#8b949e" text-anchor="middle" font-size="11">connectors map[string]ServiceConnector</text>
+      <text x="510" y="266" fill="#8b949e" text-anchor="middle" font-size="11">config + cache + models</text>
 
-    <span class="cm">// System message injected into LLM requests.</span>
-    <span class="fn">SystemInstructions</span>(
-        baseURL <span class="tp">string</span>,
-    ) <span class="tp">string</span>
+      <!-- Connectors -->
+      <rect x="680" y="40" width="160" height="40" rx="8" fill="#0d2818" stroke="#1DB954" stroke-width="1.5"/>
+      <text x="760" y="65" fill="#1DB954" text-anchor="middle" font-weight="600">SpotifyConnector</text>
+      <rect x="680" y="100" width="160" height="40" rx="8" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
+      <text x="760" y="125" fill="#58a6ff" text-anchor="middle" font-weight="600">YouTubeMusicConnector</text>
+      <rect x="680" y="160" width="160" height="40" rx="8" fill="#1f2937" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="760" y="185" fill="#8b949e" text-anchor="middle" font-weight="600">AmazonMusicConnector</text>
 
-    <span class="cm">// Handle a proxied request.</span>
-    <span class="fn">HandleProxy</span>(
-        w http.<span class="tp">ResponseWriter</span>,
-        r *http.<span class="tp">Request</span>,
-        remainingPath <span class="tp">string</span>,
-    )
-}</code></pre>
-</div>
-<div class="code-panel">
-  <div class="code-header code-header-py">Python — equivalent ABC</div>
-<pre><code><span class="kw">from</span> abc <span class="kw">import</span> ABC, abstractmethod
+      <!-- Upstream -->
+      <rect x="680" y="260" width="160" height="40" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="760" y="285" fill="#bc8cff" text-anchor="middle">api.spotify.com</text>
+      <rect x="680" y="320" width="160" height="40" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="760" y="345" fill="#bc8cff" text-anchor="middle">googleapis.com/youtube</text>
 
-<span class="kw">class</span> <span class="tp">ServiceConnector</span>(<span class="tp">ABC</span>):
-    <span class="kw">@abstractmethod</span>
-    <span class="kw">def</span> <span class="fn">capabilities</span>(self) -> <span class="tp">ServiceCapabilities</span>:
-        <span class="str">"""What this connector can do."""</span>
-
-    <span class="kw">@abstractmethod</span>
-    <span class="kw">def</span> <span class="fn">system_instructions</span>(
-        self, base_url: <span class="tp">str</span>,
-    ) -> <span class="tp">str</span>:
-        <span class="str">"""Instructions for the LLM."""</span>
-
-    <span class="kw">@abstractmethod</span>
-    <span class="kw">async def</span> <span class="fn">handle_proxy</span>(
-        self, request: <span class="tp">Request</span>,
-        path: <span class="tp">str</span>,
-    ) -> <span class="tp">Response</span>:
-        <span class="str">"""Handle a proxied request."""</span></code></pre>
-</div>
-</div>
-
-<div class="explain">
-  <p><strong>Go note:</strong> Go interfaces are satisfied implicitly — any struct with these three methods automatically implements <code>ServiceConnector</code>, no <code>implements</code> keyword needed. Python requires explicit inheritance from <code>ABC</code>.</p>
-</div>
+      <!-- Arrows -->
+      <line x1="150" y1="196" x2="205" y2="196" stroke="#58a6ff" stroke-width="2" marker-end="url(#mB)"/>
+      <text x="178" y="186" fill="#58a6ff" font-size="10" text-anchor="middle">chat</text>
+      <line x1="350" y1="185" x2="405" y2="165" stroke="#d29922" stroke-width="2" marker-end="url(#mO)" stroke-dasharray="5 3"/>
+      <text x="378" y="158" fill="#d29922" font-size="10" text-anchor="middle">hook</text>
+      <line x1="610" y1="120" x2="675" y2="65" stroke="#3fb950" stroke-width="1.5" marker-end="url(#mG)"/>
+      <line x1="610" y1="145" x2="675" y2="118" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#mB)"/>
+      <line x1="610" y1="175" x2="675" y2="178" stroke="#8b949e" stroke-width="1.5" marker-end="url(#mG)"/>
+      <line x1="760" y1="80" x2="760" y2="255" stroke="#3fb950" stroke-width="1.5" marker-end="url(#mG)"/>
+      <line x1="760" y1="140" x2="760" y2="315" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#mB)"/>
+      <!-- Agent data path -->
+      <path d="M85 232 L85 370 L510 370 L510 325" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#mG)"/>
+      <text x="290" y="362" fill="#3fb950" font-size="11">direct: GET /v1/library/playlists or /v1/services/{id}/…</text>
+      <text x="430" y="50" fill="#8b949e" font-size="11">solid = data plane</text>
+      <text x="430" y="65" fill="#d29922" font-size="11">dashed orange = control plane (hook)</text>
+    </svg>
+    <p class="diagram-label">Control plane (orange): Aperture asks Guardian what to do with the chat. Data plane (green/blue): the agent later calls Guardian’s proxy endpoints.</p>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="capabilities">3. Capabilities &amp; Operations</h2>
+<section id="startup">
+  <h2><span class="n">03</span>Startup: wiring the Server</h2>
+  <p>
+    Everything hangs off one struct. <code>main()</code> parses flags, loads config,
+    builds the token store and identity resolver, registers three connectors,
+    then serves HTTP.
+  </p>
 
-<p>Each connector declares exactly what it can do, with structured operation definitions that include method, path, parameters, and response format. This metadata is exposed at <code>GET /v1/services/{id}/capabilities</code>.</p>
-
-<div class="code-single">
-  <div class="code-header code-header-go">types in handler.go</div>
-<pre><code><span class="kw">type</span> <span class="tp">ServiceCapabilities</span> <span class="kw">struct</span> {
-    DataTypes []<span class="tp">DataTypeCapability</span> <span class="str">`json:"data_types"`</span>
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — main.go + handler.go</div>
+<pre><code><span class="cm">// One struct holds all dependencies.</span>
+<span class="kw">type</span> <span class="tp">Server</span> <span class="kw">struct</span> {
+    apiKey        <span class="tp">string</span>
+    authMode      <span class="tp">string</span>              <span class="cm">// auto | tailnet | api-key</span>
+    allowedLogins []<span class="tp">string</span>
+    identity      <span class="tp">IdentityResolver</span>
+    baseURL       <span class="tp">string</span>
+    config        *<span class="tp">Config</span>
+    cache         *<span class="tp">Cache</span>
+    tokens        *<span class="tp">TokenStore</span>
+    oauthStates   *<span class="tp">StateStore</span>
+    connectors    <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">ServiceConnector</span>
 }
 
+<span class="cm">// main() registration (main.go)</span>
+srv := &amp;<span class="tp">Server</span>{ <span class="cm">/* … */</span> connectors: <span class="fn">make</span>(<span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">ServiceConnector</span>) }
+srv.connectors[<span class="str">"spotify"</span>]       = <span class="fn">NewSpotifyConnector</span>(srv)
+srv.connectors[<span class="str">"youtube-music"</span>] = <span class="fn">NewYouTubeMusicConnector</span>(srv)
+srv.connectors[<span class="str">"amazon-music"</span>]  = <span class="fn">NewAmazonMusicConnector</span>(srv)
+
+mux := http.<span class="fn">NewServeMux</span>()
+mux.<span class="fn">HandleFunc</span>(<span class="str">"POST /v1/pre-request"</span>,
+    srv.<span class="fn">AuthMiddleware</span>(srv.HandlePreRequest))
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/library/playlists"</span>,
+    srv.<span class="fn">AuthMiddleware</span>(srv.HandleLibraryPlaylists))
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/services/"</span>,
+    srv.<span class="fn">AuthMiddleware</span>(srv.HandleServiceProxy))
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/auth/"</span>, srv.handleAuthRoutes)
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/setup"</span>, srv.HandleSetup)</code></pre>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — equivalent shape</div>
+<pre><code><span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass, field
+<span class="kw">from</span> typing <span class="kw">import</span> Protocol
+
+<span class="kw">class</span> <span class="tp">ServiceConnector</span>(<span class="tp">Protocol</span>):
+    <span class="kw">def</span> <span class="fn">capabilities</span>(self) -&gt; <span class="tp">dict</span>: ...
+    <span class="kw">def</span> <span class="fn">system_instructions</span>(self, base_url: <span class="tp">str</span>) -&gt; <span class="tp">str</span>: ...
+    <span class="kw">def</span> <span class="fn">handle_proxy</span>(self, request, path: <span class="tp">str</span>): ...
+
+<span class="tp">@dataclass</span>
+<span class="kw">class</span> <span class="tp">Server</span>:
+    api_key: <span class="tp">str</span>
+    auth_mode: <span class="tp">str</span>
+    base_url: <span class="tp">str</span>
+    config: <span class="tp">Config</span>
+    cache: <span class="tp">Cache</span>
+    tokens: <span class="tp">TokenStore</span>
+    identity: <span class="tp">IdentityResolver</span> | <span class="tp">None</span>
+    connectors: <span class="kw">dict</span>[<span class="tp">str</span>, <span class="tp">ServiceConnector</span>] = <span class="fn">field</span>(default_factory=<span class="kw">dict</span>)
+
+<span class="cm"># FastAPI wiring</span>
+app = <span class="fn">FastAPI</span>()
+srv = <span class="tp">Server</span>(..., connectors={
+    <span class="str">"spotify"</span>: <span class="fn">SpotifyConnector</span>(srv),
+    <span class="str">"youtube-music"</span>: <span class="fn">YouTubeMusicConnector</span>(srv),
+    <span class="str">"amazon-music"</span>: <span class="fn">AmazonMusicConnector</span>(srv),
+})
+app.<span class="fn">post</span>(<span class="str">"/v1/pre-request"</span>)(<span class="fn">auth</span>(srv.handle_pre_request))
+app.<span class="fn">get</span>(<span class="str">"/v1/library/playlists"</span>)(<span class="fn">auth</span>(srv.handle_library_playlists))</code></pre>
+    </div>
+  </div>
+
+  <div class="explain">
+    <p>
+      <strong>Go note:</strong> <code>Server</code> is a plain struct with methods.
+      There is no class hierarchy — behavior is attached as
+      <code>func (s *Server) HandlePreRequest(...)</code>. Pointers are used so
+      all handlers share one instance.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="auth">
+  <h2><span class="n">04</span>Two-legged auth</h2>
+  <p>
+    Guardian has <strong>two kinds of callers</strong>, and they authenticate differently.
+    A single middleware decides, based on <code>authMode</code>.
+  </p>
+
+  <table>
+    <thead>
+      <tr><th>Leg</th><th>Who</th><th>Endpoint</th><th>Preferred credential</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Hook</strong></td>
+        <td>Aperture</td>
+        <td><code>POST /v1/pre-request</code></td>
+        <td>API key in hook config; in <code>tailnet</code> mode also Serve identity / WhoIs</td>
+      </tr>
+      <tr>
+        <td><strong>Agent data</strong></td>
+        <td>LLM agent / MCP host</td>
+        <td><code>/v1/library/…</code>, <code>/v1/services/…</code></td>
+        <td>Tailscale identity (Serve headers or WhoIs). API key is fallback in <code>auto</code>/<code>api-key</code></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — AuthMiddleware (handler.go)</div>
+<pre><code><span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">AuthMiddleware</span>(
+    next http.HandlerFunc,
+) http.HandlerFunc {
+    <span class="kw">return</span> <span class="kw">func</span>(w http.ResponseWriter, r *http.Request) {
+        id, idErr := s.<span class="fn">resolveIdentity</span>(r)
+
+        <span class="kw">switch</span> s.authMode {
+        <span class="kw">case</span> AuthModeAPIKey:
+            <span class="kw">if</span> !s.<span class="fn">checkAPIKey</span>(r) { s.<span class="fn">deny</span>(...); <span class="kw">return</span> }
+            <span class="fn">next</span>(w, r)
+
+        <span class="kw">case</span> AuthModeTailnet:
+            <span class="kw">if</span> id == <span class="kw">nil</span> || !<span class="fn">loginAllowed</span>(id, s.allowedLogins) {
+                s.<span class="fn">deny</span>(...); <span class="kw">return</span>
+            }
+            <span class="fn">next</span>(w, <span class="fn">withPeerIdentity</span>(r, id))
+
+        <span class="kw">default</span>: <span class="cm">// auto: identity first, then API key</span>
+            <span class="kw">if</span> id != <span class="kw">nil</span> &amp;&amp; <span class="fn">loginAllowed</span>(id, s.allowedLogins) {
+                <span class="fn">next</span>(w, <span class="fn">withPeerIdentity</span>(r, id)); <span class="kw">return</span>
+            }
+            <span class="kw">if</span> s.apiKey != <span class="str">""</span> &amp;&amp; s.<span class="fn">checkAPIKey</span>(r) {
+                <span class="fn">next</span>(w, r); <span class="kw">return</span>
+            }
+            s.<span class="fn">deny</span>(...)
+        }
+    }
+}</code></pre>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — equivalent middleware</div>
+<pre><code><span class="kw">def</span> <span class="fn">auth_middleware</span>(srv: <span class="tp">Server</span>):
+    <span class="kw">def</span> <span class="fn">decorator</span>(handler):
+        <span class="kw">async def</span> <span class="fn">wrapper</span>(request: <span class="tp">Request</span>):
+            identity = <span class="kw">await</span> srv.resolve_identity(request)
+            mode = srv.auth_mode
+
+            <span class="kw">if</span> mode == <span class="str">"api-key"</span>:
+                <span class="kw">if not</span> srv.check_api_key(request):
+                    <span class="kw">return</span> <span class="fn">JSONResponse</span>(
+                        {<span class="str">"error"</span>: <span class="str">"unauthorized"</span>}, status_code=<span class="num">401</span>)
+            <span class="kw">elif</span> mode == <span class="str">"tailnet"</span>:
+                <span class="kw">if</span> identity <span class="kw">is None</span> <span class="kw">or not</span> <span class="fn">login_allowed</span>(identity, srv.allowed_logins):
+                    <span class="kw">return</span> <span class="fn">deny</span>(request)
+                request.state.identity = identity
+            <span class="kw">else</span>:  <span class="cm"># auto</span>
+                <span class="kw">if</span> identity <span class="kw">and</span> <span class="fn">login_allowed</span>(identity, srv.allowed_logins):
+                    request.state.identity = identity
+                <span class="kw">elif</span> srv.api_key <span class="kw">and</span> srv.check_api_key(request):
+                    <span class="kw">pass</span>
+                <span class="kw">else</span>:
+                    <span class="kw">return</span> <span class="fn">deny</span>(request)
+            <span class="kw">return await</span> handler(request)
+        <span class="kw">return</span> wrapper
+    <span class="kw">return</span> decorator</code></pre>
+    </div>
+  </div>
+
+  <h3>How identity is resolved</h3>
+  <div class="steps">
+    <div class="step">
+      <div>
+        <div class="t">ServeHeaderResolver</div>
+        <div class="d">Reads <code>Tailscale-User-Login</code> / <code>Tailscale-Node-Tags</code> headers. Only trustworthy when the request arrived through <code>tailscale serve</code>.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div>
+        <div class="t">WhoIsResolver</div>
+        <div class="d">Asks local <code>tailscaled</code> over a Unix socket (<code>/var/run/tailscale/tailscaled.sock</code>) who the peer is. Trustworthy for on-tailnet connections.</div>
+      </div>
+    </div>
+    <div class="step">
+      <div>
+        <div class="t">MultiResolver</div>
+        <div class="d">Tries them in order. <code>identity.go</code> also warns when Aperture’s claimed login differs from the actual tailnet peer.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="prerequest">
+  <h2><span class="n">05</span>Pre-request hook flow</h2>
+  <p>
+    This is the control plane. Aperture POSTs a payload with
+    <code>user_message</code> and the original <code>request_body</code>.
+    Guardian decides allow / block / modify.
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="11">
+      <defs>
+        <marker id="a1" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#58a6ff"/></marker>
+      </defs>
+      <rect x="250" y="12" width="280" height="36" rx="8" fill="#1f2937" stroke="#d29922" stroke-width="2"/>
+      <text x="390" y="35" fill="#d29922" text-anchor="middle" font-weight="700">POST /v1/pre-request</text>
+
+      <rect x="250" y="70" width="280" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+      <text x="390" y="90" fill="#e6edf3" text-anchor="middle">parse payload → user_message</text>
+
+      <rect x="250" y="122" width="280" height="36" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="390" y="144" fill="#d29922" text-anchor="middle">FindMatchingServices(msg)</text>
+
+      <rect x="20" y="180" width="220" height="48" rx="6" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>
+      <text x="130" y="200" fill="#8b949e" text-anchor="middle">no service matched</text>
+      <text x="130" y="216" fill="#8b949e" text-anchor="middle">and not library-only?</text>
+
+      <rect x="20" y="248" width="220" height="32" rx="6" fill="#0d2818" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="130" y="268" fill="#3fb950" text-anchor="middle">{"action":"allow"}</text>
+
+      <rect x="280" y="180" width="220" height="48" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="390" y="200" fill="#d29922" text-anchor="middle">any matched service</text>
+      <text x="390" y="216" fill="#d29922" text-anchor="middle">Action == "block"?</text>
+
+      <rect x="280" y="248" width="220" height="36" rx="6" fill="#2a1517" stroke="#f85149" stroke-width="1.5"/>
+      <text x="390" y="270" fill="#f85149" text-anchor="middle">{"action":"block"} → HTTP 403</text>
+
+      <rect x="540" y="180" width="220" height="48" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="650" y="200" fill="#d29922" text-anchor="middle">build system instructions</text>
+      <text x="650" y="216" fill="#d29922" text-anchor="middle">(connector or generic + library)</text>
+
+      <rect x="540" y="256" width="220" height="36" rx="6" fill="#161b22" stroke="#30363d"/>
+      <text x="650" y="278" fill="#e6edf3" text-anchor="middle">injectSystemMessage(body)</text>
+
+      <rect x="540" y="312" width="220" height="36" rx="6" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
+      <text x="650" y="334" fill="#58a6ff" text-anchor="middle">{"action":"modify", body:…}</text>
+
+      <!-- library-only path -->
+      <rect x="250" y="380" width="280" height="48" rx="6" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="390" y="400" fill="#bc8cff" text-anchor="middle">libraryOnly? message mentions playlists</text>
+      <text x="390" y="416" fill="#bc8cff" text-anchor="middle">and some connector is PlaylistProvider</text>
+      <rect x="250" y="448" width="280" height="36" rx="6" fill="#161b22" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="390" y="470" fill="#bc8cff" text-anchor="middle">inject librarySystemInstructions()</text>
+
+      <!-- arrows -->
+      <line x1="390" y1="48" x2="390" y2="66" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="390" y1="102" x2="390" y2="118" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="250" y1="158" x2="180" y2="176" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="390" y1="158" x2="390" y2="176" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="530" y1="158" x2="600" y2="176" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="130" y1="228" x2="130" y2="244" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="390" y1="228" x2="390" y2="244" stroke="#f85149" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="650" y1="228" x2="650" y2="252" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="650" y1="292" x2="650" y2="308" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <line x1="390" y1="158" x2="390" y2="376" stroke="#bc8cff" stroke-width="1.2" stroke-dasharray="4 3" marker-end="url(#a1)"/>
+      <line x1="390" y1="428" x2="390" y2="444" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#a1)"/>
+      <text x="400" y="360" fill="#bc8cff" font-size="10">no service, but playlists?</text>
+    </svg>
+    <p class="diagram-label">Decision tree in <code>HandlePreRequest</code> (handler.go). Fail-open: unreadable body or parse errors return allow.</p>
+  </div>
+
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — matching + injection</div>
+<pre><code><span class="cm">// config.go — substring match on name/aliases</span>
+<span class="kw">func</span> (c *<span class="tp">Config</span>) <span class="fn">FindMatchingServices</span>(
+    userMessage <span class="tp">string</span>,
+) []<span class="tp">Service</span> {
+    lower := strings.<span class="fn">ToLower</span>(userMessage)
+    <span class="kw">var</span> matched []<span class="tp">Service</span>
+    <span class="kw">for</span> _, svc := <span class="kw">range</span> c.Services {
+        <span class="kw">if</span> <span class="fn">matchesService</span>(svc, lower) {
+            matched = <span class="fn">append</span>(matched, svc)
+        }
+    }
+    <span class="kw">return</span> matched
+}
+
+<span class="cm">// handler.go — prepend a system message</span>
+sysMsg, _ := json.<span class="fn">Marshal</span>(<span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">string</span>{
+    <span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: content,
+})
+req.Messages = <span class="fn">append</span>(
+    []json.RawMessage{sysMsg}, req.Messages...)</code></pre>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — equivalent</div>
+<pre><code><span class="kw">def</span> <span class="fn">find_matching_services</span>(
+    services: <span class="kw">list</span>[<span class="tp">Service</span>], message: <span class="tp">str</span>
+) -&gt; <span class="kw">list</span>[<span class="tp">Service</span>]:
+    lower = message.lower()
+    <span class="kw">return</span> [
+        s <span class="kw">for</span> s <span class="kw">in</span> services
+        <span class="kw">if</span> s.name.lower() <span class="kw">in</span> lower
+        <span class="kw">or any</span>(a.lower() <span class="kw">in</span> lower <span class="kw">for</span> a <span class="kw">in</span> s.aliases)
+    ]
+
+<span class="kw">def</span> <span class="fn">inject_system_message</span>(body: <span class="kw">dict</span>, content: <span class="tp">str</span>) -&gt; <span class="kw">dict</span>:
+    messages = body.get(<span class="str">"messages"</span>, [])
+    body[<span class="str">"messages"</span>] = [
+        {<span class="str">"role"</span>: <span class="str">"system"</span>, <span class="str">"content"</span>: content},
+        *messages,
+    ]
+    <span class="kw">return</span> body</code></pre>
+    </div>
+  </div>
+
+  <div class="explain">
+    <p>
+      Connector-backed services inject <code>connector.SystemInstructions(baseURL)</code>
+      (a rich endpoint catalog). Services without a connector get a short generic
+      “use the proxy at …” string. Unnamed playlist questions get
+      <code>librarySystemInstructions()</code> pointing at the unified library.
+    </p>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="connector">
+  <h2><span class="n">06</span>ServiceConnector interface</h2>
+  <p>
+    The central abstraction. Any service that wants intelligent proxying implements
+    three methods. Registration is by service ID in <code>Server.connectors</code>.
+  </p>
+
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — handler.go</div>
+<pre><code><span class="kw">type</span> <span class="tp">ServiceConnector</span> <span class="kw">interface</span> {
+    <span class="cm">// Metadata for GET /v1/services/{id}/capabilities</span>
+    <span class="fn">Capabilities</span>() <span class="tp">ServiceCapabilities</span>
+
+    <span class="cm">// System message injected into LLM requests</span>
+    <span class="fn">SystemInstructions</span>(baseURL <span class="tp">string</span>) <span class="tp">string</span>
+
+    <span class="cm">// Handle a proxied request for this service</span>
+    <span class="fn">HandleProxy</span>(
+        w http.ResponseWriter,
+        r *http.Request,
+        remainingPath <span class="tp">string</span>,
+    )
+}
+
+<span class="kw">type</span> <span class="tp">ServiceCapabilities</span> <span class="kw">struct</span> {
+    DataTypes []<span class="tp">DataTypeCapability</span> <span class="str">`json:"data_types"`</span>
+}
 <span class="kw">type</span> <span class="tp">DataTypeCapability</span> <span class="kw">struct</span> {
-    Name        <span class="tp">string</span>      <span class="str">`json:"name"`</span>        <span class="cm">// "tracks"</span>
+    Name        <span class="tp">string</span>      <span class="str">`json:"name"`</span>
     Description <span class="tp">string</span>      <span class="str">`json:"description"`</span>
     Operations  []<span class="tp">Operation</span> <span class="str">`json:"operations"`</span>
 }
-
 <span class="kw">type</span> <span class="tp">Operation</span> <span class="kw">struct</span> {
-    Name        <span class="tp">string</span>       <span class="str">`json:"name"`</span>       <span class="cm">// "read_saved"</span>
+    Name        <span class="tp">string</span>       <span class="str">`json:"name"`</span>
     Description <span class="tp">string</span>       <span class="str">`json:"description"`</span>
-    Method      <span class="tp">string</span>       <span class="str">`json:"method"`</span>     <span class="cm">// "GET"</span>
-    Path        <span class="tp">string</span>       <span class="str">`json:"path"`</span>       <span class="cm">// "/me/tracks"</span>
+    Method      <span class="tp">string</span>       <span class="str">`json:"method"`</span>
+    Path        <span class="tp">string</span>       <span class="str">`json:"path"`</span>
     Parameters  []<span class="tp">Parameter</span>  <span class="str">`json:"parameters,omitempty"`</span>
     Response    <span class="tp">ResponseSpec</span> <span class="str">`json:"response"`</span>
-}
-
-<span class="kw">type</span> <span class="tp">Parameter</span> <span class="kw">struct</span> {
-    Name        <span class="tp">string</span> <span class="str">`json:"name"`</span>
-    In          <span class="tp">string</span> <span class="str">`json:"in"`</span>          <span class="cm">// "query" or "path"</span>
-    Type        <span class="tp">string</span> <span class="str">`json:"type"`</span>        <span class="cm">// "integer", "string"</span>
-    Description <span class="tp">string</span> <span class="str">`json:"description"`</span>
-    Default     <span class="kw">any</span>    <span class="str">`json:"default,omitempty"`</span>
-    Required    <span class="tp">bool</span>   <span class="str">`json:"required,omitempty"`</span>
-}
-
-<span class="kw">type</span> <span class="tp">ResponseSpec</span> <span class="kw">struct</span> {
-    Description <span class="tp">string</span>   <span class="str">`json:"description"`</span>
-    Fields      []<span class="tp">string</span> <span class="str">`json:"fields,omitempty"`</span>
 }</code></pre>
-</div>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — Protocol + dataclasses</div>
+<pre><code><span class="kw">from</span> typing <span class="kw">import</span> Protocol, Any
+<span class="kw">from</span> dataclasses <span class="kw">import</span> dataclass
 
-<h3>Example: Spotify capabilities response</h3>
+<span class="kw">class</span> <span class="tp">ServiceConnector</span>(<span class="tp">Protocol</span>):
+    <span class="kw">def</span> <span class="fn">capabilities</span>(self) -&gt; <span class="str">"ServiceCapabilities"</span>: ...
+    <span class="kw">def</span> <span class="fn">system_instructions</span>(self, base_url: <span class="tp">str</span>) -&gt; <span class="tp">str</span>: ...
+    <span class="kw">def</span> <span class="fn">handle_proxy</span>(
+        self, request: <span class="tp">Request</span>, path: <span class="tp">str</span>
+    ) -&gt; <span class="tp">Response</span>: ...
 
-<div class="code-single">
-<pre><code><span class="cm">// GET /v1/services/spotify/capabilities</span>
-{
-  <span class="str">"data_types"</span>: [
-    {
-      <span class="str">"name"</span>: <span class="str">"tracks"</span>,
-      <span class="str">"description"</span>: <span class="str">"Individual songs — saved tracks, top tracks"</span>,
-      <span class="str">"operations"</span>: [
-        {
-          <span class="str">"name"</span>: <span class="str">"read_saved"</span>,
-          <span class="str">"method"</span>: <span class="str">"GET"</span>,
-          <span class="str">"path"</span>: <span class="str">"/me/tracks"</span>,
-          <span class="str">"parameters"</span>: [
-            {<span class="str">"name"</span>: <span class="str">"limit"</span>, <span class="str">"in"</span>: <span class="str">"query"</span>, <span class="str">"type"</span>: <span class="str">"integer"</span>, <span class="str">"default"</span>: <span class="num">20</span>},
-            {<span class="str">"name"</span>: <span class="str">"offset"</span>, <span class="str">"in"</span>: <span class="str">"query"</span>, <span class="str">"type"</span>: <span class="str">"integer"</span>, <span class="str">"default"</span>: <span class="num">0</span>}
-          ],
-          <span class="str">"response"</span>: {
-            <span class="str">"description"</span>: <span class="str">"Saved tracks with name, artists, album"</span>,
-            <span class="str">"fields"</span>: [<span class="str">"tracks"</span>, <span class="str">"total"</span>]
-          }
-        }
-      ]
-    }
-  ]
-}</code></pre>
-</div>
+<span class="tp">@dataclass</span>
+<span class="kw">class</span> <span class="tp">Operation</span>:
+    name: <span class="tp">str</span>
+    description: <span class="tp">str</span>
+    method: <span class="tp">str</span>
+    path: <span class="tp">str</span>
+    parameters: <span class="kw">list</span>[<span class="str">"Parameter"</span>] | <span class="kw">None</span> = <span class="kw">None</span>
+    response: <span class="str">"ResponseSpec"</span> | <span class="kw">None</span> = <span class="kw">None</span>
+
+<span class="cm"># Structural typing: any object with these methods</span>
+<span class="cm"># satisfies ServiceConnector — no inheritance required.</span>
+<span class="cm"># (Same spirit as Go's implicit interfaces.)</span></code></pre>
+    </div>
+  </div>
+
+  <div class="explain">
+    <p>
+      <strong>Go note:</strong> interfaces are satisfied implicitly. Spelling the three
+      methods on <code>*SpotifyConnector</code> is enough — no <code>implements</code>.
+      Python’s <code>Protocol</code> is the closest analogue; ABC requires explicit inheritance.
+    </p>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="connectors">4. Service Connectors</h2>
+<section id="connectors">
+  <h2><span class="n">07</span>Service connectors</h2>
+  <p>Three implementations of <code>ServiceConnector</code>, with different maturity:</p>
 
-<p>Three connectors implement <code>ServiceConnector</code>, each with different maturity levels:</p>
+  <table>
+    <thead>
+      <tr><th>Connector</th><th>Upstream API</th><th>PlaylistProvider</th><th>Notes</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="color:var(--spotify)">SpotifyConnector</td>
+        <td>Spotify Web API</td>
+        <td>yes</td>
+        <td>Rich operations, auto-pagination, neutral playlist mapping</td>
+      </tr>
+      <tr>
+        <td style="color:var(--accent)">YouTubeMusicConnector</td>
+        <td>YouTube Data API v3</td>
+        <td>yes</td>
+        <td>Path mapping, music category filter, liked-playlist resolution</td>
+      </tr>
+      <tr>
+        <td style="color:var(--dim)">AmazonMusicConnector</td>
+        <td>No public REST API</td>
+        <td>scaffold</td>
+        <td>Declares data types; generic transforms for any configured endpoint</td>
+      </tr>
+    </tbody>
+  </table>
 
-<table style="width:100%; border-collapse:collapse; margin:1rem 0;">
-<tr style="border-bottom:1px solid var(--border);">
-  <th style="text-align:left; padding:0.5rem; color:var(--text);">Connector</th>
-  <th style="text-align:left; padding:0.5rem; color:var(--text);">API</th>
-  <th style="text-align:left; padding:0.5rem; color:var(--text);">Data Types</th>
-  <th style="text-align:left; padding:0.5rem; color:var(--text);">Operations</th>
-</tr>
-<tr style="border-bottom:1px solid var(--border);">
-  <td style="padding:0.5rem; color:var(--green);">SpotifyConnector</td>
-  <td style="padding:0.5rem;">Spotify Web API</td>
-  <td style="padding:0.5rem;">9</td>
-  <td style="padding:0.5rem;">15</td>
-</tr>
-<tr style="border-bottom:1px solid var(--border);">
-  <td style="padding:0.5rem; color:var(--accent);">YouTubeMusicConnector</td>
-  <td style="padding:0.5rem;">YouTube Data API v3</td>
-  <td style="padding:0.5rem;">6</td>
-  <td style="padding:0.5rem;">10</td>
-</tr>
-<tr>
-  <td style="padding:0.5rem; color:var(--text-dim);">AmazonMusicConnector</td>
-  <td style="padding:0.5rem;">No public API</td>
-  <td style="padding:0.5rem;">8</td>
-  <td style="padding:0.5rem;">0 (scaffold)</td>
-</tr>
-</table>
-
-<div class="code-compare">
-<div class="code-panel">
-  <div class="code-header code-header-go">SpotifyConnector (757 lines)</div>
-<pre><code><span class="kw">type</span> <span class="tp">SpotifyConnector</span> <span class="kw">struct</span> {
-    server *<span class="tp">Server</span>
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — neutral playlist mapping</div>
+<pre><code><span class="cm">// models.go — user-facing identity; service IDs live in Sources</span>
+<span class="kw">type</span> <span class="tp">Playlist</span> <span class="kw">struct</span> {
+    Name        <span class="tp">string</span>           <span class="str">`json:"name"`</span>
+    Description <span class="tp">string</span>           <span class="str">`json:"description,omitempty"`</span>
+    Owner       <span class="tp">string</span>           <span class="str">`json:"owner,omitempty"`</span>
+    TrackCount  <span class="tp">int</span>              <span class="str">`json:"track_count"`</span>
+    Sources     []<span class="tp">PlaylistSource</span> <span class="str">`json:"sources,omitempty"`</span>
+    Extra       <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>   <span class="str">`json:"extra,omitempty"`</span>
 }
 
-<span class="cm">// Capabilities() → 9 data types, 15 operations</span>
-<span class="cm">// SystemInstructions() → rich endpoint catalog</span>
-<span class="cm">// HandleProxy() → fetch, transform, paginate</span>
+<span class="kw">type</span> <span class="tp">PlaylistSource</span> <span class="kw">struct</span> {
+    Service     <span class="tp">string</span>         <span class="str">`json:"service"`</span>       <span class="cm">// "spotify"</span>
+    ServiceName <span class="tp">string</span>         <span class="str">`json:"service_name"`</span>
+    ID          <span class="tp">string</span>         <span class="str">`json:"id"`</span>
+    URL         <span class="tp">string</span>         <span class="str">`json:"url,omitempty"`</span>
+    Extra       <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span> <span class="str">`json:"extra,omitempty"`</span>
+}
 
-<span class="cm">// Response transforms strip verbose metadata:</span>
-<span class="cm">// Spotify: {items[{added_at, track:{artists:[{name,</span>
-<span class="cm">//   external_urls, images, href, ...}]}}]}</span>
-<span class="cm">// Becomes: {tracks: [{name, artists: ["Miles Davis"],</span>
-<span class="cm">//   album: "Kind of Blue", id, uri}]}</span>
-
-<span class="cm">// 15 endpoint-specific transform functions:</span>
-<span class="kw">func</span> (c *<span class="tp">SpotifyConnector</span>) <span class="fn">transformSavedTracks</span>(...)
-<span class="kw">func</span> (c *<span class="tp">SpotifyConnector</span>) <span class="fn">transformPlaylistList</span>(...)
-<span class="kw">func</span> (c *<span class="tp">SpotifyConnector</span>) <span class="fn">transformPlayer</span>(...)
-<span class="cm">// ... 12 more</span></code></pre>
-</div>
-<div class="code-panel">
-  <div class="code-header code-header-py">Python equivalent pattern</div>
-<pre><code><span class="kw">class</span> <span class="tp">SpotifyConnector</span>(<span class="tp">ServiceConnector</span>):
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, server: <span class="tp">Server</span>):
-        self.server = server
-
-    <span class="kw">def</span> <span class="fn">capabilities</span>(self) -> <span class="tp">ServiceCapabilities</span>:
-        <span class="kw">return</span> <span class="tp">ServiceCapabilities</span>(data_types=[
-            <span class="tp">DataTypeCapability</span>(
-                name=<span class="str">"tracks"</span>,
-                operations=[
-                    <span class="tp">Operation</span>(
-                        name=<span class="str">"read_saved"</span>,
-                        method=<span class="str">"GET"</span>,
-                        path=<span class="str">"/me/tracks"</span>,
-                        parameters=[...],
-                    ),
-                ],
-            ),
-        ])
-
-    <span class="kw">def</span> <span class="fn">_transform_saved_tracks</span>(
-        self, raw: <span class="tp">dict</span>,
-    ) -> <span class="tp">dict</span>:
-        <span class="kw">return</span> {
-            <span class="str">"tracks"</span>: [
-                {<span class="str">"name"</span>: t[<span class="str">"name"</span>],
-                 <span class="str">"artists"</span>: [
-                     a[<span class="str">"name"</span>]
-                     <span class="kw">for</span> a <span class="kw">in</span> t[<span class="str">"artists"</span>]],
-                 <span class="str">"album"</span>: t[<span class="str">"album"</span>][<span class="str">"name"</span>]}
-                <span class="kw">for</span> t <span class="kw">in</span> raw[<span class="str">"items"</span>]
-            ],
-        }</code></pre>
-</div>
-</div>
-
-<h3>Amazon Music: scaffold with no operations</h3>
-
-<p>Amazon Music has no public API, so its connector recognizes the domain (tracks, albums, playlists, etc.) but declares zero operations. Generic transforms handle any response format that comes back from a configured upstream endpoint.</p>
-
-<div class="code-single">
-  <div class="code-header code-header-go">amazonmusic.go — capabilities</div>
-<pre><code><span class="kw">func</span> (c *<span class="tp">AmazonMusicConnector</span>) <span class="fn">Capabilities</span>() <span class="tp">ServiceCapabilities</span> {
-    <span class="kw">return</span> <span class="tp">ServiceCapabilities</span>{
-        DataTypes: []<span class="tp">DataTypeCapability</span>{
-            {Name: <span class="str">"tracks"</span>, Description: <span class="str">"Individual songs"</span>,
-             Operations: []<span class="tp">Operation</span>{}},  <span class="cm">// empty — no API</span>
-            {Name: <span class="str">"playlists"</span>, Description: <span class="str">"User playlists"</span>,
-             Operations: []<span class="tp">Operation</span>{}},
-            <span class="cm">// ... 6 more data types, all with empty operations</span>
+<span class="cm">// spotify.go</span>
+<span class="kw">func</span> (c *<span class="tp">SpotifyConnector</span>) <span class="fn">neutralPlaylist</span>(
+    p <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>,
+) <span class="tp">Playlist</span> {
+    id, _ := p[<span class="str">"id"</span>].(<span class="tp">string</span>)
+    <span class="cm">// …</span>
+    <span class="kw">return</span> <span class="tp">Playlist</span>{
+        Name: name, TrackCount: trackCount,
+        Sources: []<span class="tp">PlaylistSource</span>{
+            <span class="fn">primaryPlaylistSource</span>(
+                <span class="str">"spotify"</span>, <span class="str">"Spotify"</span>, id, url, extra),
         },
     }
 }</code></pre>
-</div>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — dataclasses</div>
+<pre><code><span class="tp">@dataclass</span>
+<span class="kw">class</span> <span class="tp">PlaylistSource</span>:
+    service: <span class="tp">str</span>
+    id: <span class="tp">str</span>
+    service_name: <span class="tp">str</span> | <span class="kw">None</span> = <span class="kw">None</span>
+    url: <span class="tp">str</span> | <span class="kw">None</span> = <span class="kw">None</span>
+    extra: <span class="kw">dict</span> | <span class="kw">None</span> = <span class="kw">None</span>
+
+<span class="tp">@dataclass</span>
+<span class="kw">class</span> <span class="tp">Playlist</span>:
+    name: <span class="tp">str</span>
+    track_count: <span class="tp">int</span> = <span class="num">0</span>
+    description: <span class="tp">str</span> | <span class="kw">None</span> = <span class="kw">None</span>
+    owner: <span class="tp">str</span> | <span class="kw">None</span> = <span class="kw">None</span>
+    sources: <span class="kw">list</span>[<span class="tp">PlaylistSource</span>] = <span class="fn">field</span>(default_factory=<span class="kw">list</span>)
+    extra: <span class="kw">dict</span> | <span class="kw">None</span> = <span class="kw">None</span>
+
+<span class="kw">def</span> <span class="fn">neutral_playlist</span>(raw: <span class="kw">dict</span>) -&gt; <span class="tp">Playlist</span>:
+    <span class="kw">return</span> <span class="tp">Playlist</span>(
+        name=raw[<span class="str">"name"</span>],
+        track_count=raw.get(<span class="str">"tracks"</span>, {}).get(<span class="str">"total"</span>, <span class="num">0</span>),
+        sources=[<span class="tp">PlaylistSource</span>(
+            service=<span class="str">"spotify"</span>,
+            service_name=<span class="str">"Spotify"</span>,
+            id=raw[<span class="str">"id"</span>],
+            url=<span class="kw">f</span><span class="str">"https://open.spotify.com/playlist/</span>{raw[<span class="str">'id'</span>]}<span class="str">"</span>,
+        )],
+    )</code></pre>
+    </div>
+  </div>
+
+  <div class="explain warn">
+    <p>
+      <strong>Why <code>sources[]</code>?</strong> One logical playlist (“Road Trip”) may exist on
+      Spotify <em>and</em> YouTube Music. Top-level fields describe the user-facing thing;
+      service-local IDs and deep links live only in sources. Matching across services is
+      currently text-based (<code>NormalizeIdentityKey</code>); better entity resolution is deferred
+      (issue #4).
+    </p>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="oauth">5. OAuth &amp; Token Storage</h2>
+<section id="proxy">
+  <h2><span class="n">08</span>Proxy delegation</h2>
+  <p>
+    <code>HandleServiceProxy</code> is the data-plane entry. It parses
+    <code>/v1/services/{id}/{path…}</code>, then either answers capabilities,
+    delegates to a connector, or falls back to generic OAuth-forwarding.
+  </p>
 
-<p>Guardian manages OAuth tokens centrally so agents never see credentials. Tokens are encrypted at rest with AES-256-GCM.</p>
+  <div class="diagram">
+    <svg viewBox="0 0 760 400" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="11">
+      <defs>
+        <marker id="a2" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#58a6ff"/></marker>
+        <marker id="a3" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#3fb950"/></marker>
+      </defs>
+      <rect x="230" y="12" width="300" height="34" rx="8" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
+      <text x="380" y="34" fill="#58a6ff" text-anchor="middle" font-weight="700">GET /v1/services/spotify/me/tracks</text>
 
-<div class="diagram">
-<svg viewBox="0 0 750 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="12">
-  <!-- User browser -->
-  <rect x="10" y="90" width="120" height="60" rx="6" fill="#1f2937" stroke="#58a6ff" stroke-width="1.5"/>
-  <text x="70" y="118" fill="#58a6ff" text-anchor="middle" font-weight="600">User Browser</text>
+      <rect x="230" y="68" width="300" height="32" rx="6" fill="#161b22" stroke="#30363d"/>
+      <text x="380" y="88" fill="#e6edf3" text-anchor="middle">split serviceID + remainingPath</text>
 
-  <!-- Guardian auth -->
-  <rect x="220" y="50" width="150" height="140" rx="6" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
-  <text x="295" y="75" fill="#3fb950" text-anchor="middle" font-weight="600">Guardian Auth</text>
-  <line x1="220" y1="85" x2="370" y2="85" stroke="#30363d"/>
-  <text x="295" y="103" fill="#8b949e" text-anchor="middle" font-size="10">/v1/auth/{id}/login</text>
-  <text x="295" y="118" fill="#8b949e" text-anchor="middle" font-size="10">/v1/auth/{id}/callback</text>
-  <text x="295" y="138" fill="#8b949e" text-anchor="middle" font-size="10">tokens.json</text>
-  <text x="295" y="153" fill="#8b949e" text-anchor="middle" font-size="9">AES-256-GCM encrypted</text>
-  <text x="295" y="168" fill="#8b949e" text-anchor="middle" font-size="9">PBKDF2 key derivation</text>
+      <rect x="230" y="120" width="300" height="32" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="380" y="140" fill="#d29922" text-anchor="middle">config.GetService(id) → 404 if missing</text>
 
-  <!-- Spotify OAuth -->
-  <rect x="480" y="30" width="150" height="50" rx="6" fill="#1f2937" stroke="#1db954" stroke-width="1.5"/>
-  <text x="555" y="55" fill="#1db954" text-anchor="middle" font-weight="600">Spotify</text>
-  <text x="555" y="70" fill="#8b949e" text-anchor="middle" font-size="10">accounts.spotify.com</text>
+      <rect x="230" y="172" width="300" height="32" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="380" y="192" fill="#d29922" text-anchor="middle">path == /capabilities?</text>
 
-  <rect x="480" y="100" width="150" height="50" rx="6" fill="#1f2937" stroke="#ff0000" stroke-width="1.5"/>
-  <text x="555" y="125" fill="#ff0000" text-anchor="middle" font-weight="600">Google</text>
-  <text x="555" y="140" fill="#8b949e" text-anchor="middle" font-size="10">accounts.google.com</text>
+      <rect x="40" y="230" width="200" height="32" rx="6" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
+      <text x="140" y="250" fill="#58a6ff" text-anchor="middle">connector.Capabilities() JSON</text>
 
-  <rect x="480" y="170" width="150" height="50" rx="6" fill="#1f2937" stroke="#ff9900" stroke-width="1.5"/>
-  <text x="555" y="195" fill="#ff9900" text-anchor="middle" font-weight="600">Amazon</text>
-  <text x="555" y="210" fill="#8b949e" text-anchor="middle" font-size="10">amazon.com/ap/oa</text>
+      <rect x="280" y="230" width="200" height="32" rx="6" fill="#2a1517" stroke="#f85149" stroke-width="1.5"/>
+      <text x="380" y="250" fill="#f85149" text-anchor="middle">Action == block → 403</text>
 
-  <!-- Arrows -->
-  <line x1="130" y1="110" x2="215" y2="100" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-  <line x1="370" y1="70" x2="475" y2="55" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-  <line x1="370" y1="100" x2="475" y2="120" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-  <line x1="370" y1="140" x2="475" y2="190" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-  <line x1="480" y1="55" x2="375" y2="70" stroke="#1db954" stroke-width="1" marker-end="url(#ag)" stroke-dasharray="3,3"/>
-  <line x1="480" y1="125" x2="375" y2="110" stroke="#ff0000" stroke-width="1" marker-end="url(#ag)" stroke-dasharray="3,3"/>
+      <rect x="520" y="230" width="200" height="32" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="620" y="250" fill="#d29922" text-anchor="middle">connector registered?</text>
 
-  <text x="425" y="50" fill="#8b949e" font-size="9">redirect</text>
-  <text x="425" y="160" fill="#8b949e" font-size="9">code exchange</text>
-</svg>
-<p class="diagram-label">OAuth flow: user authorizes via browser, Guardian exchanges code for tokens, encrypts and stores them.</p>
-</div>
+      <rect x="40" y="290" width="200" height="36" rx="6" fill="#0d2818" stroke="#3fb950" stroke-width="2"/>
+      <text x="140" y="312" fill="#3fb950" text-anchor="middle">connector.HandleProxy()</text>
 
-<div class="code-compare">
-<div class="code-panel">
-  <div class="code-header code-header-go">tokens.go — encrypted storage</div>
-<pre><code><span class="kw">type</span> <span class="tp">TokenStore</span> <span class="kw">struct</span> {
-    mu     <span class="tp">sync.RWMutex</span>
-    path   <span class="tp">string</span>
-    salt   []<span class="tp">byte</span>
-    key    []<span class="tp">byte</span>
-    Tokens <span class="kw">map</span>[<span class="tp">string</span>]*<span class="tp">OAuthToken</span>
-}
+      <rect x="280" y="290" width="200" height="36" rx="6" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>
+      <text x="380" y="312" fill="#8b949e" text-anchor="middle">generic forward + OAuth + cache</text>
 
-<span class="cm">// AES-256-GCM with PBKDF2-derived key</span>
-<span class="kw">func</span> <span class="fn">deriveKey</span>(
-    passphrase <span class="tp">string</span>, salt []<span class="tp">byte</span>,
-) []<span class="tp">byte</span> {
-    <span class="kw">return</span> pbkdf2.<span class="fn">Key</span>(
-        []<span class="tp">byte</span>(passphrase), salt,
-        <span class="num">100_000</span>,  <span class="cm">// iterations</span>
-        <span class="num">32</span>,       <span class="cm">// key length</span>
-        sha256.<span class="fn">New</span>,
-    )
-}
+      <rect x="40" y="350" width="440" height="32" rx="6" fill="#0d2818" stroke="#3fb950" stroke-width="1.5"/>
+      <text x="260" y="370" fill="#3fb950" text-anchor="middle">transform response → cache GET → write JSON</text>
 
-<span class="cm">// On-disk format:</span>
-<span class="cm">// { version: 1, salt: "base64...",</span>
-<span class="cm">//   tokens: { "spotify": "encrypted..." } }</span></code></pre>
-</div>
-<div class="code-panel">
-  <div class="code-header code-header-py">Python equivalent</div>
-<pre><code><span class="kw">from</span> cryptography.fernet <span class="kw">import</span> Fernet
-<span class="kw">from</span> hashlib <span class="kw">import</span> pbkdf2_hmac
-<span class="kw">import</span> base64, json
+      <line x1="380" y1="46" x2="380" y2="64" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="380" y1="100" x2="380" y2="116" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="380" y1="152" x2="380" y2="168" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="300" y1="204" x2="180" y2="226" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="380" y1="204" x2="380" y2="226" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="460" y1="204" x2="580" y2="226" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a2)"/>
+      <line x1="560" y1="246" x2="250" y2="300" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a3)"/>
+      <text x="420" y="278" fill="#3fb950" font-size="10">yes</text>
+      <line x1="680" y1="246" x2="400" y2="300" stroke="#8b949e" stroke-width="1.5" marker-end="url(#a2)"/>
+      <text x="560" y="278" fill="#8b949e" font-size="10">no</text>
+      <line x1="140" y1="326" x2="140" y2="346" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a3)"/>
+      <line x1="380" y1="326" x2="380" y2="346" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a3)"/>
+    </svg>
+    <p class="diagram-label">Proxy decision flow in <code>proxy.go</code>. Connectors win; generic forwarding is the fallback for configured-but-uncustomized services.</p>
+  </div>
 
-<span class="kw">class</span> <span class="tp">TokenStore</span>:
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, path, passphrase):
-        self.path = path
-        self.key = <span class="fn">derive_key</span>(passphrase)
-        self.tokens = {}
-
-    <span class="kw">def</span> <span class="fn">save</span>(self, service_id, token):
-        self.tokens[service_id] = token
-        self.<span class="fn">_persist</span>()
-
-    <span class="kw">def</span> <span class="fn">_persist</span>(self):
-        <span class="cm"># Encrypt each token with AES-GCM</span>
-        encrypted = {
-            sid: self.<span class="fn">_encrypt</span>(
-                json.<span class="fn">dumps</span>(t).<span class="fn">encode</span>()
-            )
-            <span class="kw">for</span> sid, t <span class="kw">in</span> self.tokens.<span class="fn">items</span>()
-        }
-        <span class="kw">with</span> <span class="fn">open</span>(self.path, <span class="str">"w"</span>) <span class="kw">as</span> f:
-            json.<span class="fn">dump</span>({
-                <span class="str">"version"</span>: <span class="num">1</span>,
-                <span class="str">"tokens"</span>: encrypted,
-            }, f)</code></pre>
-</div>
-</div>
-
-<!-- ============================================================ -->
-<h2 id="proxy">6. Proxy Delegation Flow</h2>
-
-<p>When a request hits <code>/v1/services/{id}/{path}</code>, the proxy decides how to handle it:</p>
-
-<div class="diagram">
-<svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, sans-serif" font-size="11">
-  <!-- Start -->
-  <rect x="250" y="10" width="200" height="35" rx="6" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
-  <text x="350" y="32" fill="#58a6ff" text-anchor="middle" font-weight="600">GET /v1/services/spotify/me/tracks</text>
-
-  <!-- Decision: service exists? -->
-  <rect x="250" y="70" width="200" height="35" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
-  <text x="350" y="92" fill="#d29922" text-anchor="middle">Service configured?</text>
-
-  <text x="220" y="105" fill="#f85149" font-size="10">no → 404</text>
-
-  <!-- Decision: /capabilities? -->
-  <rect x="250" y="130" width="200" height="35" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
-  <text x="350" y="152" fill="#d29922" text-anchor="middle">Path == /capabilities?</text>
-
-  <text x="470" y="145" fill="#3fb950" font-size="10">yes → return JSON</text>
-
-  <!-- Decision: blocked? -->
-  <rect x="250" y="190" width="200" height="35" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
-  <text x="350" y="212" fill="#d29922" text-anchor="middle">Action == block?</text>
-
-  <text x="470" y="205" fill="#f85149" font-size="10">yes → 403</text>
-
-  <!-- Decision: connector? -->
-  <rect x="250" y="250" width="200" height="35" rx="6" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
-  <text x="350" y="272" fill="#d29922" text-anchor="middle">Connector registered?</text>
-
-  <!-- Connector path -->
-  <rect x="20" y="250" width="180" height="35" rx="6" fill="#0d2818" stroke="#3fb950" stroke-width="1.5"/>
-  <text x="110" y="272" fill="#3fb950" text-anchor="middle">connector.HandleProxy()</text>
-
-  <!-- Generic path -->
-  <rect x="520" y="250" width="160" height="35" rx="6" fill="#1f2937" stroke="#8b949e" stroke-width="1.5"/>
-  <text x="600" y="272" fill="#8b949e" text-anchor="middle">generic forward</text>
-
-  <!-- Bottom -->
-  <rect x="20" y="310" width="180" height="35" rx="6" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
-  <text x="110" y="332" fill="#3fb950" text-anchor="middle">transform + cache + respond</text>
-
-  <!-- Arrows -->
-  <line x1="350" y1="45" x2="350" y2="65" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-  <line x1="350" y1="105" x2="350" y2="125" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-  <line x1="350" y1="165" x2="350" y2="185" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-  <line x1="350" y1="225" x2="350" y2="245" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#ab)"/>
-  <line x1="250" y1="268" x2="205" y2="268" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-  <line x1="450" y1="268" x2="515" y2="268" stroke="#8b949e" stroke-width="1.5" marker-end="url(#agray)"/>
-  <line x1="110" y1="285" x2="110" y2="305" stroke="#3fb950" stroke-width="1.5" marker-end="url(#ag)"/>
-</svg>
-<p class="diagram-label">Proxy decision flow: connector takes priority, generic forwarding is the fallback.</p>
-</div>
-
-<div class="code-single">
-  <div class="code-header code-header-go">proxy.go — delegation</div>
-<pre><code><span class="cm">// If a connector is registered, delegate to it.</span>
+  <div class="code-single">
+    <div class="code-header code-header-go">proxy.go — the delegation fork</div>
+<pre><code><span class="cm">// If a connector is registered for this service, delegate to it.</span>
 <span class="kw">if</span> connector, ok := s.connectors[serviceID]; ok {
     connector.<span class="fn">HandleProxy</span>(w, r, remainingPath)
     <span class="kw">return</span>
 }
 
-<span class="cm">// Otherwise, generic forwarding with static headers.</span>
-upstreamURL := svc.Endpoint + remainingPath
-<span class="cm">// ... copy headers, inject OAuth token, forward</span></code></pre>
-</div>
+<span class="cm">// Generic path: build upstream URL, check cache, inject OAuth, forward.</span>
+upstreamURL := strings.<span class="fn">TrimRight</span>(svc.Endpoint, <span class="str">"/"</span>) + remainingPath
+<span class="kw">if</span> r.Method == http.MethodGet {
+    <span class="kw">if</span> cached, ok := s.cache.<span class="fn">Get</span>(cacheKey); ok {
+        w.Header().<span class="fn">Set</span>(<span class="str">"X-Guardian-Cache"</span>, <span class="str">"hit"</span>)
+        io.<span class="fn">WriteString</span>(w, cached)
+        <span class="kw">return</span>
+    }
+}
+<span class="kw">if</span> tok := s.<span class="fn">getValidToken</span>(serviceID, logger); tok != <span class="str">""</span> {
+    upstreamReq.Header.<span class="fn">Set</span>(<span class="str">"Authorization"</span>, <span class="str">"Bearer "</span>+tok)
+}</code></pre>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="transforms">7. Response Transformation</h2>
+<section id="library">
+  <h2><span class="n">09</span>Neutral library &amp; playlist sync</h2>
+  <p>
+    When an agent asks “what playlists do I have?” without naming a service,
+    Guardian points it at <code>GET /v1/library/playlists</code>.
+    That endpoint fans out to every connector that implements
+    <code>PlaylistProvider</code>, then merges same-named playlists.
+  </p>
 
-<p>Each connector transforms the upstream API's verbose JSON into compact, LLM-friendly formats. Here's how Spotify's saved tracks endpoint is transformed:</p>
+  <div class="diagram">
+    <svg viewBox="0 0 820 360" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="11">
+      <defs>
+        <marker id="a4" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#58a6ff"/></marker>
+        <marker id="a5" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#3fb950"/></marker>
+      </defs>
+      <rect x="280" y="10" width="260" height="34" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="2"/>
+      <text x="410" y="32" fill="#bc8cff" text-anchor="middle" font-weight="700">GET /v1/library/playlists</text>
 
-<div class="code-compare">
-<div class="code-panel">
-  <div class="code-header" style="background:rgba(248,81,73,0.1); color:var(--red);">Raw Spotify Response</div>
+      <rect x="40" y="80" width="200" height="48" rx="8" fill="#0d2818" stroke="#1DB954" stroke-width="1.5"/>
+      <text x="140" y="100" fill="#1DB954" text-anchor="middle" font-weight="600">Spotify</text>
+      <text x="140" y="116" fill="#8b949e" text-anchor="middle">ListUserPlaylists()</text>
+
+      <rect x="310" y="80" width="200" height="48" rx="8" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
+      <text x="410" y="100" fill="#58a6ff" text-anchor="middle" font-weight="600">YouTube Music</text>
+      <text x="410" y="116" fill="#8b949e" text-anchor="middle">ListUserPlaylists()</text>
+
+      <rect x="580" y="80" width="200" height="48" rx="8" fill="#1f2937" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <text x="680" y="100" fill="#8b949e" text-anchor="middle" font-weight="600">Amazon Music</text>
+      <text x="680" y="116" fill="#8b949e" text-anchor="middle">optional / scaffold</text>
+
+      <rect x="250" y="160" width="320" height="36" rx="8" fill="#161b22" stroke="#30363d"/>
+      <text x="410" y="182" fill="#e6edf3" text-anchor="middle">WaitGroup · gather all playlists + by_service status</text>
+
+      <rect x="250" y="220" width="320" height="36" rx="8" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="410" y="242" fill="#d29922" text-anchor="middle">MergePlaylistsSync — same normalized name → one entry</text>
+
+      <rect x="250" y="280" width="320" height="40" rx="8" fill="#0d2818" stroke="#3fb950" stroke-width="2"/>
+      <text x="410" y="305" fill="#3fb950" text-anchor="middle">{playlists[], total, synced:true, by_service{}}</text>
+
+      <line x1="410" y1="44" x2="140" y2="76" stroke="#bc8cff" stroke-width="1.4" marker-end="url(#a4)"/>
+      <line x1="410" y1="44" x2="410" y2="76" stroke="#bc8cff" stroke-width="1.4" marker-end="url(#a4)"/>
+      <line x1="410" y1="44" x2="680" y2="76" stroke="#bc8cff" stroke-width="1.4" marker-end="url(#a4)"/>
+      <line x1="140" y1="128" x2="300" y2="156" stroke="#58a6ff" stroke-width="1.2" marker-end="url(#a4)"/>
+      <line x1="410" y1="128" x2="410" y2="156" stroke="#58a6ff" stroke-width="1.2" marker-end="url(#a4)"/>
+      <line x1="680" y1="128" x2="520" y2="156" stroke="#58a6ff" stroke-width="1.2" marker-end="url(#a4)"/>
+      <line x1="410" y1="196" x2="410" y2="216" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a4)"/>
+      <line x1="410" y1="256" x2="410" y2="276" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a4)"/>
+    </svg>
+    <p class="diagram-label">Fan-out → merge. Parallel fetch with <code>sync.WaitGroup</code>; per-service failures become <code>by_service</code> status, not a hard fail.</p>
+  </div>
+
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — library.go + match.go</div>
+<pre><code><span class="kw">type</span> <span class="tp">PlaylistProvider</span> <span class="kw">interface</span> {
+    <span class="fn">ListUserPlaylists</span>(ctx context.Context) ([]<span class="tp">Playlist</span>, <span class="tp">error</span>)
+}
+
+<span class="cm">// Fan out in parallel</span>
+<span class="kw">for</span> _, t := <span class="kw">range</span> targets {
+    wg.<span class="fn">Add</span>(<span class="num">1</span>)
+    <span class="kw">go</span> <span class="kw">func</span>(t serviceTarget) {
+        <span class="kw">defer</span> wg.<span class="fn">Done</span>()
+        playlists, err := t.provider.<span class="fn">ListUserPlaylists</span>(ctx)
+        <span class="kw">switch</span> {
+        <span class="kw">case</span> err == <span class="kw">nil</span>:
+            <span class="cm">// append under mutex</span>
+        <span class="kw">case</span> errors.<span class="fn">Is</span>(err, ErrUnauthorized):
+            status = <span class="tp">LibraryServiceStatus</span>{Status: <span class="str">"unauthorized"</span>, ...}
+        <span class="kw">default</span>:
+            status = <span class="tp">LibraryServiceStatus</span>{Status: <span class="str">"error"</span>, ...}
+        }
+    }(t)
+}
+wg.<span class="fn">Wait</span>()
+merged := <span class="fn">MergePlaylistsSync</span>(all)
+
+<span class="cm">// match.go — text identity</span>
+<span class="kw">func</span> <span class="fn">NormalizeIdentityKey</span>(name <span class="tp">string</span>) <span class="tp">string</span> {
+    s := strings.<span class="fn">ToLower</span>(strings.<span class="fn">TrimSpace</span>(name))
+    s = strings.<span class="fn">ReplaceAll</span>(s, <span class="str">" - topic"</span>, <span class="str">""</span>)
+    s = strings.<span class="fn">Join</span>(strings.<span class="fn">Fields</span>(s), <span class="str">" "</span>)
+    <span class="kw">return</span> s
+}</code></pre>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — asyncio fan-out</div>
+<pre><code><span class="kw">class</span> <span class="tp">PlaylistProvider</span>(<span class="tp">Protocol</span>):
+    <span class="kw">async def</span> <span class="fn">list_user_playlists</span>(
+        self, ctx: <span class="tp">Context</span>
+    ) -&gt; <span class="kw">list</span>[<span class="tp">Playlist</span>]: ...
+
+<span class="kw">async def</span> <span class="fn">handle_library_playlists</span>(srv: <span class="tp">Server</span>):
+    targets = [
+        (sid, c) <span class="kw">for</span> sid, c <span class="kw">in</span> srv.connectors.items()
+        <span class="kw">if</span> <span class="fn">isinstance</span>(c, <span class="tp">PlaylistProvider</span>)
+        <span class="kw">and</span> <span class="fn">not blocked</span>(sid)
+    ]
+    results = <span class="kw">await</span> asyncio.<span class="fn">gather</span>(
+        *(t.list_user_playlists(ctx) <span class="kw">for</span> _, t <span class="kw">in</span> targets),
+        return_exceptions=<span class="kw">True</span>,
+    )
+    merged = <span class="fn">merge_playlists_sync</span>(all_playlists)
+    <span class="kw">return</span> {
+        <span class="str">"playlists"</span>: merged,
+        <span class="str">"total"</span>: <span class="fn">len</span>(merged),
+        <span class="str">"synced"</span>: <span class="kw">True</span>,
+        <span class="str">"by_service"</span>: by_svc,
+    }
+
+<span class="kw">def</span> <span class="fn">normalize_identity_key</span>(name: <span class="tp">str</span>) -&gt; <span class="tp">str</span>:
+    s = name.strip().lower().replace(<span class="str">" - topic"</span>, <span class="str">""</span>)
+    <span class="kw">return</span> <span class="str">" "</span>.join(s.split())</code></pre>
+    </div>
+  </div>
+
+  <h3>Example merge</h3>
+  <div class="code-single">
+    <div class="code-header code-header-json">before → after</div>
+<pre><code><span class="cm">// Before: two service-local playlists with the same user-facing name</span>
+[{<span class="str">"name"</span>:<span class="str">"Road Trip"</span>, <span class="str">"track_count"</span>:<span class="num">15</span>,
+  <span class="str">"sources"</span>:[{<span class="str">"service"</span>:<span class="str">"spotify"</span>, <span class="str">"id"</span>:<span class="str">"sp-roadtrip"</span>}]},
+ {<span class="str">"name"</span>:<span class="str">"road  trip"</span>, <span class="str">"track_count"</span>:<span class="num">12</span>,
+  <span class="str">"sources"</span>:[{<span class="str">"service"</span>:<span class="str">"youtube-music"</span>, <span class="str">"id"</span>:<span class="str">"PLxyz"</span>}]}]
+
+<span class="cm">// After MergePlaylistsSync</span>
+[{<span class="str">"name"</span>:<span class="str">"Road Trip"</span>, <span class="str">"track_count"</span>:<span class="num">15</span>,   <span class="cm">// max across copies</span>
+  <span class="str">"sources"</span>:[
+    {<span class="str">"service"</span>:<span class="str">"spotify"</span>, <span class="str">"id"</span>:<span class="str">"sp-roadtrip"</span>},
+    {<span class="str">"service"</span>:<span class="str">"youtube-music"</span>, <span class="str">"id"</span>:<span class="str">"PLxyz"</span>}
+  ]}]</code></pre>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="oauth">
+  <h2><span class="n">10</span>OAuth &amp; token storage</h2>
+  <p>
+    Users authorize once via browser. Guardian stores tokens encrypted at rest
+    and auto-refreshes them when the proxy needs a valid access token.
+  </p>
+
+  <div class="diagram">
+    <svg viewBox="0 0 780 260" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="11">
+      <defs>
+        <marker id="a6" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#58a6ff"/></marker>
+        <marker id="a7" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><path d="M0,0 L7,2.5 L0,5" fill="#3fb950"/></marker>
+      </defs>
+      <rect x="20" y="100" width="130" height="56" rx="8" fill="#1f2937" stroke="#58a6ff" stroke-width="1.5"/>
+      <text x="85" y="125" fill="#58a6ff" text-anchor="middle" font-weight="600">User browser</text>
+      <text x="85" y="142" fill="#8b949e" text-anchor="middle">/v1/setup</text>
+
+      <rect x="220" y="50" width="180" height="160" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="310" y="78" fill="#3fb950" text-anchor="middle" font-weight="700">Guardian auth</text>
+      <line x1="220" y1="90" x2="400" y2="90" stroke="#30363d"/>
+      <text x="310" y="110" fill="#8b949e" text-anchor="middle">login → redirect + CSRF state</text>
+      <text x="310" y="128" fill="#8b949e" text-anchor="middle">callback → code exchange</text>
+      <text x="310" y="146" fill="#8b949e" text-anchor="middle">tokens.json AES-256-GCM</text>
+      <text x="310" y="164" fill="#8b949e" text-anchor="middle">PBKDF2 · 100k iterations</text>
+      <text x="310" y="190" fill="#e6edf3" text-anchor="middle">getValidToken() refreshes</text>
+
+      <rect x="500" y="20" width="160" height="44" rx="8" fill="#1f2937" stroke="#1DB954" stroke-width="1.5"/>
+      <text x="580" y="40" fill="#1DB954" text-anchor="middle" font-weight="600">Spotify</text>
+      <text x="580" y="54" fill="#8b949e" text-anchor="middle" font-size="10">accounts.spotify.com</text>
+
+      <rect x="500" y="90" width="160" height="44" rx="8" fill="#1f2937" stroke="#ea4335" stroke-width="1.5"/>
+      <text x="580" y="110" fill="#ea4335" text-anchor="middle" font-weight="600">Google</text>
+      <text x="580" y="124" fill="#8b949e" text-anchor="middle" font-size="10">accounts.google.com</text>
+
+      <rect x="500" y="160" width="160" height="44" rx="8" fill="#1f2937" stroke="#ff9900" stroke-width="1.5"/>
+      <text x="580" y="180" fill="#ff9900" text-anchor="middle" font-weight="600">Amazon</text>
+      <text x="580" y="194" fill="#8b949e" text-anchor="middle" font-size="10">amazon.com/ap/oa</text>
+
+      <line x1="150" y1="120" x2="215" y2="110" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#a6)"/>
+      <line x1="400" y1="70" x2="495" y2="42" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a7)"/>
+      <line x1="400" y1="100" x2="495" y2="112" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a7)"/>
+      <line x1="400" y1="140" x2="495" y2="180" stroke="#3fb950" stroke-width="1.5" marker-end="url(#a7)"/>
+    </svg>
+    <p class="diagram-label">Login/callback stay public (no auth middleware) so the provider can redirect the user’s browser. Status/revoke require auth.</p>
+  </div>
+
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — tokens.go</div>
+<pre><code><span class="kw">const</span> (
+    pbkdf2Iter = <span class="num">100_000</span>
+    pbkdf2KeyLen = <span class="num">32</span> <span class="cm">// AES-256</span>
+)
+
+<span class="kw">func</span> <span class="fn">deriveKey</span>(pass <span class="tp">string</span>, salt []<span class="tp">byte</span>) []<span class="tp">byte</span> {
+    <span class="kw">return</span> pbkdf2.<span class="fn">Key</span>(
+        []<span class="tp">byte</span>(pass), salt,
+        pbkdf2Iter, pbkdf2KeyLen, sha256.<span class="fn">New</span>,
+    )
+}
+
+<span class="cm">// On-disk: {version, salt, tokens:{service → base64(nonce‖ciphertext)}}</span>
+<span class="kw">func</span> (ts *<span class="tp">TokenStore</span>) <span class="fn">encrypt</span>(plain []<span class="tp">byte</span>) (<span class="tp">string</span>, <span class="tp">error</span>) {
+    block, _ := aes.<span class="fn">NewCipher</span>(ts.key)
+    gcm, _ := cipher.<span class="fn">NewGCM</span>(block)
+    nonce := <span class="fn">make</span>([]<span class="tp">byte</span>, gcm.<span class="fn">NonceSize</span>())
+    io.<span class="fn">ReadFull</span>(rand.Reader, nonce)
+    <span class="kw">return</span> base64.<span class="fn">EncodeToString</span>(
+        gcm.<span class="fn">Seal</span>(nonce, nonce, plain, <span class="kw">nil</span>)), <span class="kw">nil</span>
+}</code></pre>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python — cryptography</div>
+<pre><code><span class="kw">from</span> hashlib <span class="kw">import</span> pbkdf2_hmac
+<span class="kw">from</span> cryptography.hazmat.primitives.ciphers.aead <span class="kw">import</span> AESGCM
+<span class="kw">import</span> os, base64
+
+<span class="kw">def</span> <span class="fn">derive_key</span>(passphrase: <span class="tp">str</span>, salt: <span class="kw">bytes</span>) -&gt; <span class="kw">bytes</span>:
+    <span class="kw">return</span> pbkdf2_hmac(
+        <span class="str">"sha256"</span>, passphrase.encode(), salt,
+        <span class="num">100_000</span>, dklen=<span class="num">32</span>,
+    )
+
+<span class="kw">def</span> <span class="fn">encrypt</span>(key: <span class="kw">bytes</span>, plain: <span class="kw">bytes</span>) -&gt; <span class="tp">str</span>:
+    nonce = os.<span class="fn">urandom</span>(<span class="num">12</span>)
+    ct = <span class="fn">AESGCM</span>(key).<span class="fn">encrypt</span>(nonce, plain, <span class="kw">None</span>)
+    <span class="kw">return</span> base64.b64encode(nonce + ct).decode()
+
+<span class="cm"># TokenStore keeps an RLock around the in-memory map</span>
+<span class="cm"># and rewrites tokens.json on every Save/Delete.</span></code></pre>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================ -->
+<section id="transforms">
+  <h2><span class="n">11</span>Response transforms</h2>
+  <p>
+    Upstream APIs are verbose. Connectors strip the noise so LLM context stays small.
+    Spotify saved-tracks is the clearest example.
+  </p>
+
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-note">Raw Spotify</div>
 <pre><code>{
   <span class="str">"items"</span>: [{
-    <span class="str">"added_at"</span>: <span class="str">"2024-01-15T..."</span>,
+    <span class="str">"added_at"</span>: <span class="str">"2024-01-15T…"</span>,
     <span class="str">"track"</span>: {
-      <span class="str">"album"</span>: {
-        <span class="str">"name"</span>: <span class="str">"Kind of Blue"</span>,
-        <span class="str">"images"</span>: [{...}, {...}],
-        <span class="str">"external_urls"</span>: {...},
-        <span class="str">"release_date"</span>: <span class="str">"1959-08-17"</span>,
-        <span class="str">"total_tracks"</span>: <span class="num">5</span>
-      },
-      <span class="str">"artists"</span>: [{
-        <span class="str">"name"</span>: <span class="str">"Miles Davis"</span>,
-        <span class="str">"external_urls"</span>: {...},
-        <span class="str">"images"</span>: [{...}],
-        <span class="str">"followers"</span>: {...}
-      }],
+      <span class="str">"album"</span>: { <span class="str">"name"</span>: <span class="str">"Kind of Blue"</span>,
+        <span class="str">"images"</span>: [{…}], <span class="str">"external_urls"</span>: {…},
+        <span class="str">"release_date"</span>: <span class="str">"1959-08-17"</span> },
+      <span class="str">"artists"</span>: [{ <span class="str">"name"</span>: <span class="str">"Miles Davis"</span>,
+        <span class="str">"images"</span>: [{…}], <span class="str">"followers"</span>: {…} }],
       <span class="str">"name"</span>: <span class="str">"So What"</span>,
       <span class="str">"id"</span>: <span class="str">"abc123"</span>,
       <span class="str">"uri"</span>: <span class="str">"spotify:track:abc123"</span>,
@@ -606,14 +1315,12 @@ upstreamURL := svc.Endpoint + remainingPath
       <span class="str">"popularity"</span>: <span class="num">78</span>
     }
   }],
-  <span class="str">"next"</span>: <span class="str">"https://api.spotify.com/..."</span>,
-  <span class="str">"offset"</span>: <span class="num">0</span>,
-  <span class="str">"limit"</span>: <span class="num">20</span>,
+  <span class="str">"next"</span>: <span class="str">"https://api.spotify.com/…"</span>,
   <span class="str">"total"</span>: <span class="num">347</span>
 }</code></pre>
-</div>
-<div class="code-panel">
-  <div class="code-header" style="background:rgba(63,185,80,0.1); color:var(--green);">Transformed (LLM-friendly)</div>
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-ok">Transformed (LLM-friendly)</div>
 <pre><code>{
   <span class="str">"tracks"</span>: [{
     <span class="str">"name"</span>: <span class="str">"So What"</span>,
@@ -625,163 +1332,200 @@ upstreamURL := svc.Endpoint + remainingPath
   <span class="str">"total"</span>: <span class="num">347</span>,
   <span class="str">"total_fetched"</span>: <span class="num">347</span>
 }</code></pre>
-</div>
-</div>
+    </div>
+  </div>
 
-<div class="explain">
-  <p><strong>What's stripped:</strong> <code>added_at</code>, <code>images</code>, <code>external_urls</code>, <code>followers</code>, <code>release_date</code>, <code>duration_ms</code>, <code>popularity</code>, pagination metadata (<code>next</code>, <code>offset</code>, <code>limit</code>). All pages are auto-fetched and combined.</p>
-</div>
+  <div class="code-single">
+    <div class="code-header code-header-go">spotify.go — transformSavedTracks</div>
+<pre><code><span class="kw">func</span> (c *<span class="tp">SpotifyConnector</span>) <span class="fn">transformSavedTracks</span>(
+    raw <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>,
+) <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span> {
+    items, _ := raw[<span class="str">"items"</span>].([]<span class="kw">any</span>)
+    tracks := <span class="fn">make</span>([]<span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>, <span class="num">0</span>, <span class="fn">len</span>(items))
+    <span class="kw">for</span> _, item := <span class="kw">range</span> items {
+        saved, ok := item.(<span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>)
+        <span class="kw">if</span> !ok { <span class="kw">continue</span> }
+        track, _ := saved[<span class="str">"track"</span>].(<span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>)
+        <span class="kw">if</span> track == <span class="kw">nil</span> { <span class="kw">continue</span> }
+        tracks = <span class="fn">append</span>(tracks, <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>{
+            <span class="str">"name"</span>:    track[<span class="str">"name"</span>],
+            <span class="str">"artists"</span>: <span class="fn">extractNames</span>(track, <span class="str">"artists"</span>),
+            <span class="str">"album"</span>:   <span class="fn">extractNested</span>(track, <span class="str">"album"</span>, <span class="str">"name"</span>),
+            <span class="str">"id"</span>:      track[<span class="str">"id"</span>],
+            <span class="str">"uri"</span>:     track[<span class="str">"uri"</span>],
+        })
+    }
+    <span class="kw">return</span> <span class="kw">map</span>[<span class="tp">string</span>]<span class="kw">any</span>{<span class="str">"tracks"</span>: tracks, <span class="str">"total"</span>: raw[<span class="str">"total"</span>]}
+}</code></pre>
+  </div>
+
+  <div class="explain">
+    <p>
+      <strong>Stripped:</strong> images, external_urls, followers, release_date,
+      popularity, pagination chrome. Pagination is auto-fetched
+      (<code>fetchAllPagesRaw</code> / <code>fetchAllPages</code>) so agents see a complete list.
+    </p>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="go-concepts">8. Go Concepts for Python Devs</h2>
+<section id="go-concepts">
+  <h2><span class="n">12</span>Go concepts for Python devs</h2>
 
-<h3>Interfaces (implicit satisfaction)</h3>
-<div class="code-compare">
-<div class="code-panel">
-  <div class="code-header code-header-go">Go — no implements keyword</div>
-<pre><code><span class="cm">// Define the interface</span>
-<span class="kw">type</span> <span class="tp">ServiceConnector</span> <span class="kw">interface</span> {
-    <span class="fn">Capabilities</span>() <span class="tp">ServiceCapabilities</span>
-    <span class="fn">SystemInstructions</span>(<span class="tp">string</span>) <span class="tp">string</span>
-    <span class="fn">HandleProxy</span>(<span class="tp">http.ResponseWriter</span>,
-        *<span class="tp">http.Request</span>, <span class="tp">string</span>)
+  <h3>Implicit interfaces</h3>
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go</div>
+<pre><code><span class="kw">type</span> <span class="tp">PlaylistProvider</span> <span class="kw">interface</span> {
+    <span class="fn">ListUserPlaylists</span>(ctx context.Context) ([]<span class="tp">Playlist</span>, <span class="tp">error</span>)
 }
 
-<span class="cm">// Any struct with these methods</span>
-<span class="cm">// automatically satisfies the interface</span>
-<span class="kw">type</span> <span class="tp">SpotifyConnector</span> <span class="kw">struct</span> {
-    server *<span class="tp">Server</span>
-}
-
-<span class="cm">// Maps hold interfaces</span>
-connectors := <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">ServiceConnector</span>{
-    <span class="str">"spotify"</span>: &amp;<span class="tp">SpotifyConnector</span>{},
+<span class="cm">// SpotifyConnector does not “implement PlaylistProvider”</span>
+<span class="cm">// in any declaration. Type assertion finds it:</span>
+<span class="kw">if</span> p, ok := connector.(<span class="tp">PlaylistProvider</span>); ok {
+    playlists, err := p.<span class="fn">ListUserPlaylists</span>(ctx)
 }</code></pre>
-</div>
-<div class="code-panel">
-  <div class="code-header code-header-py">Python — explicit inheritance</div>
-<pre><code><span class="cm"># Must explicitly inherit</span>
-<span class="kw">class</span> <span class="tp">SpotifyConnector</span>(<span class="tp">ServiceConnector</span>):
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, server):
-        self.server = server
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python</div>
+<pre><code><span class="kw">class</span> <span class="tp">PlaylistProvider</span>(<span class="tp">Protocol</span>):
+    <span class="kw">async def</span> <span class="fn">list_user_playlists</span>(self): ...
 
-    <span class="kw">def</span> <span class="fn">capabilities</span>(self):
-        ...
+<span class="cm"># Structural check at runtime</span>
+<span class="kw">if</span> <span class="fn">isinstance</span>(connector, <span class="tp">PlaylistProvider</span>):
+    playlists = <span class="kw">await</span> connector.list_user_playlists()
 
-    <span class="kw">def</span> <span class="fn">system_instructions</span>(
-        self, base_url
-    ):
-        ...
+<span class="cm"># Or duck-type: hasattr(connector, "list_user_playlists")</span></code></pre>
+    </div>
+  </div>
 
-    <span class="kw">async def</span> <span class="fn">handle_proxy</span>(
-        self, request, path
-    ):
-        ...
-
-<span class="cm"># Dict holds implementations</span>
-connectors = {
-    <span class="str">"spotify"</span>: <span class="fn">SpotifyConnector</span>(srv),
-}</code></pre>
-</div>
-</div>
-
-<h3>sync.RWMutex for concurrent access</h3>
-<div class="code-compare">
-<div class="code-panel">
-  <div class="code-header code-header-go">Go — explicit locking</div>
-<pre><code><span class="kw">type</span> <span class="tp">TokenStore</span> <span class="kw">struct</span> {
-    mu     <span class="tp">sync.RWMutex</span>
-    Tokens <span class="kw">map</span>[<span class="tp">string</span>]*<span class="tp">OAuthToken</span>
+  <h3>sync.RWMutex</h3>
+  <div class="code-compare">
+    <div class="code-panel">
+      <div class="code-header code-header-go">Go — many readers, one writer</div>
+<pre><code><span class="kw">type</span> <span class="tp">Cache</span> <span class="kw">struct</span> {
+    mu    <span class="tp">sync.RWMutex</span>
+    items <span class="kw">map</span>[<span class="tp">string</span>]cacheEntry
 }
 
-<span class="kw">func</span> (ts *<span class="tp">TokenStore</span>) <span class="fn">Get</span>(
-    id <span class="tp">string</span>,
-) *<span class="tp">OAuthToken</span> {
-    ts.mu.<span class="fn">RLock</span>()         <span class="cm">// read lock</span>
-    <span class="kw">defer</span> ts.mu.<span class="fn">RUnlock</span>() <span class="cm">// auto-unlock</span>
-    <span class="kw">return</span> ts.Tokens[id]
+<span class="kw">func</span> (c *<span class="tp">Cache</span>) <span class="fn">Get</span>(key <span class="tp">string</span>) (<span class="tp">string</span>, <span class="tp">bool</span>) {
+    c.mu.<span class="fn">RLock</span>()
+    <span class="kw">defer</span> c.mu.<span class="fn">RUnlock</span>()
+    <span class="cm">// concurrent Get()s share the lock</span>
 }
 
-<span class="kw">func</span> (ts *<span class="tp">TokenStore</span>) <span class="fn">Save</span>(
-    id <span class="tp">string</span>, tok *<span class="tp">OAuthToken</span>,
-) <span class="tp">error</span> {
-    ts.mu.<span class="fn">Lock</span>()        <span class="cm">// exclusive lock</span>
-    <span class="kw">defer</span> ts.mu.<span class="fn">Unlock</span>()
-    ts.Tokens[id] = tok
-    <span class="kw">return</span> ts.<span class="fn">persist</span>()
+<span class="kw">func</span> (c *<span class="tp">Cache</span>) <span class="fn">Set</span>(key, value <span class="tp">string</span>, ttl time.Duration) {
+    c.mu.<span class="fn">Lock</span>()          <span class="cm">// exclusive</span>
+    <span class="kw">defer</span> c.mu.<span class="fn">Unlock</span>()
 }</code></pre>
-</div>
-<div class="code-panel">
-  <div class="code-header code-header-py">Python — threading or asyncio</div>
-<pre><code><span class="kw">from</span> threading <span class="kw">import</span> Lock
+    </div>
+    <div class="code-panel">
+      <div class="code-header code-header-py">Python</div>
+<pre><code><span class="kw">from</span> threading <span class="kw">import</span> RLock
 
-<span class="kw">class</span> <span class="tp">TokenStore</span>:
+<span class="kw">class</span> <span class="tp">Cache</span>:
     <span class="kw">def</span> <span class="fn">__init__</span>(self):
-        self._lock = <span class="fn">Lock</span>()
-        self.tokens = {}
+        self._lock = <span class="fn">RLock</span>()
+        self.items = {}
 
-    <span class="kw">def</span> <span class="fn">get</span>(self, sid):
-        <span class="kw">with</span> self._lock:  <span class="cm"># context mgr</span>
-            <span class="kw">return</span> self.tokens.<span class="fn">get</span>(sid)
-
-    <span class="kw">def</span> <span class="fn">save</span>(self, sid, tok):
+    <span class="kw">def</span> <span class="fn">get</span>(self, key):
         <span class="kw">with</span> self._lock:
-            self.tokens[sid] = tok
-            self.<span class="fn">_persist</span>()
+            <span class="kw">return</span> self.items.get(key)
 
-<span class="cm"># Go: RWMutex allows concurrent reads</span>
-<span class="cm"># Python: Lock is always exclusive</span>
-<span class="cm"># For async: use asyncio.Lock()</span></code></pre>
-</div>
-</div>
+<span class="cm"># asyncio: use asyncio.Lock() — no reader/writer split.</span>
+<span class="cm"># In practice the in-process map is fast enough that</span>
+<span class="cm"># a single exclusive lock is fine.</span></code></pre>
+    </div>
+  </div>
+
+  <h3>defer, errors.Is, and fail-open</h3>
+  <div class="code-single">
+    <div class="code-header code-header-go">patterns used throughout</div>
+<pre><code><span class="cm">// defer runs when the function returns — unlock, close body, etc.</span>
+c.mu.<span class="fn">RLock</span>()
+<span class="kw">defer</span> c.mu.<span class="fn">RUnlock</span>()
+
+<span class="cm">// sentinel errors instead of exception types</span>
+<span class="kw">var</span> ErrUnauthorized = errors.<span class="fn">New</span>(<span class="str">"unauthorized"</span>)
+<span class="kw">if</span> errors.<span class="fn">Is</span>(err, ErrUnauthorized) { … }
+
+<span class="cm">// fail-open policy (project rule)</span>
+<span class="kw">if</span> err := json.<span class="fn">Unmarshal</span>(body, &amp;payload); err != <span class="kw">nil</span> {
+    <span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{
+        Action: ActionAllow,   <span class="cm">// let the request through</span>
+        Message: <span class="str">"failed to parse payload"</span>,
+    })
+    <span class="kw">return</span>
+}</code></pre>
+  </div>
+</section>
 
 <!-- ============================================================ -->
-<h2 id="filemap">9. File Map</h2>
+<section id="filemap">
+  <h2><span class="n">13</span>File map @ b330531</h2>
 
-<div class="diagram" style="padding: 1rem;">
-<svg viewBox="0 0 800 420" xmlns="http://www.w3.org/2000/svg" font-family="'SF Mono', monospace" font-size="12">
-  <rect x="10" y="10" width="780" height="400" rx="8" fill="#0d1117" stroke="#30363d"/>
-  <text x="30" y="40" fill="#3fb950" font-size="14" font-weight="600">aperture-guardian/ (67bdb47)</text>
+  <table>
+    <thead>
+      <tr><th>File</th><th>LOC</th><th>Role</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><code>main.go</code></td><td>197</td><td>Flags, env, Server wiring, connector registration, routes</td></tr>
+      <tr><td><code>handler.go</code></td><td>413</td><td>Server, AuthMiddleware, ServiceConnector, capabilities types, pre-request hook</td></tr>
+      <tr><td><code>proxy.go</code></td><td>179</td><td>Service proxy: capabilities, connector vs generic, OAuth inject, cache</td></tr>
+      <tr><td><code>library.go</code></td><td>147</td><td>PlaylistProvider, aggregate /v1/library/playlists</td></tr>
+      <tr><td><code>match.go</code></td><td>178</td><td>NormalizeIdentityKey, MergePlaylistsSync, artist/album merge</td></tr>
+      <tr><td><code>models.go</code></td><td>136</td><td>Neutral Playlist / Track / Artist / Album + sources</td></tr>
+      <tr><td><code>config.go</code></td><td>129</td><td>Service config, Duration JSON, matching, reload</td></tr>
+      <tr><td><code>identity.go</code></td><td>262</td><td>Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
+      <tr><td><code>oauth.go</code></td><td>236</td><td>Login, callback, exchange, refresh, revoke</td></tr>
+      <tr><td><code>tokens.go</code></td><td>231</td><td>AES-256-GCM token store, PBKDF2, status</td></tr>
+      <tr><td><code>statestore.go</code></td><td>41</td><td>CSRF state TTL map</td></tr>
+      <tr><td><code>cache.go</code></td><td>41</td><td>In-memory TTL cache</td></tr>
+      <tr><td><code>setup.go</code></td><td>115</td><td>Web setup wizard HTML</td></tr>
+      <tr><td><code>spotify.go</code></td><td>885</td><td>Spotify connector</td></tr>
+      <tr><td><code>youtube.go</code></td><td>900</td><td>YouTube Music connector</td></tr>
+      <tr><td><code>amazonmusic.go</code></td><td>682</td><td>Amazon Music connector (scaffold)</td></tr>
+    </tbody>
+  </table>
 
-  <text x="30" y="70" fill="#58a6ff" font-size="13" font-weight="600">Core</text>
-  <text x="50" y="90" fill="#58a6ff">main.go</text>
-  <text x="230" y="90" fill="#8b949e">Entry point, CLI flags, route wiring, connector registration</text>
-  <text x="50" y="110" fill="#58a6ff">handler.go</text>
-  <text x="230" y="110" fill="#8b949e">Server struct, ServiceConnector interface, capabilities types, auth middleware</text>
-  <text x="50" y="130" fill="#58a6ff">proxy.go</text>
-  <text x="230" y="130" fill="#8b949e">Proxy handler: /capabilities, connector delegation, generic forward, token injection</text>
-  <text x="50" y="150" fill="#58a6ff">config.go</text>
-  <text x="230" y="150" fill="#8b949e">Service/Config types, OAuthConfig, JSON loading, service matching, hot reload</text>
-  <text x="50" y="170" fill="#58a6ff">cache.go</text>
-  <text x="230" y="170" fill="#8b949e">In-memory TTL cache with RWMutex</text>
+  <div class="explain good">
+    <p>
+      <strong>Suggested reading order for a Python developer:</strong>
+      <code>main.go</code> → <code>handler.go</code> (Server + auth + hook)
+      → <code>models.go</code> + <code>match.go</code> (neutral data)
+      → <code>library.go</code> (fan-out)
+      → <code>proxy.go</code> → one connector (<code>spotify.go</code>)
+      → <code>oauth.go</code> + <code>tokens.go</code>.
+    </p>
+  </div>
+</section>
 
-  <text x="30" y="200" fill="#3fb950" font-size="13" font-weight="600">Auth &amp; Security</text>
-  <text x="50" y="220" fill="#58a6ff">tokens.go</text>
-  <text x="230" y="220" fill="#8b949e">AES-256-GCM encrypted token store, PBKDF2 key derivation, in-memory mode</text>
-  <text x="50" y="240" fill="#58a6ff">oauth.go</text>
-  <text x="230" y="240" fill="#8b949e">OAuth2 login/callback/refresh, CSRF state validation, success page</text>
-  <text x="50" y="260" fill="#58a6ff">statestore.go</text>
-  <text x="230" y="260" fill="#8b949e">CSRF state TTL store for OAuth flow</text>
-  <text x="50" y="280" fill="#58a6ff">setup.go</text>
-  <text x="230" y="280" fill="#8b949e">Web-based setup wizard at /v1/setup</text>
-
-  <text x="30" y="310" fill="#3fb950" font-size="13" font-weight="600">Service Connectors</text>
-  <text x="50" y="330" fill="#3fb950">spotify.go</text>
-  <text x="230" y="330" fill="#8b949e">757 lines — 9 data types, 15 operations, 15 transforms, auto-pagination</text>
-  <text x="50" y="350" fill="#58a6ff">youtube.go</text>
-  <text x="230" y="350" fill="#8b949e">692 lines — 6 data types, 10 operations, path mapping, music category filter</text>
-  <text x="50" y="370" fill="#8b949e">amazonmusic.go</text>
-  <text x="230" y="370" fill="#8b949e">548 lines — 8 data types, 0 operations (scaffold), generic transforms</text>
-
-  <text x="30" y="400" fill="#d29922" font-size="13" font-weight="600">Tests</text>
-  <text x="140" y="400" fill="#8b949e">97 tests across 8 *_test.go files (2543 lines)</text>
-</svg>
-</div>
+<!-- ============================================================ -->
+<section id="regen">
+  <h2><span class="n">14</span>Regenerating this page</h2>
+  <p>
+    This file is a <strong>snapshot of the codebase at commit
+    <code>b330531</code></strong>. When the architecture, public endpoints,
+    or core interfaces change, regenerate or edit
+    <code>docs/index.html</code> and bump the version badge at the top
+    (and in the footer) so readers know which tree they are looking at.
+  </p>
+  <p>
+    Check current version with:
+  </p>
+  <div class="code-single">
+<pre><code>git rev-parse --short HEAD
+git log -1 --oneline</code></pre>
+  </div>
+</section>
 
 <hr>
-<p style="text-align:center; color:var(--text-dim); font-size:0.85rem;">
-  Generated for <strong>67bdb47</strong> — regenerate when code changes significantly.
-</p>
+<footer>
+  Generated for <strong>b330531</strong>
+  · aperture-guardian code walkthrough
+  · Go source of truth, Python for comparison
+  · regenerate when the code evolves
+</footer>
 
 </div>
 </body>
