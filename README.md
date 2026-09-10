@@ -199,51 +199,68 @@ Returns the user's playlists from every connected music service in Guardian's **
 {
   "playlists": [
     {
-      "service": "spotify",
-      "service_name": "Spotify",
-      "id": "37i9dQZF1DXcBWIGoYBM5M",
       "name": "Today's Top Hits",
       "description": "The hottest tracks right now.",
       "owner": "Spotify",
       "track_count": 50,
-      "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
-      "extra": { "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "public": true }
+      "sources": [
+        {
+          "service": "spotify",
+          "service_name": "Spotify",
+          "id": "37i9dQZF1DXcBWIGoYBM5M",
+          "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+          "extra": { "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "public": true }
+        }
+      ]
     },
     {
-      "service": "youtube-music",
-      "service_name": "YouTube Music",
-      "id": "PLxyz...",
-      "name": "Focus Mix",
-      "owner": "Alice",
-      "track_count": 42,
-      "url": "https://www.youtube.com/playlist?list=PLxyz...",
-      "extra": { "published_at": "2024-01-15T00:00:00Z" }
+      "name": "Road Trip",
+      "track_count": 15,
+      "sources": [
+        {
+          "service": "spotify",
+          "service_name": "Spotify",
+          "id": "sp-roadtrip",
+          "url": "https://open.spotify.com/playlist/sp-roadtrip"
+        },
+        {
+          "service": "youtube-music",
+          "service_name": "YouTube Music",
+          "id": "PLxyz...",
+          "url": "https://www.youtube.com/playlist?list=PLxyz...",
+          "extra": { "published_at": "2024-01-15T00:00:00Z" }
+        }
+      ]
     }
   ],
   "total": 2,
+  "synced": true,
   "by_service": {
-    "spotify": { "status": "ok", "count": 1 },
+    "spotify": { "status": "ok", "count": 2 },
     "youtube-music": { "status": "ok", "count": 1 },
     "amazon-music": { "status": "unauthorized", "error": "not authorized — connect at /v1/auth/amazon-music/login" }
   }
 }
 ```
 
-Neutral playlist fields (always present unless noted):
+Neutral playlist fields (user-facing):
 
 | Field | Description |
 |-------|-------------|
-| `service` | Connector ID (`spotify`, `youtube-music`, `amazon-music`) |
-| `service_name` | Human-readable service label |
-| `id` | Service-local playlist ID (use with that service's `/playlists/{id}`) |
-| `name` | User-facing playlist title |
+| `name` | Playlist title |
 | `description` | Playlist description, if any |
 | `owner` | Owner display name, when known |
-| `track_count` | Number of items in the playlist |
-| `url` | Deep link to the playlist on the service, when available |
-| `extra` | Service-specific fields that don't fit the neutral shape |
+| `track_count` | Item count (max across synced sources) |
+| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `url`, `extra` |
+| `extra` | Other service-specific fields |
 
-Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service. Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
+### Cross-service sync (v1)
+
+The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Guardian merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
+
+Tracks carry unified `artists` / `album` objects. Cross-service matching is **text-based** (`NormalizeIdentityKey`: case, whitespace, strip YouTube “ - Topic”). “Britney Spears” on Spotify and Tidal become one `Artist` with two `sources`. Better entity resolution (MBIDs, ISRC, fuzzy names) is intentionally deferred — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
+
+Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
 ### Service proxy
 

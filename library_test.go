@@ -36,12 +36,20 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []Playlist{
-				{Service: "spotify", ServiceName: "Spotify", ID: "sp1", Name: "Jazz Vibes", TrackCount: 10},
+				{
+					Name:       "Jazz Vibes",
+					TrackCount: 10,
+					Sources:    []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+				},
 			},
 		},
 		"youtube-music": &fakePlaylistProvider{
 			playlists: []Playlist{
-				{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt1", Name: "Focus Mix", TrackCount: 25},
+				{
+					Name:       "Focus Mix",
+					TrackCount: 25,
+					Sources:    []PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt1"}},
+				},
 			},
 		},
 	}
@@ -71,9 +79,12 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 	if resp.ByService["youtube-music"].Status != LibraryStatusOK || resp.ByService["youtube-music"].Count != 1 {
 		t.Fatalf("youtube-music status = %+v", resp.ByService["youtube-music"])
 	}
-	// Sorted by service name then playlist name.
-	if resp.Playlists[0].Name != "Jazz Vibes" || resp.Playlists[1].Name != "Focus Mix" {
+	// Synced merge sorts by name.
+	if resp.Playlists[0].Name != "Focus Mix" || resp.Playlists[1].Name != "Jazz Vibes" {
 		t.Fatalf("order = %s, %s", resp.Playlists[0].Name, resp.Playlists[1].Name)
+	}
+	if !resp.Synced {
+		t.Fatal("expected synced=true on library list")
 	}
 }
 
@@ -88,7 +99,10 @@ func TestHandleLibraryPlaylists_UnauthorizedService(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []Playlist{
-				{Service: "spotify", ServiceName: "Spotify", ID: "sp1", Name: "Jazz"},
+				{
+					Name:    "Jazz",
+					Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+				},
 			},
 		},
 		"youtube-music": &fakePlaylistProvider{err: ErrUnauthorized},
@@ -257,8 +271,8 @@ func TestSpotifyConnector_ListUserPlaylists_MockAPI(t *testing.T) {
 	if playlists[0].Name != "Jazz" || playlists[0].TrackCount != 5 {
 		t.Fatalf("first = %+v", playlists[0])
 	}
-	if playlists[0].Service != "spotify" {
-		t.Fatalf("service = %s", playlists[0].Service)
+	if playlists[0].PrimaryService() != "spotify" {
+		t.Fatalf("service = %s", playlists[0].PrimaryService())
 	}
 	if playlists[1].Name != "Coffee" || playlists[1].TrackCount != 8 {
 		t.Fatalf("second = %+v", playlists[1])

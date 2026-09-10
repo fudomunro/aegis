@@ -94,8 +94,8 @@ func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
 	if p.TrackCount != 25 {
 		t.Fatalf("track_count = %v", p.TrackCount)
 	}
-	if p.Service != "amazon-music" || p.ServiceName != "Amazon Music" {
-		t.Fatalf("service = %s/%s", p.Service, p.ServiceName)
+	if len(p.Sources) != 1 || p.Sources[0].Service != "amazon-music" || p.Sources[0].ServiceName != "Amazon Music" {
+		t.Fatalf("sources = %+v", p.Sources)
 	}
 }
 

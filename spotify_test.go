@@ -87,11 +87,14 @@ func TestSpotifyConnector_TransformPlaylistList(t *testing.T) {
 	if p.TrackCount != 42 {
 		t.Fatalf("track_count = %v", p.TrackCount)
 	}
-	if p.Service != "spotify" || p.ServiceName != "Spotify" {
-		t.Fatalf("service = %s/%s", p.Service, p.ServiceName)
+	if len(p.Sources) != 1 || p.Sources[0].Service != "spotify" || p.Sources[0].ServiceName != "Spotify" {
+		t.Fatalf("sources = %+v", p.Sources)
 	}
-	if p.URL != "https://open.spotify.com/playlist/pl1" {
-		t.Fatalf("url = %v", p.URL)
+	if p.Sources[0].ID != "pl1" {
+		t.Fatalf("source id = %v", p.Sources[0].ID)
+	}
+	if p.Sources[0].URL != "https://open.spotify.com/playlist/pl1" {
+		t.Fatalf("url = %v", p.Sources[0].URL)
 	}
 	if result.Total != 1 {
 		t.Fatalf("total = %v", result.Total)
