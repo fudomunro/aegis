@@ -76,10 +76,10 @@ type DataTypeCapability struct {
 
 // Operation describes a single callable operation on a data type.
 type Operation struct {
-	Name        string       `json:"name"`                  // "read_saved", "search", "get_by_id"
-	Description string       `json:"description"`           // human-readable
-	Method      string       `json:"method"`                // "GET", "POST", etc.
-	Path        string       `json:"path"`                  // "/me/tracks"
+	Name        string       `json:"name"`        // "read_saved", "search", "get_by_id"
+	Description string       `json:"description"` // human-readable
+	Method      string       `json:"method"`      // "GET", "POST", etc.
+	Path        string       `json:"path"`        // "/me/tracks"
 	Parameters  []Parameter  `json:"parameters,omitempty"`
 	Response    ResponseSpec `json:"response"`
 }
@@ -87,8 +87,8 @@ type Operation struct {
 // Parameter describes a query or path parameter for an operation.
 type Parameter struct {
 	Name        string `json:"name"`
-	In          string `json:"in"`          // "query" or "path"
-	Type        string `json:"type"`        // "string", "integer", "boolean"
+	In          string `json:"in"`   // "query" or "path"
+	Type        string `json:"type"` // "string", "integer", "boolean"
 	Description string `json:"description"`
 	Default     any    `json:"default,omitempty"`
 	Required    bool   `json:"required,omitempty"`
@@ -96,7 +96,7 @@ type Parameter struct {
 
 // ResponseSpec describes what the operation returns.
 type ResponseSpec struct {
-	Description string `json:"description"`
+	Description string   `json:"description"`
 	Fields      []string `json:"fields,omitempty"` // top-level field names in the response
 }
 
@@ -144,7 +144,11 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 
-	if len(matched) == 0 {
+	// Users often ask for "my playlists" without naming a service. Surface the
+	// unified library endpoint in that case so agents can return every service.
+	libraryOnly := len(matched) == 0 && mentionsPlaylists(payload.UserMessage) && s.hasPlaylistProviders()
+
+	if len(matched) == 0 && !libraryOnly {
 		logger.Debug("no services matched, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
@@ -154,7 +158,9 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	for i, svc := range matched {
 		serviceIDs[i] = svc.ID
 	}
-	logger.Info("services matched", "services", serviceIDs)
+	if len(matched) > 0 {
+		logger.Info("services matched", "services", serviceIDs)
+	}
 
 	// If any matched service is blocked, reject the request.
 	for _, svc := range matched {
@@ -187,6 +193,10 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			)
 			instructions = append(instructions, instruction)
 		}
+	}
+
+	if libraryOnly {
+		instructions = append(instructions, s.librarySystemInstructions())
 	}
 
 	if len(instructions) == 0 {
@@ -243,4 +253,40 @@ func writeGuardrailResponse(w http.ResponseWriter, resp GuardrailResponse) {
 		w.WriteHeader(http.StatusForbidden)
 	}
 	json.NewEncoder(w).Encode(resp)
+}
+
+// hasPlaylistProviders reports whether any registered connector can list
+// neutral playlists for the library endpoint.
+func (s *Server) hasPlaylistProviders() bool {
+	for _, connector := range s.connectors {
+		if _, ok := connector.(PlaylistProvider); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// librarySystemInstructions tells agents about the cross-service library endpoint.
+func (s *Server) librarySystemInstructions() string {
+	root := strings.TrimRight(s.baseURL, "/")
+	return fmt.Sprintf(
+		"Unified music library (use when the user asks about playlists or their music library):\n"+
+			"GET %s/v1/library/playlists — all user playlists from every connected service in one "+
+			"neutral list (name, description, owner, track_count, sources[]).\n"+
+			"Same-named playlists are synced into one entry with multiple sources[]. "+
+			"Prefer this endpoint for questions like \"what playlists do I have?\" so the answer includes "+
+			"Spotify, YouTube Music, Amazon Music, and any other connected service.",
+		root,
+	)
+}
+
+// mentionsPlaylists detects library-oriented questions that don't name a service.
+func mentionsPlaylists(msg string) bool {
+	lower := strings.ToLower(msg)
+	for _, keyword := range []string{"playlist", "play list", "music library", "my library", "saved playlists"} {
+		if strings.Contains(lower, keyword) {
+			return true
+		}
+	}
+	return false
 }
