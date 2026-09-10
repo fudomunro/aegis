@@ -107,6 +107,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
+	mux.HandleFunc("/v1/library/playlists", srv.AuthMiddleware(srv.HandleLibraryPlaylists))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(srv.HandleServiceProxy))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,13 +45,17 @@ func (c *AmazonMusicConnector) Capabilities() ServiceCapabilities {
 // SystemInstructions returns the system message injected into LLM requests
 // when Amazon Music is referenced.
 func (c *AmazonMusicConnector) SystemInstructions(baseURL string) string {
-	base := strings.TrimRight(baseURL, "/") + "/v1/services/amazon-music"
+	root := strings.TrimRight(baseURL, "/")
+	base := root + "/v1/services/amazon-music"
 	return fmt.Sprintf(`When the user's request involves Amazon Music, you MUST use the Guardian proxy at %s instead of calling Amazon Music directly.
 
-Available endpoints (all require Authorization header from Guardian):
+For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
+GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
+
+Amazon Music-specific endpoints (all require Authorization header from Guardian):
 
 GET /me — Current user profile
-GET /me/playlists — List user's playlists
+GET /me/playlists — List user's playlists in neutral format
 GET /me/library — List saved/liked tracks and albums
 GET /me/recommendations — Personalized recommendations
 GET /search?q=QUERY — Search Amazon Music catalog
@@ -61,8 +66,9 @@ GET /artists/{id} — Get artist details by ID
 
 Note: Amazon Music API availability may vary. If an endpoint returns
 an error, inform the user that the feature may not be available.
+Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
-Always include the full proxy base URL in your requests.`, base)
+Always include the full proxy base URL in your requests.`, base, root)
 }
 
 // HandleProxy processes an Amazon Music API request through the connector.
@@ -231,25 +237,165 @@ func (c *AmazonMusicConnector) transformUser(raw map[string]any) map[string]any 
 	return result
 }
 
-func (c *AmazonMusicConnector) transformPlaylistList(raw map[string]any) map[string]any {
+func asInt(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int32:
+		return int(n), true
+	case int64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	}
+	return 0, false
+}
+
+// ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
+// and returns them in Guardian's neutral format.
+func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, error) {
+	token := c.server.getValidToken("amazon-music", slog.Default())
+	if token == "" {
+		return nil, ErrUnauthorized
+	}
+
+	upstreamBase := "https://api.amazonmusic.com/v1"
+	if svc := c.server.config.GetService("amazon-music"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	nextURL := upstreamBase + "/me/playlists"
+	var all []Playlist
+	for page := 0; page < 10 && nextURL != ""; page++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("amazon music playlists returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		items := c.extractItems(raw)
+		for _, item := range items {
+			p, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			all = append(all, c.neutralPlaylist(p))
+		}
+		nextURL, _ = raw["next"].(string)
+		if nextURL == "" {
+			if tokenVal, ok := raw["nextToken"].(string); ok && tokenVal != "" {
+				// Relative continuation is not reliable without a documented API shape.
+				break
+			}
+		}
+	}
+	return all, nil
+}
+
+// neutralPlaylist maps a raw Amazon Music playlist object into the neutral type.
+// Service identity lives in Sources.
+func (c *AmazonMusicConnector) neutralPlaylist(p map[string]any) Playlist {
+	id, _ := p["id"].(string)
+	name, _ := c.firstNonNil(p, "name", "title").(string)
+	description, _ := p["description"].(string)
+
+	trackCount := 0
+	if n, ok := asInt(c.firstNonNil(p, "track_count", "item_count", "total_tracks", "size")); ok {
+		trackCount = n
+	}
+
+	owner := ""
+	if o, ok := p["owner"].(map[string]any); ok {
+		owner, _ = o["name"].(string)
+	}
+	if owner == "" {
+		owner, _ = c.firstNonNil(p, "owner", "ownerName", "owner_name").(string)
+	}
+
+	extra := map[string]any{}
+	for _, k := range []string{"urn", "asin", "customerId", "privacy"} {
+		if v, ok := p[k]; ok && v != nil {
+			extra[k] = v
+		}
+	}
+
+	return Playlist{
+		Name:        name,
+		Description: description,
+		Owner:       owner,
+		TrackCount:  trackCount,
+		Sources: []PlaylistSource{
+			primaryPlaylistSource("amazon-music", "Amazon Music", id, "", extra),
+		},
+	}
+}
+
+// neutralAmazonTrack maps a raw Amazon Music track object into the neutral type.
+func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) Track {
+	id, _ := t["id"].(string)
+	name, _ := c.firstNonNil(t, "name", "title").(string)
+	artist := c.extractArtistName(t)
+	album := c.extractAlbumName(t)
+	durationMs, _ := asInt(t["duration_ms"])
+	duration, _ := t["duration"].(string)
+
+	extra := map[string]any{}
+	for _, k := range []string{"asin", "urn", "popularity"} {
+		if v, ok := t[k]; ok && v != nil {
+			extra[k] = v
+		}
+	}
+
+	var artists []Artist
+	if artist != "" {
+		artists = []Artist{newArtist("amazon-music", "Amazon Music", "", artist)}
+	}
+
+	return Track{
+		Name:       name,
+		Artists:    artists,
+		Album:      newAlbum("amazon-music", "Amazon Music", "", album),
+		DurationMs: durationMs,
+		Duration:   duration,
+		Sources: []TrackSource{{
+			Service:     "amazon-music",
+			ServiceName: "Amazon Music",
+			ID:          id,
+			Extra:       extraOrNil(extra),
+		}},
+	}
+}
+
+func (c *AmazonMusicConnector) transformPlaylistList(raw map[string]any) PlaylistList {
 	items := c.extractItems(raw)
-	playlists := make([]map[string]any, 0, len(items))
+	playlists := make([]Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		playlists = append(playlists, map[string]any{
-			"id":          p["id"],
-			"name":        c.firstNonNil(p, "name", "title"),
-			"description": p["description"],
-			"track_count": c.firstNonNil(p, "track_count", "item_count", "total_tracks", "size"),
-		})
+		playlists = append(playlists, c.neutralPlaylist(p))
 	}
-	return map[string]any{
-		"playlists": playlists,
-		"total":     c.totalCount(raw),
+	total := len(playlists)
+	if n, ok := asInt(c.totalCount(raw)); ok {
+		total = n
 	}
+	return PlaylistList{Playlists: playlists, Total: total}
 }
 
 func (c *AmazonMusicConnector) transformLibrary(raw map[string]any) map[string]any {
@@ -261,10 +407,10 @@ func (c *AmazonMusicConnector) transformLibrary(raw map[string]any) map[string]a
 			continue
 		}
 		tracks = append(tracks, map[string]any{
-			"id":      t["id"],
-			"name":    c.firstNonNil(t, "name", "title"),
-			"artist":  c.extractArtistName(t),
-			"album":   c.extractAlbumName(t),
+			"id":     t["id"],
+			"name":   c.firstNonNil(t, "name", "title"),
+			"artist": c.extractArtistName(t),
+			"album":  c.extractAlbumName(t),
 		})
 	}
 	return map[string]any{
@@ -349,48 +495,36 @@ func (c *AmazonMusicConnector) transformSearch(raw map[string]any) map[string]an
 	return result
 }
 
-func (c *AmazonMusicConnector) transformPlaylistDetail(raw map[string]any) map[string]any {
-	result := map[string]any{
-		"id":          raw["id"],
-		"name":        c.firstNonNil(raw, "name", "title"),
-		"description": raw["description"],
-		"track_count": c.firstNonNil(raw, "track_count", "item_count", "total_tracks", "size"),
-	}
+func (c *AmazonMusicConnector) transformPlaylistDetail(raw map[string]any) PlaylistDetail {
+	base := c.neutralPlaylist(raw)
 
-	// Transform tracks if present.
+	var tracks []Track
 	if tracksObj, ok := raw["tracks"].(map[string]any); ok {
 		items := c.extractItemsFromMap(tracksObj)
-		tracks := make([]map[string]any, 0, len(items))
+		tracks = make([]Track, 0, len(items))
 		for _, item := range items {
 			t, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}
-			tracks = append(tracks, map[string]any{
-				"id":     t["id"],
-				"name":   c.firstNonNil(t, "name", "title"),
-				"artist": c.extractArtistName(t),
-				"album":  c.extractAlbumName(t),
-			})
+			tracks = append(tracks, c.neutralAmazonTrack(t))
 		}
-		result["tracks"] = tracks
 	} else if items, ok := raw["items"].([]any); ok {
-		tracks := make([]map[string]any, 0, len(items))
+		tracks = make([]Track, 0, len(items))
 		for _, item := range items {
 			t, ok := item.(map[string]any)
 			if !ok {
 				continue
 			}
-			tracks = append(tracks, map[string]any{
-				"id":     t["id"],
-				"name":   c.firstNonNil(t, "name", "title"),
-				"artist": c.extractArtistName(t),
-			})
+			tracks = append(tracks, c.neutralAmazonTrack(t))
 		}
-		result["tracks"] = tracks
 	}
 
-	return result
+	return PlaylistDetail{
+		Playlist:    base,
+		Tracks:      tracks,
+		TotalTracks: base.TrackCount,
+	}
 }
 
 func (c *AmazonMusicConnector) transformTrack(raw map[string]any) map[string]any {
@@ -398,12 +532,12 @@ func (c *AmazonMusicConnector) transformTrack(raw map[string]any) map[string]any
 	if items := c.extractItems(raw); len(items) > 0 {
 		if t, ok := items[0].(map[string]any); ok {
 			return map[string]any{
-				"id":           t["id"],
-				"name":         c.firstNonNil(t, "name", "title"),
-				"artist":       c.extractArtistName(t),
-				"album":        c.extractAlbumName(t),
-				"duration_ms":  t["duration_ms"],
-				"duration":     t["duration"],
+				"id":          t["id"],
+				"name":        c.firstNonNil(t, "name", "title"),
+				"artist":      c.extractArtistName(t),
+				"album":       c.extractAlbumName(t),
+				"duration_ms": t["duration_ms"],
+				"duration":    t["duration"],
 			}
 		}
 	}
@@ -434,9 +568,9 @@ func (c *AmazonMusicConnector) transformAlbum(raw map[string]any) map[string]any
 				continue
 			}
 			tracks = append(tracks, map[string]any{
-				"name":        c.firstNonNil(t, "name", "title"),
+				"name":         c.firstNonNil(t, "name", "title"),
 				"track_number": t["track_number"],
-				"duration_ms": t["duration_ms"],
+				"duration_ms":  t["duration_ms"],
 			})
 		}
 		result["tracks"] = tracks

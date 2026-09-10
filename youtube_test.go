@@ -152,18 +152,21 @@ func TestYouTubeMusicConnector_TransformPlaylistList(t *testing.T) {
 	}
 
 	result := conn.transformPlaylistList(raw)
-	playlists, ok := result["playlists"].([]map[string]any)
-	if !ok {
-		t.Fatalf("playlists type = %T", result["playlists"])
+	if len(result.Playlists) != 1 {
+		t.Fatalf("got %d playlists, want 1", len(result.Playlists))
 	}
-	if len(playlists) != 1 {
-		t.Fatalf("got %d playlists, want 1", len(playlists))
+	p := result.Playlists[0]
+	if p.Name != "Jazz Favorites" {
+		t.Fatalf("name = %v", p.Name)
 	}
-	if playlists[0]["title"] != "Jazz Favorites" {
-		t.Fatalf("title = %v", playlists[0]["title"])
+	if p.TrackCount != 25 {
+		t.Fatalf("track_count = %v", p.TrackCount)
 	}
-	if playlists[0]["item_count"] != 25 {
-		t.Fatalf("item_count = %v", playlists[0]["item_count"])
+	if len(p.Sources) != 1 || p.Sources[0].Service != "youtube-music" {
+		t.Fatalf("sources = %+v", p.Sources)
+	}
+	if result.Total != 1 {
+		t.Fatalf("total = %v", result.Total)
 	}
 }
 
@@ -188,21 +191,21 @@ func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 	}
 
 	result := conn.transformPlaylistItems(raw)
-	videos, ok := result["videos"].([]map[string]any)
+	tracks, ok := result["tracks"].([]Track)
 	if !ok {
-		t.Fatalf("videos type = %T", result["videos"])
+		t.Fatalf("tracks type = %T", result["tracks"])
 	}
-	if len(videos) != 1 {
-		t.Fatalf("got %d videos, want 1", len(videos))
+	if len(tracks) != 1 {
+		t.Fatalf("got %d tracks, want 1", len(tracks))
 	}
-	if videos[0]["title"] != "So What - Miles Davis" {
-		t.Fatalf("title = %v", videos[0]["title"])
+	if tracks[0].Name != "So What - Miles Davis" {
+		t.Fatalf("name = %v", tracks[0].Name)
 	}
-	if videos[0]["video_id"] != "vid123" {
-		t.Fatalf("video_id = %v", videos[0]["video_id"])
+	if len(tracks[0].Sources) != 1 || tracks[0].Sources[0].ID != "vid123" {
+		t.Fatalf("sources = %+v", tracks[0].Sources)
 	}
-	if videos[0]["channel"] != "Jazz Classics" {
-		t.Fatalf("channel = %v", videos[0]["channel"])
+	if len(tracks[0].Artists) != 1 || tracks[0].Artists[0].Name != "Jazz Classics" {
+		t.Fatalf("artists = %+v", tracks[0].Artists)
 	}
 }
 
@@ -417,11 +420,19 @@ func TestYouTubeMusicConnector_Playlists_ReadList(t *testing.T) {
 
 	// Verify transformed fields.
 	first := playlists[0].(map[string]any)
-	if first["title"] != "Jazz Favorites" {
-		t.Fatalf("first playlist title = %v", first["title"])
+	if first["name"] != "Jazz Favorites" {
+		t.Fatalf("first playlist name = %v", first["name"])
 	}
-	if first["item_count"] != 25.0 {
-		t.Fatalf("first playlist item_count = %v", first["item_count"])
+	if first["track_count"] != 25.0 {
+		t.Fatalf("first playlist track_count = %v", first["track_count"])
+	}
+	sources, _ := first["sources"].([]any)
+	if len(sources) != 1 {
+		t.Fatalf("sources = %v", first["sources"])
+	}
+	src0 := sources[0].(map[string]any)
+	if src0["service"] != "youtube-music" {
+		t.Fatalf("source service = %v", src0["service"])
 	}
 
 	// Should have fetched both pages.
@@ -429,9 +440,9 @@ func TestYouTubeMusicConnector_Playlists_ReadList(t *testing.T) {
 		t.Fatalf("upstream called %d times, want 2 (pagination)", callCount)
 	}
 
-	// Verify total_fetched was set.
-	if result["total_fetched"] != 3.0 {
-		t.Fatalf("total_fetched = %v, want 3", result["total_fetched"])
+	// PlaylistList exposes the combined count as total.
+	if result["total"] != 3.0 {
+		t.Fatalf("total = %v, want 3", result["total"])
 	}
 }
 
@@ -539,20 +550,25 @@ func TestYouTubeMusicConnector_Playlists_GetByID(t *testing.T) {
 	var result map[string]any
 	json.NewDecoder(w.Body).Decode(&result)
 
-	if result["id"] != "PL_SPECIAL" {
-		t.Fatalf("id = %v", result["id"])
-	}
-	if result["title"] != "My Jazz Collection" {
-		t.Fatalf("title = %v", result["title"])
+	if result["name"] != "My Jazz Collection" {
+		t.Fatalf("name = %v", result["name"])
 	}
 	if result["description"] != "Best jazz tracks of all time" {
 		t.Fatalf("description = %v", result["description"])
 	}
-	if result["channel"] != "Alice Music" {
-		t.Fatalf("channel = %v", result["channel"])
+	if result["owner"] != "Alice Music" {
+		t.Fatalf("owner = %v", result["owner"])
 	}
-	if result["item_count"] != 87.0 {
-		t.Fatalf("item_count = %v", result["item_count"])
+	if result["track_count"] != 87.0 {
+		t.Fatalf("track_count = %v", result["track_count"])
+	}
+	sources, _ := result["sources"].([]any)
+	if len(sources) != 1 {
+		t.Fatalf("sources = %v", result["sources"])
+	}
+	src0 := sources[0].(map[string]any)
+	if src0["service"] != "youtube-music" || src0["id"] != "PL_SPECIAL" {
+		t.Fatalf("source = %v", src0)
 	}
 }
 
@@ -619,26 +635,37 @@ func TestYouTubeMusicConnector_Playlists_ReadItems(t *testing.T) {
 	var result map[string]any
 	json.NewDecoder(w.Body).Decode(&result)
 
-	videos, ok := result["videos"].([]any)
+	tracks, ok := result["tracks"].([]any)
 	if !ok {
-		t.Fatalf("videos type = %T", result["videos"])
+		t.Fatalf("tracks type = %T", result["tracks"])
 	}
-	if len(videos) != 2 {
-		t.Fatalf("got %d videos, want 2", len(videos))
+	if len(tracks) != 2 {
+		t.Fatalf("got %d tracks, want 2", len(tracks))
 	}
 
-	first := videos[0].(map[string]any)
-	if first["title"] != "So What" {
-		t.Fatalf("title = %v", first["title"])
+	first := tracks[0].(map[string]any)
+	if first["name"] != "So What" {
+		t.Fatalf("name = %v", first["name"])
 	}
-	if first["video_id"] != "v_so_what" {
-		t.Fatalf("video_id = %v", first["video_id"])
+	tsources, _ := first["sources"].([]any)
+	if len(tsources) != 1 {
+		t.Fatalf("track sources = %v", first["sources"])
 	}
-	if first["channel"] != "Miles Davis - Topic" {
-		t.Fatalf("channel = %v", first["channel"])
+	tsrc := tsources[0].(map[string]any)
+	if tsrc["id"] != "v_so_what" {
+		t.Fatalf("track source id = %v", tsrc["id"])
 	}
-	if first["thumbnail"] != "https://i.ytimg.com/vi/xxx/hqdefault.jpg" {
-		t.Fatalf("thumbnail = %v", first["thumbnail"])
+	artists, _ := first["artists"].([]any)
+	if len(artists) != 1 {
+		t.Fatalf("artists = %v", first["artists"])
+	}
+	artist := artists[0].(map[string]any)
+	if artist["name"] != "Miles Davis - Topic" {
+		t.Fatalf("artist name = %v", artist["name"])
+	}
+	extra, _ := tsrc["extra"].(map[string]any)
+	if extra["thumbnail"] != "https://i.ytimg.com/vi/xxx/hqdefault.jpg" {
+		t.Fatalf("source extra.thumbnail = %v", extra["thumbnail"])
 	}
 }
 

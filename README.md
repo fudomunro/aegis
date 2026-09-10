@@ -51,8 +51,9 @@ cp guardian.example.json guardian.json
   -token-pass your-encryption-passphrase
 ```
 
-Guardian starts with two endpoints:
+Guardian starts with three endpoints:
 - `POST /v1/pre-request` — Aperture hook
+- `GET /v1/library/playlists` — unified playlists across all connected services
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
 
@@ -207,6 +208,84 @@ Receives Aperture's `pre_request` payload. Returns one of:
 - `{"action": "modify", "body": {...}}` — LLM request with injected proxy instructions
 - `{"action": "block", "message": "..."}` — request rejected (403)
 
+When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Guardian injects instructions for the unified library endpoint so agents can answer across every connected service.
+
+### Unified library
+
+```
+GET /v1/library/playlists
+Authorization: Bearer <api-key>
+```
+
+Returns the user's playlists from every connected music service in Guardian's **neutral format**, regardless of whether they live on Spotify, YouTube Music, Amazon Music, etc.
+
+```json
+{
+  "playlists": [
+    {
+      "name": "Today's Top Hits",
+      "description": "The hottest tracks right now.",
+      "owner": "Spotify",
+      "track_count": 50,
+      "sources": [
+        {
+          "service": "spotify",
+          "service_name": "Spotify",
+          "id": "37i9dQZF1DXcBWIGoYBM5M",
+          "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+          "extra": { "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "public": true }
+        }
+      ]
+    },
+    {
+      "name": "Road Trip",
+      "track_count": 15,
+      "sources": [
+        {
+          "service": "spotify",
+          "service_name": "Spotify",
+          "id": "sp-roadtrip",
+          "url": "https://open.spotify.com/playlist/sp-roadtrip"
+        },
+        {
+          "service": "youtube-music",
+          "service_name": "YouTube Music",
+          "id": "PLxyz...",
+          "url": "https://www.youtube.com/playlist?list=PLxyz...",
+          "extra": { "published_at": "2024-01-15T00:00:00Z" }
+        }
+      ]
+    }
+  ],
+  "total": 2,
+  "synced": true,
+  "by_service": {
+    "spotify": { "status": "ok", "count": 2 },
+    "youtube-music": { "status": "ok", "count": 1 },
+    "amazon-music": { "status": "unauthorized", "error": "not authorized — connect at /v1/auth/amazon-music/login" }
+  }
+}
+```
+
+Neutral playlist fields (user-facing):
+
+| Field | Description |
+|-------|-------------|
+| `name` | Playlist title |
+| `description` | Playlist description, if any |
+| `owner` | Owner display name, when known |
+| `track_count` | Item count (max across synced sources) |
+| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `url`, `extra` |
+| `extra` | Other service-specific fields |
+
+### Cross-service sync (v1)
+
+The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Guardian merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
+
+Tracks carry unified `artists` / `album` objects. Cross-service matching is **text-based** (`NormalizeIdentityKey`: case, whitespace, strip YouTube “ - Topic”). “Britney Spears” on Spotify and Tidal become one `Artist` with two `sources`. Better entity resolution (MBIDs, ISRC, fuzzy names) is intentionally deferred — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
+
+Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
+
 ### Service proxy
 
 ```
@@ -259,6 +338,9 @@ aperture-guardian/
   config.go         Service/Config types, JSON loading, matching
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
+  models.go         Neutral data types (Playlist, Track, PlaylistList)
+  library.go        Cross-service library endpoint + PlaylistProvider
+  match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   cache.go          In-memory TTL cache with RWMutex
   oauth.go          OAuth2 login/callback/refresh flows
@@ -266,6 +348,9 @@ aperture-guardian/
   statestore.go     CSRF state validation with TTL
   setup.go          Web-based setup wizard
   SECURITY.md       Tailnet auth model, ACLs, operational guidance
+  spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
+  youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
+  amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```

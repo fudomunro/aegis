@@ -84,15 +84,18 @@ func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
 	}
 
 	result := conn.transformPlaylistList(raw)
-	playlists, ok := result["playlists"].([]map[string]any)
-	if !ok {
-		t.Fatalf("playlists type = %T", result["playlists"])
+	if len(result.Playlists) != 1 {
+		t.Fatalf("got %d playlists, want 1", len(result.Playlists))
 	}
-	if len(playlists) != 1 {
-		t.Fatalf("got %d playlists, want 1", len(playlists))
+	p := result.Playlists[0]
+	if p.Name != "Jazz Favorites" {
+		t.Fatalf("name = %v", p.Name)
 	}
-	if playlists[0]["name"] != "Jazz Favorites" {
-		t.Fatalf("name = %v", playlists[0]["name"])
+	if p.TrackCount != 25 {
+		t.Fatalf("track_count = %v", p.TrackCount)
+	}
+	if len(p.Sources) != 1 || p.Sources[0].Service != "amazon-music" || p.Sources[0].ServiceName != "Amazon Music" {
+		t.Fatalf("sources = %+v", p.Sources)
 	}
 }
 
