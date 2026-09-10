@@ -42,8 +42,9 @@ cp guardian.example.json guardian.json
   -token-pass your-encryption-passphrase
 ```
 
-Guardian starts with two endpoints:
+Guardian starts with three endpoints:
 - `POST /v1/pre-request` — Aperture hook
+- `GET /v1/library/playlists` — unified playlists across all connected services
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
 
@@ -183,6 +184,67 @@ Receives Aperture's `pre_request` payload. Returns one of:
 - `{"action": "modify", "body": {...}}` — LLM request with injected proxy instructions
 - `{"action": "block", "message": "..."}` — request rejected (403)
 
+When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Guardian injects instructions for the unified library endpoint so agents can answer across every connected service.
+
+### Unified library
+
+```
+GET /v1/library/playlists
+Authorization: Bearer <api-key>
+```
+
+Returns the user's playlists from every connected music service in Guardian's **neutral format**, regardless of whether they live on Spotify, YouTube Music, Amazon Music, etc.
+
+```json
+{
+  "playlists": [
+    {
+      "service": "spotify",
+      "service_name": "Spotify",
+      "id": "37i9dQZF1DXcBWIGoYBM5M",
+      "name": "Today's Top Hits",
+      "description": "The hottest tracks right now.",
+      "owner": "Spotify",
+      "track_count": 50,
+      "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+      "extra": { "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "public": true }
+    },
+    {
+      "service": "youtube-music",
+      "service_name": "YouTube Music",
+      "id": "PLxyz...",
+      "name": "Focus Mix",
+      "owner": "Alice",
+      "track_count": 42,
+      "url": "https://www.youtube.com/playlist?list=PLxyz...",
+      "extra": { "published_at": "2024-01-15T00:00:00Z" }
+    }
+  ],
+  "total": 2,
+  "by_service": {
+    "spotify": { "status": "ok", "count": 1 },
+    "youtube-music": { "status": "ok", "count": 1 },
+    "amazon-music": { "status": "unauthorized", "error": "not authorized — connect at /v1/auth/amazon-music/login" }
+  }
+}
+```
+
+Neutral playlist fields (always present unless noted):
+
+| Field | Description |
+|-------|-------------|
+| `service` | Connector ID (`spotify`, `youtube-music`, `amazon-music`) |
+| `service_name` | Human-readable service label |
+| `id` | Service-local playlist ID (use with that service's `/playlists/{id}`) |
+| `name` | User-facing playlist title |
+| `description` | Playlist description, if any |
+| `owner` | Owner display name, when known |
+| `track_count` | Number of items in the playlist |
+| `url` | Deep link to the playlist on the service, when available |
+| `extra` | Service-specific fields that don't fit the neutral shape |
+
+Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service. Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
+
 ### Service proxy
 
 ```
@@ -234,12 +296,17 @@ aperture-guardian/
   main.go           Entry point, CLI flags, route wiring
   config.go         Service/Config types, JSON loading, matching
   handler.go        Pre-request hook: parse payload, block/modify
+  models.go         Neutral data types (Playlist, Track, PlaylistList)
+  library.go        Cross-service library endpoint + PlaylistProvider
   proxy.go          Service proxy: cache, forward, inject tokens
   cache.go          In-memory TTL cache with RWMutex
   oauth.go          OAuth2 login/callback/refresh flows
   tokens.go         AES-256-GCM encrypted token storage
   statestore.go     CSRF state validation with TTL
   setup.go          Web-based setup wizard
+  spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
+  youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
+  amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```

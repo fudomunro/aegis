@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -42,7 +43,7 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 						Parameters: []Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Liked videos with title, channel, video_id", Fields: []string{"videos", "total"}}},
+						Response: ResponseSpec{Description: "Neutral tracks from liked videos", Fields: []string{"tracks", "total"}}},
 					{Name: "get_by_id", Description: "Get video details by ID", Method: "GET", Path: "/videos/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube video ID", Required: true},
@@ -58,18 +59,18 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 						Parameters: []Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Playlists with title, item_count", Fields: []string{"playlists", "total_results"}}},
+						Response: ResponseSpec{Description: "Neutral playlists with id, name, description, owner, track_count, service, url, extra", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID", Method: "GET", Path: "/playlists/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Playlist with title, channel, item count", Fields: []string{"id", "title", "description", "channel", "item_count"}}},
+						Response: ResponseSpec{Description: "Neutral playlist detail", Fields: []string{"id", "name", "description", "owner", "track_count", "service", "extra"}}},
 					{Name: "read_items", Description: "List items in a playlist (paginated)", Method: "GET", Path: "/playlists/{id}/items",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Playlist items with title, channel, video_id", Fields: []string{"videos", "total"}}},
+						Response: ResponseSpec{Description: "Neutral tracks with name, artists, extra", Fields: []string{"tracks", "total"}}},
 				},
 			},
 			{
@@ -106,7 +107,7 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 				Description: "User's liked videos and subscriptions",
 				Operations: []Operation{
 					{Name: "read_liked", Description: "List liked videos (alias for tracks.read_liked)", Method: "GET", Path: "/me/liked",
-						Response: ResponseSpec{Description: "Liked videos", Fields: []string{"videos", "total"}}},
+						Response: ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
 					{Name: "read_subscriptions", Description: "List subscriptions (alias for channels.read_subscriptions)", Method: "GET", Path: "/me/subscriptions",
 						Response: ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
 				},
@@ -118,24 +119,29 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 // SystemInstructions returns the system message injected into LLM requests
 // when YouTube Music is referenced.
 func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
-	base := strings.TrimRight(baseURL, "/") + "/v1/services/youtube-music"
+	root := strings.TrimRight(baseURL, "/")
+	base := root + "/v1/services/youtube-music"
 	return fmt.Sprintf(`When the user's request involves YouTube Music, you MUST use the Guardian proxy at %s instead of calling YouTube directly.
 
-Available endpoints (all require Authorization header from Guardian):
+For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
+GET %s/v1/library/playlists — all user playlists in one neutral list (service, name, track_count, …)
+
+YouTube Music-specific endpoints (all require Authorization header from Guardian):
 
 GET /me — Current user's YouTube channel info
-GET /me/playlists — List user's playlists (paginated, use ?pageToken=N)
-GET /me/liked — List liked/favorite music videos (paginated)
+GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)
+GET /me/liked — List liked/favorite music videos as neutral tracks (paginated)
 GET /me/subscriptions — List subscribed music channels (paginated)
 GET /playlists/{id} — Get a playlist by ID
-GET /playlists/{id}/items — List items in a playlist (paginated)
+GET /playlists/{id}/items — List items in a playlist as neutral tracks (paginated)
 GET /search?q=QUERY — Search YouTube Music (filters to music category)
 GET /videos/{id} — Get video details by ID
 GET /channels/{id} — Get channel details by ID
 
+Playlist responses use Guardian's neutral fields: id, name, description, owner, track_count, service, service_name, url, extra.
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
-Always include the full proxy base URL in your requests.`, base)
+Always include the full proxy base URL in your requests.`, base, root)
 }
 
 // HandleProxy processes a YouTube Music API request through the connector.
@@ -427,60 +433,204 @@ func (c *YouTubeMusicConnector) transformChannel(raw map[string]any) map[string]
 	return result
 }
 
-func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) map[string]any {
+// ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
+// and returns them in Guardian's neutral format.
+func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, error) {
+	token := c.server.getValidToken("youtube-music", slog.Default())
+	if token == "" {
+		return nil, ErrUnauthorized
+	}
+
+	upstreamBase := "https://www.googleapis.com/youtube/v3"
+	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	var all []Playlist
+	pageToken := ""
+	for page := 0; page < 10; page++ {
+		u := upstreamBase + "/playlists?part=snippet,contentDetails&mine=true&maxResults=50"
+		if pageToken != "" {
+			u += "&pageToken=" + pageToken
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("youtube playlists returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		items, _ := raw["items"].([]any)
+		for _, item := range items {
+			p, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			all = append(all, c.neutralPlaylist(p))
+		}
+		pageToken, _ = raw["nextPageToken"].(string)
+		if pageToken == "" {
+			break
+		}
+	}
+	return all, nil
+}
+
+// youtubePlaylistURL builds a public YouTube playlist link.
+func youtubePlaylistURL(id string) string {
+	if id == "" {
+		return ""
+	}
+	return "https://www.youtube.com/playlist?list=" + id
+}
+
+// neutralPlaylist maps a raw YouTube playlist resource into the neutral type.
+func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
+	id, _ := p["id"].(string)
+	snippet, _ := p["snippet"].(map[string]any)
+	contentDetails, _ := p["contentDetails"].(map[string]any)
+
+	name, _ := snippet["title"].(string)
+	description, _ := snippet["description"].(string)
+	owner, _ := snippet["channelTitle"].(string)
+	publishedAt, _ := snippet["publishedAt"].(string)
+
+	trackCount := 0
+	if n, ok := asInt(contentDetails["itemCount"]); ok {
+		trackCount = n
+	}
+
+	extra := map[string]any{}
+	if publishedAt != "" {
+		extra["published_at"] = publishedAt
+	}
+	if channelID, ok := snippet["channelId"]; ok {
+		extra["channel_id"] = channelID
+	}
+	if len(extra) == 0 {
+		extra = nil
+	}
+
+	return Playlist{
+		Service:     "youtube-music",
+		ServiceName: "YouTube Music",
+		ID:          id,
+		Name:        name,
+		Description: description,
+		Owner:       owner,
+		TrackCount:  trackCount,
+		URL:         youtubePlaylistURL(id),
+		Extra:       extra,
+	}
+}
+
+// neutralYouTubeTrack maps a raw playlistItem / liked video into the neutral Track.
+func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track, bool) {
+	snippet, _ := item["snippet"].(map[string]any)
+	contentDetails, _ := item["contentDetails"].(map[string]any)
+	if snippet == nil {
+		return Track{}, false
+	}
+	name, _ := snippet["title"].(string)
+	channel, _ := snippet["channelTitle"].(string)
+	publishedAt, _ := snippet["publishedAt"].(string)
+	videoID, _ := contentDetails["videoId"].(string)
+	if videoID == "" {
+		videoID, _ = snippet["resourceId"].(map[string]any)["videoId"].(string)
+	}
+
+	extra := map[string]any{}
+	if channel != "" {
+		extra["channel"] = channel
+	}
+	if publishedAt != "" {
+		extra["published_at"] = publishedAt
+	}
+	if videoID != "" {
+		extra["video_id"] = videoID
+	}
+	if thumbnails, ok := snippet["thumbnails"].(map[string]any); ok {
+		if high, ok := thumbnails["high"].(map[string]any); ok {
+			if url, ok := high["url"].(string); ok {
+				extra["thumbnail"] = url
+			}
+		}
+	}
+	if len(extra) == 0 {
+		extra = nil
+	}
+
+	var artists []string
+	if channel != "" {
+		artists = []string{channel}
+	}
+
+	return Track{
+		ID:      videoID,
+		Name:    name,
+		Artists: artists,
+		Extra:   extra,
+	}, true
+}
+
+func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) PlaylistList {
 	items, _ := raw["items"].([]any)
-	playlists := make([]map[string]any, 0, len(items))
+	playlists := make([]Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		snippet, _ := p["snippet"].(map[string]any)
-		contentDetails, _ := p["contentDetails"].(map[string]any)
-		playlists = append(playlists, map[string]any{
-			"id":           p["id"],
-			"title":        snippet["title"],
-			"description":  snippet["description"],
-			"item_count":   contentDetails["itemCount"],
-		})
+		playlists = append(playlists, c.neutralPlaylist(p))
 	}
-	return map[string]any{
-		"playlists":      playlists,
-		"total_results":  raw["pageInfo"],
-		"total_fetched":  raw["total_fetched"],
+	total := len(playlists)
+	if n, ok := asInt(raw["total_fetched"]); ok {
+		total = n
+	} else if pageInfo, ok := raw["pageInfo"].(map[string]any); ok {
+		if n, ok := asInt(pageInfo["totalResults"]); ok {
+			total = n
+		}
 	}
+	return PlaylistList{Playlists: playlists, Total: total}
 }
 
 func (c *YouTubeMusicConnector) transformPlaylistItems(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
-	videos := make([]map[string]any, 0, len(items))
+	tracks := make([]Track, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		snippet, _ := p["snippet"].(map[string]any)
-		contentDetails, _ := p["contentDetails"].(map[string]any)
-		if snippet == nil {
-			continue
+		if track, ok := c.neutralYouTubeTrack(p); ok {
+			tracks = append(tracks, track)
 		}
-		video := map[string]any{
-			"title":       snippet["title"],
-			"channel":     snippet["channelTitle"],
-			"published_at": snippet["publishedAt"],
-			"video_id":    contentDetails["videoId"],
+	}
+	total := len(tracks)
+	if n, ok := asInt(raw["total_fetched"]); ok {
+		total = n
+	} else if pageInfo, ok := raw["pageInfo"].(map[string]any); ok {
+		if n, ok := asInt(pageInfo["totalResults"]); ok {
+			total = n
 		}
-		if thumbnails, ok := snippet["thumbnails"].(map[string]any); ok {
-			if high, ok := thumbnails["high"].(map[string]any); ok {
-				video["thumbnail"] = high["url"]
-			}
-		}
-		videos = append(videos, video)
 	}
 	return map[string]any{
-		"videos":        videos,
-		"total":         raw["pageInfo"],
-		"total_fetched": raw["total_fetched"],
+		"tracks": tracks,
+		"total":  total,
 	}
 }
 
@@ -548,21 +698,16 @@ func (c *YouTubeMusicConnector) transformSearch(raw map[string]any) map[string]a
 	}
 }
 
-func (c *YouTubeMusicConnector) transformPlaylistDetail(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) transformPlaylistDetail(raw map[string]any) any {
 	items, _ := raw["items"].([]any)
 	if len(items) == 0 {
 		return map[string]any{"message": "Playlist not found"}
 	}
 	p, _ := items[0].(map[string]any)
-	snippet, _ := p["snippet"].(map[string]any)
-	contentDetails, _ := p["contentDetails"].(map[string]any)
-	return map[string]any{
-		"id":          p["id"],
-		"title":       snippet["title"],
-		"description": snippet["description"],
-		"channel":     snippet["channelTitle"],
-		"item_count":  contentDetails["itemCount"],
-		"published_at": snippet["publishedAt"],
+	base := c.neutralPlaylist(p)
+	return PlaylistDetail{
+		Playlist:    base,
+		TotalTracks: base.TrackCount,
 	}
 }
 
