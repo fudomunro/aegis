@@ -52,7 +52,7 @@ func (c *AmazonMusicConnector) SystemInstructions(baseURL string) string {
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
-Amazon Music-specific endpoints (all require Authorization header from Guardian):
+Amazon Music-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send Amazon tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user profile
 GET /me/playlists — List user's playlists in neutral format
