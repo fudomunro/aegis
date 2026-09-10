@@ -59,18 +59,18 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 						Parameters: []Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Neutral playlists with id, name, description, owner, track_count, service, url, extra", Fields: []string{"playlists", "total"}}},
+						Response: ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID", Method: "GET", Path: "/playlists/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Neutral playlist detail", Fields: []string{"id", "name", "description", "owner", "track_count", "service", "extra"}}},
+						Response: ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[]", Fields: []string{"name", "description", "owner", "track_count", "sources", "extra"}}},
 					{Name: "read_items", Description: "List items in a playlist (paginated)", Method: "GET", Path: "/playlists/{id}/items",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Neutral tracks with name, artists, extra", Fields: []string{"tracks", "total"}}},
+						Response: ResponseSpec{Description: "Neutral tracks: name, artists[], album, sources[]", Fields: []string{"tracks", "total"}}},
 				},
 			},
 			{
@@ -126,7 +126,7 @@ func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
-YouTube Music-specific endpoints (all require Authorization header from Guardian):
+YouTube Music-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send YouTube tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user's YouTube channel info
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)

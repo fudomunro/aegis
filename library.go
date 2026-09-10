@@ -32,7 +32,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	logger := slog.With("handler", "library_playlists")
+	logger := withPeerLog(slog.With("handler", "library_playlists"), r)
 
 	// Prefer cache for the full aggregate response.
 	cacheKey := "library:playlists"
