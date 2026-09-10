@@ -76,10 +76,10 @@ type DataTypeCapability struct {
 
 // Operation describes a single callable operation on a data type.
 type Operation struct {
-	Name        string       `json:"name"`                  // "read_saved", "search", "get_by_id"
-	Description string       `json:"description"`           // human-readable
-	Method      string       `json:"method"`                // "GET", "POST", etc.
-	Path        string       `json:"path"`                  // "/me/tracks"
+	Name        string       `json:"name"`        // "read_saved", "search", "get_by_id"
+	Description string       `json:"description"` // human-readable
+	Method      string       `json:"method"`      // "GET", "POST", etc.
+	Path        string       `json:"path"`        // "/me/tracks"
 	Parameters  []Parameter  `json:"parameters,omitempty"`
 	Response    ResponseSpec `json:"response"`
 }
@@ -87,8 +87,8 @@ type Operation struct {
 // Parameter describes a query or path parameter for an operation.
 type Parameter struct {
 	Name        string `json:"name"`
-	In          string `json:"in"`          // "query" or "path"
-	Type        string `json:"type"`        // "string", "integer", "boolean"
+	In          string `json:"in"`   // "query" or "path"
+	Type        string `json:"type"` // "string", "integer", "boolean"
 	Description string `json:"description"`
 	Default     any    `json:"default,omitempty"`
 	Required    bool   `json:"required,omitempty"`
@@ -96,7 +96,7 @@ type Parameter struct {
 
 // ResponseSpec describes what the operation returns.
 type ResponseSpec struct {
-	Description string `json:"description"`
+	Description string   `json:"description"`
 	Fields      []string `json:"fields,omitempty"` // top-level field names in the response
 }
 
@@ -272,7 +272,8 @@ func (s *Server) librarySystemInstructions() string {
 	return fmt.Sprintf(
 		"Unified music library (use when the user asks about playlists or their music library):\n"+
 			"GET %s/v1/library/playlists — all user playlists from every connected service in one "+
-			"neutral list (id, name, description, owner, track_count, service, service_name, url, extra).\n"+
+			"neutral list (name, description, owner, track_count, sources[]).\n"+
+			"Same-named playlists are synced into one entry with multiple sources[]. "+
 			"Prefer this endpoint for questions like \"what playlists do I have?\" so the answer includes "+
 			"Spotify, YouTube Music, Amazon Music, and any other connected service.",
 		root,

@@ -16,9 +16,10 @@ var ErrUnauthorized = errors.New("unauthorized")
 // PlaylistProvider is implemented by connectors that can return the user's
 // playlists in Guardian's neutral format. The aggregate library endpoint uses
 // this so agents can ask for "my playlists" once and receive every service.
+// Each returned Playlist should carry one PlaylistSource for that service.
 type PlaylistProvider interface {
 	// ListUserPlaylists fetches the user's playlists from the upstream service
-	// and maps them into neutral Playlist values.
+	// and maps them into neutral Playlist values (service identity in Sources).
 	// Return ErrUnauthorized when no valid token is available.
 	ListUserPlaylists(ctx context.Context) ([]Playlist, error)
 }
@@ -68,10 +69,10 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var (
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		all    []Playlist
-		bySvc  = make(map[string]LibraryServiceStatus, len(targets))
+		mu    sync.Mutex
+		wg    sync.WaitGroup
+		all   []Playlist
+		bySvc = make(map[string]LibraryServiceStatus, len(targets))
 	)
 
 	ctx := r.Context()
@@ -101,17 +102,29 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 	}
 	wg.Wait()
 
-	// Stable order: by service name, then playlist name.
+	// Stable order before merge: by service name, then playlist name.
 	sort.SliceStable(all, func(i, j int) bool {
-		if all[i].ServiceName != all[j].ServiceName {
-			return all[i].ServiceName < all[j].ServiceName
+		si, sj := "", ""
+		if len(all[i].Sources) > 0 {
+			si = all[i].Sources[0].ServiceName
+		}
+		if len(all[j].Sources) > 0 {
+			sj = all[j].Sources[0].ServiceName
+		}
+		if si != sj {
+			return si < sj
 		}
 		return all[i].Name < all[j].Name
 	})
 
+	// Sync: same-named playlists across services become one user-facing
+	// playlist with multiple sources.
+	merged := MergePlaylistsSync(all)
+
 	resp := PlaylistList{
-		Playlists: all,
-		Total:     len(all),
+		Playlists: merged,
+		Total:     len(merged),
+		Synced:    true,
 		ByService: bySvc,
 	}
 	if resp.Playlists == nil {

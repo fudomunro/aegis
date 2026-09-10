@@ -124,7 +124,7 @@ func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 	return fmt.Sprintf(`When the user's request involves YouTube Music, you MUST use the Guardian proxy at %s instead of calling YouTube directly.
 
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
-GET %s/v1/library/playlists — all user playlists in one neutral list (service, name, track_count, …)
+GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
 YouTube Music-specific endpoints (all require Authorization header from Guardian):
 
@@ -138,7 +138,7 @@ GET /search?q=QUERY — Search YouTube Music (filters to music category)
 GET /videos/{id} — Get video details by ID
 GET /channels/{id} — Get channel details by ID
 
-Playlist responses use Guardian's neutral fields: id, name, description, owner, track_count, service, service_name, url, extra.
+Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
 Always include the full proxy base URL in your requests.`, base, root)
@@ -265,9 +265,9 @@ func (c *YouTubeMusicConnector) mapPath(path string, query map[string][]string) 
 			return "", nil, fmt.Errorf("failed to get liked playlist ID: %w", err)
 		}
 		return "/playlistItems", map[string]string{
-			"part":        "snippet,contentDetails",
-			"playlistId":  likedPlaylistID,
-			"maxResults":  "50",
+			"part":       "snippet,contentDetails",
+			"playlistId": likedPlaylistID,
+			"maxResults": "50",
 		}, nil
 
 	case path == "/me/subscriptions":
@@ -425,8 +425,8 @@ func (c *YouTubeMusicConnector) transformChannel(raw map[string]any) map[string]
 	}
 	if related, ok := contentDetails["relatedPlaylists"].(map[string]any); ok {
 		result["playlists"] = map[string]any{
-			"likes":     related["likes"],
-			"uploads":   related["uploads"],
+			"likes":       related["likes"],
+			"uploads":     related["uploads"],
 			"watch_later": related["watchLater"],
 		}
 	}
@@ -499,6 +499,7 @@ func youtubePlaylistURL(id string) string {
 }
 
 // neutralPlaylist maps a raw YouTube playlist resource into the neutral type.
+// Service identity lives in Sources.
 func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
 	id, _ := p["id"].(string)
 	snippet, _ := p["snippet"].(map[string]any)
@@ -521,20 +522,15 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
 	if channelID, ok := snippet["channelId"]; ok {
 		extra["channel_id"] = channelID
 	}
-	if len(extra) == 0 {
-		extra = nil
-	}
 
 	return Playlist{
-		Service:     "youtube-music",
-		ServiceName: "YouTube Music",
-		ID:          id,
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		URL:         youtubePlaylistURL(id),
-		Extra:       extra,
+		Sources: []PlaylistSource{
+			primaryPlaylistSource("youtube-music", "YouTube Music", id, youtubePlaylistURL(id), extra),
+		},
 	}
 }
 
@@ -570,20 +566,27 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 			}
 		}
 	}
-	if len(extra) == 0 {
-		extra = nil
+
+	var artists []Artist
+	if channel != "" {
+		artists = []Artist{newArtist("youtube-music", "YouTube Music", "", channel)}
 	}
 
-	var artists []string
-	if channel != "" {
-		artists = []string{channel}
+	url := ""
+	if videoID != "" {
+		url = "https://www.youtube.com/watch?v=" + videoID
 	}
 
 	return Track{
-		ID:      videoID,
 		Name:    name,
 		Artists: artists,
-		Extra:   extra,
+		Sources: []TrackSource{{
+			Service:     "youtube-music",
+			ServiceName: "YouTube Music",
+			ID:          videoID,
+			URL:         url,
+			Extra:       extraOrNil(extra),
+		}},
 	}, true
 }
 
@@ -673,9 +676,9 @@ func (c *YouTubeMusicConnector) transformSearch(raw map[string]any) map[string]a
 			continue
 		}
 		entry := map[string]any{
-			"title":       snippet["title"],
-			"channel":     snippet["channelTitle"],
-			"description": snippet["description"],
+			"title":        snippet["title"],
+			"channel":      snippet["channelTitle"],
+			"description":  snippet["description"],
 			"published_at": snippet["publishedAt"],
 		}
 		// Extract the actual resource ID based on kind.
@@ -722,14 +725,14 @@ func (c *YouTubeMusicConnector) transformVideo(raw map[string]any) map[string]an
 	statistics, _ := v["statistics"].(map[string]any)
 
 	result := map[string]any{
-		"id":            v["id"],
-		"title":         snippet["title"],
-		"channel":       snippet["channelTitle"],
-		"description":   snippet["description"],
-		"published_at":  snippet["publishedAt"],
-		"duration":      contentDetails["duration"],
-		"view_count":    statistics["viewCount"],
-		"like_count":    statistics["likeCount"],
+		"id":           v["id"],
+		"title":        snippet["title"],
+		"channel":      snippet["channelTitle"],
+		"description":  snippet["description"],
+		"published_at": snippet["publishedAt"],
+		"duration":     contentDetails["duration"],
+		"view_count":   statistics["viewCount"],
+		"like_count":   statistics["likeCount"],
 	}
 	if tags, ok := snippet["tags"].([]any); ok {
 		result["tags"] = tags

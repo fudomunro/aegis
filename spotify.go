@@ -165,7 +165,7 @@ func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
 	return fmt.Sprintf(`When the user's request involves Spotify, you MUST use the Guardian proxy at %s instead of calling Spotify directly.
 
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
-GET %s/v1/library/playlists — all user playlists in one neutral list (service, name, track_count, …)
+GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
 Spotify-specific endpoints (all require Authorization header from Guardian):
 
@@ -185,7 +185,7 @@ GET /artists/{id}/top-tracks — Artist's top tracks
 GET /albums/{id} — Get an album by ID
 GET /playlists/{id} — Get a playlist by ID with tracks
 
-Playlist responses use Guardian's neutral fields: id, name, description, owner, track_count, service, service_name, url, extra.
+Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
 Always include the full proxy base URL in your requests.`, base, root)
@@ -426,6 +426,7 @@ func spotifyPlaylistURL(id string) string {
 }
 
 // neutralPlaylist maps a raw Spotify playlist object into the neutral type.
+// Service identity (id, url, uri) lives in Sources / Extra, not top-level.
 func (c *SpotifyConnector) neutralPlaylist(p map[string]any) Playlist {
 	id, _ := p["id"].(string)
 	name, _ := p["name"].(string)
@@ -456,20 +457,15 @@ func (c *SpotifyConnector) neutralPlaylist(p map[string]any) Playlist {
 	if snapshot, ok := p["snapshot_id"]; ok {
 		extra["snapshot_id"] = snapshot
 	}
-	if len(extra) == 0 {
-		extra = nil
-	}
 
 	return Playlist{
-		Service:     "spotify",
-		ServiceName: "Spotify",
-		ID:          id,
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		URL:         spotifyPlaylistURL(id),
-		Extra:       extra,
+		Sources: []PlaylistSource{
+			primaryPlaylistSource("spotify", "Spotify", id, spotifyPlaylistURL(id), extra),
+		},
 	}
 }
 
@@ -561,8 +557,8 @@ func (c *SpotifyConnector) transformPlayer(raw map[string]any) map[string]any {
 	}
 	if device, ok := raw["device"].(map[string]any); ok {
 		result["device"] = map[string]any{
-			"name":  device["name"],
-			"type":  device["type"],
+			"name":   device["name"],
+			"type":   device["type"],
 			"volume": device["volume_percent"],
 		}
 	}
@@ -619,9 +615,9 @@ func (c *SpotifyConnector) transformArtistList(raw map[string]any) map[string]an
 			continue
 		}
 		artists = append(artists, map[string]any{
-			"name": a["name"],
-			"id":   a["id"],
-			"uri":  a["uri"],
+			"name":   a["name"],
+			"id":     a["id"],
+			"uri":    a["uri"],
 			"genres": a["genres"],
 		})
 	}
@@ -660,12 +656,58 @@ func (c *SpotifyConnector) transformSearch(raw map[string]any) map[string]any {
 	return result
 }
 
+// spotifyNeutralTrack maps a raw Spotify track object into the neutral Track.
+// Artist/album names become unified identities; Spotify IDs live in Sources.
+func spotifyNeutralTrack(track map[string]any) Track {
+	id, _ := track["id"].(string)
+	name, _ := track["name"].(string)
+	uri, _ := track["uri"].(string)
+	albumName, _ := extractNested(track, "album", "name").(string)
+	albumID, _ := extractNested(track, "album", "id").(string)
+
+	extra := map[string]any{}
+	if uri != "" {
+		extra["uri"] = uri
+	}
+
+	var artists []Artist
+	for _, n := range extractNames(track, "artists") {
+		artists = append(artists, newArtist("spotify", "Spotify", "", n))
+	}
+	artists = mergeArtists(artists...)
+
+	url := ""
+	if id != "" {
+		url = "https://open.spotify.com/track/" + id
+	}
+
+	return Track{
+		Name:    name,
+		Artists: artists,
+		Album:   newAlbum("spotify", "Spotify", albumID, albumName),
+		Sources: []TrackSource{{
+			Service:     "spotify",
+			ServiceName: "Spotify",
+			ID:          id,
+			URL:         url,
+			Extra:       extraOrNil(extra),
+		}},
+	}
+}
+
+func extraOrNil(m map[string]any) map[string]any {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
+}
+
 func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) PlaylistDetail {
 	base := c.neutralPlaylist(raw)
 	// Prefer the API's declared track total when present.
 	if tracksObj, ok := raw["tracks"].(map[string]any); ok {
-		if n, ok := tracksObj["total"].(float64); ok {
-			base.TrackCount = int(n)
+		if n, ok := asInt(tracksObj["total"]); ok {
+			base.TrackCount = n
 		}
 	}
 
@@ -683,24 +725,7 @@ func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) PlaylistD
 			if track == nil {
 				continue
 			}
-			id, _ := track["id"].(string)
-			name, _ := track["name"].(string)
-			album, _ := extractNested(track, "album", "name").(string)
-			uri, _ := track["uri"].(string)
-			extra := map[string]any{}
-			if uri != "" {
-				extra["uri"] = uri
-			}
-			if len(extra) == 0 {
-				extra = nil
-			}
-			tracks = append(tracks, Track{
-				ID:      id,
-				Name:    name,
-				Artists: extractNames(track, "artists"),
-				Album:   album,
-				Extra:   extra,
-			})
+			tracks = append(tracks, spotifyNeutralTrack(track))
 		}
 	}
 	return PlaylistDetail{
@@ -712,25 +737,25 @@ func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) PlaylistD
 
 func (c *SpotifyConnector) transformTrack(raw map[string]any) map[string]any {
 	return map[string]any{
-		"name":         raw["name"],
-		"artists":      extractNames(raw, "artists"),
-		"album":        extractNested(raw, "album", "name"),
-		"duration_ms":  raw["duration_ms"],
-		"popularity":   raw["popularity"],
-		"preview_url":  raw["preview_url"],
-		"id":           raw["id"],
-		"uri":          raw["uri"],
+		"name":        raw["name"],
+		"artists":     extractNames(raw, "artists"),
+		"album":       extractNested(raw, "album", "name"),
+		"duration_ms": raw["duration_ms"],
+		"popularity":  raw["popularity"],
+		"preview_url": raw["preview_url"],
+		"id":          raw["id"],
+		"uri":         raw["uri"],
 	}
 }
 
 func (c *SpotifyConnector) transformArtist(raw map[string]any) map[string]any {
 	return map[string]any{
-		"name":      raw["name"],
-		"genres":    raw["genres"],
-		"followers": extractNested(raw, "followers", "total"),
+		"name":       raw["name"],
+		"genres":     raw["genres"],
+		"followers":  extractNested(raw, "followers", "total"),
 		"popularity": raw["popularity"],
-		"id":        raw["id"],
-		"uri":       raw["uri"],
+		"id":         raw["id"],
+		"uri":        raw["uri"],
 	}
 }
 
