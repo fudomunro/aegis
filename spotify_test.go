@@ -77,20 +77,27 @@ func TestSpotifyConnector_TransformPlaylistList(t *testing.T) {
 	}
 
 	result := conn.transformPlaylistList(raw)
-	playlists, ok := result["playlists"].([]map[string]any)
-	if !ok {
-		t.Fatalf("playlists type = %T", result["playlists"])
+	if len(result.Playlists) != 1 {
+		t.Fatalf("got %d playlists, want 1", len(result.Playlists))
 	}
-	if len(playlists) != 1 {
-		t.Fatalf("got %d playlists, want 1", len(playlists))
+	p := result.Playlists[0]
+	if p.Name != "Jazz Vibes" {
+		t.Fatalf("name = %v", p.Name)
 	}
-	if playlists[0]["name"] != "Jazz Vibes" {
-		t.Fatalf("name = %v", playlists[0]["name"])
+	if p.TrackCount != 42 {
+		t.Fatalf("track_count = %v", p.TrackCount)
 	}
-	// extractNested returns the raw value — could be int or float64.
-	tracks := playlists[0]["tracks"]
-	if tracks != 42 && tracks != 42.0 {
-		t.Fatalf("tracks = %v", tracks)
+	if len(p.Sources) != 1 || p.Sources[0].Service != "spotify" || p.Sources[0].ServiceName != "Spotify" {
+		t.Fatalf("sources = %+v", p.Sources)
+	}
+	if p.Sources[0].ID != "pl1" {
+		t.Fatalf("source id = %v", p.Sources[0].ID)
+	}
+	if p.Sources[0].URL != "https://open.spotify.com/playlist/pl1" {
+		t.Fatalf("url = %v", p.Sources[0].URL)
+	}
+	if result.Total != 1 {
+		t.Fatalf("total = %v", result.Total)
 	}
 }
 
