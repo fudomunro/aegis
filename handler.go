@@ -159,6 +159,32 @@ func PeerIdentityFrom(r *http.Request) *PeerIdentity {
 	return id
 }
 
+// withPeerLog enriches a logger with the Tailscale peer identity, when present.
+func withPeerLog(logger *slog.Logger, r *http.Request) *slog.Logger {
+	id := PeerIdentityFrom(r)
+	if id == nil {
+		return logger
+	}
+	return logger.With("login", id.LoginName, "identity_source", id.Source)
+}
+
+// warnIdentityMismatch logs when Aperture's claimed user differs from the
+// Tailscale peer that actually called Guardian (shared tailnet / bridge risk).
+func warnIdentityMismatch(logger *slog.Logger, apertureLogin string, r *http.Request) {
+	id := PeerIdentityFrom(r)
+	if id == nil || apertureLogin == "" || id.LoginName == "" {
+		return
+	}
+	if !strings.EqualFold(id.LoginName, apertureLogin) {
+		logger.Warn("identity mismatch: aperture login does not match tailnet peer",
+			"aperture_login", apertureLogin,
+			"tailnet_login", id.LoginName,
+			"identity_source", id.Source,
+			"path", r.URL.Path,
+		)
+	}
+}
+
 // ServiceConnector is an optional interface for services that provide
 // intelligent proxying beyond simple request forwarding.
 type ServiceConnector interface {
@@ -234,6 +260,8 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		"user", payload.Metadata.LoginName,
 		"model", payload.Metadata.Model,
 	)
+	logger = withPeerLog(logger, r)
+	warnIdentityMismatch(logger, payload.Metadata.LoginName, r)
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 

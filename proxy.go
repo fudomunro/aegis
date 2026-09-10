@@ -22,7 +22,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		remainingPath = "/" + parts[1]
 	}
 
-	logger := slog.With("service", serviceID, "method", r.Method, "path", remainingPath)
+	logger := withPeerLog(slog.With("service", serviceID, "method", r.Method, "path", remainingPath), r)
 
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
