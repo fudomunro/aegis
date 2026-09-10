@@ -110,7 +110,8 @@ from other LAN interfaces.
 6. **Device approval** in the admin console prevents unapproved machines from
    joining even with a stolen auth key.
 7. **Log identity.** Guardian logs `login` and `identity_source` on denied
-   requests; extend logs on successful proxy calls if you need an audit trail.
+   requests and attaches tailnet identity to library/proxy logs. Pre-request
+   also warns when Aperture’s `login_name` does not match the Tailscale peer.
 8. **Encrypt tokens at rest** (`-token-pass` / `GUARDIAN_TOKEN_PASS`) as today —
    tailnet auth does not replace disk encryption of `tokens.json`.
 9. **OAuth login/callback stay public** on purpose (browser redirects from

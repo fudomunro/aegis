@@ -194,13 +194,26 @@ Add Guardian as a pre-request hook in your Aperture configuration:
 }
 ```
 
+### Two-legged auth
+
+Guardian has **two** callers, and they authenticate differently:
+
+| Leg | Who calls Guardian | How they authenticate |
+|-----|--------------------|------------------------|
+| **Hook** | Aperture (`POST /v1/pre-request`) | Usually the shared API key in the Aperture hook config (`"apikey"`). In `tailnet` mode Aperture must also present tailnet identity (Serve headers / WhoIs). |
+| **Agent data** | The LLM agent (`/v1/library/playlists`, `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: API key if `auth-mode` is `auto` or `api-key`. |
+
+Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Guardian attaches those when proxying. With `-auth-mode tailnet` and no API key, agents on the tailnet call Guardian without a shared secret.
+
 ## API Reference
+
+Protected endpoints accept **either** a valid API key (`Authorization: Bearer <key>` or `X-Api-Key`) **or** a Tailscale identity, depending on `-auth-mode` (see [SECURITY.md](SECURITY.md)).
 
 ### Pre-request hook
 
 ```
 POST /v1/pre-request
-Authorization: Bearer <api-key>
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
 Receives Aperture's `pre_request` payload. Returns one of:
@@ -214,7 +227,7 @@ When the user asks about playlists without naming a service (e.g. "what playlist
 
 ```
 GET /v1/library/playlists
-Authorization: Bearer <api-key>
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
 Returns the user's playlists from every connected music service in Guardian's **neutral format**, regardless of whether they live on Spotify, YouTube Music, Amazon Music, etc.
@@ -290,10 +303,10 @@ Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return t
 
 ```
 GET/POST /v1/services/{service_id}/{path}
-Authorization: Bearer <api-key>
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
-Forwards to the configured upstream endpoint with OAuth tokens.
+Forwards to the configured upstream endpoint with OAuth tokens. Callers authenticate to Guardian; they do not need the upstream service’s OAuth tokens.
 - `X-Guardian-Cache: hit` or `miss` in response headers
 - GET responses cached per-service
 - POST requests forwarded without caching

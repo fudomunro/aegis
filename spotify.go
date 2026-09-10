@@ -102,12 +102,12 @@ func (c *SpotifyConnector) Capabilities() ServiceCapabilities {
 						Parameters: []Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max playlists per page (1-50)", Default: 20},
 						},
-						Response: ResponseSpec{Description: "Neutral playlists with id, name, description, owner, track_count, service, url, extra", Fields: []string{"playlists", "total"}}},
+						Response: ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID with its tracks", Method: "GET", Path: "/playlists/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify playlist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Neutral playlist detail with tracks", Fields: []string{"id", "name", "description", "owner", "track_count", "service", "tracks", "extra"}}},
+						Response: ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[], tracks", Fields: []string{"name", "description", "owner", "track_count", "sources", "tracks", "extra"}}},
 				},
 			},
 			{
@@ -167,7 +167,7 @@ func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
-Spotify-specific endpoints (all require Authorization header from Guardian):
+Spotify-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send Spotify tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user profile
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?limit=N&offset=N)
