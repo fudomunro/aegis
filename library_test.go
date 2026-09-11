@@ -199,8 +199,8 @@ func TestPreRequest_PlaylistWithoutServiceName(t *testing.T) {
 	if resp.Action != ActionModify {
 		t.Fatalf("action = %s, want modify", resp.Action)
 	}
-	if !strings.Contains(string(resp.Body), "/v1/library/playlists") {
-		t.Fatalf("body missing library endpoint: %s", resp.Body)
+	if !strings.Contains(string(resp.RequestBody), "/v1/library/playlists") {
+		t.Fatalf("request_body missing library endpoint: %s", resp.RequestBody)
 	}
 }
 
