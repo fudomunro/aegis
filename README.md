@@ -51,11 +51,12 @@ cp guardian.example.json guardian.json
   -token-pass your-encryption-passphrase
 ```
 
-Guardian starts with three endpoints:
+Guardian starts with these endpoints:
 - `POST /v1/pre-request` — Aperture hook
 - `GET /v1/library/playlists` — unified playlists across all connected services
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
+- `GET /v1/admin` — admin dashboard for services, tokens, library, and cache
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 ## Configuration
@@ -321,6 +322,23 @@ Forwards to the configured upstream endpoint with OAuth tokens. Callers authenti
 | `/v1/auth/{id}` | DELETE | Revoke stored token |
 | `/v1/setup` | GET | Web setup wizard |
 
+### Admin dashboard
+
+```
+GET /v1/admin              — HTML dashboard (shell only; no secrets)
+GET /v1/admin/summary      — redacted services, token status, cache stats
+GET /v1/admin/cache        — in-memory cache inventory
+POST /v1/admin/cache/clear — clear the response cache
+```
+
+`/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
+Serve identity the page works with no extra setup. In API-key mode, enter the
+key when prompted (kept only in that tab’s `sessionStorage`).
+
+Admin APIs use the same auth as the rest of Guardian. Secrets never appear in
+admin responses: client secrets, access tokens, and refresh tokens are omitted;
+only presence flags, scopes, and expiry status are shown.
+
 ## Development
 
 ```bash
@@ -360,6 +378,7 @@ aperture-guardian/
   tokens.go         AES-256-GCM encrypted token storage
   statestore.go     CSRF state validation with TTL
   setup.go          Web-based setup wizard
+  admin.go          Admin dashboard HTML + summary/cache APIs
   SECURITY.md       Tailnet auth model, ACLs, operational guidance
   spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
   youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
