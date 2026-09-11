@@ -48,6 +48,12 @@ func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 		"scope":         {strings.Join(svc.OAuth.Scopes, " ")},
 		"state":         {state},
 	}
+	// Google only returns a refresh_token when offline access is requested.
+	// prompt=consent ensures a refresh token even on re-authorization.
+	if strings.Contains(svc.OAuth.AuthURL, "accounts.google.com") {
+		params.Set("access_type", "offline")
+		params.Set("prompt", "consent")
+	}
 
 	authURL := svc.OAuth.AuthURL + "?" + params.Encode()
 	slog.Info("redirecting to OAuth provider", "service", serviceID, "auth_url", svc.OAuth.AuthURL)
