@@ -410,3 +410,51 @@ func TestWriteGuardrailResponse_Block(t *testing.T) {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
 }
+
+func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID: "spotify", Name: "Spotify", Action: "inject",
+				Permissions: Permissions{"default": AccessRead, "player": AccessNone, "recommendations": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	originalReq := map[string]any{
+		"model": "gpt-4",
+		"messages": []map[string]string{
+			{"role": "user", "content": "Play some jazz on Spotify"},
+		},
+	}
+	reqBody, _ := json.Marshal(originalReq)
+	payload := PreRequestPayload{
+		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-perm"},
+		UserMessage: "Play some jazz on Spotify",
+		RequestBody: reqBody,
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.HandlePreRequest(w, req)
+
+	var resp GuardrailResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Action != ActionModify {
+		t.Fatalf("action = %q, want modify", resp.Action)
+	}
+	var modified map[string]any
+	json.Unmarshal(resp.RequestBody, &modified)
+	msgs := modified["messages"].([]any)
+	sys := msgs[0].(map[string]any)
+	content := sys["content"].(string)
+	if !strings.Contains(content, "Access policy:") {
+		t.Fatalf("system message missing access policy notice:\n%s", content)
+	}
+	if !strings.Contains(content, "player") || !strings.Contains(content, "recommendations") {
+		t.Fatalf("notice should list denied types:\n%s", content)
+	}
+}

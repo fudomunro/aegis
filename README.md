@@ -93,7 +93,40 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
+| `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
 | `oauth` | OAuth2 configuration for user authorization (optional) |
+
+### Data permissions
+
+Beyond the coarse `action: inject|block` switch, each service can restrict
+**what kind of access agents have to specific data types**:
+
+```json
+"permissions": {
+  "default": "read",
+  "playlists": "read",
+  "tracks": "read",
+  "player": "none",
+  "recommendations": "none"
+}
+```
+
+| Level | Allowed methods |
+|-------|-----------------|
+| `none` | none — 403 for that data type |
+| `read` | `GET`, `HEAD` |
+| `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
+| `read-write` | both (also accepts `full` / `rw`) |
+
+- The reserved key `default` applies to data types not listed.
+- If `permissions` is omitted, agents keep unrestricted access (previous behavior).
+- Enforcement is on the service proxy, the unified library endpoint, and the
+  `/capabilities` response (denied types/operations are hidden from agents).
+- Pre-request injection also lists denied types so agents do not try them.
+
+Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
+`player`, `channels`, `library`, `recommendations`. Paths that do not map to a
+known type fall through to the `default` level.
 
 ### Environment variables
 
@@ -373,6 +406,7 @@ aperture-guardian/
   library.go        Cross-service library endpoint + PlaylistProvider
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
+  permissions.go    Agent data-type access levels, path classification, enforcement
   cache.go          In-memory TTL cache with RWMutex
   oauth.go          OAuth2 login/callback/refresh flows
   tokens.go         AES-256-GCM encrypted token storage

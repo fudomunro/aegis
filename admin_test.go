@@ -73,6 +73,10 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 				Action:   "inject",
 				Endpoint: "https://api.spotify.com/v1",
 				CacheTTL: Duration{Duration: 10 * time.Minute},
+				Permissions: Permissions{
+					"default": AccessRead,
+					"player":  AccessNone,
+				},
 				OAuth: &OAuthConfig{
 					ClientID:     "client-id-value",
 					ClientSecret: "super-secret-value",
@@ -122,6 +126,9 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	spotify := summary.Services[0]
 	if !spotify.HasOAuth || !spotify.HasSecret || !spotify.HasClientID {
 		t.Fatal("expected oauth flags set without exposing values")
+	}
+	if spotify.Permissions["player"] != AccessNone || spotify.Permissions["default"] != AccessRead {
+		t.Fatalf("permissions = %+v", spotify.Permissions)
 	}
 	if spotify.Token == nil || !spotify.Token.HasToken {
 		t.Fatal("expected token status attached")

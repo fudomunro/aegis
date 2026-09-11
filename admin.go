@@ -10,21 +10,23 @@ import (
 // AdminService is a redacted view of a configured service for the admin UI.
 // Secrets (client_secret, tokens) are never included.
 type AdminService struct {
-	ID          string       `json:"id"`
-	Name        string       `json:"name"`
-	Action      string       `json:"action"`
-	Endpoint    string       `json:"endpoint,omitempty"`
-	Aliases     []string     `json:"aliases,omitempty"`
-	CacheTTL    string       `json:"cache_ttl"`
-	Description string       `json:"description,omitempty"`
-	HasOAuth    bool         `json:"has_oauth"`
-	HasClientID bool         `json:"has_client_id"`
-	HasSecret   bool         `json:"has_client_secret"`
-	OAuthScopes []string     `json:"oauth_scopes,omitempty"`
-	Token       *TokenStatus `json:"token,omitempty"`
-	HasPlaylist bool         `json:"has_playlist_provider"`
-	ProxyPath   string       `json:"proxy_path"`
-	LoginPath   string       `json:"login_path,omitempty"`
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Action      string   `json:"action"`
+	Endpoint    string   `json:"endpoint,omitempty"`
+	Aliases     []string `json:"aliases,omitempty"`
+	CacheTTL    string   `json:"cache_ttl"`
+	Description string   `json:"description,omitempty"`
+	// Permissions is the agent access map by data type (nil = unrestricted).
+	Permissions map[string]string `json:"permissions,omitempty"`
+	HasOAuth    bool              `json:"has_oauth"`
+	HasClientID bool              `json:"has_client_id"`
+	HasSecret   bool              `json:"has_client_secret"`
+	OAuthScopes []string          `json:"oauth_scopes,omitempty"`
+	Token       *TokenStatus      `json:"token,omitempty"`
+	HasPlaylist bool              `json:"has_playlist_provider"`
+	ProxyPath   string            `json:"proxy_path"`
+	LoginPath   string            `json:"login_path,omitempty"`
 }
 
 // AdminRuntime describes non-secret server identity and auth posture.
@@ -83,6 +85,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Aliases:     svc.Aliases,
 			CacheTTL:    svc.CacheTTL.String(),
 			Description: svc.Description,
+			Permissions: svc.Permissions.Clone(),
 			HasOAuth:    svc.OAuth != nil,
 			ProxyPath:   "/v1/services/" + svc.ID,
 			HasPlaylist: false,
@@ -498,12 +501,20 @@ const adminHTML = `<!DOCTYPE html>
         actions.push('<span class="badge badge-blue">Library source</span>');
       }
 
+      const perms = svc.permissions || {};
+      const permKeys = Object.keys(perms).sort();
+      const permBits = permKeys.length
+        ? '<div class="meta">Permissions: ' + permKeys.map((k) =>
+            '<code>' + escapeHtml(k) + "=" + escapeHtml(perms[k]) + "</code>").join(" ") + "</div>"
+        : "";
+
       return '<article class="card">' +
         '<div class="card-header"><h3>' + escapeHtml(svc.name) + "</h3>" +
         actionBadge(svc.action) + tokenBadge(token, svc.has_oauth) + expires + "</div>" +
         '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
         aliases + oauthBits +
         '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code></div>" +
+        permBits +
         '<div class="actions">' + actions.join(" ") + "</div>" +
         "</article>";
     }).join("");

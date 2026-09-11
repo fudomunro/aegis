@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -18,15 +19,18 @@ type Config struct {
 // Service represents a named external service (e.g. Spotify, YouTube Music)
 // that Guardian can intercept and enrich requests for.
 type Service struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Aliases     []string   `json:"aliases,omitempty"`
-	Action      string     `json:"action"` // "inject" or "block"
-	Endpoint    string     `json:"endpoint,omitempty"`
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Aliases     []string          `json:"aliases,omitempty"`
+	Action      string            `json:"action"` // "inject" or "block"
+	Endpoint    string            `json:"endpoint,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	CacheTTL    Duration          `json:"cache_ttl"`
 	Description string            `json:"description,omitempty"`
-	OAuth       *OAuthConfig      `json:"oauth,omitempty"`
+	// Permissions restricts agent access by data type (playlists, tracks, …).
+	// Nil means unrestricted. See permissions.go for levels and the "default" key.
+	Permissions Permissions  `json:"permissions,omitempty"`
+	OAuth       *OAuthConfig `json:"oauth,omitempty"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -67,6 +71,9 @@ func LoadConfig(path string) (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	if err := validateServices(cfg.Services); err != nil {
+		return nil, err
+	}
 	cfg.path = path
 	return &cfg, nil
 }
@@ -83,8 +90,20 @@ func (c *Config) Reload() error {
 	if err := json.Unmarshal(data, &fresh); err != nil {
 		return err
 	}
+	if err := validateServices(fresh.Services); err != nil {
+		return err
+	}
 	c.Services = fresh.Services
 	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services))
+	return nil
+}
+
+func validateServices(services []Service) error {
+	for _, svc := range services {
+		if err := ValidatePermissions(svc.Permissions); err != nil {
+			return fmt.Errorf("service %q: %w", svc.ID, err)
+		}
+	}
 	return nil
 }
 

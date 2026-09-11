@@ -50,8 +50,10 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		provider PlaylistProvider
 	}
 
-	// Collect services that have a connector supporting neutral playlists.
+	// Collect services that have a connector supporting neutral playlists
+	// and that the agent is allowed to read.
 	var targets []serviceTarget
+	var deniedPlaylists []string
 	for id, connector := range s.connectors {
 		svc := s.config.GetService(id)
 		if svc == nil || svc.Action == "block" {
@@ -61,10 +63,20 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		if !ok {
 			continue
 		}
+		if !svc.Permissions.AllowsRead("playlists") {
+			deniedPlaylists = append(deniedPlaylists, id)
+			logger.Info("library playlists denied by permission", "service", id,
+				"permission", svc.Permissions.For("playlists"))
+			continue
+		}
 		targets = append(targets, serviceTarget{id: id, provider: provider})
 	}
 
 	if len(targets) == 0 {
+		if len(deniedPlaylists) > 0 {
+			writeJSONError(w, http.StatusForbidden, "permission denied: agent access to playlists is not allowed")
+			return
+		}
 		writeJSONError(w, http.StatusNotFound, "no playlist-capable services configured")
 		return
 	}
