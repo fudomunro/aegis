@@ -112,6 +112,8 @@ func main() {
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
 	mux.HandleFunc("/v1/setup", srv.HandleSetup)
+	mux.HandleFunc("/v1/admin", srv.HandleAdmin)
+	mux.HandleFunc("/v1/admin/", srv.handleAdminRoutes)
 
 	slog.Info("starting server",
 		"addr", *addr,
@@ -147,6 +149,26 @@ func buildIdentityResolver(authMode, tsSocket string) IdentityResolver {
 		slog.Warn("tailscaled socket not found — tailnet identity will only work via Tailscale Serve headers")
 	}
 	return MultiResolver{Resolvers: resolvers}
+}
+
+// handleAdminRoutes dispatches /v1/admin. The HTML shell is public (no
+// secrets in markup); JSON data endpoints require normal Guardian auth.
+func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
+	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/")
+	path = strings.Trim(path, "/")
+
+	switch {
+	case path == "":
+		s.HandleAdmin(w, r)
+	case path == "summary":
+		s.AuthMiddleware(s.HandleAdminSummary)(w, r)
+	case path == "cache":
+		s.AuthMiddleware(s.HandleAdminCache)(w, r)
+	case path == "cache/clear":
+		s.AuthMiddleware(s.HandleAdminCacheClear)(w, r)
+	default:
+		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+	}
 }
 
 // handleAuthRoutes dispatches /v1/auth/* to the correct handler.
