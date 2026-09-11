@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"sync"
+	"time"
 )
 
 // ErrUnauthorized is returned by PlaylistProvider when a service has no valid token.
@@ -139,7 +140,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// Short TTL: aggregate spans multiple APIs and should stay fresh.
-	s.cache.Set(cacheKey, string(result), 60)
+	s.cache.Set(cacheKey, string(result), 60*time.Second)
 
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Guardian-Cache", "miss")

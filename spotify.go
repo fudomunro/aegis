@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // SpotifyConnector provides intelligent proxying for the Spotify API.
@@ -273,7 +274,7 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	if r.Method == http.MethodGet {
 		ttl := c.server.config.GetService("spotify").CacheTTL.Duration
 		if ttl == 0 {
-			ttl = 60 // default 1 minute for Spotify data
+			ttl = 60 * time.Second
 		}
 		c.server.cache.Set(cacheKey, string(result), ttl)
 	}
