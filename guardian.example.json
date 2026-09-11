@@ -8,6 +8,13 @@
       "endpoint": "https://api.spotify.com/v1",
       "cache_ttl": "10m",
       "description": "Proxies Spotify API calls through Guardian for caching and auditing",
+      "permissions": {
+        "default": "read",
+        "playlists": "read",
+        "tracks": "read",
+        "player": "none",
+        "recommendations": "none"
+      },
       "oauth": {
         "client_id": "YOUR_SPOTIFY_CLIENT_ID",
         "client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
@@ -28,6 +35,9 @@
       "action": "inject",
       "endpoint": "https://www.googleapis.com/youtube/v3",
       "cache_ttl": "15m",
+      "permissions": {
+        "default": "read"
+      },
       "description": "Proxies YouTube Music API calls through Guardian",
       "oauth": {
         "client_id": "YOUR_GOOGLE_CLIENT_ID",
