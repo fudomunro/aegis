@@ -62,6 +62,7 @@ func TestSpotifyConnector_TransformPlaylistList(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	conn := NewSpotifyConnector(srv)
 
+	// Legacy shape: tracks.total.
 	raw := map[string]any{
 		"items": []any{
 			map[string]any{
@@ -98,6 +99,97 @@ func TestSpotifyConnector_TransformPlaylistList(t *testing.T) {
 	}
 	if result.Total != 1 {
 		t.Fatalf("total = %v", result.Total)
+	}
+}
+
+func TestSpotifyConnector_TransformPlaylistList_ItemsTotal(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	conn := NewSpotifyConnector(srv)
+
+	// Current Web API shape: items.total (2026 live check).
+	raw := map[string]any{
+		"items": []any{
+			map[string]any{
+				"id":   "pl2",
+				"name": "Driving",
+				"items": map[string]any{
+					"href":  "https://api.spotify.com/v1/playlists/pl2/items",
+					"total": 18,
+				},
+				"uri": "spotify:playlist:pl2",
+			},
+		},
+		"total": 1,
+	}
+
+	result := conn.transformPlaylistList(raw)
+	if len(result.Playlists) != 1 {
+		t.Fatalf("got %d playlists, want 1", len(result.Playlists))
+	}
+	if result.Playlists[0].TrackCount != 18 {
+		t.Fatalf("track_count = %v, want 18", result.Playlists[0].TrackCount)
+	}
+}
+
+func TestSpotifyConnector_TransformPlaylistDetail_CurrentItemsShape(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	conn := NewSpotifyConnector(srv)
+
+	raw := map[string]any{
+		"id":          "pl3",
+		"name":        "Happy Car Family",
+		"description": "Road trip songs",
+		"items": map[string]any{
+			"href": "https://api.spotify.com/v1/playlists/pl3/items?offset=0&limit=100",
+			"total": 2,
+			"items": []any{
+				map[string]any{
+					"added_at": "2023-01-20T22:35:20Z",
+					"item": map[string]any{
+						"id":         "t1",
+						"name":       "Hayloft",
+						"uri":        "spotify:track:t1",
+						"type":       "track",
+						"artists":    []any{map[string]any{"name": "Mother Mother"}},
+						"album":      map[string]any{"name": "O My Heart"},
+						"external_urls": map[string]any{"spotify": "https://open.spotify.com/track/t1"},
+					},
+				},
+				map[string]any{
+					"added_at": "2023-01-20T22:35:25Z",
+					"item": map[string]any{
+						"id":         "t2",
+						"name":       "Arms Tonite",
+						"uri":        "spotify:track:t2",
+						"type":       "track",
+						"artists":    []any{map[string]any{"name": "Mother Mother"}},
+						"album":      map[string]any{"name": "O My Heart"},
+						"external_urls": map[string]any{"spotify": "https://open.spotify.com/track/t2"},
+					},
+				},
+			},
+		},
+		"uri": "spotify:playlist:pl3",
+	}
+
+	detail := conn.transformPlaylistDetail(raw)
+	if detail.TrackCount != 2 {
+		t.Fatalf("track_count = %v, want 2", detail.TrackCount)
+	}
+	if detail.TotalTracks != 2 {
+		t.Fatalf("total_tracks = %v, want 2", detail.TotalTracks)
+	}
+	if len(detail.Tracks) != 2 {
+		t.Fatalf("got %d tracks, want 2", len(detail.Tracks))
+	}
+	if detail.Tracks[0].Name != "Hayloft" {
+		t.Fatalf("first track = %v", detail.Tracks[0].Name)
+	}
+	if len(detail.Tracks[0].Artists) == 0 || detail.Tracks[0].Artists[0].Name != "Mother Mother" {
+		t.Fatalf("artists = %+v", detail.Tracks[0].Artists)
+	}
+	if detail.Name != "Happy Car Family" {
+		t.Fatalf("name = %v", detail.Name)
 	}
 }
 
