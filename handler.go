@@ -37,9 +37,11 @@ const (
 )
 
 type GuardrailResponse struct {
-	Action  string          `json:"action"`
-	Body    json.RawMessage `json:"body,omitempty"`    // replacement request body for "modify"
-	Message string          `json:"message,omitempty"` // human-readable reason
+	Action string `json:"action"`
+	// RequestBody is the replacement request body for ActionModify. Aperture
+	// requires this field name; a `body` key is treated as allow.
+	RequestBody json.RawMessage `json:"request_body,omitempty"`
+	Message     string          `json:"message,omitempty"` // human-readable reason
 }
 
 // AuthMode selects how Guardian authenticates inbound API requests.
@@ -337,8 +339,8 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	logger.Info("request modified with proxy instructions", "services", len(instructions))
 	writeGuardrailResponse(w, GuardrailResponse{
-		Action: ActionModify,
-		Body:   modified,
+		Action:      ActionModify,
+		RequestBody: modified,
 	})
 }
 

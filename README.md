@@ -219,7 +219,7 @@ Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 
 Receives Aperture's `pre_request` payload. Returns one of:
 - `{"action": "allow"}` — no service matched
-- `{"action": "modify", "body": {...}}` — LLM request with injected proxy instructions
+- `{"action": "modify", "request_body": {...}}` — LLM request with injected proxy instructions (Aperture requires the `request_body` field)
 - `{"action": "block", "message": "..."}` — request rejected (403)
 
 When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Guardian injects instructions for the unified library endpoint so agents can answer across every connected service.
