@@ -3,8 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
+	"strings"
 )
 
 // AdminService is a redacted view of a configured service for the admin UI.
@@ -19,14 +21,16 @@ type AdminService struct {
 	Description string   `json:"description,omitempty"`
 	// Permissions is the agent access map by data type (nil = unrestricted).
 	Permissions map[string]string `json:"permissions,omitempty"`
-	HasOAuth    bool              `json:"has_oauth"`
-	HasClientID bool              `json:"has_client_id"`
-	HasSecret   bool              `json:"has_client_secret"`
-	OAuthScopes []string          `json:"oauth_scopes,omitempty"`
-	Token       *TokenStatus      `json:"token,omitempty"`
-	HasPlaylist bool              `json:"has_playlist_provider"`
-	ProxyPath   string            `json:"proxy_path"`
-	LoginPath   string            `json:"login_path,omitempty"`
+	// AvailableDataTypes lists connector-known types the UI can edit.
+	AvailableDataTypes []string     `json:"available_data_types,omitempty"`
+	HasOAuth           bool         `json:"has_oauth"`
+	HasClientID        bool         `json:"has_client_id"`
+	HasSecret          bool         `json:"has_client_secret"`
+	OAuthScopes        []string     `json:"oauth_scopes,omitempty"`
+	Token              *TokenStatus `json:"token,omitempty"`
+	HasPlaylist        bool         `json:"has_playlist_provider"`
+	ProxyPath          string       `json:"proxy_path"`
+	LoginPath          string       `json:"login_path,omitempty"`
 }
 
 // AdminRuntime describes non-secret server identity and auth posture.
@@ -100,6 +104,12 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			if _, isProvider := connector.(PlaylistProvider); isProvider {
 				item.HasPlaylist = true
 			}
+			caps := connector.Capabilities()
+			types := make([]string, 0, len(caps.DataTypes))
+			for _, dt := range caps.DataTypes {
+				types = append(types, dt.Name)
+			}
+			item.AvailableDataTypes = types
 		}
 		if st, ok := tokens[svc.ID]; ok {
 			st := st
@@ -168,6 +178,93 @@ func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "cleared"})
+}
+
+// adminPermissionsRequest is the body for PUT service permissions.
+type adminPermissionsRequest struct {
+	// Permissions is the new map. Empty/null clears the block (unrestricted).
+	Permissions Permissions `json:"permissions"`
+}
+
+// HandleAdminServicePermissions reads or writes a service's agent permission map.
+//
+//	GET /v1/admin/services/{id}/permissions
+//	PUT /v1/admin/services/{id}/permissions  {"permissions": {"default":"read","player":"none"}}
+func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Request) {
+	trimmed := strings.TrimPrefix(r.URL.Path, "/v1/admin/services/")
+	trimmed = strings.Trim(trimmed, "/")
+	id := strings.TrimSuffix(trimmed, "/permissions")
+	id = strings.Trim(id, "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		return
+	}
+
+	svc := s.config.GetService(id)
+	if svc == nil {
+		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", id))
+		return
+	}
+
+	switch r.Method {
+	case http.MethodGet:
+		perms := svc.Permissions.Clone()
+		if perms == nil {
+			perms = map[string]string{}
+		}
+		var types []string
+		if connector, ok := s.connectors[id]; ok {
+			for _, dt := range connector.Capabilities().DataTypes {
+				types = append(types, dt.Name)
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"service_id":           id,
+			"permissions":          perms,
+			"available_data_types": types,
+		})
+	case http.MethodPut:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "failed to read request body")
+			return
+		}
+		var req adminPermissionsRequest
+		if len(body) > 0 {
+			if err := json.Unmarshal(body, &req); err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				return
+			}
+		}
+		if err := s.config.SetServicePermissions(id, req.Permissions); err != nil {
+			withPeerLog(slog.With("handler", "admin_permissions"), r).
+				Warn("failed to save permissions", "service", id, "error", err)
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		// Cache may hold responses that are now denied.
+		s.cache.Clear()
+		withPeerLog(slog.With("handler", "admin_permissions"), r).
+			Info("service permissions updated", "service", id, "keys", len(req.Permissions))
+
+		updated := s.config.GetService(id)
+		perms := map[string]string{}
+		if updated != nil {
+			perms = updated.Permissions.Clone()
+			if perms == nil {
+				perms = map[string]string{}
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"service_id":  id,
+			"permissions": perms,
+			"status":      "saved",
+		})
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
 }
 
 const adminHTML = `<!DOCTYPE html>
@@ -271,9 +368,28 @@ const adminHTML = `<!DOCTYPE html>
     display: inline-flex; align-items: center; gap: 0.3rem; margin: 0.15rem 0.25rem 0.15rem 0;
     background: var(--surface2); border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.78rem;
   }
+  .perm-editor {
+    margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
+  }
+  .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+  .perm-row {
+    display: grid; grid-template-columns: minmax(100px, 1.2fr) minmax(120px, 1fr) auto;
+    gap: 0.5rem; align-items: center; margin-bottom: 0.45rem;
+  }
+  .perm-row label { font-size: 0.85rem; color: var(--dim); }
+  .perm-row select, .perm-add input, .perm-add select {
+    width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 6px; padding: 0.4rem 0.55rem; font: inherit; font-size: 0.85rem;
+  }
+  .perm-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-top: 0.55rem; }
+  .perm-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
+  .perm-status { font-size: 0.82rem; color: var(--dim); margin-top: 0.45rem; min-height: 1.1em; }
+  .perm-status.ok { color: var(--green); }
+  .perm-status.err { color: var(--red); }
   @media (max-width: 560px) {
     .wrap { padding: 1rem 0.85rem 2rem; }
     th:nth-child(3), td:nth-child(3) { display: none; }
+    .perm-row, .perm-add { grid-template-columns: 1fr; }
   }
 </style>
 </head>
@@ -430,6 +546,120 @@ const adminHTML = `<!DOCTYPE html>
     return '<span class="badge badge-gray">' + escapeHtml(action || "—") + "</span>";
   }
 
+  const ACCESS_LEVELS = ["none", "read", "write", "read-write"];
+  const FALLBACK_DATA_TYPES = ["user", "tracks", "albums", "artists", "playlists", "search", "player", "channels", "library", "recommendations"];
+  const openPermEditors = new Set();
+
+  function normalizeAccess(level) {
+    const v = String(level || "").toLowerCase();
+    if (v === "none" || v === "deny" || v === "off") return "none";
+    if (v === "read" || v === "ro" || v === "readonly" || v === "read-only") return "read";
+    if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only") return "write";
+    if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite") return "read-write";
+    return v || "read-write";
+  }
+
+  function accessSelect(name, selected, extraClass) {
+    const cur = normalizeAccess(selected);
+    return '<select class="' + (extraClass || "") + '" data-perm-key="' + escapeHtml(name) + '">' +
+      ACCESS_LEVELS.map((lvl) =>
+        '<option value="' + lvl + '"' + (lvl === cur ? " selected" : "") + ">" + lvl + "</option>"
+      ).join("") +
+      "</select>";
+  }
+
+  function collectPermEditor(serviceId) {
+    const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
+    if (!root) return null;
+    const map = {};
+    root.querySelectorAll("select[data-perm-key]").forEach((sel) => {
+      const key = sel.getAttribute("data-perm-key");
+      if (!key || key === "__new__") return;
+      map[key] = sel.value;
+    });
+    return map;
+  }
+
+  function renderPermEditor(svc) {
+    const id = svc.id;
+    const perms = svc.permissions || {};
+    const known = (svc.available_data_types && svc.available_data_types.length)
+      ? svc.available_data_types
+      : FALLBACK_DATA_TYPES;
+    const keys = Object.keys(perms).sort((a, b) => {
+      if (a === "default") return -1;
+      if (b === "default") return 1;
+      return a.localeCompare(b);
+    });
+    // Include default + known types even if unset (defaults to unrestricted on server).
+    const show = ["default"].concat(known.filter((k) => k !== "default"));
+    keys.forEach((k) => {
+      if (show.indexOf(k) === -1) show.push(k);
+    });
+
+    const rows = show.map((key) => {
+      const level = perms[key] != null ? perms[key] : (key === "default" ? "read-write" : "read-write");
+      return '<div class="perm-row">' +
+        "<label>" + escapeHtml(key) + (key === "default" ? " (fallback)" : "") + "</label>" +
+        accessSelect(key, level) +
+        (key === "default" ? "<span></span>" :
+          '<button type="button" class="btn btn-danger perm-remove" data-service="' + escapeHtml(id) +
+            '" data-key="' + escapeHtml(key) + '" title="Remove this row">Remove</button>') +
+        "</div>";
+    }).join("");
+
+    return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) + '">' +
+      "<h4>Agent data permissions</h4>" +
+      '<p class="meta" style="margin-bottom:0.55rem">Levels: none · read · write · read-write. Saving writes <code>guardian.json</code> and clears the response cache.</p>' +
+      rows +
+      '<div class="perm-add">' +
+        '<input type="text" class="perm-custom-key" placeholder="data type (e.g. contacts)" aria-label="Custom data type">' +
+        accessSelect("__new__", "read", "perm-custom-level") +
+        '<button type="button" class="btn perm-add-btn" data-service="' + escapeHtml(id) + '">Add</button>' +
+      "</div>" +
+      '<div class="perm-actions">' +
+        '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save permissions</button>' +
+        '<button type="button" class="btn perm-reset" data-service="' + escapeHtml(id) + '">Reset form</button>' +
+        '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Clear (unrestricted)</button>' +
+      "</div>" +
+      '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
+      "</div>";
+  }
+
+  async function savePermissions(serviceId, permissions, clear) {
+    const status = document.getElementById("perm-status-" + CSS.escape(serviceId));
+    if (status) {
+      status.textContent = clear ? "Clearing…" : "Saving…";
+      status.className = "perm-status";
+    }
+    try {
+      const body = clear ? { permissions: {} } : { permissions: permissions || {} };
+      await api("/v1/admin/services/" + encodeURIComponent(serviceId) + "/permissions", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (status) {
+        status.textContent = clear ? "Cleared — agents unrestricted." : "Saved.";
+        status.className = "perm-status ok";
+      }
+      await loadSummary();
+      openPermEditors.add(serviceId);
+      renderServices($("service-filter").value);
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      if (status) {
+        status.textContent = err.message || "Failed to save";
+        status.className = "perm-status err";
+      } else {
+        showGlobalError(err.message || "Failed to save permissions");
+      }
+    }
+  }
+
   function showAuthGate(show) {
     $("auth-gate").hidden = !show;
     $("dashboard").hidden = show;
@@ -491,6 +721,13 @@ const adminHTML = `<!DOCTYPE html>
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
         : '<div class="meta">No OAuth configuration</div>';
 
+      const perms = svc.permissions || {};
+      const permKeys = Object.keys(perms).sort();
+      const permBits = permKeys.length
+        ? '<div class="meta">Permissions: ' + permKeys.map((k) =>
+            '<code>' + escapeHtml(k) + "=" + escapeHtml(perms[k]) + "</code>").join(" ") + "</div>"
+        : '<div class="meta">Permissions: <em>unrestricted</em></div>';
+
       const actions = [];
       if (svc.login_path && svc.has_oauth) {
         actions.push('<a class="btn" href="' + escapeHtml(svc.login_path) + '">' +
@@ -500,15 +737,12 @@ const adminHTML = `<!DOCTYPE html>
       if (svc.has_playlist_provider) {
         actions.push('<span class="badge badge-blue">Library source</span>');
       }
+      actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
+        (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
 
-      const perms = svc.permissions || {};
-      const permKeys = Object.keys(perms).sort();
-      const permBits = permKeys.length
-        ? '<div class="meta">Permissions: ' + permKeys.map((k) =>
-            '<code>' + escapeHtml(k) + "=" + escapeHtml(perms[k]) + "</code>").join(" ") + "</div>"
-        : "";
+      const editor = openPermEditors.has(svc.id) ? renderPermEditor(svc) : "";
 
-      return '<article class="card">' +
+      return '<article class="card" data-service-card="' + escapeHtml(svc.id) + '">' +
         '<div class="card-header"><h3>' + escapeHtml(svc.name) + "</h3>" +
         actionBadge(svc.action) + tokenBadge(token, svc.has_oauth) + expires + "</div>" +
         '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
@@ -516,6 +750,7 @@ const adminHTML = `<!DOCTYPE html>
         '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code></div>" +
         permBits +
         '<div class="actions">' + actions.join(" ") + "</div>" +
+        editor +
         "</article>";
     }).join("");
   }
@@ -643,7 +878,7 @@ const adminHTML = `<!DOCTYPE html>
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code> and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/cache</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
   }
 
@@ -705,6 +940,92 @@ const adminHTML = `<!DOCTYPE html>
       else showGlobalError(err.message || "Failed to clear cache");
     } finally {
       $("clear-cache").disabled = false;
+    }
+  });
+
+  $("services-list").addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    const serviceId = btn.getAttribute("data-service");
+    if (!serviceId) return;
+
+    if (btn.classList.contains("perm-toggle")) {
+      if (openPermEditors.has(serviceId)) openPermEditors.delete(serviceId);
+      else openPermEditors.add(serviceId);
+      renderServices($("service-filter").value);
+      return;
+    }
+    if (btn.classList.contains("perm-save")) {
+      const map = collectPermEditor(serviceId);
+      if (!map) return;
+      // Unset rows that still show unrestricted default for non-default keys
+      // are sent as-is so the operator can set them explicitly.
+      savePermissions(serviceId, map, false);
+      return;
+    }
+    if (btn.classList.contains("perm-clear")) {
+      if (!confirm("Remove the permissions block for " + serviceId + "? Agents will have unrestricted access.")) return;
+      savePermissions(serviceId, {}, true);
+      return;
+    }
+    if (btn.classList.contains("perm-reset")) {
+      renderServices($("service-filter").value);
+      return;
+    }
+    if (btn.classList.contains("perm-remove")) {
+      const row = btn.closest(".perm-row");
+      if (row) row.remove();
+      return;
+    }
+    if (btn.classList.contains("perm-add-btn")) {
+      const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
+      if (!root) return;
+      const input = root.querySelector(".perm-custom-key");
+      const levelSel = root.querySelector(".perm-custom-level");
+      const key = (input && input.value || "").trim();
+      if (!key) {
+        if (input) input.focus();
+        return;
+      }
+      if (key === "default") {
+        // Update default row if present.
+        const existing = root.querySelector('select[data-perm-key="default"]');
+        if (existing && levelSel) {
+          existing.value = levelSel.value;
+          input.value = "";
+          return;
+        }
+      }
+      // Avoid duplicate rows.
+      if (root.querySelector('select[data-perm-key="' + CSS.escape(key) + '"]')) {
+        input.value = "";
+        return;
+      }
+      const div = document.createElement("div");
+      div.className = "perm-row";
+      const label = document.createElement("label");
+      label.textContent = key;
+      const sel = document.createElement("select");
+      sel.setAttribute("data-perm-key", key);
+      ACCESS_LEVELS.forEach((lvl) => {
+        const opt = document.createElement("option");
+        opt.value = lvl;
+        opt.textContent = lvl;
+        if (levelSel && lvl === levelSel.value) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      const rm = document.createElement("button");
+      rm.type = "button";
+      rm.className = "btn btn-danger perm-remove";
+      rm.setAttribute("data-service", serviceId);
+      rm.setAttribute("data-key", key);
+      rm.textContent = "Remove";
+      div.appendChild(label);
+      div.appendChild(sel);
+      div.appendChild(rm);
+      const addBox = root.querySelector(".perm-add");
+      root.insertBefore(div, addBox);
+      input.value = "";
     }
   });
 
