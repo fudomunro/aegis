@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // SpotifyConnector provides intelligent proxying for the Spotify API.
@@ -273,7 +274,7 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	if r.Method == http.MethodGet {
 		ttl := c.server.config.GetService("spotify").CacheTTL.Duration
 		if ttl == 0 {
-			ttl = 60 // default 1 minute for Spotify data
+			ttl = 60 * time.Second
 		}
 		c.server.cache.Set(cacheKey, string(result), ttl)
 	}
@@ -425,6 +426,49 @@ func spotifyPlaylistURL(id string) string {
 	return "https://open.spotify.com/playlist/" + id
 }
 
+// playlistTrackTotal reads the playlist's track count. Current Spotify Web API
+// reports it as items.total; older responses used tracks.total.
+func playlistTrackTotal(p map[string]any) int {
+	for _, key := range []string{"items", "tracks"} {
+		if obj, ok := p[key].(map[string]any); ok {
+			if n, ok := asInt(obj["total"]); ok {
+				return n
+			}
+		}
+	}
+	if n, ok := asInt(p["track_count"]); ok {
+		return n
+	}
+	return 0
+}
+
+// playlistTrackEntries returns the raw playlist-item objects when embedded.
+// Current API nests them under items.items; older under tracks.items.
+func playlistTrackEntries(p map[string]any) []any {
+	for _, key := range []string{"items", "tracks"} {
+		obj, ok := p[key].(map[string]any)
+		if !ok {
+			continue
+		}
+		if items, ok := obj["items"].([]any); ok {
+			return items
+		}
+	}
+	return nil
+}
+
+// playlistEntryTrack extracts the track object from a playlist item entry.
+// Current API puts it under item; older under track.
+func playlistEntryTrack(entry map[string]any) map[string]any {
+	if t, ok := entry["item"].(map[string]any); ok && t != nil {
+		return t
+	}
+	if t, ok := entry["track"].(map[string]any); ok {
+		return t
+	}
+	return nil
+}
+
 // neutralPlaylist maps a raw Spotify playlist object into the neutral type.
 // Service identity (id, url, uri) lives in Sources / Extra, not top-level.
 func (c *SpotifyConnector) neutralPlaylist(p map[string]any) Playlist {
@@ -433,17 +477,7 @@ func (c *SpotifyConnector) neutralPlaylist(p map[string]any) Playlist {
 	description, _ := p["description"].(string)
 	uri, _ := p["uri"].(string)
 
-	trackCount := 0
-	switch tracks := p["tracks"].(type) {
-	case map[string]any:
-		if n, ok := asInt(tracks["total"]); ok {
-			trackCount = n
-		}
-	default:
-		if n, ok := asInt(tracks); ok {
-			trackCount = n
-		}
-	}
+	trackCount := playlistTrackTotal(p)
 
 	owner, _ := extractNested(p, "owner", "display_name").(string)
 
@@ -704,29 +738,18 @@ func extraOrNil(m map[string]any) map[string]any {
 
 func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) PlaylistDetail {
 	base := c.neutralPlaylist(raw)
-	// Prefer the API's declared track total when present.
-	if tracksObj, ok := raw["tracks"].(map[string]any); ok {
-		if n, ok := asInt(tracksObj["total"]); ok {
-			base.TrackCount = n
-		}
-	}
 
-	tracksObj, _ := raw["tracks"].(map[string]any)
 	var tracks []Track
-	if tracksObj != nil {
-		items, _ := tracksObj["items"].([]any)
-		tracks = make([]Track, 0, len(items))
-		for _, item := range items {
-			entry, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			track, _ := entry["track"].(map[string]any)
-			if track == nil {
-				continue
-			}
-			tracks = append(tracks, spotifyNeutralTrack(track))
+	for _, entry := range playlistTrackEntries(raw) {
+		e, ok := entry.(map[string]any)
+		if !ok {
+			continue
 		}
+		track := playlistEntryTrack(e)
+		if track == nil {
+			continue
+		}
+		tracks = append(tracks, spotifyNeutralTrack(track))
 	}
 	return PlaylistDetail{
 		Playlist:    base,
