@@ -170,7 +170,7 @@ func TestHandlePreRequest_InjectService(t *testing.T) {
 
 	// Verify the modified body has proxy instructions.
 	var modified map[string]any
-	json.Unmarshal(resp.Body, &modified)
+	json.Unmarshal(resp.RequestBody, &modified)
 
 	msgs := modified["messages"].([]any)
 	if len(msgs) != 2 {
@@ -219,7 +219,7 @@ func TestHandlePreRequest_AliasMatch(t *testing.T) {
 	}
 
 	var modified map[string]any
-	json.Unmarshal(resp.Body, &modified)
+	json.Unmarshal(resp.RequestBody, &modified)
 	sysMsg := modified["messages"].([]any)[0].(map[string]any)
 	content := sysMsg["content"].(string)
 	if !strings.Contains(content, "/v1/services/ytm") {
@@ -330,7 +330,7 @@ func TestHandlePreRequest_MultipleServices(t *testing.T) {
 	}
 
 	var modified map[string]any
-	json.Unmarshal(resp.Body, &modified)
+	json.Unmarshal(resp.RequestBody, &modified)
 	sysMsg := modified["messages"].([]any)[0].(map[string]any)
 	content := sysMsg["content"].(string)
 
