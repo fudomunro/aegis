@@ -362,11 +362,17 @@ GET /v1/admin              — HTML dashboard (shell only; no secrets)
 GET /v1/admin/summary      — redacted services, token status, cache stats
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
+GET /v1/admin/services/{id}/permissions  — current agent permission map
+PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.json)
 ```
 
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
+
+Each service card has an **Edit permissions** form: set levels per data type,
+add custom types, clear to unrestricted, or save. Saves write the config file
+and clear the response cache so denials take effect immediately.
 
 Admin APIs use the same auth as the rest of Guardian. Secrets never appear in
 admin responses: client secrets, access tokens, and refresh tokens are omitted;

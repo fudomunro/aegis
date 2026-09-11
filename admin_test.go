@@ -194,3 +194,166 @@ func TestHandleAdminCacheClear(t *testing.T) {
 		t.Fatalf("cache not cleared: live=%d total=%d", live, total)
 	}
 }
+
+func TestConfig_SetServicePermissions_Persists(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/guardian.json"
+	initial := `{
+		"services": [
+			{
+				"id": "spotify",
+				"name": "Spotify",
+				"action": "inject",
+				"endpoint": "https://api.spotify.com/v1",
+				"cache_ttl": "10m"
+			}
+		]
+	}`
+	if err := writeFile(path, initial); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+
+	if err := cfg.SetServicePermissions("spotify", Permissions{
+		"default": AccessRead,
+		"player":  AccessNone,
+	}); err != nil {
+		t.Fatalf("SetServicePermissions: %v", err)
+	}
+
+	// In-memory updated.
+	if cfg.GetService("spotify").Permissions.For("player") != AccessNone {
+		t.Fatal("in-memory player permission not applied")
+	}
+
+	// Reloaded from disk.
+	fresh, err := LoadConfig(path)
+	if err != nil {
+		t.Fatalf("reload: %v", err)
+	}
+	svc := fresh.GetService("spotify")
+	if svc == nil || svc.Permissions.For("player") != AccessNone || svc.Permissions.For("tracks") != AccessRead {
+		t.Fatalf("disk permissions = %+v", svc)
+	}
+
+	// Clear restores unrestricted.
+	if err := cfg.SetServicePermissions("spotify", nil); err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if cfg.GetService("spotify").Permissions != nil {
+		t.Fatal("expected nil permissions after clear")
+	}
+	fresh, err = LoadConfig(path)
+	if err != nil {
+		t.Fatalf("reload after clear: %v", err)
+	}
+	if fresh.GetService("spotify").Permissions != nil {
+		t.Fatal("expected nil permissions on disk after clear")
+	}
+
+	// Unknown service / invalid level.
+	if err := cfg.SetServicePermissions("nope", Permissions{"default": AccessRead}); err == nil {
+		t.Fatal("expected error for unknown service")
+	}
+	if err := cfg.SetServicePermissions("spotify", Permissions{"tracks": "maybe"}); err == nil {
+		t.Fatal("expected error for invalid level")
+	}
+}
+
+func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/guardian.json"
+	initial := `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`
+	if err := writeFile(path, initial); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.cache.Set("stale", "x", time.Minute)
+
+	body := `{"permissions":{"default":"read","player":"none","playlists":"read-write"}}`
+	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/permissions", strings.NewReader(body))
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if cfg.GetService("spotify").Permissions.For("player") != AccessNone {
+		t.Fatal("permissions not applied via admin route")
+	}
+	if live, _, _ := srv.cache.Stats(); live != 0 {
+		t.Fatalf("cache should be cleared after permission save, live=%d", live)
+	}
+
+	// GET returns current map + available types.
+	req = httptest.NewRequest("GET", "/v1/admin/services/spotify/permissions", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("get status = %d", w.Code)
+	}
+	var got struct {
+		ServiceID          string            `json:"service_id"`
+		Permissions        map[string]string `json:"permissions"`
+		AvailableDataTypes []string          `json:"available_data_types"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.ServiceID != "spotify" || got.Permissions["player"] != "none" {
+		t.Fatalf("get = %+v", got)
+	}
+	if !stringSliceContains(got.AvailableDataTypes, "playlists") {
+		t.Fatalf("available types = %v", got.AvailableDataTypes)
+	}
+
+	// Invalid level rejected.
+	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/permissions", strings.NewReader(`{"permissions":{"tracks":"maybe"}}`))
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("invalid level status = %d, want 400", w.Code)
+	}
+
+	// Unknown service.
+	req = httptest.NewRequest("PUT", "/v1/admin/services/nope/permissions", strings.NewReader(`{"permissions":{}}`))
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("unknown service status = %d, want 404", w.Code)
+	}
+}
+
+func TestAdminSummary_IncludesAvailableDataTypes(t *testing.T) {
+	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+
+	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+
+	var summary AdminSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+		t.Fatal(err)
+	}
+	if len(summary.Services) != 1 {
+		t.Fatalf("services = %d", len(summary.Services))
+	}
+	if !stringSliceContains(summary.Services[0].AvailableDataTypes, "player") {
+		t.Fatalf("available types = %v", summary.Services[0].AvailableDataTypes)
+	}
+}

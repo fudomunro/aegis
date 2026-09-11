@@ -146,3 +146,56 @@ func (c *Config) GetService(id string) *Service {
 	}
 	return nil
 }
+
+// SetServicePermissions validates and persists agent permissions for a service.
+// An empty/nil map clears the permissions block (unrestricted access).
+func (c *Config) SetServicePermissions(id string, p Permissions) error {
+	if err := ValidatePermissions(p); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	idx := -1
+	for i := range c.Services {
+		if c.Services[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("service %q not found", id)
+	}
+
+	if len(p) == 0 {
+		c.Services[idx].Permissions = nil
+	} else {
+		c.Services[idx].Permissions = p
+	}
+	return c.saveLocked()
+}
+
+// saveLocked writes the current services list to the config path.
+// Caller must hold c.mu.
+func (c *Config) saveLocked() error {
+	if c.path == "" {
+		return fmt.Errorf("config has no path; cannot save")
+	}
+	payload := struct {
+		Services []Service `json:"services"`
+	}{Services: c.Services}
+	if payload.Services == nil {
+		payload.Services = []Service{}
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(c.path, data, 0o644); err != nil {
+		return err
+	}
+	slog.Info("config saved", "path", c.path, "services", len(c.Services))
+	return nil
+}
