@@ -303,6 +303,11 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		if svc.Action != "inject" {
 			continue
 		}
+		// Skip services that deny every data type — nothing useful to inject.
+		if allDataDenied(svc.Permissions) {
+			logger.Info("skipping inject: all data types denied by permission", "service", svc.ID)
+			continue
+		}
 		// Use connector-specific instructions if available.
 		if connector, ok := s.connectors[svc.ID]; ok {
 			instructions = append(instructions, connector.SystemInstructions(s.baseURL))
@@ -316,9 +321,12 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			)
 			instructions = append(instructions, instruction)
 		}
+		if notice := permissionNotice(svc.Permissions); notice != "" {
+			instructions = append(instructions, notice)
+		}
 	}
 
-	if libraryOnly {
+	if libraryOnly && s.libraryReadable() {
 		instructions = append(instructions, s.librarySystemInstructions())
 	}
 
