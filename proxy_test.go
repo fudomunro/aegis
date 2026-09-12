@@ -446,6 +446,62 @@ func TestHandleServiceProxy_Capabilities_NoConnector(t *testing.T) {
 	}
 }
 
+func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID: "spotify", Name: "Spotify", Action: "inject",
+				Permissions: Permissions{"default": AccessRead, "player": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/me/player", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "permission denied") {
+		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
+func TestHandleServiceProxy_Capabilities_FilteredByPermission(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID: "spotify", Name: "Spotify", Action: "inject",
+				Permissions: Permissions{"player": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+
+	srv.HandleServiceProxy(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200", w.Code)
+	}
+	var caps ServiceCapabilities
+	json.NewDecoder(w.Body).Decode(&caps)
+	for _, dt := range caps.DataTypes {
+		if dt.Name == "player" {
+			t.Fatal("player data type should be filtered from capabilities")
+		}
+	}
+}
+
 // testServerWithBase creates a Server with a baseURL for testing.
 // Uses an in-memory token store that doesn't persist to disk.
 // Defaults to API-key auth so existing tests keep using the shared test key.

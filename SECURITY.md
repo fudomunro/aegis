@@ -128,6 +128,15 @@ If you need per-user libraries later, store tokens keyed by Tailscale login and
 select the store from `PeerIdentityFrom(r)`. Until then, keep the allowlist
 tight on shared tailnets.
 
+### Data-type permissions
+
+Authentication answers “who may call Guardian.” Per-service `permissions` in
+`guardian.json` answer “what may an authorized agent do with each data type”
+(for example deny `player` or limit `playlists` to `read`). Denials are enforced
+on the proxy and library endpoints with 403, and capabilities are filtered so
+agents only discover allowed operations. Omitting `permissions` preserves
+unrestricted access for authorized callers.
+
 ## Deployment checklist
 
 - [ ] Guardian host tagged (`tag:guardian`) and ACL/grant limited to intended users

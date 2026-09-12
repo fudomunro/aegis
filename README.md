@@ -93,7 +93,40 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
+| `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
 | `oauth` | OAuth2 configuration for user authorization (optional) |
+
+### Data permissions
+
+Beyond the coarse `action: inject|block` switch, each service can restrict
+**what kind of access agents have to specific data types**:
+
+```json
+"permissions": {
+  "default": "read",
+  "playlists": "read",
+  "tracks": "read",
+  "player": "none",
+  "recommendations": "none"
+}
+```
+
+| Level | Allowed methods |
+|-------|-----------------|
+| `none` | none — 403 for that data type |
+| `read` | `GET`, `HEAD` |
+| `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
+| `read-write` | both (also accepts `full` / `rw`) |
+
+- The reserved key `default` applies to data types not listed.
+- If `permissions` is omitted, agents keep unrestricted access (previous behavior).
+- Enforcement is on the service proxy, the unified library endpoint, and the
+  `/capabilities` response (denied types/operations are hidden from agents).
+- Pre-request injection also lists denied types so agents do not try them.
+
+Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
+`player`, `channels`, `library`, `recommendations`. Paths that do not map to a
+known type fall through to the `default` level.
 
 ### Environment variables
 
@@ -329,11 +362,17 @@ GET /v1/admin              — HTML dashboard (shell only; no secrets)
 GET /v1/admin/summary      — redacted services, token status, cache stats
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
+GET /v1/admin/services/{id}/permissions  — current agent permission map
+PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.json)
 ```
 
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
+
+Each service card has an **Edit permissions** form: set levels per data type,
+add custom types, clear to unrestricted, or save. Saves write the config file
+and clear the response cache so denials take effect immediately.
 
 Admin APIs use the same auth as the rest of Guardian. Secrets never appear in
 admin responses: client secrets, access tokens, and refresh tokens are omitted;
@@ -373,6 +412,7 @@ aperture-guardian/
   library.go        Cross-service library endpoint + PlaylistProvider
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
+  permissions.go    Agent data-type access levels, path classification, enforcement
   cache.go          In-memory TTL cache with RWMutex
   oauth.go          OAuth2 login/callback/refresh flows
   tokens.go         AES-256-GCM encrypted token storage

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
@@ -18,15 +19,18 @@ type Config struct {
 // Service represents a named external service (e.g. Spotify, YouTube Music)
 // that Guardian can intercept and enrich requests for.
 type Service struct {
-	ID          string     `json:"id"`
-	Name        string     `json:"name"`
-	Aliases     []string   `json:"aliases,omitempty"`
-	Action      string     `json:"action"` // "inject" or "block"
-	Endpoint    string     `json:"endpoint,omitempty"`
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	Aliases     []string          `json:"aliases,omitempty"`
+	Action      string            `json:"action"` // "inject" or "block"
+	Endpoint    string            `json:"endpoint,omitempty"`
 	Headers     map[string]string `json:"headers,omitempty"`
 	CacheTTL    Duration          `json:"cache_ttl"`
 	Description string            `json:"description,omitempty"`
-	OAuth       *OAuthConfig      `json:"oauth,omitempty"`
+	// Permissions restricts agent access by data type (playlists, tracks, …).
+	// Nil means unrestricted. See permissions.go for levels and the "default" key.
+	Permissions Permissions  `json:"permissions,omitempty"`
+	OAuth       *OAuthConfig `json:"oauth,omitempty"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -67,6 +71,9 @@ func LoadConfig(path string) (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	if err := validateServices(cfg.Services); err != nil {
+		return nil, err
+	}
 	cfg.path = path
 	return &cfg, nil
 }
@@ -83,8 +90,20 @@ func (c *Config) Reload() error {
 	if err := json.Unmarshal(data, &fresh); err != nil {
 		return err
 	}
+	if err := validateServices(fresh.Services); err != nil {
+		return err
+	}
 	c.Services = fresh.Services
 	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services))
+	return nil
+}
+
+func validateServices(services []Service) error {
+	for _, svc := range services {
+		if err := ValidatePermissions(svc.Permissions); err != nil {
+			return fmt.Errorf("service %q: %w", svc.ID, err)
+		}
+	}
 	return nil
 }
 
@@ -125,5 +144,58 @@ func (c *Config) GetService(id string) *Service {
 			return &c.Services[i]
 		}
 	}
+	return nil
+}
+
+// SetServicePermissions validates and persists agent permissions for a service.
+// An empty/nil map clears the permissions block (unrestricted access).
+func (c *Config) SetServicePermissions(id string, p Permissions) error {
+	if err := ValidatePermissions(p); err != nil {
+		return err
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	idx := -1
+	for i := range c.Services {
+		if c.Services[i].ID == id {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return fmt.Errorf("service %q not found", id)
+	}
+
+	if len(p) == 0 {
+		c.Services[idx].Permissions = nil
+	} else {
+		c.Services[idx].Permissions = p
+	}
+	return c.saveLocked()
+}
+
+// saveLocked writes the current services list to the config path.
+// Caller must hold c.mu.
+func (c *Config) saveLocked() error {
+	if c.path == "" {
+		return fmt.Errorf("config has no path; cannot save")
+	}
+	payload := struct {
+		Services []Service `json:"services"`
+	}{Services: c.Services}
+	if payload.Services == nil {
+		payload.Services = []Service{}
+	}
+	data, err := json.MarshalIndent(payload, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	if err := os.WriteFile(c.path, data, 0o644); err != nil {
+		return err
+	}
+	slog.Info("config saved", "path", c.path, "services", len(c.Services))
 	return nil
 }

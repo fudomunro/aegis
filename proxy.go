@@ -31,11 +31,12 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle /capabilities requests — return connector metadata.
+	// Handle /capabilities requests — return connector metadata filtered by permissions.
 	if remainingPath == "/capabilities" {
 		if connector, ok := s.connectors[serviceID]; ok {
+			caps := FilterCapabilities(connector.Capabilities(), svc.Permissions)
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(connector.Capabilities())
+			json.NewEncoder(w).Encode(caps)
 		} else {
 			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q has no connector", serviceID))
 		}
@@ -45,6 +46,15 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)
 		writeJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))
+		return
+	}
+
+	// Enforce data-type permissions before any upstream or connector work.
+	if !s.AllowDataPermission(w, r, svc, remainingPath) {
+		logger.Warn("permission denied",
+			"data_type", DataTypeForPath(remainingPath),
+			"permission", svc.Permissions.For(DataTypeForPath(remainingPath)),
+		)
 		return
 	}
 

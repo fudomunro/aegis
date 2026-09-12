@@ -294,6 +294,72 @@ func TestSpotifyConnector_ListUserPlaylists_Unauthorized(t *testing.T) {
 	}
 }
 
+func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID: "spotify", Name: "Spotify", Action: "inject",
+				Permissions: Permissions{"playlists": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors = map[string]ServiceConnector{
+		"spotify": &fakePlaylistProvider{
+			playlists: []Playlist{{Name: "Jazz", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
+		},
+	}
+
+	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "permission denied") {
+		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
+func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+			{
+				ID: "youtube-music", Name: "YouTube Music", Action: "inject",
+				Permissions: Permissions{"playlists": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors = map[string]ServiceConnector{
+		"spotify": &fakePlaylistProvider{
+			playlists: []Playlist{{Name: "Jazz", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
+		},
+		"youtube-music": &fakePlaylistProvider{
+			playlists: []Playlist{{Name: "Focus", Sources: []PlaylistSource{{Service: "youtube-music", ID: "yt1"}}}},
+		},
+	}
+
+	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp PlaylistList
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Total != 1 || resp.Playlists[0].Name != "Jazz" {
+		t.Fatalf("resp = %+v, want only Jazz", resp)
+	}
+}
+
 func mustJSON(t *testing.T, v any) []byte {
 	t.Helper()
 	b, err := json.Marshal(v)
