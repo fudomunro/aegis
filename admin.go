@@ -547,7 +547,7 @@ const adminHTML = `<!DOCTYPE html>
   }
 
   const ACCESS_LEVELS = ["none", "read", "write", "read-write"];
-  const FALLBACK_DATA_TYPES = ["user", "tracks", "albums", "artists", "playlists", "search", "player", "channels", "library", "recommendations"];
+  const FALLBACK_DATA_TYPES = ["user", "tracks", "albums", "artists", "playlists", "search", "player", "channels", "library", "recommendations", "contacts"];
   const openPermEditors = new Set();
 
   function normalizeAccess(level) {

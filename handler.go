@@ -270,8 +270,9 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	// Users often ask for "my playlists" without naming a service. Surface the
 	// unified library endpoint in that case so agents can return every service.
 	libraryOnly := len(matched) == 0 && mentionsPlaylists(payload.UserMessage) && s.hasPlaylistProviders()
+	contactsLibraryOnly := len(matched) == 0 && mentionsContacts(payload.UserMessage) && s.hasContactProviders()
 
-	if len(matched) == 0 && !libraryOnly {
+	if len(matched) == 0 && !libraryOnly && !contactsLibraryOnly {
 		logger.Debug("no services matched, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
@@ -328,6 +329,9 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	if libraryOnly && s.libraryReadable() {
 		instructions = append(instructions, s.librarySystemInstructions())
+	}
+	if contactsLibraryOnly && s.contactsLibraryReadable() {
+		instructions = append(instructions, s.libraryContactsSystemInstructions())
 	}
 
 	if len(instructions) == 0 {
