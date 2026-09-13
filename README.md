@@ -54,6 +54,7 @@ cp guardian.example.json guardian.json
 Guardian starts with these endpoints:
 - `POST /v1/pre-request` — Aperture hook
 - `GET /v1/library/playlists` — unified playlists across all connected services
+- `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
 - `GET /v1/admin` — admin dashboard for services, tokens, library, and cache
@@ -125,7 +126,7 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 - Pre-request injection also lists denied types so agents do not try them.
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
-`player`, `channels`, `library`, `recommendations`. Paths that do not map to a
+`player`, `channels`, `library`, `recommendations`, `contacts`. Paths that do not map to a
 known type fall through to the `default` level.
 
 ### Environment variables
@@ -333,6 +334,74 @@ Tracks carry unified `artists` / `album` objects. Cross-service matching is **te
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
+### Contact as a data type
+
+`Contact` is Guardian's neutral representation of a **person or other entity**
+who appears in personal data — someone in a photo, an email correspondent, a
+playlist collaborator, etc. Future data types (mail, photos, calendar) can
+embed `Contact` references the same way tracks embed `Artist`/`Album`.
+
+Neutral contact fields (user-facing):
+
+| Field | Description |
+|-------|-------------|
+| `name` | Preferred display name |
+| `emails[]` | Known addresses (lowercased for stable matching) |
+| `phones[]` | Known numbers in digit form (`+` kept when present) |
+| `handles[]` | Usernames / social IDs / service accounts |
+| `organization` | Company, team, or group, when known |
+| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `name`, `emails`, `phones` |
+
+Cross-service matching prefers the strongest shared identifier:
+
+1. **Email** — normalized (case-insensitive)
+2. **Phone** — digits only, optional leading `+`
+3. **Handle** — lowercased, leading `@` stripped
+4. **Name** — `NormalizeIdentityKey`, used **only** when a contact has no
+   email/phone/handle, so two different people who share a display name do
+   not merge
+
+Contacts that share any of those keys are merged into one entity with multiple
+`sources[]` (union-find, so A~email B and B~phone C form one contact).
+
+```
+GET /v1/library/contacts
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Returns the user's contacts from every connected contact-capable service.
+Connectors opt in by implementing `ContactProvider` (`ListUserContacts`).
+Until a contact-capable service is registered, the endpoint returns `404
+no contact-capable services configured`. Permission key: `contacts` (paths
+`/contacts/*` and `/me/contacts` on the service proxy).
+
+```json
+{
+  "contacts": [
+    {
+      "name": "Ada Lovelace",
+      "emails": ["ada@example.com"],
+      "phones": ["+15551234567"],
+      "organization": "Analytical Engines",
+      "sources": [
+        {
+          "service": "google",
+          "service_name": "Google Contacts",
+          "id": "people/c123",
+          "name": "Ada Lovelace",
+          "emails": ["ada@example.com"]
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "google": { "status": "ok", "count": 1 }
+  }
+}
+```
+
 ### Service proxy
 
 ```
@@ -408,8 +477,9 @@ aperture-guardian/
   config.go         Service/Config types, JSON loading, matching
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
-  models.go         Neutral data types (Playlist, Track, PlaylistList)
+  models.go         Neutral data types (Playlist, Track, Contact, PlaylistList, ContactList)
   library.go        Cross-service library endpoint + PlaylistProvider
+  contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement
