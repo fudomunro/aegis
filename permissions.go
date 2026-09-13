@@ -171,6 +171,8 @@ func DataTypeForPath(path string) string {
 		return "artists"
 	case p == "/me/playlists" || strings.HasPrefix(p, "/playlists"):
 		return "playlists"
+	case p == "/me/contacts" || strings.HasPrefix(p, "/contacts"):
+		return "contacts"
 	case p == "/search":
 		return "search"
 	case p == "/me/subscriptions" || strings.HasPrefix(p, "/channels"):
