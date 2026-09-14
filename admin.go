@@ -898,6 +898,9 @@ const adminHTML = `<!DOCTYPE html>
         (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
 
       const editor = openPermEditors.has(svc.id) ? renderPermEditor(svc) : "";
+      const pickStatus = svc.supports_photo_picker
+        ? '<div class="perm-status photo-pick-status" id="photo-pick-status-' + escapeHtml(svc.id) + '"></div>'
+        : "";
 
       return '<article class="card" data-service-card="' + escapeHtml(svc.id) + '">' +
         '<div class="card-header"><h3>' + escapeHtml(svc.name) + "</h3>" +
@@ -907,6 +910,7 @@ const adminHTML = `<!DOCTYPE html>
         '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code></div>" +
         permBits +
         '<div class="actions">' + actions.join(" ") + "</div>" +
+        pickStatus +
         editor +
         "</article>";
     }).join("");
@@ -1345,9 +1349,21 @@ const adminHTML = `<!DOCTYPE html>
 
   async function startPhotoPick(serviceId) {
     const btn = document.querySelector('button.photo-pick[data-service="' + serviceId + '"]');
+    const statusEl = document.getElementById("photo-pick-status-" + serviceId);
     const setLabel = (text) => { if (btn) btn.textContent = text; };
+    const setStatus = (html, kind) => {
+      if (!statusEl) return;
+      statusEl.innerHTML = html;
+      statusEl.className = "perm-status photo-pick-status" + (kind === "ok" ? " ok" : kind === "err" ? " err" : "");
+    };
+    const setPlainStatus = (text, kind) => {
+      if (!statusEl) return;
+      statusEl.textContent = text;
+      statusEl.className = "perm-status photo-pick-status" + (kind === "ok" ? " ok" : kind === "err" ? " err" : "");
+    };
     if (btn) btn.disabled = true;
     setLabel("Starting…");
+    setPlainStatus("Creating picker session…");
     try {
       const created = await api("/v1/services/" + encodeURIComponent(serviceId) + "/picker/sessions", {
         method: "POST",
@@ -1357,29 +1373,34 @@ const adminHTML = `<!DOCTYPE html>
       if (!created || !created.id) {
         throw new Error("Picker session response missing id");
       }
-      if (created.picker_uri) {
-        window.open(created.picker_uri, "_blank", "noopener");
-      } else {
+      if (!created.picker_uri) {
         throw new Error("Picker session missing picker_uri");
       }
-      setLabel("Waiting for pick…");
-      // Poll until the user finishes selecting photos (Google returns poll hints).
+      const opened = window.open(created.picker_uri, "_blank", "noopener");
+      if (!opened) {
+        // Popup blocked — still show the link so the user can open it.
+        setStatus("Popup blocked. Open the picker: <a href=\"" + escapeHtml(created.picker_uri) +
+          "\" target=\"_blank\" rel=\"noopener\">picker_uri</a>", "err");
+      } else {
+        setPlainStatus("Waiting for you to select photos in the Google tab…");
+      }
       const deadline = Date.now() + 5 * 60 * 1000;
       while (Date.now() < deadline) {
         await new Promise((resolve) => setTimeout(resolve, 2500));
         const sess = await api("/v1/services/" + encodeURIComponent(serviceId) +
           "/picker/sessions/" + encodeURIComponent(created.id));
         if (sess && sess.media_items_set) {
-          setLabel("Loading photos…");
+          setPlainStatus("Loading selected photos…");
           await api("/v1/services/" + encodeURIComponent(serviceId) +
             "/picker/mediaItems?sessionId=" + encodeURIComponent(created.id));
           libraryDataByKind.photos = null;
           if (libraryKind === "photos") await loadLibrary("photos");
           setLabel("Pick photos…");
+          setPlainStatus("Picked photos are in Library → photos.", "ok");
           showGlobalError("");
           return;
         }
-        setLabel("Waiting for pick…");
+        setPlainStatus("Waiting for you to select photos in the Google tab…");
       }
       throw new Error("Timed out waiting for photo selection in the Google picker");
     } catch (err) {
@@ -1388,9 +1409,16 @@ const adminHTML = `<!DOCTYPE html>
         return;
       }
       const msg = (err && err.message) || "Failed to start photo pick";
-      showGlobalError(msg.includes("scope") || msg.includes("Picker")
-        ? msg
-        : msg + " — ensure the Photos Picker API is enabled and photos permission allows write (POST).");
+      const enableMatch = msg.match(/https:\/\/console\.developers\.google\.com\/[^\s]+/);
+      if (enableMatch) {
+        setStatus("Google rejected the session. Enable the API, then try again:<br><a href=\"" +
+          escapeHtml(enableMatch[0]) + "\" target=\"_blank\" rel=\"noopener\">Enable Photos Picker API</a><br>" +
+          escapeHtml(msg), "err");
+        showGlobalError(msg);
+      } else {
+        setPlainStatus(msg, "err");
+        showGlobalError(msg);
+      }
     } finally {
       if (btn) {
         btn.disabled = false;
