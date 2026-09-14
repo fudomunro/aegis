@@ -157,8 +157,8 @@ var libraryKinds = []LibraryKind{
 		PermType:        "photos",
 		Label:           "photos",
 		Usage:           "photos, pictures, or their photo library",
-		Summary:         "all user photos from every connected photo service in one neutral list (taken_at, dimensions, mime_type, filename, caption, people[] as Contact identities, sources[] with canonical blob location)",
-		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /v1/library/contacts. Photo bytes are never stored in Guardian.",
+		Summary:         "all user photos from every connected photo service in one neutral list (taken_at, dimensions, mime_type, filename, people[] as Contact identities, sources[] with canonical blob location). Google Photos contributes the user's last picker selection.",
+		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /v1/library/contacts. Photo bytes are never stored in Guardian. Google Photos uses the Picker API: the user must pick photos once before they appear here.",
 		ExampleQuestion: "what photos do I have?",
 		Keywords: []string{
 			"my photos", "photo library", "my pictures", "picture library",
