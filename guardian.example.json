@@ -79,9 +79,9 @@
       "name": "Google Photos",
       "aliases": ["photos", "google photos library"],
       "action": "inject",
-      "endpoint": "https://photoslibrary.googleapis.com/v1",
+      "endpoint": "https://photospicker.googleapis.com/v1",
       "cache_ttl": "15m",
-      "description": "Lists Google Photos media-item metadata through Guardian. Photo bytes stay on Google Photos (non-Guardian canonical).",
+      "description": "Google Photos via the Picker API: the user selects photos once; Guardian lists that selection as neutral metadata. Photo bytes stay on Google Photos (non-Guardian canonical). Full Library API sync requires Google app verification.",
       "permissions": {
         "default": "read",
         "photos": "read"
@@ -92,7 +92,7 @@
         "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
         "token_url": "https://oauth2.googleapis.com/token",
         "scopes": [
-          "https://www.googleapis.com/auth/photoslibrary.readonly"
+          "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"
         ]
       }
     },
