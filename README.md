@@ -61,7 +61,7 @@ Guardian starts with these endpoints:
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
-- `GET /v1/admin` — admin dashboard for services, tokens, library, and cache
+- `GET /v1/admin` — admin dashboard for data-flow map, services, tokens, library, and cache
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 ## Configuration
@@ -613,6 +613,7 @@ Forwards to the configured upstream endpoint with OAuth tokens. Callers authenti
 ```
 GET /v1/admin              — HTML dashboard (shell only; no secrets)
 GET /v1/admin/summary      — redacted services, token status, cache stats
+GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries)
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/services/{id}/permissions  — current agent permission map
@@ -622,6 +623,13 @@ PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.js
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
+
+The **Map** tab (default) is a live SVG overview of how data moves: agents →
+Aperture hook → Guardian, agent access to proxy/library endpoints, Guardian’s
+OAuth reads of each service, library fan-in, and token/cache stores. Service
+nodes are colored by status (connected, needs OAuth, expired, blocked). Photo
+services note that bytes stay upstream. Use it as a quick “what is this thing
+doing?” picture; the Services tab remains the place to edit permissions.
 
 Each service card has an **Edit permissions** form: set levels per data type,
 add custom types, clear to unrestricted, or save. Saves write the config file
@@ -681,6 +689,7 @@ aperture-guardian/
   statestore.go     CSRF state validation with TTL
   setup.go          Web-based setup wizard
   admin.go          Admin dashboard HTML + summary/cache APIs
+  flow.go           Data-flow topology builder + /v1/admin/flow
   SECURITY.md       Tailnet auth model, ACLs, operational guidance
   spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
   youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
