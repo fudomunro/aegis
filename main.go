@@ -106,6 +106,8 @@ func main() {
 	srv.connectors["amazon-music"] = amzMusicConn
 	gPhotosConn := NewGooglePhotosConnector(srv)
 	srv.connectors[googlePhotosServiceID] = gPhotosConn
+	gContactsConn := NewGoogleContactsConnector(srv)
+	srv.connectors[googleContactsServiceID] = gContactsConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
