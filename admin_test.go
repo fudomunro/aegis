@@ -357,3 +357,47 @@ func TestAdminSummary_IncludesAvailableDataTypes(t *testing.T) {
 		t.Fatalf("available types = %v", summary.Services[0].AvailableDataTypes)
 	}
 }
+
+func TestAdminSummary_SupportsPhotoPicker(t *testing.T) {
+	cfg := &Config{Services: []Service{
+		{ID: "google-photos", Name: "Google Photos", Action: "inject"},
+		{ID: "spotify", Name: "Spotify", Action: "inject"},
+	}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["google-photos"] = NewGooglePhotosConnector(srv)
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+
+	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+
+	var summary AdminSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]AdminService{}
+	for _, svc := range summary.Services {
+		byID[svc.ID] = svc
+	}
+	if !byID["google-photos"].SupportsPhotoPicker {
+		t.Fatal("expected google-photos supports_photo_picker")
+	}
+	if byID["spotify"].SupportsPhotoPicker {
+		t.Fatal("spotify should not advertise photo picker")
+	}
+}
+
+func TestHandleAdmin_HTMLIncludesPhotoPick(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAdmin(w, req)
+	body := w.Body.String()
+	if !strings.Contains(body, "photo-pick") {
+		t.Fatal("expected photo-pick control in admin HTML")
+	}
+	if !strings.Contains(body, "picker/sessions") {
+		t.Fatal("expected picker session path in admin JS")
+	}
+}
