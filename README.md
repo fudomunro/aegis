@@ -527,7 +527,8 @@ aperture-guardian/
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
   models.go         Neutral data types (Playlist, Track, Contact, PlaylistList, ContactList)
-  library.go        Cross-service library endpoints + Playlist/LikedTrack/Album/Artist providers
+  library.go        Library providers + thin per-kind handlers
+  librarykind.go    LibraryKind registry + shared generic aggregate pipeline
   contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
