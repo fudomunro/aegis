@@ -34,8 +34,11 @@ type AdminService struct {
 	HasArtist          bool         `json:"has_artist_provider"`
 	HasContact         bool         `json:"has_contact_provider"`
 	HasPhoto           bool         `json:"has_photo_provider"`
-	ProxyPath          string       `json:"proxy_path"`
-	LoginPath          string       `json:"login_path,omitempty"`
+	// SupportsPhotoPicker is true when the connector exposes a picker session
+	// create operation (e.g. Google Photos Picker API).
+	SupportsPhotoPicker bool   `json:"supports_photo_picker,omitempty"`
+	ProxyPath           string `json:"proxy_path"`
+	LoginPath           string `json:"login_path,omitempty"`
 }
 
 // AdminRuntime describes non-secret server identity and auth posture.
@@ -128,6 +131,11 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			types := make([]string, 0, len(caps.DataTypes))
 			for _, dt := range caps.DataTypes {
 				types = append(types, dt.Name)
+				for _, op := range dt.Operations {
+					if strings.Contains(op.Path, "/picker/sessions") && strings.EqualFold(op.Method, http.MethodPost) {
+						item.SupportsPhotoPicker = true
+					}
+				}
 			}
 			item.AvailableDataTypes = types
 		}
@@ -882,6 +890,10 @@ const adminHTML = `<!DOCTYPE html>
         if (svc.has_photo_provider) kinds.push("photos");
         actions.push('<span class="badge badge-blue">Library: ' + escapeHtml(kinds.join(", ")) + "</span>");
       }
+      if (svc.supports_photo_picker) {
+        actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
+          "Pick photos…</button>");
+      }
       actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
         (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
 
@@ -956,7 +968,7 @@ const adminHTML = `<!DOCTYPE html>
       key: "photos",
       label: "photos",
       filterPlaceholder: "Filter photos…",
-      emptyAll: "No photos found. Connect a photo-capable service (e.g. Google Photos), then reload.",
+      emptyAll: "No photos found. On Google Photos, use “Pick photos…” on the service card (user selects once; Guardian lists that selection). Then reload.",
       emptyFilter: "No photos match this filter.",
     },
   };
@@ -1331,12 +1343,72 @@ const adminHTML = `<!DOCTYPE html>
     }
   });
 
+  async function startPhotoPick(serviceId) {
+    const btn = document.querySelector('button.photo-pick[data-service="' + serviceId + '"]');
+    const setLabel = (text) => { if (btn) btn.textContent = text; };
+    if (btn) btn.disabled = true;
+    setLabel("Starting…");
+    try {
+      const created = await api("/v1/services/" + encodeURIComponent(serviceId) + "/picker/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      if (!created || !created.id) {
+        throw new Error("Picker session response missing id");
+      }
+      if (created.picker_uri) {
+        window.open(created.picker_uri, "_blank", "noopener");
+      } else {
+        throw new Error("Picker session missing picker_uri");
+      }
+      setLabel("Waiting for pick…");
+      // Poll until the user finishes selecting photos (Google returns poll hints).
+      const deadline = Date.now() + 5 * 60 * 1000;
+      while (Date.now() < deadline) {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        const sess = await api("/v1/services/" + encodeURIComponent(serviceId) +
+          "/picker/sessions/" + encodeURIComponent(created.id));
+        if (sess && sess.media_items_set) {
+          setLabel("Loading photos…");
+          await api("/v1/services/" + encodeURIComponent(serviceId) +
+            "/picker/mediaItems?sessionId=" + encodeURIComponent(created.id));
+          libraryDataByKind.photos = null;
+          if (libraryKind === "photos") await loadLibrary("photos");
+          setLabel("Pick photos…");
+          showGlobalError("");
+          return;
+        }
+        setLabel("Waiting for pick…");
+      }
+      throw new Error("Timed out waiting for photo selection in the Google picker");
+    } catch (err) {
+      if (err && err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      const msg = (err && err.message) || "Failed to start photo pick";
+      showGlobalError(msg.includes("scope") || msg.includes("Picker")
+        ? msg
+        : msg + " — ensure the Photos Picker API is enabled and photos permission allows write (POST).");
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "Pick photos…";
+      }
+    }
+  }
+
   $("services-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
     if (!btn) return;
     const serviceId = btn.getAttribute("data-service");
     if (!serviceId) return;
 
+    if (btn.classList.contains("photo-pick")) {
+      startPhotoPick(serviceId);
+      return;
+    }
     if (btn.classList.contains("perm-toggle")) {
       if (openPermEditors.has(serviceId)) openPermEditors.delete(serviceId);
       else openPermEditors.add(serviceId);
