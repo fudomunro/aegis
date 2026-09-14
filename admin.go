@@ -29,6 +29,10 @@ type AdminService struct {
 	OAuthScopes        []string     `json:"oauth_scopes,omitempty"`
 	Token              *TokenStatus `json:"token,omitempty"`
 	HasPlaylist        bool         `json:"has_playlist_provider"`
+	HasLikedTrack      bool         `json:"has_liked_track_provider"`
+	HasAlbum           bool         `json:"has_album_provider"`
+	HasArtist          bool         `json:"has_artist_provider"`
+	HasContact         bool         `json:"has_contact_provider"`
 	ProxyPath          string       `json:"proxy_path"`
 	LoginPath          string       `json:"login_path,omitempty"`
 }
@@ -103,6 +107,18 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		if connector, ok := s.connectors[svc.ID]; ok {
 			if _, isProvider := connector.(PlaylistProvider); isProvider {
 				item.HasPlaylist = true
+			}
+			if _, isProvider := connector.(LikedTrackProvider); isProvider {
+				item.HasLikedTrack = true
+			}
+			if _, isProvider := connector.(AlbumProvider); isProvider {
+				item.HasAlbum = true
+			}
+			if _, isProvider := connector.(ArtistProvider); isProvider {
+				item.HasArtist = true
+			}
+			if _, isProvider := connector.(ContactProvider); isProvider {
+				item.HasContact = true
 			}
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
@@ -309,6 +325,15 @@ const adminHTML = `<!DOCTYPE html>
   .tab:hover { color: var(--text); }
   .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: 4px; }
   .tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+  .kind-switch { display: inline-flex; gap: 0.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.2rem; }
+  .kind-btn {
+    background: none; border: none; color: var(--dim); padding: 0.4rem 0.75rem;
+    font: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; border-radius: 6px;
+    white-space: nowrap;
+  }
+  .kind-btn:hover { color: var(--text); }
+  .kind-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .kind-btn[aria-pressed="true"] { background: var(--surface2); color: var(--text); }
   .panel[hidden] { display: none; }
   .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem; margin-bottom: 1rem; }
   .toolbar .grow { flex: 1; min-width: 160px; }
@@ -372,15 +397,32 @@ const adminHTML = `<!DOCTYPE html>
     margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
   }
   .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.5rem; }
+  .perm-section { margin-bottom: 0.9rem; }
+  .perm-section-title {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;
+    color: var(--dim); margin-bottom: 0.25rem; font-weight: 650;
+  }
+  .perm-section-help { margin-bottom: 0.55rem; }
   .perm-row {
     display: grid; grid-template-columns: minmax(100px, 1.2fr) minmax(120px, 1fr) auto;
     gap: 0.5rem; align-items: center; margin-bottom: 0.45rem;
   }
-  .perm-row label { font-size: 0.85rem; color: var(--dim); }
+  .perm-row label { font-size: 0.85rem; color: var(--dim); line-height: 1.35; }
+  .perm-row-library label { color: var(--text); }
+  .perm-note { font-size: 0.72rem; color: var(--dim); font-weight: 400; }
   .perm-row select, .perm-add input, .perm-add select {
     width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
     border-radius: 6px; padding: 0.4rem 0.55rem; font: inherit; font-size: 0.85rem;
   }
+  .perm-row-disabled { opacity: 0.72; }
+  .perm-row-disabled label { color: var(--dim); }
+  .perm-locked {
+    display: inline-flex; align-items: center; justify-content: center;
+    min-height: 2.1rem; padding: 0.35rem 0.55rem; border-radius: 6px;
+    background: var(--surface); border: 1px dashed var(--border);
+    color: var(--dim); font-size: 0.8rem; font-variant-numeric: tabular-nums;
+  }
+  .perm-row select:disabled { opacity: 0.55; cursor: not-allowed; }
   .perm-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-top: 0.55rem; }
   .perm-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
   .perm-status { font-size: 0.82rem; color: var(--dim); margin-top: 0.45rem; min-height: 1.1em; }
@@ -434,8 +476,15 @@ const adminHTML = `<!DOCTYPE html>
 
     <section id="panel-library" class="panel" role="tabpanel" aria-labelledby="tab-library" hidden>
       <div class="toolbar">
+        <div class="kind-switch" role="group" aria-label="Library data type">
+          <button type="button" class="kind-btn" data-library-kind="playlists" aria-pressed="true">Playlists</button>
+          <button type="button" class="kind-btn" data-library-kind="tracks" aria-pressed="false">Liked tracks</button>
+          <button type="button" class="kind-btn" data-library-kind="albums" aria-pressed="false">Albums</button>
+          <button type="button" class="kind-btn" data-library-kind="artists" aria-pressed="false">Artists</button>
+          <button type="button" class="kind-btn" data-library-kind="contacts" aria-pressed="false">Contacts</button>
+        </div>
         <div class="grow">
-          <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter playlists">
+          <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
         </div>
         <button class="btn" id="reload-library" type="button">Reload from services</button>
       </div>
@@ -547,8 +596,23 @@ const adminHTML = `<!DOCTYPE html>
   }
 
   const ACCESS_LEVELS = ["none", "read", "write", "read-write"];
-  const FALLBACK_DATA_TYPES = ["user", "tracks", "albums", "artists", "playlists", "search", "player", "channels", "library", "recommendations", "contacts"];
+  // Types shown in the Library tab. Permissions for these map 1:1 to library views.
+  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts"];
+  const LIBRARY_TYPE_META = {
+    playlists: { label: "Playlists", endpoint: "/v1/library/playlists" },
+    tracks: { label: "Liked tracks", endpoint: "/v1/library/tracks" },
+    albums: { label: "Albums", endpoint: "/v1/library/albums" },
+    artists: { label: "Artists", endpoint: "/v1/library/artists" },
+    contacts: { label: "Contacts", endpoint: "/v1/library/contacts" },
+  };
+  // Connector types that are not part of the Library tab (proxy-only / future).
+  const FALLBACK_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts",
+    "user", "search", "player", "channels", "library", "recommendations"];
   const openPermEditors = new Set();
+
+  function isLibraryDataType(key) {
+    return LIBRARY_DATA_TYPES.indexOf(key) !== -1;
+  }
 
   function normalizeAccess(level) {
     const v = String(level || "").toLowerCase();
@@ -559,9 +623,10 @@ const adminHTML = `<!DOCTYPE html>
     return v || "read-write";
   }
 
-  function accessSelect(name, selected, extraClass) {
+  function accessSelect(name, selected, extraClass, disabled) {
     const cur = normalizeAccess(selected);
-    return '<select class="' + (extraClass || "") + '" data-perm-key="' + escapeHtml(name) + '">' +
+    const dis = disabled ? " disabled" : "";
+    return '<select class="' + (extraClass || "") + '" data-perm-key="' + escapeHtml(name) + '"' + dis + ">" +
       ACCESS_LEVELS.map((lvl) =>
         '<option value="' + lvl + '"' + (lvl === cur ? " selected" : "") + ">" + lvl + "</option>"
       ).join("") +
@@ -572,6 +637,8 @@ const adminHTML = `<!DOCTYPE html>
     const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
     if (!root) return null;
     const map = {};
+    // Include disabled (non-library) selects so saving does not drop their
+    // existing values — the user simply cannot edit them from this form.
     root.querySelectorAll("select[data-perm-key]").forEach((sel) => {
       const key = sel.getAttribute("data-perm-key");
       if (!key || key === "__new__") return;
@@ -580,47 +647,109 @@ const adminHTML = `<!DOCTYPE html>
     return map;
   }
 
+  function permRow(key, level, serviceId, opts) {
+    const o = opts || {};
+    const disabled = !!o.disabled;
+    const labelExtra = o.labelExtra || "";
+    const note = o.note ? '<span class="perm-note">' + escapeHtml(o.note) + "</span>" : "";
+    const control = disabled
+      ? '<span class="perm-locked">' + escapeHtml(normalizeAccess(level)) + "</span>"
+      : accessSelect(key, level);
+    const action = o.hideRemove
+      ? "<span></span>"
+      : '<button type="button" class="btn btn-danger perm-remove" data-service="' + escapeHtml(serviceId) +
+        '" data-key="' + escapeHtml(key) + '" title="Remove this row"' + (disabled ? " disabled" : "") + ">Remove</button>";
+    return '<div class="perm-row' + (disabled ? " perm-row-disabled" : "") + (o.library ? " perm-row-library" : "") + '">' +
+      "<label>" + escapeHtml(key) + labelExtra + (note ? "<br>" + note : "") + "</label>" +
+      control +
+      action +
+      "</div>";
+  }
+
   function renderPermEditor(svc) {
     const id = svc.id;
     const perms = svc.permissions || {};
     const known = (svc.available_data_types && svc.available_data_types.length)
       ? svc.available_data_types
-      : FALLBACK_DATA_TYPES;
+      : FALLBACK_DATA_TYPES.slice();
     const keys = Object.keys(perms).sort((a, b) => {
       if (a === "default") return -1;
       if (b === "default") return 1;
       return a.localeCompare(b);
     });
-    // Include default + known types even if unset (defaults to unrestricted on server).
-    const show = ["default"].concat(known.filter((k) => k !== "default"));
+    // default + known + any explicit permission keys not already listed
+    const show = ["default"];
+    known.forEach((k) => { if (k !== "default" && show.indexOf(k) === -1) show.push(k); });
     keys.forEach((k) => {
       if (show.indexOf(k) === -1) show.push(k);
     });
 
-    const rows = show.map((key) => {
-      const level = perms[key] != null ? perms[key] : (key === "default" ? "read-write" : "read-write");
-      return '<div class="perm-row">' +
-        "<label>" + escapeHtml(key) + (key === "default" ? " (fallback)" : "") + "</label>" +
-        accessSelect(key, level) +
-        (key === "default" ? "<span></span>" :
-          '<button type="button" class="btn btn-danger perm-remove" data-service="' + escapeHtml(id) +
-            '" data-key="' + escapeHtml(key) + '" title="Remove this row">Remove</button>') +
-        "</div>";
-    }).join("");
+    // Library types this connector actually supports (intersection).
+    const connectorTypes = known.filter((k) => k !== "default");
+    const libraryTypes = LIBRARY_DATA_TYPES.filter((t) => connectorTypes.indexOf(t) !== -1);
+    const otherTypes = show.filter((k) =>
+      k !== "default" && !isLibraryDataType(k));
+
+    const defaultLevel = perms["default"] != null ? perms["default"] : "read-write";
+    let html = "";
+
+    html += '<div class="perm-section">';
+    html += '<h5 class="perm-section-title">Library data</h5>';
+    html += '<p class="meta perm-section-help">These types appear in the Library tab. Setting <code>none</code> hides that library view for this service.</p>';
+    if (!libraryTypes.length) {
+      html += '<p class="meta">This connector does not feed any Library views.</p>';
+    }
+    libraryTypes.forEach((key) => {
+      const meta = LIBRARY_TYPE_META[key] || { label: key, endpoint: "" };
+      const level = perms[key] != null ? perms[key] : "read";
+      html += permRow(key, level, id, {
+        library: true,
+        hideRemove: false,
+        labelExtra: ' <span class="badge badge-blue">' + escapeHtml(meta.label) + "</span>",
+        note: meta.endpoint ? "Library: " + meta.endpoint : "",
+      });
+    });
+    html += "</div>";
+
+    html += '<div class="perm-section">';
+    html += '<h5 class="perm-section-title">Other data types</h5>';
+    html += '<p class="meta perm-section-help">Not shown in the Library tab. Inputs are locked so permissions stay aligned with the data you can see there. Existing values are preserved on save.</p>';
+    html += permRow("default", defaultLevel, id, {
+      hideRemove: true,
+      labelExtra: " (fallback)",
+      note: "Applies to types not listed and to locked rows without an explicit level.",
+    });
+    if (!otherTypes.length) {
+      html += '<p class="meta">No extra connector types.</p>';
+    }
+    otherTypes.forEach((key) => {
+      const level = perms[key] != null ? perms[key] : "read-write";
+      // Known connector types that aren't in Library stay locked. Explicit
+      // custom keys the user added remain editable.
+      const isCustom = FALLBACK_DATA_TYPES.indexOf(key) === -1 && known.indexOf(key) === -1;
+      html += permRow(key, level, id, {
+        disabled: !isCustom,
+        hideRemove: isCustom,
+        note: isCustom ? "Custom type (not in Library)" : "Not in Library — proxy/API type only",
+      });
+    });
+    html += "</div>";
+
+    // Custom key add still allowed for advanced/explicit mappings.
+    html += '<div class="perm-add">' +
+      '<input type="text" class="perm-custom-key" placeholder="custom type (advanced)" aria-label="Custom data type">' +
+      accessSelect("__new__", "read", "perm-custom-level") +
+      '<button type="button" class="btn perm-add-btn" data-service="' + escapeHtml(id) + '">Add</button>' +
+      "</div>";
 
     return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) + '">' +
       "<h4>Agent data permissions</h4>" +
       '<p class="meta" style="margin-bottom:0.55rem">Levels: none · read · write · read-write. Saving writes <code>guardian.json</code> and clears the response cache.</p>' +
-      rows +
-      '<div class="perm-add">' +
-        '<input type="text" class="perm-custom-key" placeholder="data type (e.g. contacts)" aria-label="Custom data type">' +
-        accessSelect("__new__", "read", "perm-custom-level") +
-        '<button type="button" class="btn perm-add-btn" data-service="' + escapeHtml(id) + '">Add</button>' +
-      "</div>" +
+      html +
       '<div class="perm-actions">' +
-        '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save permissions</button>' +
-        '<button type="button" class="btn perm-reset" data-service="' + escapeHtml(id) + '">Reset form</button>' +
-        '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Clear (unrestricted)</button>' +
+      '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save permissions</button>' +
+      '<button type="button" class="btn perm-reset" data-service="' + escapeHtml(id) + '">Reset form</button>' +
+      '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Clear (unrestricted)</button>' +
       "</div>" +
       '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
       "</div>";
@@ -734,8 +863,15 @@ const adminHTML = `<!DOCTYPE html>
           (token && token.has_token ? "Reconnect" : "Connect") + "</a>");
       }
       actions.push('<code>' + escapeHtml(svc.proxy_path) + "</code>");
-      if (svc.has_playlist_provider) {
-        actions.push('<span class="badge badge-blue">Library source</span>');
+      if (svc.has_playlist_provider || svc.has_liked_track_provider || svc.has_album_provider ||
+          svc.has_artist_provider || svc.has_contact_provider) {
+        const kinds = [];
+        if (svc.has_playlist_provider) kinds.push("playlists");
+        if (svc.has_liked_track_provider) kinds.push("liked tracks");
+        if (svc.has_album_provider) kinds.push("albums");
+        if (svc.has_artist_provider) kinds.push("artists");
+        if (svc.has_contact_provider) kinds.push("contacts");
+        actions.push('<span class="badge badge-blue">Library: ' + escapeHtml(kinds.join(", ")) + "</span>");
       }
       actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
         (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
@@ -765,67 +901,266 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
-  async function loadLibrary() {
-    const list = $("library-list");
-    const meta = $("library-meta");
-    list.innerHTML = '<div class="empty">Loading library…</div>';
-    meta.textContent = "";
-    try {
-      const data = await api("/v1/library/playlists");
-      libraryData = data;
-      const playlists = data.playlists || [];
-      const byService = data.by_service || {};
-      const statusBits = Object.keys(byService).sort().map((id) => {
-        const st = byService[id];
-        const cls = st.status === "ok" ? "badge-green" : st.status === "unauthorized" ? "badge-orange" : "badge-red";
-        const count = st.status === "ok" ? " · " + st.count : "";
-        return '<span class="badge ' + cls + '">' + escapeHtml(id) + ": " + escapeHtml(st.status) + count + "</span>";
-      }).join(" ");
-      meta.innerHTML = "<strong>" + playlists.length + "</strong> playlists" +
-        (data.synced ? " · name-synced across services" : "") +
-        (statusBits ? '<div class="scopes" style="margin-top:0.4rem">' + statusBits + "</div>" : "");
+  const LIBRARY_KINDS = {
+    playlists: {
+      path: "/v1/library/playlists",
+      key: "playlists",
+      label: "playlists",
+      filterPlaceholder: "Filter playlists…",
+      emptyAll: "No playlists found. Connect a service, then reload.",
+      emptyFilter: "No playlists match this filter.",
+    },
+    tracks: {
+      path: "/v1/library/tracks",
+      key: "tracks",
+      label: "liked tracks",
+      filterPlaceholder: "Filter liked tracks…",
+      emptyAll: "No liked tracks found. Connect a music service, then reload.",
+      emptyFilter: "No liked tracks match this filter.",
+    },
+    albums: {
+      path: "/v1/library/albums",
+      key: "albums",
+      label: "saved albums",
+      filterPlaceholder: "Filter albums…",
+      emptyAll: "No saved albums found. Connect a music service, then reload.",
+      emptyFilter: "No albums match this filter.",
+    },
+    artists: {
+      path: "/v1/library/artists",
+      key: "artists",
+      label: "followed artists",
+      filterPlaceholder: "Filter artists…",
+      emptyAll: "No followed artists found. Connect a music service, then reload.",
+      emptyFilter: "No artists match this filter.",
+    },
+    contacts: {
+      path: "/v1/library/contacts",
+      key: "contacts",
+      label: "contacts",
+      filterPlaceholder: "Filter contacts…",
+      emptyAll: "No contacts found. Connect a contact-capable service, then reload.",
+      emptyFilter: "No contacts match this filter.",
+    },
+  };
 
-      applyLibraryFilter($("library-filter").value, data);
-    } catch (err) {
-      if (err.status === 401) {
-        showAuthGate(true);
-        return;
-      }
-      list.innerHTML = '<div class="error-box">' + escapeHtml(err.message) + "</div>";
-    }
+  let libraryKind = "playlists";
+  const libraryDataByKind = {
+    playlists: null, tracks: null, albums: null, artists: null, contacts: null,
+  };
+
+  function currentLibraryKind() {
+    return LIBRARY_KINDS[libraryKind] || LIBRARY_KINDS.playlists;
   }
 
-  let libraryData = null;
+  function setLibraryKind(kind) {
+    if (!LIBRARY_KINDS[kind]) return;
+    libraryKind = kind;
+    document.querySelectorAll("[data-library-kind]").forEach((btn) => {
+      const on = btn.getAttribute("data-library-kind") === kind;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    $("library-filter").placeholder = currentLibraryKind().filterPlaceholder;
+    $("library-filter").value = "";
+    if (!libraryDataByKind[kind]) loadLibrary(kind);
+    else renderLibrary(libraryDataByKind[kind]);
+  }
 
-  function applyLibraryFilter(filterText, data) {
-    const source = data || libraryData;
-    if (!source) return;
-    const q = (filterText || "").trim().toLowerCase();
-    const playlists = (source.playlists || []).filter((p) => {
+  function libraryStatusBadges(byService) {
+    return Object.keys(byService || {}).sort().map((id) => {
+      const st = byService[id];
+      const cls = st.status === "ok" ? "badge-green" : st.status === "unauthorized" ? "badge-orange" : "badge-red";
+      const count = st.status === "ok" ? " · " + st.count : "";
+      return '<span class="badge ' + cls + '" title="' + escapeHtml(st.error || st.status) + '">' +
+        escapeHtml(id) + ": " + escapeHtml(st.status) + count +
+        "</span>";
+    }).join(" ");
+  }
+
+  function libraryCardHeader(title, badges) {
+    return '<div class="card-header"><h3>' + escapeHtml(title || "(untitled)") + "</h3>" + (badges || "") + "</div>";
+  }
+
+  function renderPlaylistCards(items, q) {
+    return items.filter((p) => {
       if (!q) return true;
       const hay = [p.name, p.description, p.owner, (p.sources || []).map((s) => s.service).join(" ")]
         .join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
-    });
-
-    if (!playlists.length) {
-      $("library-list").innerHTML = '<div class="empty">' +
-        (q ? "No playlists match this filter." : "No playlists found. Connect a service, then reload.") +
-        "</div>";
-      return;
-    }
-
-    $("library-list").innerHTML = playlists.map((p) => {
+    }).map((p) => {
+      const multi = (p.sources || []).length > 1;
       return '<article class="card">' +
-        '<div class="card-header"><h3>' + escapeHtml(p.name) + "</h3>" +
-        '<span class="badge badge-gray">' + (p.track_count || 0) + " tracks</span>" +
-        ((p.sources || []).length > 1 ? '<span class="badge badge-blue">' + p.sources.length + " sources</span>" : "") +
-        "</div>" +
+        libraryCardHeader(p.name,
+          '<span class="badge badge-gray">' + (p.track_count || 0) + " tracks</span>" +
+          (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span>" : "")) +
         (p.description ? '<div class="meta">' + escapeHtml(p.description) + "</div>" : "") +
         (p.owner ? '<div class="meta">Owner: ' + escapeHtml(p.owner) + "</div>" : "") +
         '<div class="scopes">' + sourceBadges(p.sources) + "</div>" +
         "</article>";
     }).join("");
+  }
+
+  function artistNames(artists) {
+    return (artists || []).map((a) => a && a.name).filter(Boolean).join(", ");
+  }
+
+  function renderTrackCards(items, q) {
+    return items.filter((t) => {
+      if (!q) return true;
+      const hay = [t.name, artistNames(t.artists), t.album && t.album.name, t.duration,
+        (t.sources || []).map((s) => s.service).join(" ")]
+        .join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }).map((t) => {
+      const multi = (t.sources || []).length > 1;
+      const artists = artistNames(t.artists);
+      const album = t.album && t.album.name ? t.album.name : "";
+      return '<article class="card">' +
+        libraryCardHeader(t.name,
+          (multi ? '<span class="badge badge-blue">' + t.sources.length + " sources</span>" : "")) +
+        (artists ? '<div class="meta">Artists: ' + escapeHtml(artists) + "</div>" : "") +
+        (album ? '<div class="meta">Album: ' + escapeHtml(album) + "</div>" : "") +
+        (t.duration ? '<div class="meta">Duration: ' + escapeHtml(t.duration) + "</div>" : "") +
+        '<div class="scopes">' + sourceBadges(t.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
+  function renderContactCards(items, q) {
+    return items.filter((c) => {
+      if (!q) return true;
+      const hay = [c.name, c.organization,
+        (c.emails || []).join(" "), (c.phones || []).join(" "), (c.handles || []).join(" "),
+        (c.sources || []).map((s) => s.service).join(" ")]
+        .join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }).map((c) => {
+      const multi = (c.sources || []).length > 1;
+      const emails = (c.emails || []).map((e) => '<code>' + escapeHtml(e) + "</code>").join(" ");
+      const phones = (c.phones || []).map((p) => '<code>' + escapeHtml(p) + "</code>").join(" ");
+      const handles = (c.handles || []).map((h) => '<code>' + escapeHtml(h) + "</code>").join(" ");
+      return '<article class="card">' +
+        libraryCardHeader(c.name || "(unnamed)",
+          multi ? '<span class="badge badge-blue">' + c.sources.length + " sources</span>" : "") +
+        (emails ? '<div class="meta">Emails: ' + emails + "</div>" : "") +
+        (phones ? '<div class="meta">Phones: ' + phones + "</div>" : "") +
+        (handles ? '<div class="meta">Handles: ' + handles + "</div>" : "") +
+        (c.organization ? '<div class="meta">Org: ' + escapeHtml(c.organization) + "</div>" : "") +
+        '<div class="scopes">' + sourceBadges(c.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
+  function renderAlbumCards(items, q) {
+    return items.filter((a) => {
+      if (!q) return true;
+      const hay = [a.name, artistNames(a.artists),
+        (a.sources || []).map((s) => s.service).join(" ")]
+        .join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }).map((a) => {
+      const multi = (a.sources || []).length > 1;
+      const artists = artistNames(a.artists);
+      return '<article class="card">' +
+        libraryCardHeader(a.name,
+          multi ? '<span class="badge badge-blue">' + a.sources.length + " sources</span>" : "") +
+        (artists ? '<div class="meta">Artists: ' + escapeHtml(artists) + "</div>" : "") +
+        '<div class="scopes">' + sourceBadges(a.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
+  function renderArtistCards(items, q) {
+    return items.filter((a) => {
+      if (!q) return true;
+      const hay = [a.name, (a.sources || []).map((s) => s.service).join(" ")]
+        .join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }).map((a) => {
+      const multi = (a.sources || []).length > 1;
+      return '<article class="card">' +
+        libraryCardHeader(a.name,
+          multi ? '<span class="badge badge-blue">' + a.sources.length + " sources</span>" : "") +
+        '<div class="scopes">' + sourceBadges(a.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
+  function renderLibrary(data) {
+    const kind = currentLibraryKind();
+    const meta = $("library-meta");
+    const list = $("library-list");
+    if (!data) {
+      list.innerHTML = '<div class="empty">Loading library…</div>';
+      meta.textContent = "";
+      return;
+    }
+    const items = data[kind.key] || [];
+    const statusBits = libraryStatusBadges(data.by_service);
+    const endpoint = '<code>' + escapeHtml(kind.path) + "</code>";
+    meta.innerHTML = "<strong>" + items.length + "</strong> " + kind.label +
+      (data.synced ? " · synced across services" : "") +
+      " · agents call " + endpoint +
+      (statusBits ? '<div class="scopes" style="margin-top:0.4rem">' + statusBits + "</div>" : "");
+
+    const q = ($("library-filter").value || "").trim().toLowerCase();
+    let html = "";
+    if (libraryKind === "tracks") html = renderTrackCards(items, q);
+    else if (libraryKind === "albums") html = renderAlbumCards(items, q);
+    else if (libraryKind === "artists") html = renderArtistCards(items, q);
+    else if (libraryKind === "contacts") html = renderContactCards(items, q);
+    else html = renderPlaylistCards(items, q);
+
+    if (!html) {
+      list.innerHTML = '<div class="empty">' +
+        (q ? escapeHtml(kind.emptyFilter) : escapeHtml(kind.emptyAll)) +
+        "</div>";
+      return;
+    }
+    list.innerHTML = html;
+  }
+
+  async function loadLibrary(kindName) {
+    const kind = LIBRARY_KINDS[kindName || libraryKind] || currentLibraryKind();
+    const key = kindName || libraryKind;
+    if (key === libraryKind) {
+      $("library-list").innerHTML = '<div class="empty">Loading ' + escapeHtml(kind.label) + "…</div>";
+    }
+    try {
+      const data = await api(kind.path);
+      libraryDataByKind[key] = data;
+      if (key === libraryKind) renderLibrary(data);
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      if (err.status === 404) {
+        libraryDataByKind[key] = { [kind.key]: [], total: 0, by_service: {} };
+        if (key === libraryKind) {
+          $("library-meta").textContent = "";
+          $("library-list").innerHTML = '<div class="empty">' +
+            escapeHtml(err.message || ("No " + kind.label + " available.")) +
+            "</div>";
+        }
+        return;
+      }
+      if (err.status === 403) {
+        libraryDataByKind[key] = { [kind.key]: [], total: 0, by_service: {} };
+        if (key === libraryKind) {
+          $("library-meta").textContent = "";
+          $("library-list").innerHTML = '<div class="error-box">' + escapeHtml(err.message) + "</div>";
+        }
+        return;
+      }
+      if (key === libraryKind) {
+        $("library-list").innerHTML = '<div class="error-box">' + escapeHtml(err.message) + "</div>";
+      }
+    }
+  }
+
+  function loadAllLibraryKinds() {
+    Object.keys(LIBRARY_KINDS).forEach((k) => loadLibrary(k));
   }
 
   async function loadCache() {
@@ -876,7 +1211,7 @@ const adminHTML = `<!DOCTYPE html>
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
-        '<div class="meta">Agents use <code>/v1/library/playlists</code> and <code>/v1/services/{id}/…</code></div>' +
+        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
         '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
@@ -908,7 +1243,7 @@ const adminHTML = `<!DOCTYPE html>
       tab.setAttribute("aria-selected", on ? "true" : "false");
       panel.hidden = !on;
     });
-    if (name === "library" && !libraryData) loadLibrary();
+    if (name === "library") loadAllLibraryKinds();
     if (name === "cache") loadCache();
   }
 
@@ -924,15 +1259,25 @@ const adminHTML = `<!DOCTYPE html>
   });
 
   $("service-filter").addEventListener("input", (e) => renderServices(e.target.value));
-  $("library-filter").addEventListener("input", (e) => applyLibraryFilter(e.target.value));
+  $("library-filter").addEventListener("input", () => {
+    if (libraryDataByKind[libraryKind]) renderLibrary(libraryDataByKind[libraryKind]);
+  });
+  document.querySelectorAll("[data-library-kind]").forEach((btn) => {
+    btn.addEventListener("click", () => setLibraryKind(btn.getAttribute("data-library-kind")));
+  });
   $("reload-summary").addEventListener("click", () => loadSummary());
-  $("reload-library").addEventListener("click", () => loadLibrary());
+  $("reload-library").addEventListener("click", () => loadAllLibraryKinds());
   $("reload-cache").addEventListener("click", () => loadCache());
   $("clear-cache").addEventListener("click", async () => {
     if (!confirm("Clear all cached responses?")) return;
     $("clear-cache").disabled = true;
     try {
       await api("/v1/admin/cache/clear", { method: "POST" });
+      libraryDataByKind.playlists = null;
+      libraryDataByKind.tracks = null;
+      libraryDataByKind.albums = null;
+      libraryDataByKind.artists = null;
+      libraryDataByKind.contacts = null;
       await loadCache();
       await loadSummary();
     } catch (err) {

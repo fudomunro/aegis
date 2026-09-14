@@ -79,11 +79,14 @@ type ArtistSource struct {
 	ID          string `json:"id,omitempty"`
 	// Name is how this service spells the artist.
 	Name string `json:"name,omitempty"`
+	URL  string `json:"url,omitempty"`
 }
 
 // Album is a unified album identity (name-based matching for now).
 type Album struct {
-	Name    string        `json:"name"`
+	Name string `json:"name"`
+	// Artists credit the album, when known (used by the library view).
+	Artists []Artist      `json:"artists,omitempty"`
 	Sources []AlbumSource `json:"sources,omitempty"`
 }
 
@@ -93,6 +96,7 @@ type AlbumSource struct {
 	ServiceName string `json:"service_name,omitempty"`
 	ID          string `json:"id,omitempty"`
 	Name        string `json:"name,omitempty"`
+	URL         string `json:"url,omitempty"`
 }
 
 // PlaylistDetail is a playlist plus its tracks.
@@ -178,6 +182,35 @@ type PlaylistList struct {
 	// services into multi-source entries.
 	Synced bool `json:"synced,omitempty"`
 	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
+// TrackList is the neutral response for listing liked/saved tracks — either
+// for a single service or aggregated across all connected services.
+type TrackList struct {
+	Tracks []Track `json:"tracks"`
+	// Total is the number of tracks in this response.
+	Total int `json:"total"`
+	// Synced is true when the library merged same-named tracks across
+	// services into multi-source entries.
+	Synced bool `json:"synced,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
+// AlbumList is the neutral response for listing saved albums.
+type AlbumList struct {
+	Albums    []Album                         `json:"albums"`
+	Total     int                             `json:"total"`
+	Synced    bool                            `json:"synced,omitempty"`
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
+// ArtistList is the neutral response for listing followed/top artists.
+type ArtistList struct {
+	Artists   []Artist                        `json:"artists"`
+	Total     int                             `json:"total"`
+	Synced    bool                            `json:"synced,omitempty"`
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 

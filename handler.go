@@ -267,12 +267,16 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 
-	// Users often ask for "my playlists" without naming a service. Surface the
-	// unified library endpoint in that case so agents can return every service.
+	// Users often ask for "my playlists" or "liked songs" without naming a
+	// service. Surface the unified library endpoints in that case so agents
+	// can return every service.
 	libraryOnly := len(matched) == 0 && mentionsPlaylists(payload.UserMessage) && s.hasPlaylistProviders()
+	tracksLibraryOnly := len(matched) == 0 && mentionsLikedTracks(payload.UserMessage) && s.hasLikedTrackProviders()
+	albumsLibraryOnly := len(matched) == 0 && mentionsAlbums(payload.UserMessage) && s.hasAlbumProviders()
+	artistsLibraryOnly := len(matched) == 0 && mentionsArtists(payload.UserMessage) && s.hasArtistProviders()
 	contactsLibraryOnly := len(matched) == 0 && mentionsContacts(payload.UserMessage) && s.hasContactProviders()
 
-	if len(matched) == 0 && !libraryOnly && !contactsLibraryOnly {
+	if len(matched) == 0 && !libraryOnly && !tracksLibraryOnly && !albumsLibraryOnly && !artistsLibraryOnly && !contactsLibraryOnly {
 		logger.Debug("no services matched, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
@@ -329,6 +333,15 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	if libraryOnly && s.libraryReadable() {
 		instructions = append(instructions, s.librarySystemInstructions())
+	}
+	if tracksLibraryOnly && s.tracksLibraryReadable() {
+		instructions = append(instructions, s.libraryTracksSystemInstructions())
+	}
+	if albumsLibraryOnly && s.albumsLibraryReadable() {
+		instructions = append(instructions, s.libraryAlbumsSystemInstructions())
+	}
+	if artistsLibraryOnly && s.artistsLibraryReadable() {
+		instructions = append(instructions, s.libraryArtistsSystemInstructions())
 	}
 	if contactsLibraryOnly && s.contactsLibraryReadable() {
 		instructions = append(instructions, s.libraryContactsSystemInstructions())
