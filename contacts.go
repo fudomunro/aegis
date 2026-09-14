@@ -206,7 +206,8 @@ func unionStrings(a, b []string) []string {
 }
 
 // mergeContactInto folds src into dst (shared identity). Fills empty fields,
-// unions identifier lists and sources, and keeps the first non-empty extra.
+// unions identifier lists (normalized so photo.people[] and library contacts
+// share one spelling) and sources, and keeps the first non-empty extra.
 func mergeContactInto(dst *Contact, src Contact) {
 	if dst.Name == "" {
 		dst.Name = src.Name
@@ -214,9 +215,9 @@ func mergeContactInto(dst *Contact, src Contact) {
 	if dst.Organization == "" {
 		dst.Organization = src.Organization
 	}
-	dst.Emails = unionStrings(dst.Emails, src.Emails)
-	dst.Phones = unionStrings(dst.Phones, src.Phones)
-	dst.Handles = unionStrings(dst.Handles, src.Handles)
+	dst.Emails = normalizeEmailList(unionStrings(dst.Emails, src.Emails))
+	dst.Phones = normalizePhoneList(unionStrings(dst.Phones, src.Phones))
+	dst.Handles = normalizeHandleList(unionStrings(dst.Handles, src.Handles))
 	dst.Sources = append(dst.Sources, src.Sources...)
 	if len(dst.Extra) == 0 && len(src.Extra) > 0 {
 		dst.Extra = src.Extra
