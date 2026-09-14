@@ -95,6 +95,28 @@
           "https://www.googleapis.com/auth/photoslibrary.readonly"
         ]
       }
+    },
+    {
+      "id": "google",
+      "name": "Google Contacts",
+      "aliases": ["google contacts", "contacts", "address book"],
+      "action": "inject",
+      "endpoint": "https://people.googleapis.com/v1",
+      "cache_ttl": "15m",
+      "description": "Lists Google People/Contacts address-book entries as neutral contacts so photo.people[] and other types can share identity matching.",
+      "permissions": {
+        "default": "read",
+        "contacts": "read"
+      },
+      "oauth": {
+        "client_id": "YOUR_GOOGLE_CLIENT_ID",
+        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": [
+          "https://www.googleapis.com/auth/contacts.readonly"
+        ]
+      }
     }
   ]
 }

@@ -112,12 +112,26 @@ func mergePhotoInto(dst *Photo, src Photo) {
 		dst.Caption = src.Caption
 	}
 	dst.Sources = append(dst.Sources, src.Sources...)
-	if len(dst.People) == 0 && len(src.People) > 0 {
-		dst.People = src.People
-	}
+	dst.People = mergePhotoPeople(dst.People, src.People)
 	if len(dst.Extra) == 0 && len(src.Extra) > 0 {
 		dst.Extra = src.Extra
 	}
+}
+
+// mergePhotoPeople unions people across photo sources using the same contact
+// identity matching as the contacts library (email → phone → handle → name).
+// This is the first cross-type link: photo.people[] can resolve to a Google
+// Contacts (or other) Contact entity.
+func mergePhotoPeople(dst, src []Contact) []Contact {
+	if len(src) == 0 {
+		return dst
+	}
+	if len(dst) == 0 {
+		out := make([]Contact, len(src))
+		copy(out, src)
+		return out
+	}
+	return MergeContacts(append(append([]Contact(nil), dst...), src...))
 }
 
 // MergePhotos groups photos that share a content identity (hash, or taken_at
