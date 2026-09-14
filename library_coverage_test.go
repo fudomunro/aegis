@@ -19,6 +19,7 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 		srv.HandleLibraryArtists,
 		srv.HandleLibraryPlaylists,
 		srv.HandleLibraryContacts,
+		srv.HandleLibraryPhotos,
 	} {
 		req := httptest.NewRequest("POST", "/v1/library/x", nil)
 		w := httptest.NewRecorder()
@@ -253,7 +254,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 			{ID: "b", Name: "B", Action: "block"},
 			{ID: "c", Name: "C", Action: "inject", Permissions: Permissions{
 				"tracks": AccessNone, "albums": AccessNone, "artists": AccessNone,
-				"playlists": AccessNone, "contacts": AccessNone,
+				"playlists": AccessNone, "contacts": AccessNone, "photos": AccessNone,
 			}},
 		},
 	}, "https://guardian.example.com")
@@ -261,7 +262,8 @@ func TestLibraryReadableHelpers(t *testing.T) {
 	if !srv.tracksLibraryReadable() {
 		t.Fatal("service a should allow tracks read")
 	}
-	if !srv.albumsLibraryReadable() || !srv.artistsLibraryReadable() || !srv.libraryReadable() || !srv.contactsLibraryReadable() {
+	if !srv.albumsLibraryReadable() || !srv.artistsLibraryReadable() || !srv.libraryReadable() ||
+		!srv.contactsLibraryReadable() || !srv.photosLibraryReadable() {
 		t.Fatal("service a should allow all library reads")
 	}
 
@@ -273,7 +275,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 		},
 	}, "https://guardian.example.com")
 	if srv2.tracksLibraryReadable() || srv2.albumsLibraryReadable() || srv2.artistsLibraryReadable() ||
-		srv2.libraryReadable() || srv2.contactsLibraryReadable() {
+		srv2.libraryReadable() || srv2.contactsLibraryReadable() || srv2.photosLibraryReadable() {
 		t.Fatal("expected no readable library types")
 	}
 }
@@ -281,7 +283,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 func TestHasLibraryProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	if srv.hasPlaylistProviders() || srv.hasLikedTrackProviders() || srv.hasAlbumProviders() ||
-		srv.hasArtistProviders() || srv.hasContactProviders() {
+		srv.hasArtistProviders() || srv.hasContactProviders() || srv.hasPhotoProviders() {
 		t.Fatal("empty connectors should report no providers")
 	}
 	srv.connectors = map[string]ServiceConnector{

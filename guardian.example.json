@@ -73,6 +73,28 @@
       "name": "Tidal",
       "action": "block",
       "description": "Tidal access is not permitted in this environment"
+    },
+    {
+      "id": "google-photos",
+      "name": "Google Photos",
+      "aliases": ["photos", "google photos library"],
+      "action": "inject",
+      "endpoint": "https://photoslibrary.googleapis.com/v1",
+      "cache_ttl": "15m",
+      "description": "Lists Google Photos media-item metadata through Guardian. Photo bytes stay on Google Photos (non-Guardian canonical).",
+      "permissions": {
+        "default": "read",
+        "photos": "read"
+      },
+      "oauth": {
+        "client_id": "YOUR_GOOGLE_CLIENT_ID",
+        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url": "https://oauth2.googleapis.com/token",
+        "scopes": [
+          "https://www.googleapis.com/auth/photoslibrary.readonly"
+        ]
+      }
     }
   ]
 }

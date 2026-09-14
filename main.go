@@ -104,6 +104,8 @@ func main() {
 	srv.connectors["youtube-music"] = ytMusicConn
 	amzMusicConn := NewAmazonMusicConnector(srv)
 	srv.connectors["amazon-music"] = amzMusicConn
+	gPhotosConn := NewGooglePhotosConnector(srv)
+	srv.connectors[googlePhotosServiceID] = gPhotosConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))

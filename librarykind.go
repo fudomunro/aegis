@@ -151,6 +151,27 @@ var libraryKinds = []LibraryKind{
 		HasProviders: func(s *Server) bool { return s.hasProvider[ContactProvider]() },
 		Readable:     func(s *Server) bool { return s.libraryReadableFor("contacts") },
 	},
+	{
+		ID:              "photos",
+		Path:            "/v1/library/photos",
+		PermType:        "photos",
+		Label:           "photos",
+		Usage:           "photos, pictures, or their photo library",
+		Summary:         "all user photos from every connected photo service in one neutral list (taken_at, dimensions, mime_type, filename, caption, sources[] with canonical blob location)",
+		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. Photo bytes are never stored in Guardian.",
+		ExampleQuestion: "what photos do I have?",
+		Keywords: []string{
+			"my photos", "photo library", "my pictures", "picture library",
+			"photos from", "pictures from", "photos do i have",
+			"photos i have", "list my photos", "list my pictures",
+			"google photos", "camera roll",
+		},
+		EmptyMsg:     "no photo-capable services configured",
+		DenyMsg:      "permission denied: agent access to photos is not allowed",
+		FailMsg:      "failed to fetch photos",
+		HasProviders: func(s *Server) bool { return s.hasProvider[PhotoProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("photos") },
+	},
 }
 
 // LibraryKindByID returns the registered kind, or nil.
@@ -239,6 +260,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/albums":    s.HandleLibraryAlbums,
 		"/v1/library/artists":   s.HandleLibraryArtists,
 		"/v1/library/contacts":  s.HandleLibraryContacts,
+		"/v1/library/photos":    s.HandleLibraryPhotos,
 	}
 }
 
