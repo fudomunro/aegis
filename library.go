@@ -571,7 +571,9 @@ func mentionsArtists(msg string) bool {
 	for _, keyword := range []string{
 		"followed artist",
 		"artists i follow",
+		"artists do i follow",
 		"who do i follow",
+		"do i follow",
 		"artists i've followed",
 		"favorite artist",
 		"favourite artist",
