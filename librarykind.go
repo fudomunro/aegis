@@ -245,7 +245,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 // namedLister is one service's typed fetch for a library aggregate.
 type namedLister[T any] struct {
 	id   string
-	list func(ctx context.Context) ([]T, error)
+	list func(ctx context.Context) (items []T, truncated bool, err error)
 }
 
 // collectProviders type-asserts each connector to P and builds fetch targets
@@ -253,7 +253,7 @@ type namedLister[T any] struct {
 func collectProviders[T any, P any](
 	s *Server,
 	permType string,
-	lister func(P) func(ctx context.Context) ([]T, error),
+	lister func(P) func(ctx context.Context) ([]T, bool, error),
 ) (targets []namedLister[T], denied []string) {
 	for id, connector := range s.connectors {
 		svc := s.config.GetService(id)
@@ -336,11 +336,35 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		wg.Add(1)
 		go func(t namedLister[T]) {
 			defer wg.Done()
-			items, err := t.list(ctx)
+			var items []T
+			var truncated bool
+			var err error
+			// A misbehaving connector must degrade to status=error, not take
+			// down the process (library fan-out runs outside net/http recovery).
+			func() {
+				defer func() {
+					if rec := recover(); rec != nil {
+						logger.Error("library "+kind.ID+" provider panicked",
+							"service", t.id, "panic", rec)
+						err = fmt.Errorf("provider panic: %v", rec)
+						items = nil
+						truncated = false
+					}
+				}()
+				items, truncated, err = t.list(ctx)
+			}()
 			var status LibraryServiceStatus
 			switch {
 			case err == nil:
-				status = LibraryServiceStatus{Status: LibraryStatusOK, Count: len(items)}
+				status = LibraryServiceStatus{
+					Status:    LibraryStatusOK,
+					Count:     len(items),
+					Truncated: truncated,
+				}
+				if truncated {
+					logger.Warn("library "+kind.ID+" truncated by page cap",
+						"service", t.id, "count", len(items))
+				}
 				mu.Lock()
 				all = append(all, items...)
 				mu.Unlock()

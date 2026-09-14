@@ -652,9 +652,9 @@ const adminHTML = `<!DOCTYPE html>
     const disabled = !!o.disabled;
     const labelExtra = o.labelExtra || "";
     const note = o.note ? '<span class="perm-note">' + escapeHtml(o.note) + "</span>" : "";
-    const control = disabled
-      ? '<span class="perm-locked">' + escapeHtml(normalizeAccess(level)) + "</span>"
-      : accessSelect(key, level);
+    // Always emit a select (even when disabled) so collectPermEditor still
+    // sees the value and Save does not drop locked keys from guardian.json.
+    const control = accessSelect(key, level, disabled ? "perm-locked-select" : "", disabled);
     const action = o.hideRemove
       ? "<span></span>"
       : '<button type="button" class="btn btn-danger perm-remove" data-service="' + escapeHtml(serviceId) +
@@ -701,7 +701,9 @@ const adminHTML = `<!DOCTYPE html>
     }
     libraryTypes.forEach((key) => {
       const meta = LIBRARY_TYPE_META[key] || { label: key, endpoint: "" };
-      const level = perms[key] != null ? perms[key] : "read";
+      // Unset types inherit the default fallback level (server DefaultAccessType
+      // is read-write when no permissions block exists).
+      const level = perms[key] != null ? perms[key] : defaultLevel;
       html += permRow(key, level, id, {
         library: true,
         hideRemove: false,
@@ -723,7 +725,7 @@ const adminHTML = `<!DOCTYPE html>
       html += '<p class="meta">No extra connector types.</p>';
     }
     otherTypes.forEach((key) => {
-      const level = perms[key] != null ? perms[key] : "read-write";
+      const level = perms[key] != null ? perms[key] : defaultLevel;
       // Known connector types that aren't in Library stay locked. Explicit
       // custom keys the user added remain editable.
       const isCustom = FALLBACK_DATA_TYPES.indexOf(key) === -1 && known.indexOf(key) === -1;

@@ -168,6 +168,9 @@ type LibraryServiceStatus struct {
 	Status string `json:"status"`
 	// Count is the number of items returned for this service when Status is "ok".
 	Count int `json:"count,omitempty"`
+	// Truncated is true when the connector hit its page cap with more items
+	// still available upstream. Count then reflects only the fetched prefix.
+	Truncated bool `json:"truncated,omitempty"`
 	// Error is a short reason when Status is "error" or "unauthorized".
 	Error string `json:"error,omitempty"`
 }

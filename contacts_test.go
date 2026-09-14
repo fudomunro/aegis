@@ -192,8 +192,8 @@ func (f *fakeContactProvider) SystemInstructions(string) string  { return "fake"
 func (f *fakeContactProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeContactProvider) ListUserContacts(context.Context) ([]Contact, error) {
-	return f.contacts, f.err
+func (f *fakeContactProvider) ListUserContacts(context.Context) ([]Contact, bool, error) {
+	return f.contacts, false, f.err
 }
 
 func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {

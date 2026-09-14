@@ -10,27 +10,28 @@ import (
 var ErrUnauthorized = errors.New("unauthorized")
 
 // PlaylistProvider is implemented by connectors that can return the user's
-// playlists in Guardian's neutral format.
+// playlists in Guardian's neutral format. truncated is true when the page cap
+// was hit with more items still upstream.
 type PlaylistProvider interface {
-	ListUserPlaylists(ctx context.Context) ([]Playlist, error)
+	ListUserPlaylists(ctx context.Context) (playlists []Playlist, truncated bool, err error)
 }
 
 // LikedTrackProvider is implemented by connectors that can return the user's
 // liked/saved tracks in Guardian's neutral format.
 type LikedTrackProvider interface {
-	ListUserLikedTracks(ctx context.Context) ([]Track, error)
+	ListUserLikedTracks(ctx context.Context) (tracks []Track, truncated bool, err error)
 }
 
 // AlbumProvider is implemented by connectors that can return the user's
 // saved albums in Guardian's neutral format.
 type AlbumProvider interface {
-	ListUserSavedAlbums(ctx context.Context) ([]Album, error)
+	ListUserSavedAlbums(ctx context.Context) (albums []Album, truncated bool, err error)
 }
 
 // ArtistProvider is implemented by connectors that can return the user's
 // followed or top artists in Guardian's neutral format.
 type ArtistProvider interface {
-	ListUserFollowedArtists(ctx context.Context) ([]Artist, error)
+	ListUserFollowedArtists(ctx context.Context) (artists []Artist, truncated bool, err error)
 }
 
 func playlistServiceName(p Playlist) string {
@@ -69,7 +70,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		kind: kind,
 		targets: func(s *Server) ([]namedLister[Playlist], []string) {
 			return collectProviders[Playlist, PlaylistProvider](s, kind.PermType,
-				func(p PlaylistProvider) func(context.Context) ([]Playlist, error) {
+				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
 		},
@@ -89,7 +90,7 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 		kind: kind,
 		targets: func(s *Server) ([]namedLister[Track], []string) {
 			return collectProviders[Track, LikedTrackProvider](s, kind.PermType,
-				func(p LikedTrackProvider) func(context.Context) ([]Track, error) {
+				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
 		},
@@ -109,7 +110,7 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 		kind: kind,
 		targets: func(s *Server) ([]namedLister[Album], []string) {
 			return collectProviders[Album, AlbumProvider](s, kind.PermType,
-				func(p AlbumProvider) func(context.Context) ([]Album, error) {
+				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
 		},
@@ -129,7 +130,7 @@ func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 		kind: kind,
 		targets: func(s *Server) ([]namedLister[Artist], []string) {
 			return collectProviders[Artist, ArtistProvider](s, kind.PermType,
-				func(p ArtistProvider) func(context.Context) ([]Artist, error) {
+				func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})
 		},

@@ -55,8 +55,8 @@ func TestAmazonMusicConnector_TransformUser(t *testing.T) {
 
 	// Alternative field names.
 	raw2 := map[string]any{
-		"user_id":       "u1",
-		"display_name":  "Bob",
+		"user_id":      "u1",
+		"display_name": "Bob",
 	}
 	result2 := conn.transformUser(raw2)
 	if result2["id"] != "u1" {

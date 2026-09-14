@@ -393,6 +393,7 @@ Saved albums and followed/top artists follow the same library pattern. Connector
 
 - Spotify albums: `GET /me/albums`; artists: `GET /me/following?type=artist`
 - YouTube Music artists: channel subscriptions (`GET /subscriptions?mine=true`). No public saved-albums API — albums remain Spotify-only until one is available.
+- Permission key `artists` also gates the underlying proxy paths `/me/following` and `/me/subscriptions` so `artists: none` blocks both the library endpoint and the raw proxy.
 
 ### Contact as a data type
 

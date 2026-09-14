@@ -169,13 +169,19 @@ func DataTypeForPath(path string) string {
 		return "albums"
 	case p == "/me/artists" || p == "/me/top/artists" || strings.HasPrefix(p, "/artists"):
 		return "artists"
+	// Followed artists: Spotify /me/following and YouTube subscriptions back
+	// the unified artists library, so they share the artists permission key.
+	case p == "/me/following":
+		return "artists"
 	case p == "/me/playlists" || strings.HasPrefix(p, "/playlists"):
 		return "playlists"
 	case p == "/me/contacts" || strings.HasPrefix(p, "/contacts"):
 		return "contacts"
 	case p == "/search":
 		return "search"
-	case p == "/me/subscriptions" || strings.HasPrefix(p, "/channels"):
+	case p == "/me/subscriptions":
+		return "artists"
+	case strings.HasPrefix(p, "/channels"):
 		return "channels"
 	case strings.HasPrefix(p, "/me/library"):
 		return "library"

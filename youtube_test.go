@@ -106,8 +106,8 @@ func TestYouTubeMusicConnector_TransformChannel(t *testing.T) {
 				},
 				"contentDetails": map[string]any{
 					"relatedPlaylists": map[string]any{
-						"likes":    "LLikes123",
-						"uploads":  "UUUploads456",
+						"likes":      "LLikes123",
+						"uploads":    "UUUploads456",
 						"watchLater": "WL789",
 					},
 				},
@@ -258,9 +258,9 @@ func TestYouTubeMusicConnector_TransformVideo(t *testing.T) {
 			map[string]any{
 				"id": "vid1",
 				"snippet": map[string]any{
-					"title":       "So What",
+					"title":        "So What",
 					"channelTitle": "Miles Davis",
-					"description": "Kind of Blue",
+					"description":  "Kind of Blue",
 				},
 				"contentDetails": map[string]any{
 					"duration": "PT9M22S",

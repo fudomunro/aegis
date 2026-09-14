@@ -19,11 +19,11 @@ import (
 
 // TokenStore manages encrypted OAuth tokens at rest.
 type TokenStore struct {
-	mu       sync.RWMutex
-	path     string
-	salt     []byte
-	key      []byte
-	Tokens   map[string]*OAuthToken `json:"tokens"`
+	mu     sync.RWMutex
+	path   string
+	salt   []byte
+	key    []byte
+	Tokens map[string]*OAuthToken `json:"tokens"`
 }
 
 // OAuthToken holds the credentials for a single service.
@@ -43,10 +43,10 @@ type tokenFile struct {
 }
 
 const (
-	tokenVersion    = 1
-	pbkdf2Iter      = 100_000
-	pbkdf2KeyLen    = 32 // AES-256
-	tokenFilePerms  = 0600
+	tokenVersion   = 1
+	pbkdf2Iter     = 100_000
+	pbkdf2KeyLen   = 32 // AES-256
+	tokenFilePerms = 0600
 )
 
 // NewTokenStore loads or creates a token store encrypted with the given passphrase.
@@ -139,11 +139,11 @@ func (ts *TokenStore) Status() map[string]TokenStatus {
 	status := make(map[string]TokenStatus)
 	for svcID, tok := range ts.Tokens {
 		status[svcID] = TokenStatus{
-			HasToken:     true,
-			Expired:      tok.IsExpired(0),
-			ExpiresIn:    time.Until(tok.Expiry).Truncate(time.Second).String(),
-			HasRefresh:   tok.RefreshToken != "",
-			Scopes:       tok.Scopes,
+			HasToken:   true,
+			Expired:    tok.IsExpired(0),
+			ExpiresIn:  time.Until(tok.Expiry).Truncate(time.Second).String(),
+			HasRefresh: tok.RefreshToken != "",
+			Scopes:     tok.Scopes,
 		}
 	}
 	return status

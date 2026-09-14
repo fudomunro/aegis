@@ -21,8 +21,8 @@ func (f *fakePlaylistProvider) SystemInstructions(string) string  { return "fake
 func (f *fakePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakePlaylistProvider) ListUserPlaylists(context.Context) ([]Playlist, error) {
-	return f.playlists, f.err
+func (f *fakePlaylistProvider) ListUserPlaylists(context.Context) ([]Playlist, bool, error) {
+	return f.playlists, false, f.err
 }
 
 func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
@@ -261,7 +261,7 @@ func TestSpotifyConnector_ListUserPlaylists_MockAPI(t *testing.T) {
 	})
 	conn := NewSpotifyConnector(srv)
 
-	playlists, err := conn.ListUserPlaylists(context.Background())
+	playlists, _, err := conn.ListUserPlaylists(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserPlaylists: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestSpotifyConnector_ListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 	conn := NewSpotifyConnector(srv)
 
-	_, err := conn.ListUserPlaylists(context.Background())
+	_, _, err := conn.ListUserPlaylists(context.Background())
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
@@ -370,8 +370,8 @@ func (f *fakeLikedTrackProvider) SystemInstructions(string) string  { return "fa
 func (f *fakeLikedTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeLikedTrackProvider) ListUserLikedTracks(context.Context) ([]Track, error) {
-	return f.tracks, f.err
+func (f *fakeLikedTrackProvider) ListUserLikedTracks(context.Context) ([]Track, bool, error) {
+	return f.tracks, false, f.err
 }
 
 func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
@@ -593,7 +593,7 @@ func TestSpotifyConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 	})
 	conn := NewSpotifyConnector(srv)
 
-	tracks, err := conn.ListUserLikedTracks(context.Background())
+	tracks, _, err := conn.ListUserLikedTracks(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserLikedTracks: %v", err)
 	}
@@ -648,7 +648,7 @@ func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 	})
 	conn := NewYouTubeMusicConnector(srv)
 
-	tracks, err := conn.ListUserLikedTracks(context.Background())
+	tracks, _, err := conn.ListUserLikedTracks(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserLikedTracks: %v", err)
 	}
@@ -694,8 +694,8 @@ func (f *fakeAlbumProvider) SystemInstructions(string) string  { return "fake" }
 func (f *fakeAlbumProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeAlbumProvider) ListUserSavedAlbums(context.Context) ([]Album, error) {
-	return f.albums, f.err
+func (f *fakeAlbumProvider) ListUserSavedAlbums(context.Context) ([]Album, bool, error) {
+	return f.albums, false, f.err
 }
 
 type fakeArtistProvider struct {
@@ -708,8 +708,8 @@ func (f *fakeArtistProvider) SystemInstructions(string) string  { return "fake" 
 func (f *fakeArtistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeArtistProvider) ListUserFollowedArtists(context.Context) ([]Artist, error) {
-	return f.artists, f.err
+func (f *fakeArtistProvider) ListUserFollowedArtists(context.Context) ([]Artist, bool, error) {
+	return f.artists, false, f.err
 }
 
 func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
@@ -870,7 +870,7 @@ func TestSpotifyConnector_ListUserSavedAlbums_MockAPI(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
-	albums, err := NewSpotifyConnector(srv).ListUserSavedAlbums(context.Background())
+	albums, _, err := NewSpotifyConnector(srv).ListUserSavedAlbums(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserSavedAlbums: %v", err)
 	}
@@ -897,7 +897,7 @@ func TestSpotifyConnector_ListUserFollowedArtists_MockAPI(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
-	artists, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
+	artists, _, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserFollowedArtists: %v", err)
 	}
@@ -925,7 +925,7 @@ func TestYouTubeConnector_ListUserFollowedArtists_MockAPI(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
-	artists, err := NewYouTubeMusicConnector(srv).ListUserFollowedArtists(context.Background())
+	artists, _, err := NewYouTubeMusicConnector(srv).ListUserFollowedArtists(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserFollowedArtists: %v", err)
 	}

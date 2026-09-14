@@ -559,13 +559,13 @@ func TestAdminSummary_ReportsTasteProviders(t *testing.T) {
 func TestSpotifyProviders_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://guardian.example.com")
 	conn := NewSpotifyConnector(srv)
-	if _, err := conn.ListUserSavedAlbums(context.Background()); !errors.Is(err, ErrUnauthorized) {
+	if _, _, err := conn.ListUserSavedAlbums(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("albums err = %v", err)
 	}
-	if _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, ErrUnauthorized) {
+	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("artists err = %v", err)
 	}
-	if _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, ErrUnauthorized) {
+	if _, _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("tracks err = %v", err)
 	}
 }
@@ -581,13 +581,13 @@ func TestSpotifyProviders_HTTPError(t *testing.T) {
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn := NewSpotifyConnector(srv)
 
-	if _, err := conn.ListUserSavedAlbums(context.Background()); err == nil {
+	if _, _, err := conn.ListUserSavedAlbums(context.Background()); err == nil {
 		t.Fatal("expected albums HTTP error")
 	}
-	if _, err := conn.ListUserFollowedArtists(context.Background()); err == nil {
+	if _, _, err := conn.ListUserFollowedArtists(context.Background()); err == nil {
 		t.Fatal("expected artists HTTP error")
 	}
-	if _, err := conn.ListUserLikedTracks(context.Background()); err == nil {
+	if _, _, err := conn.ListUserLikedTracks(context.Background()); err == nil {
 		t.Fatal("expected tracks HTTP error")
 	}
 }
@@ -595,10 +595,10 @@ func TestSpotifyProviders_HTTPError(t *testing.T) {
 func TestYouTubeProviders_UnauthorizedAndError(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject"}}}, "https://guardian.example.com")
 	conn := NewYouTubeMusicConnector(srv)
-	if _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, ErrUnauthorized) {
+	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("artists err = %v", err)
 	}
-	if _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, ErrUnauthorized) {
+	if _, _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("tracks err = %v", err)
 	}
 
@@ -610,10 +610,10 @@ func TestYouTubeProviders_UnauthorizedAndError(t *testing.T) {
 	srv2 := testServerWithBase(cfg, "https://guardian.example.com")
 	srv2.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn2 := NewYouTubeMusicConnector(srv2)
-	if _, err := conn2.ListUserFollowedArtists(context.Background()); err == nil {
+	if _, _, err := conn2.ListUserFollowedArtists(context.Background()); err == nil {
 		t.Fatal("expected artists HTTP error")
 	}
-	if _, err := conn2.ListUserLikedTracks(context.Background()); err == nil {
+	if _, _, err := conn2.ListUserLikedTracks(context.Background()); err == nil {
 		t.Fatal("expected liked HTTP error (channel fetch fails)")
 	}
 }
@@ -630,7 +630,7 @@ func TestSpotifyFollowing_FlatItemsShape(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
-	artists, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
+	artists, _, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
@@ -649,7 +649,7 @@ func TestSpotifyFollowing_MissingFollowScopeExplainsReconnect(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
-	_, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
+	_, _, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -717,5 +717,125 @@ func TestMentionsAlbumsAndArtists_Keywords(t *testing.T) {
 	}
 	if !mentionsArtists("favorite artist") {
 		t.Fatal("favorite artist")
+	}
+}
+
+func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
+	svc := &Service{
+		ID: "spotify", Name: "Spotify",
+		Permissions: Permissions{"default": AccessRead, "artists": AccessNone},
+	}
+	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/me/following?type=artist", nil)
+	w := httptest.NewRecorder()
+	if srv.AllowDataPermission(w, req, svc, "/me/following") {
+		t.Fatal("artists:none should deny /me/following")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest("GET", "/v1/services/youtube-music/me/subscriptions", nil)
+	w = httptest.NewRecorder()
+	if srv.AllowDataPermission(w, req, svc, "/me/subscriptions") {
+		t.Fatal("artists:none should deny /me/subscriptions")
+	}
+}
+
+func TestNeutralYouTubeTrack_DeletedItemNoPanic(t *testing.T) {
+	// No contentDetails and no resourceId — used to panic on type assertion.
+	conn := NewYouTubeMusicConnector(testServerWithBase(&Config{}, "https://guardian.example.com"))
+	track, ok := conn.neutralYouTubeTrack(map[string]any{
+		"snippet": map[string]any{"title": "Deleted video"},
+	})
+	if !ok {
+		t.Fatal("expected a track entry even without video id")
+	}
+	if track.Name != "Deleted video" {
+		t.Fatalf("name = %q", track.Name)
+	}
+}
+
+type panickingArtistProvider struct{}
+
+func (panickingArtistProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
+func (panickingArtistProvider) SystemInstructions(string) string  { return "x" }
+func (panickingArtistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
+}
+
+func (panickingArtistProvider) ListUserFollowedArtists(context.Context) ([]Artist, bool, error) {
+	panic("boom")
+}
+
+func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
+	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors = map[string]ServiceConnector{"spotify": panickingArtistProvider{}}
+
+	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp ArtistList
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.ByService["spotify"].Status != LibraryStatusError {
+		t.Fatalf("status = %+v, want error after panic", resp.ByService["spotify"])
+	}
+}
+
+func TestLibraryTracks_TruncatedFlag(t *testing.T) {
+	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors = map[string]ServiceConnector{
+		"spotify": &truncatingTrackProvider{},
+	}
+
+	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+
+	var resp TrackList
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !resp.ByService["spotify"].Truncated {
+		t.Fatalf("expected truncated=true, got %+v", resp.ByService["spotify"])
+	}
+}
+
+type truncatingTrackProvider struct{}
+
+func (truncatingTrackProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
+func (truncatingTrackProvider) SystemInstructions(string) string  { return "x" }
+func (truncatingTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
+}
+
+func (truncatingTrackProvider) ListUserLikedTracks(context.Context) ([]Track, bool, error) {
+	return []Track{{Name: "Only Prefix"}}, true, nil
+}
+
+func TestAdminHTML_LockedPermUsesSelect(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAdmin(w, req)
+	body := w.Body.String()
+	// Locked rows must emit a select (not a bare span) so Save keeps values.
+	if !strings.Contains(body, "perm-locked-select") {
+		t.Fatal("expected disabled select class for locked permission rows")
+	}
+	if strings.Contains(body, "class=\"perm-locked\"") && !strings.Contains(body, "accessSelect(key, level") {
+		// span-only locked control is the old buggy shape
+		if strings.Contains(body, "'<span class=\"perm-locked\">'") {
+			t.Fatal("locked rows still render a span-only control")
+		}
 	}
 }
