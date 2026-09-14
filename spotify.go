@@ -168,6 +168,13 @@ func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
+For "liked songs" / saved tracks across every connected music service:
+GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[])
+
+For saved albums and followed artists across every connected music service:
+GET %s/v1/library/albums — all saved albums in one neutral list (name, artists, sources[])
+GET %s/v1/library/artists — all followed artists in one neutral list (name, sources[])
+
 Spotify-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send Spotify tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user profile
@@ -189,7 +196,7 @@ GET /playlists/{id} — Get a playlist by ID with tracks
 Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
-Always include the full proxy base URL in your requests.`, base, root)
+Always include the full proxy base URL in your requests.`, base, root, root, root, root)
 }
 
 // HandleProxy processes a Spotify API request through the connector.
@@ -366,6 +373,217 @@ func (c *SpotifyConnector) transformUser(raw map[string]any) map[string]any {
 		"display_name": raw["display_name"],
 		"uri":          raw["uri"],
 	}
+}
+
+// ListUserSavedAlbums implements AlbumProvider. Fetches Spotify saved albums
+// and returns them in Guardian's neutral format.
+func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, error) {
+	token := c.server.getValidToken("spotify", slog.Default())
+	if token == "" {
+		return nil, ErrUnauthorized
+	}
+
+	upstreamBase := "https://api.spotify.com/v1"
+	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	var all []Album
+	nextURL := upstreamBase + "/me/albums?limit=50"
+	for page := 0; page < 10 && nextURL != ""; page++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("spotify saved albums returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		items, _ := raw["items"].([]any)
+		for _, item := range items {
+			saved, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			album, _ := saved["album"].(map[string]any)
+			if album == nil {
+				continue
+			}
+			all = append(all, spotifyNeutralAlbum(album))
+		}
+		nextURL, _ = raw["next"].(string)
+	}
+	return all, nil
+}
+
+// ListUserFollowedArtists implements ArtistProvider. Fetches Spotify followed
+// artists and returns them in Guardian's neutral format.
+func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, error) {
+	token := c.server.getValidToken("spotify", slog.Default())
+	if token == "" {
+		return nil, ErrUnauthorized
+	}
+
+	upstreamBase := "https://api.spotify.com/v1"
+	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	var all []Artist
+	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
+	for page := 0; page < 10 && nextURL != ""; page++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("spotify following returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		// Spotify nests followed artists under artists.items
+		container := raw
+		if artistsObj, ok := raw["artists"].(map[string]any); ok {
+			container = artistsObj
+		}
+		items, _ := container["items"].([]any)
+		for _, item := range items {
+			artist, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			all = append(all, spotifyNeutralArtist(artist))
+		}
+		nextURL, _ = container["next"].(string)
+	}
+	return all, nil
+}
+
+// spotifyNeutralAlbum maps a raw Spotify album into the neutral Album type.
+func spotifyNeutralAlbum(album map[string]any) Album {
+	id, _ := album["id"].(string)
+	name, _ := album["name"].(string)
+	uri, _ := album["uri"].(string)
+
+	var artists []Artist
+	for _, n := range extractNames(album, "artists") {
+		artists = append(artists, newArtist("spotify", "Spotify", "", n))
+	}
+
+	url := ""
+	if id != "" {
+		url = "https://open.spotify.com/album/" + id
+	}
+	extra := map[string]any{}
+	if uri != "" {
+		extra["uri"] = uri
+	}
+
+	return Album{
+		Name:    name,
+		Artists: artists,
+		Sources: []AlbumSource{{
+			Service:     "spotify",
+			ServiceName: "Spotify",
+			ID:          id,
+			Name:        name,
+			URL:         url,
+		}},
+	}
+}
+
+// spotifyNeutralArtist maps a raw Spotify artist into the neutral Artist type.
+func spotifyNeutralArtist(artist map[string]any) Artist {
+	id, _ := artist["id"].(string)
+	name, _ := artist["name"].(string)
+	url := ""
+	if id != "" {
+		url = "https://open.spotify.com/artist/" + id
+	}
+	a := newArtist("spotify", "Spotify", id, name)
+	if len(a.Sources) > 0 {
+		a.Sources[0].URL = url
+	}
+	return a
+}
+
+// ListUserLikedTracks implements LikedTrackProvider. Fetches Spotify saved
+// tracks and returns them in Guardian's neutral format.
+func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, error) {
+	token := c.server.getValidToken("spotify", slog.Default())
+	if token == "" {
+		return nil, ErrUnauthorized
+	}
+
+	upstreamBase := "https://api.spotify.com/v1"
+	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	var all []Track
+	nextURL := upstreamBase + "/me/tracks?limit=50"
+	for page := 0; page < 10 && nextURL != ""; page++ {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("spotify saved tracks returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		items, _ := raw["items"].([]any)
+		for _, item := range items {
+			saved, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			track, _ := saved["track"].(map[string]any)
+			if track == nil {
+				continue
+			}
+			all = append(all, spotifyNeutralTrack(track))
+		}
+		nextURL, _ = raw["next"].(string)
+	}
+	return all, nil
 }
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Spotify playlists
