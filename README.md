@@ -433,9 +433,8 @@ Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 
 Returns the user's contacts from every connected contact-capable service.
 Connectors opt in by implementing `ContactProvider` (`ListUserContacts`).
-Until a contact-capable service is registered, the endpoint returns `404
-no contact-capable services configured`. Permission key: `contacts` (paths
-`/contacts/*` and `/me/contacts` on the service proxy).
+Permission key: `contacts` (paths `/contacts/*`, `/me/contacts`, and `/people/*`
+on the service proxy).
 
 ```json
 {
@@ -464,6 +463,25 @@ no contact-capable services configured`. Permission key: `contacts` (paths
 }
 ```
 
+#### Google Contacts
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create an OAuth 2.0 Client ID (Web application)
+3. Add `https://your-guardian/v1/auth/google/callback` as an authorized redirect URI
+4. Enable the **People API**
+5. Copy credentials into `guardian.json` (see `guardian.example.json`)
+
+Scope: `https://www.googleapis.com/auth/contacts.readonly`. The connector lists
+address-book connections via `GET /people/me/connections` and maps them to
+neutral `Contact` values. Service-local IDs are People resource names
+(`people/c123`).
+
+Contacts are the first cross-type identity: `Photo.people[]` holds the same
+`Contact` shape, so a person from this address book can be matched to someone
+listed on a photo via email/phone/name. Google Photos itself does not currently
+expose face/people labels through the public API, so photo `people[]` stays
+empty until a provider supplies them — the merge path is ready.
+
 ### Photos as a data type
 
 `Photo` is Guardian's neutral representation of a photo (or video still).
@@ -485,7 +503,7 @@ Neutral photo fields (user-facing):
 | `mime_type` | Media type (e.g. `image/jpeg`) |
 | `filename` | Original filename or service display name |
 | `caption` | Description, when present |
-| `people[]` | Known people as `Contact` values (future connectors) |
+| `people[]` | Known people as `Contact` values; merged with contacts-library identity matching |
 | `sources[]` | Service-local copies: `service`, `id`, `url`, `canonical`, `blob_url`, `thumbnail_url` |
 
 Cross-service merge uses a **content hash** when a provider supplies one
@@ -643,6 +661,7 @@ aperture-guardian/
   youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
   amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
   google-photos.go  Google Photos connector (photo metadata only; bytes stay upstream)
+  google-contacts.go Google Contacts / People API connector (ContactProvider)
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```
