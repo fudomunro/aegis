@@ -63,10 +63,10 @@ func TestYouTubeGetLikedPlaylistID_NoToken(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
-	// getLikedPlaylistID hardcodes googleapis.com; intercept via DefaultClient.
-	orig := http.DefaultClient
-	defer func() { http.DefaultClient = orig }()
-	http.DefaultClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	// getLikedPlaylistID may hit the real host; intercept via guardianHTTPClient.
+	orig := guardianHTTPClient
+	defer func() { guardianHTTPClient = orig }()
+	guardianHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			return &http.Response{
 				StatusCode: http.StatusUnauthorized,
@@ -99,9 +99,9 @@ func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_NoChannel(t *testing.T) {
-	orig := http.DefaultClient
-	defer func() { http.DefaultClient = orig }()
-	http.DefaultClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	orig := guardianHTTPClient
+	defer func() { guardianHTTPClient = orig }()
+	guardianHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(`{"items":[]}`)),
@@ -128,7 +128,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 func TestYouTubeListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	conn := NewYouTubeMusicConnector(srv)
-	if _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -154,7 +154,7 @@ func TestYouTubeListUserPlaylists_Success(t *testing.T) {
 		Expiry:      time.Now().Add(time.Hour),
 	}
 	conn := NewYouTubeMusicConnector(srv)
-	playlists, err := conn.ListUserPlaylists(context.Background())
+	playlists, _, err := conn.ListUserPlaylists(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

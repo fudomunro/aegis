@@ -176,3 +176,204 @@ func firstSourceID(p Playlist) string {
 	}
 	return p.Sources[0].ID
 }
+
+// trackIdentityKey produces the merge key for a liked track: normalized title
+// plus primary artist. Same v1 quality as playlist name matching.
+func trackIdentityKey(t Track) string {
+	title := NormalizeIdentityKey(t.Name)
+	artist := ""
+	if len(t.Artists) > 0 {
+		artist = NormalizeIdentityKey(t.Artists[0].Name)
+	}
+	if title == "" {
+		if len(t.Sources) > 0 {
+			return "\x00" + t.Sources[0].Service + ":" + t.Sources[0].ID
+		}
+		return "\x00"
+	}
+	if artist == "" {
+		return title
+	}
+	return title + "|" + artist
+}
+
+// MergeTracksSync groups liked tracks that share a normalized title and
+// primary artist into a single user-facing track with multiple Sources.
+// This mirrors MergePlaylistsSync for the liked-songs library.
+func MergeTracksSync(in []Track) []Track {
+	if len(in) == 0 {
+		return nil
+	}
+	type entry struct {
+		key string
+		t   Track
+	}
+	var order []string
+	byKey := map[string]*entry{}
+
+	for _, t := range in {
+		key := trackIdentityKey(t)
+		if cur, ok := byKey[key]; ok {
+			cur.t.Sources = append(cur.t.Sources, t.Sources...)
+			// Merge artist sources; keep first non-empty album.
+			cur.t.Artists = mergeArtists(append(cur.t.Artists, t.Artists...)...)
+			if cur.t.Album == nil && t.Album != nil {
+				album := *t.Album
+				cur.t.Album = &album
+			}
+			if cur.t.DurationMs == 0 && t.DurationMs != 0 {
+				cur.t.DurationMs = t.DurationMs
+			}
+			if cur.t.Duration == "" && t.Duration != "" {
+				cur.t.Duration = t.Duration
+			}
+			if len(cur.t.Extra) == 0 && len(t.Extra) > 0 {
+				cur.t.Extra = t.Extra
+			}
+			continue
+		}
+		cp := t
+		cp.Sources = append([]TrackSource(nil), t.Sources...)
+		if t.Album != nil {
+			album := *t.Album
+			cp.Album = &album
+		}
+		byKey[key] = &entry{key: key, t: cp}
+		order = append(order, key)
+	}
+
+	out := make([]Track, 0, len(order))
+	for _, k := range order {
+		e := byKey[k]
+		sort.SliceStable(e.t.Sources, func(i, j int) bool {
+			if e.t.Sources[i].ServiceName != e.t.Sources[j].ServiceName {
+				return e.t.Sources[i].ServiceName < e.t.Sources[j].ServiceName
+			}
+			return e.t.Sources[i].Service < e.t.Sources[j].Service
+		})
+		if e.t.Artists != nil {
+			sort.SliceStable(e.t.Artists, func(i, j int) bool {
+				return e.t.Artists[i].Name < e.t.Artists[j].Name
+			})
+		}
+		out = append(out, e.t)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return trackIdentityKey(out[i]) < trackIdentityKey(out[j])
+	})
+	return out
+}
+
+// albumIdentityKey produces the merge key for a saved album: normalized title
+// plus primary artist.
+func albumIdentityKey(a Album) string {
+	title := NormalizeIdentityKey(a.Name)
+	artist := ""
+	if len(a.Artists) > 0 {
+		artist = NormalizeIdentityKey(a.Artists[0].Name)
+	}
+	if title == "" {
+		if len(a.Sources) > 0 {
+			return "\x00" + a.Sources[0].Service + ":" + a.Sources[0].ID
+		}
+		return "\x00"
+	}
+	if artist == "" {
+		return title
+	}
+	return title + "|" + artist
+}
+
+// MergeAlbumsSync groups saved albums that share a normalized title and
+// primary artist into one user-facing album with multiple Sources.
+func MergeAlbumsSync(in []Album) []Album {
+	if len(in) == 0 {
+		return nil
+	}
+	type entry struct {
+		key string
+		a   Album
+	}
+	var order []string
+	byKey := map[string]*entry{}
+
+	for _, a := range in {
+		key := albumIdentityKey(a)
+		if cur, ok := byKey[key]; ok {
+			cur.a.Sources = append(cur.a.Sources, a.Sources...)
+			cur.a.Artists = mergeArtists(append(cur.a.Artists, a.Artists...)...)
+			continue
+		}
+		cp := a
+		cp.Sources = append([]AlbumSource(nil), a.Sources...)
+		byKey[key] = &entry{key: key, a: cp}
+		order = append(order, key)
+	}
+
+	out := make([]Album, 0, len(order))
+	for _, k := range order {
+		e := byKey[k]
+		sort.SliceStable(e.a.Sources, func(i, j int) bool {
+			if e.a.Sources[i].ServiceName != e.a.Sources[j].ServiceName {
+				return e.a.Sources[i].ServiceName < e.a.Sources[j].ServiceName
+			}
+			return e.a.Sources[i].Service < e.a.Sources[j].Service
+		})
+		out = append(out, e.a)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return albumIdentityKey(out[i]) < albumIdentityKey(out[j])
+	})
+	return out
+}
+
+// mergeArtistLibrary folds followed artists across services by normalized name.
+func mergeArtistLibrary(in []Artist) []Artist {
+	if len(in) == 0 {
+		return nil
+	}
+	type entry struct {
+		key string
+		a   Artist
+	}
+	var order []string
+	byKey := map[string]*entry{}
+
+	for _, a := range in {
+		key := NormalizeIdentityKey(a.Name)
+		if key == "" {
+			if len(a.Sources) > 0 {
+				key = "\x00" + a.Sources[0].Service + ":" + a.Sources[0].ID
+			} else {
+				continue
+			}
+		}
+		if cur, ok := byKey[key]; ok {
+			cur.a.Sources = append(cur.a.Sources, a.Sources...)
+			continue
+		}
+		cp := a
+		cp.Sources = append([]ArtistSource(nil), a.Sources...)
+		byKey[key] = &entry{key: key, a: cp}
+		order = append(order, key)
+	}
+
+	out := make([]Artist, 0, len(order))
+	for _, k := range order {
+		e := byKey[k]
+		sort.SliceStable(e.a.Sources, func(i, j int) bool {
+			if e.a.Sources[i].ServiceName != e.a.Sources[j].ServiceName {
+				return e.a.Sources[i].ServiceName < e.a.Sources[j].ServiceName
+			}
+			return e.a.Sources[i].Service < e.a.Sources[j].Service
+		})
+		out = append(out, e.a)
+	}
+
+	sort.SliceStable(out, func(i, j int) bool {
+		return NormalizeIdentityKey(out[i].Name) < NormalizeIdentityKey(out[j].Name)
+	})
+	return out
+}

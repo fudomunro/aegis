@@ -54,6 +54,9 @@ cp guardian.example.json guardian.json
 Guardian starts with these endpoints:
 - `POST /v1/pre-request` — Aperture hook
 - `GET /v1/library/playlists` — unified playlists across all connected services
+- `GET /v1/library/tracks` — unified liked/saved tracks across all connected services
+- `GET /v1/library/albums` — unified saved albums across all connected services
+- `GET /v1/library/artists` — unified followed/top artists across all connected services
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
@@ -80,7 +83,7 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
     "client_secret": "...",
     "auth_url": "https://accounts.spotify.com/authorize",
     "token_url": "https://accounts.spotify.com/api/token",
-    "scopes": ["user-library-read", "playlist-read-private"]
+    "scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
   }
 }
 ```
@@ -179,6 +182,17 @@ Default mode is `auto` (identity if present, else API key). For a solo tailnet, 
 3. Set the redirect URI to `https://your-guardian/v1/auth/spotify/callback`
 4. Copy the Client ID and Client Secret into `guardian.json`
 
+Spotify scopes (see `guardian.example.json`):
+
+| Scope | Needed for |
+|-------|------------|
+| `user-library-read` | Liked tracks (`/v1/library/tracks`), saved albums (`/v1/library/albums`), playlists |
+| `user-follow-read` | Followed artists (`/v1/library/artists` via `/me/following`) |
+| `playlist-read-private` / `playlist-read-collaborative` | Private and collaborative playlists |
+| `user-read-playback-state` | Player state (optional; often denied via permissions) |
+
+**Reconnect after adding scopes.** OAuth tokens keep the scopes from the original consent. After you add `user-follow-read` (or any new scope) to `guardian.json`, visit `/v1/auth/spotify/login` again so Spotify re-issues a token with the expanded grant. Without that, `/v1/library/artists` returns an upstream 403 even though saved tracks still work.
+
 ### YouTube Music (Google)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
@@ -256,7 +270,7 @@ Receives Aperture's `pre_request` payload. Returns one of:
 - `{"action": "modify", "request_body": {...}}` — LLM request with injected proxy instructions (Aperture requires the `request_body` field)
 - `{"action": "block", "message": "..."}` — request rejected (403)
 
-When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Guardian injects instructions for the unified library endpoint so agents can answer across every connected service.
+When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Guardian injects instructions for the unified library endpoint so agents can answer across every connected service. The same applies to liked songs ("what songs have I liked?") via `/v1/library/tracks`.
 
 ### Unified library
 
@@ -333,6 +347,53 @@ The library endpoint treats **same-named playlists** on different services as on
 Tracks carry unified `artists` / `album` objects. Cross-service matching is **text-based** (`NormalizeIdentityKey`: case, whitespace, strip YouTube “ - Topic”). “Britney Spears” on Spotify and Tidal become one `Artist` with two `sources`. Better entity resolution (MBIDs, ISRC, fuzzy names) is intentionally deferred — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
+
+### Unified liked tracks
+
+```
+GET /v1/library/tracks
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Returns the user's liked/saved tracks from every connected music service in Guardian's neutral `Track` format. Connectors opt in by implementing `LikedTrackProvider` (`ListUserLikedTracks`). Permission key: `tracks` (also covers proxy paths `/me/tracks` and `/me/liked`).
+
+```json
+{
+  "tracks": [
+    {
+      "name": "Blinding Lights",
+      "artists": [{ "name": "The Weeknd", "sources": [{ "service": "spotify", "name": "The Weeknd" }] }],
+      "album": { "name": "After Hours", "sources": [{ "service": "spotify", "id": "al1", "name": "After Hours" }] },
+      "sources": [
+        { "service": "spotify", "service_name": "Spotify", "id": "t1", "url": "https://open.spotify.com/track/t1" },
+        { "service": "youtube-music", "service_name": "YouTube Music", "id": "vid1", "url": "https://www.youtube.com/watch?v=vid1" }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "spotify": { "status": "ok", "count": 120 },
+    "youtube-music": { "status": "ok", "count": 45 }
+  }
+}
+```
+
+Cross-service merge is **title + primary artist** via `NormalizeIdentityKey` (same v1 quality as playlists). Spotify maps `/me/tracks` (saved library); YouTube Music maps the liked-videos playlist.
+
+### Unified albums and artists
+
+```
+GET /v1/library/albums
+GET /v1/library/artists
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Saved albums and followed/top artists follow the same library pattern. Connectors opt in via `AlbumProvider` (`ListUserSavedAlbums`) and `ArtistProvider` (`ListUserFollowedArtists`). Permission keys: `albums` and `artists`.
+
+- Spotify albums: `GET /me/albums`; artists: `GET /me/following?type=artist`
+- YouTube Music artists: channel subscriptions (`GET /subscriptions?mine=true`). No public saved-albums API — albums remain Spotify-only until one is available.
+- Permission key `artists` also gates the underlying proxy paths `/me/following` and `/me/subscriptions` so `artists: none` blocks both the library endpoint and the raw proxy.
 
 ### Contact as a data type
 
@@ -478,7 +539,8 @@ aperture-guardian/
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
   models.go         Neutral data types (Playlist, Track, Contact, PlaylistList, ContactList)
-  library.go        Cross-service library endpoint + PlaylistProvider
+  library.go        Library providers + thin per-kind handlers
+  librarykind.go    LibraryKind registry + shared generic aggregate pipeline
   contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens

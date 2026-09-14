@@ -1,6 +1,14 @@
 # Binaries
 aperture-guardian
+guardian
 *.exe
+
+# Local live-test state (issue #1)
+guardian.json
+tokens.json
+.guardian-token-pass
+guardian.log
+*.log
 
 # IDE
 .idea/

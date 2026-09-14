@@ -2,15 +2,9 @@ package main
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
-	"fmt"
-	"log/slog"
 	"net/http"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 )
 
 // ContactProvider is implemented by connectors that can return the user's
@@ -22,7 +16,8 @@ type ContactProvider interface {
 	// ListUserContacts fetches the user's contacts from the upstream service
 	// and maps them into neutral Contact values (service identity in Sources).
 	// Return ErrUnauthorized when no valid token is available.
-	ListUserContacts(ctx context.Context) ([]Contact, error)
+	// truncated is true when the page cap was hit with more items still upstream.
+	ListUserContacts(ctx context.Context) (contacts []Contact, truncated bool, err error)
 }
 
 // NormalizeContactEmail lowercases and trims an address for identity matching.
@@ -344,187 +339,49 @@ func MergeContacts(in []Contact) []Contact {
 }
 
 // HandleLibraryContacts returns the user's contacts from every connected
-// service in one neutral list: GET /v1/library/contacts
+// service: GET /v1/library/contacts
 func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	logger := withPeerLog(slog.With("handler", "library_contacts"), r)
-
-	cacheKey := "library:contacts"
-	if cached, ok := s.cache.Get(cacheKey); ok {
-		logger.Debug("cache hit")
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Guardian-Cache", "hit")
-		w.Write([]byte(cached))
-		return
-	}
-
-	type serviceTarget struct {
-		id       string
-		provider ContactProvider
-	}
-
-	var targets []serviceTarget
-	var deniedContacts []string
-	for id, connector := range s.connectors {
-		svc := s.config.GetService(id)
-		if svc == nil || svc.Action == "block" {
-			continue
-		}
-		provider, ok := connector.(ContactProvider)
-		if !ok {
-			continue
-		}
-		if !svc.Permissions.AllowsRead("contacts") {
-			deniedContacts = append(deniedContacts, id)
-			logger.Info("library contacts denied by permission", "service", id,
-				"permission", svc.Permissions.For("contacts"))
-			continue
-		}
-		targets = append(targets, serviceTarget{id: id, provider: provider})
-	}
-
-	if len(targets) == 0 {
-		if len(deniedContacts) > 0 {
-			writeJSONError(w, http.StatusForbidden, "permission denied: agent access to contacts is not allowed")
-			return
-		}
-		writeJSONError(w, http.StatusNotFound, "no contact-capable services configured")
-		return
-	}
-
-	var (
-		mu    sync.Mutex
-		wg    sync.WaitGroup
-		all   []Contact
-		bySvc = make(map[string]LibraryServiceStatus, len(targets))
-	)
-
-	ctx := r.Context()
-	for _, t := range targets {
-		wg.Add(1)
-		go func(t serviceTarget) {
-			defer wg.Done()
-			contacts, err := t.provider.ListUserContacts(ctx)
-			var status LibraryServiceStatus
-			switch {
-			case err == nil:
-				status = LibraryServiceStatus{Status: LibraryStatusOK, Count: len(contacts)}
-				mu.Lock()
-				all = append(all, contacts...)
-				mu.Unlock()
-			case errors.Is(err, ErrUnauthorized):
-				logger.Info("library contacts unauthorized", "service", t.id)
-				status = LibraryServiceStatus{Status: LibraryStatusUnauthorized, Error: "not authorized — connect at /v1/auth/" + t.id + "/login"}
-			default:
-				logger.Warn("library contacts failed", "service", t.id, "error", err)
-				status = LibraryServiceStatus{Status: LibraryStatusError, Error: "failed to fetch contacts"}
-			}
-			mu.Lock()
-			bySvc[t.id] = status
-			mu.Unlock()
-		}(t)
-	}
-	wg.Wait()
-
-	sort.SliceStable(all, func(i, j int) bool {
-		si, sj := "", ""
-		if len(all[i].Sources) > 0 {
-			si = all[i].Sources[0].ServiceName
-		}
-		if len(all[j].Sources) > 0 {
-			sj = all[j].Sources[0].ServiceName
-		}
-		if si != sj {
-			return si < sj
-		}
-		return primaryContactKey(all[i]) < primaryContactKey(all[j])
+	kind := *LibraryKindByID("contacts")
+	handleLibraryAggregate(s, w, r, libraryKindSpec[Contact]{
+		kind: kind,
+		targets: func(s *Server) ([]namedLister[Contact], []string) {
+			return collectProviders[Contact, ContactProvider](s, kind.PermType,
+				func(p ContactProvider) func(context.Context) ([]Contact, bool, error) {
+					return p.ListUserContacts
+				})
+		},
+		serviceOf: contactServiceName,
+		sortKey:   primaryContactKey,
+		merge:     MergeContacts,
+		encode: func(merged []Contact, bySvc map[string]LibraryServiceStatus) any {
+			return ContactList{Contacts: merged, Total: len(merged), Synced: true, ByService: bySvc}
+		},
 	})
-
-	merged := MergeContacts(all)
-
-	resp := ContactList{
-		Contacts:  merged,
-		Total:     len(merged),
-		Synced:    true,
-		ByService: bySvc,
-	}
-	if resp.Contacts == nil {
-		resp.Contacts = []Contact{}
-	}
-
-	result, err := json.Marshal(resp)
-	if err != nil {
-		logger.Error("failed to marshal library contacts", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build contact list")
-		return
-	}
-
-	// Short TTL: aggregate spans multiple APIs and should stay fresh.
-	s.cache.Set(cacheKey, string(result), 60*time.Second)
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
-	w.Write(result)
 }
 
-// hasContactProviders reports whether any registered connector can list
-// neutral contacts for the library endpoint.
+func contactServiceName(c Contact) string {
+	if len(c.Sources) > 0 {
+		return c.Sources[0].ServiceName
+	}
+	return ""
+}
+
+// hasContactProviders reports whether any registered connector can list contacts.
 func (s *Server) hasContactProviders() bool {
-	for _, connector := range s.connectors {
-		if _, ok := connector.(ContactProvider); ok {
-			return true
-		}
-	}
-	return false
+	return LibraryKindByID("contacts").HasProviders(s)
 }
 
-// contactsLibraryReadable reports whether at least one configured service
-// allows read access to contacts (used to decide whether to inject library hints).
+// contactsLibraryReadable reports whether any service allows contact reads.
 func (s *Server) contactsLibraryReadable() bool {
-	for _, svc := range s.config.Services {
-		if svc.Action == "block" {
-			continue
-		}
-		if svc.Permissions.AllowsRead("contacts") {
-			return true
-		}
-	}
-	return false
+	return LibraryKindByID("contacts").Readable(s)
 }
 
-// libraryContactsSystemInstructions tells agents about the cross-service
-// contacts endpoint.
+// libraryContactsSystemInstructions tells agents about the contacts endpoint.
 func (s *Server) libraryContactsSystemInstructions() string {
-	root := strings.TrimRight(s.baseURL, "/")
-	return fmt.Sprintf(
-		"Unified contacts library (use when the user asks about people, contacts, or their address book):\n"+
-			"GET %s/v1/library/contacts — all user contacts from every connected service in one "+
-			"neutral list (name, emails, phones, handles, organization, sources[]).\n"+
-			"Contacts that share an email, phone, handle, or name are synced into one entry with "+
-			"multiple sources[]. Prefer this endpoint for questions like \"who is in my contacts?\" "+
-			"so the answer includes every connected contact-capable service.",
-		root,
-	)
+	return LibraryKindByID("contacts").Instructions(s.baseURL)
 }
 
 // mentionsContacts detects contact-oriented questions that don't name a service.
 func mentionsContacts(msg string) bool {
-	lower := strings.ToLower(msg)
-	for _, keyword := range []string{
-		"my contacts",
-		"address book",
-		"contact list",
-		"contacts list",
-		"who is in my contacts",
-		"people i know",
-	} {
-		if strings.Contains(lower, keyword) {
-			return true
-		}
-	}
-	return false
+	return LibraryKindByID("contacts").Mentions(msg)
 }
