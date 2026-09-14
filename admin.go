@@ -440,6 +440,27 @@ const adminHTML = `<!DOCTYPE html>
   .perm-status { font-size: 0.82rem; color: var(--dim); margin-top: 0.45rem; min-height: 1.1em; }
   .perm-status.ok { color: var(--green); }
   .perm-status.err { color: var(--red); }
+  .map-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.75rem; overflow-x: auto; margin-bottom: 0.85rem;
+  }
+  .map-wrap svg { display: block; max-width: 100%; height: auto; }
+  .map-legend {
+    display: flex; flex-wrap: wrap; gap: 0.65rem 1rem; margin: 0.5rem 0 1rem;
+    color: var(--dim); font-size: 0.8rem;
+  }
+  .map-legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .map-legend i {
+    display: inline-block; width: 14px; height: 3px; border-radius: 2px; background: var(--dim);
+  }
+  .map-legend i.hook { background: #bc8cff; }
+  .map-legend i.access { background: var(--accent); }
+  .map-legend i.data { background: var(--green); }
+  .map-legend i.meta { background: var(--dim); }
+  .map-legend i.denied { background: var(--red); }
+  .map-legend i.library { background: var(--orange); }
+  .map-narrative { margin-bottom: 0.85rem; }
+  .map-libraries { display: grid; gap: 0.55rem; }
   @media (max-width: 560px) {
     .wrap { padding: 1rem 0.85rem 2rem; }
     th:nth-child(3), td:nth-child(3) { display: none; }
@@ -470,13 +491,33 @@ const adminHTML = `<!DOCTYPE html>
     <div class="status-strip" id="status-strip"></div>
 
     <nav role="tablist" aria-label="Admin sections">
-      <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="true">Services</button>
+      <button class="tab" role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
+      <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="false">Services</button>
       <button class="tab" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false">Library</button>
       <button class="tab" role="tab" id="tab-cache" aria-controls="panel-cache" aria-selected="false">Cache</button>
       <button class="tab" role="tab" id="tab-runtime" aria-controls="panel-runtime" aria-selected="false">Runtime</button>
     </nav>
 
-    <section id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services">
+    <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
+      <div class="toolbar">
+        <span class="meta" id="map-meta">How agents, Guardian, and your services connect</span>
+        <div class="grow"></div>
+        <button class="btn" id="reload-flow" type="button">Refresh</button>
+      </div>
+      <div id="map-narrative" class="meta map-narrative"></div>
+      <div class="map-wrap" id="map-svg-wrap"><div class="empty">Loading map…</div></div>
+      <div class="map-legend" aria-label="Edge legend">
+        <span><i class="hook"></i> Hook</span>
+        <span><i class="access"></i> Agent access</span>
+        <span><i class="data"></i> Live data</span>
+        <span><i class="library"></i> Library fan-in</span>
+        <span><i class="meta"></i> Meta / needs auth</span>
+        <span><i class="denied"></i> Blocked</span>
+      </div>
+      <div id="map-libraries" class="map-libraries"></div>
+    </section>
+
+    <section id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services" hidden>
       <div class="toolbar">
         <div class="grow">
           <input type="search" id="service-filter" placeholder="Filter services…" aria-label="Filter services">
@@ -590,6 +631,180 @@ const adminHTML = `<!DOCTYPE html>
     if (n < 1024) return n + " B";
     if (n < 1024 * 1024) return (n / 1024).toFixed(1) + " KB";
     return (n / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  const FLOW_STATUS_COLORS = {
+    connected: "#3fb950",
+    "needs-auth": "#d29922",
+    expired: "#d29922",
+    blocked: "#f85149",
+    configured: "#58a6ff",
+  };
+  const FLOW_EDGE_COLORS = {
+    hook: "#bc8cff",
+    access: "#58a6ff",
+    data: "#3fb950",
+    library: "#d29922",
+    meta: "#8b949e",
+    denied: "#f85149",
+  };
+
+  function flowStatusFill(status, kind) {
+    if (kind === "guardian") return "#1c2129";
+    if (kind === "store") return "#21262d";
+    if (kind === "agent" || kind === "gateway") return "#161b22";
+    return "#161b22";
+  }
+
+  function flowStatusStroke(status, kind) {
+    if (kind === "guardian") return "#58a6ff";
+    if (kind === "agent" || kind === "gateway") return "#8b949e";
+    if (kind === "store") return "#30363d";
+    return FLOW_STATUS_COLORS[status] || "#30363d";
+  }
+
+  function layoutFlowNodes(nodes) {
+    const pos = {};
+    const core = {
+      agents: { x: 24, y: 180, w: 130, h: 56 },
+      aperture: { x: 190, y: 180, w: 130, h: 56 },
+      guardian: { x: 350, y: 140, w: 160, h: 120 },
+      tokens: { x: 350, y: 290, w: 160, h: 48 },
+      cache: { x: 350, y: 352, w: 160, h: 48 },
+    };
+    nodes.forEach((n) => {
+      if (core[n.id]) {
+        pos[n.id] = Object.assign({ label: n.label, kind: n.kind, status: n.status }, core[n.id]);
+        return;
+      }
+    });
+    const services = nodes.filter((n) => n.kind === "service");
+    const gap = 12;
+    const h = 52;
+    const total = services.length * (h + gap) - gap;
+    const startY = Math.max(24, Math.floor(220 - total / 2));
+    services.forEach((n, i) => {
+      pos[n.id] = {
+        x: 560,
+        y: startY + i * (h + gap),
+        w: 200,
+        h: h,
+        label: n.label,
+        kind: n.kind,
+        status: n.status,
+      };
+    });
+    const bottom = Math.max(420, startY + total + 24);
+    return { pos: pos, width: 790, height: bottom };
+  }
+
+  function flowAnchor(pos, side) {
+    if (side === "left") return { x: pos.x, y: pos.y + pos.h / 2 };
+    if (side === "right") return { x: pos.x + pos.w, y: pos.y + pos.h / 2 };
+    if (side === "top") return { x: pos.x + pos.w / 2, y: pos.y };
+    return { x: pos.x + pos.w / 2, y: pos.y + pos.h };
+  }
+
+  function flowEdgePath(from, to, style) {
+    // Vertical neighbors (stores under Guardian).
+    if (Math.abs((from.x + from.w / 2) - (to.x + to.w / 2)) < 8 && to.y >= from.y + from.h - 4) {
+      const a = flowAnchor(from, "bottom");
+      const b = flowAnchor(to, "top");
+      const midY = (a.y + b.y) / 2;
+      return "M " + a.x + " " + a.y + " C " + a.x + " " + midY + ", " + b.x + " " + midY + ", " + b.x + " " + b.y;
+    }
+    const a = flowAnchor(from, "right");
+    const b = flowAnchor(to, "left");
+    // Library fan-in: service → guardian, draw under the main data edge.
+    if (style === "library") {
+      const midY = Math.max(a.y, b.y) + 18;
+      return "M " + a.x + " " + a.y + " C " + (a.x + 40) + " " + midY + ", " + (b.x - 40) + " " + midY + ", " + b.x + " " + b.y;
+    }
+    // Guardian → service and horizontal links.
+    const midX = (a.x + b.x) / 2;
+    return "M " + a.x + " " + a.y + " C " + midX + " " + a.y + ", " + midX + " " + b.y + ", " + b.x + " " + b.y;
+  }
+
+  function renderFlowMap(topo) {
+    const layout = layoutFlowNodes(topo.nodes || []);
+    const pos = layout.pos;
+    const parts = [];
+    parts.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + layout.width + " " + layout.height + '" width="' + layout.width + '" height="' + layout.height + '" role="img" aria-label="Guardian data-flow map">');
+    parts.push("<defs>");
+    parts.push('<marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/></marker>');
+    Object.keys(FLOW_EDGE_COLORS).forEach((style) => {
+      parts.push('<marker id="flow-arrow-' + style + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + FLOW_EDGE_COLORS[style] + '"/></marker>');
+    });
+    parts.push("</defs>");
+
+    (topo.edges || []).forEach((e) => {
+      const from = pos[e.from];
+      const to = pos[e.to];
+      if (!from || !to) return;
+      const color = FLOW_EDGE_COLORS[e.style] || "#8b949e";
+      const dash = e.style === "hook" || e.style === "meta" || e.style === "denied" || e.style === "library"
+        ? ' stroke-dasharray="5 4"'
+        : "";
+      const d = flowEdgePath(from, to, e.style);
+      parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.6"' + dash + ' marker-end="url(#flow-arrow-' + (FLOW_EDGE_COLORS[e.style] ? e.style : "access") + ')"/>');
+      // Label near the midpoint.
+      const mx = (from.x + from.w + to.x) / 2;
+      const my = (from.y + from.h / 2 + to.y + to.h / 2) / 2;
+      if (e.label) {
+        parts.push('<text x="' + mx + '" y="' + (my - 4) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label) + "</text>");
+      }
+    });
+
+    (topo.nodes || []).forEach((n) => {
+      const p = pos[n.id];
+      if (!p) return;
+      const stroke = flowStatusStroke(n.status, n.kind);
+      const fill = flowStatusFill(n.status, n.kind);
+      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5"/>');
+      parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 - (n.status || n.detail ? 6 : 0)) + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(n.label) + "</text>");
+      const sub = n.status || (n.kind === "guardian" ? "hook · proxy · library" : "");
+      if (sub) {
+        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 + 12) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(sub) + "</text>");
+      }
+    });
+
+    parts.push("</svg>");
+    $("map-svg-wrap").innerHTML = parts.join("");
+  }
+
+  function renderFlowLibraries(libraries) {
+    const root = $("map-libraries");
+    if (!libraries || !libraries.length) {
+      root.innerHTML = '<div class="empty">No unified library datasets registered.</div>';
+      return;
+    }
+    root.innerHTML = libraries.map((lib) => {
+      const providers = (lib.providers || []).length
+        ? lib.providers.map((id) => "<code>" + escapeHtml(id) + "</code>").join(" ")
+        : "<em>none</em>";
+      return (
+        '<article class="card">' +
+        '<div class="card-header"><h3>' + escapeHtml(lib.label) + '</h3> <code>' + escapeHtml(lib.path) + "</code></div>" +
+        '<div class="meta">' + escapeHtml(lib.sync_rule) + "</div>" +
+        '<div class="meta">Providers: ' + providers + "</div>" +
+        "</article>"
+      );
+    }).join("");
+  }
+
+  async function loadFlow() {
+    try {
+      const topo = await api("/v1/admin/flow");
+      $("map-narrative").textContent = topo.narrative || "";
+      renderFlowMap(topo);
+      renderFlowLibraries(topo.libraries);
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      $("map-svg-wrap").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "Failed to load data-flow map") + "</div>";
+    }
   }
 
   function tokenBadge(token, hasOAuth) {
@@ -1272,7 +1487,7 @@ const adminHTML = `<!DOCTYPE html>
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/services/{id}/permissions</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
   }
 
@@ -1285,6 +1500,7 @@ const adminHTML = `<!DOCTYPE html>
       renderStatusStrip(summary);
       renderServices($("service-filter").value);
       renderRuntime(summary);
+      loadFlow();
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -1294,19 +1510,22 @@ const adminHTML = `<!DOCTYPE html>
     }
   }
 
+  const FLOW_TABS = ["map", "services", "library", "cache", "runtime"];
+
   function selectTab(name) {
-    ["services", "library", "cache", "runtime"].forEach((id) => {
+    FLOW_TABS.forEach((id) => {
       const tab = $("tab-" + id);
       const panel = $("panel-" + id);
       const on = id === name;
       tab.setAttribute("aria-selected", on ? "true" : "false");
       panel.hidden = !on;
     });
+    if (name === "map") loadFlow();
     if (name === "library") loadAllLibraryKinds();
     if (name === "cache") loadCache();
   }
 
-  ["services", "library", "cache", "runtime"].forEach((id) => {
+  FLOW_TABS.forEach((id) => {
     $("tab-" + id).addEventListener("click", () => selectTab(id));
   });
 
@@ -1325,6 +1544,7 @@ const adminHTML = `<!DOCTYPE html>
     btn.addEventListener("click", () => setLibraryKind(btn.getAttribute("data-library-kind")));
   });
   $("reload-summary").addEventListener("click", () => loadSummary());
+  $("reload-flow").addEventListener("click", () => loadFlow());
   $("reload-library").addEventListener("click", () => loadAllLibraryKinds());
   $("reload-cache").addEventListener("click", () => loadCache());
   $("clear-cache").addEventListener("click", async () => {
