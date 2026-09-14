@@ -74,14 +74,20 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 				},
 			},
 			{
-				Name:        "channels",
-				Description: "YouTube channels — subscribed music channels",
+				Name:        "artists",
+				Description: "Followed artists / subscribed channels (feeds /v1/library/artists)",
 				Operations: []Operation{
-					{Name: "read_subscriptions", Description: "List subscribed channels (paginated)", Method: "GET", Path: "/me/subscriptions",
+					{Name: "read_followed", Description: "List followed artists via channel subscriptions (paginated). Permission key: artists.", Method: "GET", Path: "/me/subscriptions",
 						Parameters: []Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
 						Response: ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
+				},
+			},
+			{
+				Name:        "channels",
+				Description: "YouTube channels — lookup by id",
+				Operations: []Operation{
 					{Name: "get_by_id", Description: "Get channel details by ID", Method: "GET", Path: "/channels/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube channel ID", Required: true},
@@ -108,7 +114,7 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 				Operations: []Operation{
 					{Name: "read_liked", Description: "List liked videos (alias for tracks.read_liked)", Method: "GET", Path: "/me/liked",
 						Response: ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
-					{Name: "read_subscriptions", Description: "List subscriptions (alias for channels.read_subscriptions)", Method: "GET", Path: "/me/subscriptions",
+					{Name: "read_followed", Description: "List subscriptions (alias for artists.read_followed)", Method: "GET", Path: "/me/subscriptions",
 						Response: ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
 				},
 			},
@@ -134,7 +140,7 @@ YouTube Music-specific endpoints (call the full proxy URL; Guardian authenticate
 GET /me — Current user's YouTube channel info
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)
 GET /me/liked — List liked/favorite music videos as neutral tracks (paginated)
-GET /me/subscriptions — List subscribed music channels (paginated)
+GET /me/subscriptions — List followed artists / subscribed music channels (paginated; permission key: artists)
 GET /playlists/{id} — Get a playlist by ID
 GET /playlists/{id}/items — List items in a playlist as neutral tracks (paginated)
 GET /search?q=QUERY — Search YouTube Music (filters to music category)
