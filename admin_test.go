@@ -397,7 +397,13 @@ func TestHandleAdmin_HTMLIncludesPhotoPick(t *testing.T) {
 	if !strings.Contains(body, "photo-pick") {
 		t.Fatal("expected photo-pick control in admin HTML")
 	}
+	if !strings.Contains(body, "photo-pick-status-") {
+		t.Fatal("expected per-card photo pick status element")
+	}
 	if !strings.Contains(body, "picker/sessions") {
 		t.Fatal("expected picker session path in admin JS")
+	}
+	if !strings.Contains(body, "Enable Photos Picker API") {
+		t.Fatal("expected enable-API link label in admin JS")
 	}
 }
