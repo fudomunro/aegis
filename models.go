@@ -162,6 +162,68 @@ type ContactList struct {
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
+// Photo is a user-facing photo (or video still). Service identity lives in
+// Sources. Guardian never stores photo bytes — the authoritative copy stays on
+// a non-Guardian service marked Canonical (issue #16). Ownership / provenance
+// claims are intentionally deferred: https://github.com/fudomunro/aperture-guardian/issues/20
+type Photo struct {
+	// TakenAt is the capture time in RFC3339, when the service provides it.
+	TakenAt string `json:"taken_at,omitempty"`
+	// Width and Height are pixel dimensions, when known.
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
+	// MimeType is the media type (e.g. "image/jpeg").
+	MimeType string `json:"mime_type,omitempty"`
+	// Filename is the original filename or service display name.
+	Filename string `json:"filename,omitempty"`
+	// Caption is the user-visible description, when present.
+	Caption string `json:"caption,omitempty"`
+	// People lists known people in the photo (Contact identity matching).
+	People []Contact `json:"people,omitempty"`
+	// Sources lists service-local copies. At least one source should be
+	// Canonical when the blob lives outside Guardian.
+	Sources []PhotoSource `json:"sources,omitempty"`
+	// Extra holds other service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// PhotoSource is a service-specific location of a photo. Bytes are never
+// stored in Guardian; Canonical/BlobURL point at the real copy.
+type PhotoSource struct {
+	// Service is the connector ID: "google-photos", …
+	Service string `json:"service"`
+	// ServiceName is the human-readable label: "Google Photos".
+	ServiceName string `json:"service_name,omitempty"`
+	// ID is the service-local media item ID.
+	ID string `json:"id,omitempty"`
+	// URL is a deep link to the item on the service, when available.
+	URL string `json:"url,omitempty"`
+	// Canonical is true when this service holds the authoritative photo bytes.
+	// This is the non-Guardian-canonical slice of issue #16: photo binaries
+	// stay on the source service, not in Guardian's cache or disk.
+	Canonical bool `json:"canonical,omitempty"`
+	// BlobURL points at the retrievable image when bytes live outside Guardian.
+	// Some services (Google Photos baseUrl) issue short-lived URLs.
+	BlobURL string `json:"blob_url,omitempty"`
+	// ThumbnailURL is a smaller preview, when available.
+	ThumbnailURL string `json:"thumbnail_url,omitempty"`
+	// Extra holds additional service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// PhotoList is the neutral response for listing photos — either for a single
+// service or aggregated across all connected photo-capable services.
+type PhotoList struct {
+	Photos []Photo `json:"photos"`
+	// Total is the number of photos in this response.
+	Total int `json:"total"`
+	// Synced is true when the library merged photos that shared an identity
+	// key (content hash, or taken_at + dimensions) into multi-source entries.
+	Synced bool `json:"synced,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
 // LibraryServiceStatus reports per-service results for an aggregate call.
 type LibraryServiceStatus struct {
 	// Status is "ok", "unauthorized", "error", or "skipped".

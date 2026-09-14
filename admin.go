@@ -33,6 +33,7 @@ type AdminService struct {
 	HasAlbum           bool         `json:"has_album_provider"`
 	HasArtist          bool         `json:"has_artist_provider"`
 	HasContact         bool         `json:"has_contact_provider"`
+	HasPhoto           bool         `json:"has_photo_provider"`
 	ProxyPath          string       `json:"proxy_path"`
 	LoginPath          string       `json:"login_path,omitempty"`
 }
@@ -119,6 +120,9 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			if _, isProvider := connector.(ContactProvider); isProvider {
 				item.HasContact = true
+			}
+			if _, isProvider := connector.(PhotoProvider); isProvider {
+				item.HasPhoto = true
 			}
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
@@ -482,6 +486,7 @@ const adminHTML = `<!DOCTYPE html>
           <button type="button" class="kind-btn" data-library-kind="albums" aria-pressed="false">Albums</button>
           <button type="button" class="kind-btn" data-library-kind="artists" aria-pressed="false">Artists</button>
           <button type="button" class="kind-btn" data-library-kind="contacts" aria-pressed="false">Contacts</button>
+          <button type="button" class="kind-btn" data-library-kind="photos" aria-pressed="false">Photos</button>
         </div>
         <div class="grow">
           <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
@@ -597,16 +602,17 @@ const adminHTML = `<!DOCTYPE html>
 
   const ACCESS_LEVELS = ["none", "read", "write", "read-write"];
   // Types shown in the Library tab. Permissions for these map 1:1 to library views.
-  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts"];
+  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos"];
   const LIBRARY_TYPE_META = {
     playlists: { label: "Playlists", endpoint: "/v1/library/playlists" },
     tracks: { label: "Liked tracks", endpoint: "/v1/library/tracks" },
     albums: { label: "Albums", endpoint: "/v1/library/albums" },
     artists: { label: "Artists", endpoint: "/v1/library/artists" },
     contacts: { label: "Contacts", endpoint: "/v1/library/contacts" },
+    photos: { label: "Photos", endpoint: "/v1/library/photos" },
   };
   // Connector types that are not part of the Library tab (proxy-only / future).
-  const FALLBACK_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts",
+  const FALLBACK_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos",
     "user", "search", "player", "channels", "library", "recommendations"];
   const openPermEditors = new Set();
 
@@ -866,13 +872,14 @@ const adminHTML = `<!DOCTYPE html>
       }
       actions.push('<code>' + escapeHtml(svc.proxy_path) + "</code>");
       if (svc.has_playlist_provider || svc.has_liked_track_provider || svc.has_album_provider ||
-          svc.has_artist_provider || svc.has_contact_provider) {
+          svc.has_artist_provider || svc.has_contact_provider || svc.has_photo_provider) {
         const kinds = [];
         if (svc.has_playlist_provider) kinds.push("playlists");
         if (svc.has_liked_track_provider) kinds.push("liked tracks");
         if (svc.has_album_provider) kinds.push("albums");
         if (svc.has_artist_provider) kinds.push("artists");
         if (svc.has_contact_provider) kinds.push("contacts");
+        if (svc.has_photo_provider) kinds.push("photos");
         actions.push('<span class="badge badge-blue">Library: ' + escapeHtml(kinds.join(", ")) + "</span>");
       }
       actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
@@ -944,11 +951,19 @@ const adminHTML = `<!DOCTYPE html>
       emptyAll: "No contacts found. Connect a contact-capable service, then reload.",
       emptyFilter: "No contacts match this filter.",
     },
+    photos: {
+      path: "/v1/library/photos",
+      key: "photos",
+      label: "photos",
+      filterPlaceholder: "Filter photos…",
+      emptyAll: "No photos found. Connect a photo-capable service (e.g. Google Photos), then reload.",
+      emptyFilter: "No photos match this filter.",
+    },
   };
 
   let libraryKind = "playlists";
   const libraryDataByKind = {
-    playlists: null, tracks: null, albums: null, artists: null, contacts: null,
+    playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null,
   };
 
   function currentLibraryKind() {
@@ -1053,6 +1068,31 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
+  function renderPhotoCards(items, q) {
+    return items.filter((p) => {
+      if (!q) return true;
+      const hay = [p.filename, p.caption, p.mime_type, p.taken_at,
+        (p.sources || []).map((s) => s.service + " " + (s.id || "")).join(" ")]
+        .join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    }).map((p) => {
+      const multi = (p.sources || []).length > 1;
+      const dims = (p.width && p.height) ? (p.width + "×" + p.height) : "";
+      const title = p.filename || p.caption || "(untitled photo)";
+      const canonical = (p.sources || []).filter((s) => s.canonical).length;
+      return '<article class="card">' +
+        libraryCardHeader(title,
+          (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span> " : "") +
+          (canonical ? '<span class="badge badge-gray">canonical off-guardian</span>' : "")) +
+        (p.taken_at ? '<div class="meta">Taken: ' + escapeHtml(p.taken_at) + "</div>" : "") +
+        (dims ? '<div class="meta">Size: ' + escapeHtml(dims) +
+          (p.mime_type ? " · " + escapeHtml(p.mime_type) : "") + "</div>" : "") +
+        (p.caption && p.caption !== p.filename ? '<div class="meta">' + escapeHtml(p.caption) + "</div>" : "") +
+        '<div class="scopes">' + sourceBadges(p.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
   function renderAlbumCards(items, q) {
     return items.filter((a) => {
       if (!q) return true;
@@ -1111,6 +1151,7 @@ const adminHTML = `<!DOCTYPE html>
     else if (libraryKind === "albums") html = renderAlbumCards(items, q);
     else if (libraryKind === "artists") html = renderArtistCards(items, q);
     else if (libraryKind === "contacts") html = renderContactCards(items, q);
+    else if (libraryKind === "photos") html = renderPhotoCards(items, q);
     else html = renderPlaylistCards(items, q);
 
     if (!html) {
@@ -1213,7 +1254,7 @@ const adminHTML = `<!DOCTYPE html>
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
-        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, and <code>/v1/services/{id}/…</code></div>' +
+        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
         '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
