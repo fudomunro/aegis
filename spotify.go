@@ -377,10 +377,10 @@ func (c *SpotifyConnector) transformUser(raw map[string]any) map[string]any {
 
 // ListUserSavedAlbums implements AlbumProvider. Fetches Spotify saved albums
 // and returns them in Guardian's neutral format.
-func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, error) {
+func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
 	}
 
 	upstreamBase := "https://api.spotify.com/v1"
@@ -390,27 +390,27 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, er
 
 	var all []Album
 	nextURL := upstreamBase + "/me/albums?limit=50"
-	for page := 0; page < 10 && nextURL != ""; page++ {
+	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := guardianHTTPClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("spotify saved albums returned %d", resp.StatusCode)
+			return nil, false, fmt.Errorf("spotify saved albums returned %d", resp.StatusCode)
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		items, _ := raw["items"].([]any)
 		for _, item := range items {
@@ -426,15 +426,15 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, er
 		}
 		nextURL, _ = raw["next"].(string)
 	}
-	return all, nil
+	return all, nextURL != "", nil
 }
 
 // ListUserFollowedArtists implements ArtistProvider. Fetches Spotify followed
 // artists and returns them in Guardian's neutral format.
-func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, error) {
+func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
 	}
 
 	upstreamBase := "https://api.spotify.com/v1"
@@ -444,33 +444,33 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artis
 
 	var all []Artist
 	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
-	for page := 0; page < 10 && nextURL != ""; page++ {
+	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := guardianHTTPClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
-			return nil, fmt.Errorf(
+			return nil, false, fmt.Errorf(
 				"spotify following returned %d — token is missing the user-follow-read scope; reconnect at /v1/auth/spotify/login",
 				resp.StatusCode,
 			)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("spotify following returned %d", resp.StatusCode)
+			return nil, false, fmt.Errorf("spotify following returned %d", resp.StatusCode)
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		// Spotify nests followed artists under artists.items
 		container := raw
@@ -487,7 +487,7 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artis
 		}
 		nextURL, _ = container["next"].(string)
 	}
-	return all, nil
+	return all, nextURL != "", nil
 }
 
 // spotifyNeutralAlbum maps a raw Spotify album into the neutral Album type.
@@ -540,10 +540,10 @@ func spotifyNeutralArtist(artist map[string]any) Artist {
 
 // ListUserLikedTracks implements LikedTrackProvider. Fetches Spotify saved
 // tracks and returns them in Guardian's neutral format.
-func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, error) {
+func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
 	}
 
 	upstreamBase := "https://api.spotify.com/v1"
@@ -553,27 +553,27 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, er
 
 	var all []Track
 	nextURL := upstreamBase + "/me/tracks?limit=50"
-	for page := 0; page < 10 && nextURL != ""; page++ {
+	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := guardianHTTPClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("spotify saved tracks returned %d", resp.StatusCode)
+			return nil, false, fmt.Errorf("spotify saved tracks returned %d", resp.StatusCode)
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		items, _ := raw["items"].([]any)
 		for _, item := range items {
@@ -589,15 +589,15 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, er
 		}
 		nextURL, _ = raw["next"].(string)
 	}
-	return all, nil
+	return all, nextURL != "", nil
 }
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Spotify playlists
 // and returns them in Guardian's neutral format.
-func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, error) {
+func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
 	}
 
 	upstreamBase := "https://api.spotify.com/v1"
@@ -607,27 +607,27 @@ func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, e
 
 	var all []Playlist
 	nextURL := upstreamBase + "/me/playlists?limit=50"
-	for page := 0; page < 10 && nextURL != ""; page++ {
+	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := guardianHTTPClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("spotify playlists returned %d", resp.StatusCode)
+			return nil, false, fmt.Errorf("spotify playlists returned %d", resp.StatusCode)
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		items, _ := raw["items"].([]any)
 		for _, item := range items {
@@ -639,7 +639,7 @@ func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, e
 		}
 		nextURL, _ = raw["next"].(string)
 	}
-	return all, nil
+	return all, nextURL != "", nil
 }
 
 // spotifyPlaylistURL builds a public Spotify playlist link.

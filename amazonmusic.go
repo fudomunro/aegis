@@ -253,10 +253,10 @@ func asInt(v any) (int, bool) {
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
 // and returns them in Guardian's neutral format.
-func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, error) {
+func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
 	token := c.server.getValidToken("amazon-music", slog.Default())
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
 	}
 
 	upstreamBase := "https://api.amazonmusic.com/v1"
@@ -266,27 +266,27 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 
 	nextURL := upstreamBase + "/me/playlists"
 	var all []Playlist
-	for page := 0; page < 10 && nextURL != ""; page++ {
+	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := guardianHTTPClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("amazon music playlists returned %d", resp.StatusCode)
+			return nil, false, fmt.Errorf("amazon music playlists returned %d", resp.StatusCode)
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		items := c.extractItems(raw)
 		for _, item := range items {
@@ -304,7 +304,7 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 			}
 		}
 	}
-	return all, nil
+	return all, nextURL != "", nil
 }
 
 // neutralPlaylist maps a raw Amazon Music playlist object into the neutral type.

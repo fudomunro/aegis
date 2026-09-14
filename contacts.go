@@ -16,7 +16,8 @@ type ContactProvider interface {
 	// ListUserContacts fetches the user's contacts from the upstream service
 	// and maps them into neutral Contact values (service identity in Sources).
 	// Return ErrUnauthorized when no valid token is available.
-	ListUserContacts(ctx context.Context) ([]Contact, error)
+	// truncated is true when the page cap was hit with more items still upstream.
+	ListUserContacts(ctx context.Context) (contacts []Contact, truncated bool, err error)
 }
 
 // NormalizeContactEmail lowercases and trims an address for identity matching.
@@ -345,7 +346,7 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 		kind: kind,
 		targets: func(s *Server) ([]namedLister[Contact], []string) {
 			return collectProviders[Contact, ContactProvider](s, kind.PermType,
-				func(p ContactProvider) func(context.Context) ([]Contact, error) {
+				func(p ContactProvider) func(context.Context) ([]Contact, bool, error) {
 					return p.ListUserContacts
 				})
 		},

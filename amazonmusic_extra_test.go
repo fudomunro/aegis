@@ -30,7 +30,7 @@ func TestAmazonSimplify(t *testing.T) {
 func TestAmazonListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	conn := NewAmazonMusicConnector(srv)
-	if _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -60,7 +60,7 @@ func TestAmazonListUserPlaylists_Success(t *testing.T) {
 		Expiry:      time.Now().Add(time.Hour),
 	}
 	conn := NewAmazonMusicConnector(srv)
-	playlists, err := conn.ListUserPlaylists(context.Background())
+	playlists, _, err := conn.ListUserPlaylists(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +89,7 @@ func TestAmazonListUserPlaylists_HTTPError(t *testing.T) {
 		Expiry:      time.Now().Add(time.Hour),
 	}
 	conn := NewAmazonMusicConnector(srv)
-	if _, err := conn.ListUserPlaylists(context.Background()); err == nil {
+	if _, _, err := conn.ListUserPlaylists(context.Background()); err == nil {
 		t.Fatal("expected HTTP error")
 	}
 }
