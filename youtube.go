@@ -74,14 +74,20 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 				},
 			},
 			{
-				Name:        "channels",
-				Description: "YouTube channels — subscribed music channels",
+				Name:        "artists",
+				Description: "Followed artists / subscribed channels (feeds /v1/library/artists)",
 				Operations: []Operation{
-					{Name: "read_subscriptions", Description: "List subscribed channels (paginated)", Method: "GET", Path: "/me/subscriptions",
+					{Name: "read_followed", Description: "List followed artists via channel subscriptions (paginated). Permission key: artists.", Method: "GET", Path: "/me/subscriptions",
 						Parameters: []Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
 						Response: ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
+				},
+			},
+			{
+				Name:        "channels",
+				Description: "YouTube channels — lookup by id",
+				Operations: []Operation{
 					{Name: "get_by_id", Description: "Get channel details by ID", Method: "GET", Path: "/channels/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube channel ID", Required: true},
@@ -108,7 +114,7 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 				Operations: []Operation{
 					{Name: "read_liked", Description: "List liked videos (alias for tracks.read_liked)", Method: "GET", Path: "/me/liked",
 						Response: ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
-					{Name: "read_subscriptions", Description: "List subscriptions (alias for channels.read_subscriptions)", Method: "GET", Path: "/me/subscriptions",
+					{Name: "read_followed", Description: "List subscriptions (alias for artists.read_followed)", Method: "GET", Path: "/me/subscriptions",
 						Response: ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
 				},
 			},
@@ -126,12 +132,15 @@ func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
+For "liked songs" / liked videos across every connected music service:
+GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[])
+
 YouTube Music-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send YouTube tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user's YouTube channel info
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)
 GET /me/liked — List liked/favorite music videos as neutral tracks (paginated)
-GET /me/subscriptions — List subscribed music channels (paginated)
+GET /me/subscriptions — List followed artists / subscribed music channels (paginated; permission key: artists)
 GET /playlists/{id} — Get a playlist by ID
 GET /playlists/{id}/items — List items in a playlist as neutral tracks (paginated)
 GET /search?q=QUERY — Search YouTube Music (filters to music category)
@@ -141,7 +150,7 @@ GET /channels/{id} — Get channel details by ID
 Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
-Always include the full proxy base URL in your requests.`, base, root)
+Always include the full proxy base URL in your requests.`, base, root, root)
 }
 
 // HandleProxy processes a YouTube Music API request through the connector.
@@ -324,7 +333,11 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 		return "", fmt.Errorf("no valid token")
 	}
 
-	url := "https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true"
+	upstreamBase := "https://www.googleapis.com/youtube/v3"
+	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+	url := upstreamBase + "/channels?part=contentDetails&mine=true"
 	data, status, err := c.doYouTubeRequest("GET", url, nil, token)
 	if err != nil {
 		return "", err
@@ -360,7 +373,7 @@ func (c *YouTubeMusicConnector) doYouTubeRequest(method, url string, body io.Rea
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := guardianHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -433,12 +446,151 @@ func (c *YouTubeMusicConnector) transformChannel(raw map[string]any) map[string]
 	return result
 }
 
-// ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
-// and returns them in Guardian's neutral format.
-func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, error) {
+// ListUserFollowedArtists implements ArtistProvider. YouTube subscriptions
+// are the closest match to followed artists/channels.
+func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, bool, error) {
 	token := c.server.getValidToken("youtube-music", slog.Default())
 	if token == "" {
-		return nil, ErrUnauthorized
+		return nil, false, ErrUnauthorized
+	}
+
+	upstreamBase := "https://www.googleapis.com/youtube/v3"
+	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	var all []Artist
+	pageToken := ""
+	for page := 0; page < libraryPageCap; page++ {
+		u := upstreamBase + "/subscriptions?part=snippet&mine=true&maxResults=50"
+		if pageToken != "" {
+			u += "&pageToken=" + pageToken
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, false, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := guardianHTTPClient.Do(req)
+		if err != nil {
+			return nil, false, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, false, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, false, fmt.Errorf("youtube subscriptions returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, false, err
+		}
+		items, _ := raw["items"].([]any)
+		for _, item := range items {
+			s, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			snippet, _ := s["snippet"].(map[string]any)
+			if snippet == nil {
+				continue
+			}
+			title, _ := snippet["title"].(string)
+			channelID, _ := extractNested(snippet, "resourceId", "channelId").(string)
+			if channelID == "" {
+				if id, ok := snippet["channelId"].(string); ok {
+					channelID = id
+				}
+			}
+			a := newArtist("youtube-music", "YouTube Music", channelID, title)
+			if len(a.Sources) > 0 && channelID != "" {
+				a.Sources[0].URL = "https://www.youtube.com/channel/" + channelID
+			}
+			if a.Name != "" {
+				all = append(all, a)
+			}
+		}
+		pageToken, _ = raw["nextPageToken"].(string)
+		if pageToken == "" {
+			break
+		}
+	}
+	return all, pageToken != "", nil
+}
+
+// ListUserLikedTracks implements LikedTrackProvider. Fetches the liked-videos
+// playlist and maps items into Guardian's neutral Track format.
+func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
+	token := c.server.getValidToken("youtube-music", slog.Default())
+	if token == "" {
+		return nil, false, ErrUnauthorized
+	}
+
+	likedPlaylistID, err := c.getLikedPlaylistID()
+	if err != nil {
+		return nil, false, err
+	}
+
+	upstreamBase := "https://www.googleapis.com/youtube/v3"
+	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
+		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
+	}
+
+	var all []Track
+	pageToken := ""
+	for page := 0; page < libraryPageCap; page++ {
+		u := upstreamBase + "/playlistItems?part=snippet,contentDetails&playlistId=" +
+			likedPlaylistID + "&maxResults=50"
+		if pageToken != "" {
+			u += "&pageToken=" + pageToken
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, false, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := guardianHTTPClient.Do(req)
+		if err != nil {
+			return nil, false, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, false, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, false, fmt.Errorf("youtube liked videos returned %d", resp.StatusCode)
+		}
+		var raw map[string]any
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, false, err
+		}
+		items, _ := raw["items"].([]any)
+		for _, item := range items {
+			p, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if track, ok := c.neutralYouTubeTrack(p); ok {
+				all = append(all, track)
+			}
+		}
+		pageToken, _ = raw["nextPageToken"].(string)
+		if pageToken == "" {
+			break
+		}
+	}
+	return all, pageToken != "", nil
+}
+
+// ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
+// and returns them in Guardian's neutral format.
+func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
+	token := c.server.getValidToken("youtube-music", slog.Default())
+	if token == "" {
+		return nil, false, ErrUnauthorized
 	}
 
 	upstreamBase := "https://www.googleapis.com/youtube/v3"
@@ -448,31 +600,31 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playli
 
 	var all []Playlist
 	pageToken := ""
-	for page := 0; page < 10; page++ {
+	for page := 0; page < libraryPageCap; page++ {
 		u := upstreamBase + "/playlists?part=snippet,contentDetails&mine=true&maxResults=50"
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
 		}
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := guardianHTTPClient.Do(req)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("youtube playlists returned %d", resp.StatusCode)
+			return nil, false, fmt.Errorf("youtube playlists returned %d", resp.StatusCode)
 		}
 		var raw map[string]any
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		items, _ := raw["items"].([]any)
 		for _, item := range items {
@@ -487,7 +639,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playli
 			break
 		}
 	}
-	return all, nil
+	return all, pageToken != "", nil
 }
 
 // youtubePlaylistURL builds a public YouTube playlist link.
@@ -546,7 +698,10 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 	publishedAt, _ := snippet["publishedAt"].(string)
 	videoID, _ := contentDetails["videoId"].(string)
 	if videoID == "" {
-		videoID, _ = snippet["resourceId"].(map[string]any)["videoId"].(string)
+		// Deleted/private items often omit contentDetails; resourceId may be absent.
+		if rid, ok := snippet["resourceId"].(map[string]any); ok {
+			videoID, _ = rid["videoId"].(string)
+		}
 	}
 
 	extra := map[string]any{}

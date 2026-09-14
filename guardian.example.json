@@ -23,6 +23,7 @@
         "scopes": [
           "user-read-playback-state",
           "user-library-read",
+          "user-follow-read",
           "playlist-read-private",
           "playlist-read-collaborative"
         ]

@@ -267,12 +267,14 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 
-	// Users often ask for "my playlists" without naming a service. Surface the
-	// unified library endpoint in that case so agents can return every service.
-	libraryOnly := len(matched) == 0 && mentionsPlaylists(payload.UserMessage) && s.hasPlaylistProviders()
-	contactsLibraryOnly := len(matched) == 0 && mentionsContacts(payload.UserMessage) && s.hasContactProviders()
+	// Users often ask about library data without naming a service. Surface
+	// every matching unified library endpoint from the kind registry.
+	var libraryInstructions []string
+	if len(matched) == 0 {
+		libraryInstructions = s.libraryHintsForMessage(payload.UserMessage)
+	}
 
-	if len(matched) == 0 && !libraryOnly && !contactsLibraryOnly {
+	if len(matched) == 0 && len(libraryInstructions) == 0 {
 		logger.Debug("no services matched, allowing")
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
@@ -327,12 +329,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if libraryOnly && s.libraryReadable() {
-		instructions = append(instructions, s.librarySystemInstructions())
-	}
-	if contactsLibraryOnly && s.contactsLibraryReadable() {
-		instructions = append(instructions, s.libraryContactsSystemInstructions())
-	}
+	instructions = append(instructions, libraryInstructions...)
 
 	if len(instructions) == 0 {
 		logger.Debug("no injectable services, allowing")
@@ -388,40 +385,4 @@ func writeGuardrailResponse(w http.ResponseWriter, resp GuardrailResponse) {
 		w.WriteHeader(http.StatusForbidden)
 	}
 	json.NewEncoder(w).Encode(resp)
-}
-
-// hasPlaylistProviders reports whether any registered connector can list
-// neutral playlists for the library endpoint.
-func (s *Server) hasPlaylistProviders() bool {
-	for _, connector := range s.connectors {
-		if _, ok := connector.(PlaylistProvider); ok {
-			return true
-		}
-	}
-	return false
-}
-
-// librarySystemInstructions tells agents about the cross-service library endpoint.
-func (s *Server) librarySystemInstructions() string {
-	root := strings.TrimRight(s.baseURL, "/")
-	return fmt.Sprintf(
-		"Unified music library (use when the user asks about playlists or their music library):\n"+
-			"GET %s/v1/library/playlists — all user playlists from every connected service in one "+
-			"neutral list (name, description, owner, track_count, sources[]).\n"+
-			"Same-named playlists are synced into one entry with multiple sources[]. "+
-			"Prefer this endpoint for questions like \"what playlists do I have?\" so the answer includes "+
-			"Spotify, YouTube Music, Amazon Music, and any other connected service.",
-		root,
-	)
-}
-
-// mentionsPlaylists detects library-oriented questions that don't name a service.
-func mentionsPlaylists(msg string) bool {
-	lower := strings.ToLower(msg)
-	for _, keyword := range []string{"playlist", "play list", "music library", "my library", "saved playlists"} {
-		if strings.Contains(lower, keyword) {
-			return true
-		}
-	}
-	return false
 }

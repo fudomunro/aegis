@@ -2,159 +2,209 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"log/slog"
 	"net/http"
-	"sort"
-	"sync"
-	"time"
 )
 
-// ErrUnauthorized is returned by PlaylistProvider when a service has no valid token.
+// ErrUnauthorized is returned by library providers when a service has no valid token.
 var ErrUnauthorized = errors.New("unauthorized")
 
 // PlaylistProvider is implemented by connectors that can return the user's
-// playlists in Guardian's neutral format. The aggregate library endpoint uses
-// this so agents can ask for "my playlists" once and receive every service.
-// Each returned Playlist should carry one PlaylistSource for that service.
+// playlists in Guardian's neutral format. truncated is true when the page cap
+// was hit with more items still upstream.
 type PlaylistProvider interface {
-	// ListUserPlaylists fetches the user's playlists from the upstream service
-	// and maps them into neutral Playlist values (service identity in Sources).
-	// Return ErrUnauthorized when no valid token is available.
-	ListUserPlaylists(ctx context.Context) ([]Playlist, error)
+	ListUserPlaylists(ctx context.Context) (playlists []Playlist, truncated bool, err error)
+}
+
+// LikedTrackProvider is implemented by connectors that can return the user's
+// liked/saved tracks in Guardian's neutral format.
+type LikedTrackProvider interface {
+	ListUserLikedTracks(ctx context.Context) (tracks []Track, truncated bool, err error)
+}
+
+// AlbumProvider is implemented by connectors that can return the user's
+// saved albums in Guardian's neutral format.
+type AlbumProvider interface {
+	ListUserSavedAlbums(ctx context.Context) (albums []Album, truncated bool, err error)
+}
+
+// ArtistProvider is implemented by connectors that can return the user's
+// followed or top artists in Guardian's neutral format.
+type ArtistProvider interface {
+	ListUserFollowedArtists(ctx context.Context) (artists []Artist, truncated bool, err error)
+}
+
+func playlistServiceName(p Playlist) string {
+	if len(p.Sources) > 0 {
+		return p.Sources[0].ServiceName
+	}
+	return ""
+}
+
+func trackServiceName(t Track) string {
+	if len(t.Sources) > 0 {
+		return t.Sources[0].ServiceName
+	}
+	return ""
+}
+
+func albumServiceName(a Album) string {
+	if len(a.Sources) > 0 {
+		return a.Sources[0].ServiceName
+	}
+	return ""
+}
+
+func artistServiceName(a Artist) string {
+	if len(a.Sources) > 0 {
+		return a.Sources[0].ServiceName
+	}
+	return ""
 }
 
 // HandleLibraryPlaylists returns the user's playlists from every connected
-// service in one neutral list: GET /v1/library/playlists
+// service: GET /v1/library/playlists
 func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-
-	logger := withPeerLog(slog.With("handler", "library_playlists"), r)
-
-	// Prefer cache for the full aggregate response.
-	cacheKey := "library:playlists"
-	if cached, ok := s.cache.Get(cacheKey); ok {
-		logger.Debug("cache hit")
-		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Guardian-Cache", "hit")
-		w.Write([]byte(cached))
-		return
-	}
-
-	type serviceTarget struct {
-		id       string
-		provider PlaylistProvider
-	}
-
-	// Collect services that have a connector supporting neutral playlists
-	// and that the agent is allowed to read.
-	var targets []serviceTarget
-	var deniedPlaylists []string
-	for id, connector := range s.connectors {
-		svc := s.config.GetService(id)
-		if svc == nil || svc.Action == "block" {
-			continue
-		}
-		provider, ok := connector.(PlaylistProvider)
-		if !ok {
-			continue
-		}
-		if !svc.Permissions.AllowsRead("playlists") {
-			deniedPlaylists = append(deniedPlaylists, id)
-			logger.Info("library playlists denied by permission", "service", id,
-				"permission", svc.Permissions.For("playlists"))
-			continue
-		}
-		targets = append(targets, serviceTarget{id: id, provider: provider})
-	}
-
-	if len(targets) == 0 {
-		if len(deniedPlaylists) > 0 {
-			writeJSONError(w, http.StatusForbidden, "permission denied: agent access to playlists is not allowed")
-			return
-		}
-		writeJSONError(w, http.StatusNotFound, "no playlist-capable services configured")
-		return
-	}
-
-	var (
-		mu    sync.Mutex
-		wg    sync.WaitGroup
-		all   []Playlist
-		bySvc = make(map[string]LibraryServiceStatus, len(targets))
-	)
-
-	ctx := r.Context()
-	for _, t := range targets {
-		wg.Add(1)
-		go func(t serviceTarget) {
-			defer wg.Done()
-			playlists, err := t.provider.ListUserPlaylists(ctx)
-			var status LibraryServiceStatus
-			switch {
-			case err == nil:
-				status = LibraryServiceStatus{Status: LibraryStatusOK, Count: len(playlists)}
-				mu.Lock()
-				all = append(all, playlists...)
-				mu.Unlock()
-			case errors.Is(err, ErrUnauthorized):
-				logger.Info("library playlists unauthorized", "service", t.id)
-				status = LibraryServiceStatus{Status: LibraryStatusUnauthorized, Error: "not authorized — connect at /v1/auth/" + t.id + "/login"}
-			default:
-				logger.Warn("library playlists failed", "service", t.id, "error", err)
-				status = LibraryServiceStatus{Status: LibraryStatusError, Error: "failed to fetch playlists"}
-			}
-			mu.Lock()
-			bySvc[t.id] = status
-			mu.Unlock()
-		}(t)
-	}
-	wg.Wait()
-
-	// Stable order before merge: by service name, then playlist name.
-	sort.SliceStable(all, func(i, j int) bool {
-		si, sj := "", ""
-		if len(all[i].Sources) > 0 {
-			si = all[i].Sources[0].ServiceName
-		}
-		if len(all[j].Sources) > 0 {
-			sj = all[j].Sources[0].ServiceName
-		}
-		if si != sj {
-			return si < sj
-		}
-		return all[i].Name < all[j].Name
+	kind := *LibraryKindByID("playlists")
+	handleLibraryAggregate(s, w, r, libraryKindSpec[Playlist]{
+		kind: kind,
+		targets: func(s *Server) ([]namedLister[Playlist], []string) {
+			return collectProviders[Playlist, PlaylistProvider](s, kind.PermType,
+				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
+					return p.ListUserPlaylists
+				})
+		},
+		serviceOf: playlistServiceName,
+		sortKey:   func(p Playlist) string { return p.Name },
+		merge:     MergePlaylistsSync,
+		encode: func(merged []Playlist, bySvc map[string]LibraryServiceStatus) any {
+			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, ByService: bySvc}
+		},
 	})
+}
 
-	// Sync: same-named playlists across services become one user-facing
-	// playlist with multiple sources.
-	merged := MergePlaylistsSync(all)
+// HandleLibraryTracks returns liked/saved tracks: GET /v1/library/tracks
+func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
+	kind := *LibraryKindByID("tracks")
+	handleLibraryAggregate(s, w, r, libraryKindSpec[Track]{
+		kind: kind,
+		targets: func(s *Server) ([]namedLister[Track], []string) {
+			return collectProviders[Track, LikedTrackProvider](s, kind.PermType,
+				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
+					return p.ListUserLikedTracks
+				})
+		},
+		serviceOf: trackServiceName,
+		sortKey:   trackIdentityKey,
+		merge:     MergeTracksSync,
+		encode: func(merged []Track, bySvc map[string]LibraryServiceStatus) any {
+			return TrackList{Tracks: merged, Total: len(merged), Synced: true, ByService: bySvc}
+		},
+	})
+}
 
-	resp := PlaylistList{
-		Playlists: merged,
-		Total:     len(merged),
-		Synced:    true,
-		ByService: bySvc,
-	}
-	if resp.Playlists == nil {
-		resp.Playlists = []Playlist{}
-	}
+// HandleLibraryAlbums returns saved albums: GET /v1/library/albums
+func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
+	kind := *LibraryKindByID("albums")
+	handleLibraryAggregate(s, w, r, libraryKindSpec[Album]{
+		kind: kind,
+		targets: func(s *Server) ([]namedLister[Album], []string) {
+			return collectProviders[Album, AlbumProvider](s, kind.PermType,
+				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
+					return p.ListUserSavedAlbums
+				})
+		},
+		serviceOf: albumServiceName,
+		sortKey:   albumIdentityKey,
+		merge:     MergeAlbumsSync,
+		encode: func(merged []Album, bySvc map[string]LibraryServiceStatus) any {
+			return AlbumList{Albums: merged, Total: len(merged), Synced: true, ByService: bySvc}
+		},
+	})
+}
 
-	result, err := json.Marshal(resp)
-	if err != nil {
-		logger.Error("failed to marshal library playlists", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build playlist list")
-		return
-	}
+// HandleLibraryArtists returns followed/top artists: GET /v1/library/artists
+func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
+	kind := *LibraryKindByID("artists")
+	handleLibraryAggregate(s, w, r, libraryKindSpec[Artist]{
+		kind: kind,
+		targets: func(s *Server) ([]namedLister[Artist], []string) {
+			return collectProviders[Artist, ArtistProvider](s, kind.PermType,
+				func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
+					return p.ListUserFollowedArtists
+				})
+		},
+		serviceOf: artistServiceName,
+		sortKey:   func(a Artist) string { return NormalizeIdentityKey(a.Name) },
+		merge:     mergeArtistLibrary,
+		encode: func(merged []Artist, bySvc map[string]LibraryServiceStatus) any {
+			return ArtistList{Artists: merged, Total: len(merged), Synced: true, ByService: bySvc}
+		},
+	})
+}
 
-	// Short TTL: aggregate spans multiple APIs and should stay fresh.
-	s.cache.Set(cacheKey, string(result), 60*time.Second)
+// Compatibility wrappers — thin aliases over the library kind registry.
 
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
-	w.Write(result)
+func (s *Server) hasPlaylistProviders() bool {
+	return LibraryKindByID("playlists").HasProviders(s)
+}
+
+func (s *Server) hasLikedTrackProviders() bool {
+	return LibraryKindByID("tracks").HasProviders(s)
+}
+
+func (s *Server) hasAlbumProviders() bool {
+	return LibraryKindByID("albums").HasProviders(s)
+}
+
+func (s *Server) hasArtistProviders() bool {
+	return LibraryKindByID("artists").HasProviders(s)
+}
+
+func (s *Server) libraryReadable() bool {
+	return LibraryKindByID("playlists").Readable(s)
+}
+
+func (s *Server) tracksLibraryReadable() bool {
+	return LibraryKindByID("tracks").Readable(s)
+}
+
+func (s *Server) albumsLibraryReadable() bool {
+	return LibraryKindByID("albums").Readable(s)
+}
+
+func (s *Server) artistsLibraryReadable() bool {
+	return LibraryKindByID("artists").Readable(s)
+}
+
+func (s *Server) librarySystemInstructions() string {
+	return LibraryKindByID("playlists").Instructions(s.baseURL)
+}
+
+func (s *Server) libraryTracksSystemInstructions() string {
+	return LibraryKindByID("tracks").Instructions(s.baseURL)
+}
+
+func (s *Server) libraryAlbumsSystemInstructions() string {
+	return LibraryKindByID("albums").Instructions(s.baseURL)
+}
+
+func (s *Server) libraryArtistsSystemInstructions() string {
+	return LibraryKindByID("artists").Instructions(s.baseURL)
+}
+
+func mentionsPlaylists(msg string) bool {
+	return LibraryKindByID("playlists").Mentions(msg)
+}
+
+func mentionsLikedTracks(msg string) bool {
+	return LibraryKindByID("tracks").Mentions(msg)
+}
+
+func mentionsAlbums(msg string) bool {
+	return LibraryKindByID("albums").Mentions(msg)
+}
+
+func mentionsArtists(msg string) bool {
+	return LibraryKindByID("artists").Mentions(msg)
 }
