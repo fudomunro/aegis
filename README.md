@@ -517,8 +517,8 @@ Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 
 Returns the user's photo metadata from every connected photo-capable service.
 Connectors opt in by implementing `PhotoProvider` (`ListUserPhotos`).
-Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, and `/me/photos`
-on the service proxy).
+Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, `/picker/*`, and
+`/me/photos` on the service proxy).
 
 ```json
 {
@@ -529,13 +529,11 @@ on the service proxy).
       "height": 3024,
       "mime_type": "image/jpeg",
       "filename": "beach.jpg",
-      "caption": "Sunset at the pier",
       "sources": [
         {
           "service": "google-photos",
           "service_name": "Google Photos",
           "id": "AGxyz...",
-          "url": "https://photos.google.com/lr/photo/AGxyz...",
           "canonical": true,
           "blob_url": "https://lh3.googleusercontent.com/...",
           "thumbnail_url": "https://lh3.googleusercontent.com/..."
@@ -546,23 +544,44 @@ on the service proxy).
   "total": 1,
   "synced": true,
   "by_service": {
-    "google-photos": { "status": "ok", "count": 1280, "truncated": true }
+    "google-photos": { "status": "ok", "count": 1 }
   }
 }
 ```
 
-#### Google Photos
+#### Google Photos (Picker API)
+
+Full Library API reads (`photoslibrary.readonly`) require Google app
+verification; unverified apps get 403. Guardian therefore uses the
+**[Photos Picker API](https://developers.google.com/photos/picker/guides/get-started-picker)**:
+the user explicitly selects photos once; agents only see that selection.
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
-2. Create an OAuth 2.0 Client ID (Web application)
+2. Create or reuse an OAuth 2.0 Client ID (Web application)
 3. Add `https://your-guardian/v1/auth/google-photos/callback` as an authorized redirect URI
-4. Enable the **Photos Library API**
-5. Copy credentials into `guardian.json` (see `guardian.example.json`)
+4. Enable the **Photos Picker API** (not the Library API)
+5. Copy credentials into `guardian.json` (see `guardian.example.json`) with scope
+   `https://www.googleapis.com/auth/photospicker.mediaitems.readonly`
+6. Re-authorize at `/v1/auth/google-photos/login` if you previously used the library scope
 
-Scope: `https://www.googleapis.com/auth/photoslibrary.readonly`. The connector
-lists media-item **metadata** only (`GET /mediaItems`); it does not download
-image bytes. Reconnect after adding the scope if you already authorized a
-narrower Google client.
+Picker flow:
+
+```
+POST /v1/services/google-photos/picker/sessions
+  → { "id", "picker_uri", "media_items_set": false }
+
+# User opens picker_uri in a browser and selects photos
+
+GET /v1/services/google-photos/picker/sessions/{id}
+  → poll until media_items_set is true
+
+GET /v1/services/google-photos/picker/mediaItems?sessionId={id}
+  → neutral Photo[] (also cached as the last pick for /v1/library/photos)
+```
+
+`/v1/library/photos` returns the **last completed Google Photos pick** (empty
+until the user has picked once). Metadata only — Guardian still never downloads
+or stores image bytes; `blob_url` values expire in about an hour.
 
 Ownership / provenance proofs for photos are intentionally deferred:
 [issue #20](https://github.com/fudomunro/aperture-guardian/issues/20).
@@ -660,7 +679,7 @@ aperture-guardian/
   spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
   youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
   amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
-  google-photos.go  Google Photos connector (photo metadata only; bytes stay upstream)
+  google-photos.go  Google Photos Picker connector (user-selected photos; bytes stay upstream)
   google-contacts.go Google Contacts / People API connector (ContactProvider)
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)

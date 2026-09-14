@@ -314,34 +314,62 @@ func TestHasPhotoProviders(t *testing.T) {
 	}
 }
 
-func TestGooglePhotosConnector_ListUserPhotos_MockAPI(t *testing.T) {
+func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
+	var listCalls int
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-token" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		if !strings.HasPrefix(r.URL.Path, "/mediaItems") {
-			w.WriteHeader(http.StatusNotFound)
+		switch {
+		case r.Method == http.MethodPost && r.URL.Path == "/sessions":
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			json.NewEncoder(w).Encode(map[string]any{
+				"id":            "sess-1",
+				"pickerUri":     "https://photos.google.com/picker/sess-1",
+				"mediaItemsSet": false,
+				"pollingConfig": map[string]any{"pollInterval": "5s", "timeout": "600s"},
+			})
 			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"mediaItems": []map[string]any{
-				{
-					"id":         "gp-item-1",
-					"filename":   "beach.jpg",
-					"mimeType":   "image/jpeg",
-					"productUrl": "https://photos.google.com/lr/photo/gp-item-1",
-					"baseUrl":    "https://lh3.googleusercontent.com/short-lived",
-					"mediaMetadata": map[string]any{
-						"creationTime": "2023-07-04T18:30:00Z",
-						"width":        "4032",
-						"height":       "3024",
-						"photo":        map[string]any{"cameraMake": "Apple", "cameraModel": "iPhone"},
+		case r.Method == http.MethodGet && r.URL.Path == "/sessions/sess-1":
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"id":            "sess-1",
+				"pickerUri":     "https://photos.google.com/picker/sess-1",
+				"mediaItemsSet": true,
+			})
+			return
+		case r.Method == http.MethodGet && r.URL.Path == "/mediaItems":
+			if r.URL.Query().Get("sessionId") != "sess-1" {
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			listCalls++
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]any{
+				"mediaItems": []map[string]any{
+					{
+						"id":         "gp-item-1",
+						"createTime": "2023-07-04T18:30:00Z",
+						"type":       "PHOTO",
+						"mediaFile": map[string]any{
+							"baseUrl":  "https://lh3.googleusercontent.com/short-lived",
+							"mimeType": "image/jpeg",
+							"filename": "beach.jpg",
+							"mediaFileMetadata": map[string]any{
+								"width":       4032,
+								"height":      3024,
+								"cameraMake":  "Apple",
+								"cameraModel": "iPhone",
+							},
+						},
 					},
 				},
-			},
-		})
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer upstream.Close()
 
@@ -355,6 +383,63 @@ func TestGooglePhotosConnector_ListUserPhotos_MockAPI(t *testing.T) {
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := NewGooglePhotosConnector(srv)
+
+	// No session yet — library is empty, not an error.
+	photos, _, err := conn.ListUserPhotos(context.Background())
+	if err != nil {
+		t.Fatalf("ListUserPhotos without session: %v", err)
+	}
+	if len(photos) != 0 {
+		t.Fatalf("want empty before pick, got %d", len(photos))
+	}
+
+	// Create session.
+	createReq := httptest.NewRequest("POST", "/picker/sessions", nil)
+	createW := httptest.NewRecorder()
+	conn.HandleProxy(createW, createReq, "/picker/sessions")
+	if createW.Code != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", createW.Code, createW.Body.String())
+	}
+	var created map[string]any
+	if err := json.Unmarshal(createW.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created["picker_uri"] == "" || created["id"] != "sess-1" {
+		t.Fatalf("created session = %+v", created)
+	}
+
+	// Poll until ready.
+	getReq := httptest.NewRequest("GET", "/picker/sessions/sess-1", nil)
+	getW := httptest.NewRecorder()
+	conn.HandleProxy(getW, getReq, "/picker/sessions/sess-1")
+	if getW.Code != http.StatusOK {
+		t.Fatalf("get status = %d body=%s", getW.Code, getW.Body.String())
+	}
+	if !strings.Contains(getW.Body.String(), `"media_items_set":true`) &&
+		!strings.Contains(getW.Body.String(), `"media_items_set": true`) {
+		// map is marshaled without space after colon by encoding/json
+		var sess map[string]any
+		if err := json.Unmarshal(getW.Body.Bytes(), &sess); err != nil || sess["media_items_set"] != true {
+			t.Fatalf("session not ready: %s", getW.Body.String())
+		}
+	}
+
+	// List via proxy.
+	listReq := httptest.NewRequest("GET", "/picker/mediaItems?sessionId=sess-1", nil)
+	listW := httptest.NewRecorder()
+	conn.HandleProxy(listW, listReq, "/picker/mediaItems")
+	if listW.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", listW.Code, listW.Body.String())
+	}
+	var listResp PhotoList
+	if err := json.Unmarshal(listW.Body.Bytes(), &listResp); err != nil {
+		t.Fatalf("decode list: %v", err)
+	}
+	if listResp.Total != 1 {
+		t.Fatalf("proxy list total = %d: %s", listResp.Total, listW.Body.String())
+	}
+
+	// Library aggregate now sees the last pick.
 	photos, truncated, err := conn.ListUserPhotos(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserPhotos: %v", err)
@@ -369,11 +454,20 @@ func TestGooglePhotosConnector_ListUserPhotos_MockAPI(t *testing.T) {
 	if p.Filename != "beach.jpg" || p.Width != 4032 || p.Height != 3024 {
 		t.Fatalf("mapped photo = %+v", p)
 	}
+	if p.TakenAt != "2023-07-04T18:30:00Z" {
+		t.Fatalf("taken_at = %q", p.TakenAt)
+	}
 	if len(p.Sources) != 1 || !p.Sources[0].Canonical {
 		t.Fatalf("sources = %+v", p.Sources)
 	}
-	if p.Sources[0].BlobURL == "" || p.Sources[0].URL == "" {
-		t.Fatalf("expected blob and product urls: %+v", p.Sources[0])
+	if p.Sources[0].BlobURL == "" || p.Sources[0].ID != "gp-item-1" {
+		t.Fatalf("source = %+v", p.Sources[0])
+	}
+	if p.Extra["picker_session_id"] != "sess-1" {
+		t.Fatalf("extra = %+v", p.Extra)
+	}
+	if listCalls == 0 {
+		t.Fatal("expected mediaItems list call")
 	}
 }
 
@@ -385,5 +479,35 @@ func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 	_, _, err := conn.ListUserPhotos(context.Background())
 	if !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestGooglePhotosConnector_SystemInstructions_MentionPicker(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	conn := NewGooglePhotosConnector(srv)
+	instr := conn.SystemInstructions("https://guardian.example.com")
+	for _, want := range []string{
+		"/v1/library/photos",
+		"/picker/sessions",
+		"Picker API",
+		"Guardian authenticates you",
+	} {
+		if !strings.Contains(instr, want) {
+			t.Fatalf("missing %q in instructions:\n%s", want, instr)
+		}
+	}
+}
+
+func TestDataTypeForPath_Picker(t *testing.T) {
+	cases := map[string]string{
+		"/picker/sessions":          "photos",
+		"/picker/sessions/abc":      "photos",
+		"/picker/mediaItems":        "photos",
+		"/mediaItems?sessionId=s-1": "photos",
+	}
+	for path, want := range cases {
+		if got := DataTypeForPath(path); got != want {
+			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		}
 	}
 }
