@@ -627,6 +627,12 @@ Each service card has an **Edit permissions** form: set levels per data type,
 add custom types, clear to unrestricted, or save. Saves write the config file
 and clear the response cache so denials take effect immediately.
 
+Photo connectors that expose a picker session create operation (Google Photos)
+also show **Pick photos…** on the service card: it creates a session, opens
+Google’s picker in a new tab, polls until the user finishes selecting, then
+refreshes the photos library view. (Session create is a POST — the service’s
+`photos` permission must allow write.)
+
 Admin APIs use the same auth as the rest of Guardian. Secrets never appear in
 admin responses: client secrets, access tokens, and refresh tokens are omitted;
 only presence flags, scopes, and expiry status are shown.
