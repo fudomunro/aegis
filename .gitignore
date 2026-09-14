@@ -7,6 +7,8 @@ guardian
 guardian.json
 tokens.json
 .guardian-token-pass
+guardian.log
+*.log
 
 # IDE
 .idea/
