@@ -58,6 +58,7 @@ Guardian starts with these endpoints:
 - `GET /v1/library/albums` — unified saved albums across all connected services
 - `GET /v1/library/artists` — unified followed/top artists across all connected services
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
+- `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
 - `GET /v1/admin` — admin dashboard for services, tokens, library, and cache
@@ -129,7 +130,7 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 - Pre-request injection also lists denied types so agents do not try them.
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
-`player`, `channels`, `library`, `recommendations`, `contacts`. Paths that do not map to a
+`player`, `channels`, `library`, `recommendations`, `contacts`, `photos`. Paths that do not map to a
 known type fall through to the `default` level.
 
 ### Environment variables
@@ -463,6 +464,91 @@ no contact-capable services configured`. Permission key: `contacts` (paths
 }
 ```
 
+### Photos as a data type
+
+`Photo` is Guardian's neutral representation of a photo (or video still).
+Service identity lives in `sources[]`, same as playlists and contacts.
+
+**Guardian never stores photo bytes.** The authoritative copy stays on a
+non-Guardian service marked `canonical` (the minimal slice of
+[issue #16](https://github.com/fudomunro/aperture-guardian/issues/16)).
+`blob_url` points at the retrievable image when the source exposes one; Google
+Photos `baseUrl` values expire in about an hour, so agents must not treat them
+as permanent links.
+
+Neutral photo fields (user-facing):
+
+| Field | Description |
+|-------|-------------|
+| `taken_at` | Capture time (RFC3339), when known |
+| `width` / `height` | Pixel dimensions |
+| `mime_type` | Media type (e.g. `image/jpeg`) |
+| `filename` | Original filename or service display name |
+| `caption` | Description, when present |
+| `people[]` | Known people as `Contact` values (future connectors) |
+| `sources[]` | Service-local copies: `service`, `id`, `url`, `canonical`, `blob_url`, `thumbnail_url` |
+
+Cross-service merge uses a **content hash** when a provider supplies one
+(`extra.content_hash`), otherwise **taken_at + dimensions**. Filename alone is
+never an identity — two different `IMG_0001.jpg` files must not merge.
+
+```
+GET /v1/library/photos
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Returns the user's photo metadata from every connected photo-capable service.
+Connectors opt in by implementing `PhotoProvider` (`ListUserPhotos`).
+Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, and `/me/photos`
+on the service proxy).
+
+```json
+{
+  "photos": [
+    {
+      "taken_at": "2023-07-04T18:30:00Z",
+      "width": 4032,
+      "height": 3024,
+      "mime_type": "image/jpeg",
+      "filename": "beach.jpg",
+      "caption": "Sunset at the pier",
+      "sources": [
+        {
+          "service": "google-photos",
+          "service_name": "Google Photos",
+          "id": "AGxyz...",
+          "url": "https://photos.google.com/lr/photo/AGxyz...",
+          "canonical": true,
+          "blob_url": "https://lh3.googleusercontent.com/...",
+          "thumbnail_url": "https://lh3.googleusercontent.com/..."
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "google-photos": { "status": "ok", "count": 1280, "truncated": true }
+  }
+}
+```
+
+#### Google Photos
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create an OAuth 2.0 Client ID (Web application)
+3. Add `https://your-guardian/v1/auth/google-photos/callback` as an authorized redirect URI
+4. Enable the **Photos Library API**
+5. Copy credentials into `guardian.json` (see `guardian.example.json`)
+
+Scope: `https://www.googleapis.com/auth/photoslibrary.readonly`. The connector
+lists media-item **metadata** only (`GET /mediaItems`); it does not download
+image bytes. Reconnect after adding the scope if you already authorized a
+narrower Google client.
+
+Ownership / provenance proofs for photos are intentionally deferred:
+[issue #20](https://github.com/fudomunro/aperture-guardian/issues/20).
+
 ### Service proxy
 
 ```
@@ -538,10 +624,11 @@ aperture-guardian/
   config.go         Service/Config types, JSON loading, matching
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
-  models.go         Neutral data types (Playlist, Track, Contact, PlaylistList, ContactList)
+  models.go         Neutral data types (Playlist, Track, Contact, Photo, and their list wrappers)
   library.go        Library providers + thin per-kind handlers
   librarykind.go    LibraryKind registry + shared generic aggregate pipeline
   contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
+  photos.go         Photo identity/merge, PhotoProvider, /v1/library/photos
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement
@@ -555,6 +642,7 @@ aperture-guardian/
   spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
   youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
   amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
+  google-photos.go  Google Photos connector (photo metadata only; bytes stay upstream)
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```
