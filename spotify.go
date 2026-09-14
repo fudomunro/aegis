@@ -459,6 +459,12 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artis
 		if err != nil {
 			return nil, err
 		}
+		if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusUnauthorized {
+			return nil, fmt.Errorf(
+				"spotify following returned %d — token is missing the user-follow-read scope; reconnect at /v1/auth/spotify/login",
+				resp.StatusCode,
+			)
+		}
 		if resp.StatusCode != http.StatusOK {
 			return nil, fmt.Errorf("spotify following returned %d", resp.StatusCode)
 		}

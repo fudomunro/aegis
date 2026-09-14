@@ -639,6 +639,25 @@ func TestSpotifyFollowing_FlatItemsShape(t *testing.T) {
 	}
 }
 
+func TestSpotifyFollowing_MissingFollowScopeExplainsReconnect(t *testing.T) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	}))
+	defer mock.Close()
+
+	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+
+	_, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(err.Error(), "user-follow-read") || !strings.Contains(err.Error(), "/v1/auth/spotify/login") {
+		t.Fatalf("error should explain missing scope and reconnect: %v", err)
+	}
+}
+
 func TestHandleAdminCache_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	req := httptest.NewRequest("POST", "/v1/admin/cache", nil)
