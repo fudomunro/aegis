@@ -272,17 +272,3 @@ func allDataDenied(p Permissions) bool {
 	}
 	return true
 }
-
-// libraryReadable reports whether at least one configured service allows
-// read access to playlists (used to decide whether to inject library hints).
-func (s *Server) libraryReadable() bool {
-	for _, svc := range s.config.Services {
-		if svc.Action == "block" {
-			continue
-		}
-		if svc.Permissions.AllowsRead("playlists") {
-			return true
-		}
-	}
-	return false
-}
