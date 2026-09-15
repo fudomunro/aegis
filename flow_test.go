@@ -130,6 +130,33 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		t.Fatalf("tidal status = %q, want blocked", byID["svc:tidal"].Status)
 	}
 
+	if byID["guardian"].Parent != "aperture" {
+		t.Fatalf("guardian parent = %q, want aperture", byID["guardian"].Parent)
+	}
+	if byID["tokens"].Parent != "guardian" {
+		t.Fatalf("tokens parent = %q, want guardian", byID["tokens"].Parent)
+	}
+	if byID["cache"].Parent != "guardian" {
+		t.Fatalf("cache parent = %q, want guardian", byID["cache"].Parent)
+	}
+
+	hasLibraryType := false
+	hasReadablePlaylists := false
+	for _, dt := range topo.DataTypes {
+		if dt.Kind == "library" {
+			hasLibraryType = true
+		}
+		if dt.ID == "playlists" && dt.Kind == "library" && dt.Readable && len(dt.Providers) > 0 {
+			hasReadablePlaylists = true
+		}
+	}
+	if !hasLibraryType {
+		t.Fatal("expected library data types in topology")
+	}
+	if !hasReadablePlaylists {
+		t.Fatal("expected readable playlists data type with providers")
+	}
+
 	hasPhotoNote := false
 	for _, note := range byID["svc:google-photos"].Notes {
 		if strings.Contains(strings.ToLower(note), "photo bytes") {

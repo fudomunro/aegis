@@ -649,53 +649,110 @@ const adminHTML = `<!DOCTYPE html>
     denied: "#f85149",
   };
 
-  function flowStatusFill(status, kind) {
-    if (kind === "guardian") return "#1c2129";
-    if (kind === "store") return "#21262d";
-    if (kind === "agent" || kind === "gateway") return "#161b22";
-    return "#161b22";
-  }
-
-  function flowStatusStroke(status, kind) {
-    if (kind === "guardian") return "#58a6ff";
-    if (kind === "agent" || kind === "gateway") return "#8b949e";
-    if (kind === "store") return "#30363d";
-    return FLOW_STATUS_COLORS[status] || "#30363d";
-  }
-
-  function layoutFlowNodes(nodes) {
-    const pos = {};
-    const core = {
-      agents: { x: 24, y: 180, w: 130, h: 56 },
-      aperture: { x: 190, y: 180, w: 130, h: 56 },
-      guardian: { x: 350, y: 140, w: 160, h: 120 },
-      tokens: { x: 350, y: 290, w: 160, h: 48 },
-      cache: { x: 350, y: 352, w: 160, h: 48 },
-    };
-    nodes.forEach((n) => {
-      if (core[n.id]) {
-        pos[n.id] = Object.assign({ label: n.label, kind: n.kind, status: n.status }, core[n.id]);
-        return;
-      }
-    });
+  // Nested layout: Aperture wraps Guardian; Guardian holds stores + data types.
+  function layoutFlowMap(topo) {
+    const nodes = topo.nodes || [];
+    const dataTypes = topo.data_types || [];
     const services = nodes.filter((n) => n.kind === "service");
-    const gap = 12;
-    const h = 52;
-    const total = services.length * (h + gap) - gap;
-    const startY = Math.max(24, Math.floor(220 - total / 2));
+    const byId = {};
+    nodes.forEach((n) => { byId[n.id] = n; });
+
+    const chipCols = 3;
+    const chipW = 118;
+    const chipH = 22;
+    const chipGap = 6;
+    const typeRows = Math.max(1, Math.ceil(dataTypes.length / chipCols));
+    const typesBlockH = 18 + typeRows * (chipH + chipGap);
+
+    const storeH = 44;
+    const storeGap = 10;
+    const guardianTitleH = 36;
+    const guardianPad = 12;
+    const guardianH = guardianTitleH + storeH + storeGap + typesBlockH + guardianPad * 2;
+    const apertureTitleH = 28;
+    const aperturePad = 12;
+    const apertureH = apertureTitleH + guardianH + aperturePad * 2;
+
+    const agents = { x: 20, y: 0, w: 130, h: 56, id: "agents" };
+    const aperture = { x: 180, y: 20, w: 400, h: apertureH, id: "aperture" };
+    const guardian = {
+      x: aperture.x + aperturePad,
+      y: aperture.y + apertureTitleH + aperturePad,
+      w: aperture.w - aperturePad * 2,
+      h: guardianH,
+      id: "guardian",
+    };
+    agents.y = Math.floor(aperture.y + aperture.h / 2 - agents.h / 2);
+
+    const pos = {};
+    pos.agents = Object.assign({ label: byId.agents ? byId.agents.label : "LLM Agents", kind: "agent" }, agents);
+    pos.aperture = Object.assign({
+      label: byId.aperture ? byId.aperture.label : "Aperture",
+      kind: "gateway",
+      container: true,
+    }, aperture);
+    pos.guardian = Object.assign({
+      label: byId.guardian ? byId.guardian.label : "Guardian",
+      kind: "guardian",
+      container: true,
+      parent: "aperture",
+    }, guardian);
+
+    const storeW = Math.floor((guardian.w - guardianPad * 2 - storeGap) / 2);
+    const storeY = guardian.y + guardianTitleH + guardianPad;
+    pos.tokens = {
+      x: guardian.x + guardianPad,
+      y: storeY,
+      w: storeW,
+      h: storeH,
+      label: byId.tokens ? byId.tokens.label : "Token vault",
+      kind: "store",
+      parent: "guardian",
+    };
+    pos.cache = {
+      x: guardian.x + guardianPad + storeW + storeGap,
+      y: storeY,
+      w: storeW,
+      h: storeH,
+      label: byId.cache ? byId.cache.label : "Response cache",
+      kind: "store",
+      parent: "guardian",
+    };
+
+    const typeOrigin = {
+      x: guardian.x + guardianPad,
+      y: storeY + storeH + storeGap,
+      cols: chipCols,
+      chipW: chipW,
+      chipH: chipH,
+      gap: chipGap,
+    };
+
+    const svcW = 200;
+    const svcH = 52;
+    const svcGap = 12;
+    const svcTotal = services.length * (svcH + svcGap) - svcGap;
+    const svcStartY = Math.max(20, Math.floor(aperture.y + aperture.h / 2 - svcTotal / 2));
     services.forEach((n, i) => {
       pos[n.id] = {
-        x: 560,
-        y: startY + i * (h + gap),
-        w: 200,
-        h: h,
+        x: 620,
+        y: svcStartY + i * (svcH + svcGap),
+        w: svcW,
+        h: svcH,
         label: n.label,
-        kind: n.kind,
+        kind: "service",
         status: n.status,
       };
     });
-    const bottom = Math.max(420, startY + total + 24);
-    return { pos: pos, width: 790, height: bottom };
+
+    const bottom = Math.max(aperture.y + aperture.h, svcStartY + svcTotal, agents.y + agents.h) + 24;
+    return {
+      pos: pos,
+      typeOrigin: typeOrigin,
+      dataTypes: dataTypes,
+      width: 850,
+      height: bottom,
+    };
   }
 
   function flowAnchor(pos, side) {
@@ -706,65 +763,109 @@ const adminHTML = `<!DOCTYPE html>
   }
 
   function flowEdgePath(from, to, style) {
-    // Vertical neighbors (stores under Guardian).
-    if (Math.abs((from.x + from.w / 2) - (to.x + to.w / 2)) < 8 && to.y >= from.y + from.h - 4) {
-      const a = flowAnchor(from, "bottom");
-      const b = flowAnchor(to, "top");
-      const midY = (a.y + b.y) / 2;
-      return "M " + a.x + " " + a.y + " C " + a.x + " " + midY + ", " + b.x + " " + midY + ", " + b.x + " " + b.y;
-    }
+    // Prefer connecting to the outer container when the target is nested.
     const a = flowAnchor(from, "right");
     const b = flowAnchor(to, "left");
-    // Library fan-in: service → guardian, draw under the main data edge.
     if (style === "library") {
       const midY = Math.max(a.y, b.y) + 18;
       return "M " + a.x + " " + a.y + " C " + (a.x + 40) + " " + midY + ", " + (b.x - 40) + " " + midY + ", " + b.x + " " + b.y;
     }
-    // Guardian → service and horizontal links.
+    // Access into nested Guardian: land on Aperture's left edge first.
+    if (style === "access" && to.parent) {
+      const outer = { x: to.x - 12, y: to.y - 40, w: to.w + 24, h: to.h + 52 };
+      const ob = flowAnchor(outer, "left");
+      const midX = (a.x + ob.x) / 2;
+      return "M " + a.x + " " + a.y + " C " + midX + " " + a.y + ", " + midX + " " + ob.y + ", " + ob.x + " " + ob.y;
+    }
     const midX = (a.x + b.x) / 2;
     return "M " + a.x + " " + a.y + " C " + midX + " " + a.y + ", " + midX + " " + b.y + ", " + b.x + " " + b.y;
   }
 
   function renderFlowMap(topo) {
-    const layout = layoutFlowNodes(topo.nodes || []);
+    const layout = layoutFlowMap(topo);
     const pos = layout.pos;
     const parts = [];
     parts.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + layout.width + " " + layout.height + '" width="' + layout.width + '" height="' + layout.height + '" role="img" aria-label="Guardian data-flow map">');
     parts.push("<defs>");
-    parts.push('<marker id="flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#8b949e"/></marker>');
     Object.keys(FLOW_EDGE_COLORS).forEach((style) => {
       parts.push('<marker id="flow-arrow-' + style + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + FLOW_EDGE_COLORS[style] + '"/></marker>');
     });
     parts.push("</defs>");
 
+    // Edges first (under nodes).
     (topo.edges || []).forEach((e) => {
+      // Containment is drawn as nesting — skip parent/child arrows.
+      const fromN = (topo.nodes || []).find((n) => n.id === e.from);
+      const toN = (topo.nodes || []).find((n) => n.id === e.to);
+      if (fromN && toN && toN.parent === e.from) return;
+      if (fromN && toN && fromN.parent === e.to) return;
+
       const from = pos[e.from];
       const to = pos[e.to];
       if (!from || !to) return;
+      // Hook into nested Guardian: target Aperture box for a cleaner landing.
+      let target = to;
+      if (e.style === "hook" && e.to === "guardian" && pos.aperture) {
+        target = pos.aperture;
+      }
       const color = FLOW_EDGE_COLORS[e.style] || "#8b949e";
       const dash = e.style === "hook" || e.style === "meta" || e.style === "denied" || e.style === "library"
         ? ' stroke-dasharray="5 4"'
         : "";
-      const d = flowEdgePath(from, to, e.style);
+      const d = flowEdgePath(from, target, e.style);
       parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.6"' + dash + ' marker-end="url(#flow-arrow-' + (FLOW_EDGE_COLORS[e.style] ? e.style : "access") + ')"/>');
-      // Label near the midpoint.
-      const mx = (from.x + from.w + to.x) / 2;
-      const my = (from.y + from.h / 2 + to.y + to.h / 2) / 2;
+      const mx = (from.x + from.w + target.x) / 2;
+      const my = (from.y + from.h / 2 + target.y + target.h / 2) / 2;
       if (e.label) {
-        parts.push('<text x="' + mx + '" y="' + (my - 4) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label) + "</text>");
+        parts.push('<text x="' + mx + '" y="' + (my - 6) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label) + "</text>");
       }
     });
 
-    (topo.nodes || []).forEach((n) => {
-      const p = pos[n.id];
+    // Aperture container.
+    const ap = pos.aperture;
+    parts.push('<rect x="' + ap.x + '" y="' + ap.y + '" width="' + ap.w + '" height="' + ap.h + '" rx="12" fill="#12161c" stroke="#bc8cff" stroke-width="1.4" stroke-dasharray="6 4"/>');
+    parts.push('<text x="' + (ap.x + 12) + '" y="' + (ap.y + 18) + '" fill="#bc8cff" font-size="12" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(ap.label) + '</text>');
+    parts.push('<text x="' + (ap.x + ap.w - 12) + '" y="' + (ap.y + 18) + '" text-anchor="end" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">pre-request gateway</text>');
+
+    // Guardian container.
+    const g = pos.guardian;
+    parts.push('<rect x="' + g.x + '" y="' + g.y + '" width="' + g.w + '" height="' + g.h + '" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>');
+    parts.push('<text x="' + (g.x + 12) + '" y="' + (g.y + 18) + '" fill="#58a6ff" font-size="13" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(g.label) + '</text>');
+    parts.push('<text x="' + (g.x + g.w - 12) + '" y="' + (g.y + 18) + '" text-anchor="end" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">hook · proxy · library</text>');
+
+    // Stores inside Guardian.
+    [pos.tokens, pos.cache].forEach((p) => {
+      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#21262d" stroke="#30363d" stroke-width="1.2"/>');
+      parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2) + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="12" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
+    });
+
+    // Data types inside Guardian.
+    const origin = layout.typeOrigin;
+    parts.push('<text x="' + origin.x + '" y="' + (origin.y + 12) + '" fill="#8b949e" font-size="10" font-weight="600" font-family="system-ui,sans-serif">DATA TYPES</text>');
+    (layout.dataTypes || []).forEach((dt, i) => {
+      const col = i % origin.cols;
+      const row = Math.floor(i / origin.cols);
+      const x = origin.x + col * (origin.chipW + origin.gap);
+      const y = origin.y + 18 + row * (origin.chipH + origin.gap);
+      const stroke = dt.readable ? "#3fb950" : "#d29922";
+      const fill = dt.readable ? "rgba(63,185,80,0.12)" : "rgba(210,153,34,0.12)";
+      parts.push('<rect x="' + x + '" y="' + y + '" width="' + origin.chipW + '" height="' + origin.chipH + '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"/>');
+      const label = dt.label + (dt.kind === "library" ? "" : " · proxy");
+      parts.push('<text x="' + (x + origin.chipW / 2) + '" y="' + (y + origin.chipH / 2) + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(label) + "</text>");
+    });
+
+    // Agents + services (leaf boxes).
+    [pos.agents].concat(services.map((n) => pos[n.id])).forEach((p) => {
       if (!p) return;
-      const stroke = flowStatusStroke(n.status, n.kind);
-      const fill = flowStatusFill(n.status, n.kind);
-      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1.5"/>');
-      parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 - (n.status || n.detail ? 6 : 0)) + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(n.label) + "</text>");
-      const sub = n.status || (n.kind === "guardian" ? "hook · proxy · library" : "");
-      if (sub) {
-        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 + 12) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(sub) + "</text>");
+      const stroke = p.kind === "service"
+        ? (FLOW_STATUS_COLORS[p.status] || "#30363d")
+        : "#8b949e";
+      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#161b22" stroke="' + stroke + '" stroke-width="1.5"/>');
+      const n = (topo.nodes || []).find((x) => x.id === p.id) || {};
+      const subY = p.y + p.h / 2 - (n.status ? 6 : 0);
+      parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + subY + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
+      if (n.status) {
+        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 + 12) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(n.status) + "</text>");
       }
     });
 

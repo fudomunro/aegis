@@ -42,6 +42,8 @@ type FlowNode struct {
 	Kind   string `json:"kind"`
 	Label  string `json:"label"`
 	Detail string `json:"detail,omitempty"`
+	// Parent nests this node inside another (e.g. guardian inside aperture).
+	Parent string `json:"parent,omitempty"`
 	// Status applies mainly to services (connected, needs-auth, …).
 	Status    string   `json:"status,omitempty"`
 	Action    string   `json:"action,omitempty"`
@@ -71,6 +73,21 @@ type FlowLibrary struct {
 	Providers []string `json:"providers"`
 }
 
+// FlowDataType is one data type agents can reach through this instance.
+type FlowDataType struct {
+	ID string `json:"id"`
+	// Label is the human name ("liked tracks").
+	Label string `json:"label"`
+	// Path is the library endpoint when Kind is library.
+	Path string `json:"path,omitempty"`
+	// Kind is "library" (unified endpoint) or "proxy" (service proxy only).
+	Kind string `json:"kind"`
+	// Readable is true when at least one non-blocked service allows reads.
+	Readable bool `json:"readable"`
+	// Providers lists non-blocked services that can supply this type.
+	Providers []string `json:"providers,omitempty"`
+}
+
 // FlowRuntime is the non-secret runtime context for the map.
 type FlowRuntime struct {
 	AuthMode string `json:"auth_mode"`
@@ -79,11 +96,12 @@ type FlowRuntime struct {
 
 // FlowTopology is the admin data-flow map payload (issue #25).
 type FlowTopology struct {
-	Runtime   FlowRuntime   `json:"runtime"`
-	Narrative string        `json:"narrative"`
-	Nodes     []FlowNode    `json:"nodes"`
-	Edges     []FlowEdge    `json:"edges"`
-	Libraries []FlowLibrary `json:"libraries"`
+	Runtime   FlowRuntime    `json:"runtime"`
+	Narrative string         `json:"narrative"`
+	Nodes     []FlowNode     `json:"nodes"`
+	Edges     []FlowEdge     `json:"edges"`
+	Libraries []FlowLibrary  `json:"libraries"`
+	DataTypes []FlowDataType `json:"data_types"`
 }
 
 // HandleAdminFlow returns the data-flow topology for the admin Map view.
@@ -114,25 +132,28 @@ func (s *Server) buildFlowTopology() FlowTopology {
 			ID:     "aperture",
 			Kind:   FlowKindGateway,
 			Label:  "Aperture",
-			Detail: "Pre-request hook injects Guardian proxy URLs into agent prompts",
+			Detail: "Gateway shell — pre-request hook injects Guardian URLs into agent prompts",
 		},
 		{
 			ID:     "guardian",
 			Kind:   FlowKindGuardian,
 			Label:  "Guardian",
 			Detail: "Hook · service proxy · unified library · permissions",
+			Parent: "aperture",
 		},
 		{
 			ID:     "tokens",
 			Kind:   FlowKindStore,
 			Label:  "Token vault",
 			Detail: "Encrypted OAuth tokens on disk",
+			Parent: "guardian",
 		},
 		{
 			ID:     "cache",
 			Kind:   FlowKindStore,
 			Label:  "Response cache",
 			Detail: "In-memory GET cache for proxied and library responses",
+			Parent: "guardian",
 		},
 	}
 
@@ -140,8 +161,6 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		{From: "agents", To: "aperture", Label: "LLM traffic", Style: FlowEdgeHook},
 		{From: "aperture", To: "guardian", Label: "POST /v1/pre-request", Style: FlowEdgeHook},
 		{From: "agents", To: "guardian", Label: "proxy + library API", Style: FlowEdgeAccess},
-		{From: "guardian", To: "tokens", Label: "OAuth tokens", Style: FlowEdgeMeta},
-		{From: "guardian", To: "cache", Label: "cached GETs", Style: FlowEdgeMeta},
 	}
 
 	// Library kinds this server can aggregate, with which services feed them.
@@ -149,6 +168,9 @@ func (s *Server) buildFlowTopology() FlowTopology {
 	for _, kind := range libraryKinds {
 		libraryProviders[kind.ID] = nil
 	}
+
+	// Proxy-only data types seen on non-blocked connectors (beyond library kinds).
+	proxyTypes := map[string]map[string]bool{} // type → service id set
 
 	for _, svc := range s.config.Services {
 		node := FlowNode{
@@ -171,8 +193,19 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		if hasConnector {
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
+			libraryIDs := map[string]bool{}
+			for _, kind := range libraryKinds {
+				libraryIDs[kind.ID] = true
+			}
 			for _, dt := range caps.DataTypes {
 				types = append(types, dt.Name)
+				if strings.EqualFold(svc.Action, "block") || libraryIDs[dt.Name] {
+					continue
+				}
+				if proxyTypes[dt.Name] == nil {
+					proxyTypes[dt.Name] = map[string]bool{}
+				}
+				proxyTypes[dt.Name][svc.ID] = true
 			}
 			node.DataTypes = types
 
@@ -266,17 +299,50 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		})
 	}
 
+	dataTypes := make([]FlowDataType, 0, len(libraryKinds)+len(proxyTypes))
+	for _, lib := range libraries {
+		dataTypes = append(dataTypes, FlowDataType{
+			ID:        lib.ID,
+			Label:     lib.Label,
+			Path:      lib.Path,
+			Kind:      "library",
+			Readable:  len(lib.Providers) > 0 && s.libraryReadableFor(lib.ID),
+			Providers: lib.Providers,
+		})
+	}
+	proxyIDs := make([]string, 0, len(proxyTypes))
+	for id := range proxyTypes {
+		proxyIDs = append(proxyIDs, id)
+	}
+	sort.Strings(proxyIDs)
+	for _, id := range proxyIDs {
+		providers := make([]string, 0, len(proxyTypes[id]))
+		for svcID := range proxyTypes[id] {
+			providers = append(providers, svcID)
+		}
+		sort.Strings(providers)
+		dataTypes = append(dataTypes, FlowDataType{
+			ID:        id,
+			Label:     id,
+			Kind:      "proxy",
+			Readable:  true,
+			Providers: providers,
+		})
+	}
+
 	return FlowTopology{
 		Runtime: FlowRuntime{
 			AuthMode: s.authMode,
 			BaseURL:  s.baseURL,
 		},
-		Narrative: "Agents ask Guardian (via Aperture’s hook and Guardian’s proxy/library APIs). " +
-			"Guardian attaches OAuth tokens, reads your services, caches responses, and merges " +
-			"library items into one neutral list. Photo bytes stay on the source service.",
+		Narrative: "Agents reach Guardian through Aperture’s hook and Guardian’s proxy/library APIs. " +
+			"Guardian (nested inside Aperture) holds the token vault and response cache, attaches OAuth " +
+			"tokens, reads your services, and merges library items into one neutral list. Photo bytes " +
+			"stay on the source service.",
 		Nodes:     nodes,
 		Edges:     edges,
 		Libraries: libraries,
+		DataTypes: dataTypes,
 	}
 }
 
