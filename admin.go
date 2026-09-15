@@ -855,7 +855,8 @@ const adminHTML = `<!DOCTYPE html>
     });
 
     // Agents + services (leaf boxes).
-    [pos.agents].concat(services.map((n) => pos[n.id])).forEach((p) => {
+    const leafServices = (topo.nodes || []).filter((n) => n.kind === "service");
+    [pos.agents].concat(leafServices.map((n) => pos[n.id])).forEach((p) => {
       if (!p) return;
       const stroke = p.kind === "service"
         ? (FLOW_STATUS_COLORS[p.status] || "#30363d")
