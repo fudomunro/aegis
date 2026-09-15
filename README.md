@@ -624,12 +624,15 @@ PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.js
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
 
-The **Map** tab (default) is a live SVG overview of how data moves: agents →
-Aperture hook → Guardian, agent access to proxy/library endpoints, Guardian’s
-OAuth reads of each service, library fan-in, and token/cache stores. Service
-nodes are colored by status (connected, needs OAuth, expired, blocked). Photo
-services note that bytes stay upstream. Use it as a quick “what is this thing
-doing?” picture; the Services tab remains the place to edit permissions.
+The **Map** tab (default) is a live SVG overview of how data moves. Aperture
+is drawn as a container around Guardian; Guardian nests the token vault and
+response cache and lists every data type available on this instance (unified
+library kinds plus proxy-only types). Agents connect via the hook and
+proxy/library APIs; edges show OAuth reads, library fan-in, and blocked
+services. Service nodes are colored by status (connected, needs OAuth, expired,
+blocked). Photo services note that bytes stay upstream. Use it as a quick
+“what is this thing doing?” picture; the Services tab remains the place to
+edit permissions.
 
 Each service card has an **Edit permissions** form: set levels per data type,
 add custom types, clear to unrestricted, or save. Saves write the config file
