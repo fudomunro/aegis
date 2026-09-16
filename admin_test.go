@@ -62,6 +62,12 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 	if !strings.Contains(body, "/v1/admin/summary") {
 		t.Fatal("expected summary API reference in page")
 	}
+	if !strings.Contains(body, `id="library-pager"`) || !strings.Contains(body, `id="cache-pager"`) {
+		t.Fatal("expected library and cache pager containers")
+	}
+	if !strings.Contains(body, "PAGE_SIZE") || !strings.Contains(body, "paginate(") {
+		t.Fatal("expected client-side pagination helpers in admin JS")
+	}
 }
 
 func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
