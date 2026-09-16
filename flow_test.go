@@ -429,4 +429,10 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	if !strings.Contains(body, "edgeStrokeWidth") {
 		t.Fatal("expected hit-scaled edge width")
 	}
+	if !strings.Contains(body, "flowGatewayPath") {
+		t.Fatal("expected simplified gateway bi-arrow")
+	}
+	if !strings.Contains(body, "marker-start") {
+		t.Fatal("expected bidirectional gateway markers")
+	}
 }
