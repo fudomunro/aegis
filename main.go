@@ -81,6 +81,8 @@ func main() {
 		slog.Error("failed to load token store", "path", *tokenPath, "error", err)
 		os.Exit(1)
 	}
+	// Fold legacy per-service tokens into shared provider connections (issue #26).
+	tokens.FoldIntoConnections(cfg)
 
 	identity := buildIdentityResolver(*authMode, *tsSocket)
 

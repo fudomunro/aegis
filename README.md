@@ -101,7 +101,67 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
 | `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Guardian home (see [Canonical sources](#canonical-sources-non-guardian-issue-16)) |
-| `oauth` | OAuth2 configuration for user authorization (optional) |
+| `connection` | Optional name of a shared OAuth provider connection (issue #26) |
+| `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
+| `oauth` | Legacy per-service OAuth2 configuration (optional; prefer `connections` + `connection`) |
+
+### Provider connections (issue #26)
+
+Multi-surface providers (especially Google) should use **one shared connection**
+instead of copying the same client credentials into every service block:
+
+```json
+{
+  "connections": {
+    "google": {
+      "name": "Google",
+      "client_id": "…",
+      "client_secret": "…",
+      "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+      "token_url": "https://oauth2.googleapis.com/token",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+        "https://www.googleapis.com/auth/contacts.readonly"
+      ]
+    }
+  },
+  "services": [
+    {
+      "id": "youtube-music",
+      "connection": "google",
+      "oauth_scopes": ["https://www.googleapis.com/auth/youtube.readonly"]
+    },
+    {
+      "id": "google-photos",
+      "connection": "google",
+      "oauth_scopes": ["https://www.googleapis.com/auth/photospicker.mediaitems.readonly"]
+    }
+  ]
+}
+```
+
+- Guardian stores **one** encrypted token (access + refresh) per connection ID.
+- Login at `/v1/auth/{service_id}/login` still works per surface; it resolves to
+  the shared connection and requests the connection’s scope union.
+- Google logins send `access_type=offline` and `include_granted_scopes=true`,
+  and only force `prompt=consent` when no refresh token exists yet — so adding
+  Photos later does not drop YouTube access.
+- A connection token missing a surface’s `oauth_scopes` makes that surface
+  report library status `unauthorized` (or proxy 401) without failing the
+  whole connection.
+- On upgrade, legacy per-service tokens are folded into the shared connection
+  automatically (best-effort: prefer refresh token, then more scopes, then
+  later expiry). One reconnect may still be needed if scopes were incomplete.
+
+Register **all** surface callback URLs on the same OAuth client, e.g.:
+
+- `https://your-guardian/v1/auth/youtube-music/callback`
+- `https://your-guardian/v1/auth/google-photos/callback`
+- `https://your-guardian/v1/auth/google/callback`
+
+Inline per-service `oauth` blocks remain supported for 1:1 providers (Spotify,
+Amazon).
 
 ### Data permissions
 
@@ -289,9 +349,13 @@ Spotify scopes (see `guardian.example.json`):
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create an OAuth 2.0 Client ID (Web application)
-3. Add `https://your-guardian/v1/auth/youtube-music/callback` as an authorized redirect URI
-4. Enable the YouTube Data API v3
-5. Copy credentials into `guardian.json`
+3. Add redirect URIs for every Google surface you use:
+   - `https://your-guardian/v1/auth/youtube-music/callback`
+   - `https://your-guardian/v1/auth/google-photos/callback`
+   - `https://your-guardian/v1/auth/google/callback`
+4. Enable the APIs you need (YouTube Data API v3, People API, Photos Picker API)
+5. Put the **same** client ID/secret in the shared `connections.google` block
+   (see [Provider connections](#provider-connections-issue-26))
 
 ### Amazon Music (Login with Amazon)
 
