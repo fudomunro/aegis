@@ -162,9 +162,20 @@ Merge sorts canonical sources first. `CanonicalService()` (and the JSON
 to prefer that service for writes or mirrors. The admin service card shows a
 `canonical: …` badge; library cards mark items with a canonical source.
 
-This is **policy/metadata only** in Phase 1: agents still write through the
-service proxy to whichever service they call. Mirror/backup sync and foreign-DB
-connectors are follow-up work on
+#### Write / access policy
+
+When a matched service allows **write** (or `read-write`) for a library kind,
+pre-request injection adds a short write-policy block:
+
+- The **home** service is told: “send mutations of &lt;type&gt; here first.”
+- A **secondary** service is told: “prefer &lt;home&gt; before this service;
+  secondary copies are not auto-synced.”
+
+Library instructions always include the multi-source mutation rule: write to
+`sources[].canonical` first, then ask the user before updating other copies.
+Guardian still does **not** route or mirror writes automatically — agents call
+the service proxy for whichever service they choose. Mirror/backup sync and
+foreign-DB connectors remain follow-up work on
 [issue #16](https://github.com/fudomunro/aperture-guardian/issues/16).
 
 ### Environment variables
