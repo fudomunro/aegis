@@ -1319,10 +1319,16 @@ const adminHTML = `<!DOCTYPE html>
   function libraryStatusBadges(byService) {
     return Object.keys(byService || {}).sort().map((id) => {
       const st = byService[id];
-      const cls = st.status === "ok" ? "badge-green" : st.status === "unauthorized" ? "badge-orange" : "badge-red";
+      const cls = st.status === "ok"
+        ? (st.truncated ? "badge-orange" : "badge-green")
+        : st.status === "unauthorized" ? "badge-orange" : "badge-red";
       const count = st.status === "ok" ? " · " + st.count : "";
-      return '<span class="badge ' + cls + '" title="' + escapeHtml(st.error || st.status) + '">' +
-        escapeHtml(id) + ": " + escapeHtml(st.status) + count +
+      const trunc = st.truncated ? " · truncated" : "";
+      const title = st.error || (st.truncated
+        ? "page cap hit — more items remain upstream"
+        : st.status);
+      return '<span class="badge ' + cls + '" title="' + escapeHtml(title) + '">' +
+        escapeHtml(id) + ": " + escapeHtml(st.status) + count + trunc +
         "</span>";
     }).join(" ");
   }
@@ -1475,6 +1481,7 @@ const adminHTML = `<!DOCTYPE html>
     const endpoint = '<code>' + escapeHtml(kind.path) + "</code>";
     meta.innerHTML = "<strong>" + items.length + "</strong> " + kind.label +
       (data.synced ? " · synced across services" : "") +
+      (data.truncated ? ' · <span class="badge badge-orange" title="page cap hit — more items remain upstream">truncated</span>' : "") +
       " · agents call " + endpoint +
       (statusBits ? '<div class="scopes" style="margin-top:0.4rem">' + statusBits + "</div>" : "");
 

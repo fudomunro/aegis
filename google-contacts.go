@@ -188,9 +188,10 @@ func (c *GoogleContactsConnector) handleListContacts(w http.ResponseWriter, r *h
 		contacts = []Contact{}
 	}
 	result := ContactList{
-		Contacts: contacts,
-		Total:    len(contacts),
-		Synced:   true,
+		Contacts:  contacts,
+		Total:     len(contacts),
+		Synced:    true,
+		Truncated: truncated,
 		ByService: map[string]LibraryServiceStatus{
 			googleContactsServiceID: {
 				Status:    LibraryStatusOK,

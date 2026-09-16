@@ -75,6 +75,35 @@ func TestAmazonListUserPlaylists_Success(t *testing.T) {
 	}
 }
 
+func TestAmazonListUserPlaylists_NextTokenTruncated(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprint(w, `{
+			"items":[{"id":"amz1","name":"Chill","item_count":8}],
+			"nextToken":"opaque-continuation"
+		}`)
+	}))
+	defer ts.Close()
+
+	srv := testServerWithBase(&Config{
+		Services: []Service{{ID: "amazon-music", Endpoint: ts.URL}},
+	}, "https://guardian.example.com")
+	srv.tokens.Tokens["amazon-music"] = &OAuthToken{
+		AccessToken: "tok",
+		Expiry:      time.Now().Add(time.Hour),
+	}
+	conn := NewAmazonMusicConnector(srv)
+	playlists, truncated, err := conn.ListUserPlaylists(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(playlists) != 1 {
+		t.Fatalf("playlists = %+v", playlists)
+	}
+	if !truncated {
+		t.Fatal("expected truncated=true when Amazon nextToken is present but unfollowed")
+	}
+}
+
 func TestAmazonListUserPlaylists_HTTPError(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "nope", http.StatusForbidden)

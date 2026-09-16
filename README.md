@@ -349,6 +349,24 @@ Tracks carry unified `artists` / `album` objects. Cross-service matching is **te
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
+### Sync completeness
+
+Guardian aims to surface a user’s **full** library, not a prefix. Two layers matter:
+
+1. **Pagination safety valve** — connectors and proxy auto-pagination follow up to `libraryPageCap` pages (currently 200, about 10k items at page size 50 / 20k at 100). That cap exists only to stop a looping upstream; it is not a product limit. When a connector hits it with more pages still upstream, it sets `by_service[service].truncated = true`, and the library response also sets a top-level `"truncated": true`. Proxy auto-pagination responses set `"truncated": true` in the combined payload the same way.
+
+2. **Provider / API gaps** — some datasets are incomplete for reasons Guardian cannot fix by paginating harder:
+
+| Gap | Why | How it is reported |
+|-----|-----|--------------------|
+| **Google Photos full library** | Library API reads require Google app verification; unverified apps get 403. Guardian uses the Picker API instead — only the user’s last selection. | Empty library until a pick; system instructions tell agents to run the picker flow. Not a `truncated` flag — the library is intentionally a selection, not a full dump. |
+| **YouTube Music albums** | No public saved-albums API. | `/v1/library/albums` simply has no YouTube source. |
+| **Amazon Music** | No public developer REST API; playlist pagination may return an unfollowed `nextToken`. | When `nextToken` is present and not followed, `truncated` is set rather than claiming completeness. |
+| **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via the service proxy for a specific playlist. |
+| **Cross-service entity resolution** | v1 matching is text-based. | Tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4). |
+
+**Always check `truncated` before answering “is this everything?”** Library system instructions tell agents to do the same. Admin Library badges turn orange and say `truncated` when a service hit its page cap.
+
 ### Unified liked tracks
 
 ```
@@ -379,6 +397,8 @@ Returns the user's liked/saved tracks from every connected music service in Guar
   }
 }
 ```
+
+When any service hits its page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`.
 
 Cross-service merge is **title + primary artist** via `NormalizeIdentityKey` (same v1 quality as playlists). Spotify maps `/me/tracks` (saved library); YouTube Music maps the liked-videos playlist.
 

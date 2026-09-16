@@ -229,7 +229,7 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 		sortKey:   photoIdentityKey,
 		merge:     MergePhotos,
 		encode: func(merged []Photo, bySvc map[string]LibraryServiceStatus) any {
-			return PhotoList{Photos: merged, Total: len(merged), Synced: true, ByService: bySvc}
+			return PhotoList{Photos: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }
