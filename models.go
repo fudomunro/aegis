@@ -31,6 +31,9 @@ type PlaylistSource struct {
 	ID string `json:"id"`
 	// URL is a deep link to the playlist on the service, when available.
 	URL string `json:"url,omitempty"`
+	// Canonical is true when this service is the authoritative location for
+	// the playlist (issue #16). Set by connectors or config canonical_for.
+	Canonical bool `json:"canonical,omitempty"`
 	// Extra holds additional service-specific fields (uri, published_at, …).
 	Extra map[string]any `json:"extra,omitempty"`
 }
@@ -55,11 +58,14 @@ type Track struct {
 
 // TrackSource is a service-specific location of a track or video.
 type TrackSource struct {
-	Service     string         `json:"service"`
-	ServiceName string         `json:"service_name,omitempty"`
-	ID          string         `json:"id,omitempty"`
-	URL         string         `json:"url,omitempty"`
-	Extra       map[string]any `json:"extra,omitempty"`
+	Service     string `json:"service"`
+	ServiceName string `json:"service_name,omitempty"`
+	ID          string `json:"id,omitempty"`
+	URL         string `json:"url,omitempty"`
+	// Canonical is true when this service is the authoritative location for
+	// the track (issue #16). Set by connectors or config canonical_for.
+	Canonical bool           `json:"canonical,omitempty"`
+	Extra     map[string]any `json:"extra,omitempty"`
 }
 
 // Artist is a unified artist/channel identity. Matching across services is
@@ -145,6 +151,9 @@ type ContactSource struct {
 	Emails []string `json:"emails,omitempty"`
 	// Phones are phone numbers this service reports for the contact.
 	Phones []string `json:"phones,omitempty"`
+	// Canonical is true when this service is the authoritative location for
+	// the contact (issue #16). Set by connectors or config canonical_for.
+	Canonical bool `json:"canonical,omitempty"`
 	// Extra holds additional service-specific fields.
 	Extra map[string]any `json:"extra,omitempty"`
 }

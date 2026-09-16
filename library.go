@@ -80,6 +80,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		encode: func(merged []Playlist, bySvc map[string]LibraryServiceStatus) any {
 			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
+		markCanonical: s.stampPlaylistCanonical,
 	})
 }
 
@@ -100,6 +101,7 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 		encode: func(merged []Track, bySvc map[string]LibraryServiceStatus) any {
 			return TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
+		markCanonical: s.stampTrackCanonical,
 	})
 }
 
@@ -178,19 +180,19 @@ func (s *Server) artistsLibraryReadable() bool {
 }
 
 func (s *Server) librarySystemInstructions() string {
-	return LibraryKindByID("playlists").Instructions(s.baseURL)
+	return s.libraryInstructionsFor("playlists")
 }
 
 func (s *Server) libraryTracksSystemInstructions() string {
-	return LibraryKindByID("tracks").Instructions(s.baseURL)
+	return s.libraryInstructionsFor("tracks")
 }
 
 func (s *Server) libraryAlbumsSystemInstructions() string {
-	return LibraryKindByID("albums").Instructions(s.baseURL)
+	return s.libraryInstructionsFor("albums")
 }
 
 func (s *Server) libraryArtistsSystemInstructions() string {
-	return LibraryKindByID("artists").Instructions(s.baseURL)
+	return s.libraryInstructionsFor("artists")
 }
 
 func mentionsPlaylists(msg string) bool {

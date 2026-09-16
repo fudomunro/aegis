@@ -99,6 +99,7 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
 | `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
+| `canonical_for` | Optional list of library kinds where this service is the authoritative non-Guardian home (see [Canonical sources](#canonical-sources-non-guardian-issue-16)) |
 | `oauth` | OAuth2 configuration for user authorization (optional) |
 
 ### Data permissions
@@ -132,6 +133,39 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`. Paths that do not map to a
 known type fall through to the `default` level.
+
+### Canonical sources (non-Guardian, issue #16)
+
+Guardian does **not** store library content. The authoritative copy for each
+item lives on a service outside Guardian. That location is marked
+`canonical` on the item's `sources[]` entry.
+
+Two layers set the flag:
+
+1. **Connector** — a provider may mark inherent ownership. Google Photos always
+   sets `canonical: true` because photo bytes stay on Google (never in Guardian).
+2. **Config** — declare a home service per library kind:
+
+```json
+{
+  "id": "spotify",
+  "canonical_for": ["playlists", "tracks"]
+}
+```
+
+Valid kinds: `playlists`, `tracks`, `albums`, `artists`, `contacts`, `photos`.
+At most **one** non-blocked service may claim each kind. After a library fetch,
+sources from a configured home service are stamped `canonical: true`.
+
+Merge sorts canonical sources first. `CanonicalService()` (and the JSON
+`sources[]` order) tell agents where the home copy is. System instructions say
+to prefer that service for writes or mirrors. The admin service card shows a
+`canonical: …` badge; library cards mark items with a canonical source.
+
+This is **policy/metadata only** in Phase 1: agents still write through the
+service proxy to whichever service they call. Mirror/backup sync and foreign-DB
+connectors are follow-up work on
+[issue #16](https://github.com/fudomunro/aperture-guardian/issues/16).
 
 ### Environment variables
 
@@ -338,7 +372,7 @@ Neutral playlist fields (user-facing):
 | `description` | Playlist description, if any |
 | `owner` | Owner display name, when known |
 | `track_count` | Item count (max across synced sources) |
-| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `url`, `extra` |
+| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `url`, `canonical`, `extra` |
 | `extra` | Other service-specific fields |
 
 ### Cross-service sync (v1)
@@ -508,7 +542,8 @@ empty until a provider supplies them — the merge path is ready.
 Service identity lives in `sources[]`, same as playlists and contacts.
 
 **Guardian never stores photo bytes.** The authoritative copy stays on a
-non-Guardian service marked `canonical` (the minimal slice of
+non-Guardian service marked `canonical` (see
+[Canonical sources](#canonical-sources-non-guardian-issue-16) /
 [issue #16](https://github.com/fudomunro/aperture-guardian/issues/16)).
 `blob_url` points at the retrievable image when the source exposes one; Google
 Photos `baseUrl` values expire in about an hour, so agents must not treat them

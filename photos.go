@@ -231,6 +231,7 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 		encode: func(merged []Photo, bySvc map[string]LibraryServiceStatus) any {
 			return PhotoList{Photos: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
+		markCanonical: s.stampPhotoCanonical,
 	})
 }
 
@@ -246,7 +247,7 @@ func (s *Server) photosLibraryReadable() bool {
 
 // libraryPhotosSystemInstructions tells agents about the photos endpoint.
 func (s *Server) libraryPhotosSystemInstructions() string {
-	return LibraryKindByID("photos").Instructions(s.baseURL)
+	return s.libraryInstructionsFor("photos")
 }
 
 // mentionsPhotos detects photo-oriented questions that don't name a service.
