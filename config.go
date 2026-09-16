@@ -11,9 +11,23 @@ import (
 )
 
 type Config struct {
-	mu       sync.RWMutex
-	Services []Service `json:"services"`
-	path     string
+	mu          sync.RWMutex
+	Connections map[string]Connection `json:"connections,omitempty"`
+	Services    []Service             `json:"services"`
+	path        string
+}
+
+// Connection is a shared OAuth provider registration (issue #26). Multiple
+// service surfaces can reference one connection so the user authorizes once
+// and Guardian keeps a single token/refresh path per provider.
+type Connection struct {
+	Name         string `json:"name,omitempty"`
+	ClientID     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	AuthURL      string `json:"auth_url"`
+	TokenURL     string `json:"token_url"`
+	// Scopes is the union requested at login for this connection.
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // Service represents a named external service (e.g. Spotify, YouTube Music)
@@ -33,8 +47,18 @@ type Service struct {
 	// CanonicalFor lists library kinds where this service is the authoritative
 	// non-Guardian location (issue #16). At most one non-blocked service may
 	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
-	CanonicalFor []string     `json:"canonical_for,omitempty"`
-	OAuth        *OAuthConfig `json:"oauth,omitempty"`
+	CanonicalFor []string `json:"canonical_for,omitempty"`
+	// Connection names the shared provider connection this surface uses
+	// (issue #26). Empty + inline oauth keeps a 1:1 connection named after
+	// the service ID.
+	Connection string `json:"connection,omitempty"`
+	// OAuthScopes lists scopes this surface requires from the connection.
+	// When set, a shared token missing any of these degrades the surface
+	// to unauthorized rather than failing the whole connection.
+	OAuthScopes []string `json:"oauth_scopes,omitempty"`
+	// OAuth is the legacy per-service registration. Prefer top-level
+	// connections + connection/oauth_scopes for multi-surface providers.
+	OAuth *OAuthConfig `json:"oauth,omitempty"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -75,7 +99,7 @@ func LoadConfig(path string) (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
-	if err := validateServices(cfg.Services); err != nil {
+	if err := validateConfig(&cfg); err != nil {
 		return nil, err
 	}
 	cfg.path = path
@@ -94,15 +118,17 @@ func (c *Config) Reload() error {
 	if err := json.Unmarshal(data, &fresh); err != nil {
 		return err
 	}
-	if err := validateServices(fresh.Services); err != nil {
+	if err := validateConfig(&fresh); err != nil {
 		return err
 	}
+	c.Connections = fresh.Connections
 	c.Services = fresh.Services
-	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services))
+	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services), "connections", len(fresh.Connections))
 	return nil
 }
 
-func validateServices(services []Service) error {
+func validateConfig(cfg *Config) error {
+	services := cfg.Services
 	for i := range services {
 		services[i].CanonicalFor = normalizeCanonicalFor(services[i].CanonicalFor)
 	}
@@ -112,6 +138,26 @@ func validateServices(services []Service) error {
 	for _, svc := range services {
 		if err := ValidatePermissions(svc.Permissions); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)
+		}
+		if svc.Connection == "" {
+			continue
+		}
+		if _, ok := cfg.Connections[svc.Connection]; ok {
+			continue
+		}
+		// Legacy: connection id may name a service that still carries inline oauth.
+		other := cfg.serviceByID(svc.Connection)
+		if other == nil || other.OAuth == nil {
+			return fmt.Errorf("service %q references unknown connection %q", svc.ID, svc.Connection)
+		}
+	}
+	return nil
+}
+
+func (c *Config) serviceByID(id string) *Service {
+	for i := range c.Services {
+		if c.Services[i].ID == id {
+			return &c.Services[i]
 		}
 	}
 	return nil
@@ -149,12 +195,21 @@ func matchesService(svc Service, lowerMessage string) bool {
 func (c *Config) GetService(id string) *Service {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	for i := range c.Services {
-		if c.Services[i].ID == id {
-			return &c.Services[i]
-		}
+	return c.serviceByID(id)
+}
+
+// GetConnection returns the named shared provider connection, or nil.
+func (c *Config) GetConnection(id string) *Connection {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.Connections == nil {
+		return nil
 	}
-	return nil
+	conn, ok := c.Connections[id]
+	if !ok {
+		return nil
+	}
+	return &conn
 }
 
 // SetServicePermissions validates and persists agent permissions for a service.
@@ -193,8 +248,9 @@ func (c *Config) saveLocked() error {
 		return fmt.Errorf("config has no path; cannot save")
 	}
 	payload := struct {
-		Services []Service `json:"services"`
-	}{Services: c.Services}
+		Connections map[string]Connection `json:"connections,omitempty"`
+		Services    []Service             `json:"services"`
+	}{Connections: c.Connections, Services: c.Services}
 	if payload.Services == nil {
 		payload.Services = []Service{}
 	}

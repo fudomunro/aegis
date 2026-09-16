@@ -186,7 +186,8 @@ func (s *Server) buildFlowTopology() FlowTopology {
 			node.Status = FlowStatusBlocked
 			node.Detail = "Blocked in this environment"
 		} else {
-			node.Status = flowServiceStatus(svc, tokens[svc.ID])
+			connID := s.config.connectionIDForService(svc.ID)
+			node.Status = flowServiceStatus(svc, tokens[connID])
 		}
 
 		connector, hasConnector := s.connectors[svc.ID]
@@ -366,7 +367,7 @@ func flowKindOrder(kind string) int {
 }
 
 func flowServiceStatus(svc Service, st TokenStatus) string {
-	if svc.OAuth == nil {
+	if svc.OAuth == nil && svc.Connection == "" {
 		return FlowStatusConfigured
 	}
 	if !st.HasToken {
