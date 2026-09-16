@@ -896,6 +896,16 @@ const adminHTML = `<!DOCTYPE html>
       rowH: typeRowH,
       gap: typeGap,
     };
+    const typeItems = (dataTypes || []).map((dt, i) => ({
+      id: dt.id,
+      label: dt.label,
+      x: typeOrigin.x,
+      y: typeOrigin.y + i * (typeRowH + typeGap),
+      w: typeOrigin.rowW,
+      h: typeRowH,
+      providers: dt.providers || [],
+      readable: !!dt.readable,
+    }));
 
     const svcW = 200;
     const svcH = 52;
@@ -926,6 +936,7 @@ const adminHTML = `<!DOCTYPE html>
     return {
       pos: pos,
       typeOrigin: typeOrigin,
+      typeItems: typeItems,
       dataTypes: dataTypes,
       tokenItems: tokenItems,
       width: 870,
@@ -1004,6 +1015,8 @@ const adminHTML = `<!DOCTYPE html>
       if (fromN && toN && fromN.parent === e.to) return;
       // Aperture cluster is one unlabeled bi-arrow above; skip individual edges.
       if (isGatewayClusterEdge(e)) return;
+      // Library fan-in is drawn from each data-type row to its providers.
+      if (e.style === "library") return;
 
       const from = pos[e.from];
       const to = pos[e.to];
@@ -1022,6 +1035,28 @@ const adminHTML = `<!DOCTYPE html>
         const suffix = hits ? " · " + formatHits(hits) : "";
         parts.push('<text x="' + mx + '" y="' + (my - 6) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label + suffix) + "</text>");
       }
+    });
+
+    // Data-type rows originate access arrows to each providing service.
+    (layout.typeItems || []).forEach((item) => {
+      (item.providers || []).forEach((svcId) => {
+        const to = pos["svc:" + svcId];
+        if (!to) return;
+        const ax = item.x + item.w;
+        const ay = item.y + item.h / 2;
+        const bx = to.x;
+        const by = to.y + to.h / 2;
+        const midX = (ax + bx) / 2;
+        const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
+        const color = item.readable ? FLOW_EDGE_COLORS.library : FLOW_EDGE_COLORS.meta;
+        parts.push(
+          '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' +
+          ' stroke-dasharray="5 4" marker-end="url(#flow-arrow-' +
+          (item.readable ? "library" : "meta") + ')"><title>' +
+          escapeHtml(item.label) + " · " + escapeHtml(svcId) +
+          "</title></path>"
+        );
+      });
     });
 
     // Aperture container.
