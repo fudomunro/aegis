@@ -139,6 +139,35 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	if byID["cache"].Parent != "guardian" {
 		t.Fatalf("cache parent = %q, want guardian", byID["cache"].Parent)
 	}
+	if byID["cache"].Label != "Data cache" {
+		t.Fatalf("cache label = %q, want Data cache", byID["cache"].Label)
+	}
+
+	// Token vault lists held connections as child nodes (issue #32 map cleanup).
+	var tokenChildren []string
+	for _, n := range topo.Nodes {
+		if n.Parent == "tokens" && n.Kind == FlowKindToken {
+			tokenChildren = append(tokenChildren, n.ID)
+		}
+	}
+	if len(tokenChildren) == 0 {
+		t.Fatal("expected token vault children for held tokens")
+	}
+	foundSpotifyToken := false
+	for _, id := range tokenChildren {
+		if id == "tok:spotify" {
+			foundSpotifyToken = true
+		}
+	}
+	if !foundSpotifyToken {
+		t.Fatalf("token children = %v, want tok:spotify", tokenChildren)
+	}
+	if byID["tok:spotify"].Label == "" || byID["tok:spotify"].Label == "spotify" {
+		// Label may be display name "Spotify" or the id fallback; require non-empty.
+		if byID["tok:spotify"].Label == "" {
+			t.Fatal("expected token child label")
+		}
+	}
 
 	hasLibraryType := false
 	hasReadablePlaylists := false
