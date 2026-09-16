@@ -1009,10 +1009,9 @@ const adminHTML = `<!DOCTYPE html>
       const stroke = dt.readable ? "#3fb950" : "#d29922";
       const fill = dt.readable ? "rgba(63,185,80,0.12)" : "rgba(210,153,34,0.12)";
       parts.push('<rect x="' + x + '" y="' + y + '" width="' + origin.chipW + '" height="' + origin.chipH + '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"/>');
-      const iconId = dt.kind === "library" ? dt.id : "proxy";
+      const iconId = dt.id;
       parts.push(flowIconSVG(iconId, x + 12, y + origin.chipH / 2, 11, stroke));
-      const label = dt.label + (dt.kind === "library" ? "" : " · proxy");
-      parts.push('<text x="' + (x + 22) + '" y="' + (y + origin.chipH / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(label) + "</text>");
+      parts.push('<text x="' + (x + 22) + '" y="' + (y + origin.chipH / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(dt.label) + "</text>");
     });
 
     // Agents + services (leaf boxes).

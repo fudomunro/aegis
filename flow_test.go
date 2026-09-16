@@ -156,6 +156,15 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	if !hasReadablePlaylists {
 		t.Fatal("expected readable playlists data type with providers")
 	}
+	for _, dt := range topo.DataTypes {
+		if dt.Kind != "library" {
+			t.Fatalf("map data type %q kind = %q, want library only (proxy chips removed)", dt.ID, dt.Kind)
+		}
+	}
+	if len(topo.DataTypes) != len(topo.Libraries) {
+		t.Fatalf("data types = %d, libraries = %d; map chips should match synced library kinds",
+			len(topo.DataTypes), len(topo.Libraries))
+	}
 
 	hasPhotoNote := false
 	for _, note := range byID["svc:google-photos"].Notes {
