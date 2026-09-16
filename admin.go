@@ -1045,7 +1045,7 @@ const adminHTML = `<!DOCTYPE html>
 
     // Aperture container.
     const ap = pos.aperture;
-    parts.push('<rect x="' + ap.x + '" y="' + ap.y + '" width="' + ap.w + '" height="' + ap.h + '" rx="12" fill="#12161c" stroke="#bc8cff" stroke-width="1.4" stroke-dasharray="6 4"/>');
+    parts.push('<rect x="' + ap.x + '" y="' + ap.y + '" width="' + ap.w + '" height="' + ap.h + '" rx="12" fill="#12161c" stroke="#bc8cff" stroke-width="1.4"/>');
     parts.push('<text x="' + (ap.x + 12) + '" y="' + (ap.y + 18) + '" fill="#bc8cff" font-size="12" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(ap.label) + '</text>');
     parts.push('<text x="' + (ap.x + ap.w - 12) + '" y="' + (ap.y + 18) + '" text-anchor="end" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">pre-request gateway</text>');
 
