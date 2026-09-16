@@ -205,9 +205,25 @@ func (k LibraryKind) Instructions(baseURL string) string {
 			"%s Prefer this endpoint for questions like %q so the answer includes "+
 			"every connected service.\n"+
 			"Check response.truncated (and by_service[].truncated) before claiming the list is complete; "+
-			"when true, say so and note that some items may still be missing upstream.",
+			"when true, say so and note that some items may still be missing upstream.\n"+
+			"sources[].canonical marks the authoritative non-Guardian location for that item "+
+			"(issue #16); prefer that service for writes or mirrors.",
 		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, k.ExampleQuestion,
 	)
+}
+
+// libraryInstructionsFor returns kind instructions plus a configured canonical
+// service hint when the instance declares one for this kind.
+func (s *Server) libraryInstructionsFor(kindID string) string {
+	k := LibraryKindByID(kindID)
+	if k == nil {
+		return ""
+	}
+	text := k.Instructions(s.baseURL)
+	if name := s.canonicalServiceName(kindID); name != "" {
+		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", k.Label, name)
+	}
+	return text
 }
 
 // anyServiceTruncated reports whether any per-service status hit a page cap
@@ -259,7 +275,7 @@ func (s *Server) libraryHintsForMessage(msg string) []string {
 		if !k.HasProviders(s) || !k.Readable(s) {
 			continue
 		}
-		out = append(out, k.Instructions(s.baseURL))
+		out = append(out, s.libraryInstructionsFor(k.ID))
 	}
 	return out
 }
@@ -318,6 +334,9 @@ type libraryKindSpec[T any] struct {
 	sortKey func(T) string
 	merge   func([]T) []T
 	encode  func(merged []T, bySvc map[string]LibraryServiceStatus) any
+	// markCanonical stamps Source.Canonical on items from a config-declared
+	// canonical_for service (issue #16). Nil skips config stamping.
+	markCanonical func(items []T, serviceID string)
 }
 
 // handleLibraryAggregate is the shared GET /v1/library/{kind} pipeline:
@@ -391,6 +410,9 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			var status LibraryServiceStatus
 			switch {
 			case err == nil:
+				if spec.markCanonical != nil {
+					spec.markCanonical(items, t.id)
+				}
 				status = LibraryServiceStatus{
 					Status:    LibraryStatusOK,
 					Count:     len(items),

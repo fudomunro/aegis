@@ -36,9 +36,12 @@ type AdminService struct {
 	HasPhoto           bool         `json:"has_photo_provider"`
 	// SupportsPhotoPicker is true when the connector exposes a picker session
 	// create operation (e.g. Google Photos Picker API).
-	SupportsPhotoPicker bool   `json:"supports_photo_picker,omitempty"`
-	ProxyPath           string `json:"proxy_path"`
-	LoginPath           string `json:"login_path,omitempty"`
+	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`
+	// CanonicalFor lists library kinds where this service is the configured
+	// authoritative non-Guardian location (issue #16).
+	CanonicalFor []string `json:"canonical_for,omitempty"`
+	ProxyPath    string   `json:"proxy_path"`
+	LoginPath    string   `json:"login_path,omitempty"`
 }
 
 // AdminRuntime describes non-secret server identity and auth posture.
@@ -90,17 +93,18 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 	services := make([]AdminService, 0, len(s.config.Services))
 	for _, svc := range s.config.Services {
 		item := AdminService{
-			ID:          svc.ID,
-			Name:        svc.Name,
-			Action:      svc.Action,
-			Endpoint:    svc.Endpoint,
-			Aliases:     svc.Aliases,
-			CacheTTL:    svc.CacheTTL.String(),
-			Description: svc.Description,
-			Permissions: svc.Permissions.Clone(),
-			HasOAuth:    svc.OAuth != nil,
-			ProxyPath:   "/v1/services/" + svc.ID,
-			HasPlaylist: false,
+			ID:           svc.ID,
+			Name:         svc.Name,
+			Action:       svc.Action,
+			Endpoint:     svc.Endpoint,
+			Aliases:      svc.Aliases,
+			CacheTTL:     svc.CacheTTL.String(),
+			Description:  svc.Description,
+			Permissions:  svc.Permissions.Clone(),
+			CanonicalFor: svc.CanonicalFor,
+			HasOAuth:     svc.OAuth != nil,
+			ProxyPath:    "/v1/services/" + svc.ID,
+			HasPlaylist:  false,
 		}
 		if svc.OAuth != nil {
 			item.HasClientID = svc.OAuth.ClientID != ""
@@ -1196,6 +1200,10 @@ const adminHTML = `<!DOCTYPE html>
           (token && token.has_token ? "Reconnect" : "Connect") + "</a>");
       }
       actions.push('<code>' + escapeHtml(svc.proxy_path) + "</code>");
+      if (svc.canonical_for && svc.canonical_for.length) {
+        actions.push('<span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
+          escapeHtml(svc.canonical_for.join(", ")) + "</span>");
+      }
       if (svc.has_playlist_provider || svc.has_liked_track_provider || svc.has_album_provider ||
           svc.has_artist_provider || svc.has_contact_provider || svc.has_photo_provider) {
         const kinds = [];
@@ -1236,11 +1244,18 @@ const adminHTML = `<!DOCTYPE html>
   function sourceBadges(sources) {
     return (sources || []).map((src) => {
       const name = escapeHtml(src.service_name || src.service);
+      const label = src.canonical ? name + " · canonical" : name;
       if (src.url) {
-        return '<a class="playlist-source" href="' + escapeHtml(src.url) + '" target="_blank" rel="noopener">' + name + "</a>";
+        return '<a class="playlist-source" href="' + escapeHtml(src.url) + '" target="_blank" rel="noopener"' +
+          (src.canonical ? ' title="Authoritative non-Guardian location"' : "") + ">" + label + "</a>";
       }
-      return '<span class="playlist-source">' + name + "</span>";
+      return '<span class="playlist-source"' +
+        (src.canonical ? ' title="Authoritative non-Guardian location"' : "") + ">" + label + "</span>";
     }).join("");
+  }
+
+  function hasCanonicalSource(sources) {
+    return (sources || []).some((src) => !!src.canonical);
   }
 
   const LIBRARY_KINDS = {
@@ -1345,10 +1360,12 @@ const adminHTML = `<!DOCTYPE html>
       return hay.indexOf(q) !== -1;
     }).map((p) => {
       const multi = (p.sources || []).length > 1;
+      const can = hasCanonicalSource(p.sources);
       return '<article class="card">' +
         libraryCardHeader(p.name,
           '<span class="badge badge-gray">' + (p.track_count || 0) + " tracks</span>" +
-          (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span>" : "")) +
+          (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span>" : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "")) +
         (p.description ? '<div class="meta">' + escapeHtml(p.description) + "</div>" : "") +
         (p.owner ? '<div class="meta">Owner: ' + escapeHtml(p.owner) + "</div>" : "") +
         '<div class="scopes">' + sourceBadges(p.sources) + "</div>" +
@@ -1369,11 +1386,13 @@ const adminHTML = `<!DOCTYPE html>
       return hay.indexOf(q) !== -1;
     }).map((t) => {
       const multi = (t.sources || []).length > 1;
+      const can = hasCanonicalSource(t.sources);
       const artists = artistNames(t.artists);
       const album = t.album && t.album.name ? t.album.name : "";
       return '<article class="card">' +
         libraryCardHeader(t.name,
-          (multi ? '<span class="badge badge-blue">' + t.sources.length + " sources</span>" : "")) +
+          (multi ? '<span class="badge badge-blue">' + t.sources.length + " sources</span>" : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "")) +
         (artists ? '<div class="meta">Artists: ' + escapeHtml(artists) + "</div>" : "") +
         (album ? '<div class="meta">Album: ' + escapeHtml(album) + "</div>" : "") +
         (t.duration ? '<div class="meta">Duration: ' + escapeHtml(t.duration) + "</div>" : "") +
@@ -1392,12 +1411,14 @@ const adminHTML = `<!DOCTYPE html>
       return hay.indexOf(q) !== -1;
     }).map((c) => {
       const multi = (c.sources || []).length > 1;
+      const can = hasCanonicalSource(c.sources);
       const emails = (c.emails || []).map((e) => '<code>' + escapeHtml(e) + "</code>").join(" ");
       const phones = (c.phones || []).map((p) => '<code>' + escapeHtml(p) + "</code>").join(" ");
       const handles = (c.handles || []).map((h) => '<code>' + escapeHtml(h) + "</code>").join(" ");
       return '<article class="card">' +
         libraryCardHeader(c.name || "(unnamed)",
-          multi ? '<span class="badge badge-blue">' + c.sources.length + " sources</span>" : "") +
+          (multi ? '<span class="badge badge-blue">' + c.sources.length + " sources</span>" : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "")) +
         (emails ? '<div class="meta">Emails: ' + emails + "</div>" : "") +
         (phones ? '<div class="meta">Phones: ' + phones + "</div>" : "") +
         (handles ? '<div class="meta">Handles: ' + handles + "</div>" : "") +
