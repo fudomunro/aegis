@@ -435,4 +435,7 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	if !strings.Contains(body, "marker-start") {
 		t.Fatal("expected bidirectional gateway markers")
 	}
+	if !strings.Contains(body, "typeItems") {
+		t.Fatal("expected data-type row access arrows")
+	}
 }
