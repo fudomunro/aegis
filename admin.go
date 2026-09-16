@@ -1028,12 +1028,18 @@ const adminHTML = `<!DOCTYPE html>
       const d = flowEdgePath(from, to, e.style);
       const hits = edgeHitsFor(topo, e);
       const sw = edgeStrokeWidth(hits);
-      parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' + dash + ' marker-end="url(#flow-arrow-' + (FLOW_EDGE_COLORS[e.style] ? e.style : "access") + ')"/>');
-      const mx = (from.x + from.w + to.x) / 2;
-      const my = (from.y + from.h / 2 + to.y + to.h / 2) / 2;
+      const marker = FLOW_EDGE_COLORS[e.style] ? e.style : "access";
+      // No on-map edge text — labels like "OAuth proxy reads" were unreadable.
+      // Keep a hover title when the topology supplies one.
       if (e.label) {
-        const suffix = hits ? " · " + formatHits(hits) : "";
-        parts.push('<text x="' + mx + '" y="' + (my - 6) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label + suffix) + "</text>");
+        const suffix = hits ? " · " + formatHits(hits) + " hits" : "";
+        parts.push(
+          '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' + dash +
+          ' marker-end="url(#flow-arrow-' + marker + ')"><title>' +
+          escapeHtml(e.label + suffix) + "</title></path>"
+        );
+      } else {
+        parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' + dash + ' marker-end="url(#flow-arrow-' + marker + ')"/>');
       }
     });
 
