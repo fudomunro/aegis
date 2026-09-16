@@ -168,6 +168,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.HandleAdmin(w, r)
 	case path == "summary":
 		s.AuthMiddleware(s.HandleAdminSummary)(w, r)
+	case path == "flow":
+		s.AuthMiddleware(s.HandleAdminFlow)(w, r)
 	case path == "cache":
 		s.AuthMiddleware(s.HandleAdminCache)(w, r)
 	case path == "cache/clear":
