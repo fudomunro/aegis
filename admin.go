@@ -483,6 +483,21 @@ const adminHTML = `<!DOCTYPE html>
   .map-legend i.library { background: var(--orange); }
   .map-narrative { margin-bottom: 0.85rem; }
   .map-libraries { display: grid; gap: 0.55rem; }
+  .map-window { display: inline-flex; gap: 0.25rem; margin-right: 0.4rem; }
+  .map-window button {
+    background: var(--surface2); border: 1px solid var(--border); color: var(--dim);
+    border-radius: 6px; padding: 0.28rem 0.5rem; font: inherit; font-size: 0.78rem;
+    cursor: pointer;
+  }
+  .map-window button[aria-pressed="true"] {
+    color: var(--text); border-color: var(--accent); background: rgba(88,166,255,0.12);
+  }
+  .map-stats-meta { color: var(--dim); font-size: 0.8rem; }
+  .map-recent { margin-top: 0.75rem; }
+  .map-recent h3 { font-size: 0.9rem; margin-bottom: 0.4rem; }
+  .map-recent ul { margin: 0; padding-left: 1.1rem; color: var(--dim); font-size: 0.8rem; }
+  .map-recent li { margin-bottom: 0.2rem; }
+  .map-recent code { font-size: 0.75rem; }
   @media (max-width: 560px) {
     .wrap { padding: 1rem 0.85rem 2rem; }
     th:nth-child(3), td:nth-child(3) { display: none; }
@@ -524,9 +539,15 @@ const adminHTML = `<!DOCTYPE html>
       <div class="toolbar">
         <span class="meta" id="map-meta">How agents, Guardian, and your services connect</span>
         <div class="grow"></div>
+        <div class="map-window" role="group" aria-label="Access stats window">
+          <button type="button" data-flow-window="5m" aria-pressed="false">5m</button>
+          <button type="button" data-flow-window="1h" aria-pressed="true">1h</button>
+          <button type="button" data-flow-window="24h" aria-pressed="false">24h</button>
+        </div>
         <button class="btn" id="reload-flow" type="button">Refresh</button>
       </div>
       <div id="map-narrative" class="meta map-narrative"></div>
+      <div id="map-stats-summary" class="map-stats-meta" style="margin-bottom:0.55rem"></div>
       <div class="map-wrap" id="map-svg-wrap"><div class="empty">Loading map…</div></div>
       <div class="map-legend" aria-label="Edge legend">
         <span><i class="hook"></i> Hook</span>
@@ -537,6 +558,7 @@ const adminHTML = `<!DOCTYPE html>
         <span><i class="denied"></i> Blocked</span>
       </div>
       <div id="map-libraries" class="map-libraries"></div>
+      <div id="map-recent" class="map-recent" hidden></div>
     </section>
 
     <section id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services" hidden>
@@ -671,6 +693,106 @@ const adminHTML = `<!DOCTYPE html>
     denied: "#f85149",
   };
 
+  // Self-contained 16×16 stroke path icons for the map SVG (issue #32).
+  // Missing id falls back to text-only rendering.
+  const FLOW_ICONS = {
+    agent: "M5.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm5.5 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM1.5 13.5c0-2.2 1.8-4 4-4s4 1.8 4 4M11 10c1.8.3 3.5 1.7 3.5 3.5",
+    gateway: "M2 3.5h12v9H2zM5 12.5v-2h6v2M8 3.5v5M6 6.5 8 8.5l2-2",
+    guardian: "M8 1.5 2.5 4v4.2c0 3.2 2.3 5.4 5.5 6.3 3.2-.9 5.5-3.1 5.5-6.3V4L8 1.5ZM5.5 8.2 7.2 10l3.3-3.5",
+    tokens: "M9.5 1.5a4 4 0 1 0-2.7 6.9L8 9.6V11h1.5v1.5H11V14h1.5v-4.2L9.8 7.1A4 4 0 0 0 9.5 1.5Zm.2 3.2a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Z",
+    cache: "M2.5 4.5 8 2l5.5 2.5L8 7 2.5 4.5ZM2.5 8 8 10.5 13.5 8M2.5 11.5 8 14l5.5-2.5",
+    spotify: "M3 6.2c3.4-1.2 7.2-.9 10 .9M3.8 9c2.7-.9 5.7-.7 8 .7M4.5 11.6c2-.6 4.2-.5 6 .5",
+    "youtube-music": "M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2Zm-1.7 3.6 4.2 2.2-4.2 2.2V5.8Z",
+    "amazon-music": "M3 10.5c2.8 1.8 7.2 1.8 10 0M5 5.5v5M8 3.5v7M11 6.5v4",
+    "google-photos": "M8 2a3 3 0 0 1 3 3v1H8V2Zm3 4h3a3 3 0 0 1-3 3V6ZM8 9v5a3 3 0 0 1-3-3V9h3Zm-3 0H2a3 3 0 0 1 3-3v3Z",
+    "google-contacts": "M4 2.5h8v11H4zM8 5.5a1.8 1.8 0 1 0 0 3.6A1.8 1.8 0 0 0 8 5.5ZM4.8 12c.6-1.4 1.8-2.1 3.2-2.1s2.6.7 3.2 2.1",
+    immich: "M2.5 5.5 8 2.5l5.5 3v5L8 13.5l-5.5-3v-5ZM8 6.5v3M6.5 8h3",
+    playlists: "M2.5 4h8M2.5 7h8M2.5 10h5M11.5 9.5v3.2M11.5 9.5c.8-.4 1.8-.2 2.2.5M10 12.7c.5.7 1.4 1 2.2.6",
+    tracks: "M9.5 2.5v8.2M9.5 2.5 13 4v3.2M9.5 4.2 13 3",
+    albums: "M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2Zm0 3.3a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5Zm0 1.5a1 1 0 1 0 0 2 1 1 0 0 0 0-2Z",
+    artists: "M8 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM2.5 13.5c0-2.5 2.5-4.5 5.5-4.5s5.5 2 5.5 4.5",
+    contacts: "M3 3.5h10v9H3zM5.5 6h5M5.5 8.5h5M5.5 11h3",
+    photos: "M2.5 3.5h11v9h-11zM2.5 10l3-3 2.5 2.5L10 7l3.5 3.5M5.5 6.2a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
+    proxy: "M3 5h7.5M8.5 2.5 11 5 8.5 7.5M13 11H5.5M7.5 8.5 5 11l2.5 2.5",
+  };
+
+  let flowWindow = "1h";
+
+  function flowIconPath(id) {
+    return FLOW_ICONS[id] || FLOW_ICONS[serviceMonogramKey(id)] || "";
+  }
+
+  function serviceMonogramKey(id) {
+    // Prefer full known id; unknown services get monogram fallback only.
+    return id;
+  }
+
+  function serviceMonogram(label) {
+    const words = String(label || "").trim().split(/\s+/).filter(Boolean);
+    if (!words.length) return "?";
+    if (words.length === 1) return words[0].slice(0, 2).toUpperCase();
+    return (words[0][0] + words[1][0]).toUpperCase();
+  }
+
+  function flowIconSVG(id, cx, cy, size, color) {
+    const d = flowIconPath(id);
+    if (!d) return "";
+    const s = size / 16;
+    const x = cx - size / 2;
+    const y = cy - size / 2;
+    return (
+      '<g transform="translate(' + x + " " + y + ") scale(" + s + ')" ' +
+      'fill="none" stroke="' + color + '" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="' + d + '"/></g>'
+    );
+  }
+
+  function formatHits(n) {
+    if (!n) return "";
+    if (n >= 1000) return Math.round(n / 100) / 10 + "k";
+    return String(n);
+  }
+
+  function edgeHitsFor(topo, e) {
+    const stats = topo.stats || {};
+    const services = stats.services || {};
+    const libraries = stats.libraries || {};
+    if (e.style === "library" && e.kind && libraries[e.kind]) {
+      return libraries[e.kind].hits || 0;
+    }
+    if (e.style === "access" || e.style === "data") {
+      const svcId = (e.to || "").replace(/^svc:/, "");
+      if (services[svcId] && services[svcId].hits) return services[svcId].hits;
+      const fromId = (e.from || "").replace(/^svc:/, "");
+      if (services[fromId] && services[fromId].hits) return services[fromId].hits;
+    }
+    if (e.style === "access" && e.to === "guardian") {
+      let total = 0;
+      Object.keys(services).forEach((id) => { total += services[id].hits || 0; });
+      Object.keys(libraries).forEach((id) => { total += libraries[id].hits || 0; });
+      return total;
+    }
+    return 0;
+  }
+
+  function edgeStrokeWidth(hits) {
+    if (!hits) return 1.4;
+    if (hits < 5) return 2;
+    if (hits < 20) return 2.8;
+    if (hits < 100) return 3.6;
+    return 4.4;
+  }
+
+  function hitBadgeSVG(x, y, hits, color) {
+    const label = formatHits(hits);
+    if (!label) return "";
+    const w = Math.max(22, 7 * label.length + 12);
+    return (
+      '<g><rect x="' + x + '" y="' + y + '" width="' + w + '" height="16" rx="8" fill="' + color + '" fill-opacity="0.18" stroke="' + color + '" stroke-width="1"/>' +
+      '<text x="' + (x + w / 2) + '" y="' + (y + 8) + '" text-anchor="middle" dominant-baseline="central" fill="' + color + '" font-size="9" font-family="system-ui,sans-serif">' + label + "</text></g>"
+    );
+  }
+
   // Nested layout: Aperture wraps Guardian; Guardian holds stores + data types.
   function layoutFlowMap(topo) {
     const nodes = topo.nodes || [];
@@ -727,6 +849,7 @@ const adminHTML = `<!DOCTYPE html>
       y: storeY,
       w: storeW,
       h: storeH,
+      id: "tokens",
       label: byId.tokens ? byId.tokens.label : "Token vault",
       kind: "store",
       parent: "guardian",
@@ -736,6 +859,7 @@ const adminHTML = `<!DOCTYPE html>
       y: storeY,
       w: storeW,
       h: storeH,
+      id: "cache",
       label: byId.cache ? byId.cache.label : "Response cache",
       kind: "store",
       parent: "guardian",
@@ -764,8 +888,16 @@ const adminHTML = `<!DOCTYPE html>
         label: n.label,
         kind: "service",
         status: n.status,
+        hits: n.hits || 0,
+        agents: n.agents || 0,
+        serviceId: n.id.replace(/^svc:/, ""),
+        nodeId: n.id,
       };
     });
+    if (byId.agents) {
+      pos.agents.hits = byId.agents.hits || 0;
+      pos.agents.agents = byId.agents.agents || 0;
+    }
 
     const bottom = Math.max(aperture.y + aperture.h, svcStartY + svcTotal, agents.y + agents.h) + 24;
     return {
@@ -835,11 +967,14 @@ const adminHTML = `<!DOCTYPE html>
         ? ' stroke-dasharray="5 4"'
         : "";
       const d = flowEdgePath(from, target, e.style);
-      parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.6"' + dash + ' marker-end="url(#flow-arrow-' + (FLOW_EDGE_COLORS[e.style] ? e.style : "access") + ')"/>');
+      const hits = edgeHitsFor(topo, e);
+      const sw = edgeStrokeWidth(hits);
+      parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' + dash + ' marker-end="url(#flow-arrow-' + (FLOW_EDGE_COLORS[e.style] ? e.style : "access") + ')"/>');
       const mx = (from.x + from.w + target.x) / 2;
       const my = (from.y + from.h / 2 + target.y + target.h / 2) / 2;
       if (e.label) {
-        parts.push('<text x="' + mx + '" y="' + (my - 6) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label) + "</text>");
+        const suffix = hits ? " · " + formatHits(hits) : "";
+        parts.push('<text x="' + mx + '" y="' + (my - 6) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label + suffix) + "</text>");
       }
     });
 
@@ -857,8 +992,10 @@ const adminHTML = `<!DOCTYPE html>
 
     // Stores inside Guardian.
     [pos.tokens, pos.cache].forEach((p) => {
+      const iconId = p.id === "tokens" ? "tokens" : "cache";
       parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#21262d" stroke="#30363d" stroke-width="1.2"/>');
-      parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2) + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="12" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
+      parts.push(flowIconSVG(iconId, p.x + 22, p.y + p.h / 2, 14, "#8b949e"));
+      parts.push('<text x="' + (p.x + 36) + '" y="' + (p.y + p.h / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="12" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
     });
 
     // Data types inside Guardian.
@@ -872,8 +1009,10 @@ const adminHTML = `<!DOCTYPE html>
       const stroke = dt.readable ? "#3fb950" : "#d29922";
       const fill = dt.readable ? "rgba(63,185,80,0.12)" : "rgba(210,153,34,0.12)";
       parts.push('<rect x="' + x + '" y="' + y + '" width="' + origin.chipW + '" height="' + origin.chipH + '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"/>');
+      const iconId = dt.kind === "library" ? dt.id : "proxy";
+      parts.push(flowIconSVG(iconId, x + 12, y + origin.chipH / 2, 11, stroke));
       const label = dt.label + (dt.kind === "library" ? "" : " · proxy");
-      parts.push('<text x="' + (x + origin.chipW / 2) + '" y="' + (y + origin.chipH / 2) + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(label) + "</text>");
+      parts.push('<text x="' + (x + 22) + '" y="' + (y + origin.chipH / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(label) + "</text>");
     });
 
     // Agents + services (leaf boxes).
@@ -883,13 +1022,41 @@ const adminHTML = `<!DOCTYPE html>
       const stroke = p.kind === "service"
         ? (FLOW_STATUS_COLORS[p.status] || "#30363d")
         : "#8b949e";
-      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#161b22" stroke="' + stroke + '" stroke-width="1.5"/>');
       const n = (topo.nodes || []).find((x) => x.id === p.id) || {};
-      const subY = p.y + p.h / 2 - (n.status ? 6 : 0);
-      parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + subY + '" text-anchor="middle" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
+      const title = p.kind === "service"
+        ? p.label + (p.status ? " · " + p.status : "") + (p.hits ? " · " + p.hits + " hits" : "")
+        : p.label + (p.agents ? " · " + p.agents + " agents" : "");
+      parts.push('<g><title>' + escapeHtml(title) + "</title>");
+      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#161b22" stroke="' + stroke + '" stroke-width="1.5"/>');
+      const iconId = p.kind === "service" ? (p.serviceId || "") : "agent";
+      let textX = p.x + p.w / 2;
+      if (p.kind === "service") {
+        if (FLOW_ICONS[iconId]) {
+          parts.push(flowIconSVG(iconId, p.x + 18, p.y + p.h / 2 - (n.status ? 6 : 0), 16, stroke));
+          textX = p.x + 34;
+        } else {
+          // Monogram fallback keeps a mark when no icon exists.
+          parts.push('<circle cx="' + (p.x + 18) + '" cy="' + (p.y + p.h / 2 - (n.status ? 6 : 0)) + '" r="9" fill="none" stroke="' + stroke + '" stroke-width="1.2"/>');
+          parts.push('<text x="' + (p.x + 18) + '" y="' + (p.y + p.h / 2 - (n.status ? 6 : 0)) + '" text-anchor="middle" dominant-baseline="central" fill="' + stroke + '" font-size="8" font-weight="700" font-family="system-ui,sans-serif">' + escapeHtml(serviceMonogram(p.label)) + "</text>");
+          textX = p.x + 34;
+        }
+      } else {
+        parts.push(flowIconSVG("agent", p.x + 20, p.y + p.h / 2 - (p.agents ? 6 : 0), 16, stroke));
+        textX = p.x + 36;
+      }
+      const subY = p.y + p.h / 2 - (n.status || p.agents ? 6 : 0);
+      parts.push('<text x="' + textX + '" y="' + subY + '" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
       if (n.status) {
         parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 + 12) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(n.status) + "</text>");
       }
+      if (p.kind === "service" && p.hits) {
+        parts.push(hitBadgeSVG(p.x + p.w - 40, p.y + 6, p.hits, "#58a6ff"));
+      }
+      if (p.kind === "agent" && p.agents != null) {
+        const agentLabel = p.agents === 1 ? "1 agent" : p.agents + " agents";
+        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h - 10) + '" text-anchor="middle" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(agentLabel) + (p.hits ? " · " + formatHits(p.hits) + " hits" : "") + "</text>");
+      }
+      parts.push("</g>");
     });
 
     parts.push("</svg>");
@@ -906,22 +1073,71 @@ const adminHTML = `<!DOCTYPE html>
       const providers = (lib.providers || []).length
         ? lib.providers.map((id) => "<code>" + escapeHtml(id) + "</code>").join(" ")
         : "<em>none</em>";
+      const hits = lib.hits
+        ? '<div class="meta">Recent hits: <strong>' + escapeHtml(String(lib.hits)) + "</strong></div>"
+        : "";
       return (
         '<article class="card">' +
         '<div class="card-header"><h3>' + escapeHtml(lib.label) + '</h3> <code>' + escapeHtml(lib.path) + "</code></div>" +
         '<div class="meta">' + escapeHtml(lib.sync_rule) + "</div>" +
         '<div class="meta">Providers: ' + providers + "</div>" +
+        hits +
         "</article>"
       );
     }).join("");
   }
 
+  function renderFlowStatsSummary(stats) {
+    const el = $("map-stats-summary");
+    if (!el) return;
+    if (!stats) {
+      el.textContent = "";
+      return;
+    }
+    const agents = (stats.agents && stats.agents.distinct) || 0;
+    const sample = (stats.agents && stats.agents.sample) || [];
+    const sampleTxt = sample.length ? " · " + sample.join(", ") : "";
+    el.textContent =
+      "Access window " + (stats.window || "1h") +
+      " · " + agents + (agents === 1 ? " agent" : " agents") +
+      sampleTxt +
+      " · admin-only, no request bodies";
+  }
+
+  function renderFlowRecent(stats) {
+    const root = $("map-recent");
+    if (!root) return;
+    const recent = (stats && stats.recent) || [];
+    if (!recent.length) {
+      root.hidden = true;
+      root.innerHTML = "";
+      return;
+    }
+    root.hidden = false;
+    const items = recent.slice(-8).reverse().map((ev) => {
+      const when = ev.at ? new Date(ev.at).toLocaleTimeString() : "";
+      const type = ev.data_type ? " <code>" + escapeHtml(ev.data_type) + "</code>" : "";
+      const cache = ev.cache ? " · cache " + escapeHtml(ev.cache) : "";
+      return (
+        "<li><code>" + escapeHtml(when) + "</code> " +
+        escapeHtml(ev.agent || "—") + " → " +
+        escapeHtml(ev.surface || "") + " " +
+        "<code>" + escapeHtml(ev.target || "") + "</code>" +
+        type + cache +
+        "</li>"
+      );
+    }).join("");
+    root.innerHTML = "<h3>Recent access</h3><ul>" + items + "</ul>";
+  }
+
   async function loadFlow() {
     try {
-      const topo = await api("/v1/admin/flow");
+      const topo = await api("/v1/admin/flow?window=" + encodeURIComponent(flowWindow || "1h"));
       $("map-narrative").textContent = topo.narrative || "";
       renderFlowMap(topo);
       renderFlowLibraries(topo.libraries);
+      renderFlowStatsSummary(topo.stats);
+      renderFlowRecent(topo.stats);
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -1693,6 +1909,15 @@ const adminHTML = `<!DOCTYPE html>
   });
   $("reload-summary").addEventListener("click", () => loadSummary());
   $("reload-flow").addEventListener("click", () => loadFlow());
+  document.querySelectorAll("[data-flow-window]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      flowWindow = btn.getAttribute("data-flow-window") || "1h";
+      document.querySelectorAll("[data-flow-window]").forEach((b) => {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      loadFlow();
+    });
+  });
   $("reload-library").addEventListener("click", () => loadAllLibraryKinds());
   $("reload-cache").addEventListener("click", () => loadCache());
   $("clear-cache").addEventListener("click", async () => {

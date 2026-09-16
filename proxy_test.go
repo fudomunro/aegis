@@ -515,6 +515,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		tokens:      &TokenStore{Tokens: make(map[string]*OAuthToken)},
 		oauthStates: NewStateStore(),
 		connectors:  make(map[string]ServiceConnector),
+		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 	}
 }
 

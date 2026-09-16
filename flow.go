@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Flow topology node kinds.
@@ -53,6 +54,10 @@ type FlowNode struct {
 	Providers []string `json:"providers,omitempty"`
 	// Notes are short caveats (e.g. photo bytes stay upstream).
 	Notes []string `json:"notes,omitempty"`
+	// Hits is recent access count for this node in the stats window (issue #32).
+	Hits int `json:"hits,omitempty"`
+	// Agents is the distinct agent count that touched this node in the window.
+	Agents int `json:"agents,omitempty"`
 }
 
 // FlowEdge is a directed connection between two nodes.
@@ -62,6 +67,8 @@ type FlowEdge struct {
 	Label string `json:"label"`
 	// Style is hook, access, data, meta, denied, or library.
 	Style string `json:"style"`
+	// Kind is the library kind id on library edges (issue #32).
+	Kind string `json:"kind,omitempty"`
 }
 
 // FlowLibrary describes one unified library endpoint and its fan-in sources.
@@ -71,6 +78,8 @@ type FlowLibrary struct {
 	Label     string   `json:"label"`
 	SyncRule  string   `json:"sync_rule"`
 	Providers []string `json:"providers"`
+	// Hits is recent library access count in the stats window (issue #32).
+	Hits int `json:"hits,omitempty"`
 }
 
 // FlowDataType is one data type agents can reach through this instance.
@@ -94,7 +103,46 @@ type FlowRuntime struct {
 	BaseURL  string `json:"base_url"`
 }
 
-// FlowTopology is the admin data-flow map payload (issue #25).
+// FlowAgentStats is the distinct-agent summary for the active window.
+type FlowAgentStats struct {
+	Distinct int      `json:"distinct"`
+	Sample   []string `json:"sample,omitempty"`
+}
+
+// FlowEndpointStats is recent hit counts for one service or library.
+type FlowEndpointStats struct {
+	Hits      int            `json:"hits"`
+	Agents    int            `json:"agents"`
+	CacheHits int            `json:"cache_hits,omitempty"`
+	CacheMiss int            `json:"cache_misses,omitempty"`
+	DataTypes map[string]int `json:"data_types,omitempty"`
+}
+
+// FlowRecentAccess is a redacted sample of recent agent access (no bodies).
+type FlowRecentAccess struct {
+	At       time.Time `json:"at"`
+	Agent    string    `json:"agent"`
+	Surface  string    `json:"surface"`
+	Target   string    `json:"target"`
+	DataType string    `json:"data_type,omitempty"`
+	Cache    string    `json:"cache,omitempty"`
+}
+
+// FlowStats is the live access summary embedded in the admin map payload.
+type FlowStats struct {
+	GeneratedAt time.Time                    `json:"generated_at"`
+	Window      string                       `json:"window"`
+	Windows     []string                     `json:"windows"`
+	Agents      FlowAgentStats               `json:"agents"`
+	Services    map[string]FlowEndpointStats `json:"services"`
+	Libraries   map[string]FlowEndpointStats `json:"libraries"`
+	Recent      []FlowRecentAccess           `json:"recent,omitempty"`
+}
+
+// FlowStatsWindows are the selectable access-stat windows for the map.
+var FlowStatsWindows = []string{"5m", "1h", "24h"}
+
+// FlowTopology is the admin data-flow map payload (issue #25, #32).
 type FlowTopology struct {
 	Runtime   FlowRuntime    `json:"runtime"`
 	Narrative string         `json:"narrative"`
@@ -102,23 +150,38 @@ type FlowTopology struct {
 	Edges     []FlowEdge     `json:"edges"`
 	Libraries []FlowLibrary  `json:"libraries"`
 	DataTypes []FlowDataType `json:"data_types"`
+	// Stats is recent agent access for the requested window (issue #32).
+	Stats FlowStats `json:"stats"`
 }
 
 // HandleAdminFlow returns the data-flow topology for the admin Map view.
-// GET /v1/admin/flow
+// GET /v1/admin/flow[?window=5m|1h|24h]
 func (s *Server) HandleAdminFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	topo := s.buildFlowTopology()
+	window, windowLabel := parseFlowWindow(r.URL.Query().Get("window"))
+	topo := s.buildFlowTopology(window, windowLabel)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(topo)
 }
 
+// parseFlowWindow maps the window query value to a duration and stable label.
+func parseFlowWindow(raw string) (time.Duration, string) {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "5m", "5min":
+		return 5 * time.Minute, "5m"
+	case "24h", "1d", "day":
+		return 24 * time.Hour, "24h"
+	default:
+		return time.Hour, "1h"
+	}
+}
+
 // buildFlowTopology assembles the graph from config, connectors, and tokens.
 // Secrets are never included.
-func (s *Server) buildFlowTopology() FlowTopology {
+func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) FlowTopology {
 	tokens := s.tokens.Status()
 
 	nodes := []FlowNode{
@@ -267,6 +330,7 @@ func (s *Server) buildFlowTopology() FlowTopology {
 					To:    "guardian",
 					Label: kind.Label + " → library",
 					Style: FlowEdgeLibrary,
+					Kind:  kindID,
 				})
 			}
 		}
@@ -302,6 +366,27 @@ func (s *Server) buildFlowTopology() FlowTopology {
 			SyncRule:  kind.SyncRule,
 			Providers: providers,
 		})
+	}
+
+	stats := s.buildFlowStats(window, windowLabel)
+	// Stamp recent hit counts onto nodes and library chips for the map UI.
+	for i := range nodes {
+		switch {
+		case nodes[i].Kind == FlowKindAgent:
+			nodes[i].Agents = stats.Agents.Distinct
+			nodes[i].Hits = stats.TotalHits()
+		case nodes[i].Kind == FlowKindService:
+			id := strings.TrimPrefix(nodes[i].ID, "svc:")
+			if st, ok := stats.Services[id]; ok {
+				nodes[i].Hits = st.Hits
+				nodes[i].Agents = st.Agents
+			}
+		}
+	}
+	for i := range libraries {
+		if st, ok := stats.Libraries[libraries[i].ID]; ok {
+			libraries[i].Hits = st.Hits
+		}
 	}
 
 	dataTypes := make([]FlowDataType, 0, len(libraryKinds)+len(proxyTypes))
@@ -348,7 +433,69 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		Edges:     edges,
 		Libraries: libraries,
 		DataTypes: dataTypes,
+		Stats:     stats,
 	}
+}
+
+// buildFlowStats aggregates recent access metrics for the map (issue #32).
+func (s *Server) buildFlowStats(window time.Duration, windowLabel string) FlowStats {
+	if windowLabel == "" {
+		windowLabel = "1h"
+	}
+	snap := s.metricsSnapshot(window)
+	services := make(map[string]FlowEndpointStats, len(snap.Services))
+	for id, st := range snap.Services {
+		services[id] = flowEndpointFromMetrics(st)
+	}
+	libraries := make(map[string]FlowEndpointStats, len(snap.Libraries))
+	for id, st := range snap.Libraries {
+		libraries[id] = flowEndpointFromMetrics(st)
+	}
+	recent := make([]FlowRecentAccess, 0, len(snap.Recent))
+	for _, ev := range snap.Recent {
+		recent = append(recent, FlowRecentAccess{
+			At:       ev.At,
+			Agent:    ev.Agent,
+			Surface:  ev.Surface,
+			Target:   ev.Target,
+			DataType: ev.DataType,
+			Cache:    ev.Cache,
+		})
+	}
+	return FlowStats{
+		GeneratedAt: time.Now().UTC(),
+		Window:      windowLabel,
+		Windows:     append([]string(nil), FlowStatsWindows...),
+		Agents: FlowAgentStats{
+			Distinct: snap.Agents.Distinct,
+			Sample:   snap.Agents.Sample,
+		},
+		Services:  services,
+		Libraries: libraries,
+		Recent:    recent,
+	}
+}
+
+func flowEndpointFromMetrics(st MetricsEndpointStats) FlowEndpointStats {
+	return FlowEndpointStats{
+		Hits:      st.Hits,
+		Agents:    st.Agents,
+		CacheHits: st.CacheHits,
+		CacheMiss: st.CacheMiss,
+		DataTypes: st.DataTypes,
+	}
+}
+
+// TotalHits sums service + library hits for the agents node badge.
+func (fs FlowStats) TotalHits() int {
+	total := 0
+	for _, st := range fs.Services {
+		total += st.Hits
+	}
+	for _, st := range fs.Libraries {
+		total += st.Hits
+	}
+	return total
 }
 
 func flowKindOrder(kind string) int {

@@ -239,7 +239,128 @@ func TestAdminFlow_RouteRequiresAuth(t *testing.T) {
 	}
 }
 
-func TestHandleAdmin_HTMLIncludesMap(t *testing.T) {
+func TestHandleAdminFlow_StatsBlock(t *testing.T) {
+	srv := flowTestServer()
+	srv.recordAccess(AccessEvent{
+		Agent:    "alice@example.com",
+		Surface:  MetricSurfaceService,
+		Target:   "spotify",
+		DataType: "tracks",
+		Cache:    MetricCacheMiss,
+	})
+	srv.recordAccess(AccessEvent{
+		Agent:    "alice@example.com",
+		Surface:  MetricSurfaceLibrary,
+		Target:   "playlists",
+		DataType: "playlists",
+		Cache:    MetricCacheHit,
+	})
+	srv.recordAccess(AccessEvent{
+		Agent:    "bob@example.com",
+		Surface:  MetricSurfaceService,
+		Target:   "spotify",
+		DataType: "playlists",
+	})
+
+	req := httptest.NewRequest("GET", "/v1/admin/flow?window=1h", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	raw := w.Body.String()
+	for _, secret := range []string{
+		"alice@example.com", // sample may include logins — that's ok for admin
+		"super-secret-value",
+		"access-token-secret",
+	} {
+		if secret == "alice@example.com" {
+			continue
+		}
+		if strings.Contains(raw, secret) {
+			t.Fatalf("flow leaked secret %q", secret)
+		}
+	}
+	// Login names are admin-visible samples; tokens must not appear.
+	if strings.Contains(raw, "access-token-secret") {
+		t.Fatal("stats must not include OAuth tokens")
+	}
+
+	var topo FlowTopology
+	if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
+		t.Fatalf("parse flow: %v", err)
+	}
+	if topo.Stats.Window != "1h" {
+		t.Fatalf("window = %q, want 1h", topo.Stats.Window)
+	}
+	if len(topo.Stats.Windows) != 3 {
+		t.Fatalf("windows = %v", topo.Stats.Windows)
+	}
+	if topo.Stats.Agents.Distinct != 2 {
+		t.Fatalf("agents = %d, want 2", topo.Stats.Agents.Distinct)
+	}
+	if topo.Stats.Services["spotify"].Hits != 2 {
+		t.Fatalf("spotify hits = %d, want 2", topo.Stats.Services["spotify"].Hits)
+	}
+	if topo.Stats.Libraries["playlists"].Hits != 1 {
+		t.Fatalf("playlists hits = %d, want 1", topo.Stats.Libraries["playlists"].Hits)
+	}
+
+	byID := map[string]FlowNode{}
+	for _, n := range topo.Nodes {
+		byID[n.ID] = n
+	}
+	if byID["svc:spotify"].Hits != 2 {
+		t.Fatalf("spotify node hits = %d, want 2", byID["svc:spotify"].Hits)
+	}
+	if byID["agents"].Agents != 2 {
+		t.Fatalf("agents node agents = %d, want 2", byID["agents"].Agents)
+	}
+}
+
+func TestHandleAdminFlow_WindowParam(t *testing.T) {
+	srv := flowTestServer()
+	srv.recordAccess(AccessEvent{
+		Agent:   "alice@example.com",
+		Surface: MetricSurfaceService,
+		Target:  "spotify",
+		At:      time.Now().Add(-10 * time.Minute),
+	})
+
+	for _, tc := range []struct {
+		query string
+		want  string
+		hits  int
+	}{
+		{"", "1h", 1},
+		{"window=5m", "5m", 0},
+		{"window=1h", "1h", 1},
+		{"window=24h", "24h", 1},
+		{"window=bogus", "1h", 1},
+	} {
+		req := httptest.NewRequest("GET", "/v1/admin/flow?"+tc.query, nil)
+		req.Header.Set("X-Api-Key", "test-key")
+		w := httptest.NewRecorder()
+		srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("query %q status = %d", tc.query, w.Code)
+		}
+		var topo FlowTopology
+		if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
+			t.Fatalf("parse %q: %v", tc.query, err)
+		}
+		if topo.Stats.Window != tc.want {
+			t.Fatalf("query %q window = %q, want %q", tc.query, topo.Stats.Window, tc.want)
+		}
+		if got := topo.Stats.Services["spotify"].Hits; got != tc.hits {
+			t.Fatalf("query %q spotify hits = %d, want %d", tc.query, got, tc.hits)
+		}
+	}
+}
+
+func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
@@ -257,5 +378,17 @@ func TestHandleAdmin_HTMLIncludesMap(t *testing.T) {
 	}
 	if !strings.Contains(body, "map-svg-wrap") {
 		t.Fatal("expected map svg container")
+	}
+	if !strings.Contains(body, "data-flow-window") {
+		t.Fatal("expected access-stats window picker")
+	}
+	if !strings.Contains(body, "FLOW_ICONS") {
+		t.Fatal("expected map icon set")
+	}
+	if !strings.Contains(body, "map-recent") {
+		t.Fatal("expected recent access panel")
+	}
+	if !strings.Contains(body, "edgeStrokeWidth") {
+		t.Fatal("expected hit-scaled edge width")
 	}
 }
