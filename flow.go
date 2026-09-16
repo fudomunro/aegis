@@ -221,6 +221,10 @@ func (s *Server) buildFlowTopology() FlowTopology {
 				node.Notes = append(node.Notes, "Photo bytes stay on this service (canonical)")
 			}
 		}
+		if len(svc.CanonicalFor) > 0 {
+			node.Notes = append(node.Notes,
+				"Configured canonical for "+strings.Join(svc.CanonicalFor, ", ")+" (issue #16)")
+		}
 
 		if !strings.EqualFold(svc.Action, "block") {
 			edgeLabel := "OAuth proxy reads"

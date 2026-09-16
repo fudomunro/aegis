@@ -314,12 +314,7 @@ func MergeContacts(in []Contact) []Contact {
 	out := make([]Contact, 0, len(order))
 	for _, r := range order {
 		e := byRoot[r]
-		sort.SliceStable(e.c.Sources, func(i, j int) bool {
-			if e.c.Sources[i].ServiceName != e.c.Sources[j].ServiceName {
-				return e.c.Sources[i].ServiceName < e.c.Sources[j].ServiceName
-			}
-			return e.c.Sources[i].Service < e.c.Sources[j].Service
-		})
+		sortContactSourcesCanonicalFirst(e.c.Sources)
 		out = append(out, e.c)
 	}
 
@@ -357,6 +352,7 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 		encode: func(merged []Contact, bySvc map[string]LibraryServiceStatus) any {
 			return ContactList{Contacts: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
+		markCanonical: s.stampContactCanonical,
 	})
 }
 
@@ -379,7 +375,7 @@ func (s *Server) contactsLibraryReadable() bool {
 
 // libraryContactsSystemInstructions tells agents about the contacts endpoint.
 func (s *Server) libraryContactsSystemInstructions() string {
-	return LibraryKindByID("contacts").Instructions(s.baseURL)
+	return s.libraryInstructionsFor("contacts")
 }
 
 // mentionsContacts detects contact-oriented questions that don't name a service.
