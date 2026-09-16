@@ -961,6 +961,22 @@ const adminHTML = `<!DOCTYPE html>
     return "M " + a.x + " " + a.y + " C " + midX + " " + a.y + ", " + midX + " " + b.y + ", " + b.x + " " + b.y;
   }
 
+  // Simple horizontal bi-arrow between agents and the Aperture box.
+  function flowGatewayPath(agentsPos, aperturePos) {
+    const a = flowAnchor(agentsPos, "right");
+    const b = flowAnchor(aperturePos, "left");
+    return "M " + a.x + " " + a.y + " L " + b.x + " " + b.y;
+  }
+
+  // Gateway cluster edges (agents ↔ Aperture/Guardian) are drawn as one
+  // unlabeled bidirectional arrow — no room for useful edge text there.
+  function isGatewayClusterEdge(e) {
+    if (e.from === "aperture" || e.to === "aperture") return true;
+    if (e.from === "agents" && (e.to === "guardian" || e.to === "aperture")) return true;
+    if (e.to === "agents" && (e.from === "guardian" || e.from === "aperture")) return true;
+    return false;
+  }
+
   function renderFlowMap(topo) {
     const layout = layoutFlowMap(topo);
     const pos = layout.pos;
@@ -972,6 +988,15 @@ const adminHTML = `<!DOCTYPE html>
     });
     parts.push("</defs>");
 
+    // One clean bidirectional arrow for the agents ↔ Aperture link.
+    if (pos.agents && pos.aperture) {
+      const d = flowGatewayPath(pos.agents, pos.aperture);
+      parts.push(
+        '<path d="' + d + '" fill="none" stroke="' + FLOW_EDGE_COLORS.access + '" stroke-width="1.8"' +
+        ' marker-start="url(#flow-arrow-access)" marker-end="url(#flow-arrow-access)"/>'
+      );
+    }
+
     // Edges first (under nodes).
     (topo.edges || []).forEach((e) => {
       // Containment is drawn as nesting — skip parent/child arrows.
@@ -979,25 +1004,22 @@ const adminHTML = `<!DOCTYPE html>
       const toN = (topo.nodes || []).find((n) => n.id === e.to);
       if (fromN && toN && toN.parent === e.from) return;
       if (fromN && toN && fromN.parent === e.to) return;
+      // Aperture cluster is one unlabeled bi-arrow above; skip individual edges.
+      if (isGatewayClusterEdge(e)) return;
 
       const from = pos[e.from];
       const to = pos[e.to];
       if (!from || !to) return;
-      // Hook into nested Guardian: target Aperture box for a cleaner landing.
-      let target = to;
-      if (e.style === "hook" && e.to === "guardian" && pos.aperture) {
-        target = pos.aperture;
-      }
       const color = FLOW_EDGE_COLORS[e.style] || "#8b949e";
-      const dash = e.style === "hook" || e.style === "meta" || e.style === "denied" || e.style === "library"
+      const dash = e.style === "meta" || e.style === "denied" || e.style === "library"
         ? ' stroke-dasharray="5 4"'
         : "";
-      const d = flowEdgePath(from, target, e.style);
+      const d = flowEdgePath(from, to, e.style);
       const hits = edgeHitsFor(topo, e);
       const sw = edgeStrokeWidth(hits);
       parts.push('<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="' + sw + '"' + dash + ' marker-end="url(#flow-arrow-' + (FLOW_EDGE_COLORS[e.style] ? e.style : "access") + ')"/>');
-      const mx = (from.x + from.w + target.x) / 2;
-      const my = (from.y + from.h / 2 + target.y + target.h / 2) / 2;
+      const mx = (from.x + from.w + to.x) / 2;
+      const my = (from.y + from.h / 2 + to.y + to.h / 2) / 2;
       if (e.label) {
         const suffix = hits ? " · " + formatHits(hits) : "";
         parts.push('<text x="' + mx + '" y="' + (my - 6) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(e.label + suffix) + "</text>");
