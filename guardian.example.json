@@ -99,6 +99,22 @@
       }
     },
     {
+      "id": "immich",
+      "name": "Immich",
+      "aliases": ["immich photos", "self-hosted photos"],
+      "action": "inject",
+      "endpoint": "http://192.168.1.10:2283/api",
+      "headers": {
+        "X-API-Key": "YOUR_IMMICH_API_KEY"
+      },
+      "cache_ttl": "5m",
+      "description": "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical). Set canonical_for: [\"photos\"] here if Immich is your home copy (and remove it from google-photos).",
+      "permissions": {
+        "default": "read",
+        "photos": "read"
+      }
+    },
+    {
       "id": "google",
       "name": "Google Contacts",
       "aliases": ["google contacts", "contacts", "address book"],

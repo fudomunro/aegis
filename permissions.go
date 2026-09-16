@@ -179,6 +179,11 @@ func DataTypeForPath(path string) string {
 		return "contacts"
 	case p == "/me/photos" || strings.HasPrefix(p, "/photos") || strings.HasPrefix(p, "/mediaItems") || strings.HasPrefix(p, "/picker"):
 		return "photos"
+	// Self-hosted / foreign photo stores (Immich, …). /search/metadata is the
+	// Immich asset search; keep it under photos so the permission key matches
+	// the unified photos library.
+	case strings.HasPrefix(p, "/assets") || p == "/search/metadata":
+		return "photos"
 	case p == "/search":
 		return "search"
 	case p == "/me/subscriptions":

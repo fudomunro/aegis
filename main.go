@@ -108,6 +108,8 @@ func main() {
 	srv.connectors[googlePhotosServiceID] = gPhotosConn
 	gContactsConn := NewGoogleContactsConnector(srv)
 	srv.connectors[googleContactsServiceID] = gContactsConn
+	immichConn := NewImmichConnector(srv)
+	srv.connectors[immichServiceID] = immichConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
