@@ -60,6 +60,8 @@ type FlowNode struct {
 	Hits int `json:"hits,omitempty"`
 	// Agents is the distinct agent count that touched this node in the window.
 	Agents int `json:"agents,omitempty"`
+	// ConnectionID is the OAuth connection this service uses (issue #26 / #32).
+	ConnectionID string `json:"connection_id,omitempty"`
 }
 
 // FlowEdge is a directed connection between two nodes.
@@ -274,6 +276,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			node.Detail = "Blocked in this environment"
 		} else {
 			connID := s.config.connectionIDForService(svc.ID)
+			node.ConnectionID = connID
 			node.Status = flowServiceStatus(svc, tokens[connID])
 		}
 

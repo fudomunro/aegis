@@ -162,11 +162,11 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	if !foundSpotifyToken {
 		t.Fatalf("token children = %v, want tok:spotify", tokenChildren)
 	}
-	if byID["tok:spotify"].Label == "" || byID["tok:spotify"].Label == "spotify" {
-		// Label may be display name "Spotify" or the id fallback; require non-empty.
-		if byID["tok:spotify"].Label == "" {
-			t.Fatal("expected token child label")
-		}
+	if byID["tok:spotify"].Label == "" {
+		t.Fatal("expected token child label")
+	}
+	if byID["svc:spotify"].ConnectionID == "" {
+		t.Fatal("expected service connection_id for token-origin auth edges")
 	}
 
 	hasLibraryType := false
@@ -437,5 +437,8 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	}
 	if !strings.Contains(body, "typeItems") {
 		t.Fatal("expected data-type row access arrows")
+	}
+	if !strings.Contains(body, "connection_id") {
+		t.Fatal("expected service connection_id for token-origin auth arrows")
 	}
 }

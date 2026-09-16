@@ -1017,6 +1017,8 @@ const adminHTML = `<!DOCTYPE html>
       if (isGatewayClusterEdge(e)) return;
       // Library fan-in is drawn from each data-type row to its providers.
       if (e.style === "library") return;
+      // Auth/proxy-read lines are drawn from Token vault entries, not Guardian.
+      if (e.style === "data" || e.style === "meta") return;
 
       const from = pos[e.from];
       const to = pos[e.to];
@@ -1100,6 +1102,35 @@ const adminHTML = `<!DOCTYPE html>
         parts.push('<text x="' + (x + w - 10) + '" y="' + (y + h / 2) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(dt.path) + "</text>");
       }
       parts.push("</g>");
+    });
+
+    // Auth / proxy-read arrows: originate at each Token vault entry and draw
+    // above Aperture/Guardian fills (same treatment as data-type reads).
+    const leafSvcNodes = (topo.nodes || []).filter((n) => n.kind === "service");
+    tokenItems.forEach((token) => {
+      leafSvcNodes.forEach((n) => {
+        if (!n.connection_id || n.connection_id !== token.connectionId) return;
+        const to = pos[n.id];
+        if (!to) return;
+        const ax = token.x + token.w;
+        const ay = token.y + token.h / 2;
+        const bx = to.x;
+        const by = to.y + to.h / 2;
+        const midX = (ax + bx) / 2;
+        const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
+        // Connected = live data (solid green); expired/needs work = meta dash.
+        const live = n.status === "connected";
+        const color = live ? FLOW_EDGE_COLORS.data : FLOW_EDGE_COLORS.meta;
+        const dash = live ? "" : ' stroke-dasharray="5 4"';
+        const marker = live ? "data" : "meta";
+        parts.push(
+          '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' + dash +
+          ' marker-end="url(#flow-arrow-' + marker + ')"><title>' +
+          escapeHtml(token.label + " · " + (n.label || n.id) +
+            (n.status ? " · " + n.status : "")) +
+          "</title></path>"
+        );
+      });
     });
 
     // Data-type access arrows: drawn above Aperture/Guardian fills so the
