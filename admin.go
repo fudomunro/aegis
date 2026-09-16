@@ -805,12 +805,11 @@ const adminHTML = `<!DOCTYPE html>
 
     const pad = 12;
     const titleH = 22;
-    const chipCols = 3;
-    const chipW = 118;
-    const chipH = 22;
-    const chipGap = 6;
-    const typeRows = Math.max(1, Math.ceil(Math.max(dataTypes.length, 1) / chipCols));
-    const typeBlockH = titleH + typeRows * (chipH + chipGap);
+    // Data types are a vertical list — one type per row, full container width.
+    const typeRowH = 24;
+    const typeGap = 6;
+    const typeCount = Math.max(dataTypes.length, 1);
+    const typeBlockH = titleH + typeCount * (typeRowH + typeGap);
 
     const tokenRowH = 24;
     const tokenGap = 6;
@@ -893,10 +892,9 @@ const adminHTML = `<!DOCTYPE html>
     const typeOrigin = {
       x: innerX + pad,
       y: cacheY + titleH,
-      cols: chipCols,
-      chipW: chipW,
-      chipH: chipH,
-      gap: chipGap,
+      rowW: innerW - pad * 2,
+      rowH: typeRowH,
+      gap: typeGap,
     };
 
     const svcW = 200;
@@ -1069,15 +1067,20 @@ const adminHTML = `<!DOCTYPE html>
     const origin = layout.typeOrigin;
     drawStoreShell(pos.cache, "cache", (layout.dataTypes || []).length + " types");
     (layout.dataTypes || []).forEach((dt, i) => {
-      const col = i % origin.cols;
-      const row = Math.floor(i / origin.cols);
-      const x = origin.x + col * (origin.chipW + origin.gap);
-      const y = origin.y + row * (origin.chipH + origin.gap);
+      const x = origin.x;
+      const y = origin.y + i * (origin.rowH + origin.gap);
+      const w = origin.rowW;
+      const h = origin.rowH;
       const stroke = dt.readable ? "#3fb950" : "#d29922";
       const fill = dt.readable ? "rgba(63,185,80,0.12)" : "rgba(210,153,34,0.12)";
-      parts.push('<rect x="' + x + '" y="' + y + '" width="' + origin.chipW + '" height="' + origin.chipH + '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"/>');
-      parts.push(flowIconSVG(dt.id, x + 12, y + origin.chipH / 2, 11, stroke));
-      parts.push('<text x="' + (x + 22) + '" y="' + (y + origin.chipH / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(dt.label) + "</text>");
+      parts.push('<g><title>' + escapeHtml(dt.path || dt.label) + "</title>");
+      parts.push('<rect x="' + x + '" y="' + y + '" width="' + w + '" height="' + h + '" rx="5" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"/>');
+      parts.push(flowIconSVG(dt.id, x + 12, y + h / 2, 12, stroke));
+      parts.push('<text x="' + (x + 24) + '" y="' + (y + h / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(dt.label) + "</text>");
+      if (dt.path) {
+        parts.push('<text x="' + (x + w - 10) + '" y="' + (y + h / 2) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(dt.path) + "</text>");
+      }
+      parts.push("</g>");
     });
 
     // Agents + services (leaf boxes).
