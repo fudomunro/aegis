@@ -219,7 +219,9 @@ Requires **write** permission on the target for that kind and **read** on the
 source. Guardian stores no media; it reads source metadata and writes through
 the target's API using the stored OAuth token.
 
-Foreign-DB / professional-data connectors remain follow-up work on
+Immich is supported as a **local/foreign canonical photo source** (see
+[Immich](#immich-local--foreign-canonical)). Additional foreign-DB /
+professional-data connectors remain follow-up work on
 [issue #16](https://github.com/fudomunro/aperture-guardian/issues/16).
 
 ### Environment variables
@@ -695,6 +697,46 @@ or stores image bytes; `blob_url` values expire in about an hour.
 
 Ownership / provenance proofs for photos are intentionally deferred:
 [issue #20](https://github.com/fudomunro/aperture-guardian/issues/20).
+
+#### Immich (local / foreign canonical)
+
+Immich is a self-hosted photo library. Guardian treats it as a **foreign/local
+canonical** source: metadata is listed through Guardian; **bytes stay on
+Immich**. Auth is an API key in service headers — no OAuth app.
+
+```json
+{
+  "id": "immich",
+  "name": "Immich",
+  "action": "inject",
+  "endpoint": "http://photos.home.ts.net:2283/api",
+  "headers": { "X-API-Key": "YOUR_IMMICH_API_KEY" },
+  "cache_ttl": "5m",
+  "canonical_for": ["photos"],
+  "permissions": { "default": "read", "photos": "read" }
+}
+```
+
+Only **one** non-blocked service may claim `canonical_for: ["photos"]`. If
+Immich is the home copy, remove that key from `google-photos` (or omit it).
+
+The connector implements `PhotoProvider` via Immich `POST /search/metadata`
+(with EXIF). Library photos get `sources[].canonical: true` and
+`blob_url` / `thumbnail_url` pointing at the **Guardian proxy**
+(`/v1/services/immich/assets/{id}/original`), so agents never need the Immich
+API key. Proxy paths under `/assets/*` and `/search/metadata` are classified
+as the `photos` permission.
+
+```
+GET /v1/library/photos
+POST /v1/services/immich/search/metadata
+GET  /v1/services/immich/assets/{id}/original
+GET  /v1/services/immich/assets/{id}/thumbnail
+```
+
+This is the reference pattern for other local/foreign stores: configure
+`endpoint` + static `headers`, implement a library provider, mark
+`canonical_for`, and never cache content bytes in Guardian.
 
 ### Service proxy
 
