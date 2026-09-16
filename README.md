@@ -59,6 +59,7 @@ Guardian starts with these endpoints:
 - `GET /v1/library/artists` — unified followed/top artists across all connected services
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
+- `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
 - `GET /v1/admin` — admin dashboard for data-flow map, services, tokens, library, and cache
