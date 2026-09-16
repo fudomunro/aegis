@@ -97,6 +97,7 @@ func main() {
 		tokens:        tokens,
 		oauthStates:   NewStateStore(),
 		connectors:    make(map[string]ServiceConnector),
+		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 	}
 
 	// Register service connectors.

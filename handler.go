@@ -73,6 +73,8 @@ type Server struct {
 	tokens      *TokenStore
 	oauthStates *StateStore
 	connectors  map[string]ServiceConnector
+	// metrics is the in-memory access ring buffer for the admin map (issue #32).
+	metrics *AccessMetrics
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.
