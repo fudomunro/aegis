@@ -334,9 +334,10 @@ func (c *GooglePhotosConnector) handleListPickedMediaItems(w http.ResponseWriter
 		photos = []Photo{}
 	}
 	result := PhotoList{
-		Photos: photos,
-		Total:  len(photos),
-		Synced: true,
+		Photos:    photos,
+		Total:     len(photos),
+		Synced:    true,
+		Truncated: truncated,
 		ByService: map[string]LibraryServiceStatus{
 			googlePhotosServiceID: {
 				Status:    LibraryStatusOK,

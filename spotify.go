@@ -1072,8 +1072,9 @@ func (c *SpotifyConnector) fetchAllPagesRaw(first map[string]any, token string, 
 	allItems, _ := first["items"].([]any)
 	nextURL, _ := first["next"].(string)
 
-	// Fetch up to 10 additional pages to prevent runaway.
-	maxPages := 10
+	// Follow up to libraryPageCap additional pages so large libraries are
+	// not silently cut off. Hit the cap → mark truncated for the caller.
+	maxPages := libraryPageCap
 	for i := 0; i < maxPages && nextURL != ""; i++ {
 		data, status, err := c.doSpotifyRequest("GET", nextURL, nil, token)
 		if err != nil || status != http.StatusOK {
@@ -1091,6 +1092,9 @@ func (c *SpotifyConnector) fetchAllPagesRaw(first map[string]any, token string, 
 
 	first["items"] = allItems
 	first["total_fetched"] = float64(len(allItems))
+	if nextURL != "" {
+		first["truncated"] = true
+	}
 	delete(first, "next")
 	delete(first, "previous")
 	delete(first, "href")

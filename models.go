@@ -158,6 +158,9 @@ type ContactList struct {
 	// Synced is true when the library merged contacts that shared an identity
 	// key (email, phone, handle, or name) into multi-source entries.
 	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap (or left an
+	// unfollowed continuation) with more items still upstream.
+	Truncated bool `json:"truncated,omitempty"`
 	// ByService is set on aggregate responses only.
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
@@ -220,6 +223,9 @@ type PhotoList struct {
 	// Synced is true when the library merged photos that shared an identity
 	// key (content hash, or taken_at + dimensions) into multi-source entries.
 	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream (or the Google Photos pick itself is only a selection).
+	Truncated bool `json:"truncated,omitempty"`
 	// ByService is set on aggregate responses only.
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
@@ -246,6 +252,9 @@ type PlaylistList struct {
 	// Synced is true when the library merged same-name playlists across
 	// services into multi-source entries.
 	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream.
+	Truncated bool `json:"truncated,omitempty"`
 	// ByService is set on aggregate responses only.
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
@@ -259,6 +268,9 @@ type TrackList struct {
 	// Synced is true when the library merged same-named tracks across
 	// services into multi-source entries.
 	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream. A heavy Spotify/YouTube library is the usual case.
+	Truncated bool `json:"truncated,omitempty"`
 	// ByService is set on aggregate responses only.
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
@@ -268,6 +280,7 @@ type AlbumList struct {
 	Albums    []Album                         `json:"albums"`
 	Total     int                             `json:"total"`
 	Synced    bool                            `json:"synced,omitempty"`
+	Truncated bool                            `json:"truncated,omitempty"`
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
@@ -276,6 +289,7 @@ type ArtistList struct {
 	Artists   []Artist                        `json:"artists"`
 	Total     int                             `json:"total"`
 	Synced    bool                            `json:"synced,omitempty"`
+	Truncated bool                            `json:"truncated,omitempty"`
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 

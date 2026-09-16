@@ -811,6 +811,17 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 	if !resp.ByService["spotify"].Truncated {
 		t.Fatalf("expected truncated=true, got %+v", resp.ByService["spotify"])
 	}
+	if !resp.Truncated {
+		t.Fatal("expected top-level truncated=true when a service is truncated")
+	}
+}
+
+func TestLibrarySystemInstructions_MentionTruncated(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	instr := srv.libraryTracksSystemInstructions()
+	if !strings.Contains(instr, "truncated") {
+		t.Fatalf("tracks instructions should tell agents to check truncated: %s", instr)
+	}
 }
 
 type truncatingTrackProvider struct{}
