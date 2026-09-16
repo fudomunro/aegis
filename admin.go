@@ -1037,28 +1037,6 @@ const adminHTML = `<!DOCTYPE html>
       }
     });
 
-    // Data-type rows originate access arrows to each providing service.
-    (layout.typeItems || []).forEach((item) => {
-      (item.providers || []).forEach((svcId) => {
-        const to = pos["svc:" + svcId];
-        if (!to) return;
-        const ax = item.x + item.w;
-        const ay = item.y + item.h / 2;
-        const bx = to.x;
-        const by = to.y + to.h / 2;
-        const midX = (ax + bx) / 2;
-        const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
-        const color = item.readable ? FLOW_EDGE_COLORS.library : FLOW_EDGE_COLORS.meta;
-        parts.push(
-          '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' +
-          ' stroke-dasharray="5 4" marker-end="url(#flow-arrow-' +
-          (item.readable ? "library" : "meta") + ')"><title>' +
-          escapeHtml(item.label) + " · " + escapeHtml(svcId) +
-          "</title></path>"
-        );
-      });
-    });
-
     // Aperture container.
     const ap = pos.aperture;
     parts.push('<rect x="' + ap.x + '" y="' + ap.y + '" width="' + ap.w + '" height="' + ap.h + '" rx="12" fill="#12161c" stroke="#bc8cff" stroke-width="1.4" stroke-dasharray="6 4"/>');
@@ -1116,6 +1094,29 @@ const adminHTML = `<!DOCTYPE html>
         parts.push('<text x="' + (x + w - 10) + '" y="' + (y + h / 2) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(dt.path) + "</text>");
       }
       parts.push("</g>");
+    });
+
+    // Data-type access arrows: drawn above Aperture/Guardian fills so the
+    // origin at each type row stays visible (SVG paint order = z-index).
+    (layout.typeItems || []).forEach((item) => {
+      (item.providers || []).forEach((svcId) => {
+        const to = pos["svc:" + svcId];
+        if (!to) return;
+        const ax = item.x + item.w;
+        const ay = item.y + item.h / 2;
+        const bx = to.x;
+        const by = to.y + to.h / 2;
+        const midX = (ax + bx) / 2;
+        const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
+        const color = item.readable ? FLOW_EDGE_COLORS.library : FLOW_EDGE_COLORS.meta;
+        parts.push(
+          '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' +
+          ' stroke-dasharray="5 4" marker-end="url(#flow-arrow-' +
+          (item.readable ? "library" : "meta") + ')"><title>' +
+          escapeHtml(item.label) + " · " + escapeHtml(svcId) +
+          "</title></path>"
+        );
+      });
     });
 
     // Agents + services (leaf boxes).
