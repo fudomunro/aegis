@@ -82,14 +82,16 @@ type FlowLibrary struct {
 	Hits int `json:"hits,omitempty"`
 }
 
-// FlowDataType is one data type agents can reach through this instance.
+// FlowDataType is one synced library data type shown on the admin map.
+// Map chips are limited to library kinds Guardian merges; proxy-only
+// connector surfaces are not listed here.
 type FlowDataType struct {
 	ID string `json:"id"`
 	// Label is the human name ("liked tracks").
 	Label string `json:"label"`
-	// Path is the library endpoint when Kind is library.
+	// Path is the library endpoint.
 	Path string `json:"path,omitempty"`
-	// Kind is "library" (unified endpoint) or "proxy" (service proxy only).
+	// Kind is "library" (unified endpoint). Kept for API stability.
 	Kind string `json:"kind"`
 	// Readable is true when at least one non-blocked service allows reads.
 	Readable bool `json:"readable"`
@@ -232,9 +234,6 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		libraryProviders[kind.ID] = nil
 	}
 
-	// Proxy-only data types seen on non-blocked connectors (beyond library kinds).
-	proxyTypes := map[string]map[string]bool{} // type → service id set
-
 	for _, svc := range s.config.Services {
 		node := FlowNode{
 			ID:       "svc:" + svc.ID,
@@ -257,19 +256,8 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		if hasConnector {
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
-			libraryIDs := map[string]bool{}
-			for _, kind := range libraryKinds {
-				libraryIDs[kind.ID] = true
-			}
 			for _, dt := range caps.DataTypes {
 				types = append(types, dt.Name)
-				if strings.EqualFold(svc.Action, "block") || libraryIDs[dt.Name] {
-					continue
-				}
-				if proxyTypes[dt.Name] == nil {
-					proxyTypes[dt.Name] = map[string]bool{}
-				}
-				proxyTypes[dt.Name][svc.ID] = true
 			}
 			node.DataTypes = types
 
@@ -389,7 +377,9 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		}
 	}
 
-	dataTypes := make([]FlowDataType, 0, len(libraryKinds)+len(proxyTypes))
+	// Map data types are the core synced library kinds only (issue #32 cleanup).
+	// Proxy-only connector surfaces stay on service nodes, not as chips.
+	dataTypes := make([]FlowDataType, 0, len(libraries))
 	for _, lib := range libraries {
 		dataTypes = append(dataTypes, FlowDataType{
 			ID:        lib.ID,
@@ -398,25 +388,6 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Kind:      "library",
 			Readable:  len(lib.Providers) > 0 && s.libraryReadableFor(lib.ID),
 			Providers: lib.Providers,
-		})
-	}
-	proxyIDs := make([]string, 0, len(proxyTypes))
-	for id := range proxyTypes {
-		proxyIDs = append(proxyIDs, id)
-	}
-	sort.Strings(proxyIDs)
-	for _, id := range proxyIDs {
-		providers := make([]string, 0, len(proxyTypes[id]))
-		for svcID := range proxyTypes[id] {
-			providers = append(providers, svcID)
-		}
-		sort.Strings(providers)
-		dataTypes = append(dataTypes, FlowDataType{
-			ID:        id,
-			Label:     id,
-			Kind:      "proxy",
-			Readable:  true,
-			Providers: providers,
 		})
 	}
 
