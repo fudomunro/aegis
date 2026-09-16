@@ -793,32 +793,40 @@ const adminHTML = `<!DOCTYPE html>
     );
   }
 
-  // Nested layout: Aperture wraps Guardian; Guardian holds stores + data types.
+  // Nested layout: Aperture wraps Guardian; Guardian holds Token vault
+  // (connection tokens) and Data cache (synced library data types).
   function layoutFlowMap(topo) {
     const nodes = topo.nodes || [];
     const dataTypes = topo.data_types || [];
     const services = nodes.filter((n) => n.kind === "service");
+    const tokens = nodes.filter((n) => n.kind === "token" || (n.parent === "tokens" && n.id.indexOf("tok:") === 0));
     const byId = {};
     nodes.forEach((n) => { byId[n.id] = n; });
 
+    const pad = 12;
+    const titleH = 22;
     const chipCols = 3;
     const chipW = 118;
     const chipH = 22;
     const chipGap = 6;
-    const typeRows = Math.max(1, Math.ceil(dataTypes.length / chipCols));
-    const typesBlockH = 18 + typeRows * (chipH + chipGap);
+    const typeRows = Math.max(1, Math.ceil(Math.max(dataTypes.length, 1) / chipCols));
+    const typeBlockH = titleH + typeRows * (chipH + chipGap);
 
-    const storeH = 44;
+    const tokenRowH = 24;
+    const tokenGap = 6;
+    const tokenCount = Math.max(tokens.length, 1);
+    const tokenBlockH = titleH + tokenCount * (tokenRowH + tokenGap);
+
     const storeGap = 10;
     const guardianTitleH = 36;
-    const guardianPad = 12;
-    const guardianH = guardianTitleH + storeH + storeGap + typesBlockH + guardianPad * 2;
+    const guardianH = guardianTitleH + tokenBlockH + storeGap + typeBlockH + pad * 2;
     const apertureTitleH = 28;
     const aperturePad = 12;
     const apertureH = apertureTitleH + guardianH + aperturePad * 2;
+    const apertureW = 420;
 
     const agents = { x: 20, y: 0, w: 130, h: 56, id: "agents" };
-    const aperture = { x: 180, y: 20, w: 400, h: apertureH, id: "aperture" };
+    const aperture = { x: 180, y: 20, w: apertureW, h: apertureH, id: "aperture" };
     const guardian = {
       x: aperture.x + aperturePad,
       y: aperture.y + apertureTitleH + aperturePad,
@@ -842,32 +850,49 @@ const adminHTML = `<!DOCTYPE html>
       parent: "aperture",
     }, guardian);
 
-    const storeW = Math.floor((guardian.w - guardianPad * 2 - storeGap) / 2);
-    const storeY = guardian.y + guardianTitleH + guardianPad;
+    const innerX = guardian.x + pad;
+    const innerW = guardian.w - pad * 2;
+    const tokensY = guardian.y + guardianTitleH + pad;
     pos.tokens = {
-      x: guardian.x + guardianPad,
-      y: storeY,
-      w: storeW,
-      h: storeH,
+      x: innerX,
+      y: tokensY,
+      w: innerW,
+      h: tokenBlockH,
       id: "tokens",
       label: byId.tokens ? byId.tokens.label : "Token vault",
       kind: "store",
       parent: "guardian",
+      container: true,
     };
+    const tokenItems = tokens.map((n, i) => ({
+      id: n.id,
+      x: innerX + pad,
+      y: tokensY + titleH + i * (tokenRowH + tokenGap),
+      w: innerW - pad * 2,
+      h: tokenRowH,
+      label: n.label,
+      status: n.status,
+      kind: "token",
+      parent: "tokens",
+      connectionId: n.id.replace(/^tok:/, ""),
+    }));
+    tokenItems.forEach((item) => { pos[item.id] = item; });
+
+    const cacheY = tokensY + tokenBlockH + storeGap;
     pos.cache = {
-      x: guardian.x + guardianPad + storeW + storeGap,
-      y: storeY,
-      w: storeW,
-      h: storeH,
+      x: innerX,
+      y: cacheY,
+      w: innerW,
+      h: typeBlockH,
       id: "cache",
-      label: byId.cache ? byId.cache.label : "Response cache",
+      label: byId.cache ? byId.cache.label : "Data cache",
       kind: "store",
       parent: "guardian",
+      container: true,
     };
-
     const typeOrigin = {
-      x: guardian.x + guardianPad,
-      y: storeY + storeH + storeGap,
+      x: innerX + pad,
+      y: cacheY + titleH,
       cols: chipCols,
       chipW: chipW,
       chipH: chipH,
@@ -881,7 +906,7 @@ const adminHTML = `<!DOCTYPE html>
     const svcStartY = Math.max(20, Math.floor(aperture.y + aperture.h / 2 - svcTotal / 2));
     services.forEach((n, i) => {
       pos[n.id] = {
-        x: 620,
+        x: 640,
         y: svcStartY + i * (svcH + svcGap),
         w: svcW,
         h: svcH,
@@ -904,7 +929,8 @@ const adminHTML = `<!DOCTYPE html>
       pos: pos,
       typeOrigin: typeOrigin,
       dataTypes: dataTypes,
-      width: 850,
+      tokenItems: tokenItems,
+      width: 870,
       height: bottom,
     };
   }
@@ -990,27 +1016,45 @@ const adminHTML = `<!DOCTYPE html>
     parts.push('<text x="' + (g.x + 12) + '" y="' + (g.y + 18) + '" fill="#58a6ff" font-size="13" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(g.label) + '</text>');
     parts.push('<text x="' + (g.x + g.w - 12) + '" y="' + (g.y + 18) + '" text-anchor="end" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">hook · proxy · library</text>');
 
-    // Stores inside Guardian.
-    [pos.tokens, pos.cache].forEach((p) => {
-      const iconId = p.id === "tokens" ? "tokens" : "cache";
+    // Token vault + Data cache containers (and their children).
+    function drawStoreShell(p, iconId, subtitle) {
       parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#21262d" stroke="#30363d" stroke-width="1.2"/>');
-      parts.push(flowIconSVG(iconId, p.x + 22, p.y + p.h / 2, 14, "#8b949e"));
-      parts.push('<text x="' + (p.x + 36) + '" y="' + (p.y + p.h / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="12" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
-    });
+      parts.push(flowIconSVG(iconId, p.x + 16, p.y + 12, 12, "#8b949e"));
+      parts.push('<text x="' + (p.x + 28) + '" y="' + (p.y + 12) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
+      if (subtitle) {
+        parts.push('<text x="' + (p.x + p.w - 10) + '" y="' + (p.y + 12) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(subtitle) + "</text>");
+      }
+    }
 
-    // Data types inside Guardian.
+    const tokenItems = layout.tokenItems || [];
+    drawStoreShell(pos.tokens, "tokens", tokenItems.length ? tokenItems.length + " held" : "empty");
+    tokenItems.forEach((item) => {
+      const stroke = FLOW_STATUS_COLORS[item.status] || "#30363d";
+      const title = item.label + (item.status ? " · " + item.status : "");
+      parts.push('<g><title>' + escapeHtml(title) + "</title>");
+      parts.push('<rect x="' + item.x + '" y="' + item.y + '" width="' + item.w + '" height="' + item.h + '" rx="5" fill="#161b22" stroke="' + stroke + '" stroke-width="1.1"/>');
+      parts.push('<circle cx="' + (item.x + 12) + '" cy="' + (item.y + item.h / 2) + '" r="3.5" fill="' + stroke + '"/>');
+      parts.push('<text x="' + (item.x + 22) + '" y="' + (item.y + item.h / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(item.label) + "</text>");
+      if (item.status) {
+        parts.push('<text x="' + (item.x + item.w - 10) + '" y="' + (item.y + item.h / 2) + '" text-anchor="end" dominant-baseline="central" fill="' + stroke + '" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(item.status) + "</text>");
+      }
+      parts.push("</g>");
+    });
+    if (!tokenItems.length) {
+      parts.push('<text x="' + (pos.tokens.x + pos.tokens.w / 2) + '" y="' + (pos.tokens.y + 36) + '" text-anchor="middle" dominant-baseline="central" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">no OAuth tokens held</text>');
+    }
+
     const origin = layout.typeOrigin;
-    parts.push('<text x="' + origin.x + '" y="' + (origin.y + 12) + '" fill="#8b949e" font-size="10" font-weight="600" font-family="system-ui,sans-serif">DATA TYPES</text>');
+    drawStoreShell(pos.cache, "cache", (layout.dataTypes || []).length + " types");
     (layout.dataTypes || []).forEach((dt, i) => {
       const col = i % origin.cols;
       const row = Math.floor(i / origin.cols);
       const x = origin.x + col * (origin.chipW + origin.gap);
-      const y = origin.y + 18 + row * (origin.chipH + origin.gap);
+      const y = origin.y + row * (origin.chipH + origin.gap);
       const stroke = dt.readable ? "#3fb950" : "#d29922";
       const fill = dt.readable ? "rgba(63,185,80,0.12)" : "rgba(210,153,34,0.12)";
       parts.push('<rect x="' + x + '" y="' + y + '" width="' + origin.chipW + '" height="' + origin.chipH + '" rx="6" fill="' + fill + '" stroke="' + stroke + '" stroke-width="1"/>');
-      const iconId = dt.id;
-      parts.push(flowIconSVG(iconId, x + 12, y + origin.chipH / 2, 11, stroke));
+      parts.push(flowIconSVG(dt.id, x + 12, y + origin.chipH / 2, 11, stroke));
       parts.push('<text x="' + (x + 22) + '" y="' + (y + origin.chipH / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(dt.label) + "</text>");
     });
 

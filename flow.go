@@ -15,6 +15,8 @@ const (
 	FlowKindGuardian = "guardian"
 	FlowKindStore    = "store"
 	FlowKindService  = "service"
+	// FlowKindToken is one OAuth connection held inside the token vault.
+	FlowKindToken = "token"
 )
 
 // Flow topology node statuses for services.
@@ -216,10 +218,33 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		{
 			ID:     "cache",
 			Kind:   FlowKindStore,
-			Label:  "Response cache",
-			Detail: "In-memory GET cache for proxied and library responses",
+			Label:  "Data cache",
+			Detail: "In-memory cache of synced library data types and proxied GETs",
 			Parent: "guardian",
 		},
+	}
+
+	// List tokens currently held in the vault (connection id → status).
+	// Labels use connection/service display names; secrets never appear.
+	tokenIDs := make([]string, 0, len(tokens))
+	for id := range tokens {
+		tokenIDs = append(tokenIDs, id)
+	}
+	sort.Strings(tokenIDs)
+	for _, connID := range tokenIDs {
+		st := tokens[connID]
+		status := FlowStatusConnected
+		if st.Expired {
+			status = FlowStatusExpired
+		}
+		nodes = append(nodes, FlowNode{
+			ID:     "tok:" + connID,
+			Kind:   FlowKindToken,
+			Label:  s.tokenDisplayName(connID),
+			Detail: "OAuth token held for this connection",
+			Parent: "tokens",
+			Status: status,
+		})
 	}
 
 	edges := []FlowEdge{
@@ -479,9 +504,37 @@ func flowKindOrder(kind string) int {
 		return 2
 	case FlowKindStore:
 		return 3
-	default:
+	case FlowKindToken:
 		return 4
+	default:
+		return 5
 	}
+}
+
+// tokenDisplayName returns a human label for a vault connection id.
+func (s *Server) tokenDisplayName(connID string) string {
+	if s.config != nil {
+		if conn, ok := s.config.Connections[connID]; ok && conn.Name != "" {
+			return conn.Name
+		}
+		if svc := s.config.GetService(connID); svc != nil && svc.Name != "" {
+			return svc.Name
+		}
+	}
+	// Fallback: title-case the id ("google" → "Google").
+	if connID == "" {
+		return "connection"
+	}
+	parts := strings.FieldsFunc(connID, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' '
+	})
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 func flowServiceStatus(svc Service, st TokenStatus) string {
