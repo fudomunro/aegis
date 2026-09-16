@@ -351,6 +351,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 
 	kind := spec.kind
 	logger := withPeerLog(slog.With("handler", "library_"+kind.ID), r)
+	agent := agentForRequest(r)
 
 	cacheKey := kind.CacheKey()
 	if cached, ok := s.cache.Get(cacheKey); ok {
@@ -358,6 +359,13 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Guardian-Cache", "hit")
 		w.Write([]byte(cached))
+		s.recordAccess(AccessEvent{
+			Agent:    agent,
+			Surface:  MetricSurfaceLibrary,
+			Target:   kind.ID,
+			DataType: kind.ID,
+			Cache:    MetricCacheHit,
+		})
 		return
 	}
 
@@ -420,6 +428,12 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 					Count:     len(items),
 					Truncated: truncated,
 				}
+				s.recordAccess(AccessEvent{
+					Agent:    agent,
+					Surface:  MetricSurfaceService,
+					Target:   t.id,
+					DataType: kind.ID,
+				})
 				if truncated {
 					logger.Warn("library "+kind.ID+" truncated by page cap",
 						"service", t.id, "count", len(items))
@@ -468,4 +482,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Guardian-Cache", "miss")
 	w.Write(result)
+	s.recordAccess(AccessEvent{
+		Agent:    agent,
+		Surface:  MetricSurfaceLibrary,
+		Target:   kind.ID,
+		DataType: kind.ID,
+		Cache:    MetricCacheMiss,
+	})
 }

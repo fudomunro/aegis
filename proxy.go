@@ -43,8 +43,16 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	dataType := DataTypeForPath(remainingPath)
+
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)
+		s.recordAccess(AccessEvent{
+			Agent:    agentForRequest(r),
+			Surface:  MetricSurfaceService,
+			Target:   serviceID,
+			DataType: dataType,
+		})
 		writeJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))
 		return
 	}
@@ -52,15 +60,22 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// Enforce data-type permissions before any upstream or connector work.
 	if !s.AllowDataPermission(w, r, svc, remainingPath) {
 		logger.Warn("permission denied",
-			"data_type", DataTypeForPath(remainingPath),
-			"permission", svc.Permissions.For(DataTypeForPath(remainingPath)),
+			"data_type", dataType,
+			"permission", svc.Permissions.For(dataType),
 		)
+		s.recordAccess(AccessEvent{
+			Agent:    agentForRequest(r),
+			Surface:  MetricSurfaceService,
+			Target:   serviceID,
+			DataType: dataType,
+		})
 		return
 	}
 
 	// If a connector is registered for this service, delegate to it.
 	if connector, ok := s.connectors[serviceID]; ok {
 		connector.HandleProxy(w, r, remainingPath)
+		s.recordProxyAccess(r, serviceID, dataType, w.Header().Get("X-Guardian-Cache"))
 		return
 	}
 
@@ -84,6 +99,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Guardian-Cache", "hit")
 			io.WriteString(w, cached)
+			s.recordProxyAccess(r, serviceID, dataType, MetricCacheHit)
 			return
 		}
 	}
@@ -148,6 +164,26 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Guardian-Cache", "miss")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(data)
+	s.recordProxyAccess(r, serviceID, dataType, MetricCacheMiss)
+}
+
+// recordProxyAccess records a redacted service-proxy access event (issue #32).
+func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache string) {
+	switch cache {
+	case "hit":
+		cache = MetricCacheHit
+	case "miss":
+		cache = MetricCacheMiss
+	default:
+		cache = MetricCacheNone
+	}
+	s.recordAccess(AccessEvent{
+		Agent:    agentForRequest(r),
+		Surface:  MetricSurfaceService,
+		Target:   serviceID,
+		DataType: dataType,
+		Cache:    cache,
+	})
 }
 
 func writeJSONError(w http.ResponseWriter, status int, message string) {

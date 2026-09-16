@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sort"
 	"strings"
+	"time"
 )
 
 // Flow topology node kinds.
@@ -14,6 +15,8 @@ const (
 	FlowKindGuardian = "guardian"
 	FlowKindStore    = "store"
 	FlowKindService  = "service"
+	// FlowKindToken is one OAuth connection held inside the token vault.
+	FlowKindToken = "token"
 )
 
 // Flow topology node statuses for services.
@@ -53,6 +56,12 @@ type FlowNode struct {
 	Providers []string `json:"providers,omitempty"`
 	// Notes are short caveats (e.g. photo bytes stay upstream).
 	Notes []string `json:"notes,omitempty"`
+	// Hits is recent access count for this node in the stats window (issue #32).
+	Hits int `json:"hits,omitempty"`
+	// Agents is the distinct agent count that touched this node in the window.
+	Agents int `json:"agents,omitempty"`
+	// ConnectionID is the OAuth connection this service uses (issue #26 / #32).
+	ConnectionID string `json:"connection_id,omitempty"`
 }
 
 // FlowEdge is a directed connection between two nodes.
@@ -62,6 +71,8 @@ type FlowEdge struct {
 	Label string `json:"label"`
 	// Style is hook, access, data, meta, denied, or library.
 	Style string `json:"style"`
+	// Kind is the library kind id on library edges (issue #32).
+	Kind string `json:"kind,omitempty"`
 }
 
 // FlowLibrary describes one unified library endpoint and its fan-in sources.
@@ -71,16 +82,20 @@ type FlowLibrary struct {
 	Label     string   `json:"label"`
 	SyncRule  string   `json:"sync_rule"`
 	Providers []string `json:"providers"`
+	// Hits is recent library access count in the stats window (issue #32).
+	Hits int `json:"hits,omitempty"`
 }
 
-// FlowDataType is one data type agents can reach through this instance.
+// FlowDataType is one synced library data type shown on the admin map.
+// Map chips are limited to library kinds Guardian merges; proxy-only
+// connector surfaces are not listed here.
 type FlowDataType struct {
 	ID string `json:"id"`
 	// Label is the human name ("liked tracks").
 	Label string `json:"label"`
-	// Path is the library endpoint when Kind is library.
+	// Path is the library endpoint.
 	Path string `json:"path,omitempty"`
-	// Kind is "library" (unified endpoint) or "proxy" (service proxy only).
+	// Kind is "library" (unified endpoint). Kept for API stability.
 	Kind string `json:"kind"`
 	// Readable is true when at least one non-blocked service allows reads.
 	Readable bool `json:"readable"`
@@ -94,7 +109,46 @@ type FlowRuntime struct {
 	BaseURL  string `json:"base_url"`
 }
 
-// FlowTopology is the admin data-flow map payload (issue #25).
+// FlowAgentStats is the distinct-agent summary for the active window.
+type FlowAgentStats struct {
+	Distinct int      `json:"distinct"`
+	Sample   []string `json:"sample,omitempty"`
+}
+
+// FlowEndpointStats is recent hit counts for one service or library.
+type FlowEndpointStats struct {
+	Hits      int            `json:"hits"`
+	Agents    int            `json:"agents"`
+	CacheHits int            `json:"cache_hits,omitempty"`
+	CacheMiss int            `json:"cache_misses,omitempty"`
+	DataTypes map[string]int `json:"data_types,omitempty"`
+}
+
+// FlowRecentAccess is a redacted sample of recent agent access (no bodies).
+type FlowRecentAccess struct {
+	At       time.Time `json:"at"`
+	Agent    string    `json:"agent"`
+	Surface  string    `json:"surface"`
+	Target   string    `json:"target"`
+	DataType string    `json:"data_type,omitempty"`
+	Cache    string    `json:"cache,omitempty"`
+}
+
+// FlowStats is the live access summary embedded in the admin map payload.
+type FlowStats struct {
+	GeneratedAt time.Time                    `json:"generated_at"`
+	Window      string                       `json:"window"`
+	Windows     []string                     `json:"windows"`
+	Agents      FlowAgentStats               `json:"agents"`
+	Services    map[string]FlowEndpointStats `json:"services"`
+	Libraries   map[string]FlowEndpointStats `json:"libraries"`
+	Recent      []FlowRecentAccess           `json:"recent,omitempty"`
+}
+
+// FlowStatsWindows are the selectable access-stat windows for the map.
+var FlowStatsWindows = []string{"5m", "1h", "24h"}
+
+// FlowTopology is the admin data-flow map payload (issue #25, #32).
 type FlowTopology struct {
 	Runtime   FlowRuntime    `json:"runtime"`
 	Narrative string         `json:"narrative"`
@@ -102,23 +156,38 @@ type FlowTopology struct {
 	Edges     []FlowEdge     `json:"edges"`
 	Libraries []FlowLibrary  `json:"libraries"`
 	DataTypes []FlowDataType `json:"data_types"`
+	// Stats is recent agent access for the requested window (issue #32).
+	Stats FlowStats `json:"stats"`
 }
 
 // HandleAdminFlow returns the data-flow topology for the admin Map view.
-// GET /v1/admin/flow
+// GET /v1/admin/flow[?window=5m|1h|24h]
 func (s *Server) HandleAdminFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	topo := s.buildFlowTopology()
+	window, windowLabel := parseFlowWindow(r.URL.Query().Get("window"))
+	topo := s.buildFlowTopology(window, windowLabel)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(topo)
 }
 
+// parseFlowWindow maps the window query value to a duration and stable label.
+func parseFlowWindow(raw string) (time.Duration, string) {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "5m", "5min":
+		return 5 * time.Minute, "5m"
+	case "24h", "1d", "day":
+		return 24 * time.Hour, "24h"
+	default:
+		return time.Hour, "1h"
+	}
+}
+
 // buildFlowTopology assembles the graph from config, connectors, and tokens.
 // Secrets are never included.
-func (s *Server) buildFlowTopology() FlowTopology {
+func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) FlowTopology {
 	tokens := s.tokens.Status()
 
 	nodes := []FlowNode{
@@ -151,10 +220,33 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		{
 			ID:     "cache",
 			Kind:   FlowKindStore,
-			Label:  "Response cache",
-			Detail: "In-memory GET cache for proxied and library responses",
+			Label:  "Data cache",
+			Detail: "In-memory cache of synced library data types and proxied GETs",
 			Parent: "guardian",
 		},
+	}
+
+	// List tokens currently held in the vault (connection id → status).
+	// Labels use connection/service display names; secrets never appear.
+	tokenIDs := make([]string, 0, len(tokens))
+	for id := range tokens {
+		tokenIDs = append(tokenIDs, id)
+	}
+	sort.Strings(tokenIDs)
+	for _, connID := range tokenIDs {
+		st := tokens[connID]
+		status := FlowStatusConnected
+		if st.Expired {
+			status = FlowStatusExpired
+		}
+		nodes = append(nodes, FlowNode{
+			ID:     "tok:" + connID,
+			Kind:   FlowKindToken,
+			Label:  s.tokenDisplayName(connID),
+			Detail: "OAuth token held for this connection",
+			Parent: "tokens",
+			Status: status,
+		})
 	}
 
 	edges := []FlowEdge{
@@ -168,9 +260,6 @@ func (s *Server) buildFlowTopology() FlowTopology {
 	for _, kind := range libraryKinds {
 		libraryProviders[kind.ID] = nil
 	}
-
-	// Proxy-only data types seen on non-blocked connectors (beyond library kinds).
-	proxyTypes := map[string]map[string]bool{} // type → service id set
 
 	for _, svc := range s.config.Services {
 		node := FlowNode{
@@ -187,6 +276,7 @@ func (s *Server) buildFlowTopology() FlowTopology {
 			node.Detail = "Blocked in this environment"
 		} else {
 			connID := s.config.connectionIDForService(svc.ID)
+			node.ConnectionID = connID
 			node.Status = flowServiceStatus(svc, tokens[connID])
 		}
 
@@ -194,19 +284,8 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		if hasConnector {
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
-			libraryIDs := map[string]bool{}
-			for _, kind := range libraryKinds {
-				libraryIDs[kind.ID] = true
-			}
 			for _, dt := range caps.DataTypes {
 				types = append(types, dt.Name)
-				if strings.EqualFold(svc.Action, "block") || libraryIDs[dt.Name] {
-					continue
-				}
-				if proxyTypes[dt.Name] == nil {
-					proxyTypes[dt.Name] = map[string]bool{}
-				}
-				proxyTypes[dt.Name][svc.ID] = true
 			}
 			node.DataTypes = types
 
@@ -267,6 +346,7 @@ func (s *Server) buildFlowTopology() FlowTopology {
 					To:    "guardian",
 					Label: kind.Label + " → library",
 					Style: FlowEdgeLibrary,
+					Kind:  kindID,
 				})
 			}
 		}
@@ -304,7 +384,30 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		})
 	}
 
-	dataTypes := make([]FlowDataType, 0, len(libraryKinds)+len(proxyTypes))
+	stats := s.buildFlowStats(window, windowLabel)
+	// Stamp recent hit counts onto nodes and library chips for the map UI.
+	for i := range nodes {
+		switch {
+		case nodes[i].Kind == FlowKindAgent:
+			nodes[i].Agents = stats.Agents.Distinct
+			nodes[i].Hits = stats.TotalHits()
+		case nodes[i].Kind == FlowKindService:
+			id := strings.TrimPrefix(nodes[i].ID, "svc:")
+			if st, ok := stats.Services[id]; ok {
+				nodes[i].Hits = st.Hits
+				nodes[i].Agents = st.Agents
+			}
+		}
+	}
+	for i := range libraries {
+		if st, ok := stats.Libraries[libraries[i].ID]; ok {
+			libraries[i].Hits = st.Hits
+		}
+	}
+
+	// Map data types are the core synced library kinds only (issue #32 cleanup).
+	// Proxy-only connector surfaces stay on service nodes, not as chips.
+	dataTypes := make([]FlowDataType, 0, len(libraries))
 	for _, lib := range libraries {
 		dataTypes = append(dataTypes, FlowDataType{
 			ID:        lib.ID,
@@ -313,25 +416,6 @@ func (s *Server) buildFlowTopology() FlowTopology {
 			Kind:      "library",
 			Readable:  len(lib.Providers) > 0 && s.libraryReadableFor(lib.ID),
 			Providers: lib.Providers,
-		})
-	}
-	proxyIDs := make([]string, 0, len(proxyTypes))
-	for id := range proxyTypes {
-		proxyIDs = append(proxyIDs, id)
-	}
-	sort.Strings(proxyIDs)
-	for _, id := range proxyIDs {
-		providers := make([]string, 0, len(proxyTypes[id]))
-		for svcID := range proxyTypes[id] {
-			providers = append(providers, svcID)
-		}
-		sort.Strings(providers)
-		dataTypes = append(dataTypes, FlowDataType{
-			ID:        id,
-			Label:     id,
-			Kind:      "proxy",
-			Readable:  true,
-			Providers: providers,
 		})
 	}
 
@@ -348,7 +432,69 @@ func (s *Server) buildFlowTopology() FlowTopology {
 		Edges:     edges,
 		Libraries: libraries,
 		DataTypes: dataTypes,
+		Stats:     stats,
 	}
+}
+
+// buildFlowStats aggregates recent access metrics for the map (issue #32).
+func (s *Server) buildFlowStats(window time.Duration, windowLabel string) FlowStats {
+	if windowLabel == "" {
+		windowLabel = "1h"
+	}
+	snap := s.metricsSnapshot(window)
+	services := make(map[string]FlowEndpointStats, len(snap.Services))
+	for id, st := range snap.Services {
+		services[id] = flowEndpointFromMetrics(st)
+	}
+	libraries := make(map[string]FlowEndpointStats, len(snap.Libraries))
+	for id, st := range snap.Libraries {
+		libraries[id] = flowEndpointFromMetrics(st)
+	}
+	recent := make([]FlowRecentAccess, 0, len(snap.Recent))
+	for _, ev := range snap.Recent {
+		recent = append(recent, FlowRecentAccess{
+			At:       ev.At,
+			Agent:    ev.Agent,
+			Surface:  ev.Surface,
+			Target:   ev.Target,
+			DataType: ev.DataType,
+			Cache:    ev.Cache,
+		})
+	}
+	return FlowStats{
+		GeneratedAt: time.Now().UTC(),
+		Window:      windowLabel,
+		Windows:     append([]string(nil), FlowStatsWindows...),
+		Agents: FlowAgentStats{
+			Distinct: snap.Agents.Distinct,
+			Sample:   snap.Agents.Sample,
+		},
+		Services:  services,
+		Libraries: libraries,
+		Recent:    recent,
+	}
+}
+
+func flowEndpointFromMetrics(st MetricsEndpointStats) FlowEndpointStats {
+	return FlowEndpointStats{
+		Hits:      st.Hits,
+		Agents:    st.Agents,
+		CacheHits: st.CacheHits,
+		CacheMiss: st.CacheMiss,
+		DataTypes: st.DataTypes,
+	}
+}
+
+// TotalHits sums service + library hits for the agents node badge.
+func (fs FlowStats) TotalHits() int {
+	total := 0
+	for _, st := range fs.Services {
+		total += st.Hits
+	}
+	for _, st := range fs.Libraries {
+		total += st.Hits
+	}
+	return total
 }
 
 func flowKindOrder(kind string) int {
@@ -361,9 +507,37 @@ func flowKindOrder(kind string) int {
 		return 2
 	case FlowKindStore:
 		return 3
-	default:
+	case FlowKindToken:
 		return 4
+	default:
+		return 5
 	}
+}
+
+// tokenDisplayName returns a human label for a vault connection id.
+func (s *Server) tokenDisplayName(connID string) string {
+	if s.config != nil {
+		if conn, ok := s.config.Connections[connID]; ok && conn.Name != "" {
+			return conn.Name
+		}
+		if svc := s.config.GetService(connID); svc != nil && svc.Name != "" {
+			return svc.Name
+		}
+	}
+	// Fallback: title-case the id ("google" → "Google").
+	if connID == "" {
+		return "connection"
+	}
+	parts := strings.FieldsFunc(connID, func(r rune) bool {
+		return r == '-' || r == '_' || r == ' '
+	})
+	for i, p := range parts {
+		if p == "" {
+			continue
+		}
+		parts[i] = strings.ToUpper(p[:1]) + p[1:]
+	}
+	return strings.Join(parts, " ")
 }
 
 func flowServiceStatus(svc Service, st TokenStatus) string {
