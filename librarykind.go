@@ -213,7 +213,8 @@ func (k LibraryKind) Instructions(baseURL string) string {
 }
 
 // libraryInstructionsFor returns kind instructions plus a configured canonical
-// service hint when the instance declares one for this kind.
+// service hint when the instance declares one for this kind, and the
+// multi-source mutation rule.
 func (s *Server) libraryInstructionsFor(kindID string) string {
 	k := LibraryKindByID(kindID)
 	if k == nil {
@@ -223,6 +224,7 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 	if name := s.canonicalServiceName(kindID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", k.Label, name)
 	}
+	text += "\n" + multiSourceMutationRule()
 	return text
 }
 
