@@ -1119,13 +1119,13 @@ const adminHTML = `<!DOCTYPE html>
         const midX = (ax + bx) / 2;
         const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
         // Connected = live data (solid green); expired/needs work = meta dash.
+        // No arrowheads — auth + data lines land on the same service edge.
         const live = n.status === "connected";
         const color = live ? FLOW_EDGE_COLORS.data : FLOW_EDGE_COLORS.meta;
         const dash = live ? "" : ' stroke-dasharray="5 4"';
-        const marker = live ? "data" : "meta";
         parts.push(
           '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' + dash +
-          ' marker-end="url(#flow-arrow-' + marker + ')"><title>' +
+          '><title>' +
           escapeHtml(token.label + " · " + (n.label || n.id) +
             (n.status ? " · " + n.status : "")) +
           "</title></path>"
@@ -1146,10 +1146,10 @@ const adminHTML = `<!DOCTYPE html>
         const midX = (ax + bx) / 2;
         const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
         const color = item.readable ? FLOW_EDGE_COLORS.library : FLOW_EDGE_COLORS.meta;
+        // Plain lines (no arrowheads) so auth + data origins stay readable.
         parts.push(
           '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-width="1.5"' +
-          ' stroke-dasharray="5 4" marker-end="url(#flow-arrow-' +
-          (item.readable ? "library" : "meta") + ')"><title>' +
+          ' stroke-dasharray="5 4"><title>' +
           escapeHtml(item.label) + " · " + escapeHtml(svcId) +
           "</title></path>"
         );
