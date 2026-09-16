@@ -22,18 +22,20 @@ type AdminService struct {
 	// Permissions is the agent access map by data type (nil = unrestricted).
 	Permissions map[string]string `json:"permissions,omitempty"`
 	// AvailableDataTypes lists connector-known types the UI can edit.
-	AvailableDataTypes []string     `json:"available_data_types,omitempty"`
-	HasOAuth           bool         `json:"has_oauth"`
-	HasClientID        bool         `json:"has_client_id"`
-	HasSecret          bool         `json:"has_client_secret"`
-	OAuthScopes        []string     `json:"oauth_scopes,omitempty"`
-	Token              *TokenStatus `json:"token,omitempty"`
-	HasPlaylist        bool         `json:"has_playlist_provider"`
-	HasLikedTrack      bool         `json:"has_liked_track_provider"`
-	HasAlbum           bool         `json:"has_album_provider"`
-	HasArtist          bool         `json:"has_artist_provider"`
-	HasContact         bool         `json:"has_contact_provider"`
-	HasPhoto           bool         `json:"has_photo_provider"`
+	AvailableDataTypes []string `json:"available_data_types,omitempty"`
+	HasOAuth           bool     `json:"has_oauth"`
+	// ConnectionID is the shared provider connection this surface uses (issue #26).
+	ConnectionID  string       `json:"connection_id,omitempty"`
+	HasClientID   bool         `json:"has_client_id"`
+	HasSecret     bool         `json:"has_client_secret"`
+	OAuthScopes   []string     `json:"oauth_scopes,omitempty"`
+	Token         *TokenStatus `json:"token,omitempty"`
+	HasPlaylist   bool         `json:"has_playlist_provider"`
+	HasLikedTrack bool         `json:"has_liked_track_provider"`
+	HasAlbum      bool         `json:"has_album_provider"`
+	HasArtist     bool         `json:"has_artist_provider"`
+	HasContact    bool         `json:"has_contact_provider"`
+	HasPhoto      bool         `json:"has_photo_provider"`
 	// SupportsPhotoPicker is true when the connector exposes a picker session
 	// create operation (e.g. Google Photos Picker API).
 	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`
@@ -102,7 +104,8 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Description:  svc.Description,
 			Permissions:  svc.Permissions.Clone(),
 			CanonicalFor: svc.CanonicalFor,
-			HasOAuth:     svc.OAuth != nil,
+			HasOAuth:     svc.OAuth != nil || svc.Connection != "",
+			ConnectionID: s.config.connectionIDForService(svc.ID),
 			ProxyPath:    "/v1/services/" + svc.ID,
 			HasPlaylist:  false,
 		}
@@ -110,6 +113,18 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			item.HasClientID = svc.OAuth.ClientID != ""
 			item.HasSecret = svc.OAuth.ClientSecret != ""
 			item.OAuthScopes = svc.OAuth.Scopes
+			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
+		}
+		if connectionID, conn := s.config.ConnectionForService(svc.ID); connectionID != "" {
+			item.ConnectionID = connectionID
+			item.HasOAuth = true
+			if conn != nil {
+				item.HasClientID = conn.ClientID != ""
+				item.HasSecret = conn.ClientSecret != ""
+				if len(item.OAuthScopes) == 0 {
+					item.OAuthScopes = s.config.requiredScopes(svc.ID)
+				}
+			}
 			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
 		}
 		if connector, ok := s.connectors[svc.ID]; ok {
@@ -143,7 +158,10 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			item.AvailableDataTypes = types
 		}
-		if st, ok := tokens[svc.ID]; ok {
+		if st, ok := tokens[item.ConnectionID]; ok {
+			st := st
+			item.Token = &st
+		} else if st, ok := tokens[svc.ID]; ok {
 			st := st
 			item.Token = &st
 		}

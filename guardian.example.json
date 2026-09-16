@@ -1,4 +1,42 @@
 {
+  "connections": {
+    "google": {
+      "name": "Google",
+      "client_id": "YOUR_GOOGLE_CLIENT_ID",
+      "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+      "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+      "token_url": "https://oauth2.googleapis.com/token",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+        "https://www.googleapis.com/auth/contacts.readonly"
+      ]
+    },
+    "spotify": {
+      "name": "Spotify",
+      "client_id": "YOUR_SPOTIFY_CLIENT_ID",
+      "client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
+      "auth_url": "https://accounts.spotify.com/authorize",
+      "token_url": "https://accounts.spotify.com/api/token",
+      "scopes": [
+        "user-read-playback-state",
+        "user-library-read",
+        "user-follow-read",
+        "playlist-read-private",
+        "playlist-read-collaborative"
+      ]
+    },
+    "amazon": {
+      "name": "Amazon",
+      "client_id": "YOUR_LWA_CLIENT_ID",
+      "client_secret": "YOUR_LWA_CLIENT_SECRET",
+      "auth_url": "https://www.amazon.com/ap/oa",
+      "token_url": "https://api.amazon.com/auth/o2/token",
+      "scopes": [
+        "music:user_profile"
+      ]
+    }
+  },
   "services": [
     {
       "id": "spotify",
@@ -9,25 +47,13 @@
       "cache_ttl": "10m",
       "description": "Proxies Spotify API calls through Guardian for caching and auditing",
       "canonical_for": ["playlists", "tracks"],
+      "connection": "spotify",
       "permissions": {
         "default": "read",
         "playlists": "read",
         "tracks": "read",
         "player": "none",
         "recommendations": "none"
-      },
-      "oauth": {
-        "client_id": "YOUR_SPOTIFY_CLIENT_ID",
-        "client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
-        "auth_url": "https://accounts.spotify.com/authorize",
-        "token_url": "https://accounts.spotify.com/api/token",
-        "scopes": [
-          "user-read-playback-state",
-          "user-library-read",
-          "user-follow-read",
-          "playlist-read-private",
-          "playlist-read-collaborative"
-        ]
       }
     },
     {
@@ -37,19 +63,14 @@
       "action": "inject",
       "endpoint": "https://www.googleapis.com/youtube/v3",
       "cache_ttl": "15m",
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly"
+      ],
       "permissions": {
         "default": "read"
       },
-      "description": "Proxies YouTube Music API calls through Guardian",
-      "oauth": {
-        "client_id": "YOUR_GOOGLE_CLIENT_ID",
-        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": [
-          "https://www.googleapis.com/auth/youtube.readonly"
-        ]
-      }
+      "description": "Proxies YouTube Music API calls through Guardian (shares the Google connection)"
     },
     {
       "id": "amazon-music",
@@ -59,15 +80,7 @@
       "endpoint": "https://api.amazonmusic.com/v1",
       "cache_ttl": "15m",
       "description": "Proxies Amazon Music API calls through Guardian",
-      "oauth": {
-        "client_id": "YOUR_LWA_CLIENT_ID",
-        "client_secret": "YOUR_LWA_CLIENT_SECRET",
-        "auth_url": "https://www.amazon.com/ap/oa",
-        "token_url": "https://api.amazon.com/auth/o2/token",
-        "scopes": [
-          "music:user_profile"
-        ]
-      }
+      "connection": "amazon"
     },
     {
       "id": "tidal",
@@ -82,20 +95,15 @@
       "action": "inject",
       "endpoint": "https://photospicker.googleapis.com/v1",
       "cache_ttl": "15m",
-      "description": "Google Photos via the Picker API: the user selects photos once; Guardian lists that selection as neutral metadata. Photo bytes stay on Google Photos (non-Guardian canonical). Full Library API sync requires Google app verification.",
+      "description": "Google Photos via the Picker API: the user selects photos once; Guardian lists that selection as neutral metadata. Photo bytes stay on Google Photos (non-Guardian canonical). Shares the Google connection with YouTube and Contacts.",
       "canonical_for": ["photos"],
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"
+      ],
       "permissions": {
         "default": "read",
         "photos": "read"
-      },
-      "oauth": {
-        "client_id": "YOUR_GOOGLE_CLIENT_ID",
-        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": [
-          "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"
-        ]
       }
     },
     {
@@ -121,20 +129,15 @@
       "action": "inject",
       "endpoint": "https://people.googleapis.com/v1",
       "cache_ttl": "15m",
-      "description": "Lists Google People/Contacts address-book entries as neutral contacts so photo.people[] and other types can share identity matching.",
+      "description": "Lists Google People/Contacts address-book entries as neutral contacts so photo.people[] and other types can share identity matching. Shares the Google connection.",
       "canonical_for": ["contacts"],
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/contacts.readonly"
+      ],
       "permissions": {
         "default": "read",
         "contacts": "read"
-      },
-      "oauth": {
-        "client_id": "YOUR_GOOGLE_CLIENT_ID",
-        "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
-        "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
-        "token_url": "https://oauth2.googleapis.com/token",
-        "scopes": [
-          "https://www.googleapis.com/auth/contacts.readonly"
-        ]
       }
     }
   ]

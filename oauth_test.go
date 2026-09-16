@@ -121,6 +121,9 @@ func TestHandleAuthLogin_GoogleOfflineAccess(t *testing.T) {
 	if q.Get("access_type") != "offline" {
 		t.Fatalf("access_type = %q, want offline", q.Get("access_type"))
 	}
+	if q.Get("include_granted_scopes") != "true" {
+		t.Fatalf("include_granted_scopes = %q, want true", q.Get("include_granted_scopes"))
+	}
 	if q.Get("prompt") != "consent" {
 		t.Fatalf("prompt = %q, want consent", q.Get("prompt"))
 	}
@@ -397,5 +400,165 @@ func TestHandleAuthRoutes_Dispatch(t *testing.T) {
 	srv.handleAuthRoutes(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("GET revoke = %d", w.Code)
+	}
+}
+
+func TestHandleAuthLogin_SharedGoogleConnection(t *testing.T) {
+	cfg := googleSharedConfig()
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/auth/google-photos/login", nil)
+	rec := httptest.NewRecorder()
+	srv.HandleAuthLogin(rec, req)
+
+	if rec.Code != http.StatusTemporaryRedirect {
+		t.Fatalf("status = %d, want 307", rec.Code)
+	}
+	u, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	// Union of all Google surface scopes from the connection block.
+	scope := q.Get("scope")
+	for _, want := range []string{
+		"https://www.googleapis.com/auth/youtube.readonly",
+		"https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+		"https://www.googleapis.com/auth/contacts.readonly",
+	} {
+		if !strings.Contains(scope, want) {
+			t.Fatalf("scope %q missing from %q", want, scope)
+		}
+	}
+	if q.Get("client_id") != "cid" {
+		t.Fatalf("client_id = %q", q.Get("client_id"))
+	}
+	if q.Get("access_type") != "offline" {
+		t.Fatalf("access_type = %q", q.Get("access_type"))
+	}
+	if q.Get("include_granted_scopes") != "true" {
+		t.Fatalf("include_granted_scopes = %q", q.Get("include_granted_scopes"))
+	}
+	if q.Get("prompt") != "consent" {
+		t.Fatalf("prompt = %q, want consent on first connect", q.Get("prompt"))
+	}
+	if q.Get("redirect_uri") != "https://guardian.example.com/v1/auth/google-photos/callback" {
+		t.Fatalf("redirect_uri = %q", q.Get("redirect_uri"))
+	}
+}
+
+func TestHandleAuthLogin_SharedConnectionSkipsPromptWhenRefreshExists(t *testing.T) {
+	cfg := googleSharedConfig()
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.tokens.Save("google", &OAuthToken{
+		AccessToken:  "at",
+		RefreshToken: "rt",
+		Expiry:       time.Now().Add(time.Hour),
+		Scopes:       []string{"https://www.googleapis.com/auth/youtube.readonly"},
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/v1/auth/youtube-music/login", nil)
+	rec := httptest.NewRecorder()
+	srv.HandleAuthLogin(rec, req)
+
+	u, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := u.Query()
+	if q.Get("prompt") != "" {
+		t.Fatalf("prompt = %q, want empty when refresh token already exists", q.Get("prompt"))
+	}
+	if q.Get("include_granted_scopes") != "true" {
+		t.Fatalf("include_granted_scopes = %q", q.Get("include_granted_scopes"))
+	}
+}
+
+func TestHandleAuthCallback_SharedConnectionStoresUnderConnectionID(t *testing.T) {
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"shared-at","refresh_token":"shared-rt","token_type":"Bearer","expires_in":3600,"scope":"https://www.googleapis.com/auth/youtube.readonly https://www.googleapis.com/auth/photospicker.mediaitems.readonly https://www.googleapis.com/auth/contacts.readonly"}`)
+	}))
+	defer tokenSrv.Close()
+
+	cfg := googleSharedConfig()
+	gconn := cfg.Connections["google"]
+	gconn.TokenURL = tokenSrv.URL
+	cfg.Connections["google"] = gconn
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.oauthStates.Set("google-photos:ok", true, time.Minute)
+
+	req := httptest.NewRequest("GET", "/v1/auth/google-photos/callback?code=auth-code&state=ok", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthCallback(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if srv.tokens.Get("google") == nil {
+		t.Fatal("expected token under connection id google")
+	}
+	if srv.tokens.Get("google-photos") != nil {
+		t.Fatal("should not store a second token under surface id")
+	}
+	if srv.tokens.Get("google").AccessToken != "shared-at" {
+		t.Fatalf("token = %+v", srv.tokens.Get("google"))
+	}
+}
+
+func TestHandleAuthCallback_PreservesRefreshTokenAndScopes(t *testing.T) {
+	tokenSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// No refresh_token and no scope in response — provider omitted them.
+		fmt.Fprint(w, `{"access_token":"new-at","token_type":"Bearer","expires_in":3600}`)
+	}))
+	defer tokenSrv.Close()
+
+	cfg := googleSharedConfig()
+	gconn := cfg.Connections["google"]
+	gconn.TokenURL = tokenSrv.URL
+	cfg.Connections["google"] = gconn
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.tokens.Save("google", &OAuthToken{
+		AccessToken:  "old",
+		RefreshToken: "keep-rt",
+		Expiry:       time.Now().Add(time.Hour),
+		Scopes:       []string{"https://www.googleapis.com/auth/youtube.readonly"},
+	})
+	srv.oauthStates.Set("youtube-music:st", true, time.Minute)
+
+	req := httptest.NewRequest("GET", "/v1/auth/youtube-music/callback?code=auth-code&state=st", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthCallback(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	tok := srv.tokens.Get("google")
+	if tok.RefreshToken != "keep-rt" {
+		t.Fatalf("refresh = %q, want keep-rt", tok.RefreshToken)
+	}
+	if len(tok.Scopes) != 1 || tok.Scopes[0] != "https://www.googleapis.com/auth/youtube.readonly" {
+		t.Fatalf("scopes = %v", tok.Scopes)
+	}
+	if tok.AccessToken != "new-at" {
+		t.Fatalf("access = %q", tok.AccessToken)
+	}
+}
+
+func TestHandleAuthRevoke_SharedConnection(t *testing.T) {
+	cfg := googleSharedConfig()
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.tokens.Save("google", &OAuthToken{AccessToken: "at", Expiry: time.Now().Add(time.Hour)})
+
+	req := httptest.NewRequest(http.MethodDelete, "/v1/auth/google-photos", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAuthRevoke(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	if srv.tokens.Get("google") != nil {
+		t.Fatal("expected google connection token to be revoked")
 	}
 }

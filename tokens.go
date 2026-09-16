@@ -132,6 +132,8 @@ func (t *OAuthToken) IsExpired(grace time.Duration) bool {
 }
 
 // Status returns a summary of all stored tokens (without revealing secrets).
+// Keys are provider connection IDs after issue #26 (legacy files may still
+// use service IDs until FoldIntoConnections runs).
 func (ts *TokenStore) Status() map[string]TokenStatus {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
@@ -147,6 +149,99 @@ func (ts *TokenStore) Status() map[string]TokenStatus {
 		}
 	}
 	return status
+}
+
+// FoldIntoConnections rewrites legacy per-service token keys into shared
+// provider connection IDs (issue #26). Best-effort: keeps the strongest
+// token per connection (refresh preferred, then more scopes, then later
+// expiry) and unions recorded scopes. Call after config is available.
+func (ts *TokenStore) FoldIntoConnections(cfg *Config) {
+	if ts == nil || cfg == nil {
+		return
+	}
+
+	type group struct {
+		keys   []string
+		best   string
+		tok    *OAuthToken
+		scopes map[string]bool
+	}
+	groups := make(map[string]*group)
+
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+
+	for key, tok := range ts.Tokens {
+		connID := cfg.connectionIDForService(key)
+		g := groups[connID]
+		if g == nil {
+			g = &group{scopes: make(map[string]bool)}
+			groups[connID] = g
+		}
+		g.keys = append(g.keys, key)
+		for _, sc := range tok.Scopes {
+			g.scopes[sc] = true
+		}
+		if g.tok == nil || betterFoldToken(tok, g.tok) {
+			g.best = key
+			g.tok = tok
+		}
+	}
+
+	changed := false
+	for connID, g := range groups {
+		if len(g.keys) == 1 && g.keys[0] == connID {
+			continue
+		}
+		picked := *g.tok
+		if len(g.scopes) > 0 {
+			union := make([]string, 0, len(g.scopes))
+			for sc := range g.scopes {
+				union = append(union, sc)
+			}
+			// Prefer recorded scopes on the winning token when present.
+			if len(picked.Scopes) > 0 {
+				picked.Scopes = unionScopes(picked.Scopes, union)
+			} else {
+				picked.Scopes = union
+			}
+		}
+		for _, key := range g.keys {
+			delete(ts.Tokens, key)
+		}
+		ts.Tokens[connID] = &picked
+		changed = true
+		slog.Info("folded OAuth tokens into provider connection",
+			"connection", connID,
+			"sources", g.keys,
+			"scopes", picked.Scopes,
+		)
+	}
+
+	if changed && ts.path != "" {
+		if err := ts.persist(); err != nil {
+			slog.Error("failed to persist folded token store", "error", err)
+		}
+	}
+}
+
+// betterFoldToken reports whether a should win over b when folding tokens
+// into one provider connection.
+func betterFoldToken(a, b *OAuthToken) bool {
+	if a == nil {
+		return false
+	}
+	if b == nil {
+		return true
+	}
+	aRefresh, bRefresh := a.RefreshToken != "", b.RefreshToken != ""
+	if aRefresh != bRefresh {
+		return aRefresh
+	}
+	if len(a.Scopes) != len(b.Scopes) {
+		return len(a.Scopes) > len(b.Scopes)
+	}
+	return a.Expiry.After(b.Expiry)
 }
 
 type TokenStatus struct {
