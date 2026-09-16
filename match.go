@@ -154,13 +154,8 @@ func MergePlaylistsSync(in []Playlist) []Playlist {
 	out := make([]Playlist, 0, len(order))
 	for _, k := range order {
 		e := byKey[k]
-		// Stable source order: by service name.
-		sort.SliceStable(e.p.Sources, func(i, j int) bool {
-			if e.p.Sources[i].ServiceName != e.p.Sources[j].ServiceName {
-				return e.p.Sources[i].ServiceName < e.p.Sources[j].ServiceName
-			}
-			return e.p.Sources[i].Service < e.p.Sources[j].Service
-		})
+		// Canonical sources first so the authoritative home is obvious.
+		sortPlaylistSourcesCanonicalFirst(e.p.Sources)
 		out = append(out, e.p)
 	}
 
@@ -245,12 +240,7 @@ func MergeTracksSync(in []Track) []Track {
 	out := make([]Track, 0, len(order))
 	for _, k := range order {
 		e := byKey[k]
-		sort.SliceStable(e.t.Sources, func(i, j int) bool {
-			if e.t.Sources[i].ServiceName != e.t.Sources[j].ServiceName {
-				return e.t.Sources[i].ServiceName < e.t.Sources[j].ServiceName
-			}
-			return e.t.Sources[i].Service < e.t.Sources[j].Service
-		})
+		sortTrackSourcesCanonicalFirst(e.t.Sources)
 		if e.t.Artists != nil {
 			sort.SliceStable(e.t.Artists, func(i, j int) bool {
 				return e.t.Artists[i].Name < e.t.Artists[j].Name

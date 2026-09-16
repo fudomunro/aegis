@@ -29,8 +29,12 @@ type Service struct {
 	Description string            `json:"description,omitempty"`
 	// Permissions restricts agent access by data type (playlists, tracks, …).
 	// Nil means unrestricted. See permissions.go for levels and the "default" key.
-	Permissions Permissions  `json:"permissions,omitempty"`
-	OAuth       *OAuthConfig `json:"oauth,omitempty"`
+	Permissions Permissions `json:"permissions,omitempty"`
+	// CanonicalFor lists library kinds where this service is the authoritative
+	// non-Guardian location (issue #16). At most one non-blocked service may
+	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
+	CanonicalFor []string     `json:"canonical_for,omitempty"`
+	OAuth        *OAuthConfig `json:"oauth,omitempty"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -99,6 +103,12 @@ func (c *Config) Reload() error {
 }
 
 func validateServices(services []Service) error {
+	for i := range services {
+		services[i].CanonicalFor = normalizeCanonicalFor(services[i].CanonicalFor)
+	}
+	if err := validateCanonicalFor(services); err != nil {
+		return err
+	}
 	for _, svc := range services {
 		if err := ValidatePermissions(svc.Permissions); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)
