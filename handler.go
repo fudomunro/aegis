@@ -329,6 +329,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	instructions = append(instructions, s.writePolicyNotices(matched)...)
 	instructions = append(instructions, libraryInstructions...)
 
 	if len(instructions) == 0 {
