@@ -423,6 +423,12 @@ const adminHTML = `<!DOCTYPE html>
   .auth-box form { display: flex; flex-direction: column; gap: 0.6rem; }
   .scopes { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
   .muted-num { color: var(--dim); }
+  .pager {
+    display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between;
+    gap: 0.65rem; margin-top: 0.85rem; color: var(--dim); font-size: 0.85rem;
+  }
+  .pager-controls { display: inline-flex; align-items: center; gap: 0.45rem; }
+  .pager-page { font-variant-numeric: tabular-nums; min-width: 6.5rem; text-align: center; }
   .playlist-source {
     display: inline-flex; align-items: center; gap: 0.3rem; margin: 0.15rem 0.25rem 0.15rem 0;
     background: var(--surface2); border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.78rem;
@@ -566,6 +572,7 @@ const adminHTML = `<!DOCTYPE html>
       </div>
       <div id="library-meta" class="meta" style="margin-bottom:0.75rem"></div>
       <div id="library-list"><div class="empty">Loading library…</div></div>
+      <div id="library-pager" class="pager" hidden></div>
     </section>
 
     <section id="panel-cache" class="panel" role="tabpanel" aria-labelledby="tab-cache" hidden>
@@ -590,6 +597,7 @@ const adminHTML = `<!DOCTYPE html>
           </table>
         </div>
       </div>
+      <div id="cache-pager" class="pager" hidden></div>
     </section>
 
     <section id="panel-runtime" class="panel" role="tabpanel" aria-labelledby="tab-runtime" hidden>
@@ -1331,6 +1339,47 @@ const adminHTML = `<!DOCTYPE html>
   const libraryDataByKind = {
     playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null,
   };
+  const PAGE_SIZE = 20;
+  let libraryPage = 1;
+  let cachePage = 1;
+  let cacheEntries = [];
+
+  function paginate(items, page) {
+    const total = items.length;
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const p = Math.min(Math.max(1, page), totalPages);
+    const start = (p - 1) * PAGE_SIZE;
+    const end = Math.min(start + PAGE_SIZE, total);
+    return {
+      items: items.slice(start, end),
+      page: p,
+      totalPages: totalPages,
+      total: total,
+      start: total ? start + 1 : 0,
+      end: end,
+    };
+  }
+
+  function renderPager(el, info, onPage) {
+    if (!el) return;
+    if (info.total <= PAGE_SIZE) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    el.hidden = false;
+    el.innerHTML =
+      '<span class="pager-info">Showing ' + info.start + "–" + info.end + " of " + info.total + "</span>" +
+      '<span class="pager-controls">' +
+      '<button type="button" class="btn pager-prev"' + (info.page <= 1 ? " disabled" : "") + ">Prev</button>" +
+      '<span class="pager-page">Page ' + info.page + " of " + info.totalPages + "</span>" +
+      '<button type="button" class="btn pager-next"' + (info.page >= info.totalPages ? " disabled" : "") + ">Next</button>" +
+      "</span>";
+    const prev = el.querySelector(".pager-prev");
+    const next = el.querySelector(".pager-next");
+    if (prev) prev.addEventListener("click", () => onPage(info.page - 1));
+    if (next) next.addEventListener("click", () => onPage(info.page + 1));
+  }
 
   function currentLibraryKind() {
     return LIBRARY_KINDS[libraryKind] || LIBRARY_KINDS.playlists;
@@ -1339,6 +1388,7 @@ const adminHTML = `<!DOCTYPE html>
   function setLibraryKind(kind) {
     if (!LIBRARY_KINDS[kind]) return;
     libraryKind = kind;
+    libraryPage = 1;
     document.querySelectorAll("[data-library-kind]").forEach((btn) => {
       const on = btn.getAttribute("data-library-kind") === kind;
       btn.setAttribute("aria-pressed", on ? "true" : "false");
@@ -1370,13 +1420,8 @@ const adminHTML = `<!DOCTYPE html>
     return '<div class="card-header"><h3>' + escapeHtml(title || "(untitled)") + "</h3>" + (badges || "") + "</div>";
   }
 
-  function renderPlaylistCards(items, q) {
-    return items.filter((p) => {
-      if (!q) return true;
-      const hay = [p.name, p.description, p.owner, (p.sources || []).map((s) => s.service).join(" ")]
-        .join(" ").toLowerCase();
-      return hay.indexOf(q) !== -1;
-    }).map((p) => {
+  function renderPlaylistCards(items) {
+    return items.map((p) => {
       const multi = (p.sources || []).length > 1;
       const can = hasCanonicalSource(p.sources);
       return '<article class="card">' +
@@ -1395,14 +1440,8 @@ const adminHTML = `<!DOCTYPE html>
     return (artists || []).map((a) => a && a.name).filter(Boolean).join(", ");
   }
 
-  function renderTrackCards(items, q) {
-    return items.filter((t) => {
-      if (!q) return true;
-      const hay = [t.name, artistNames(t.artists), t.album && t.album.name, t.duration,
-        (t.sources || []).map((s) => s.service).join(" ")]
-        .join(" ").toLowerCase();
-      return hay.indexOf(q) !== -1;
-    }).map((t) => {
+  function renderTrackCards(items) {
+    return items.map((t) => {
       const multi = (t.sources || []).length > 1;
       const can = hasCanonicalSource(t.sources);
       const artists = artistNames(t.artists);
@@ -1419,15 +1458,8 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
-  function renderContactCards(items, q) {
-    return items.filter((c) => {
-      if (!q) return true;
-      const hay = [c.name, c.organization,
-        (c.emails || []).join(" "), (c.phones || []).join(" "), (c.handles || []).join(" "),
-        (c.sources || []).map((s) => s.service).join(" ")]
-        .join(" ").toLowerCase();
-      return hay.indexOf(q) !== -1;
-    }).map((c) => {
+  function renderContactCards(items) {
+    return items.map((c) => {
       const multi = (c.sources || []).length > 1;
       const can = hasCanonicalSource(c.sources);
       const emails = (c.emails || []).map((e) => '<code>' + escapeHtml(e) + "</code>").join(" ");
@@ -1446,14 +1478,8 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
-  function renderPhotoCards(items, q) {
-    return items.filter((p) => {
-      if (!q) return true;
-      const hay = [p.filename, p.caption, p.mime_type, p.taken_at,
-        (p.sources || []).map((s) => s.service + " " + (s.id || "")).join(" ")]
-        .join(" ").toLowerCase();
-      return hay.indexOf(q) !== -1;
-    }).map((p) => {
+  function renderPhotoCards(items) {
+    return items.map((p) => {
       const multi = (p.sources || []).length > 1;
       const dims = (p.width && p.height) ? (p.width + "×" + p.height) : "";
       const title = p.filename || p.caption || "(untitled photo)";
@@ -1471,14 +1497,8 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
-  function renderAlbumCards(items, q) {
-    return items.filter((a) => {
-      if (!q) return true;
-      const hay = [a.name, artistNames(a.artists),
-        (a.sources || []).map((s) => s.service).join(" ")]
-        .join(" ").toLowerCase();
-      return hay.indexOf(q) !== -1;
-    }).map((a) => {
+  function renderAlbumCards(items) {
+    return items.map((a) => {
       const multi = (a.sources || []).length > 1;
       const artists = artistNames(a.artists);
       return '<article class="card">' +
@@ -1490,13 +1510,8 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
-  function renderArtistCards(items, q) {
-    return items.filter((a) => {
-      if (!q) return true;
-      const hay = [a.name, (a.sources || []).map((s) => s.service).join(" ")]
-        .join(" ").toLowerCase();
-      return hay.indexOf(q) !== -1;
-    }).map((a) => {
+  function renderArtistCards(items) {
+    return items.map((a) => {
       const multi = (a.sources || []).length > 1;
       return '<article class="card">' +
         libraryCardHeader(a.name,
@@ -1506,13 +1521,67 @@ const adminHTML = `<!DOCTYPE html>
     }).join("");
   }
 
+  function filterLibraryItems(items, q) {
+    if (!q) return items;
+    if (libraryKind === "tracks") {
+      return items.filter((t) => {
+        const hay = [t.name, artistNames(t.artists), t.album && t.album.name, t.duration,
+          (t.sources || []).map((s) => s.service).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
+    if (libraryKind === "albums") {
+      return items.filter((a) => {
+        const hay = [a.name, artistNames(a.artists),
+          (a.sources || []).map((s) => s.service).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
+    if (libraryKind === "artists") {
+      return items.filter((a) => {
+        const hay = [a.name, (a.sources || []).map((s) => s.service).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
+    if (libraryKind === "contacts") {
+      return items.filter((c) => {
+        const hay = [c.name, c.organization,
+          (c.emails || []).join(" "), (c.phones || []).join(" "), (c.handles || []).join(" "),
+          (c.sources || []).map((s) => s.service).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
+    if (libraryKind === "photos") {
+      return items.filter((p) => {
+        const hay = [p.filename, p.caption, p.mime_type, p.taken_at,
+          (p.sources || []).map((s) => s.service + " " + (s.id || "")).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
+    return items.filter((p) => {
+      const hay = [p.name, p.description, p.owner, (p.sources || []).map((s) => s.service).join(" ")]
+        .join(" ").toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+
   function renderLibrary(data) {
     const kind = currentLibraryKind();
     const meta = $("library-meta");
     const list = $("library-list");
+    const pager = $("library-pager");
     if (!data) {
       list.innerHTML = '<div class="empty">Loading library…</div>';
       meta.textContent = "";
+      if (pager) {
+        pager.hidden = true;
+        pager.innerHTML = "";
+      }
       return;
     }
     const items = data[kind.key] || [];
@@ -1525,33 +1594,55 @@ const adminHTML = `<!DOCTYPE html>
       (statusBits ? '<div class="scopes" style="margin-top:0.4rem">' + statusBits + "</div>" : "");
 
     const q = ($("library-filter").value || "").trim().toLowerCase();
+    const filtered = filterLibraryItems(items, q);
+    const info = paginate(filtered, libraryPage);
+    libraryPage = info.page;
+
     let html = "";
-    if (libraryKind === "tracks") html = renderTrackCards(items, q);
-    else if (libraryKind === "albums") html = renderAlbumCards(items, q);
-    else if (libraryKind === "artists") html = renderArtistCards(items, q);
-    else if (libraryKind === "contacts") html = renderContactCards(items, q);
-    else if (libraryKind === "photos") html = renderPhotoCards(items, q);
-    else html = renderPlaylistCards(items, q);
+    if (libraryKind === "tracks") html = renderTrackCards(info.items);
+    else if (libraryKind === "albums") html = renderAlbumCards(info.items);
+    else if (libraryKind === "artists") html = renderArtistCards(info.items);
+    else if (libraryKind === "contacts") html = renderContactCards(info.items);
+    else if (libraryKind === "photos") html = renderPhotoCards(info.items);
+    else html = renderPlaylistCards(info.items);
 
     if (!html) {
       list.innerHTML = '<div class="empty">' +
         (q ? escapeHtml(kind.emptyFilter) : escapeHtml(kind.emptyAll)) +
         "</div>";
+      renderPager(pager, info, (page) => {
+        libraryPage = page;
+        renderLibrary(libraryDataByKind[libraryKind]);
+      });
       return;
     }
     list.innerHTML = html;
+    renderPager(pager, info, (page) => {
+      libraryPage = page;
+      renderLibrary(libraryDataByKind[libraryKind]);
+    });
   }
 
   async function loadLibrary(kindName) {
     const kind = LIBRARY_KINDS[kindName || libraryKind] || currentLibraryKind();
     const key = kindName || libraryKind;
+    const clearLibraryPager = () => {
+      const pager = $("library-pager");
+      if (!pager) return;
+      pager.hidden = true;
+      pager.innerHTML = "";
+    };
     if (key === libraryKind) {
       $("library-list").innerHTML = '<div class="empty">Loading ' + escapeHtml(kind.label) + "…</div>";
+      clearLibraryPager();
     }
     try {
       const data = await api(kind.path);
       libraryDataByKind[key] = data;
-      if (key === libraryKind) renderLibrary(data);
+      if (key === libraryKind) {
+        libraryPage = 1;
+        renderLibrary(data);
+      }
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -1561,6 +1652,7 @@ const adminHTML = `<!DOCTYPE html>
         libraryDataByKind[key] = { [kind.key]: [], total: 0, by_service: {} };
         if (key === libraryKind) {
           $("library-meta").textContent = "";
+          clearLibraryPager();
           $("library-list").innerHTML = '<div class="empty">' +
             escapeHtml(err.message || ("No " + kind.label + " available.")) +
             "</div>";
@@ -1571,11 +1663,13 @@ const adminHTML = `<!DOCTYPE html>
         libraryDataByKind[key] = { [kind.key]: [], total: 0, by_service: {} };
         if (key === libraryKind) {
           $("library-meta").textContent = "";
+          clearLibraryPager();
           $("library-list").innerHTML = '<div class="error-box">' + escapeHtml(err.message) + "</div>";
         }
         return;
       }
       if (key === libraryKind) {
+        clearLibraryPager();
         $("library-list").innerHTML = '<div class="error-box">' + escapeHtml(err.message) + "</div>";
       }
     }
@@ -1586,36 +1680,63 @@ const adminHTML = `<!DOCTYPE html>
   }
 
   async function loadCache() {
+    const pager = $("cache-pager");
     try {
       const data = await api("/v1/admin/cache");
       $("cache-summary").textContent =
         data.live + " live · " + data.total + " total · " + formatBytes(data.bytes);
-      const entries = data.entries || [];
-      if (!entries.length) {
+      cacheEntries = data.entries || [];
+      if (!cacheEntries.length) {
+        cachePage = 1;
         $("cache-body").innerHTML = '<tr><td colspan="4" class="muted-num">Cache is empty.</td></tr>';
+        renderPager(pager, paginate(cacheEntries, cachePage), setCachePage);
         return;
       }
-      $("cache-body").innerHTML = entries.map((e) => {
-        const status = e.expired
-          ? '<span class="badge badge-gray">Expired</span>'
-          : '<span class="badge badge-green">Live</span>';
-        const exp = e.expires_at ? new Date(e.expires_at).toLocaleString() : "—";
-        return "<tr>" +
-          '<td class="key">' + escapeHtml(e.key) +
-            (e.preview ? '<div class="meta" style="margin-top:0.25rem">' + escapeHtml(e.preview) + "</div>" : "") +
-          "</td>" +
-          '<td class="num">' + formatBytes(e.size) + "</td>" +
-          '<td class="num">' + escapeHtml(exp) + "</td>" +
-          "<td>" + status + "</td>" +
-          "</tr>";
-      }).join("");
+      renderCachePage();
     } catch (err) {
+      cacheEntries = [];
+      cachePage = 1;
       if (err.status === 401) {
         showAuthGate(true);
         return;
       }
+      if (pager) {
+        pager.hidden = true;
+        pager.innerHTML = "";
+      }
       $("cache-body").innerHTML = '<tr><td colspan="4"><div class="error-box">' + escapeHtml(err.message) + "</div></td></tr>";
     }
+  }
+
+  function renderCachePage() {
+    const pager = $("cache-pager");
+    const info = paginate(cacheEntries, cachePage);
+    cachePage = info.page;
+    if (!info.items.length) {
+      $("cache-body").innerHTML = '<tr><td colspan="4" class="muted-num">Cache is empty.</td></tr>';
+      renderPager(pager, info, setCachePage);
+      return;
+    }
+    $("cache-body").innerHTML = info.items.map((e) => {
+      const status = e.expired
+        ? '<span class="badge badge-gray">Expired</span>'
+        : '<span class="badge badge-green">Live</span>';
+      const exp = e.expires_at ? new Date(e.expires_at).toLocaleString() : "—";
+      return "<tr>" +
+        '<td class="key">' + escapeHtml(e.key) +
+          (e.preview ? '<div class="meta" style="margin-top:0.25rem">' + escapeHtml(e.preview) + "</div>" : "") +
+        "</td>" +
+        '<td class="num">' + formatBytes(e.size) + "</td>" +
+        '<td class="num">' + escapeHtml(exp) + "</td>" +
+        "<td>" + status + "</td>" +
+        "</tr>";
+    }).join("");
+    renderPager(pager, info, setCachePage);
+  }
+
+  function setCachePage(page) {
+    cachePage = page;
+    renderCachePage();
   }
 
   function renderRuntime(data) {
@@ -1686,6 +1807,7 @@ const adminHTML = `<!DOCTYPE html>
 
   $("service-filter").addEventListener("input", (e) => renderServices(e.target.value));
   $("library-filter").addEventListener("input", () => {
+    libraryPage = 1;
     if (libraryDataByKind[libraryKind]) renderLibrary(libraryDataByKind[libraryKind]);
   });
   document.querySelectorAll("[data-library-kind]").forEach((btn) => {
