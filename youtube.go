@@ -931,7 +931,9 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(path string, query map[string][
 
 	apiPath, extraParams, _ := c.mapPath(path, query)
 
-	maxPages := 10
+	// Follow up to libraryPageCap additional pages so large libraries are
+	// not silently cut off. Hit the cap → mark truncated for the caller.
+	maxPages := libraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		q := map[string][]string{}
 		for k, v := range query {
@@ -959,6 +961,9 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(path string, query map[string][
 	}
 
 	firstPage["items"] = allItems
+	if nextToken != "" {
+		firstPage["truncated"] = true
+	}
 	delete(firstPage, "nextPageToken")
 	firstPage["total_fetched"] = len(allItems)
 
@@ -985,8 +990,9 @@ func (c *YouTubeMusicConnector) fetchAllPages(path string, query map[string][]st
 
 	allItems, _ := page[itemsKey].([]any)
 
-	// Fetch up to 10 additional pages.
-	maxPages := 10
+	// Follow up to libraryPageCap additional pages so large libraries are
+	// not silently cut off. Hit the cap → mark truncated for the caller.
+	maxPages := libraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		// Build the next page URL.
 		svc := c.server.config.GetService("youtube-music")
@@ -1022,6 +1028,9 @@ func (c *YouTubeMusicConnector) fetchAllPages(path string, query map[string][]st
 	}
 
 	page[itemsKey] = allItems
+	if nextToken != "" {
+		page["truncated"] = true
+	}
 	delete(page, "nextPageToken")
 	page["total_fetched"] = len(allItems)
 

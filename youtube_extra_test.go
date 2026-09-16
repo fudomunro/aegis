@@ -206,6 +206,9 @@ func TestYouTubeFetchAllPages_WithPagination(t *testing.T) {
 	if _, ok := got["nextPageToken"]; ok {
 		t.Fatal("nextPageToken should be removed")
 	}
+	if got["truncated"] == true {
+		t.Fatal("complete two-page fetch should not set truncated")
+	}
 }
 
 func TestYouTubeMapPath(t *testing.T) {
