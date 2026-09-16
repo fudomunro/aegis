@@ -266,6 +266,7 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 
 	nextURL := upstreamBase + "/me/playlists"
 	var all []Playlist
+	truncated := false
 	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
@@ -299,12 +300,18 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 		nextURL, _ = raw["next"].(string)
 		if nextURL == "" {
 			if tokenVal, ok := raw["nextToken"].(string); ok && tokenVal != "" {
-				// Relative continuation is not reliable without a documented API shape.
+				// Continuation token exists but the documented API shape for
+				// following it is unknown — report incomplete rather than
+				// silently claiming this is the full library.
+				truncated = true
 				break
 			}
 		}
 	}
-	return all, nextURL != "", nil
+	if nextURL != "" {
+		truncated = true
+	}
+	return all, truncated, nil
 }
 
 // neutralPlaylist maps a raw Amazon Music playlist object into the neutral type.

@@ -355,7 +355,7 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 		sortKey:   primaryContactKey,
 		merge:     MergeContacts,
 		encode: func(merged []Contact, bySvc map[string]LibraryServiceStatus) any {
-			return ContactList{Contacts: merged, Total: len(merged), Synced: true, ByService: bySvc}
+			return ContactList{Contacts: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }

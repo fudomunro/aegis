@@ -203,9 +203,22 @@ func (k LibraryKind) Instructions(baseURL string) string {
 		"Unified %s library (use when the user asks about %s):\n"+
 			"GET %s%s — %s.\n"+
 			"%s Prefer this endpoint for questions like %q so the answer includes "+
-			"every connected service.",
+			"every connected service.\n"+
+			"Check response.truncated (and by_service[].truncated) before claiming the list is complete; "+
+			"when true, say so and note that some items may still be missing upstream.",
 		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, k.ExampleQuestion,
 	)
+}
+
+// anyServiceTruncated reports whether any per-service status hit a page cap
+// or left an unfollowed continuation. Used for the top-level truncated flag.
+func anyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
+	for _, st := range bySvc {
+		if st.Truncated {
+			return true
+		}
+	}
+	return false
 }
 
 // CacheKey is the in-memory cache key for the aggregate response.

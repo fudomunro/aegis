@@ -78,7 +78,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		sortKey:   func(p Playlist) string { return p.Name },
 		merge:     MergePlaylistsSync,
 		encode: func(merged []Playlist, bySvc map[string]LibraryServiceStatus) any {
-			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, ByService: bySvc}
+			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }
@@ -98,7 +98,7 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 		sortKey:   trackIdentityKey,
 		merge:     MergeTracksSync,
 		encode: func(merged []Track, bySvc map[string]LibraryServiceStatus) any {
-			return TrackList{Tracks: merged, Total: len(merged), Synced: true, ByService: bySvc}
+			return TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }
@@ -118,7 +118,7 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 		sortKey:   albumIdentityKey,
 		merge:     MergeAlbumsSync,
 		encode: func(merged []Album, bySvc map[string]LibraryServiceStatus) any {
-			return AlbumList{Albums: merged, Total: len(merged), Synced: true, ByService: bySvc}
+			return AlbumList{Albums: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }
@@ -138,7 +138,7 @@ func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 		sortKey:   func(a Artist) string { return NormalizeIdentityKey(a.Name) },
 		merge:     mergeArtistLibrary,
 		encode: func(merged []Artist, bySvc map[string]LibraryServiceStatus) any {
-			return ArtistList{Artists: merged, Total: len(merged), Synced: true, ByService: bySvc}
+			return ArtistList{Artists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }
