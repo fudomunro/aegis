@@ -175,8 +175,51 @@ pre-request injection adds a short write-policy block:
 Library instructions always include the multi-source mutation rule: write to
 `sources[].canonical` first, then ask the user before updating other copies.
 Guardian still does **not** route or mirror writes automatically — agents call
-the service proxy for whichever service they choose. Mirror/backup sync and
-foreign-DB connectors remain follow-up work on
+the service proxy for whichever service they choose. Use
+[POST /v1/library/mirror](#mirror--backup-sync-issue-16-phase-3) for a
+deliberate copy to a secondary service.
+
+#### Mirror / backup sync (issue #16, phase 3)
+
+To keep a **backup** of a playlist or liked-tracks list on another service:
+
+```
+POST /v1/library/mirror
+Authorization: Bearer <api-key>   # or tailnet identity
+Content-Type: application/json
+
+{
+  "kind": "playlists",
+  "source_service": "spotify",
+  "source_id": "37i9dQZF1DXcBWIGoYBM5M",
+  "target_service": "youtube-music",
+  "name": "Today's Top Hits (backup)",
+  "dry_run": false
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `kind` | `playlists` or `tracks` (liked/saved tracks) |
+| `source_service` | Service to read from; empty uses the configured `canonical_for` home |
+| `source_id` | Service-local playlist ID (required for `playlists`) |
+| `target_service` | Service to write to (required; must differ from source) |
+| `name` | Optional playlist title on the target |
+| `dry_run` | Plan only — no writes to the target |
+
+Response reports `planned`, `copied`, `skipped`, and per-track `skips`. Set
+`dry_run` first when the match quality matters.
+
+**Supported services:** `spotify` and `youtube-music` as either side.
+Cross-service track matching is **name-based** (issue #4) — expect skips and
+review them before treating a mirror as a complete backup. A single call
+copies at most 200 tracks (`truncated: true` when more remain).
+
+Requires **write** permission on the target for that kind and **read** on the
+source. Guardian stores no media; it reads source metadata and writes through
+the target's API using the stored OAuth token.
+
+Foreign-DB / professional-data connectors remain follow-up work on
 [issue #16](https://github.com/fudomunro/aperture-guardian/issues/16).
 
 ### Environment variables
