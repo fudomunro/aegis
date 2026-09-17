@@ -13,6 +13,9 @@ type Playlist struct {
 	// TrackCount is the number of items. For multi-source (synced) playlists
 	// this is the max count across services.
 	TrackCount int `json:"track_count"`
+	// Match records cross-service identity: "link" (explicit user link) or
+	// "name" (title equality). Empty on single-source playlists.
+	Match string `json:"match,omitempty"`
 	// Sources lists every service-local copy of this playlist. A single-service
 	// list has one entry; a synced library entry may have several.
 	Sources []PlaylistSource `json:"sources,omitempty"`

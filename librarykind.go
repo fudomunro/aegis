@@ -292,6 +292,9 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/artists":   s.HandleLibraryArtists,
 		"/v1/library/contacts":  s.HandleLibraryContacts,
 		"/v1/library/photos":    s.HandleLibraryPhotos,
+		"/v1/library/review":    s.HandleMergeReview,
+		"/v1/library/links":     s.HandleEntityLinks,
+		"/v1/library/links/":    s.HandleEntityLinks,
 	}
 }
 
