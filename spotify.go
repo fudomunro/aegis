@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -200,118 +201,25 @@ Always include the full proxy base URL in your requests.`, base, root, root, roo
 }
 
 // HandleProxy processes a Spotify API request through the connector.
-// It forwards to the Spotify API, transforms the response, and handles pagination.
 func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", "spotify", "method", r.Method, "path", remainingPath)
-
-	token := c.server.getValidToken("spotify", logger)
-	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized, "no valid Spotify token — authorize at /v1/auth/spotify/login")
-		return
-	}
-
-	// Build the upstream Spotify API URL from the configured endpoint.
-	svc := c.server.config.GetService("spotify")
-	upstreamBase := "https://api.spotify.com/v1"
-	if svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
-	upstreamURL := upstreamBase + remainingPath
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
-	}
-
-	// For GET requests, check cache first.
-	cacheKey := "spotify:" + r.URL.RequestURI()
-	if r.Method == http.MethodGet {
-		if cached, ok := c.server.cache.Get(cacheKey); ok {
-			logger.Debug("cache hit")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Guardian-Cache", "hit")
-			io.WriteString(w, cached)
-			return
-		}
-	}
-
-	// Execute the request against Spotify.
-	data, status, err := c.doSpotifyRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
-	if err != nil {
-		logger.Error("spotify request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Spotify API request failed")
-		return
-	}
-
-	logger.Debug("spotify response", "status", status, "bytes", len(data))
-
-	// Handle 401 — token may have been revoked.
-	if status == http.StatusUnauthorized {
-		logger.Warn("spotify returned 401, token may be revoked")
-		writeJSONError(w, http.StatusUnauthorized, "Spotify token is invalid or expired — re-authorize at /v1/auth/spotify/login")
-		return
-	}
-
-	// Handle 429 — rate limited.
-	if status == http.StatusTooManyRequests {
-		logger.Warn("spotify rate limited")
-		w.Header().Set("Retry-After", "30")
-		writeJSONError(w, http.StatusTooManyRequests, "Spotify rate limit exceeded — retry later")
-		return
-	}
-
-	// Auto-fetch remaining pages from raw data (before transform changes the shape).
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err == nil {
-		if r.Method == http.MethodGet && c.isPaginated(remainingPath) {
-			raw = c.fetchAllPagesRaw(r.Context(), raw, token, logger)
-		}
-		data, _ = json.Marshal(raw)
-	}
-
-	// Transform the (possibly paginated) response for LLM consumption.
-	transformed := c.transformResponse(remainingPath, data, logger)
-
-	result, err := json.Marshal(transformed)
-	if err != nil {
-		logger.Error("failed to marshal transformed response", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "response transformation failed")
-		return
-	}
-
-	// Cache successful GET responses only.
-	if r.Method == http.MethodGet && status == http.StatusOK {
-		ttl := c.server.config.GetService("spotify").CacheTTL.Duration
-		if ttl == 0 {
-			ttl = 60 * time.Second
-		}
-		c.server.cache.Set(cacheKey, string(result), ttl)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
-	w.WriteHeader(status)
-	w.Write(result)
+	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
+		serviceID:   "spotify",
+		displayName: "Spotify",
+		defaultBase: "https://api.spotify.com/v1",
+		defaultTTL:  60 * time.Second,
+		expandPages: func(ctx context.Context, path string, _ url.Values, raw map[string]any, token string, logger *slog.Logger) map[string]any {
+			if c.isPaginated(path) {
+				return c.fetchAllPagesRaw(ctx, raw, token, logger)
+			}
+			return raw
+		},
+		transform: c.transformResponse,
+	})
 }
 
 // doSpotifyRequest executes an HTTP request to the Spotify API.
 func (c *SpotifyConnector) doSpotifyRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := guardianHTTPClient.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return data, resp.StatusCode, nil
+	return doUpstreamRequest(ctx, method, url, body, token)
 }
 
 // transformResponse converts Spotify's verbose JSON into a compact format

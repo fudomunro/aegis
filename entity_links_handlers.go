@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // HandleEntityLinks manages explicit cross-service identity links:
@@ -91,123 +92,158 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Reuse live library fetch via in-process listers so review matches
-	// what /v1/library/* returns (including MusicBrainz enrichment).
 	ctx := r.Context()
-	var items []MergeReviewItem
+	var (
+		itemsMu sync.Mutex
+		items   []MergeReviewItem
+		wg      sync.WaitGroup
+	)
+	appendItems := func(batch []MergeReviewItem) {
+		if len(batch) == 0 {
+			return
+		}
+		itemsMu.Lock()
+		items = append(items, batch...)
+		itemsMu.Unlock()
+	}
 
 	if s.tracksLibraryReadable() {
-		trackProviders, _ := collectProviders[Track, LikedTrackProvider](s, "tracks",
-			func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
-				return p.ListUserLikedTracks
-			})
-		var all []Track
-		for _, t := range trackProviders {
-			list, _, err := t.list(ctx)
-			if err != nil {
-				continue
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			trackProviders, _ := collectProviders[Track, LikedTrackProvider](s, "tracks",
+				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
+					return p.ListUserLikedTracks
+				})
+			all := listProvidersParallel[Track](ctx, trackProviders)
+			s.resolveTrackEntities(ctx, all)
+			var batch []MergeReviewItem
+			for _, tr := range MergeTracksSync(all) {
+				if tr.Match != TrackMatchName || len(tr.Sources) < 2 {
+					continue
+				}
+				batch = append(batch, MergeReviewItem{
+					Kind:    "track",
+					Match:   tr.Match,
+					Name:    tr.Name,
+					Sources: trackSourceRefs(tr),
+					Note:    "joined by title+artist (no shared ISRC/MBID)",
+				})
 			}
-			all = append(all, list...)
-		}
-		s.resolveTrackEntities(ctx, all)
-		for _, tr := range MergeTracksSync(all) {
-			if tr.Match != TrackMatchName || len(tr.Sources) < 2 {
-				continue
-			}
-			items = append(items, MergeReviewItem{
-				Kind:    "track",
-				Match:   tr.Match,
-				Name:    tr.Name,
-				Sources: trackSourceRefs(tr),
-				Note:    "joined by title+artist (no shared ISRC/MBID)",
-			})
-		}
+			appendItems(batch)
+		}()
 	}
 
 	if LibraryKindByID("albums").Readable(s) {
-		albumProviders, _ := collectProviders[Album, AlbumProvider](s, "albums",
-			func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
-				return p.ListUserSavedAlbums
-			})
-		var all []Album
-		for _, t := range albumProviders {
-			list, _, err := t.list(ctx)
-			if err != nil {
-				continue
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			albumProviders, _ := collectProviders[Album, AlbumProvider](s, "albums",
+				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
+					return p.ListUserSavedAlbums
+				})
+			all := listProvidersParallel[Album](ctx, albumProviders)
+			s.resolveAlbumEntities(ctx, all)
+			var batch []MergeReviewItem
+			for _, al := range MergeAlbumsSync(all) {
+				if al.Match != TrackMatchName || len(al.Sources) < 2 {
+					continue
+				}
+				batch = append(batch, MergeReviewItem{
+					Kind:    "album",
+					Match:   al.Match,
+					Name:    al.Name,
+					Sources: albumSourceRefs(al),
+					Note:    "joined by title+artist (no shared UPC/MBID)",
+				})
 			}
-			all = append(all, list...)
-		}
-		s.resolveAlbumEntities(ctx, all)
-		for _, al := range MergeAlbumsSync(all) {
-			if al.Match != TrackMatchName || len(al.Sources) < 2 {
-				continue
-			}
-			items = append(items, MergeReviewItem{
-				Kind:    "album",
-				Match:   al.Match,
-				Name:    al.Name,
-				Sources: albumSourceRefs(al),
-				Note:    "joined by title+artist (no shared UPC/MBID)",
-			})
-		}
+			appendItems(batch)
+		}()
 	}
 
 	if LibraryKindByID("artists").Readable(s) {
-		artistProviders, _ := collectProviders[Artist, ArtistProvider](s, "artists",
-			func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
-				return p.ListUserFollowedArtists
-			})
-		var all []Artist
-		for _, t := range artistProviders {
-			list, _, err := t.list(ctx)
-			if err != nil {
-				continue
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			artistProviders, _ := collectProviders[Artist, ArtistProvider](s, "artists",
+				func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
+					return p.ListUserFollowedArtists
+				})
+			all := listProvidersParallel[Artist](ctx, artistProviders)
+			s.resolveArtistEntities(ctx, all)
+			var batch []MergeReviewItem
+			for _, ar := range mergeArtistLibrary(all) {
+				if ar.Match != TrackMatchName || len(ar.Sources) < 2 {
+					continue
+				}
+				batch = append(batch, MergeReviewItem{
+					Kind:    "artist",
+					Match:   ar.Match,
+					Name:    ar.Name,
+					Sources: artistSourceRefs(ar),
+					Note:    "joined by name (no shared MBID)",
+				})
 			}
-			all = append(all, list...)
-		}
-		s.resolveArtistEntities(ctx, all)
-		for _, ar := range mergeArtistLibrary(all) {
-			if ar.Match != TrackMatchName || len(ar.Sources) < 2 {
-				continue
-			}
-			items = append(items, MergeReviewItem{
-				Kind:    "artist",
-				Match:   ar.Match,
-				Name:    ar.Name,
-				Sources: artistSourceRefs(ar),
-				Note:    "joined by name (no shared MBID)",
-			})
-		}
+			appendItems(batch)
+		}()
 	}
 
 	if s.libraryReadable() {
-		plProviders, _ := collectProviders[Playlist, PlaylistProvider](s, "playlists",
-			func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
-				return p.ListUserPlaylists
-			})
-		var all []Playlist
-		for _, t := range plProviders {
-			list, _, err := t.list(ctx)
-			if err != nil {
-				continue
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			plProviders, _ := collectProviders[Playlist, PlaylistProvider](s, "playlists",
+				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
+					return p.ListUserPlaylists
+				})
+			all := listProvidersParallel[Playlist](ctx, plProviders)
+			var batch []MergeReviewItem
+			for _, pl := range MergePlaylistsSyncLinked(all, s.links.PlaylistLinkKey) {
+				if pl.Match != PlaylistMatchName || len(pl.Sources) < 2 {
+					continue
+				}
+				batch = append(batch, MergeReviewItem{
+					Kind:    "playlist",
+					Match:   pl.Match,
+					Name:    pl.Name,
+					Sources: playlistSourceRefs(pl),
+					Note:    "joined by name — POST /v1/library/links to confirm or split by renaming",
+				})
 			}
-			all = append(all, list...)
-		}
-		for _, pl := range MergePlaylistsSyncLinked(all, s.links.PlaylistLinkKey) {
-			if pl.Match != PlaylistMatchName || len(pl.Sources) < 2 {
-				continue
-			}
-			items = append(items, MergeReviewItem{
-				Kind:    "playlist",
-				Match:   pl.Match,
-				Name:    pl.Name,
-				Sources: playlistSourceRefs(pl),
-				Note:    "joined by name — POST /v1/library/links to confirm or split by renaming",
-			})
-		}
+			appendItems(batch)
+		}()
 	}
 
+	wg.Wait()
 	writeJSON(w, MergeReviewResponse{Items: items, Total: len(items)})
+}
+
+// listProvidersParallel fans out named listers like handleLibraryAggregate.
+// Provider errors are skipped (same as the previous sequential review path).
+func listProvidersParallel[T any](ctx context.Context, providers []namedLister[T]) []T {
+	if len(providers) == 0 {
+		return nil
+	}
+	var (
+		mu  sync.Mutex
+		wg  sync.WaitGroup
+		all []T
+	)
+	for _, t := range providers {
+		wg.Add(1)
+		go func(t namedLister[T]) {
+			defer wg.Done()
+			list, _, err := t.list(ctx)
+			if err != nil || len(list) == 0 {
+				return
+			}
+			mu.Lock()
+			all = append(all, list...)
+			mu.Unlock()
+		}(t)
+	}
+	wg.Wait()
+	return all
 }
 
 func trackSourceRefs(t Track) []string {
