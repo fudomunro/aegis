@@ -76,7 +76,9 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		},
 		serviceOf: playlistServiceName,
 		sortKey:   func(p Playlist) string { return p.Name },
-		merge:     MergePlaylistsSync,
+		merge: func(in []Playlist) []Playlist {
+			return MergePlaylistsSyncLinked(in, s.links.PlaylistLinkKey)
+		},
 		encode: func(merged []Playlist, bySvc map[string]LibraryServiceStatus) any {
 			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
