@@ -501,7 +501,7 @@ Neutral playlist fields (user-facing):
 
 The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Guardian merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
 
-Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id`** when a service provides one or Guardian resolves one (track **ISRC** `match: "isrc"`, album **UPC** `match: "upc"`, artist **MusicBrainz MBID** `match: "mbid"`); otherwise it falls back to **text** (`NormalizeIdentityKey`) (`match: "name"`). Artist MBIDs are resolved optionally via MusicBrainz (budgeted, cached; failures keep name matching). Playlist explicit links remain open work — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
+Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id`** when a service provides one or Guardian resolves one (track **ISRC** or MusicBrainz **recording** MBID, album **UPC** or **release-group** MBID, artist **MBID**); otherwise it falls back to **text** (`NormalizeIdentityKey`) (`match: "name"`). MusicBrainz lookups are budgeted and cached; failures keep name matching. Playlist explicit links remain open work — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
