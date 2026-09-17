@@ -10,8 +10,10 @@ import (
 // Match methods for Track.Match / Album.Match / Artist.Match.
 const (
 	TrackMatchISRC  = "isrc"
+	TrackMatchMBID  = "mbid"
 	TrackMatchName  = "name"
 	AlbumMatchUPC   = "upc"
+	AlbumMatchMBID  = "mbid"
 	ArtistMatchMBID = "mbid"
 )
 

@@ -98,6 +98,9 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 		serviceOf: trackServiceName,
 		sortKey:   trackIdentityKey,
 		merge:     MergeTracksSync,
+		enrich: func(ctx context.Context, s *Server, tracks []Track) {
+			s.resolveTrackEntities(ctx, tracks)
+		},
 		encode: func(merged []Track, bySvc map[string]LibraryServiceStatus) any {
 			return TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
@@ -119,6 +122,9 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 		serviceOf: albumServiceName,
 		sortKey:   albumIdentityKey,
 		merge:     MergeAlbumsSync,
+		enrich: func(ctx context.Context, s *Server, albums []Album) {
+			s.resolveAlbumEntities(ctx, albums)
+		},
 		encode: func(merged []Album, bySvc map[string]LibraryServiceStatus) any {
 			return AlbumList{Albums: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
