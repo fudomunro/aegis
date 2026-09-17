@@ -922,10 +922,15 @@ func spotifyNeutralTrack(track map[string]any) Track {
 	uri, _ := track["uri"].(string)
 	albumName, _ := extractNested(track, "album", "name").(string)
 	albumID, _ := extractNested(track, "album", "id").(string)
+	isrc, _ := extractNested(track, "external_ids", "isrc").(string)
+	durationMs, _ := asInt(track["duration_ms"])
 
 	extra := map[string]any{}
 	if uri != "" {
 		extra["uri"] = uri
+	}
+	if isrc != "" {
+		extra["isrc"] = isrc
 	}
 
 	var artists []Artist
@@ -940,9 +945,11 @@ func spotifyNeutralTrack(track map[string]any) Track {
 	}
 
 	return Track{
-		Name:    name,
-		Artists: artists,
-		Album:   newAlbum("spotify", "Spotify", albumID, albumName),
+		Name:       name,
+		Artists:    artists,
+		Album:      newAlbum("spotify", "Spotify", albumID, albumName),
+		DurationMs: durationMs,
+		EntityID:   strings.ToUpper(strings.TrimSpace(isrc)),
 		Sources: []TrackSource{{
 			Service:     "spotify",
 			ServiceName: "Spotify",

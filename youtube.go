@@ -537,6 +537,9 @@ func isMusicShapedYouTubeVideo(categoryID, channelTitle string) bool {
 // fetchVideoSnippets batch-fetches videos.list snippet metadata (categoryId,
 // channelTitle, …) for the given video IDs. IDs not returned upstream are absent
 // from the map (deleted/private).
+// fetchVideoSnippets batch-fetches videos.list resources (snippet + duration)
+// for the given video IDs. IDs not returned upstream are absent from the map
+// (deleted/private).
 func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, upstreamBase string, videoIDs []string) (map[string]map[string]any, error) {
 	out := make(map[string]map[string]any, len(videoIDs))
 	const batch = 50
@@ -671,6 +674,19 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 		if !isMusicShapedYouTubeVideo(categoryID, channelTitle) {
 			continue
 		}
+		// Prefer enriched videos.list contentDetails (duration) when present.
+		if cd, ok := video["contentDetails"].(map[string]any); ok {
+			if p["contentDetails"] == nil {
+				p["contentDetails"] = map[string]any{}
+			}
+			if pcd, ok := p["contentDetails"].(map[string]any); ok {
+				if _, has := pcd["duration"]; !has {
+					if d, ok := cd["duration"]; ok {
+						pcd["duration"] = d
+					}
+				}
+			}
+		}
 		if track, ok := c.neutralYouTubeTrack(p); ok {
 			all = append(all, track)
 		}
@@ -796,13 +812,19 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
 }
 
 // neutralYouTubeTrack maps a raw playlistItem / liked video into the neutral Track.
+// Titles are cleaned of YouTube decoration so name matching can join catalog
+// tracks (issue #4). Original title is preserved in source extra.
 func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track, bool) {
 	snippet, _ := item["snippet"].(map[string]any)
 	contentDetails, _ := item["contentDetails"].(map[string]any)
 	if snippet == nil {
 		return Track{}, false
 	}
-	name, _ := snippet["title"].(string)
+	rawName, _ := snippet["title"].(string)
+	name := cleanYouTubeTitle(rawName)
+	if name == "" {
+		name = rawName
+	}
 	channel, _ := snippet["channelTitle"].(string)
 	publishedAt, _ := snippet["publishedAt"].(string)
 	videoID, _ := contentDetails["videoId"].(string)
@@ -823,6 +845,12 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 	if videoID != "" {
 		extra["video_id"] = videoID
 	}
+	if rawName != "" && rawName != name {
+		extra["original_title"] = rawName
+	}
+	if iso, ok := contentDetails["duration"].(string); ok && iso != "" {
+		extra["duration"] = iso
+	}
 	if thumbnails, ok := snippet["thumbnails"].(map[string]any); ok {
 		if high, ok := thumbnails["high"].(map[string]any); ok {
 			if url, ok := high["url"].(string); ok {
@@ -841,9 +869,18 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 		url = "https://www.youtube.com/watch?v=" + videoID
 	}
 
+	durationMs := 0
+	duration := ""
+	if iso, ok := contentDetails["duration"].(string); ok {
+		duration = iso
+		durationMs = iso8601DurationMs(iso)
+	}
+
 	return Track{
-		Name:    name,
-		Artists: artists,
+		Name:       name,
+		Artists:    artists,
+		DurationMs: durationMs,
+		Duration:   duration,
 		Sources: []TrackSource{{
 			Service:     "youtube-music",
 			ServiceName: "YouTube Music",
@@ -852,6 +889,40 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 			Extra:       extraOrNil(extra),
 		}},
 	}, true
+}
+
+// iso8601DurationMs parses a YouTube ISO-8601 duration (e.g. PT3M42S) into ms.
+func iso8601DurationMs(s string) int {
+	s = strings.TrimSpace(s)
+	if !strings.HasPrefix(s, "PT") {
+		return 0
+	}
+	s = s[2:]
+	total := 0
+	num := 0
+	hasDigit := false
+	for i := 0; i < len(s); i++ {
+		ch := s[i]
+		if ch >= '0' && ch <= '9' {
+			num = num*10 + int(ch-'0')
+			hasDigit = true
+			continue
+		}
+		if !hasDigit {
+			continue
+		}
+		switch ch {
+		case 'H':
+			total += num * 3600 * 1000
+		case 'M':
+			total += num * 60 * 1000
+		case 'S':
+			total += num * 1000
+		}
+		num = 0
+		hasDigit = false
+	}
+	return total
 }
 
 func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) PlaylistList {
