@@ -117,8 +117,8 @@ var libraryKinds = []LibraryKind{
 		PermType:        "artists",
 		Label:           "followed artists",
 		Usage:           "artists they follow or favorite artists",
-		Summary:         "all followed/top artists from every connected music service in one neutral list (name, sources[])",
-		SyncRule:        "Same-named artists are synced into one entry with multiple sources[].",
+		Summary:         "all followed/top artists from every connected music service in one neutral list (name, entity_id, sources[])",
+		SyncRule:        "Artists merge on durable entity_id (MusicBrainz MBID) when resolved (match=mbid); otherwise same normalized name (match=name).",
 		ExampleQuestion: "what artists do I follow?",
 		Keywords: []string{
 			"followed artist", "artists i follow", "artists do i follow",
@@ -339,6 +339,8 @@ type libraryKindSpec[T any] struct {
 	// markCanonical stamps Source.Canonical on items from a config-declared
 	// canonical_for service (issue #16). Nil skips config stamping.
 	markCanonical func(items []T, serviceID string)
+	// enrich optionally resolves durable IDs before merge (issue #4).
+	enrich func(ctx context.Context, s *Server, items []T)
 }
 
 // handleLibraryAggregate is the shared GET /v1/library/{kind} pipeline:
@@ -465,6 +467,10 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		}
 		return spec.sortKey(all[i]) < spec.sortKey(all[j])
 	})
+
+	if spec.enrich != nil {
+		spec.enrich(ctx, s, all)
+	}
 
 	merged := spec.merge(all)
 	if merged == nil {
