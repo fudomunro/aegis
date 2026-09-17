@@ -33,3 +33,17 @@ func TestStateStore_Expired(t *testing.T) {
 		t.Fatal("expected expired state to be rejected")
 	}
 }
+
+func TestStateStore_PurgesExpiredOnSet(t *testing.T) {
+	s := NewStateStore()
+	s.Set("abandoned", true, 10*time.Millisecond)
+	time.Sleep(20 * time.Millisecond)
+	s.Set("fresh", true, time.Minute)
+
+	if s.Len() != 1 {
+		t.Fatalf("len = %d, want 1 (expired purged)", s.Len())
+	}
+	if !s.Delete("fresh") {
+		t.Fatal("expected fresh key to delete cleanly")
+	}
+}
