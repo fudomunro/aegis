@@ -883,6 +883,11 @@ go test ./...
 # Run with verbose output
 go test -v ./...
 
+# Race + coverage profile (matches CI)
+go test ./... -count=1 -race -covermode=atomic -coverprofile=coverage.out
+go tool cover -func=coverage.out | tail -n 1
+go tool cover -func=coverage.out | sort -t$'\t' -k3 -n | head -n 20
+
 # Build
 go build -o guardian .
 
@@ -895,6 +900,10 @@ go build -o guardian .
   -log-level debug \
   -log-format text
 ```
+
+CI fails if statement coverage drops below the floor in `.github/workflows/ci.yml`
+(currently 80%). Raise the floor when the suite grows; do not lower it to land a
+change that only adds untested write paths.
 
 ### Project structure
 
