@@ -74,6 +74,37 @@ type AdminSummary struct {
 	Cache    AdminCacheStats `json:"cache"`
 }
 
+// HandleAdminLibrary returns one unified library dataset for the admin UI.
+// GET /v1/admin/library/{kind}
+//
+// Same aggregate pipeline and JSON shape as the agent /v1/library/{kind}
+// endpoints, but access is not recorded on the Map access-count stats
+// (issue #62). Admin browsing must not look like agent traffic.
+func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	kindID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/library/"), "/")
+	if kindID == "" || strings.Contains(kindID, "/") {
+		writeJSONError(w, http.StatusNotFound, "unknown library kind")
+		return
+	}
+	var handler http.HandlerFunc
+	for _, kind := range libraryKinds {
+		if kind.ID != kindID {
+			continue
+		}
+		handler = s.libraryRouteHandlers()[kind.Path]
+		break
+	}
+	if handler == nil {
+		writeJSONError(w, http.StatusNotFound, "unknown library kind")
+		return
+	}
+	handler(w, withSkipAccessMetrics(r))
+}
+
 // HandleAdmin serves the HTML admin dashboard (shell only; data loads via API).
 // GET /v1/admin
 func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
