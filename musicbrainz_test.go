@@ -165,3 +165,88 @@ func TestMBIDCacheNegative(t *testing.T) {
 		t.Fatal("expected expiry")
 	}
 }
+
+func TestLookupRecordingMBID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/recording") {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		w.Write([]byte(`{"recordings":[
+			{"id":"rec-1","name":"So What","score":100},
+			{"id":"rec-2","name":"So What","score":40}
+		]}`))
+	}))
+	defer srv.Close()
+	old := mbLookupBase
+	mbLookupBase = srv.URL
+	defer func() { mbLookupBase = old }()
+
+	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	if mbid := g.lookupRecordingMBID(context.Background(), "So What", "Miles Davis - Topic"); mbid != "rec-1" {
+		t.Fatalf("mbid = %q", mbid)
+	}
+}
+
+func TestResolveTrackEntities_KeepsISRC(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"recordings":[{"id":"rec-1","name":"Blue","score":100}]}`))
+	}))
+	defer srv.Close()
+	old := mbLookupBase
+	mbLookupBase = srv.URL
+	defer func() { mbLookupBase = old }()
+
+	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	tracks := []Track{
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "USRC123"},
+	}
+	g.resolveTrackEntities(context.Background(), tracks)
+	if tracks[0].EntityID != "rec-1" {
+		t.Fatalf("resolved = %+v", tracks[0])
+	}
+	if tracks[1].EntityID != "USRC123" {
+		t.Fatalf("must keep ISRC: %+v", tracks[1])
+	}
+}
+
+func TestLookupReleaseGroupMBID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/release-group") {
+			t.Errorf("path = %s", r.URL.Path)
+		}
+		w.Write([]byte(`{"release-groups":[{"id":"rg-1","name":"Kind of Blue","score":100}]}`))
+	}))
+	defer srv.Close()
+	old := mbLookupBase
+	mbLookupBase = srv.URL
+	defer func() { mbLookupBase = old }()
+
+	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	if mbid := g.lookupReleaseGroupMBID(context.Background(), "Kind of Blue", "Miles Davis"); mbid != "rg-1" {
+		t.Fatalf("mbid = %q", mbid)
+	}
+}
+
+func TestResolveAlbumEntities_KeepsUPC(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"release-groups":[{"id":"rg-1","name":"Blue","score":100}]}`))
+	}))
+	defer srv.Close()
+	old := mbLookupBase
+	mbLookupBase = srv.URL
+	defer func() { mbLookupBase = old }()
+
+	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	albums := []Album{
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
+		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "00123456789012"},
+	}
+	g.resolveAlbumEntities(context.Background(), albums)
+	if albums[0].EntityID != "rg-1" {
+		t.Fatalf("resolved = %+v", albums[0])
+	}
+	if albums[1].EntityID != "00123456789012" {
+		t.Fatalf("must keep UPC: %+v", albums[1])
+	}
+}
