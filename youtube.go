@@ -39,11 +39,11 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 				Name:        "tracks",
 				Description: "Music videos and tracks — liked, search results",
 				Operations: []Operation{
-					{Name: "read_liked", Description: "List liked/favorite music videos (paginated)", Method: "GET", Path: "/me/liked",
+					{Name: "read_liked", Description: "List liked YouTube videos as neutral tracks (paginated; music-only filtering lives on /v1/library/tracks)", Method: "GET", Path: "/me/liked",
 						Parameters: []Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Neutral tracks from liked videos", Fields: []string{"tracks", "total"}}},
+						Response: ResponseSpec{Description: "Neutral tracks from liked videos (unfiltered playlist)", Fields: []string{"tracks", "total"}}},
 					{Name: "get_by_id", Description: "Get video details by ID", Method: "GET", Path: "/videos/{id}",
 						Parameters: []Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube video ID", Required: true},
@@ -132,14 +132,14 @@ func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
-For "liked songs" / liked videos across every connected music service:
-GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[])
+For "liked songs" / liked music across every connected music service:
+GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[]). YouTube likes are filtered to music-shaped videos (not every liked YouTube video).
 
 YouTube Music-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send YouTube tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user's YouTube channel info
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)
-GET /me/liked — List liked/favorite music videos as neutral tracks (paginated)
+GET /me/liked — List liked YouTube videos as neutral tracks (paginated; proxy shows the raw liked-videos playlist — use /v1/library/tracks for music-only liked songs)
 GET /me/subscriptions — List followed artists / subscribed music channels (paginated; permission key: artists)
 GET /playlists/{id} — Get a playlist by ID
 GET /playlists/{id}/items — List items in a playlist as neutral tracks (paginated)
@@ -520,8 +520,71 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 	return all, pageToken != "", nil
 }
 
-// ListUserLikedTracks implements LikedTrackProvider. Fetches the liked-videos
-// playlist and maps items into Guardian's neutral Track format.
+// youtubeMusicCategoryID is YouTube Data API v3 categoryId for Music.
+const youtubeMusicCategoryID = "10"
+
+// isMusicShapedYouTubeVideo reports whether a videos.list resource looks like
+// music (category Music, or an official catalog channel ending in " - Topic").
+// Used to keep non-music YouTube likes out of the neutral liked-tracks library.
+// See https://github.com/fudomunro/aperture-guardian/issues/43.
+func isMusicShapedYouTubeVideo(categoryID, channelTitle string) bool {
+	if categoryID == youtubeMusicCategoryID {
+		return true
+	}
+	return strings.HasSuffix(strings.TrimSpace(channelTitle), " - Topic")
+}
+
+// fetchVideoSnippets batch-fetches videos.list snippet metadata (categoryId,
+// channelTitle, …) for the given video IDs. IDs not returned upstream are absent
+// from the map (deleted/private).
+func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, upstreamBase string, videoIDs []string) (map[string]map[string]any, error) {
+	out := make(map[string]map[string]any, len(videoIDs))
+	const batch = 50
+	for start := 0; start < len(videoIDs); start += batch {
+		end := start + batch
+		if end > len(videoIDs) {
+			end = len(videoIDs)
+		}
+		u := upstreamBase + "/videos?part=snippet,contentDetails&id=" + strings.Join(videoIDs[start:end], ",")
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := guardianHTTPClient.Do(req)
+		if err != nil {
+			return nil, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("youtube videos lookup returned %d", resp.StatusCode)
+		}
+		var raw struct {
+			Items []map[string]any `json:"items"`
+		}
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return nil, err
+		}
+		for _, item := range raw.Items {
+			id, _ := item["id"].(string)
+			if id == "" {
+				continue
+			}
+			out[id] = item
+		}
+	}
+	return out, nil
+}
+
+// ListUserLikedTracks implements LikedTrackProvider. The YouTube liked-videos
+// playlist is all-time YouTube likes (not music-only). Items are filtered to
+// music-shaped videos via videos.list so the neutral library, agent answers,
+// and mirror do not treat tutorials/vlogs as liked songs.
+// https://github.com/fudomunro/aperture-guardian/issues/43
 func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
 	token := c.server.getValidToken("youtube-music", slog.Default())
 	if token == "" {
@@ -538,7 +601,9 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
 	}
 
-	var all []Track
+	var likedItems []map[string]any
+	var videoIDs []string
+	seenID := make(map[string]bool)
 	pageToken := ""
 	for page := 0; page < libraryPageCap; page++ {
 		u := upstreamBase + "/playlistItems?part=snippet,contentDetails&playlistId=" +
@@ -573,8 +638,10 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 			if !ok {
 				continue
 			}
-			if track, ok := c.neutralYouTubeTrack(p); ok {
-				all = append(all, track)
+			likedItems = append(likedItems, p)
+			if id := youtubePlaylistItemVideoID(p); id != "" && !seenID[id] {
+				seenID[id] = true
+				videoIDs = append(videoIDs, id)
 			}
 		}
 		pageToken, _ = raw["nextPageToken"].(string)
@@ -582,7 +649,49 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 			break
 		}
 	}
+
+	snippets, err := c.fetchVideoSnippets(ctx, token, upstreamBase, videoIDs)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var all []Track
+	for _, p := range likedItems {
+		id := youtubePlaylistItemVideoID(p)
+		video, ok := snippets[id]
+		if !ok {
+			continue
+		}
+		snippet, _ := video["snippet"].(map[string]any)
+		if snippet == nil {
+			continue
+		}
+		categoryID, _ := snippet["categoryId"].(string)
+		channelTitle, _ := snippet["channelTitle"].(string)
+		if !isMusicShapedYouTubeVideo(categoryID, channelTitle) {
+			continue
+		}
+		if track, ok := c.neutralYouTubeTrack(p); ok {
+			all = append(all, track)
+		}
+	}
 	return all, pageToken != "", nil
+}
+
+// youtubePlaylistItemVideoID extracts the video ID from a playlistItem resource.
+func youtubePlaylistItemVideoID(item map[string]any) string {
+	if contentDetails, ok := item["contentDetails"].(map[string]any); ok {
+		if id, _ := contentDetails["videoId"].(string); id != "" {
+			return id
+		}
+	}
+	if snippet, ok := item["snippet"].(map[string]any); ok {
+		if rid, ok := snippet["resourceId"].(map[string]any); ok {
+			id, _ := rid["videoId"].(string)
+			return id
+		}
+	}
+	return ""
 }
 
 // ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
