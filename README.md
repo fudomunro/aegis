@@ -81,13 +81,8 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
   "endpoint": "https://api.spotify.com/v1",
   "cache_ttl": "10m",
   "description": "Proxies Spotify API calls",
-  "oauth": {
-    "client_id": "...",
-    "client_secret": "...",
-    "auth_url": "https://accounts.spotify.com/authorize",
-    "token_url": "https://accounts.spotify.com/api/token",
-    "scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
-  }
+  "connection": "spotify",
+  "oauth_scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
 }
 ```
 
@@ -102,14 +97,13 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
 | `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Guardian home (see [Canonical sources](#canonical-sources-non-guardian-issue-16)) |
-| `connection` | Optional name of a shared OAuth provider connection (issue #26) |
+| `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
-| `oauth` | Legacy per-service OAuth2 configuration (optional; prefer `connections` + `connection`) |
 
-### Provider connections (issue #26)
+### Provider connections
 
-Multi-surface providers (especially Google) should use **one shared connection**
-instead of copying the same client credentials into every service block:
+Every OAuth-enabled service must reference a top-level **connection** so
+multiple surfaces can share one provider registration and one token:
 
 ```json
 {
@@ -143,26 +137,20 @@ instead of copying the same client credentials into every service block:
 ```
 
 - Guardian stores **one** encrypted token (access + refresh) per connection ID.
-- Login at `/v1/auth/{service_id}/login` still works per surface; it resolves to
-  the shared connection and requests the connection’s scope union.
+- Login at `/v1/auth/{service_id}/login` resolves to the surface’s connection
+  and requests the connection’s scope union.
 - Google logins send `access_type=offline` and `include_granted_scopes=true`,
   and only force `prompt=consent` when no refresh token exists yet — so adding
   Photos later does not drop YouTube access.
 - A connection token missing a surface’s `oauth_scopes` makes that surface
   report library status `unauthorized` (or proxy 401) without failing the
   whole connection.
-- On upgrade, legacy per-service tokens are folded into the shared connection
-  automatically (best-effort: prefer refresh token, then more scopes, then
-  later expiry). One reconnect may still be needed if scopes were incomplete.
 
 Register **all** surface callback URLs on the same OAuth client, e.g.:
 
 - `https://your-guardian/v1/auth/youtube-music/callback`
 - `https://your-guardian/v1/auth/google-photos/callback`
 - `https://your-guardian/v1/auth/google/callback`
-
-Inline per-service `oauth` blocks remain supported for 1:1 providers (Spotify,
-Amazon).
 
 ### Data permissions
 

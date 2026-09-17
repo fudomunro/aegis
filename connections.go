@@ -4,7 +4,7 @@ import "strings"
 
 // connectionIDForService returns the token-store / OAuth connection key for a
 // service surface (issue #26). Shared connections use the named connection ID;
-// legacy 1:1 services keep using the service ID.
+// surfaces without a connection keep using the service ID.
 func (c *Config) connectionIDForService(serviceID string) string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -33,24 +33,7 @@ func (conn *Connection) toOAuth() *OAuthConfig {
 	}
 }
 
-// connectionFromOAuth builds an in-memory Connection from a legacy inline
-// OAuth block so 1:1 services keep working without a top-level connections map.
-func connectionFromOAuth(oauth *OAuthConfig) *Connection {
-	if oauth == nil {
-		return nil
-	}
-	return &Connection{
-		ClientID:     oauth.ClientID,
-		ClientSecret: oauth.ClientSecret,
-		AuthURL:      oauth.AuthURL,
-		TokenURL:     oauth.TokenURL,
-		Scopes:       oauth.Scopes,
-	}
-}
-
 // OAuthForConnection returns OAuth credentials/endpoints for a connection ID.
-// Prefers a top-level connection; falls back to a legacy service whose ID
-// matches the connection and still carries inline oauth.
 func (c *Config) OAuthForConnection(connectionID string) *OAuthConfig {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -64,35 +47,22 @@ func (c *Config) OAuthForConnection(connectionID string) *OAuthConfig {
 			Scopes:       conn.Scopes,
 		}
 	}
-	if svc := c.serviceByID(connectionID); svc != nil && svc.OAuth != nil {
-		return svc.OAuth
-	}
 	return nil
 }
 
 // ConnectionForService resolves the provider connection used by a service
-// surface. Prefers an explicit top-level connection; falls back to the
-// service's own ID + inline oauth.
+// surface.
 func (c *Config) ConnectionForService(serviceID string) (connectionID string, conn *Connection) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	svc := c.serviceByID(serviceID)
-	if svc == nil {
+	if svc == nil || svc.Connection == "" {
 		return "", nil
 	}
-	if svc.Connection != "" {
-		if existing, ok := c.Connections[svc.Connection]; ok {
-			cp := existing
-			return svc.Connection, &cp
-		}
-		// Connection id may name a service that still carries inline oauth.
-		if other := c.serviceByID(svc.Connection); other != nil && other.OAuth != nil {
-			return svc.Connection, connectionFromOAuth(other.OAuth)
-		}
-	}
-	if svc.OAuth != nil {
-		return svc.ID, connectionFromOAuth(svc.OAuth)
+	if existing, ok := c.Connections[svc.Connection]; ok {
+		cp := existing
+		return svc.Connection, &cp
 	}
 	return "", nil
 }
@@ -106,19 +76,13 @@ func (c *Config) requiredScopes(serviceID string) []string {
 	if svc == nil {
 		return nil
 	}
-	if len(svc.OAuthScopes) > 0 {
-		return svc.OAuthScopes
-	}
-	if svc.OAuth != nil {
-		return svc.OAuth.Scopes
-	}
-	return nil
+	return svc.OAuthScopes
 }
 
 // loginScopes returns the scope set requested at OAuth login for a connection.
 // Prefers the connection's declared union; otherwise unions surface scopes
 // that share the connection.
-func (c *Config) loginScopes(connectionID, initiatingServiceID string) []string {
+func (c *Config) loginScopes(connectionID string) []string {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
@@ -136,25 +100,9 @@ func (c *Config) loginScopes(connectionID, initiatingServiceID string) []string 
 		if id != connectionID {
 			continue
 		}
-		switch {
-		case len(svc.OAuthScopes) > 0:
-			out = unionScopes(out, svc.OAuthScopes)
-		case svc.OAuth != nil:
-			out = unionScopes(out, svc.OAuth.Scopes)
-		}
+		out = unionScopes(out, svc.OAuthScopes)
 	}
-	if len(out) > 0 {
-		return out
-	}
-	if initiatingServiceID != "" {
-		if svc := c.serviceByID(initiatingServiceID); svc != nil && svc.OAuth != nil {
-			return svc.OAuth.Scopes
-		}
-	}
-	if svc := c.serviceByID(connectionID); svc != nil && svc.OAuth != nil {
-		return svc.OAuth.Scopes
-	}
-	return nil
+	return out
 }
 
 // scopesSatisfy reports whether every required scope appears in granted.

@@ -541,7 +541,7 @@ func (s *Server) tokenDisplayName(connID string) string {
 }
 
 func flowServiceStatus(svc Service, st TokenStatus) string {
-	if svc.OAuth == nil && svc.Connection == "" {
+	if svc.Connection == "" {
 		return FlowStatusConfigured
 	}
 	if !st.HasToken {

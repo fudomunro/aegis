@@ -45,7 +45,7 @@ func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	s.oauthStates.Set(serviceID+":"+state, true, 10*time.Minute)
 
 	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURL, "/"), serviceID)
-	scopes := s.config.loginScopes(connectionID, serviceID)
+	scopes := s.config.loginScopes(connectionID)
 
 	params := url.Values{
 		"client_id":     {conn.ClientID},
