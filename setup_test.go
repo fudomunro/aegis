@@ -8,6 +8,31 @@ import (
 	"time"
 )
 
+func TestRenderServiceCard_EscapesHTML(t *testing.T) {
+	srv := testServerWithBase(&Config{
+		Services: []Service{
+			{
+				ID:          `evil"><script>alert(1)</script>`,
+				Name:        `<img src=x onerror=alert(1)>`,
+				Description: `</p><script>alert(2)</script>`,
+				Connection:  `conn&<b>`,
+			},
+		},
+	}, "https://guardian.example.com")
+
+	body := srv.renderServiceCard(srv.config.Services[0], TokenStatus{})
+	for _, bad := range []string{"<script>", "<img ", "<b>"} {
+		if strings.Contains(body, bad) {
+			t.Fatalf("card leaked raw HTML %q:\n%s", bad, body)
+		}
+	}
+	for _, want := range []string{"&lt;script&gt;", "&lt;img ", "conn&amp;&lt;b&gt;"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("card missing escaped form %q:\n%s", want, body)
+		}
+	}
+}
+
 func TestHandleSetup_RendersServiceCards(t *testing.T) {
 	srv := testServerWithBase(&Config{
 		Connections: map[string]Connection{

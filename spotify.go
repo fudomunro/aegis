@@ -234,7 +234,7 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	}
 
 	// Execute the request against Spotify.
-	data, status, err := c.doSpotifyRequest(r.Method, upstreamURL, r.Body, token)
+	data, status, err := c.doSpotifyRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
 	if err != nil {
 		logger.Error("spotify request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Spotify API request failed")
@@ -262,7 +262,7 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err == nil {
 		if r.Method == http.MethodGet && c.isPaginated(remainingPath) {
-			raw = c.fetchAllPagesRaw(raw, token, logger)
+			raw = c.fetchAllPagesRaw(r.Context(), raw, token, logger)
 		}
 		data, _ = json.Marshal(raw)
 	}
@@ -277,8 +277,8 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 
-	// Cache the transformed response.
-	if r.Method == http.MethodGet {
+	// Cache successful GET responses only.
+	if r.Method == http.MethodGet && status == http.StatusOK {
 		ttl := c.server.config.GetService("spotify").CacheTTL.Duration
 		if ttl == 0 {
 			ttl = 60 * time.Second
@@ -293,15 +293,15 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 }
 
 // doSpotifyRequest executes an HTTP request to the Spotify API.
-func (c *SpotifyConnector) doSpotifyRequest(method, url string, body io.Reader, token string) ([]byte, int, error) {
-	req, err := http.NewRequest(method, url, body)
+func (c *SpotifyConnector) doSpotifyRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := guardianHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1119,7 +1119,7 @@ func (c *SpotifyConnector) isPaginated(path string) bool {
 // fetchAllPagesRaw follows Spotify's pagination `next` URLs on the raw API
 // response and combines items under the standard "items" key. Must run before
 // transform, so subsequent pages share the same shape as the first page.
-func (c *SpotifyConnector) fetchAllPagesRaw(first map[string]any, token string, logger *slog.Logger) map[string]any {
+func (c *SpotifyConnector) fetchAllPagesRaw(ctx context.Context, first map[string]any, token string, logger *slog.Logger) map[string]any {
 	allItems, _ := first["items"].([]any)
 	nextURL, _ := first["next"].(string)
 
@@ -1127,7 +1127,7 @@ func (c *SpotifyConnector) fetchAllPagesRaw(first map[string]any, token string, 
 	// not silently cut off. Hit the cap → mark truncated for the caller.
 	maxPages := libraryPageCap
 	for i := 0; i < maxPages && nextURL != ""; i++ {
-		data, status, err := c.doSpotifyRequest("GET", nextURL, nil, token)
+		data, status, err := c.doSpotifyRequest(ctx, "GET", nextURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", nextURL, "status", status, "error", err)
 			break
