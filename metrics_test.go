@@ -184,6 +184,111 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 	}
 }
 
+func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID:          "spotify",
+				Name:        "Spotify",
+				Action:      "inject",
+				Permissions: Permissions{PermissionDefaultKey: AccessRead},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = &fakePlaylistProvider{
+		playlists: []Playlist{{Name: "Mix", Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
+	}
+
+	req := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminLibrary)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"playlists"`) {
+		t.Fatalf("expected playlists payload, body=%s", w.Body.String())
+	}
+
+	snap := srv.metricsSnapshot(time.Hour)
+	if snap.Libraries["playlists"].Hits != 0 {
+		t.Fatalf("library hits after admin view = %d, want 0", snap.Libraries["playlists"].Hits)
+	}
+	if snap.Services["spotify"].Hits != 0 {
+		t.Fatalf("provider hits after admin view = %d, want 0", snap.Services["spotify"].Hits)
+	}
+	if snap.TotalHits != 0 {
+		t.Fatalf("total hits after admin view = %d, want 0", snap.TotalHits)
+	}
+
+	// Cache-hit path must also stay off the Map.
+	req2 := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
+	req2.Header.Set("X-Api-Key", "test-key")
+	w2 := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminLibrary)(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("cached admin status = %d body=%s", w2.Code, w2.Body.String())
+	}
+	if w2.Header().Get("X-Guardian-Cache") != "hit" {
+		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Guardian-Cache"))
+	}
+	snap = srv.metricsSnapshot(time.Hour)
+	if snap.TotalHits != 0 || snap.Libraries["playlists"].Hits != 0 {
+		t.Fatalf("metrics after admin cache hit = total %d libraries %v, want all zero",
+			snap.TotalHits, snap.Libraries)
+	}
+
+	// Agent path still records.
+	req3 := httptest.NewRequest("GET", "/v1/library/playlists", nil)
+	req3.Header.Set("X-Api-Key", "test-key")
+	w3 := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w3, req3)
+	if w3.Code != http.StatusOK {
+		t.Fatalf("agent status = %d body=%s", w3.Code, w3.Body.String())
+	}
+	snap = srv.metricsSnapshot(time.Hour)
+	if snap.Libraries["playlists"].Hits != 1 {
+		t.Fatalf("library hits after agent view = %d, want 1", snap.Libraries["playlists"].Hits)
+	}
+}
+
+func TestHandleAdminLibrary_UnknownKind(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	for _, path := range []string{
+		"/v1/admin/library/",
+		"/v1/admin/library/nope",
+		"/v1/admin/library/playlists/extra",
+		"/v1/admin/library/review",
+	} {
+		req := httptest.NewRequest("GET", path, nil)
+		req.Header.Set("X-Api-Key", "test-key")
+		w := httptest.NewRecorder()
+		srv.AuthMiddleware(srv.HandleAdminLibrary)(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("%s status = %d, want 404 body=%s", path, w.Code, w.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest("POST", "/v1/admin/library/playlists", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminLibrary)(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("method status = %d, want 405", w.Code)
+	}
+}
+
+func TestHandleAdminRoutes_LibraryRequiresAuth(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
+	w := httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want 401", w.Code)
+	}
+}
+
 func TestMetrics_Redacted_NoBodiesOrKeys(t *testing.T) {
 	m := NewAccessMetrics(8)
 	m.Record(AccessEvent{

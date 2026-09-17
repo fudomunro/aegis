@@ -364,7 +364,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("X-Guardian-Cache", "hit")
 		w.Write([]byte(cached))
-		s.recordAccess(AccessEvent{
+		s.recordAccessFrom(r, AccessEvent{
 			Agent:    agent,
 			Surface:  MetricSurfaceLibrary,
 			Target:   kind.ID,
@@ -433,7 +433,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 					Count:     len(items),
 					Truncated: truncated,
 				}
-				s.recordAccess(AccessEvent{
+				s.recordAccessFrom(r, AccessEvent{
 					Agent:    agent,
 					Surface:  MetricSurfaceService,
 					Target:   t.id,
@@ -491,7 +491,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Guardian-Cache", "miss")
 	w.Write(result)
-	s.recordAccess(AccessEvent{
+	s.recordAccessFrom(r, AccessEvent{
 		Agent:    agent,
 		Surface:  MetricSurfaceLibrary,
 		Target:   kind.ID,
