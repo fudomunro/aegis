@@ -17,6 +17,7 @@ func main() {
 	tsSocket := flag.String("ts-socket", "", "path to tailscaled LocalAPI socket for WhoIs (default: auto-detect /var/run/tailscale/tailscaled.sock)")
 	configPath := flag.String("config", "guardian.json", "path to rules configuration file")
 	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
+	linkPath := flag.String("link-file", "entity_links.json", "path to user-confirmed entity links (playlists)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
@@ -84,6 +85,12 @@ func main() {
 	// Fold legacy per-service tokens into shared provider connections (issue #26).
 	tokens.FoldIntoConnections(cfg)
 
+	links, err := NewEntityLinkStore(*linkPath)
+	if err != nil {
+		slog.Error("failed to load entity link store", "path", *linkPath, "error", err)
+		os.Exit(1)
+	}
+
 	identity := buildIdentityResolver(*authMode, *tsSocket)
 
 	srv := &Server{
@@ -98,6 +105,7 @@ func main() {
 		oauthStates:   NewStateStore(),
 		connectors:    make(map[string]ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
+		links:         links,
 	}
 
 	// Register service connectors.

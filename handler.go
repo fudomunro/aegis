@@ -75,6 +75,8 @@ type Server struct {
 	connectors  map[string]ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
+	// links holds user-confirmed cross-service entity links (issue #4).
+	links *EntityLinkStore
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.

@@ -501,7 +501,28 @@ Neutral playlist fields (user-facing):
 
 The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Guardian merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
 
-Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id`** when a service provides one or Guardian resolves one (track **ISRC** or MusicBrainz **recording** MBID, album **UPC** or **release-group** MBID, artist **MBID**); otherwise it falls back to **text** (`NormalizeIdentityKey`) (`match: "name"`). MusicBrainz lookups are budgeted and cached; failures keep name matching. Playlist explicit links remain open work — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
+Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id`** when a service provides one or Guardian resolves one (track **ISRC** or MusicBrainz **recording** MBID, album **UPC** or **release-group** MBID, artist **MBID**); otherwise it falls back to **text** (`NormalizeIdentityKey`) (`match: "name"`). MusicBrainz lookups are budgeted and cached; failures keep name matching.
+
+**Playlists** have no catalog IDs. Same-name playlists still merge (`match: "name"`), but users can confirm identity explicitly:
+
+```
+GET    /v1/library/links
+POST   /v1/library/links   {"kind":"playlist","sources":[{"service":"spotify","id":"…"},{"service":"youtube-music","id":"…"}]}
+DELETE /v1/library/links/{id}
+```
+
+Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` (`-link-file`).
+
+**Merge review:** `GET /v1/library/review` lists multi-source entities joined by **name only** (no shared ISRC/UPC/MBID/link) so they can be checked or explicitly linked.
+
+### Migration from name-key merge
+
+1. Library responses now include `match` (`isrc` / `upc` / `mbid` / `link` / `name`) and `entity_id` when known.
+2. Name-only joins still happen; they are marked `match: "name"` and appear in `/v1/library/review`.
+3. Prefer durable IDs for identity; treat name merges as provisional until reviewed or linked.
+4. Clients that only compared display names should prefer `entity_id` + `sources[]` instead.
+
+Tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 

@@ -7,14 +7,16 @@ import (
 	"strings"
 )
 
-// Match methods for Track.Match / Album.Match / Artist.Match.
+// Match methods for Track / Album / Artist / Playlist.
 const (
-	TrackMatchISRC  = "isrc"
-	TrackMatchMBID  = "mbid"
-	TrackMatchName  = "name"
-	AlbumMatchUPC   = "upc"
-	AlbumMatchMBID  = "mbid"
-	ArtistMatchMBID = "mbid"
+	TrackMatchISRC    = "isrc"
+	TrackMatchMBID    = "mbid"
+	TrackMatchName    = "name"
+	AlbumMatchUPC     = "upc"
+	AlbumMatchMBID    = "mbid"
+	ArtistMatchMBID   = "mbid"
+	PlaylistMatchLink = "link"
+	PlaylistMatchName = "name"
 )
 
 // NormalizeIdentityKey produces a comparable key for cross-service identity
@@ -120,10 +122,17 @@ func primaryPlaylistSource(service, serviceName, id, url string, extra map[strin
 }
 
 // MergePlaylistsSync groups playlists that share a normalized name into a
-// single user-facing playlist with multiple Sources. This is the v1 "sync"
-// model: Guardian treats same-named playlists on different services as one
-// thing the user cares about, without copying tracks between services yet.
+// single user-facing playlist with multiple Sources. Prefer
+// MergePlaylistsSyncLinked when explicit entity links are available.
 func MergePlaylistsSync(in []Playlist) []Playlist {
+	return MergePlaylistsSyncLinked(in, nil)
+}
+
+// MergePlaylistsSyncLinked merges playlists using explicit user-confirmed
+// links first (issue #4), then falls back to normalized name equality.
+// linkKey may be nil. Multi-source name merges set Match=name; linked
+// merges set Match=link.
+func MergePlaylistsSyncLinked(in []Playlist, linkKey func(Playlist) string) []Playlist {
 	if len(in) == 0 {
 		return nil
 	}
@@ -134,11 +143,21 @@ func MergePlaylistsSync(in []Playlist) []Playlist {
 	var order []string
 	byKey := map[string]*entry{}
 
-	for _, p := range in {
+	playlistKey := func(p Playlist) string {
+		if linkKey != nil {
+			if lk := linkKey(p); lk != "" {
+				return lk
+			}
+		}
 		key := NormalizeIdentityKey(p.Name)
 		if key == "" {
 			key = "\x00" + p.PrimaryService() + ":" + firstSourceID(p)
 		}
+		return "name:" + key
+	}
+
+	for _, p := range in {
+		key := playlistKey(p)
 		if cur, ok := byKey[key]; ok {
 			cur.p.Sources = append(cur.p.Sources, p.Sources...)
 			// Prefer a non-empty description/owner; track_count = max (copies).
@@ -154,11 +173,19 @@ func MergePlaylistsSync(in []Playlist) []Playlist {
 			if len(cur.p.Extra) == 0 && len(p.Extra) > 0 {
 				cur.p.Extra = p.Extra
 			}
+			if strings.HasPrefix(key, "link:") {
+				cur.p.Match = PlaylistMatchLink
+			} else {
+				cur.p.Match = PlaylistMatchName
+			}
 			continue
 		}
 		// Clone sources so later appends don't alias.
 		cp := p
 		cp.Sources = append([]PlaylistSource(nil), p.Sources...)
+		if strings.HasPrefix(key, "link:") {
+			cp.Match = PlaylistMatchLink
+		}
 		byKey[key] = &entry{key: key, p: cp}
 		order = append(order, key)
 	}
@@ -168,6 +195,10 @@ func MergePlaylistsSync(in []Playlist) []Playlist {
 		e := byKey[k]
 		// Canonical sources first so the authoritative home is obvious.
 		sortPlaylistSourcesCanonicalFirst(e.p.Sources)
+		// Drop Match on still-single name-only playlists (not a join).
+		if e.p.Match == PlaylistMatchName && len(e.p.Sources) <= 1 {
+			e.p.Match = ""
+		}
 		out = append(out, e.p)
 	}
 
