@@ -150,10 +150,8 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			item.AvailableDataTypes = types
 		}
+		// Token store keys are provider connection IDs only.
 		if st, ok := tokens[item.ConnectionID]; ok {
-			st := st
-			item.Token = &st
-		} else if st, ok := tokens[svc.ID]; ok {
 			st := st
 			item.Token = &st
 		}
