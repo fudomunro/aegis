@@ -7,11 +7,12 @@ import (
 	"strings"
 )
 
-// Match methods for Track.Match / Album.Match.
+// Match methods for Track.Match / Album.Match / Artist.Match.
 const (
-	TrackMatchISRC = "isrc"
-	TrackMatchName = "name"
-	AlbumMatchUPC  = "upc"
+	TrackMatchISRC  = "isrc"
+	TrackMatchName  = "name"
+	AlbumMatchUPC   = "upc"
+	ArtistMatchMBID = "mbid"
 )
 
 // NormalizeIdentityKey produces a comparable key for cross-service identity
@@ -554,19 +555,72 @@ func MergeAlbumsSync(in []Album) []Album {
 	return out
 }
 
-// mergeArtistLibrary folds followed artists across services by normalized name.
+// artistEntityID returns a normalized MusicBrainz MBID when present.
+func artistEntityID(a Artist) string {
+	return strings.ToLower(strings.TrimSpace(a.EntityID))
+}
+
+func mergeArtistInto(dst *Artist, src Artist, match string) {
+	dst.Sources = append(dst.Sources, src.Sources...)
+	if dst.EntityID == "" {
+		dst.EntityID = src.EntityID
+	}
+	if dst.Match == "" {
+		dst.Match = match
+	} else if dst.Match == TrackMatchName && match == ArtistMatchMBID {
+		dst.Match = ArtistMatchMBID
+	}
+}
+
+// mergeArtistLibrary folds followed artists across services.
+//
+// Identity order (issue #4):
+//  1. Shared EntityID (MusicBrainz MBID) — durable (Match=mbid)
+//  2. Normalized display name — fallback (Match=name)
 func mergeArtistLibrary(in []Artist) []Artist {
 	if len(in) == 0 {
 		return nil
 	}
 	type entry struct {
-		key string
-		a   Artist
+		a Artist
 	}
 	var order []string
-	byKey := map[string]*entry{}
+	byEntity := map[string]*entry{}
+	var nameOnly []Artist
 
 	for _, a := range in {
+		if id := artistEntityID(a); id != "" {
+			if cur, ok := byEntity[id]; ok {
+				mergeArtistInto(&cur.a, a, ArtistMatchMBID)
+				continue
+			}
+			cp := a
+			cp.EntityID = id
+			cp.Sources = append([]ArtistSource(nil), a.Sources...)
+			byEntity[id] = &entry{a: cp}
+			order = append(order, "e:"+id)
+			continue
+		}
+		nameOnly = append(nameOnly, a)
+	}
+
+	entityByName := map[string][]*entry{}
+	ids := make([]string, 0, len(byEntity))
+	for id := range byEntity {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		e := byEntity[id]
+		k := NormalizeIdentityKey(e.a.Name)
+		if k == "" && len(e.a.Sources) > 0 {
+			k = "\x00" + e.a.Sources[0].Service + ":" + e.a.Sources[0].ID
+		}
+		entityByName[k] = append(entityByName[k], e)
+	}
+
+	byName := map[string]*entry{}
+	for _, a := range nameOnly {
 		key := NormalizeIdentityKey(a.Name)
 		if key == "" {
 			if len(a.Sources) > 0 {
@@ -575,29 +629,59 @@ func mergeArtistLibrary(in []Artist) []Artist {
 				continue
 			}
 		}
-		if cur, ok := byKey[key]; ok {
-			cur.a.Sources = append(cur.a.Sources, a.Sources...)
+		absorbed := false
+		for _, e := range entityByName[key] {
+			mergeArtistInto(&e.a, a, TrackMatchName)
+			absorbed = true
+			break
+		}
+		if absorbed {
+			continue
+		}
+		if e, ok := byName[key]; ok {
+			mergeArtistInto(&e.a, a, TrackMatchName)
 			continue
 		}
 		cp := a
 		cp.Sources = append([]ArtistSource(nil), a.Sources...)
-		byKey[key] = &entry{key: key, a: cp}
-		order = append(order, key)
+		byName[key] = &entry{a: cp}
+		order = append(order, "n:"+key)
+	}
+
+	for _, e := range byEntity {
+		if len(e.a.Sources) > 1 {
+			e.a.Match = ArtistMatchMBID
+		}
 	}
 
 	out := make([]Artist, 0, len(order))
 	for _, k := range order {
-		e := byKey[k]
+		var e *entry
+		if strings.HasPrefix(k, "e:") {
+			e = byEntity[k[2:]]
+		} else {
+			e = byName[k[2:]]
+		}
+		if e == nil {
+			continue
+		}
 		sort.SliceStable(e.a.Sources, func(i, j int) bool {
 			if e.a.Sources[i].ServiceName != e.a.Sources[j].ServiceName {
 				return e.a.Sources[i].ServiceName < e.a.Sources[j].ServiceName
 			}
 			return e.a.Sources[i].Service < e.a.Sources[j].Service
 		})
+		if e.a.EntityID == "" && e.a.Match == TrackMatchName && len(e.a.Sources) <= 1 {
+			e.a.Match = ""
+		}
 		out = append(out, e.a)
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
+		ei, ej := artistEntityID(out[i]), artistEntityID(out[j])
+		if ei != "" && ej != "" && ei != ej {
+			return ei < ej
+		}
 		return NormalizeIdentityKey(out[i].Name) < NormalizeIdentityKey(out[j].Name)
 	})
 	return out

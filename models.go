@@ -76,12 +76,15 @@ type TrackSource struct {
 	Extra     map[string]any `json:"extra,omitempty"`
 }
 
-// Artist is a unified artist/channel identity. Matching across services is
-// currently name-based (NormalizeIdentityKey); IDs are service-local only.
-// Follow-up: https://github.com/fudomunro/aperture-guardian/issues/4
+// Artist is a unified artist/channel identity. Matching prefers EntityID
+// (MusicBrainz MBID when resolved) then normalized name (issue #4).
 type Artist struct {
 	// Name is the preferred display name (first service that reported it).
 	Name string `json:"name"`
+	// EntityID is a durable catalog ID (MusicBrainz MBID) when resolved.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records cross-service identity: "mbid" or "name". Empty on singles.
+	Match string `json:"match,omitempty"`
 	// Sources lists service-local representations of this artist.
 	Sources []ArtistSource `json:"sources,omitempty"`
 }

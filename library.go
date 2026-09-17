@@ -139,6 +139,9 @@ func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 		serviceOf: artistServiceName,
 		sortKey:   func(a Artist) string { return NormalizeIdentityKey(a.Name) },
 		merge:     mergeArtistLibrary,
+		enrich: func(ctx context.Context, s *Server, artists []Artist) {
+			s.resolveArtistEntities(ctx, artists)
+		},
 		encode: func(merged []Artist, bySvc map[string]LibraryServiceStatus) any {
 			return ArtistList{Artists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
