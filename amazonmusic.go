@@ -73,105 +73,18 @@ Always include the full proxy base URL in your requests.`, base, root)
 
 // HandleProxy processes an Amazon Music API request through the connector.
 func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", "amazon-music", "method", r.Method, "path", remainingPath)
-
-	token := c.server.getValidToken("amazon-music", logger)
-	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized, "no valid Amazon Music token — authorize at /v1/auth/amazon-music/login")
-		return
-	}
-
-	// Build the upstream URL.
-	svc := c.server.config.GetService("amazon-music")
-	upstreamBase := "https://api.amazonmusic.com/v1"
-	if svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
-	upstreamURL := upstreamBase + remainingPath
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
-	}
-
-	// Cache check.
-	cacheKey := "amazon-music:" + r.URL.RequestURI()
-	if r.Method == http.MethodGet {
-		if cached, ok := c.server.cache.Get(cacheKey); ok {
-			logger.Debug("cache hit")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Guardian-Cache", "hit")
-			io.WriteString(w, cached)
-			return
-		}
-	}
-
-	// Execute the request.
-	data, status, err := c.doAmazonRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
-	if err != nil {
-		logger.Error("amazon music request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Amazon Music API request failed")
-		return
-	}
-
-	logger.Debug("amazon music response", "status", status, "bytes", len(data))
-
-	if status == http.StatusUnauthorized {
-		logger.Warn("amazon music returned 401, token may be revoked")
-		writeJSONError(w, http.StatusUnauthorized, "Amazon Music token is invalid or expired — re-authorize at /v1/auth/amazon-music/login")
-		return
-	}
-
-	if status == http.StatusTooManyRequests {
-		logger.Warn("amazon music rate limited")
-		w.Header().Set("Retry-After", "30")
-		writeJSONError(w, http.StatusTooManyRequests, "Amazon Music rate limit exceeded — retry later")
-		return
-	}
-
-	// Transform the response.
-	transformed := c.transformResponse(remainingPath, data, logger)
-
-	result, err := json.Marshal(transformed)
-	if err != nil {
-		logger.Error("failed to marshal transformed response", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "response transformation failed")
-		return
-	}
-
-	// Cache successful GET responses only.
-	if r.Method == http.MethodGet && status == http.StatusOK {
-		ttl := 60 * time.Second
-		if svc != nil && svc.CacheTTL.Duration > 0 {
-			ttl = svc.CacheTTL.Duration
-		}
-		c.server.cache.Set(cacheKey, string(result), ttl)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
-	w.WriteHeader(status)
-	w.Write(result)
+	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
+		serviceID:   "amazon-music",
+		displayName: "Amazon Music",
+		defaultBase: "https://api.amazonmusic.com/v1",
+		defaultTTL:  60 * time.Second,
+		transform:   c.transformResponse,
+	})
 }
 
 // doAmazonRequest executes an HTTP request to the Amazon Music API.
 func (c *AmazonMusicConnector) doAmazonRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := guardianHTTPClient.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return data, resp.StatusCode, nil
+	return doUpstreamRequest(ctx, method, url, body, token)
 }
 
 // transformResponse converts Amazon Music's JSON into a compact format.

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -155,105 +156,34 @@ Always include the full proxy base URL in your requests.`, base, root, root)
 
 // HandleProxy processes a YouTube Music API request through the connector.
 func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", "youtube-music", "method", r.Method, "path", remainingPath)
+	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
+		serviceID:   "youtube-music",
+		displayName: "YouTube",
+		defaultBase: "https://www.googleapis.com/youtube/v3",
+		defaultTTL:  60 * time.Second,
+		mapUpstream: func(path string, query url.Values) (string, url.Values, error) {
+			apiPath, extraParams, err := c.mapPath(path, query)
+			if err != nil {
+				return "", nil, err
+			}
+			if query == nil {
+				query = url.Values{}
+			}
+			for k, v := range extraParams {
+				query.Set(k, v)
+			}
+			return apiPath, query, nil
+		},
+		expandPages: func(ctx context.Context, path string, query url.Values, raw map[string]any, token string, logger *slog.Logger) map[string]any {
+			return c.fetchAllPagesRaw(ctx, path, query, raw, token, logger)
+		},
+		transform: c.transformResponse,
+	})
+}
 
-	token := c.server.getValidToken("youtube-music", logger)
-	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized, "no valid YouTube token — authorize at /v1/auth/youtube-music/login")
-		return
-	}
-
-	// Map friendly paths to YouTube Data API v3 calls.
-	apiPath, extraParams, err := c.mapPath(remainingPath, r.URL.Query())
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	// Build the upstream URL.
-	svc := c.server.config.GetService("youtube-music")
-	upstreamBase := "https://www.googleapis.com/youtube/v3"
-	if svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
-
-	upstreamURL := upstreamBase + apiPath
-	// Merge extra params with original query.
-	q := r.URL.Query()
-	for k, v := range extraParams {
-		q.Set(k, v)
-	}
-	if encoded := q.Encode(); encoded != "" {
-		upstreamURL += "?" + encoded
-	}
-
-	// Cache check.
-	cacheKey := "youtube-music:" + r.URL.RequestURI()
-	if r.Method == http.MethodGet {
-		if cached, ok := c.server.cache.Get(cacheKey); ok {
-			logger.Debug("cache hit")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Guardian-Cache", "hit")
-			io.WriteString(w, cached)
-			return
-		}
-	}
-
-	// Execute the request.
-	data, status, err := c.doYouTubeRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
-	if err != nil {
-		logger.Error("youtube request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "YouTube API request failed")
-		return
-	}
-
-	logger.Debug("youtube response", "status", status, "bytes", len(data))
-
-	if status == http.StatusUnauthorized {
-		logger.Warn("youtube returned 401, token may be revoked")
-		writeJSONError(w, http.StatusUnauthorized, "YouTube token is invalid or expired — re-authorize at /v1/auth/youtube-music/login")
-		return
-	}
-
-	if status == http.StatusTooManyRequests {
-		logger.Warn("youtube rate limited")
-		w.Header().Set("Retry-After", "30")
-		writeJSONError(w, http.StatusTooManyRequests, "YouTube rate limit exceeded — retry later")
-		return
-	}
-
-	// Auto-fetch remaining pages from raw data (before transform strips nextPageToken).
-	var raw map[string]any
-	if err := json.Unmarshal(data, &raw); err == nil {
-		if r.Method == http.MethodGet {
-			raw = c.fetchAllPagesRaw(r.Context(), remainingPath, q, raw, token, logger)
-		}
-		data, _ = json.Marshal(raw)
-	}
-
-	// Transform the (possibly paginated) response.
-	transformed := c.transformResponse(remainingPath, data, logger)
-
-	result, err := json.Marshal(transformed)
-	if err != nil {
-		logger.Error("failed to marshal transformed response", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "response transformation failed")
-		return
-	}
-
-	// Cache successful GET responses only.
-	if r.Method == http.MethodGet && status == http.StatusOK {
-		ttl := 60 * time.Second // default 1 minute
-		if svc != nil && svc.CacheTTL.Duration > 0 {
-			ttl = svc.CacheTTL.Duration
-		}
-		c.server.cache.Set(cacheKey, string(result), ttl)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
-	w.WriteHeader(status)
-	w.Write(result)
+// doYouTubeRequest executes an HTTP request to the YouTube Data API.
+func (c *YouTubeMusicConnector) doYouTubeRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
+	return doUpstreamRequest(ctx, method, url, body, token)
 }
 
 // mapPath translates friendly proxy paths to YouTube Data API v3 calls.
@@ -362,28 +292,6 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 		return "", fmt.Errorf("no channel found")
 	}
 	return resp.Items[0].ContentDetails.RelatedPlaylists.Likes, nil
-}
-
-// doYouTubeRequest executes an HTTP request to the YouTube Data API.
-func (c *YouTubeMusicConnector) doYouTubeRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := guardianHTTPClient.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, resp.StatusCode, err
-	}
-	return data, resp.StatusCode, nil
 }
 
 // transformResponse converts YouTube's verbose JSON into a compact format.
