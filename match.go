@@ -1,8 +1,15 @@
 package main
 
 import (
+	"regexp"
 	"sort"
 	"strings"
+)
+
+// Match methods for Track.Match.
+const (
+	TrackMatchISRC = "isrc"
+	TrackMatchName = "name"
 )
 
 // NormalizeIdentityKey produces a comparable key for cross-service identity
@@ -172,8 +179,9 @@ func firstSourceID(p Playlist) string {
 	return p.Sources[0].ID
 }
 
-// trackIdentityKey produces the merge key for a liked track: normalized title
-// plus primary artist. Same v1 quality as playlist name matching.
+// trackIdentityKey produces the fallback merge key for a liked track:
+// normalized title plus primary artist. Used when no durable EntityID (ISRC)
+// is available. Same v1 quality as playlist name matching.
 func trackIdentityKey(t Track) string {
 	title := NormalizeIdentityKey(t.Name)
 	artist := ""
@@ -192,64 +200,176 @@ func trackIdentityKey(t Track) string {
 	return title + "|" + artist
 }
 
-// MergeTracksSync groups liked tracks that share a normalized title and
-// primary artist into a single user-facing track with multiple Sources.
-// This mirrors MergePlaylistsSync for the liked-songs library.
+// trackEntityID returns a normalized durable catalog ID (ISRC) when present.
+func trackEntityID(t Track) string {
+	return strings.ToUpper(strings.TrimSpace(t.EntityID))
+}
+
+// youtubeTitleNoise matches common YouTube decoration at the end of a title
+// so music videos can name-match catalog tracks (Spotify, etc.).
+var youtubeTitleNoise = regexp.MustCompile(
+	`(?i)\s*[\(\[]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|lyric\s*video?|lyrics?|visuali[sz]er|hd|hq|4k|live|explicit|clean|remaster(?:ed)?)(?:\s+[^)\]]*)?[\)\]]\s*$`)
+
+// cleanYouTubeTitle strips stacked trailing noise tags from a video title.
+// The cleaned string is used as the neutral Track.Name; the original is
+// preserved in source extra as original_title when they differ.
+func cleanYouTubeTitle(name string) string {
+	s := strings.TrimSpace(name)
+	for i := 0; i < 5; i++ {
+		next := strings.TrimSpace(youtubeTitleNoise.ReplaceAllString(s, ""))
+		if next == "" || next == s {
+			return next
+		}
+		s = next
+	}
+	return s
+}
+
+// mergeTrackInto folds b into a (a is the survivor). match is the identity
+// method used for this join.
+func mergeTrackInto(a *Track, b Track, match string) {
+	a.Sources = append(a.Sources, b.Sources...)
+	a.Artists = mergeArtists(append(a.Artists, b.Artists...)...)
+	if a.Album == nil && b.Album != nil {
+		album := *b.Album
+		a.Album = &album
+	}
+	if a.DurationMs == 0 && b.DurationMs != 0 {
+		a.DurationMs = b.DurationMs
+	}
+	if a.Duration == "" && b.Duration != "" {
+		a.Duration = b.Duration
+	}
+	if a.EntityID == "" {
+		a.EntityID = b.EntityID
+	}
+	if len(a.Extra) == 0 && len(b.Extra) > 0 {
+		a.Extra = b.Extra
+	}
+	if a.Match == "" {
+		a.Match = match
+	} else if a.Match == TrackMatchName && match == TrackMatchISRC {
+		a.Match = TrackMatchISRC
+	}
+}
+
+func cloneTrackForMerge(t Track) Track {
+	cp := t
+	cp.Sources = append([]TrackSource(nil), t.Sources...)
+	if t.Album != nil {
+		album := *t.Album
+		cp.Album = &album
+	}
+	if t.Artists != nil {
+		cp.Artists = append([]Artist(nil), t.Artists...)
+	}
+	return cp
+}
+
+// MergeTracksSync groups liked tracks into unified entities.
+//
+// Identity order (issue #4):
+//  1. Shared EntityID (ISRC) — durable, high confidence (Match=isrc)
+//  2. Normalized title + primary artist — fallback (Match=name)
+//
+// Name-only tracks are absorbed into an ISRC group when their name key
+// matches, so a YouTube music video can join a Spotify catalog track.
+// Distinct ISRCs with the same display name stay separate (different
+// recordings / remixes).
 func MergeTracksSync(in []Track) []Track {
 	if len(in) == 0 {
 		return nil
 	}
+
 	type entry struct {
-		key string
-		t   Track
+		t Track
 	}
 	var order []string
-	byKey := map[string]*entry{}
+	byEntity := map[string]*entry{}
+	var nameOnly []Track
 
 	for _, t := range in {
-		key := trackIdentityKey(t)
-		if cur, ok := byKey[key]; ok {
-			cur.t.Sources = append(cur.t.Sources, t.Sources...)
-			// Merge artist sources; keep first non-empty album.
-			cur.t.Artists = mergeArtists(append(cur.t.Artists, t.Artists...)...)
-			if cur.t.Album == nil && t.Album != nil {
-				album := *t.Album
-				cur.t.Album = &album
+		if id := trackEntityID(t); id != "" {
+			if cur, ok := byEntity[id]; ok {
+				mergeTrackInto(&cur.t, t, TrackMatchISRC)
+				continue
 			}
-			if cur.t.DurationMs == 0 && t.DurationMs != 0 {
-				cur.t.DurationMs = t.DurationMs
-			}
-			if cur.t.Duration == "" && t.Duration != "" {
-				cur.t.Duration = t.Duration
-			}
-			if len(cur.t.Extra) == 0 && len(t.Extra) > 0 {
-				cur.t.Extra = t.Extra
-			}
+			cp := cloneTrackForMerge(t)
+			cp.EntityID = id
+			byEntity[id] = &entry{t: cp}
+			order = append(order, "e:"+id)
 			continue
 		}
-		cp := t
-		cp.Sources = append([]TrackSource(nil), t.Sources...)
-		if t.Album != nil {
-			album := *t.Album
-			cp.Album = &album
+		nameOnly = append(nameOnly, t)
+	}
+
+	// Name key → first ISRC group with that key (absorption target).
+	entityByName := map[string]*entry{}
+	ids := make([]string, 0, len(byEntity))
+	for id := range byEntity {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		e := byEntity[id]
+		k := trackIdentityKey(e.t)
+		if _, ok := entityByName[k]; !ok {
+			entityByName[k] = e
 		}
-		byKey[key] = &entry{key: key, t: cp}
-		order = append(order, key)
+	}
+
+	byName := map[string]*entry{}
+	for _, t := range nameOnly {
+		k := trackIdentityKey(t)
+		if e, ok := entityByName[k]; ok {
+			mergeTrackInto(&e.t, t, TrackMatchName)
+			continue
+		}
+		if e, ok := byName[k]; ok {
+			mergeTrackInto(&e.t, t, TrackMatchName)
+			continue
+		}
+		cp := cloneTrackForMerge(t)
+		byName[k] = &entry{t: cp}
+		order = append(order, "n:"+k)
+	}
+
+	// Multi-source ISRC groups are high-confidence matches.
+	for _, e := range byEntity {
+		if len(e.t.Sources) > 1 {
+			e.t.Match = TrackMatchISRC
+		}
 	}
 
 	out := make([]Track, 0, len(order))
 	for _, k := range order {
-		e := byKey[k]
+		var e *entry
+		if strings.HasPrefix(k, "e:") {
+			e = byEntity[k[2:]]
+		} else {
+			e = byName[k[2:]]
+		}
+		if e == nil {
+			continue
+		}
 		sortTrackSourcesCanonicalFirst(e.t.Sources)
 		if e.t.Artists != nil {
 			sort.SliceStable(e.t.Artists, func(i, j int) bool {
 				return e.t.Artists[i].Name < e.t.Artists[j].Name
 			})
 		}
+		// Drop Match on still-single name-only tracks (not a join).
+		if e.t.EntityID == "" && e.t.Match == TrackMatchName && len(e.t.Sources) <= 1 {
+			e.t.Match = ""
+		}
 		out = append(out, e.t)
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
+		ei, ej := trackEntityID(out[i]), trackEntityID(out[j])
+		if ei != "" && ej != "" && ei != ej {
+			return ei < ej
+		}
 		return trackIdentityKey(out[i]) < trackIdentityKey(out[j])
 	})
 	return out

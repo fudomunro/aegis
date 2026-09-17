@@ -162,9 +162,13 @@ func TestTransformTrackAndAlbum(t *testing.T) {
 
 func TestSpotifyNeutralTrack(t *testing.T) {
 	tr := spotifyNeutralTrack(map[string]any{
-		"id":   "t1",
-		"name": "So What",
-		"uri":  "spotify:track:t1",
+		"id":          "t1",
+		"name":        "So What",
+		"uri":         "spotify:track:t1",
+		"duration_ms": float64(222000),
+		"external_ids": map[string]any{
+			"isrc": "usrc17000001",
+		},
 		"artists": []any{
 			map[string]any{"name": "Miles Davis"},
 		},
@@ -179,11 +183,20 @@ func TestSpotifyNeutralTrack(t *testing.T) {
 	if tr.Album == nil || tr.Album.Name != "Kind of Blue" {
 		t.Fatalf("album = %+v", tr.Album)
 	}
+	if tr.EntityID != "USRC17000001" {
+		t.Fatalf("entity_id = %q", tr.EntityID)
+	}
+	if tr.DurationMs != 222000 {
+		t.Fatalf("duration_ms = %d", tr.DurationMs)
+	}
 	if len(tr.Sources) != 1 || tr.Sources[0].Service != "spotify" || tr.Sources[0].URL != "https://open.spotify.com/track/t1" {
 		t.Fatalf("sources = %+v", tr.Sources)
 	}
 	if tr.Sources[0].Extra["uri"] != "spotify:track:t1" {
 		t.Fatalf("extra = %+v", tr.Sources[0].Extra)
+	}
+	if tr.Sources[0].Extra["isrc"] != "usrc17000001" {
+		t.Fatalf("source isrc = %+v", tr.Sources[0].Extra)
 	}
 }
 

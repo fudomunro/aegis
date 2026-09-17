@@ -367,6 +367,13 @@ func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) Track {
 			extra[k] = v
 		}
 	}
+	isrc := ""
+	if v, ok := t["isrc"].(string); ok {
+		isrc = strings.ToUpper(strings.TrimSpace(v))
+		if isrc != "" {
+			extra["isrc"] = isrc
+		}
+	}
 
 	var artists []Artist
 	if artist != "" {
@@ -379,6 +386,7 @@ func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) Track {
 		Album:      newAlbum("amazon-music", "Amazon Music", "", album),
 		DurationMs: durationMs,
 		Duration:   duration,
+		EntityID:   isrc,
 		Sources: []TrackSource{{
 			Service:     "amazon-music",
 			ServiceName: "Amazon Music",
