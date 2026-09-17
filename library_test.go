@@ -630,6 +630,12 @@ func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 				"nextPageToken":"",
 				"pageInfo":{"totalResults":1}
 			}`))
+		case "/videos":
+			w.Write([]byte(`{
+				"items":[
+					{"id":"vid1","snippet":{"title":"Video Song","channelTitle":"Some Artist","categoryId":"10"}}
+				]
+			}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -663,6 +669,94 @@ func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 	}
 	if len(tracks[0].Sources) != 1 || tracks[0].Sources[0].ID != "vid1" {
 		t.Fatalf("sources = %+v", tracks[0].Sources)
+	}
+}
+
+func TestYouTubeConnector_ListUserLikedTracks_FiltersNonMusic(t *testing.T) {
+	var mock *httptest.Server
+	mock = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/channels":
+			w.Write([]byte(`{"items":[{"id":"ch1","contentDetails":{"relatedPlaylists":{"likes":"LL123"}}}]}`))
+		case "/playlistItems":
+			w.Write([]byte(`{
+				"items":[
+					{"snippet":{"title":"So What","channelTitle":"Miles Davis - Topic","publishedAt":"2024-01-01T00:00:00Z",
+						"resourceId":{"videoId":"vid_music"}},"contentDetails":{"videoId":"vid_music"}},
+					{"snippet":{"title":"Official Music Video","channelTitle":"Some Band","publishedAt":"2024-01-02T00:00:00Z",
+						"resourceId":{"videoId":"vid_mvid"}},"contentDetails":{"videoId":"vid_mvid"}},
+					{"snippet":{"title":"How to cook pasta","channelTitle":"Cooking Channel","publishedAt":"2024-01-03T00:00:00Z",
+						"resourceId":{"videoId":"vid_tutorial"}},"contentDetails":{"videoId":"vid_tutorial"}},
+					{"snippet":{"title":"Deleted clip","channelTitle":"Someone","publishedAt":"2024-01-04T00:00:00Z",
+						"resourceId":{"videoId":"vid_deleted"}},"contentDetails":{"videoId":"vid_deleted"}}
+				],
+				"nextPageToken":"",
+				"pageInfo":{"totalResults":4}
+			}`))
+		case "/videos":
+			// Deleted/private video id is omitted from videos.list.
+			w.Write([]byte(`{
+				"items":[
+					{"id":"vid_music","snippet":{"title":"So What","channelTitle":"Miles Davis - Topic","categoryId":"24"}},
+					{"id":"vid_mvid","snippet":{"title":"Official Music Video","channelTitle":"Some Band","categoryId":"10"}},
+					{"id":"vid_tutorial","snippet":{"title":"How to cook pasta","channelTitle":"Cooking Channel","categoryId":"26"}}
+				]
+			}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer mock.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.tokens.Save("youtube-music", &OAuthToken{
+		AccessToken: "tok",
+		Expiry:      time.Now().Add(time.Hour),
+	})
+	conn := NewYouTubeMusicConnector(srv)
+
+	tracks, _, err := conn.ListUserLikedTracks(context.Background())
+	if err != nil {
+		t.Fatalf("ListUserLikedTracks: %v", err)
+	}
+	if len(tracks) != 2 {
+		t.Fatalf("got %d tracks, want 2 (music + Topic); tracks=%+v", len(tracks), tracks)
+	}
+	names := map[string]bool{}
+	for _, tr := range tracks {
+		names[tr.Name] = true
+	}
+	if !names["So What"] || !names["Official Music Video"] {
+		t.Fatalf("track names = %v", names)
+	}
+	if names["How to cook pasta"] || names["Deleted clip"] {
+		t.Fatalf("non-music/deleted leaked into tracks: %v", names)
+	}
+}
+
+func TestIsMusicShapedYouTubeVideo(t *testing.T) {
+	cases := []struct {
+		categoryID string
+		channel    string
+		want       bool
+	}{
+		{"10", "Some Band", true},
+		{"24", "Miles Davis - Topic", true},
+		{"26", "Cooking Channel", false},
+		{"10", "", true},
+		{"", "Artist - Topic", true},
+		{"", "Vlogger", false},
+	}
+	for _, tc := range cases {
+		if got := isMusicShapedYouTubeVideo(tc.categoryID, tc.channel); got != tc.want {
+			t.Fatalf("isMusicShapedYouTubeVideo(%q, %q) = %v, want %v", tc.categoryID, tc.channel, got, tc.want)
+		}
 	}
 }
 
