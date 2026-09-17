@@ -186,6 +186,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminCache)(w, r)
 	case path == "cache/clear":
 		s.AuthMiddleware(s.HandleAdminCacheClear)(w, r)
+	case strings.HasPrefix(path, "library/"):
+		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
 		s.AuthMiddleware(s.HandleAdminServicePermissions)(w, r)
 	default:

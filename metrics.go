@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"sort"
 	"sync"
@@ -248,6 +249,32 @@ func (s *Server) recordAccess(ev AccessEvent) {
 		ev.At = time.Now()
 	}
 	s.metrics.Record(ev)
+}
+
+type skipAccessMetricsKey struct{}
+
+// withSkipAccessMetrics marks a request as admin/preview traffic. Admin
+// Library views share the agent aggregate pipeline but must not inflate
+// Map access counts (issue #62).
+func withSkipAccessMetrics(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), skipAccessMetricsKey{}, true))
+}
+
+func skipAccessMetrics(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	skip, _ := r.Context().Value(skipAccessMetricsKey{}).(bool)
+	return skip
+}
+
+// recordAccessFrom records agent access unless the request is admin UI
+// preview traffic (issue #62).
+func (s *Server) recordAccessFrom(r *http.Request, ev AccessEvent) {
+	if skipAccessMetrics(r) {
+		return
+	}
+	s.recordAccess(ev)
 }
 
 // metricsSnapshot returns aggregated stats; empty maps when metrics are off.

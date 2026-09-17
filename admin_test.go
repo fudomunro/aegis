@@ -62,6 +62,9 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 	if !strings.Contains(body, "/v1/admin/summary") {
 		t.Fatal("expected summary API reference in page")
 	}
+	if !strings.Contains(body, "/v1/admin/library/playlists") {
+		t.Fatal("expected admin Library tab to use /v1/admin/library/* paths")
+	}
 	if !strings.Contains(body, `id="library-pager"`) || !strings.Contains(body, `id="cache-pager"`) {
 		t.Fatal("expected library and cache pager containers")
 	}
@@ -179,6 +182,14 @@ func TestAdminRoutes_AuthRequired(t *testing.T) {
 	srv.handleAdminRoutes(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("clear status = %d, want 401", w.Code)
+	}
+
+	// Library preview requires auth.
+	req = httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("library status = %d, want 401", w.Code)
 	}
 
 	// Unknown path.

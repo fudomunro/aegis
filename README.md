@@ -64,6 +64,7 @@ Guardian starts with these endpoints:
 - `GET /v1/setup` — web-based setup wizard
 - `GET /v1/admin` — admin dashboard for data-flow map, services, tokens, library, and cache
 - `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32)
+- `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 ## Configuration
@@ -842,6 +843,7 @@ GET /v1/admin/summary      — redacted services, token status, cache stats
 GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries)
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
+GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
 GET /v1/admin/services/{id}/permissions  — current agent permission map
 PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.json)
 ```
@@ -849,6 +851,10 @@ PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.js
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
+
+The **Library** tab loads datasets via `/v1/admin/library/{kind}` so browsing
+the admin UI does not inflate Map access counts. Agents still use
+`/v1/library/{kind}`; those requests are the ones the Map counts.
 
 The **Map** tab (default) is a live SVG overview of how data moves. Aperture
 is drawn as a container around Guardian; Guardian nests the token vault and
