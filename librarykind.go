@@ -97,8 +97,8 @@ var libraryKinds = []LibraryKind{
 		PermType:        "albums",
 		Label:           "saved albums",
 		Usage:           "albums they saved or their album library",
-		Summary:         "all saved albums from every connected music service in one neutral list (name, artists, sources[])",
-		SyncRule:        "Same-named albums by the same primary artist are synced into one entry with multiple sources[].",
+		Summary:         "all saved albums from every connected music service in one neutral list (name, artists, entity_id, sources[])",
+		SyncRule:        "Albums merge on durable entity_id (UPC) when present (match=upc); otherwise same title + primary artist (match=name).",
 		ExampleQuestion: "what albums have I saved?",
 		Keywords: []string{
 			"saved album", "liked album", "favorite album", "favourite album",
