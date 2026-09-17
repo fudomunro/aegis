@@ -6,9 +6,17 @@ import (
 	"time"
 )
 
+// Cache size caps keep a long-lived single-instance process from growing without
+// bound. Values larger than cacheMaxBytes are not stored.
+const (
+	cacheMaxEntries = 256
+	cacheMaxBytes   = 32 << 20 // 32 MiB of live payload
+)
+
 type Cache struct {
 	mu    sync.RWMutex
 	items map[string]cacheEntry
+	bytes int // sum of len(value) over stored entries
 }
 
 type cacheEntry struct {
@@ -33,12 +41,39 @@ func (c *Cache) Get(key string) (string, bool) {
 }
 
 func (c *Cache) Set(key, value string, ttl time.Duration) {
+	if key == "" || len(value) > cacheMaxBytes {
+		return
+	}
+
+	now := time.Now()
 	c.mu.Lock()
 	defer c.mu.Unlock()
+
+	c.purgeExpiredLocked(now)
+
+	if old, ok := c.items[key]; ok {
+		c.bytes -= len(old.value)
+		delete(c.items, key)
+	}
+
+	for len(c.items) >= cacheMaxEntries {
+		if !c.evictSoonestLocked() {
+			break
+		}
+	}
+	for c.bytes+len(value) > cacheMaxBytes && len(c.items) > 0 {
+		if !c.evictSoonestLocked() {
+			break
+		}
+	}
+
+	// Non-positive TTL stores an already-expired entry (admin snapshot / tests);
+	// Get still misses and the next Set purges it.
 	c.items[key] = cacheEntry{
 		value:   value,
-		expires: time.Now().Add(ttl),
+		expires: now.Add(ttl),
 	}
+	c.bytes += len(value)
 }
 
 // CacheItem is a snapshot of one cache entry for admin views.
@@ -79,6 +114,7 @@ func (c *Cache) Clear() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.items = make(map[string]cacheEntry)
+	c.bytes = 0
 }
 
 // Stats counts live and total entries plus total live payload bytes.
@@ -96,4 +132,37 @@ func (c *Cache) Stats() (live, total, bytes int) {
 		bytes += len(entry.value)
 	}
 	return live, total, bytes
+}
+
+func (c *Cache) purgeExpiredLocked(now time.Time) {
+	for key, entry := range c.items {
+		if now.After(entry.expires) {
+			c.bytes -= len(entry.value)
+			if c.bytes < 0 {
+				c.bytes = 0
+			}
+			delete(c.items, key)
+		}
+	}
+}
+
+func (c *Cache) evictSoonestLocked() bool {
+	var victim string
+	var victimExpiry time.Time
+	for key, entry := range c.items {
+		if victim == "" || entry.expires.Before(victimExpiry) {
+			victim = key
+			victimExpiry = entry.expires
+		}
+	}
+	if victim == "" {
+		return false
+	}
+	entry := c.items[victim]
+	c.bytes -= len(entry.value)
+	if c.bytes < 0 {
+		c.bytes = 0
+	}
+	delete(c.items, victim)
+	return true
 }
