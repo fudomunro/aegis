@@ -555,7 +555,7 @@ Returns the user's liked/saved tracks from every connected music service in Guar
 
 When any service hits its page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`.
 
-Cross-service merge is **title + primary artist** via `NormalizeIdentityKey` (same v1 quality as playlists). Spotify maps `/me/tracks` (saved library); YouTube Music maps the liked-videos playlist.
+Cross-service merge is **title + primary artist** via `NormalizeIdentityKey` (same v1 quality as playlists). Spotify maps `/me/tracks` (saved library); YouTube Music maps the channel liked-videos playlist, then keeps only music-shaped items (category Music or a `" - Topic"` catalog channel) so non-music YouTube likes do not enter the liked-tracks library ([#43](https://github.com/fudomunro/aperture-guardian/issues/43)).
 
 ### Unified albums and artists
 
