@@ -19,11 +19,15 @@ import (
 
 // TokenStore manages encrypted OAuth tokens at rest.
 type TokenStore struct {
-	mu     sync.RWMutex
-	path   string
-	salt   []byte
-	key    []byte
-	Tokens map[string]*OAuthToken `json:"tokens"`
+	// mu protects Tokens / salt / key / path. Do not hold it during disk I/O.
+	mu sync.RWMutex
+	// persistMu serializes whole-store encrypt+write so concurrent Save/Delete
+	// cannot interleave stale snapshots onto disk.
+	persistMu sync.Mutex
+	path      string
+	salt      []byte
+	key       []byte
+	Tokens    map[string]*OAuthToken `json:"tokens"`
 }
 
 // OAuthToken holds the credentials for a single service.
@@ -101,28 +105,46 @@ func NewTokenStore(path, passphrase string) (*TokenStore, error) {
 	return ts, nil
 }
 
-// Get returns the token for a service, or nil if not stored.
+// Get returns a copy of the token for a service, or nil if not stored.
+// The copy is safe for callers to read after the store lock is released.
 func (ts *TokenStore) Get(serviceID string) *OAuthToken {
 	ts.mu.RLock()
 	defer ts.mu.RUnlock()
-	return ts.Tokens[serviceID]
+	tok := ts.Tokens[serviceID]
+	if tok == nil {
+		return nil
+	}
+	cp := *tok
+	if tok.Scopes != nil {
+		cp.Scopes = append([]string(nil), tok.Scopes...)
+	}
+	return &cp
 }
 
-// Save stores a token for a service, encrypting and writing to disk.
+// Save stores a token for a service. The token is copied; encrypt/persist
+// runs without holding the read path lock.
 func (ts *TokenStore) Save(serviceID string, tok *OAuthToken) error {
-	ts.mu.Lock()
-	defer ts.mu.Unlock()
+	if tok == nil {
+		return fmt.Errorf("nil token for %s", serviceID)
+	}
+	cp := *tok
+	if tok.Scopes != nil {
+		cp.Scopes = append([]string(nil), tok.Scopes...)
+	}
 
-	ts.Tokens[serviceID] = tok
+	ts.mu.Lock()
+	ts.Tokens[serviceID] = &cp
+	ts.mu.Unlock()
+
 	return ts.persist()
 }
 
 // Delete removes a token for a service.
 func (ts *TokenStore) Delete(serviceID string) error {
 	ts.mu.Lock()
-	defer ts.mu.Unlock()
-
 	delete(ts.Tokens, serviceID)
+	ts.mu.Unlock()
+
 	return ts.persist()
 }
 
@@ -158,39 +180,59 @@ type TokenStatus struct {
 	Scopes     []string `json:"scopes"`
 }
 
-// persist writes the encrypted token store to disk. Must be called with ts.mu held.
+// persist writes the encrypted token store to disk. Snapshots under ts.mu,
+// then encrypts/writes under persistMu so concurrent readers are not blocked
+// by AES + filesystem work.
 // Skips disk writes if no path is configured (in-memory store).
 func (ts *TokenStore) persist() error {
-	if ts.path == "" {
+	ts.persistMu.Lock()
+	defer ts.persistMu.Unlock()
+
+	ts.mu.RLock()
+	path := ts.path
+	if path == "" {
+		ts.mu.RUnlock()
 		return nil
 	}
-	tf := tokenFile{
-		Version: tokenVersion,
-		Salt:    base64.StdEncoding.EncodeToString(ts.salt),
-		Tokens:  make(map[string]string),
+	saltB64 := base64.StdEncoding.EncodeToString(ts.salt)
+	type plainTok struct {
+		id   string
+		data []byte
 	}
-
+	plains := make([]plainTok, 0, len(ts.Tokens))
 	for svcID, tok := range ts.Tokens {
 		plain, err := json.Marshal(tok)
 		if err != nil {
+			ts.mu.RUnlock()
 			return fmt.Errorf("marshaling token for %s: %w", svcID, err)
 		}
-		encrypted, err := ts.encrypt(plain)
+		plains = append(plains, plainTok{id: svcID, data: plain})
+	}
+	key := ts.key
+	ts.mu.RUnlock()
+
+	tf := tokenFile{
+		Version: tokenVersion,
+		Salt:    saltB64,
+		Tokens:  make(map[string]string, len(plains)),
+	}
+	for _, p := range plains {
+		encrypted, err := encryptWith(key, p.data)
 		if err != nil {
-			return fmt.Errorf("encrypting token for %s: %w", svcID, err)
+			return fmt.Errorf("encrypting token for %s: %w", p.id, err)
 		}
-		tf.Tokens[svcID] = encrypted
+		tf.Tokens[p.id] = encrypted
 	}
 
 	data, err := json.MarshalIndent(tf, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshaling token file: %w", err)
 	}
-	return os.WriteFile(ts.path, data, tokenFilePerms)
+	return os.WriteFile(path, data, tokenFilePerms)
 }
 
-func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
-	block, err := aes.NewCipher(ts.key)
+func encryptWith(key, plaintext []byte) (string, error) {
+	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", err
 	}
@@ -204,6 +246,10 @@ func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
 	}
 	ciphertext := gcm.Seal(nonce, nonce, plaintext, nil)
 	return base64.StdEncoding.EncodeToString(ciphertext), nil
+}
+
+func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
+	return encryptWith(ts.key, plaintext)
 }
 
 func (ts *TokenStore) decrypt(encoded string) ([]byte, error) {

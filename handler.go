@@ -72,7 +72,9 @@ type Server struct {
 	cache       *Cache
 	tokens      *TokenStore
 	oauthStates *StateStore
-	connectors  map[string]ServiceConnector
+	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
+	refreshFlight tokenFlight
+	connectors    map[string]ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).

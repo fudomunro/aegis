@@ -127,6 +127,27 @@ func TestTokenStore_MultipleServices(t *testing.T) {
 	}
 }
 
+func TestTokenStore_GetReturnsCopy(t *testing.T) {
+	ts := &TokenStore{Tokens: make(map[string]*OAuthToken)}
+	tok := &OAuthToken{
+		AccessToken: "orig",
+		Expiry:      time.Now().Add(time.Hour),
+		Scopes:      []string{"a"},
+	}
+	if err := ts.Save("spotify", tok); err != nil {
+		t.Fatal(err)
+	}
+
+	got := ts.Get("spotify")
+	got.AccessToken = "mutated"
+	got.Scopes[0] = "mutated-scope"
+
+	again := ts.Get("spotify")
+	if again.AccessToken != "orig" || again.Scopes[0] != "a" {
+		t.Fatalf("store mutated via Get copy: %+v", again)
+	}
+}
+
 func TestOAuthToken_IsExpired(t *testing.T) {
 	tok := &OAuthToken{Expiry: time.Now().Add(-time.Minute)}
 	if !tok.IsExpired(0) {
