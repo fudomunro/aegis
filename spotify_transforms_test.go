@@ -170,7 +170,7 @@ func TestSpotifyNeutralTrack(t *testing.T) {
 			"isrc": "usrc17000001",
 		},
 		"artists": []any{
-			map[string]any{"name": "Miles Davis"},
+			map[string]any{"id": "art1", "name": "Miles Davis"},
 		},
 		"album": map[string]any{"id": "ab1", "name": "Kind of Blue"},
 	})
@@ -179,6 +179,12 @@ func TestSpotifyNeutralTrack(t *testing.T) {
 	}
 	if len(tr.Artists) != 1 || tr.Artists[0].Name != "Miles Davis" {
 		t.Fatalf("artists = %+v", tr.Artists)
+	}
+	if len(tr.Artists[0].Sources) != 1 || tr.Artists[0].Sources[0].ID != "art1" {
+		t.Fatalf("artist source id = %+v", tr.Artists[0].Sources)
+	}
+	if tr.Artists[0].Sources[0].URL != "https://open.spotify.com/artist/art1" {
+		t.Fatalf("artist url = %q", tr.Artists[0].Sources[0].URL)
 	}
 	if tr.Album == nil || tr.Album.Name != "Kind of Blue" {
 		t.Fatalf("album = %+v", tr.Album)
