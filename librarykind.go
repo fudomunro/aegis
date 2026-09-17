@@ -74,7 +74,7 @@ var libraryKinds = []LibraryKind{
 		Label:           "liked tracks",
 		Usage:           "songs they like, saved tracks, or favorites",
 		Summary:         "all liked/saved tracks from every connected music service in one neutral list (name, artists, album, duration, entity_id, sources[])",
-		SyncRule:        "Tracks merge on durable entity_id (ISRC) when present (match=isrc); otherwise same title + primary artist when durations agree (match=name).",
+		SyncRule:        "Tracks merge on durable entity_id (ISRC or MusicBrainz recording MBID) when present; otherwise same title + primary artist when durations agree (match=name).",
 		ExampleQuestion: "what songs have I liked?",
 		Keywords: []string{
 			"liked song", "liked track", "liked music",
@@ -98,7 +98,7 @@ var libraryKinds = []LibraryKind{
 		Label:           "saved albums",
 		Usage:           "albums they saved or their album library",
 		Summary:         "all saved albums from every connected music service in one neutral list (name, artists, entity_id, sources[])",
-		SyncRule:        "Albums merge on durable entity_id (UPC) when present (match=upc); otherwise same title + primary artist (match=name).",
+		SyncRule:        "Albums merge on durable entity_id (UPC or MusicBrainz release-group MBID) when present; otherwise same title + primary artist (match=name).",
 		ExampleQuestion: "what albums have I saved?",
 		Keywords: []string{
 			"saved album", "liked album", "favorite album", "favourite album",
