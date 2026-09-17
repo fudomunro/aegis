@@ -3,6 +3,7 @@ package main
 import (
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -205,6 +206,23 @@ func trackEntityID(t Track) string {
 	return strings.ToUpper(strings.TrimSpace(t.EntityID))
 }
 
+// durationMsTolerance is how far two name-matched tracks' lengths may differ
+// and still be treated as the same recording.
+const durationMsTolerance = 5000
+
+// durationCompatible reports whether two tracks may be the same recording
+// based on duration. Zero means unknown and does not block a merge.
+func durationCompatible(a, b Track) bool {
+	if a.DurationMs <= 0 || b.DurationMs <= 0 {
+		return true
+	}
+	diff := a.DurationMs - b.DurationMs
+	if diff < 0 {
+		diff = -diff
+	}
+	return diff <= durationMsTolerance
+}
+
 // youtubeTitleNoise matches common YouTube decoration at the end of a title
 // so music videos can name-match catalog tracks (Spotify, etc.).
 var youtubeTitleNoise = regexp.MustCompile(
@@ -303,8 +321,8 @@ func MergeTracksSync(in []Track) []Track {
 		nameOnly = append(nameOnly, t)
 	}
 
-	// Name key → first ISRC group with that key (absorption target).
-	entityByName := map[string]*entry{}
+	// Name key → ISRC groups with that key (absorption targets).
+	entityByName := map[string][]*entry{}
 	ids := make([]string, 0, len(byEntity))
 	for id := range byEntity {
 		ids = append(ids, id)
@@ -313,21 +331,32 @@ func MergeTracksSync(in []Track) []Track {
 	for _, id := range ids {
 		e := byEntity[id]
 		k := trackIdentityKey(e.t)
-		if _, ok := entityByName[k]; !ok {
-			entityByName[k] = e
-		}
+		entityByName[k] = append(entityByName[k], e)
 	}
 
 	byName := map[string]*entry{}
 	for _, t := range nameOnly {
 		k := trackIdentityKey(t)
-		if e, ok := entityByName[k]; ok {
-			mergeTrackInto(&e.t, t, TrackMatchName)
+		absorbed := false
+		for _, e := range entityByName[k] {
+			if durationCompatible(e.t, t) {
+				mergeTrackInto(&e.t, t, TrackMatchName)
+				absorbed = true
+				break
+			}
+		}
+		if absorbed {
 			continue
 		}
 		if e, ok := byName[k]; ok {
-			mergeTrackInto(&e.t, t, TrackMatchName)
-			continue
+			if durationCompatible(e.t, t) {
+				mergeTrackInto(&e.t, t, TrackMatchName)
+				continue
+			}
+			// Same title/artist but incompatible length → separate entry.
+			if t.DurationMs > 0 {
+				k = k + "|" + strconv.Itoa(t.DurationMs/1000)
+			}
 		}
 		cp := cloneTrackForMerge(t)
 		byName[k] = &entry{t: cp}

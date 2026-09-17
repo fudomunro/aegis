@@ -74,7 +74,7 @@ var libraryKinds = []LibraryKind{
 		Label:           "liked tracks",
 		Usage:           "songs they like, saved tracks, or favorites",
 		Summary:         "all liked/saved tracks from every connected music service in one neutral list (name, artists, album, duration, entity_id, sources[])",
-		SyncRule:        "Tracks merge on durable entity_id (ISRC) when present (match=isrc); otherwise same title + primary artist (match=name).",
+		SyncRule:        "Tracks merge on durable entity_id (ISRC) when present (match=isrc); otherwise same title + primary artist when durations agree (match=name).",
 		ExampleQuestion: "what songs have I liked?",
 		Keywords: []string{
 			"liked song", "liked track", "liked music",
