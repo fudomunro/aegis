@@ -104,16 +104,10 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Description:  svc.Description,
 			Permissions:  svc.Permissions.Clone(),
 			CanonicalFor: svc.CanonicalFor,
-			HasOAuth:     svc.OAuth != nil || svc.Connection != "",
+			HasOAuth:     svc.Connection != "",
 			ConnectionID: s.config.connectionIDForService(svc.ID),
 			ProxyPath:    "/v1/services/" + svc.ID,
 			HasPlaylist:  false,
-		}
-		if svc.OAuth != nil {
-			item.HasClientID = svc.OAuth.ClientID != ""
-			item.HasSecret = svc.OAuth.ClientSecret != ""
-			item.OAuthScopes = svc.OAuth.Scopes
-			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
 		}
 		if connectionID, conn := s.config.ConnectionForService(svc.ID); connectionID != "" {
 			item.ConnectionID = connectionID
@@ -121,9 +115,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			if conn != nil {
 				item.HasClientID = conn.ClientID != ""
 				item.HasSecret = conn.ClientSecret != ""
-				if len(item.OAuthScopes) == 0 {
-					item.OAuthScopes = s.config.requiredScopes(svc.ID)
-				}
+				item.OAuthScopes = s.config.requiredScopes(svc.ID)
 			}
 			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
 		}

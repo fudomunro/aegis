@@ -12,24 +12,32 @@ import (
 	"time"
 )
 
-func oauthService(tokenURL, authURL string) Service {
-	return Service{
-		ID:     "spotify",
-		Name:   "Spotify",
-		Action: "inject",
-		OAuth: &OAuthConfig{
-			ClientID:     "client-id",
-			ClientSecret: "client-secret",
-			AuthURL:      authURL,
-			TokenURL:     tokenURL,
-			Scopes:       []string{"user-library-read"},
+func oauthConfig(tokenURL, authURL string) *Config {
+	return &Config{
+		Connections: map[string]Connection{
+			"spotify": {
+				Name:         "Spotify",
+				ClientID:     "client-id",
+				ClientSecret: "client-secret",
+				AuthURL:      authURL,
+				TokenURL:     tokenURL,
+				Scopes:       []string{"user-library-read"},
+			},
+		},
+		Services: []Service{
+			{
+				ID:          "spotify",
+				Name:        "Spotify",
+				Action:      "inject",
+				Connection:  "spotify",
+				OAuthScopes: []string{"user-library-read"},
+			},
 		},
 	}
 }
 
 func TestHandleAuthLogin_RedirectsWithState(t *testing.T) {
-	svc := oauthService("https://tokens.example.com/token", "https://accounts.example.com/authorize")
-	srv := testServerWithBase(&Config{Services: []Service{svc}}, "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://guardian.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/login", nil)
 	w := httptest.NewRecorder()
@@ -90,16 +98,23 @@ func TestHandleAuthLogin_NoOAuthConfig(t *testing.T) {
 }
 
 func TestHandleAuthLogin_GoogleOfflineAccess(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:   "youtube-music",
-		Name: "YouTube Music",
-		OAuth: &OAuthConfig{
-			ClientID: "cid",
-			AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
-			TokenURL: "https://oauth2.googleapis.com/token",
-			Scopes:   []string{"https://www.googleapis.com/auth/youtube.readonly"},
+	cfg := &Config{
+		Connections: map[string]Connection{
+			"google": {
+				Name:     "Google",
+				ClientID: "cid",
+				AuthURL:  "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL: "https://oauth2.googleapis.com/token",
+				Scopes:   []string{"https://www.googleapis.com/auth/youtube.readonly"},
+			},
 		},
-	}}}
+		Services: []Service{{
+			ID:          "youtube-music",
+			Name:        "YouTube Music",
+			Connection:  "google",
+			OAuthScopes: []string{"https://www.googleapis.com/auth/youtube.readonly"},
+		}},
+	}
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/youtube-music/login", nil)
@@ -133,16 +148,7 @@ func TestHandleAuthLogin_GoogleOfflineAccess(t *testing.T) {
 }
 
 func TestHandleAuthLogin_SpotifyOmitsGoogleParams(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:   "spotify",
-		Name: "Spotify",
-		OAuth: &OAuthConfig{
-			ClientID: "cid",
-			AuthURL:  "https://accounts.spotify.com/authorize",
-			TokenURL: "https://accounts.spotify.com/api/token",
-			Scopes:   []string{"user-library-read"},
-		},
-	}}}
+	cfg := oauthConfig("https://accounts.spotify.com/api/token", "https://accounts.spotify.com/authorize")
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/spotify/login", nil)
@@ -197,8 +203,7 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	svc := oauthService(tokenSrv.URL, "https://accounts.example.com/authorize")
-	srv := testServerWithBase(&Config{Services: []Service{svc}}, "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://guardian.example.com")
 	srv.oauthStates.Set("spotify:good-state", true, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=auth-code&state=good-state", nil)
@@ -227,8 +232,7 @@ func TestHandleAuthCallback_TokenExchangeFails(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	svc := oauthService(tokenSrv.URL, "https://accounts.example.com/authorize")
-	srv := testServerWithBase(&Config{Services: []Service{svc}}, "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://guardian.example.com")
 	srv.oauthStates.Set("spotify:st", true, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=x&state=st", nil)
@@ -290,8 +294,7 @@ func TestRefreshToken_Success(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	svc := oauthService(tokenSrv.URL, "https://accounts.example.com/authorize")
-	srv := testServerWithBase(&Config{Services: []Service{svc}}, "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://guardian.example.com")
 	srv.tokens.Tokens["spotify"] = &OAuthToken{
 		AccessToken:  "old-at",
 		RefreshToken: "old-rt",
@@ -359,8 +362,7 @@ func TestGenerateState_Unique(t *testing.T) {
 }
 
 func TestHandleAuthRoutes_Dispatch(t *testing.T) {
-	svc := oauthService("https://tokens.example.com/token", "https://accounts.example.com/authorize")
-	srv := testServerWithBase(&Config{Services: []Service{svc}}, "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://guardian.example.com")
 
 	// login is public
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/login", nil)

@@ -11,40 +11,49 @@ import (
 
 func flowTestServer() *Server {
 	cfg := &Config{
+		Connections: map[string]Connection{
+			"spotify": {
+				Name:         "Spotify",
+				ClientID:     "client-id-value",
+				ClientSecret: "super-secret-value",
+				AuthURL:      "https://accounts.spotify.com/authorize",
+				TokenURL:     "https://accounts.spotify.com/api/token",
+				Scopes:       []string{"user-library-read"},
+			},
+			"google": {
+				Name:         "Google",
+				ClientID:     "yt-id",
+				ClientSecret: "yt-secret",
+				AuthURL:      "https://accounts.google.com/o/oauth2/v2/auth",
+				TokenURL:     "https://oauth2.googleapis.com/token",
+				Scopes:       []string{"youtube.readonly"},
+			},
+		},
 		Services: []Service{
 			{
-				ID:       "spotify",
-				Name:     "Spotify",
-				Action:   "inject",
-				Endpoint: "https://api.spotify.com/v1",
-				CacheTTL: Duration{Duration: 10 * time.Minute},
+				ID:          "spotify",
+				Name:        "Spotify",
+				Action:      "inject",
+				Endpoint:    "https://api.spotify.com/v1",
+				CacheTTL:    Duration{Duration: 10 * time.Minute},
+				Connection:  "spotify",
+				OAuthScopes: []string{"user-library-read"},
 				Permissions: Permissions{
 					PermissionDefaultKey: AccessRead,
 					"player":             AccessNone,
 				},
-				OAuth: &OAuthConfig{
-					ClientID:     "client-id-value",
-					ClientSecret: "super-secret-value",
-					Scopes:       []string{"user-library-read"},
-				},
 			},
 			{
-				ID:     "youtube-music",
-				Name:   "YouTube Music",
-				Action: "inject",
-				OAuth: &OAuthConfig{
-					ClientID:     "yt-id",
-					ClientSecret: "yt-secret",
-				},
+				ID:         "youtube-music",
+				Name:       "YouTube Music",
+				Action:     "inject",
+				Connection: "google",
 			},
 			{
-				ID:     "google-photos",
-				Name:   "Google Photos",
-				Action: "inject",
-				OAuth: &OAuthConfig{
-					ClientID:     "gp-id",
-					ClientSecret: "gp-secret",
-				},
+				ID:         "google-photos",
+				Name:       "Google Photos",
+				Action:     "inject",
+				Connection: "google",
 			},
 			{ID: "tidal", Name: "Tidal", Action: "block"},
 		},
@@ -59,7 +68,7 @@ func flowTestServer() *Server {
 		Expiry:       time.Now().Add(time.Hour),
 		Scopes:       []string{"user-library-read"},
 	}
-	srv.tokens.Tokens["youtube-music"] = &OAuthToken{
+	srv.tokens.Tokens["google"] = &OAuthToken{
 		AccessToken:  "yt-access-secret",
 		RefreshToken: "yt-refresh-secret",
 		Expiry:       time.Now().Add(-time.Hour),
@@ -123,8 +132,9 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	if byID["svc:youtube-music"].Status != FlowStatusExpired {
 		t.Fatalf("youtube status = %q, want expired", byID["svc:youtube-music"].Status)
 	}
-	if byID["svc:google-photos"].Status != FlowStatusNeedsAuth {
-		t.Fatalf("photos status = %q, want needs-auth", byID["svc:google-photos"].Status)
+	// Photos shares the Google connection, so it inherits the same token status.
+	if byID["svc:google-photos"].Status != FlowStatusExpired {
+		t.Fatalf("photos status = %q, want expired", byID["svc:google-photos"].Status)
 	}
 	if byID["svc:tidal"].Status != FlowStatusBlocked {
 		t.Fatalf("tidal status = %q, want blocked", byID["svc:tidal"].Status)

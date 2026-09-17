@@ -23,6 +23,14 @@ func googleSharedConfig() *Config {
 					"https://www.googleapis.com/auth/contacts.readonly",
 				},
 			},
+			"spotify": {
+				Name:         "Spotify",
+				ClientID:     "spot",
+				ClientSecret: "spot-secret",
+				AuthURL:      "https://accounts.spotify.com/authorize",
+				TokenURL:     "https://accounts.spotify.com/api/token",
+				Scopes:       []string{"user-library-read"},
+			},
 		},
 		Services: []Service{
 			{
@@ -47,16 +55,11 @@ func googleSharedConfig() *Config {
 				OAuthScopes: []string{"https://www.googleapis.com/auth/contacts.readonly"},
 			},
 			{
-				ID:     "spotify",
-				Name:   "Spotify",
-				Action: "inject",
-				OAuth: &OAuthConfig{
-					ClientID:     "spot",
-					ClientSecret: "spot-secret",
-					AuthURL:      "https://accounts.spotify.com/authorize",
-					TokenURL:     "https://accounts.spotify.com/api/token",
-					Scopes:       []string{"user-library-read"},
-				},
+				ID:          "spotify",
+				Name:        "Spotify",
+				Action:      "inject",
+				Connection:  "spotify",
+				OAuthScopes: []string{"user-library-read"},
 			},
 		},
 	}
@@ -77,7 +80,7 @@ func TestConnectionIDForService(t *testing.T) {
 	}
 }
 
-func TestConnectionForService_SharedAndLegacy(t *testing.T) {
+func TestConnectionForService_Shared(t *testing.T) {
 	cfg := googleSharedConfig()
 
 	id, conn := cfg.ConnectionForService("youtube-music")
@@ -88,6 +91,11 @@ func TestConnectionForService_SharedAndLegacy(t *testing.T) {
 	id, conn = cfg.ConnectionForService("spotify")
 	if id != "spotify" || conn == nil || conn.ClientID != "spot" {
 		t.Fatalf("spotify → (%q, %+v)", id, conn)
+	}
+
+	id, conn = cfg.ConnectionForService("tidal")
+	if id != "" || conn != nil {
+		t.Fatalf("tidal → (%q, %+v), want empty", id, conn)
 	}
 }
 
@@ -110,15 +118,14 @@ func TestRequiredAndLoginScopes(t *testing.T) {
 		t.Fatalf("requiredScopes = %v", req)
 	}
 
-	login := cfg.loginScopes("google", "youtube-music")
+	login := cfg.loginScopes("google")
 	if len(login) != 3 {
 		t.Fatalf("loginScopes = %v, want connection union of 3", login)
 	}
 
-	// Legacy 1:1 service login scopes come from inline oauth.
-	legacy := cfg.loginScopes("spotify", "spotify")
-	if len(legacy) != 1 || legacy[0] != "user-library-read" {
-		t.Fatalf("legacy loginScopes = %v", legacy)
+	login = cfg.loginScopes("spotify")
+	if len(login) != 1 || login[0] != "user-library-read" {
+		t.Fatalf("spotify loginScopes = %v", login)
 	}
 }
 
@@ -190,61 +197,6 @@ func TestLoadConfig_SharedConnections(t *testing.T) {
 	}
 }
 
-func TestTokenStore_FoldIntoConnections(t *testing.T) {
-	cfg := googleSharedConfig()
-	ts := &TokenStore{Tokens: make(map[string]*OAuthToken)}
-
-	// Legacy per-service tokens with overlapping scopes.
-	ts.Tokens["youtube-music"] = &OAuthToken{
-		AccessToken:  "yt-access",
-		RefreshToken: "yt-refresh",
-		Expiry:       time.Now().Add(time.Hour),
-		Scopes:       []string{"https://www.googleapis.com/auth/youtube.readonly"},
-	}
-	ts.Tokens["google-photos"] = &OAuthToken{
-		AccessToken:  "photos-access",
-		RefreshToken: "photos-refresh",
-		Expiry:       time.Now().Add(2 * time.Hour),
-		Scopes:       []string{"https://www.googleapis.com/auth/photospicker.mediaitems.readonly"},
-	}
-	ts.Tokens["google"] = &OAuthToken{
-		AccessToken:  "contacts-access",
-		RefreshToken: "contacts-refresh",
-		Expiry:       time.Now().Add(30 * time.Minute),
-		Scopes:       []string{"https://www.googleapis.com/auth/contacts.readonly"},
-	}
-	ts.Tokens["spotify"] = &OAuthToken{
-		AccessToken:  "spot",
-		RefreshToken: "spot-refresh",
-		Expiry:       time.Now().Add(time.Hour),
-		Scopes:       []string{"user-library-read"},
-	}
-
-	ts.FoldIntoConnections(cfg)
-
-	if len(ts.Tokens) != 2 {
-		t.Fatalf("token keys after fold = %v", keysOf(ts.Tokens))
-	}
-	g := ts.Tokens["google"]
-	if g == nil {
-		t.Fatal("expected google connection token")
-	}
-	// Best token: photos has refresh + most recent expiry among google group...
-	// photos has later expiry than youtube; contacts has fewer scopes.
-	if g.RefreshToken != "photos-refresh" {
-		t.Fatalf("picked refresh = %q, want photos-refresh (latest expiry among refresh holders)", g.RefreshToken)
-	}
-	if len(g.Scopes) != 3 {
-		t.Fatalf("union scopes = %v, want 3", g.Scopes)
-	}
-	if ts.Tokens["spotify"] == nil || ts.Tokens["spotify"].AccessToken != "spot" {
-		t.Fatalf("spotify token should be untouched: %+v", ts.Tokens["spotify"])
-	}
-	if _, ok := ts.Tokens["youtube-music"]; ok {
-		t.Fatal("youtube-music key should have been folded away")
-	}
-}
-
 func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 	cfg := googleSharedConfig()
 	srv := testServerWithBase(cfg, "https://guardian.example.com")
@@ -283,36 +235,4 @@ func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 			t.Fatalf("%s token = %q, want full", id, tok)
 		}
 	}
-}
-
-func TestGetValidToken_LegacyOneToOne(t *testing.T) {
-	svc := Service{
-		ID:     "spotify",
-		Name:   "Spotify",
-		Action: "inject",
-		OAuth: &OAuthConfig{
-			ClientID:     "cid",
-			ClientSecret: "sec",
-			AuthURL:      "https://accounts.spotify.com/authorize",
-			TokenURL:     "https://accounts.spotify.com/api/token",
-			Scopes:       []string{"user-library-read"},
-		},
-	}
-	srv := testServerWithBase(&Config{Services: []Service{svc}}, "https://guardian.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
-		AccessToken: "spot-tok",
-		Expiry:      time.Now().Add(time.Hour),
-		Scopes:      []string{"user-library-read"},
-	})
-	if tok := srv.getValidToken("spotify", slog.Default()); tok != "spot-tok" {
-		t.Fatalf("token = %q", tok)
-	}
-}
-
-func keysOf(m map[string]*OAuthToken) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	return out
 }

@@ -25,10 +25,10 @@ func (s *Server) HandleSetup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderServiceCard(svc Service, status TokenStatus) string {
 	var statusBadge, actionBtn string
 
-	hasOAuth := svc.OAuth != nil || svc.Connection != ""
+	hasOAuth := svc.Connection != ""
 	if !hasOAuth {
 		statusBadge = `<span class="badge badge-gray">No OAuth</span>`
-		actionBtn = `<p class="dim">Add an <code>oauth</code> section or a <code>connection</code> reference to this service's config to enable authorization.</p>`
+		actionBtn = `<p class="dim">Add a <code>connection</code> reference to this service's config to enable authorization.</p>`
 	} else if status.HasToken && !status.Expired {
 		statusBadge = fmt.Sprintf(`<span class="badge badge-green">Connected</span> <span class="dim">expires in %s</span>`, status.ExpiresIn)
 		actionBtn = fmt.Sprintf(`<a class="btn btn-outline" href="/v1/auth/%s/login">Reconnect</a>`, svc.ID)
@@ -45,9 +45,6 @@ func (s *Server) renderServiceCard(svc Service, status TokenStatus) string {
 	}
 
 	scopes := s.config.requiredScopes(svc.ID)
-	if len(scopes) == 0 && svc.OAuth != nil {
-		scopes = svc.OAuth.Scopes
-	}
 	var scopesInfo string
 	if len(scopes) > 0 {
 		scopesInfo = fmt.Sprintf(`<p class="dim">Scopes: <code>%s</code></p>`, strings.Join(scopes, "</code>, <code>"))
