@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -263,7 +264,7 @@ func TestFetchAllPagesRaw(t *testing.T) {
 		"offset":   float64(0),
 		"previous": nil,
 	}
-	got := conn.fetchAllPagesRaw(first, "tok", slog.Default())
+	got := conn.fetchAllPagesRaw(context.Background(), first, "tok", slog.Default())
 	items, _ := got["items"].([]any)
 	if len(items) != 3 {
 		t.Fatalf("items = %d (%+v)", len(items), got["items"])
