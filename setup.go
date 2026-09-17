@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"html"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -25,32 +27,39 @@ func (s *Server) HandleSetup(w http.ResponseWriter, r *http.Request) {
 func (s *Server) renderServiceCard(svc Service, status TokenStatus) string {
 	var statusBadge, actionBtn string
 
+	name := html.EscapeString(svc.Name)
+	idPath := url.PathEscape(svc.ID)
+
 	hasOAuth := svc.Connection != ""
 	if !hasOAuth {
 		statusBadge = `<span class="badge badge-gray">No OAuth</span>`
 		actionBtn = `<p class="dim">Add a <code>connection</code> reference to this service's config to enable authorization.</p>`
 	} else if status.HasToken && !status.Expired {
-		statusBadge = fmt.Sprintf(`<span class="badge badge-green">Connected</span> <span class="dim">expires in %s</span>`, status.ExpiresIn)
-		actionBtn = fmt.Sprintf(`<a class="btn btn-outline" href="/v1/auth/%s/login">Reconnect</a>`, svc.ID)
+		statusBadge = fmt.Sprintf(`<span class="badge badge-green">Connected</span> <span class="dim">expires in %s</span>`, html.EscapeString(status.ExpiresIn))
+		actionBtn = fmt.Sprintf(`<a class="btn btn-outline" href="/v1/auth/%s/login">Reconnect</a>`, idPath)
 	} else if status.HasToken && status.Expired {
 		if status.HasRefresh {
 			statusBadge = `<span class="badge badge-orange">Expired (will auto-refresh)</span>`
 		} else {
 			statusBadge = `<span class="badge badge-red">Expired</span>`
 		}
-		actionBtn = fmt.Sprintf(`<a class="btn btn-primary" href="/v1/auth/%s/login">Reconnect</a>`, svc.ID)
+		actionBtn = fmt.Sprintf(`<a class="btn btn-primary" href="/v1/auth/%s/login">Reconnect</a>`, idPath)
 	} else {
 		statusBadge = `<span class="badge badge-orange">Not Connected</span>`
-		actionBtn = fmt.Sprintf(`<a class="btn btn-primary" href="/v1/auth/%s/login">Connect</a>`, svc.ID)
+		actionBtn = fmt.Sprintf(`<a class="btn btn-primary" href="/v1/auth/%s/login">Connect</a>`, idPath)
 	}
 
 	scopes := s.config.requiredScopes(svc.ID)
 	var scopesInfo string
 	if len(scopes) > 0 {
-		scopesInfo = fmt.Sprintf(`<p class="dim">Scopes: <code>%s</code></p>`, strings.Join(scopes, "</code>, <code>"))
+		escaped := make([]string, len(scopes))
+		for i, sc := range scopes {
+			escaped[i] = html.EscapeString(sc)
+		}
+		scopesInfo = fmt.Sprintf(`<p class="dim">Scopes: <code>%s</code></p>`, strings.Join(escaped, "</code>, <code>"))
 	}
 	if svc.Connection != "" {
-		scopesInfo += fmt.Sprintf(`<p class="dim">Connection: <code>%s</code></p>`, svc.Connection)
+		scopesInfo += fmt.Sprintf(`<p class="dim">Connection: <code>%s</code></p>`, html.EscapeString(svc.Connection))
 	}
 
 	return fmt.Sprintf(`
@@ -62,7 +71,7 @@ func (s *Server) renderServiceCard(svc Service, status TokenStatus) string {
   <p class="dim">%s</p>
   %s
   <div class="card-actions">%s</div>
-</div>`, svc.Name, statusBadge, svc.Description, scopesInfo, actionBtn)
+</div>`, name, statusBadge, html.EscapeString(svc.Description), scopesInfo, actionBtn)
 }
 
 const setupHTML = `<!DOCTYPE html>

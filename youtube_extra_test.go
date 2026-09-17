@@ -170,7 +170,7 @@ func TestYouTubeFetchAllPages_NoToken(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	page := map[string]any{"items": []any{map[string]any{"id": "1"}}}
-	got := conn.fetchAllPagesRaw("/playlists", nil, page, "tok", slog.Default())
+	got := conn.fetchAllPagesRaw(context.Background(), "/playlists", nil, page, "tok", slog.Default())
 	if got["items"] == nil {
 		t.Fatal("items missing")
 	}
@@ -198,7 +198,7 @@ func TestYouTubeFetchAllPages_WithPagination(t *testing.T) {
 		"items":         []any{map[string]any{"id": "seed"}},
 		"nextPageToken": "t2",
 	}
-	got := conn.fetchAllPagesRaw("/playlists", map[string][]string{}, first, "tok", slog.Default())
+	got := conn.fetchAllPagesRaw(context.Background(), "/playlists", map[string][]string{}, first, "tok", slog.Default())
 	items := got["items"].([]any)
 	if len(items) != 2 {
 		t.Fatalf("items = %v", items)
@@ -277,7 +277,7 @@ func TestYouTubeTransformResponse_ErrorPassthrough(t *testing.T) {
 func TestYouTubeFetchAllPages_NonMap(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	conn := NewYouTubeMusicConnector(srv)
-	got := conn.fetchAllPages("/me", nil, "not-a-map", "tok", slog.Default())
+	got := conn.fetchAllPages(context.Background(), "/me", nil, "not-a-map", "tok", slog.Default())
 	if got != "not-a-map" {
 		t.Fatalf("got = %#v", got)
 	}
@@ -293,7 +293,7 @@ func TestYouTubeFetchAllPages_EmptyItemsKey(t *testing.T) {
 	// Path with no items key should return first page unchanged.
 	// itemsKeyForPath for unknown may still return "items" — check behavior.
 	_ = page
-	got := conn.fetchAllPages("/unknown-path-xyz", nil, map[string]any{
+	got := conn.fetchAllPages(context.Background(), "/unknown-path-xyz", nil, map[string]any{
 		"nextPageToken": "x",
 		"other":         []any{},
 	}, "tok", slog.Default())

@@ -200,7 +200,7 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Execute the request.
-	data, status, err := c.doYouTubeRequest(r.Method, upstreamURL, r.Body, token)
+	data, status, err := c.doYouTubeRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
 	if err != nil {
 		logger.Error("youtube request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "YouTube API request failed")
@@ -226,7 +226,7 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err == nil {
 		if r.Method == http.MethodGet {
-			raw = c.fetchAllPagesRaw(remainingPath, q, raw, token, logger)
+			raw = c.fetchAllPagesRaw(r.Context(), remainingPath, q, raw, token, logger)
 		}
 		data, _ = json.Marshal(raw)
 	}
@@ -241,8 +241,8 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// Cache the response.
-	if r.Method == http.MethodGet {
+	// Cache successful GET responses only.
+	if r.Method == http.MethodGet && status == http.StatusOK {
 		ttl := 60 * time.Second // default 1 minute
 		if svc != nil && svc.CacheTTL.Duration > 0 {
 			ttl = svc.CacheTTL.Duration
@@ -338,7 +338,7 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
 	}
 	url := upstreamBase + "/channels?part=contentDetails&mine=true"
-	data, status, err := c.doYouTubeRequest("GET", url, nil, token)
+	data, status, err := c.doYouTubeRequest(context.Background(), "GET", url, nil, token)
 	if err != nil {
 		return "", err
 	}
@@ -365,8 +365,8 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 }
 
 // doYouTubeRequest executes an HTTP request to the YouTube Data API.
-func (c *YouTubeMusicConnector) doYouTubeRequest(method, url string, body io.Reader, token string) ([]byte, int, error) {
-	req, err := http.NewRequest(method, url, body)
+func (c *YouTubeMusicConnector) doYouTubeRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1095,7 +1095,7 @@ func (c *YouTubeMusicConnector) isPaginated(raw map[string]any) bool {
 
 // fetchAllPagesRaw follows YouTube's pagination tokens on raw (untransformed) data.
 // It combines items arrays from all pages into the first page's response.
-func (c *YouTubeMusicConnector) fetchAllPagesRaw(path string, query map[string][]string, firstPage map[string]any, token string, logger *slog.Logger) map[string]any {
+func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path string, query map[string][]string, firstPage map[string]any, token string, logger *slog.Logger) map[string]any {
 	nextToken, _ := firstPage["nextPageToken"].(string)
 	if nextToken == "" {
 		return firstPage
@@ -1126,7 +1126,7 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(path string, query map[string][
 
 		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
 
-		data, status, err := c.doYouTubeRequest("GET", upstreamURL, nil, token)
+		data, status, err := c.doYouTubeRequest(ctx, "GET", upstreamURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
 			break
@@ -1151,7 +1151,7 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(path string, query map[string][
 }
 
 // fetchAllPages follows YouTube's pagination tokens and combines items.
-func (c *YouTubeMusicConnector) fetchAllPages(path string, query map[string][]string, firstPage any, token string, logger *slog.Logger) any {
+func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, query map[string][]string, firstPage any, token string, logger *slog.Logger) any {
 	page, ok := firstPage.(map[string]any)
 	if !ok {
 		return firstPage
@@ -1193,7 +1193,7 @@ func (c *YouTubeMusicConnector) fetchAllPages(path string, query map[string][]st
 
 		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
 
-		data, status, err := c.doYouTubeRequest("GET", upstreamURL, nil, token)
+		data, status, err := c.doYouTubeRequest(ctx, "GET", upstreamURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
 			break

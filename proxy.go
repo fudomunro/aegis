@@ -130,7 +130,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		upstreamReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 
-	resp, err := http.DefaultClient.Do(upstreamReq)
+	resp, err := guardianHTTPClient.Do(upstreamReq)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("upstream request to %s failed", svc.Name))
@@ -147,8 +147,8 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 
 	logger.Debug("upstream response", "status", resp.StatusCode, "bytes", len(data))
 
-	// Cache GET responses.
-	if r.Method == http.MethodGet {
+	// Cache successful GET responses only — never persist error bodies.
+	if r.Method == http.MethodGet && resp.StatusCode == http.StatusOK {
 		ttl := svc.CacheTTL.Duration
 		if ttl == 0 {
 			ttl = 5 * time.Minute
