@@ -288,3 +288,68 @@ func TestDurationCompatible(t *testing.T) {
 		t.Fatal("beyond tolerance should not be compatible")
 	}
 }
+
+func TestMergeAlbumsSync_UPCPreferred(t *testing.T) {
+	// Shared UPC across services → one album.
+	merged := MergeAlbumsSync([]Album{
+		{
+			Name:     "Kind of Blue",
+			Artists:  []Artist{newArtist("spotify", "Spotify", "art1", "Miles Davis")},
+			EntityID: "00602537638569",
+			Sources:  []AlbumSource{{Service: "spotify", ID: "sp-al"}},
+		},
+		{
+			Name:     "Kind of Blue (Remastered)",
+			Artists:  []Artist{newArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
+			EntityID: "00602537638569",
+			Sources:  []AlbumSource{{Service: "amazon-music", ID: "am-al"}},
+		},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("shared UPC should merge: %+v", merged)
+	}
+	if merged[0].Match != AlbumMatchUPC {
+		t.Fatalf("match = %q", merged[0].Match)
+	}
+	if len(merged[0].Sources) != 2 {
+		t.Fatalf("sources = %+v", merged[0].Sources)
+	}
+
+	// Distinct UPCs with same title stay separate.
+	merged = MergeAlbumsSync([]Album{
+		{Name: "Greatest Hits", Artists: []Artist{{Name: "A"}}, EntityID: "UPC1", Sources: []AlbumSource{{Service: "spotify", ID: "1"}}},
+		{Name: "Greatest Hits", Artists: []Artist{{Name: "A"}}, EntityID: "UPC2", Sources: []AlbumSource{{Service: "spotify", ID: "2"}}},
+	})
+	if len(merged) != 2 {
+		t.Fatalf("distinct UPCs must not merge: %+v", merged)
+	}
+
+	// Name-only absorbs into UPC group.
+	merged = MergeAlbumsSync([]Album{
+		{Name: "Kind of Blue", Artists: []Artist{{Name: "Miles Davis"}}, EntityID: "UPC1", Sources: []AlbumSource{{Service: "spotify", ID: "1"}}},
+		{Name: "kind of blue", Artists: []Artist{{Name: "Miles  Davis"}}, Sources: []AlbumSource{{Service: "youtube-music", ID: "2"}}},
+	})
+	if len(merged) != 1 || merged[0].Match != AlbumMatchUPC {
+		t.Fatalf("name fallback should join UPC group: %+v", merged)
+	}
+}
+
+func TestSpotifyNeutralAlbum_UPC(t *testing.T) {
+	al := spotifyNeutralAlbum(map[string]any{
+		"id":   "ab1",
+		"name": "Kind of Blue",
+		"uri":  "spotify:album:ab1",
+		"external_ids": map[string]any{
+			"upc": "00602537638569",
+		},
+		"artists": []any{
+			map[string]any{"id": "art1", "name": "Miles Davis"},
+		},
+	})
+	if al.EntityID != "00602537638569" {
+		t.Fatalf("entity_id = %q", al.EntityID)
+	}
+	if len(al.Artists) != 1 || al.Artists[0].Sources[0].ID != "art1" {
+		t.Fatalf("artists = %+v", al.Artists)
+	}
+}

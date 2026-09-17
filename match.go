@@ -7,10 +7,11 @@ import (
 	"strings"
 )
 
-// Match methods for Track.Match.
+// Match methods for Track.Match / Album.Match.
 const (
 	TrackMatchISRC = "isrc"
 	TrackMatchName = "name"
+	AlbumMatchUPC  = "upc"
 )
 
 // NormalizeIdentityKey produces a comparable key for cross-service identity
@@ -404,8 +405,8 @@ func MergeTracksSync(in []Track) []Track {
 	return out
 }
 
-// albumIdentityKey produces the merge key for a saved album: normalized title
-// plus primary artist.
+// albumIdentityKey produces the fallback merge key for a saved album:
+// normalized title plus primary artist.
 func albumIdentityKey(a Album) string {
 	title := NormalizeIdentityKey(a.Name)
 	artist := ""
@@ -424,45 +425,130 @@ func albumIdentityKey(a Album) string {
 	return title + "|" + artist
 }
 
-// MergeAlbumsSync groups saved albums that share a normalized title and
-// primary artist into one user-facing album with multiple Sources.
+// albumEntityID returns a normalized durable catalog ID (UPC) when present.
+func albumEntityID(a Album) string {
+	return strings.ToUpper(strings.TrimSpace(a.EntityID))
+}
+
+func mergeAlbumInto(dst *Album, src Album, match string) {
+	dst.Sources = append(dst.Sources, src.Sources...)
+	dst.Artists = mergeArtists(append(dst.Artists, src.Artists...)...)
+	if dst.EntityID == "" {
+		dst.EntityID = src.EntityID
+	}
+	if dst.Match == "" {
+		dst.Match = match
+	} else if dst.Match == TrackMatchName && match == AlbumMatchUPC {
+		dst.Match = AlbumMatchUPC
+	}
+}
+
+func cloneAlbumForMerge(a Album) Album {
+	cp := a
+	cp.Sources = append([]AlbumSource(nil), a.Sources...)
+	if a.Artists != nil {
+		cp.Artists = append([]Artist(nil), a.Artists...)
+	}
+	return cp
+}
+
+// MergeAlbumsSync groups saved albums into unified entities.
+//
+// Identity order (issue #4):
+//  1. Shared EntityID (UPC/barcode) — durable (Match=upc)
+//  2. Normalized title + primary artist — fallback (Match=name)
 func MergeAlbumsSync(in []Album) []Album {
 	if len(in) == 0 {
 		return nil
 	}
-	type entry struct {
-		key string
-		a   Album
-	}
+
+	type entry struct{ a Album }
 	var order []string
-	byKey := map[string]*entry{}
+	byEntity := map[string]*entry{}
+	var nameOnly []Album
 
 	for _, a := range in {
-		key := albumIdentityKey(a)
-		if cur, ok := byKey[key]; ok {
-			cur.a.Sources = append(cur.a.Sources, a.Sources...)
-			cur.a.Artists = mergeArtists(append(cur.a.Artists, a.Artists...)...)
+		if id := albumEntityID(a); id != "" {
+			if cur, ok := byEntity[id]; ok {
+				mergeAlbumInto(&cur.a, a, AlbumMatchUPC)
+				continue
+			}
+			cp := cloneAlbumForMerge(a)
+			cp.EntityID = id
+			byEntity[id] = &entry{a: cp}
+			order = append(order, "e:"+id)
 			continue
 		}
-		cp := a
-		cp.Sources = append([]AlbumSource(nil), a.Sources...)
-		byKey[key] = &entry{key: key, a: cp}
-		order = append(order, key)
+		nameOnly = append(nameOnly, a)
+	}
+
+	entityByName := map[string][]*entry{}
+	ids := make([]string, 0, len(byEntity))
+	for id := range byEntity {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		e := byEntity[id]
+		k := albumIdentityKey(e.a)
+		entityByName[k] = append(entityByName[k], e)
+	}
+
+	byName := map[string]*entry{}
+	for _, a := range nameOnly {
+		k := albumIdentityKey(a)
+		absorbed := false
+		for _, e := range entityByName[k] {
+			mergeAlbumInto(&e.a, a, TrackMatchName)
+			absorbed = true
+			break
+		}
+		if absorbed {
+			continue
+		}
+		if e, ok := byName[k]; ok {
+			mergeAlbumInto(&e.a, a, TrackMatchName)
+			continue
+		}
+		cp := cloneAlbumForMerge(a)
+		byName[k] = &entry{a: cp}
+		order = append(order, "n:"+k)
+	}
+
+	for _, e := range byEntity {
+		if len(e.a.Sources) > 1 {
+			e.a.Match = AlbumMatchUPC
+		}
 	}
 
 	out := make([]Album, 0, len(order))
 	for _, k := range order {
-		e := byKey[k]
+		var e *entry
+		if strings.HasPrefix(k, "e:") {
+			e = byEntity[k[2:]]
+		} else {
+			e = byName[k[2:]]
+		}
+		if e == nil {
+			continue
+		}
 		sort.SliceStable(e.a.Sources, func(i, j int) bool {
 			if e.a.Sources[i].ServiceName != e.a.Sources[j].ServiceName {
 				return e.a.Sources[i].ServiceName < e.a.Sources[j].ServiceName
 			}
 			return e.a.Sources[i].Service < e.a.Sources[j].Service
 		})
+		if e.a.EntityID == "" && e.a.Match == TrackMatchName && len(e.a.Sources) <= 1 {
+			e.a.Match = ""
+		}
 		out = append(out, e.a)
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
+		ei, ej := albumEntityID(out[i]), albumEntityID(out[j])
+		if ei != "" && ej != "" && ei != ej {
+			return ei < ej
+		}
 		return albumIdentityKey(out[i]) < albumIdentityKey(out[j])
 	})
 	return out
