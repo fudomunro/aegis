@@ -495,10 +495,30 @@ func spotifyNeutralAlbum(album map[string]any) Album {
 	id, _ := album["id"].(string)
 	name, _ := album["name"].(string)
 	uri, _ := album["uri"].(string)
+	upc, _ := extractNested(album, "external_ids", "upc").(string)
 
 	var artists []Artist
-	for _, n := range extractNames(album, "artists") {
-		artists = append(artists, newArtist("spotify", "Spotify", "", n))
+	if rawArtists, ok := album["artists"].([]any); ok {
+		for _, item := range rawArtists {
+			obj, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			aName, _ := obj["name"].(string)
+			artistID, _ := obj["id"].(string)
+			a := newArtist("spotify", "Spotify", artistID, aName)
+			if artistID != "" && len(a.Sources) > 0 {
+				a.Sources[0].URL = "https://open.spotify.com/artist/" + artistID
+			}
+			if a.Name != "" {
+				artists = append(artists, a)
+			}
+		}
+	}
+	if len(artists) == 0 {
+		for _, n := range extractNames(album, "artists") {
+			artists = append(artists, newArtist("spotify", "Spotify", "", n))
+		}
 	}
 
 	url := ""
@@ -509,16 +529,21 @@ func spotifyNeutralAlbum(album map[string]any) Album {
 	if uri != "" {
 		extra["uri"] = uri
 	}
+	if upc != "" {
+		extra["upc"] = upc
+	}
 
 	return Album{
-		Name:    name,
-		Artists: artists,
+		Name:     name,
+		Artists:  artists,
+		EntityID: strings.ToUpper(strings.TrimSpace(upc)),
 		Sources: []AlbumSource{{
 			Service:     "spotify",
 			ServiceName: "Spotify",
 			ID:          id,
 			Name:        name,
 			URL:         url,
+			Extra:       extraOrNil(extra),
 		}},
 	}
 }

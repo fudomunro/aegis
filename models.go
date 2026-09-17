@@ -96,21 +96,27 @@ type ArtistSource struct {
 	URL  string `json:"url,omitempty"`
 }
 
-// Album is a unified album identity (name-based matching for now).
+// Album is a unified album identity. Matching prefers EntityID (UPC/barcode)
+// then title+primary artist (issue #4).
 type Album struct {
 	Name string `json:"name"`
 	// Artists credit the album, when known (used by the library view).
-	Artists []Artist      `json:"artists,omitempty"`
+	Artists []Artist `json:"artists,omitempty"`
+	// EntityID is a durable catalog ID (UPC/barcode) when a service provides one.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records cross-service identity: "upc" or "name". Empty on singles.
+	Match   string        `json:"match,omitempty"`
 	Sources []AlbumSource `json:"sources,omitempty"`
 }
 
 // AlbumSource is a service-local album reference.
 type AlbumSource struct {
-	Service     string `json:"service"`
-	ServiceName string `json:"service_name,omitempty"`
-	ID          string `json:"id,omitempty"`
-	Name        string `json:"name,omitempty"`
-	URL         string `json:"url,omitempty"`
+	Service     string         `json:"service"`
+	ServiceName string         `json:"service_name,omitempty"`
+	ID          string         `json:"id,omitempty"`
+	Name        string         `json:"name,omitempty"`
+	URL         string         `json:"url,omitempty"`
+	Extra       map[string]any `json:"extra,omitempty"`
 }
 
 // PlaylistDetail is a playlist plus its tracks.
