@@ -10,8 +10,15 @@ import (
 
 func TestHandleSetup_RendersServiceCards(t *testing.T) {
 	srv := testServerWithBase(&Config{
+		Connections: map[string]Connection{
+			"spotify": {
+				Name:     "Spotify",
+				ClientID: "cid",
+				Scopes:   []string{"user-library-read"},
+			},
+		},
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Description: "Proxies Spotify", OAuth: &OAuthConfig{Scopes: []string{"user-library-read"}}},
+			{ID: "spotify", Name: "Spotify", Description: "Proxies Spotify", Connection: "spotify", OAuthScopes: []string{"user-library-read"}},
 			{ID: "tidal", Name: "Tidal", Description: "blocked"},
 		},
 	}, "https://guardian.example.com")
@@ -50,31 +57,31 @@ func TestRenderServiceCard_StatusVariants(t *testing.T) {
 	}{
 		{
 			name: "not connected",
-			svc:  Service{ID: "spotify", Name: "Spotify", OAuth: &OAuthConfig{}},
+			svc:  Service{ID: "spotify", Name: "Spotify", Connection: "spotify"},
 			want: []string{"Not Connected", "Connect"},
 		},
 		{
 			name:   "connected",
-			svc:    Service{ID: "spotify", Name: "Spotify", OAuth: &OAuthConfig{}},
+			svc:    Service{ID: "spotify", Name: "Spotify", Connection: "spotify"},
 			status: TokenStatus{HasToken: true, ExpiresIn: "1h0m0s"},
 			want:   []string{"Connected", "Reconnect"},
 		},
 		{
 			name:   "expired with refresh",
-			svc:    Service{ID: "spotify", Name: "Spotify", OAuth: &OAuthConfig{}},
+			svc:    Service{ID: "spotify", Name: "Spotify", Connection: "spotify"},
 			status: TokenStatus{HasToken: true, Expired: true, HasRefresh: true},
 			want:   []string{"Expired (will auto-refresh)", "Reconnect"},
 		},
 		{
 			name:   "expired without refresh",
-			svc:    Service{ID: "spotify", Name: "Spotify", OAuth: &OAuthConfig{}},
+			svc:    Service{ID: "spotify", Name: "Spotify", Connection: "spotify"},
 			status: TokenStatus{HasToken: true, Expired: true},
 			want:   []string{"badge-red", "Reconnect"},
 		},
 		{
 			name: "no oauth",
 			svc:  Service{ID: "tidal", Name: "Tidal"},
-			want: []string{"No OAuth", "oauth"},
+			want: []string{"No OAuth", "connection"},
 		},
 	}
 

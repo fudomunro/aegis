@@ -49,16 +49,12 @@ type Service struct {
 	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
 	CanonicalFor []string `json:"canonical_for,omitempty"`
 	// Connection names the shared provider connection this surface uses
-	// (issue #26). Empty + inline oauth keeps a 1:1 connection named after
-	// the service ID.
+	// (issue #26). Required for OAuth-enabled surfaces.
 	Connection string `json:"connection,omitempty"`
 	// OAuthScopes lists scopes this surface requires from the connection.
 	// When set, a shared token missing any of these degrades the surface
 	// to unauthorized rather than failing the whole connection.
 	OAuthScopes []string `json:"oauth_scopes,omitempty"`
-	// OAuth is the legacy per-service registration. Prefer top-level
-	// connections + connection/oauth_scopes for multi-surface providers.
-	OAuth *OAuthConfig `json:"oauth,omitempty"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.
@@ -142,12 +138,7 @@ func validateConfig(cfg *Config) error {
 		if svc.Connection == "" {
 			continue
 		}
-		if _, ok := cfg.Connections[svc.Connection]; ok {
-			continue
-		}
-		// Legacy: connection id may name a service that still carries inline oauth.
-		other := cfg.serviceByID(svc.Connection)
-		if other == nil || other.OAuth == nil {
+		if _, ok := cfg.Connections[svc.Connection]; !ok {
 			return fmt.Errorf("service %q references unknown connection %q", svc.ID, svc.Connection)
 		}
 	}

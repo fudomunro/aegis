@@ -72,21 +72,28 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 
 func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	cfg := &Config{
+		Connections: map[string]Connection{
+			"spotify": {
+				Name:         "Spotify",
+				ClientID:     "client-id-value",
+				ClientSecret: "super-secret-value",
+				AuthURL:      "https://accounts.spotify.com/authorize",
+				TokenURL:     "https://accounts.spotify.com/api/token",
+				Scopes:       []string{"user-library-read"},
+			},
+		},
 		Services: []Service{
 			{
-				ID:       "spotify",
-				Name:     "Spotify",
-				Action:   "inject",
-				Endpoint: "https://api.spotify.com/v1",
-				CacheTTL: Duration{Duration: 10 * time.Minute},
+				ID:          "spotify",
+				Name:        "Spotify",
+				Action:      "inject",
+				Endpoint:    "https://api.spotify.com/v1",
+				CacheTTL:    Duration{Duration: 10 * time.Minute},
+				Connection:  "spotify",
+				OAuthScopes: []string{"user-library-read"},
 				Permissions: Permissions{
 					"default": AccessRead,
 					"player":  AccessNone,
-				},
-				OAuth: &OAuthConfig{
-					ClientID:     "client-id-value",
-					ClientSecret: "super-secret-value",
-					Scopes:       []string{"user-library-read"},
 				},
 			},
 			{ID: "tidal", Name: "Tidal", Action: "block"},
