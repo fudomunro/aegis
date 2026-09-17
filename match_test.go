@@ -214,3 +214,77 @@ func TestIso8601DurationMs(t *testing.T) {
 		t.Fatalf("bogus = %d", got)
 	}
 }
+
+func TestMergeTracksSync_DurationGuard(t *testing.T) {
+	// Same title/artist, lengths far apart → do not merge (different recordings).
+	merged := MergeTracksSync([]Track{
+		{
+			Name:       "Song",
+			Artists:    []Artist{newArtist("spotify", "Spotify", "", "A")},
+			DurationMs: 200000,
+			Sources:    []TrackSource{{Service: "spotify", ID: "1"}},
+		},
+		{
+			Name:       "Song",
+			Artists:    []Artist{newArtist("youtube-music", "YouTube Music", "", "A")},
+			DurationMs: 350000,
+			Sources:    []TrackSource{{Service: "youtube-music", ID: "2"}},
+		},
+	})
+	if len(merged) != 2 {
+		t.Fatalf("want 2 tracks when durations diverge, got %+v", merged)
+	}
+
+	// Within tolerance → merge.
+	merged = MergeTracksSync([]Track{
+		{
+			Name:       "Song",
+			Artists:    []Artist{newArtist("spotify", "Spotify", "", "A")},
+			DurationMs: 200000,
+			Sources:    []TrackSource{{Service: "spotify", ID: "1"}},
+		},
+		{
+			Name:       "Song",
+			Artists:    []Artist{newArtist("youtube-music", "YouTube Music", "", "A")},
+			DurationMs: 202000,
+			Sources:    []TrackSource{{Service: "youtube-music", ID: "2"}},
+		},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("want merge within tolerance, got %+v", merged)
+	}
+
+	// ISRC still wins even when durations differ (live vs studio share nothing,
+	// but identical ISRC is authoritative).
+	merged = MergeTracksSync([]Track{
+		{
+			Name:       "Song",
+			Artists:    []Artist{newArtist("spotify", "Spotify", "", "A")},
+			EntityID:   "USRC1",
+			DurationMs: 200000,
+			Sources:    []TrackSource{{Service: "spotify", ID: "1"}},
+		},
+		{
+			Name:       "Song",
+			Artists:    []Artist{newArtist("amazon-music", "Amazon Music", "", "A")},
+			EntityID:   "USRC1",
+			DurationMs: 350000,
+			Sources:    []TrackSource{{Service: "amazon-music", ID: "2"}},
+		},
+	})
+	if len(merged) != 1 || merged[0].Match != TrackMatchISRC {
+		t.Fatalf("ISRC should merge regardless of duration: %+v", merged)
+	}
+}
+
+func TestDurationCompatible(t *testing.T) {
+	if !durationCompatible(Track{}, Track{DurationMs: 1000}) {
+		t.Fatal("unknown duration should be compatible")
+	}
+	if !durationCompatible(Track{DurationMs: 100000}, Track{DurationMs: 104000}) {
+		t.Fatal("within tolerance should be compatible")
+	}
+	if durationCompatible(Track{DurationMs: 100000}, Track{DurationMs: 120000}) {
+		t.Fatal("beyond tolerance should not be compatible")
+	}
+}

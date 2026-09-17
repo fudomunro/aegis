@@ -934,8 +934,27 @@ func spotifyNeutralTrack(track map[string]any) Track {
 	}
 
 	var artists []Artist
-	for _, n := range extractNames(track, "artists") {
-		artists = append(artists, newArtist("spotify", "Spotify", "", n))
+	if rawArtists, ok := track["artists"].([]any); ok {
+		for _, a := range rawArtists {
+			obj, ok := a.(map[string]any)
+			if !ok {
+				continue
+			}
+			name, _ := obj["name"].(string)
+			artistID, _ := obj["id"].(string)
+			artist := newArtist("spotify", "Spotify", artistID, name)
+			if artistID != "" && len(artist.Sources) > 0 {
+				artist.Sources[0].URL = "https://open.spotify.com/artist/" + artistID
+			}
+			if artist.Name != "" {
+				artists = append(artists, artist)
+			}
+		}
+	}
+	if len(artists) == 0 {
+		for _, n := range extractNames(track, "artists") {
+			artists = append(artists, newArtist("spotify", "Spotify", "", n))
+		}
 	}
 	artists = mergeArtists(artists...)
 
