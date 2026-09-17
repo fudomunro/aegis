@@ -50,6 +50,14 @@ type Track struct {
 	DurationMs int `json:"duration_ms,omitempty"`
 	// Duration is a human-readable length (e.g. ISO-8601 for YouTube).
 	Duration string `json:"duration,omitempty"`
+	// EntityID is a durable catalog ID when a service provides one (ISRC).
+	// Preferred cross-service identity over display-name matching.
+	// https://github.com/fudomunro/aperture-guardian/issues/4
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records how this unified track's cross-service identity was
+	// established: "isrc" (shared EntityID) or "name" (title+artist fallback).
+	// Empty on single-source tracks.
+	Match string `json:"match,omitempty"`
 	// Sources lists service-local copies / IDs for this track.
 	Sources []TrackSource `json:"sources,omitempty"`
 	// Extra holds other service-specific fields.

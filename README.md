@@ -501,7 +501,7 @@ Neutral playlist fields (user-facing):
 
 The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Guardian merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
 
-Tracks carry unified `artists` / `album` objects. Cross-service matching is **text-based** (`NormalizeIdentityKey`: case, whitespace, strip YouTube “ - Topic”). “Britney Spears” on Spotify and Tidal become one `Artist` with two `sources`. Better entity resolution (MBIDs, ISRC, fuzzy names) is intentionally deferred — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
+Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id` (ISRC)** when a service provides one (`match: "isrc"`); otherwise it falls back to **text** (`NormalizeIdentityKey`: case, whitespace, strip YouTube “ - Topic”, plus YouTube title cleanup) (`match: "name"`). Artist identity is still name-based. MusicBrainz MBIDs and user-confirmed playlist links remain open work — tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
@@ -519,7 +519,7 @@ Guardian aims to surface a user’s **full** library, not a prefix. Two layers m
 | **YouTube Music albums** | No public saved-albums API. | `/v1/library/albums` simply has no YouTube source. |
 | **Amazon Music** | No public developer REST API; playlist pagination may return an unfollowed `nextToken`. | When `nextToken` is present and not followed, `truncated` is set rather than claiming completeness. |
 | **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via the service proxy for a specific playlist. |
-| **Cross-service entity resolution** | v1 matching is text-based. | Tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4). |
+| **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4). |
 
 **Always check `truncated` before answering “is this everything?”** Library system instructions tell agents to do the same. Admin Library badges turn orange and say `truncated` when a service hit its page cap.
 
@@ -556,7 +556,7 @@ Returns the user's liked/saved tracks from every connected music service in Guar
 
 When any service hits its page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`.
 
-Cross-service merge is **title + primary artist** via `NormalizeIdentityKey` (same v1 quality as playlists). Spotify maps `/me/tracks` (saved library); YouTube Music maps the channel liked-videos playlist, then keeps only music-shaped items (category Music or a `" - Topic"` catalog channel) so non-music YouTube likes do not enter the liked-tracks library ([#43](https://github.com/fudomunro/aperture-guardian/issues/43)).
+Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks ([#43](https://github.com/fudomunro/aperture-guardian/issues/43), [#4](https://github.com/fudomunro/aperture-guardian/issues/4)).
 
 ### Unified albums and artists
 
