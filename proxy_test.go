@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestHandleServiceProxy_GetForwarding(t *testing.T) {
@@ -82,6 +83,41 @@ func TestHandleServiceProxy_CacheHit(t *testing.T) {
 
 	if callCount != 1 {
 		t.Fatalf("upstream called %d times, want 1", callCount)
+	}
+}
+
+func TestHandleServiceProxy_ErrorGETNotCached(t *testing.T) {
+	callCount := 0
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+		io.WriteString(w, `{"error":"upstream boom"}`)
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL, CacheTTL: Duration{Duration: time.Hour}},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+
+	for i := 0; i < 2; i++ {
+		w := httptest.NewRecorder()
+		srv.HandleServiceProxy(w, req)
+		if w.Code != http.StatusInternalServerError {
+			t.Fatalf("request %d: status = %d, want 500", i, w.Code)
+		}
+		if w.Header().Get("X-Guardian-Cache") != "miss" {
+			t.Fatalf("request %d: cache = %q, want miss (errors must not cache)", i, w.Header().Get("X-Guardian-Cache"))
+		}
+	}
+	if callCount != 2 {
+		t.Fatalf("upstream called %d times, want 2", callCount)
 	}
 }
 

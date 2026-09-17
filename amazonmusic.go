@@ -105,7 +105,7 @@ func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Execute the request.
-	data, status, err := c.doAmazonRequest(r.Method, upstreamURL, r.Body, token)
+	data, status, err := c.doAmazonRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
 	if err != nil {
 		logger.Error("amazon music request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Amazon Music API request failed")
@@ -137,8 +137,8 @@ func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Cache the response.
-	if r.Method == http.MethodGet {
+	// Cache successful GET responses only.
+	if r.Method == http.MethodGet && status == http.StatusOK {
 		ttl := 60 * time.Second
 		if svc != nil && svc.CacheTTL.Duration > 0 {
 			ttl = svc.CacheTTL.Duration
@@ -153,15 +153,15 @@ func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 }
 
 // doAmazonRequest executes an HTTP request to the Amazon Music API.
-func (c *AmazonMusicConnector) doAmazonRequest(method, url string, body io.Reader, token string) ([]byte, int, error) {
-	req, err := http.NewRequest(method, url, body)
+func (c *AmazonMusicConnector) doAmazonRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, 0, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := guardianHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}

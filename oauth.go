@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -239,7 +240,18 @@ func (s *Server) RefreshToken(connectionID string) (*OAuthToken, error) {
 
 // tokenRequest performs the HTTP POST to a token endpoint and parses the response.
 func (s *Server) tokenRequest(tokenURL string, data url.Values) (*OAuthToken, error) {
-	resp, err := http.PostForm(tokenURL, data)
+	req, err := http.NewRequestWithContext(
+		context.Background(),
+		http.MethodPost,
+		tokenURL,
+		strings.NewReader(data.Encode()),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("token request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := guardianHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token request: %w", err)
 	}
