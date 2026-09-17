@@ -199,7 +199,18 @@ func (s *Server) exchangeCode(oauth *OAuthConfig, code, redirectURI string) (*OA
 }
 
 // RefreshToken refreshes an expired access token for a provider connection.
+// Concurrent callers for the same connection share one upstream exchange.
 func (s *Server) RefreshToken(connectionID string) (*OAuthToken, error) {
+	return s.refreshFlight.Do(connectionID, func() (*OAuthToken, error) {
+		// Another waiter may have already refreshed while we queued.
+		if tok := s.tokens.Get(connectionID); tok != nil && !tok.IsExpired(30*time.Second) {
+			return tok, nil
+		}
+		return s.refreshTokenOnce(connectionID)
+	})
+}
+
+func (s *Server) refreshTokenOnce(connectionID string) (*OAuthToken, error) {
 	tok := s.tokens.Get(connectionID)
 	if tok == nil || tok.RefreshToken == "" {
 		return nil, fmt.Errorf("no refresh token for %s", connectionID)
