@@ -85,3 +85,132 @@ func TestNewArtist_EmptyName(t *testing.T) {
 		t.Fatalf("expected empty artist, got %+v", got)
 	}
 }
+
+func TestCleanYouTubeTitle(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"So What (Official Video)", "So What"},
+		{"So What (Official Music Video)", "So What"},
+		{"So What (Official Audio)", "So What"},
+		{"So What (Lyrics)", "So What"},
+		{"So What [Official Video]", "So What"},
+		{"Blue in Green (Official Video) (HD)", "Blue in Green"},
+		{"So What", "So What"},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := cleanYouTubeTitle(c.in); got != c.want {
+			t.Errorf("cleanYouTubeTitle(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestMergeTracksSync_ISRCPreferredOverName(t *testing.T) {
+	// Same display name, different ISRCs → stay separate (different recordings).
+	merged := MergeTracksSync([]Track{
+		{
+			Name:     "Song",
+			Artists:  []Artist{newArtist("spotify", "Spotify", "", "A")},
+			EntityID: "USRC12345678",
+			Sources:  []TrackSource{{Service: "spotify", ID: "sp1"}},
+		},
+		{
+			Name:     "Song",
+			Artists:  []Artist{newArtist("spotify", "Spotify", "", "A")},
+			EntityID: "USRC87654321",
+			Sources:  []TrackSource{{Service: "spotify", ID: "sp2"}},
+		},
+	})
+	if len(merged) != 2 {
+		t.Fatalf("distinct ISRCs must not merge: %+v", merged)
+	}
+
+	// Shared ISRC across services → one entity, match=isrc.
+	merged = MergeTracksSync([]Track{
+		{
+			Name:     "So What",
+			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Miles Davis")},
+			EntityID: "usrc17000001",
+			Sources:  []TrackSource{{Service: "spotify", ID: "sp1"}},
+		},
+		{
+			Name:     "So What (Remastered)",
+			Artists:  []Artist{newArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
+			EntityID: "USRC17000001",
+			Sources:  []TrackSource{{Service: "amazon-music", ID: "am1"}},
+		},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("shared ISRC should merge: %+v", merged)
+	}
+	if merged[0].EntityID != "USRC17000001" {
+		t.Fatalf("entity_id = %q", merged[0].EntityID)
+	}
+	if merged[0].Match != TrackMatchISRC {
+		t.Fatalf("match = %q, want isrc", merged[0].Match)
+	}
+	if len(merged[0].Sources) != 2 {
+		t.Fatalf("sources = %+v", merged[0].Sources)
+	}
+}
+
+func TestMergeTracksSync_NameFallbackAbsorbsIntoISRCGroup(t *testing.T) {
+	// YouTube has no ISRC; cleaned title should join the Spotify ISRC entity.
+	merged := MergeTracksSync([]Track{
+		{
+			Name:     "So What",
+			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Miles Davis")},
+			EntityID: "USRC17000001",
+			Sources:  []TrackSource{{Service: "spotify", ID: "sp1"}},
+		},
+		{
+			Name:    "So What",
+			Artists: []Artist{newArtist("youtube-music", "YouTube Music", "", "Miles Davis - Topic")},
+			Sources: []TrackSource{{Service: "youtube-music", ID: "vid1"}},
+		},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("name fallback should absorb into ISRC group: %+v", merged)
+	}
+	if merged[0].EntityID != "USRC17000001" {
+		t.Fatalf("entity_id = %q", merged[0].EntityID)
+	}
+	if merged[0].Match != TrackMatchISRC {
+		t.Fatalf("match = %q, want isrc (survivor keeps durable id)", merged[0].Match)
+	}
+	if len(merged[0].Sources) != 2 {
+		t.Fatalf("sources = %+v", merged[0].Sources)
+	}
+}
+
+func TestMergeTracksSync_NameOnlyMultiSource(t *testing.T) {
+	merged := MergeTracksSync([]Track{
+		{
+			Name:    "Song",
+			Artists: []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Sources: []TrackSource{{Service: "spotify", ID: "1"}},
+		},
+		{
+			Name:    "song",
+			Artists: []Artist{newArtist("tidal", "Tidal", "", "A")},
+			Sources: []TrackSource{{Service: "tidal", ID: "2"}},
+		},
+	})
+	if len(merged) != 1 {
+		t.Fatalf("got %d", len(merged))
+	}
+	if merged[0].Match != TrackMatchName {
+		t.Fatalf("match = %q, want name", merged[0].Match)
+	}
+}
+
+func TestIso8601DurationMs(t *testing.T) {
+	if got := iso8601DurationMs("PT3M42S"); got != 222000 {
+		t.Fatalf("PT3M42S = %d", got)
+	}
+	if got := iso8601DurationMs("PT1H2M3S"); got != 3723000 {
+		t.Fatalf("PT1H2M3S = %d", got)
+	}
+	if got := iso8601DurationMs("bogus"); got != 0 {
+		t.Fatalf("bogus = %d", got)
+	}
+}
