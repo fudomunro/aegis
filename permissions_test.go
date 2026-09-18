@@ -264,6 +264,84 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 	}
 }
 
+func TestClampPermissionsWithWritable(t *testing.T) {
+	caps := ServiceCapabilities{DataTypes: []DataTypeCapability{
+		{Name: "tracks", Operations: []Operation{{Method: "GET", Path: "/me/tracks"}}},
+		{Name: "photos", Operations: []Operation{
+			{Method: "GET", Path: "/photos"},
+			{Method: "POST", Path: "/picker/sessions"},
+		}},
+		{Name: "player", Operations: []Operation{{Method: "GET", Path: "/me/player"}}},
+		{Name: "playlists", Operations: []Operation{{Method: "GET", Path: "/me/playlists"}}},
+	}}
+	// Mirror adapters make playlists writable even though proxy ops are GET-only.
+	writable := map[string]bool{"photos": true, "playlists": true}
+	p := Permissions{
+		PermissionDefaultKey: AccessFull,
+		"tracks":             AccessFull,
+		"photos":             AccessFull,
+		"playlists":          AccessFull,
+		"player":             AccessWrite,
+		"custom":             AccessFull, // unknown to connector — left alone
+	}
+	got := clampPermissionsWithWritable(p, caps, writable)
+	if got["tracks"] != AccessRead {
+		t.Fatalf("tracks = %q, want read (clamped; no write path)", got["tracks"])
+	}
+	if got["photos"] != AccessFull {
+		t.Fatalf("photos = %q, want read-write (proxy write op)", got["photos"])
+	}
+	if got["playlists"] != AccessFull {
+		t.Fatalf("playlists = %q, want read-write (mirror target write)", got["playlists"])
+	}
+	if got["player"] != AccessRead {
+		t.Fatalf("player = %q, want read (clamped)", got["player"])
+	}
+	if got["custom"] != AccessFull {
+		t.Fatalf("custom = %q, want preserved (unknown type)", got["custom"])
+	}
+	if got[PermissionDefaultKey] != AccessFull {
+		t.Fatalf("default = %q, want preserved", got[PermissionDefaultKey])
+	}
+}
+
+func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
+	cfg := &Config{Services: []Service{{
+		ID:   "spotify",
+		Name: "Spotify",
+		// Legacy write grant — must not unlock proxy writes the connector
+		// does not implement (mirror write is a separate path).
+		Permissions: Permissions{"tracks": AccessFull, "playlists": AccessFull},
+	}}}
+	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	svc := cfg.GetService("spotify")
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/services/spotify/me/tracks", nil)
+	w := httptest.NewRecorder()
+	if srv.AllowDataPermission(w, req, svc, "/me/tracks") {
+		t.Fatal("POST tracks should be denied: connector has no write ops for tracks")
+	}
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "does not support write") {
+		t.Fatalf("body = %s, want connector write-capability denial", w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/v1/services/spotify/me/tracks", nil)
+	w = httptest.NewRecorder()
+	if !srv.AllowDataPermission(w, req, svc, "/me/tracks") {
+		t.Fatal("GET tracks should be allowed under read-write permission")
+	}
+
+	// Spotify is a mirror target for playlists/tracks — Editable stays available.
+	writable := srv.writableDataSet("spotify", NewSpotifyConnector(srv).Capabilities())
+	if !writable["playlists"] || !writable["tracks"] {
+		t.Fatalf("spotify writable set = %v, want playlists+tracks via mirror", writable)
+	}
+}
+
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
 }

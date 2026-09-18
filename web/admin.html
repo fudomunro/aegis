@@ -117,34 +117,22 @@
   .perm-editor {
     margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
   }
-  .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.5rem; }
-  .perm-section { margin-bottom: 0.9rem; }
-  .perm-section-title {
-    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em;
-    color: var(--dim); margin-bottom: 0.25rem; font-weight: 650;
-  }
-  .perm-section-help { margin-bottom: 0.55rem; }
+  .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.35rem; }
+  .perm-help { margin-bottom: 0.65rem; }
+  .perm-list { margin-bottom: 0.35rem; }
   .perm-row {
-    display: grid; grid-template-columns: minmax(100px, 1.2fr) minmax(120px, 1fr) auto;
-    gap: 0.5rem; align-items: center; margin-bottom: 0.45rem;
+    display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 180px);
+    gap: 0.65rem; align-items: center; margin-bottom: 0.4rem;
   }
-  .perm-row label { font-size: 0.85rem; color: var(--dim); line-height: 1.35; }
-  .perm-row-library label { color: var(--text); }
-  .perm-note { font-size: 0.72rem; color: var(--dim); font-weight: 400; }
-  .perm-row select, .perm-add input, .perm-add select {
+  .perm-row label { font-size: 0.88rem; color: var(--text); line-height: 1.3; }
+  .perm-row label .perm-key {
+    display: block; color: var(--dim); font-size: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  .perm-row select {
     width: 100%; background: var(--surface2); border: 1px solid var(--border); color: var(--text);
-    border-radius: 6px; padding: 0.4rem 0.55rem; font: inherit; font-size: 0.85rem;
+    border-radius: 6px; padding: 0.45rem 0.55rem; font: inherit; font-size: 0.88rem;
   }
-  .perm-row-disabled { opacity: 0.72; }
-  .perm-row-disabled label { color: var(--dim); }
-  .perm-locked {
-    display: inline-flex; align-items: center; justify-content: center;
-    min-height: 2.1rem; padding: 0.35rem 0.55rem; border-radius: 6px;
-    background: var(--surface); border: 1px dashed var(--border);
-    color: var(--dim); font-size: 0.8rem; font-variant-numeric: tabular-nums;
-  }
-  .perm-row select:disabled { opacity: 0.55; cursor: not-allowed; }
-  .perm-add { display: grid; grid-template-columns: 1fr 1fr auto; gap: 0.5rem; margin-top: 0.55rem; }
+  .perm-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
   .perm-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
   .perm-status { font-size: 0.82rem; color: var(--dim); margin-top: 0.45rem; min-height: 1.1em; }
   .perm-status.ok { color: var(--green); }
@@ -188,7 +176,7 @@
   @media (max-width: 560px) {
     .wrap { padding: 1rem 0.85rem 2rem; }
     th:nth-child(3), td:nth-child(3) { display: none; }
-    .perm-row, .perm-add { grid-template-columns: 1fr; }
+    .perm-row { grid-template-columns: 1fr; gap: 0.25rem; }
   }
 </style>
 </head>
@@ -993,41 +981,52 @@
     return '<span class="badge badge-gray">' + escapeHtml(action || "—") + "</span>";
   }
 
-  const ACCESS_LEVELS = ["none", "read", "write", "read-write"];
-  // Types shown in the Library tab. Permissions for these map 1:1 to library views.
+  // Core data types — same synced library kinds the Map shows (flow.go).
+  // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
+  // any explicit keys from guardian.json that are not rendered.
   const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos"];
-  const LIBRARY_TYPE_META = {
-    playlists: { label: "Playlists", endpoint: "/v1/library/playlists" },
-    tracks: { label: "Liked tracks", endpoint: "/v1/library/tracks" },
-    albums: { label: "Albums", endpoint: "/v1/library/albums" },
-    artists: { label: "Artists", endpoint: "/v1/library/artists" },
-    contacts: { label: "Contacts", endpoint: "/v1/library/contacts" },
-    photos: { label: "Photos", endpoint: "/v1/library/photos" },
+  const DATA_TYPE_LABELS = {
+    playlists: "Playlists",
+    tracks: "Liked tracks",
+    albums: "Saved albums",
+    artists: "Followed artists",
+    contacts: "Contacts",
+    photos: "Photos",
   };
-  // Connector types that are not part of the Library tab (proxy-only / future).
-  const FALLBACK_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos",
-    "user", "search", "player", "channels", "library", "recommendations"];
+  // User-facing access options. Backend still stores none/read/write/read-write.
+  const ACCESS_CHOICES = [
+    { value: "read", label: "Available" },
+    { value: "read-write", label: "Editable" },
+    { value: "none", label: "Off" },
+  ];
   const openPermEditors = new Set();
-
-  function isLibraryDataType(key) {
-    return LIBRARY_DATA_TYPES.indexOf(key) !== -1;
-  }
 
   function normalizeAccess(level) {
     const v = String(level || "").toLowerCase();
-    if (v === "none" || v === "deny" || v === "off") return "none";
+    if (v === "none" || v === "deny" || v === "off" || v === "false") return "none";
     if (v === "read" || v === "ro" || v === "readonly" || v === "read-only") return "read";
-    if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only") return "write";
-    if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite") return "read-write";
+    if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only" || v === "mutate") return "write";
+    if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite" || v === "read_write") return "read-write";
     return v || "read-write";
   }
 
-  function accessSelect(name, selected, extraClass, disabled) {
+  function dataTypeLabel(key) {
+    return DATA_TYPE_LABELS[key] || key;
+  }
+
+  function accessSelect(name, selected, allowWrite) {
     const cur = normalizeAccess(selected);
-    const dis = disabled ? " disabled" : "";
-    return '<select class="' + (extraClass || "") + '" data-perm-key="' + escapeHtml(name) + '"' + dis + ">" +
-      ACCESS_LEVELS.map((lvl) =>
-        '<option value="' + lvl + '"' + (lvl === cur ? " selected" : "") + ">" + lvl + "</option>"
+    // Display write as Available when the connector cannot write this type —
+    // the form must not offer a way to increase available functionality.
+    const display = (!allowWrite && (cur === "read-write" || cur === "write")) ? "read" : cur;
+    const options = ACCESS_CHOICES.filter((o) => allowWrite || o.value !== "read-write");
+    if (options.every((o) => o.value !== display) && display) {
+      options.push({ value: display, label: display });
+    }
+    return '<select data-perm-key="' + escapeHtml(name) + '" aria-label="' + escapeHtml(dataTypeLabel(name)) + '">' +
+      options.map((opt) =>
+        '<option value="' + escapeHtml(opt.value) + '"' +
+        (opt.value === display ? " selected" : "") + ">" + escapeHtml(opt.label) + "</option>"
       ).join("") +
       "</select>";
   }
@@ -1036,124 +1035,87 @@
     const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
     if (!root) return null;
     const map = {};
-    // Include disabled (non-library) selects so saving does not drop their
-    // existing values — the user simply cannot edit them from this form.
+    // Keep keys the simple form does not show (default, proxy-only types, custom)
+    // so Save does not drop them from guardian.json.
+    try {
+      const original = root.getAttribute("data-original-perms");
+      if (original) Object.assign(map, JSON.parse(original));
+    } catch (e) { /* ignore malformed original snapshot */ }
     root.querySelectorAll("select[data-perm-key]").forEach((sel) => {
       const key = sel.getAttribute("data-perm-key");
-      if (!key || key === "__new__") return;
+      if (!key) return;
       map[key] = sel.value;
     });
     return map;
   }
 
-  function permRow(key, level, serviceId, opts) {
-    const o = opts || {};
-    const disabled = !!o.disabled;
-    const labelExtra = o.labelExtra || "";
-    const note = o.note ? '<span class="perm-note">' + escapeHtml(o.note) + "</span>" : "";
-    // Always emit a select (even when disabled) so collectPermEditor still
-    // sees the value and Save does not drop locked keys from guardian.json.
-    const control = accessSelect(key, level, disabled ? "perm-locked-select" : "", disabled);
-    const action = o.hideRemove
-      ? "<span></span>"
-      : '<button type="button" class="btn btn-danger perm-remove" data-service="' + escapeHtml(serviceId) +
-        '" data-key="' + escapeHtml(key) + '" title="Remove this row"' + (disabled ? " disabled" : "") + ">Remove</button>";
-    return '<div class="perm-row' + (disabled ? " perm-row-disabled" : "") + (o.library ? " perm-row-library" : "") + '">' +
-      "<label>" + escapeHtml(key) + labelExtra + (note ? "<br>" + note : "") + "</label>" +
-      control +
-      action +
+  function permRow(key, level, allowWrite) {
+    return '<div class="perm-row">' +
+      '<label for="perm-' + escapeHtml(key) + '">' + escapeHtml(dataTypeLabel(key)) + "</label>" +
+      accessSelect(key, level, allowWrite).replace("<select ", '<select id="perm-' + escapeHtml(key) + '" ') +
       "</div>";
+  }
+
+  function corePermTypes(svc, perms) {
+    // Match the Map: library kinds only. Prefer connector-advertised types;
+    // also keep any core kind that already has an explicit permission.
+    const known = (svc.available_data_types && svc.available_data_types.length)
+      ? svc.available_data_types.filter((k) => k && k !== "default")
+      : null;
+    return LIBRARY_DATA_TYPES.filter((t) => {
+      if (known) {
+        return known.indexOf(t) !== -1 || Object.prototype.hasOwnProperty.call(perms || {}, t);
+      }
+      return true;
+    });
   }
 
   function renderPermEditor(svc) {
     const id = svc.id;
     const perms = svc.permissions || {};
-    const known = (svc.available_data_types && svc.available_data_types.length)
-      ? svc.available_data_types
-      : FALLBACK_DATA_TYPES.slice();
-    const keys = Object.keys(perms).sort((a, b) => {
-      if (a === "default") return -1;
-      if (b === "default") return 1;
-      return a.localeCompare(b);
-    });
-    // default + known + any explicit permission keys not already listed
-    const show = ["default"];
-    known.forEach((k) => { if (k !== "default" && show.indexOf(k) === -1) show.push(k); });
-    keys.forEach((k) => {
-      if (show.indexOf(k) === -1) show.push(k);
-    });
+    const show = corePermTypes(svc, perms);
+    const writable = new Set(svc.writable_data_types || []);
 
-    // Library types this connector actually supports (intersection).
-    const connectorTypes = known.filter((k) => k !== "default");
-    const libraryTypes = LIBRARY_DATA_TYPES.filter((t) => connectorTypes.indexOf(t) !== -1);
-    const otherTypes = show.filter((k) =>
-      k !== "default" && !isLibraryDataType(k));
+    // Unset types display as Available (read) — the common agent case.
+    // Editable is only offered when the connector currently supports write;
+    // saved levels stay sticky if write support appears later.
+    const rows = show.map((key) => {
+      const level = perms[key] != null ? perms[key] : "read";
+      return permRow(key, level, writable.has(key));
+    }).join("");
 
-    const defaultLevel = perms["default"] != null ? perms["default"] : "read-write";
-    let html = "";
-
-    html += '<div class="perm-section">';
-    html += '<h5 class="perm-section-title">Library data</h5>';
-    html += '<p class="meta perm-section-help">These types appear in the Library tab. Setting <code>none</code> hides that library view for this service.</p>';
-    if (!libraryTypes.length) {
-      html += '<p class="meta">This connector does not feed any Library views.</p>';
-    }
-    libraryTypes.forEach((key) => {
-      const meta = LIBRARY_TYPE_META[key] || { label: key, endpoint: "" };
-      // Unset types inherit the default fallback level (server DefaultAccessType
-      // is read-write when no permissions block exists).
-      const level = perms[key] != null ? perms[key] : defaultLevel;
-      html += permRow(key, level, id, {
-        library: true,
-        hideRemove: false,
-        labelExtra: ' <span class="badge badge-blue">' + escapeHtml(meta.label) + "</span>",
-        note: meta.endpoint ? "Library: " + meta.endpoint : "",
-      });
-    });
-    html += "</div>";
-
-    html += '<div class="perm-section">';
-    html += '<h5 class="perm-section-title">Other data types</h5>';
-    html += '<p class="meta perm-section-help">Not shown in the Library tab. Inputs are locked so permissions stay aligned with the data you can see there. Existing values are preserved on save.</p>';
-    html += permRow("default", defaultLevel, id, {
-      hideRemove: true,
-      labelExtra: " (fallback)",
-      note: "Applies to types not listed and to locked rows without an explicit level.",
-    });
-    if (!otherTypes.length) {
-      html += '<p class="meta">No extra connector types.</p>';
-    }
-    otherTypes.forEach((key) => {
-      const level = perms[key] != null ? perms[key] : defaultLevel;
-      // Known connector types that aren't in Library stay locked. Explicit
-      // custom keys the user added remain editable.
-      const isCustom = FALLBACK_DATA_TYPES.indexOf(key) === -1 && known.indexOf(key) === -1;
-      html += permRow(key, level, id, {
-        disabled: !isCustom,
-        hideRemove: isCustom,
-        note: isCustom ? "Custom type (not in Library)" : "Not in Library — proxy/API type only",
-      });
-    });
-    html += "</div>";
-
-    // Custom key add still allowed for advanced/explicit mappings.
-    html += '<div class="perm-add">' +
-      '<input type="text" class="perm-custom-key" placeholder="custom type (advanced)" aria-label="Custom data type">' +
-      accessSelect("__new__", "read", "perm-custom-level") +
-      '<button type="button" class="btn perm-add-btn" data-service="' + escapeHtml(id) + '">Add</button>' +
-      "</div>";
-
-    return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) + '">' +
-      "<h4>Agent data permissions</h4>" +
-      '<p class="meta" style="margin-bottom:0.55rem">Levels: none · read · write · read-write. Saving writes <code>guardian.json</code> and clears the response cache.</p>' +
-      html +
+    const original = JSON.stringify(perms || {});
+    return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
+      '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
+      "<h4>Agent data access</h4>" +
+      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Editable = read and change (only where the connector supports writes) · Off = hidden. Permissions only narrow connector access — they never add capabilities. Saves write <code>guardian.json</code>.</p>' +
+      (show.length
+        ? '<div class="perm-list">' + rows + "</div>"
+        : '<p class="meta">No core data types for this service.</p>') +
       '<div class="perm-actions">' +
-      '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save permissions</button>' +
-      '<button type="button" class="btn perm-reset" data-service="' + escapeHtml(id) + '">Reset form</button>' +
-      '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Clear (unrestricted)</button>' +
+      '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save</button>' +
+      '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Allow all</button>' +
       "</div>" +
       '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
       "</div>";
+  }
+
+  function permSummary(perms) {
+    const keys = Object.keys(perms || {});
+    if (!keys.length) return "unrestricted";
+    const denied = [];
+    const editable = [];
+    keys.sort().forEach((k) => {
+      const level = normalizeAccess(perms[k]);
+      if (k === "default") return;
+      if (level === "none") denied.push(dataTypeLabel(k));
+      else if (level === "read-write" || level === "write") editable.push(dataTypeLabel(k));
+    });
+    const parts = [];
+    if (denied.length) parts.push("off: " + denied.join(", "));
+    if (editable.length) parts.push("editable: " + editable.join(", "));
+    if (!parts.length) parts.push("available");
+    return parts.join(" · ");
   }
 
   async function savePermissions(serviceId, permissions, clear) {
@@ -1170,7 +1132,7 @@
         body: JSON.stringify(body),
       });
       if (status) {
-        status.textContent = clear ? "Cleared — agents unrestricted." : "Saved.";
+        status.textContent = clear ? "Agents have unrestricted access." : "Saved.";
         status.className = "perm-status ok";
       }
       await loadSummary();
@@ -1252,11 +1214,7 @@
         : '<div class="meta">No OAuth configuration</div>';
 
       const perms = svc.permissions || {};
-      const permKeys = Object.keys(perms).sort();
-      const permBits = permKeys.length
-        ? '<div class="meta">Permissions: ' + permKeys.map((k) =>
-            '<code>' + escapeHtml(k) + "=" + escapeHtml(perms[k]) + "</code>").join(" ") + "</div>"
-        : '<div class="meta">Permissions: <em>unrestricted</em></div>';
+      const permBits = '<div class="meta">Agent data: <em>' + escapeHtml(permSummary(perms)) + "</em></div>";
 
       const actions = [];
       if (svc.login_path && svc.has_oauth) {
@@ -1983,74 +1941,13 @@
     if (btn.classList.contains("perm-save")) {
       const map = collectPermEditor(serviceId);
       if (!map) return;
-      // Unset rows that still show unrestricted default for non-default keys
-      // are sent as-is so the operator can set them explicitly.
       savePermissions(serviceId, map, false);
       return;
     }
     if (btn.classList.contains("perm-clear")) {
-      if (!confirm("Remove the permissions block for " + serviceId + "? Agents will have unrestricted access.")) return;
+      if (!confirm("Allow agents unrestricted access to " + serviceId + "?")) return;
       savePermissions(serviceId, {}, true);
       return;
-    }
-    if (btn.classList.contains("perm-reset")) {
-      renderServices($("service-filter").value);
-      return;
-    }
-    if (btn.classList.contains("perm-remove")) {
-      const row = btn.closest(".perm-row");
-      if (row) row.remove();
-      return;
-    }
-    if (btn.classList.contains("perm-add-btn")) {
-      const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
-      if (!root) return;
-      const input = root.querySelector(".perm-custom-key");
-      const levelSel = root.querySelector(".perm-custom-level");
-      const key = (input && input.value || "").trim();
-      if (!key) {
-        if (input) input.focus();
-        return;
-      }
-      if (key === "default") {
-        // Update default row if present.
-        const existing = root.querySelector('select[data-perm-key="default"]');
-        if (existing && levelSel) {
-          existing.value = levelSel.value;
-          input.value = "";
-          return;
-        }
-      }
-      // Avoid duplicate rows.
-      if (root.querySelector('select[data-perm-key="' + CSS.escape(key) + '"]')) {
-        input.value = "";
-        return;
-      }
-      const div = document.createElement("div");
-      div.className = "perm-row";
-      const label = document.createElement("label");
-      label.textContent = key;
-      const sel = document.createElement("select");
-      sel.setAttribute("data-perm-key", key);
-      ACCESS_LEVELS.forEach((lvl) => {
-        const opt = document.createElement("option");
-        opt.value = lvl;
-        opt.textContent = lvl;
-        if (levelSel && lvl === levelSel.value) opt.selected = true;
-        sel.appendChild(opt);
-      });
-      const rm = document.createElement("button");
-      rm.type = "button";
-      rm.className = "btn btn-danger perm-remove";
-      rm.setAttribute("data-service", serviceId);
-      rm.setAttribute("data-key", key);
-      rm.textContent = "Remove";
-      div.appendChild(label);
-      div.appendChild(sel);
-      div.appendChild(rm);
-      const addBox = root.querySelector(".perm-add");
-      root.insertBefore(div, addBox);
-      input.value = "";
     }
   });
 

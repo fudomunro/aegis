@@ -835,20 +835,44 @@ func (truncatingTrackProvider) ListUserLikedTracks(context.Context) ([]Track, bo
 	return []Track{{Name: "Only Prefix"}}, true, nil
 }
 
-func TestAdminHTML_LockedPermUsesSelect(t *testing.T) {
+func TestAdminHTML_SimplePermForm(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
 	body := w.Body.String()
-	// Locked rows must emit a select (not a bare span) so Save keeps values.
-	if !strings.Contains(body, "perm-locked-select") {
-		t.Fatal("expected disabled select class for locked permission rows")
+	// Issue #61: form is a simple per-type availability control for core Map types.
+	for _, want := range []string{
+		"Agent data access",
+		"Available",
+		"Editable",
+		"data-perm-key",
+		"data-original-perms",
+		"Allow all",
+		"Liked tracks",
+		"Followed artists",
+		"Saved albums",
+		"LIBRARY_DATA_TYPES",
+		"writable_data_types",
+		"allowWrite",
+		"never add capabilities",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)
+		}
 	}
-	if strings.Contains(body, "class=\"perm-locked\"") && !strings.Contains(body, "accessSelect(key, level") {
-		// span-only locked control is the old buggy shape
-		if strings.Contains(body, "'<span class=\"perm-locked\">'") {
-			t.Fatal("locked rows still render a span-only control")
+	// Advanced clutter from the old dialog should stay gone.
+	for _, gone := range []string{
+		"perm-custom-key",
+		"perm-locked-select",
+		"custom type (advanced)",
+		"Other data types",
+		"class=\"perm-key\"",
+		"Playback",
+		"Library aliases",
+	} {
+		if strings.Contains(body, gone) {
+			t.Fatalf("admin HTML still contains old permissions dialog piece %q", gone)
 		}
 	}
 }
