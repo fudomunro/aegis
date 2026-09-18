@@ -273,35 +273,36 @@ func TestClampPermissionsWithWritable(t *testing.T) {
 		}},
 		{Name: "player", Operations: []Operation{{Method: "GET", Path: "/me/player"}}},
 		{Name: "playlists", Operations: []Operation{{Method: "GET", Path: "/me/playlists"}}},
+		{Name: "contacts", Operations: []Operation{
+			{Method: "GET", Path: "/me/contacts"},
+			{Method: "POST", Path: "/people/merge"},
+		}},
 	}}
-	// Mirror adapters make playlists writable even though proxy ops are GET-only.
-	writable := map[string]bool{"photos": true, "playlists": true}
+	// Picker POST is not agent-writable; contacts POST (data write) is.
+	writable := writableDataTypesFromCapabilities(caps)
+	if len(writable) != 1 || writable[0] != "contacts" {
+		t.Fatalf("writable from caps = %v, want [contacts]", writable)
+	}
+	wset := map[string]bool{"contacts": true}
 	p := Permissions{
 		PermissionDefaultKey: AccessFull,
 		"tracks":             AccessFull,
 		"photos":             AccessFull,
 		"playlists":          AccessFull,
+		"contacts":           AccessFull,
 		"player":             AccessWrite,
-		"custom":             AccessFull, // unknown to connector — left alone
+		"custom":             AccessFull,
 	}
-	got := clampPermissionsWithWritable(p, caps, writable)
-	if got["tracks"] != AccessRead {
-		t.Fatalf("tracks = %q, want read (clamped; no write path)", got["tracks"])
+	got := clampPermissionsWithWritable(p, caps, wset)
+	if got["tracks"] != AccessRead || got["playlists"] != AccessRead || got["photos"] != AccessRead || got["player"] != AccessRead {
+		t.Fatalf("non-agent-writable types should clamp to read: tracks=%q playlists=%q photos=%q player=%q",
+			got["tracks"], got["playlists"], got["photos"], got["player"])
 	}
-	if got["photos"] != AccessFull {
-		t.Fatalf("photos = %q, want read-write (proxy write op)", got["photos"])
+	if got["contacts"] != AccessFull {
+		t.Fatalf("contacts = %q, want read-write (true data write op)", got["contacts"])
 	}
-	if got["playlists"] != AccessFull {
-		t.Fatalf("playlists = %q, want read-write (mirror target write)", got["playlists"])
-	}
-	if got["player"] != AccessRead {
-		t.Fatalf("player = %q, want read (clamped)", got["player"])
-	}
-	if got["custom"] != AccessFull {
-		t.Fatalf("custom = %q, want preserved (unknown type)", got["custom"])
-	}
-	if got[PermissionDefaultKey] != AccessFull {
-		t.Fatalf("default = %q, want preserved", got[PermissionDefaultKey])
+	if got["custom"] != AccessFull || got[PermissionDefaultKey] != AccessFull {
+		t.Fatalf("unknown/default should be preserved: custom=%q default=%q", got["custom"], got[PermissionDefaultKey])
 	}
 }
 
@@ -335,10 +336,25 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 		t.Fatal("GET tracks should be allowed under read-write permission")
 	}
 
-	// Spotify is a mirror target for playlists/tracks — Editable stays available.
+	// Mirror does not make core types Editable in the admin form.
 	writable := srv.writableDataSet("spotify", NewSpotifyConnector(srv).Capabilities())
-	if !writable["playlists"] || !writable["tracks"] {
-		t.Fatalf("spotify writable set = %v, want playlists+tracks via mirror", writable)
+	if len(writable) != 0 {
+		t.Fatalf("spotify writable set = %v, want empty (no agent data write ops)", writable)
+	}
+}
+
+func TestWritableDataTypes_ExcludesPickerAndSearch(t *testing.T) {
+	caps := ServiceCapabilities{DataTypes: []DataTypeCapability{
+		{Name: "photos", Operations: []Operation{
+			{Method: "GET", Path: "/photos"},
+			{Method: "POST", Path: "/picker/sessions"},
+		}},
+		{Name: "photos2", Operations: []Operation{
+			{Method: "POST", Path: "/search/metadata"},
+		}},
+	}}
+	if got := writableDataTypesFromCapabilities(caps); len(got) != 0 {
+		t.Fatalf("picker/search POSTs must not mark types writable, got %v", got)
 	}
 }
 
