@@ -853,6 +853,9 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"Followed artists",
 		"Saved albums",
 		"LIBRARY_DATA_TYPES",
+		"writable_data_types",
+		"allowWrite",
+		"never add capabilities",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)

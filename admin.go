@@ -29,6 +29,10 @@ type AdminService struct {
 	Permissions map[string]string `json:"permissions,omitempty"`
 	// AvailableDataTypes lists connector-known types the UI can edit.
 	AvailableDataTypes []string `json:"available_data_types,omitempty"`
+	// WritableDataTypes lists connector types that currently expose at least
+	// one mutating operation. The admin form only offers Editable for these;
+	// saved write levels are clamped so permissions cannot exceed the connector.
+	WritableDataTypes []string `json:"writable_data_types,omitempty"`
 	HasOAuth           bool     `json:"has_oauth"`
 	// ConnectionID is the shared provider connection this surface uses (issue #26).
 	ConnectionID  string       `json:"connection_id,omitempty"`
@@ -186,6 +190,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			item.AvailableDataTypes = types
+			item.WritableDataTypes = s.writableDataTypesFor(item.ID, caps)
 		}
 		// Token store keys are provider connection IDs only.
 		if st, ok := tokens[item.ConnectionID]; ok {
@@ -290,16 +295,20 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 			perms = map[string]string{}
 		}
 		var types []string
+		var writable []string
 		if connector, ok := s.connectors[id]; ok {
-			for _, dt := range connector.Capabilities().DataTypes {
+			caps := connector.Capabilities()
+			for _, dt := range caps.DataTypes {
 				types = append(types, dt.Name)
 			}
+			writable = s.writableDataTypesFor(id, caps)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
 			"service_id":           id,
 			"permissions":          perms,
 			"available_data_types": types,
+			"writable_data_types":  writable,
 		})
 	case http.MethodPut:
 		body, err := io.ReadAll(r.Body)
@@ -314,7 +323,14 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 				return
 			}
 		}
-		if err := s.config.SetServicePermissions(id, req.Permissions); err != nil {
+		// Permissions may only further constrain Guardian — never grant write
+		// where neither proxy ops nor mirror adapters can write that type.
+		saved := req.Permissions
+		if connector, ok := s.connectors[id]; ok && len(saved) > 0 {
+			caps := connector.Capabilities()
+			saved = clampPermissionsWithWritable(saved, caps, s.writableDataSet(id, caps))
+		}
+		if err := s.config.SetServicePermissions(id, saved); err != nil {
 			withPeerLog(slog.With("handler", "admin_permissions"), r).
 				Warn("failed to save permissions", "service", id, "error", err)
 			writeJSONError(w, http.StatusBadRequest, err.Error())

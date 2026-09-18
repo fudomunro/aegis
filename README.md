@@ -177,6 +177,11 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 
 - The reserved key `default` applies to data types not listed.
 - If `permissions` is omitted, agents keep unrestricted access (previous behavior).
+- Permissions **further constrain** the connector; they never add capabilities.
+  Write / read-write on a data type the connector does not currently implement
+  is treated as read (admin saves clamp it; proxy and mirror deny mutating
+  methods). If a connector later gains write support for that type, an existing
+  `read` level stays `read` — enable write explicitly in the admin form.
 - Enforcement is on the service proxy, the unified library endpoint, and the
   `/capabilities` response (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
@@ -844,8 +849,8 @@ GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries)
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
-GET /v1/admin/services/{id}/permissions  — current agent permission map
-PUT /v1/admin/services/{id}/permissions  — replace the map (writes guardian.json)
+GET /v1/admin/services/{id}/permissions  — current agent permission map + available/writable types
+PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes guardian.json)
 ```
 
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
@@ -868,11 +873,11 @@ edit permissions.
 
 Each service card has an **Edit permissions** form: one control per core data
 type shown on the Map (playlists, liked tracks, saved albums, followed
-artists, contacts, photos), labeled in plain language. Available / Editable /
-Off. Save writes `guardian.json` and clears the response cache so denials take
-effect immediately. **Allow all** removes the permissions block (unrestricted
-agent access). Keys not shown in the form (for example proxy-only types or
-`default`) are preserved on save.
+artists, contacts, photos), labeled in plain language. Available / Off always;
+**Editable** only when that connector currently exposes a write for the type.
+Save writes `guardian.json` (clamping write levels to connector capability)
+and clears the response cache. **Allow all** removes the permissions block.
+Keys not shown in the form are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)
 also show **Pick photos…** on the service card: it creates a session, opens
