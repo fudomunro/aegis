@@ -178,10 +178,12 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 - The reserved key `default` applies to data types not listed.
 - If `permissions` is omitted, agents keep unrestricted access (previous behavior).
 - Permissions **further constrain** the connector; they never add capabilities.
-  Write / read-write on a data type the connector does not currently implement
-  is treated as read (admin saves clamp it; proxy and mirror deny mutating
-  methods). If a connector later gains write support for that type, an existing
-  `read` level stays `read` — enable write explicitly in the admin form.
+  The admin form only offers **Editable** for types with a true agent data-write
+  operation on the connector. Mirror backup writes and photo-picker session
+  creates are not Editable. Write / read-write on a type the form cannot offer
+  is treated as read when saved from the admin UI (proxy still allows mutating
+  methods the connector implements if the config already has write and you do
+  not re-save). Enable write explicitly when a real agent write op appears.
 - Enforcement is on the service proxy, the unified library endpoint, and the
   `/capabilities` response (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
@@ -874,9 +876,9 @@ edit permissions.
 Each service card has an **Edit permissions** form: one control per core data
 type shown on the Map (playlists, liked tracks, saved albums, followed
 artists, contacts, photos), labeled in plain language. Available / Off always;
-**Editable** only when that connector currently exposes a write for the type.
-Save writes `guardian.json` (clamping write levels to connector capability)
-and clears the response cache. **Allow all** removes the permissions block.
+**Editable** only when agents can truly change that data through Guardian
+(not mirror backups or picker sessions). Save writes `guardian.json` and
+clears the response cache. **Allow all** removes the permissions block.
 Keys not shown in the form are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)

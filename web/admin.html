@@ -1088,7 +1088,7 @@
     return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
       "<h4>Agent data access</h4>" +
-      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Editable = read and change (only where the connector supports writes) · Off = hidden. Permissions only narrow connector access — they never add capabilities. Saves write <code>guardian.json</code>.</p>' +
+      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Saves write <code>guardian.json</code>.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +
@@ -1100,16 +1100,20 @@
       "</div>";
   }
 
-  function permSummary(perms) {
+  function permSummary(perms, writableTypes) {
     const keys = Object.keys(perms || {});
     if (!keys.length) return "unrestricted";
+    const writable = new Set(writableTypes || []);
     const denied = [];
     const editable = [];
     keys.sort().forEach((k) => {
       const level = normalizeAccess(perms[k]);
       if (k === "default") return;
       if (level === "none") denied.push(dataTypeLabel(k));
-      else if (level === "read-write" || level === "write") editable.push(dataTypeLabel(k));
+      // Only surface Editable for types the form can actually offer as writable.
+      else if ((level === "read-write" || level === "write") && writable.has(k)) {
+        editable.push(dataTypeLabel(k));
+      }
     });
     const parts = [];
     if (denied.length) parts.push("off: " + denied.join(", "));
@@ -1214,7 +1218,8 @@
         : '<div class="meta">No OAuth configuration</div>';
 
       const perms = svc.permissions || {};
-      const permBits = '<div class="meta">Agent data: <em>' + escapeHtml(permSummary(perms)) + "</em></div>";
+      const permBits = '<div class="meta">Agent data: <em>' +
+        escapeHtml(permSummary(perms, svc.writable_data_types)) + "</em></div>";
 
       const actions = [];
       if (svc.login_path && svc.has_oauth) {
