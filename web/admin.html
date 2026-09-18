@@ -1014,16 +1014,19 @@
     return DATA_TYPE_LABELS[key] || key;
   }
 
-  function accessSelect(name, selected) {
+  function accessSelect(name, selected, allowWrite) {
     const cur = normalizeAccess(selected);
-    const options = ACCESS_CHOICES.slice();
-    if (options.every((o) => o.value !== cur) && cur) {
-      options.push({ value: cur, label: cur });
+    // Display write as Available when the connector cannot write this type —
+    // the form must not offer a way to increase available functionality.
+    const display = (!allowWrite && (cur === "read-write" || cur === "write")) ? "read" : cur;
+    const options = ACCESS_CHOICES.filter((o) => allowWrite || o.value !== "read-write");
+    if (options.every((o) => o.value !== display) && display) {
+      options.push({ value: display, label: display });
     }
     return '<select data-perm-key="' + escapeHtml(name) + '" aria-label="' + escapeHtml(dataTypeLabel(name)) + '">' +
       options.map((opt) =>
         '<option value="' + escapeHtml(opt.value) + '"' +
-        (opt.value === cur ? " selected" : "") + ">" + escapeHtml(opt.label) + "</option>"
+        (opt.value === display ? " selected" : "") + ">" + escapeHtml(opt.label) + "</option>"
       ).join("") +
       "</select>";
   }
@@ -1046,10 +1049,10 @@
     return map;
   }
 
-  function permRow(key, level) {
+  function permRow(key, level, allowWrite) {
     return '<div class="perm-row">' +
       '<label for="perm-' + escapeHtml(key) + '">' + escapeHtml(dataTypeLabel(key)) + "</label>" +
-      accessSelect(key, level).replace("<select ", '<select id="perm-' + escapeHtml(key) + '" ') +
+      accessSelect(key, level, allowWrite).replace("<select ", '<select id="perm-' + escapeHtml(key) + '" ') +
       "</div>";
   }
 
@@ -1071,18 +1074,21 @@
     const id = svc.id;
     const perms = svc.permissions || {};
     const show = corePermTypes(svc, perms);
+    const writable = new Set(svc.writable_data_types || []);
 
     // Unset types display as Available (read) — the common agent case.
+    // Editable is only offered when the connector currently supports write;
+    // saved levels stay sticky if write support appears later.
     const rows = show.map((key) => {
       const level = perms[key] != null ? perms[key] : "read";
-      return permRow(key, level);
+      return permRow(key, level, writable.has(key));
     }).join("");
 
     const original = JSON.stringify(perms || {});
     return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
       "<h4>Agent data access</h4>" +
-      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Editable = read and change · Off = hidden. Saves write <code>guardian.json</code>.</p>' +
+      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Editable = read and change (only where the connector supports writes) · Off = hidden. Permissions only narrow connector access — they never add capabilities. Saves write <code>guardian.json</code>.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +

@@ -228,8 +228,146 @@ func FilterCapabilities(caps ServiceCapabilities, p Permissions) ServiceCapabili
 	return out
 }
 
+// isMutatingMethod reports whether the HTTP method changes data.
+func isMutatingMethod(method string) bool {
+	switch strings.ToUpper(strings.TrimSpace(method)) {
+	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+// dataTypeKnown reports whether the connector advertises the data type.
+func dataTypeKnown(caps ServiceCapabilities, dataType string) bool {
+	if dataType == "" {
+		return false
+	}
+	for _, dt := range caps.DataTypes {
+		if dt.Name == dataType {
+			return true
+		}
+	}
+	return false
+}
+
+// dataTypeHasWriteOp reports whether the connector exposes any mutating
+// operation for the data type. Permissions must not grant more than this.
+func dataTypeHasWriteOp(caps ServiceCapabilities, dataType string) bool {
+	if dataType == "" {
+		return false
+	}
+	for _, dt := range caps.DataTypes {
+		if dt.Name != dataType {
+			continue
+		}
+		for _, op := range dt.Operations {
+			method := op.Method
+			if method == "" {
+				method = http.MethodGet
+			}
+			if isMutatingMethod(method) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// writableDataTypesFromCapabilities lists data types with at least one
+// mutating connector operation.
+func writableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
+	var out []string
+	for _, dt := range caps.DataTypes {
+		if dataTypeHasWriteOp(caps, dt.Name) {
+			out = append(out, dt.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// writableDataSet reports every data type agents can currently write through
+// Guardian for this service: proxy mutating ops on the connector, plus mirror
+// adapter targets (playlists/liked tracks) which write upstream without
+// appearing as proxy Operations.
+func (s *Server) writableDataSet(serviceID string, caps ServiceCapabilities) map[string]bool {
+	set := map[string]bool{}
+	for _, name := range writableDataTypesFromCapabilities(caps) {
+		set[name] = true
+	}
+	if s != nil && serviceID != "" {
+		for _, kind := range []string{MirrorKindPlaylists, MirrorKindTracks} {
+			if _, err := s.mirrorTargetFor(serviceID, kind); err == nil {
+				set[kind] = true
+			}
+		}
+	}
+	return set
+}
+
+// writableDataTypesFor returns the sorted list for admin payloads.
+func (s *Server) writableDataTypesFor(serviceID string, caps ServiceCapabilities) []string {
+	set := s.writableDataSet(serviceID, caps)
+	out := make([]string, 0, len(set))
+	for k := range set {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// clampPermissionsWithWritable further constrains write levels so a saved
+// permission can never exceed what Guardian can write for that type today.
+// Known read-only types become read, so later write support does not
+// auto-open — the operator must enable it explicitly. Unknown keys and
+// "default" are preserved.
+func clampPermissionsWithWritable(p Permissions, caps ServiceCapabilities, writable map[string]bool) Permissions {
+	if p == nil {
+		return nil
+	}
+	known := map[string]bool{}
+	for _, dt := range caps.DataTypes {
+		known[dt.Name] = true
+	}
+	for _, kind := range []string{MirrorKindPlaylists, MirrorKindTracks} {
+		if writable[kind] {
+			known[kind] = true
+		}
+	}
+	out := make(Permissions, len(p))
+	for k, v := range p {
+		level := normalizeAccess(v)
+		if k != PermissionDefaultKey && known[k] && !writable[k] &&
+			(level == AccessWrite || level == AccessFull) {
+			level = AccessRead
+		}
+		out[k] = level
+	}
+	return out
+}
+
+// connectorWriteGate reports whether a mutating proxy call is blocked because
+// the connector does not implement write for that data type.
+func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool {
+	if !isMutatingMethod(method) || dataType == "" || serviceID == "" {
+		return false
+	}
+	conn, ok := s.connectors[serviceID]
+	if !ok || conn == nil {
+		return false
+	}
+	caps := conn.Capabilities()
+	if !dataTypeKnown(caps, dataType) {
+		return false
+	}
+	return !dataTypeHasWriteOp(caps, dataType)
+}
+
 // AllowDataPermission enforces the service's permission for a proxy request.
 // Returns true when the request may proceed. On denial it writes a 403 JSON error.
+// Permissions further constrain the connector: a write level never unlocks
+// mutating calls the connector does not implement.
 func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc *Service, remainingPath string) bool {
 	if svc == nil {
 		return false
@@ -239,6 +377,17 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		return true
 	}
 	dataType := DataTypeForPath(remainingPath)
+	if s.connectorWriteBlocked(svc.ID, dataType, r.Method) {
+		label := dataType
+		if label == "" {
+			label = "this data"
+		}
+		writeJSONError(w, http.StatusForbidden, fmt.Sprintf(
+			"permission denied: %s does not support write access to %s (method %s)",
+			svc.Name, label, r.Method,
+		))
+		return false
+	}
 	if svc.Permissions.Allows(dataType, r.Method) {
 		return true
 	}
