@@ -314,9 +314,9 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	if cfg.GetService("spotify").Permissions.For("player") != AccessNone {
 		t.Fatal("permissions not applied via admin route")
 	}
-	// Spotify playlists/tracks are writable via mirror adapters — write stays.
-	if got := cfg.GetService("spotify").Permissions.For("playlists"); got != AccessFull {
-		t.Fatalf("playlists permission = %q, want read-write (mirror write supported)", got)
+	// Mirror adapters are not agent "Editable" — playlists write is clamped on save.
+	if got := cfg.GetService("spotify").Permissions.For("playlists"); got != AccessRead {
+		t.Fatalf("playlists permission = %q, want read (clamped; not agent-writable)", got)
 	}
 	// Search is read-only on the connector — write levels are clamped to read.
 	body = `{"permissions":{"search":"read-write","player":"none"}}`
@@ -328,7 +328,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 		t.Fatalf("clamp put status = %d, body=%s", w.Code, w.Body.String())
 	}
 	if got := cfg.GetService("spotify").Permissions.For("search"); got != AccessRead {
-		t.Fatalf("search permission = %q, want read (clamped; no write path)", got)
+		t.Fatalf("search permission = %q, want read (clamped; no agent write path)", got)
 	}
 	if live, _, _ := srv.cache.Stats(); live != 0 {
 		t.Fatalf("cache should be cleared after permission save, live=%d", live)
@@ -357,11 +357,9 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	if !stringSliceContains(got.AvailableDataTypes, "playlists") {
 		t.Fatalf("available types = %v", got.AvailableDataTypes)
 	}
-	if !stringSliceContains(got.WritableDataTypes, "playlists") || !stringSliceContains(got.WritableDataTypes, "tracks") {
-		t.Fatalf("spotify writable types should include mirror kinds playlists/tracks, got %v", got.WritableDataTypes)
-	}
-	if stringSliceContains(got.WritableDataTypes, "search") || stringSliceContains(got.WritableDataTypes, "player") {
-		t.Fatalf("spotify read-only proxy types should not be writable, got %v", got.WritableDataTypes)
+	// Spotify has no agent-meaningful write ops — form must not offer Editable.
+	if len(got.WritableDataTypes) != 0 {
+		t.Fatalf("spotify writable types should be empty (mirror is not Editable), got %v", got.WritableDataTypes)
 	}
 
 	// Invalid level rejected.

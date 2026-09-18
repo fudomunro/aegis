@@ -252,7 +252,9 @@ func dataTypeKnown(caps ServiceCapabilities, dataType string) bool {
 }
 
 // dataTypeHasWriteOp reports whether the connector exposes any mutating
-// operation for the data type. Permissions must not grant more than this.
+// operation for the data type (including session/search POSTs). Used for
+// proxy enforcement: a permission write level never unlocks methods the
+// connector does not implement at all.
 func dataTypeHasWriteOp(caps ServiceCapabilities, dataType string) bool {
 	if dataType == "" {
 		return false
@@ -274,12 +276,50 @@ func dataTypeHasWriteOp(caps ServiceCapabilities, dataType string) bool {
 	return false
 }
 
+// isAgentDataWritePath filters mutating ops that are not "agents may change
+// this data type". Picker session creates and metadata search POSTs are
+// operational helpers, not library write surface for the permissions form.
+func isAgentDataWritePath(path string) bool {
+	p := strings.ToLower(path)
+	switch {
+	case strings.Contains(p, "/picker/"):
+		return false
+	case strings.Contains(p, "/search"):
+		return false
+	default:
+		return true
+	}
+}
+
+// dataTypeHasAgentWriteOp reports whether the connector exposes a mutating
+// operation that actually changes data of this type (not picker/search).
+func dataTypeHasAgentWriteOp(caps ServiceCapabilities, dataType string) bool {
+	if dataType == "" {
+		return false
+	}
+	for _, dt := range caps.DataTypes {
+		if dt.Name != dataType {
+			continue
+		}
+		for _, op := range dt.Operations {
+			method := op.Method
+			if method == "" {
+				method = http.MethodGet
+			}
+			if isMutatingMethod(method) && isAgentDataWritePath(op.Path) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // writableDataTypesFromCapabilities lists data types with at least one
-// mutating connector operation.
+// agent-meaningful mutating connector operation.
 func writableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
 	var out []string
 	for _, dt := range caps.DataTypes {
-		if dataTypeHasWriteOp(caps, dt.Name) {
+		if dataTypeHasAgentWriteOp(caps, dt.Name) {
 			out = append(out, dt.Name)
 		}
 	}
@@ -287,21 +327,13 @@ func writableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
 	return out
 }
 
-// writableDataSet reports every data type agents can currently write through
-// Guardian for this service: proxy mutating ops on the connector, plus mirror
-// adapter targets (playlists/liked tracks) which write upstream without
-// appearing as proxy Operations.
+// writableDataSet reports data types the admin form may offer as Editable:
+// agent-meaningful proxy write ops only. Mirror adapters and picker/search
+// POSTs do not count — those are not "agents can edit this data type".
 func (s *Server) writableDataSet(serviceID string, caps ServiceCapabilities) map[string]bool {
 	set := map[string]bool{}
 	for _, name := range writableDataTypesFromCapabilities(caps) {
 		set[name] = true
-	}
-	if s != nil && serviceID != "" {
-		for _, kind := range []string{MirrorKindPlaylists, MirrorKindTracks} {
-			if _, err := s.mirrorTargetFor(serviceID, kind); err == nil {
-				set[kind] = true
-			}
-		}
 	}
 	return set
 }
@@ -318,8 +350,8 @@ func (s *Server) writableDataTypesFor(serviceID string, caps ServiceCapabilities
 }
 
 // clampPermissionsWithWritable further constrains write levels so a saved
-// permission can never exceed what Guardian can write for that type today.
-// Known read-only types become read, so later write support does not
+// permission never exceeds types the form may offer as Editable. Known
+// read-only types become read, so later agent-write support does not
 // auto-open — the operator must enable it explicitly. Unknown keys and
 // "default" are preserved.
 func clampPermissionsWithWritable(p Permissions, caps ServiceCapabilities, writable map[string]bool) Permissions {
@@ -329,11 +361,6 @@ func clampPermissionsWithWritable(p Permissions, caps ServiceCapabilities, writa
 	known := map[string]bool{}
 	for _, dt := range caps.DataTypes {
 		known[dt.Name] = true
-	}
-	for _, kind := range []string{MirrorKindPlaylists, MirrorKindTracks} {
-		if writable[kind] {
-			known[kind] = true
-		}
 	}
 	out := make(Permissions, len(p))
 	for k, v := range p {
@@ -347,8 +374,10 @@ func clampPermissionsWithWritable(p Permissions, caps ServiceCapabilities, writa
 	return out
 }
 
-// connectorWriteGate reports whether a mutating proxy call is blocked because
-// the connector does not implement write for that data type.
+// connectorWriteBlocked reports whether a mutating proxy call is blocked
+// because the connector does not implement any mutating op for that data
+// type. Picker/search POSTs still count here so a configured write level can
+// reach them; the admin form simply does not offer Editable for those.
 func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool {
 	if !isMutatingMethod(method) || dataType == "" || serviceID == "" {
 		return false
