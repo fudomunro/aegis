@@ -981,25 +981,18 @@
     return '<span class="badge badge-gray">' + escapeHtml(action || "—") + "</span>";
   }
 
-  // Types shown in the Library tab. Permissions for these map 1:1 to library views.
+  // Core data types — same synced library kinds the Map shows (flow.go).
+  // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
+  // any explicit keys from guardian.json that are not rendered.
   const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos"];
   const DATA_TYPE_LABELS = {
     playlists: "Playlists",
     tracks: "Liked tracks",
-    albums: "Albums",
-    artists: "Artists",
+    albums: "Saved albums",
+    artists: "Followed artists",
     contacts: "Contacts",
     photos: "Photos",
-    user: "Account",
-    search: "Search",
-    player: "Playback",
-    channels: "Channels",
-    library: "Library aliases",
-    recommendations: "Recommendations",
   };
-  // Connector types used when available_data_types is missing.
-  const FALLBACK_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos",
-    "user", "search", "player", "channels", "library", "recommendations"];
   // User-facing access options. Backend still stores none/read/write/read-write.
   const ACCESS_CHOICES = [
     { value: "read", label: "Available" },
@@ -1039,8 +1032,8 @@
     const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
     if (!root) return null;
     const map = {};
-    // Keep keys the simple form does not show (default, custom, legacy) so Save
-    // does not drop them from guardian.json.
+    // Keep keys the simple form does not show (default, proxy-only types, custom)
+    // so Save does not drop them from guardian.json.
     try {
       const original = root.getAttribute("data-original-perms");
       if (original) Object.assign(map, JSON.parse(original));
@@ -1055,28 +1048,29 @@
 
   function permRow(key, level) {
     return '<div class="perm-row">' +
-      '<label for="perm-' + escapeHtml(key) + '">' + escapeHtml(dataTypeLabel(key)) +
-      (dataTypeLabel(key) !== key ? '<span class="perm-key">' + escapeHtml(key) + "</span>" : "") +
-      "</label>" +
+      '<label for="perm-' + escapeHtml(key) + '">' + escapeHtml(dataTypeLabel(key)) + "</label>" +
       accessSelect(key, level).replace("<select ", '<select id="perm-' + escapeHtml(key) + '" ') +
       "</div>";
+  }
+
+  function corePermTypes(svc, perms) {
+    // Match the Map: library kinds only. Prefer connector-advertised types;
+    // also keep any core kind that already has an explicit permission.
+    const known = (svc.available_data_types && svc.available_data_types.length)
+      ? svc.available_data_types.filter((k) => k && k !== "default")
+      : null;
+    return LIBRARY_DATA_TYPES.filter((t) => {
+      if (known) {
+        return known.indexOf(t) !== -1 || Object.prototype.hasOwnProperty.call(perms || {}, t);
+      }
+      return true;
+    });
   }
 
   function renderPermEditor(svc) {
     const id = svc.id;
     const perms = svc.permissions || {};
-    const known = (svc.available_data_types && svc.available_data_types.length)
-      ? svc.available_data_types.filter((k) => k && k !== "default")
-      : FALLBACK_DATA_TYPES.slice();
-
-    // Show connector types first (library kinds, then the rest), then any
-    // extra explicit permission keys the config already has.
-    const libraryTypes = LIBRARY_DATA_TYPES.filter((t) => known.indexOf(t) !== -1);
-    const otherKnown = known.filter((t) => LIBRARY_DATA_TYPES.indexOf(t) === -1).sort();
-    const extras = Object.keys(perms)
-      .filter((k) => k !== "default" && known.indexOf(k) === -1)
-      .sort();
-    const show = libraryTypes.concat(otherKnown, extras);
+    const show = corePermTypes(svc, perms);
 
     // Unset types display as Available (read) — the common agent case.
     const rows = show.map((key) => {
@@ -1091,7 +1085,7 @@
       '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Editable = read and change · Off = hidden. Saves write <code>guardian.json</code>.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
-        : '<p class="meta">No data types for this service.</p>') +
+        : '<p class="meta">No core data types for this service.</p>') +
       '<div class="perm-actions">' +
       '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save</button>' +
       '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Allow all</button>' +
@@ -1108,8 +1102,8 @@
     keys.sort().forEach((k) => {
       const level = normalizeAccess(perms[k]);
       if (k === "default") return;
-      if (level === "none") denied.push(k);
-      else if (level === "read-write" || level === "write") editable.push(k);
+      if (level === "none") denied.push(dataTypeLabel(k));
+      else if (level === "read-write" || level === "write") editable.push(dataTypeLabel(k));
     });
     const parts = [];
     if (denied.length) parts.push("off: " + denied.join(", "));

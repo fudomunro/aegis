@@ -866,11 +866,13 @@ blocked). Photo services note that bytes stay upstream. Use it as a quick
 “what is this thing doing?” picture; the Services tab remains the place to
 edit permissions.
 
-Each service card has an **Edit permissions** form: one control per data type
-with Available / Editable / Off. Save writes `guardian.json` and clears the
-response cache so denials take effect immediately. **Allow all** removes the
-permissions block (unrestricted agent access). Keys not shown in the form
-(for example a custom type or `default`) are preserved on save.
+Each service card has an **Edit permissions** form: one control per core data
+type shown on the Map (playlists, liked tracks, saved albums, followed
+artists, contacts, photos), labeled in plain language. Available / Editable /
+Off. Save writes `guardian.json` and clears the response cache so denials take
+effect immediately. **Allow all** removes the permissions block (unrestricted
+agent access). Keys not shown in the form (for example proxy-only types or
+`default`) are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)
 also show **Pick photos…** on the service card: it creates a session, opens

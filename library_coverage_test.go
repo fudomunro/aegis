@@ -841,7 +841,7 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
 	body := w.Body.String()
-	// Issue #61: form is a simple per-type availability control.
+	// Issue #61: form is a simple per-type availability control for core Map types.
 	for _, want := range []string{
 		"Agent data access",
 		"Available",
@@ -849,6 +849,10 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"data-perm-key",
 		"data-original-perms",
 		"Allow all",
+		"Liked tracks",
+		"Followed artists",
+		"Saved albums",
+		"LIBRARY_DATA_TYPES",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)
@@ -860,6 +864,9 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"perm-locked-select",
 		"custom type (advanced)",
 		"Other data types",
+		"class=\"perm-key\"",
+		"Playback",
+		"Library aliases",
 	} {
 		if strings.Contains(body, gone) {
 			t.Fatalf("admin HTML still contains old permissions dialog piece %q", gone)
