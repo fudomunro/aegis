@@ -199,12 +199,8 @@ func TestPermissionsOverlay_InvalidLevelRejectedOnLoad(t *testing.T) {
 	permsPath := filepath.Join(dir, "permissions.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
 	mustWriteFile(t, permsPath, `{"version":1,"services":{"spotify":{"tracks":"maybe"}}}`)
-	cfg, err := LoadConfig(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cfg.InitPermissionsStore(permsPath); err == nil {
-		t.Fatal("expected invalid overlay level to fail load")
+	if _, err := LoadConfig(cfgPath); err == nil {
+		t.Fatal("expected invalid overlay level to fail LoadConfig")
 	}
 }
 
@@ -215,11 +211,9 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"default":"read"}}]}`)
 	mustWriteFile(t, permsPath, `{"version":1,"services":{"spotify":{"default":"none"}}}`)
 
+	// LoadConfig applies the sibling overlay automatically.
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
-		t.Fatal(err)
-	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
 	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != AccessNone {
@@ -237,26 +231,15 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	}
 }
 
-func TestConfig_SetServicePermissions_LegacyWithoutOverlayPath(t *testing.T) {
+func TestInitPermissionsStore_EmptyPathRejected(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "guardian.json")
-	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","cache_ttl":"10m"}]}`)
+	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.SetServicePermissions("spotify", Permissions{"player": AccessNone}); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(data), `"player": "none"`) {
-		t.Fatalf("legacy path should rewrite guardian.json, got %s", data)
-	}
-	// Overlay file must not appear.
-	if _, err := os.Stat(filepath.Join(dir, "permissions.json")); !os.IsNotExist(err) {
-		t.Fatalf("unexpected permissions.json: %v", err)
+	if err := cfg.InitPermissionsStore(""); err == nil {
+		t.Fatal("empty permissions overlay path must be rejected")
 	}
 }
