@@ -16,21 +16,17 @@
   a:hover { text-decoration: underline; }
   code { background: var(--surface2); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .wrap { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem; }
   h1 { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; }
   .sub { color: var(--dim); font-size: 0.9rem; }
-  .status-strip {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.75rem; margin-bottom: 1.5rem;
-  }
-  .stat {
+  .section-heading { font-size: 1.05rem; margin: 1.25rem 0 0.65rem; }
+  .help-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 0.85rem 1rem;
+    padding: 1.1rem 1.2rem; margin-bottom: 1rem; line-height: 1.55; color: var(--dim);
   }
-  .stat .label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.25rem; }
-  .stat .value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat .value.ok { color: var(--green); }
-  .stat .value.warn { color: var(--orange); }
+  .help-box h3 { color: var(--text); font-size: 1rem; margin-bottom: 0.45rem; }
+  .help-box p { margin-bottom: 0.45rem; font-size: 0.9rem; }
+  .help-box ol { margin: 0.35rem 0 0 1.25rem; font-size: 0.9rem; }
+  .help-box li { margin-bottom: 0.25rem; }
   nav { display: flex; gap: 0.35rem; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; overflow-x: auto; }
   .tab {
     background: none; border: none; color: var(--dim); padding: 0.65rem 0.9rem;
@@ -182,14 +178,6 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
-      <h1>Guardian Admin</h1>
-      <p class="sub">Services, tokens, library, and cache under this instance</p>
-    </div>
-    <p class="sub"><a href="/v1/setup">Setup wizard</a></p>
-  </header>
-
   <div id="auth-gate" class="auth-box" hidden>
     <h2>API key required</h2>
     <p>Enter the Guardian API key. It is stored only in this browser tab.</p>
@@ -200,14 +188,11 @@
   </div>
 
   <div id="dashboard" hidden>
-    <div class="status-strip" id="status-strip"></div>
-
     <nav role="tablist" aria-label="Admin sections">
       <button class="tab" role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
       <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="false">Services</button>
       <button class="tab" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false">Library</button>
-      <button class="tab" role="tab" id="tab-cache" aria-controls="panel-cache" aria-selected="false">Cache</button>
-      <button class="tab" role="tab" id="tab-runtime" aria-controls="panel-runtime" aria-selected="false">Runtime</button>
+      <button class="tab" role="tab" id="tab-advanced" aria-controls="panel-advanced" aria-selected="false">Advanced</button>
     </nav>
 
     <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
@@ -232,11 +217,10 @@
         <span><i class="meta"></i> Meta / needs auth</span>
         <span><i class="denied"></i> Blocked</span>
       </div>
-      <div id="map-libraries" class="map-libraries"></div>
-      <div id="map-recent" class="map-recent" hidden></div>
     </section>
 
     <section id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services" hidden>
+      <div id="services-help" class="help-box" hidden></div>
       <div class="toolbar">
         <div class="grow">
           <input type="search" id="service-filter" placeholder="Filter services…" aria-label="Filter services">
@@ -268,7 +252,13 @@
       <div id="library-pager" class="pager" hidden></div>
     </section>
 
-    <section id="panel-cache" class="panel" role="tabpanel" aria-labelledby="tab-cache" hidden>
+    <section id="panel-advanced" class="panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
+      <h2 class="section-heading">Library datasets</h2>
+      <div id="map-libraries" class="map-libraries"><div class="empty">Open Map to load topology details.</div></div>
+
+      <div id="map-recent" class="map-recent" hidden></div>
+
+      <h2 class="section-heading">Cache</h2>
       <div class="toolbar">
         <span class="meta" id="cache-summary"></span>
         <div class="grow"></div>
@@ -291,9 +281,8 @@
         </div>
       </div>
       <div id="cache-pager" class="pager" hidden></div>
-    </section>
 
-    <section id="panel-runtime" class="panel" role="tabpanel" aria-labelledby="tab-runtime" hidden>
+      <h2 class="section-heading">Runtime</h2>
       <div id="runtime-body"><div class="empty">Loading…</div></div>
     </section>
   </div>
@@ -1175,26 +1164,53 @@
     box.textContent = message || "";
   }
 
-  function renderStatusStrip(data) {
-    const connected = data.services.filter((s) => s.token && s.token.has_token && !s.token.expired).length;
-    const total = data.services.length;
-    const cache = data.cache;
-    const stats = [
-      { label: "Auth mode", value: escapeHtml(data.runtime.auth_mode || "—") },
-      { label: "Services", value: connected + " / " + total + " connected", cls: connected === total && total > 0 ? "ok" : (connected === 0 ? "warn" : "") },
-      { label: "Cache live", value: cache.live + " entries", cls: cache.live > 0 ? "ok" : "" },
-      { label: "Cache size", value: formatBytes(cache.bytes) },
-    ];
-    $("status-strip").innerHTML = stats.map((s) =>
-      '<div class="stat"><div class="label">' + escapeHtml(s.label) + '</div>' +
-      '<div class="value ' + (s.cls || "") + '">' + s.value + "</div></div>"
-    ).join("");
+  function renderServicesHelp(services) {
+    const root = $("services-help");
+    if (!root) return;
+    const total = services.length;
+    const oauthReady = services.filter((s) => s.has_oauth).length;
+    const connected = services.filter((s) => s.token && s.token.has_token && !s.token.expired).length;
+
+    if (total > 0 && connected > 0) {
+      root.hidden = true;
+      root.innerHTML = "";
+      return;
+    }
+
+    root.hidden = false;
+    if (total === 0) {
+      root.innerHTML =
+        "<h3>No services configured</h3>" +
+        "<p>Add named services to <code>guardian.json</code> (see the README and <code>guardian.example.json</code>), then restart Guardian. " +
+        "Each service should reference a top-level <code>connections</code> entry for OAuth.</p>" +
+        "<p>Once services appear here, use <strong>Connect</strong> on each card to authorize Guardian. Agents never handle tokens — Guardian stores them and injects proxy instructions.</p>";
+      return;
+    }
+
+    const missingOAuth = oauthReady === 0;
+    root.innerHTML =
+      "<h3>Connect your services</h3>" +
+      "<p>This page is where you manage service connections. " +
+      (missingOAuth
+        ? "None of the configured services have OAuth set up yet. Add a <code>connection</code> reference and client credentials in <code>guardian.json</code>, then restart."
+        : "Click <strong>Connect</strong> on a service card to authorize Guardian via OAuth.") + "</p>" +
+      "<ol>" +
+      "<li>Register an OAuth app with the provider and put the client ID/secret in <code>guardian.json</code> <code>connections</code>.</li>" +
+      "<li>Click <strong>Connect</strong> and finish the provider redirect.</li>" +
+      "<li>Tokens are stored encrypted on disk and refresh automatically.</li>" +
+      "<li>Agents call Guardian’s proxy/library APIs — they never see credentials.</li>" +
+      "</ol>" +
+      (total > 0 && connected === 0 && !missingOAuth
+        ? "<p>" + total + " service" + (total === 1 ? " is" : "s are") + " configured, but none are connected yet.</p>"
+        : "");
   }
 
   function renderServices(filterText) {
     if (!summary) return;
     const q = (filterText || "").trim().toLowerCase();
-    const rows = summary.services.filter((svc) => {
+    const all = summary.services || [];
+    renderServicesHelp(all);
+    const rows = all.filter((svc) => {
       if (!q) return true;
       const hay = [svc.id, svc.name, svc.action, svc.endpoint, (svc.aliases || []).join(" "), svc.description]
         .join(" ").toLowerCase();
@@ -1202,7 +1218,9 @@
     });
 
     if (!rows.length) {
-      $("services-list").innerHTML = '<div class="empty">No services match this filter.</div>';
+      $("services-list").innerHTML = all.length
+        ? '<div class="empty">No services match this filter.</div>'
+        : '<div class="empty">Add services in guardian.json — connection management lives here.</div>';
       return;
     }
 
@@ -1853,7 +1871,7 @@
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, and <code>/v1/services/{id}/…</code></div>' +
-        '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
+        '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
         '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
   }
@@ -1864,7 +1882,6 @@
       summary = await api("/v1/admin/summary");
       showAuthGate(false);
       $("dashboard").hidden = false;
-      renderStatusStrip(summary);
       renderServices($("service-filter").value);
       renderRuntime(summary);
       loadFlow();
@@ -1877,7 +1894,7 @@
     }
   }
 
-  const FLOW_TABS = ["map", "services", "library", "cache", "runtime"];
+  const FLOW_TABS = ["map", "services", "library", "advanced"];
 
   function selectTab(name) {
     FLOW_TABS.forEach((id) => {
@@ -1889,7 +1906,7 @@
     });
     if (name === "map") loadFlow();
     if (name === "library") loadAllLibraryKinds();
-    if (name === "cache") loadCache();
+    if (name === "advanced") loadCache();
   }
 
   FLOW_TABS.forEach((id) => {

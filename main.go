@@ -133,7 +133,6 @@ func main() {
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(srv.HandleServiceProxy))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
-	mux.HandleFunc("/v1/setup", srv.HandleSetup)
 	mux.HandleFunc("/v1/admin", srv.HandleAdmin)
 	mux.HandleFunc("/v1/admin/", srv.handleAdminRoutes)
 
