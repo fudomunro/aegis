@@ -259,7 +259,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatal("in-memory player permission not applied")
 	}
 
-	// Reloaded from disk.
+	// Reloaded: overlay applied on top of bootstrap guardian.json.
 	fresh, err := LoadConfig(path)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
@@ -269,7 +269,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatalf("disk permissions = %+v", svc)
 	}
 
-	// Clear restores unrestricted.
+	// Clear restores unrestricted (overlay null; bootstrap must not resurface).
 	if err := cfg.SetServicePermissions("spotify", nil); err != nil {
 		t.Fatalf("clear: %v", err)
 	}

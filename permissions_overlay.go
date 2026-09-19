@@ -76,17 +76,16 @@ func savePermissionsOverlay(path string, ov *permissionsOverlayFile) error {
 	return nil
 }
 
-// InitPermissionsStore points Config at the admin permissions overlay and
-// applies any existing overlay onto bootstrap permissions from guardian.json.
-// An empty path keeps legacy behavior: permission saves rewrite guardian.json.
+// InitPermissionsStore overrides the overlay path and applies any existing
+// overlay onto bootstrap permissions from guardian.json. LoadConfig already
+// defaults the path to permissions.json beside the config file.
 func (c *Config) InitPermissionsStore(path string) error {
+	if path == "" {
+		return fmt.Errorf("permissions overlay path is required")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.permsPath = path
-	if path == "" {
-		c.permsOverlay = nil
-		return nil
-	}
 	return c.applyPermissionsOverlayLocked()
 }
 
@@ -94,9 +93,6 @@ func (c *Config) InitPermissionsStore(path string) error {
 // in-memory service permissions. Bootstrap values remain for services absent
 // from the overlay. Caller must hold c.mu.
 func (c *Config) applyPermissionsOverlayLocked() error {
-	if c.permsPath == "" {
-		return nil
-	}
 	ov, err := loadPermissionsOverlay(c.permsPath)
 	if err != nil {
 		return err
@@ -122,9 +118,6 @@ func (c *Config) applyPermissionsOverlayLocked() error {
 // clear (JSON null) so bootstrap permissions do not resurface on reload.
 // Caller must hold c.mu.
 func (c *Config) setPermissionsOverlayEntryLocked(id string, p Permissions) error {
-	if c.permsPath == "" {
-		return fmt.Errorf("permissions overlay not configured")
-	}
 	if c.permsOverlay == nil {
 		c.permsOverlay = map[string]*Permissions{}
 	}

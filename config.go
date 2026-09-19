@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -16,11 +17,20 @@ type Config struct {
 	Services    []Service             `json:"services"`
 	path        string
 	// permsPath is the admin permissions overlay file (permissions.json).
-	// Empty means legacy mode: permission saves rewrite guardian.json.
+	// Admin permission saves always write here — never guardian.json.
 	permsPath string
 	// permsOverlay is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared).
 	permsOverlay map[string]*Permissions
+}
+
+// defaultPermissionsPath returns the overlay path beside a guardian.json path.
+func defaultPermissionsPath(configPath string) string {
+	dir := filepath.Dir(configPath)
+	if dir == "" || dir == "." {
+		return "permissions.json"
+	}
+	return filepath.Join(dir, "permissions.json")
 }
 
 // Connection is a shared OAuth provider registration (issue #26). Multiple
@@ -105,6 +115,10 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg.path = path
+	cfg.permsPath = defaultPermissionsPath(path)
+	if err := cfg.applyPermissionsOverlayLocked(); err != nil {
+		return nil, err
+	}
 	return &cfg, nil
 }
 
@@ -214,9 +228,7 @@ func (c *Config) GetConnection(id string) *Connection {
 
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
-// When a permissions overlay store is configured (permissions.json), only that
-// file is written — guardian.json bootstrap config and OAuth secrets stay put.
-// Without an overlay path, the whole guardian.json is rewritten (legacy).
+// Always writes the permissions overlay (permissions.json) — never guardian.json.
 func (c *Config) SetServicePermissions(id string, p Permissions) error {
 	if err := ValidatePermissions(p); err != nil {
 		return err
@@ -241,33 +253,5 @@ func (c *Config) SetServicePermissions(id string, p Permissions) error {
 	} else {
 		c.Services[idx].Permissions = Permissions(p.Clone())
 	}
-	if c.permsPath != "" {
-		return c.setPermissionsOverlayEntryLocked(id, p)
-	}
-	return c.saveLocked()
-}
-
-// saveLocked atomically writes the current services list to the config path.
-// Caller must hold c.mu.
-func (c *Config) saveLocked() error {
-	if c.path == "" {
-		return fmt.Errorf("config has no path; cannot save")
-	}
-	payload := struct {
-		Connections map[string]Connection `json:"connections,omitempty"`
-		Services    []Service             `json:"services"`
-	}{Connections: c.Connections, Services: c.Services}
-	if payload.Services == nil {
-		payload.Services = []Service{}
-	}
-	data, err := json.MarshalIndent(payload, "", "  ")
-	if err != nil {
-		return err
-	}
-	data = append(data, '\n')
-	if err := atomicWriteFile(c.path, data, 0o644); err != nil {
-		return err
-	}
-	slog.Info("config saved", "path", c.path, "services", len(c.Services))
-	return nil
+	return c.setPermissionsOverlayEntryLocked(id, p)
 }

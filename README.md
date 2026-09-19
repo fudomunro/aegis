@@ -309,8 +309,8 @@ professional-data connectors remain follow-up work on
 | `-api-key` | | Shared API key (required only for `api-key` mode) |
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
-| `-config` | `guardian.json` | Config file path |
-| `-permissions-file` | `permissions.json` | Admin permissions overlay (non-secret). Permission saves write here; `guardian.json` is not rewritten |
+| `-config` | `guardian.json` | Bootstrap config path (services, connections, secrets) |
+| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `guardian.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
@@ -1166,7 +1166,7 @@ change that only adds untested write paths.
 aperture-guardian/
   main.go           Entry point, CLI flags, route wiring
   config.go         Service/Config types, JSON loading, matching
-  atomicfile.go     Atomic temp+rename writes for config/overlay files
+  atomicfile.go     Atomic temp+rename writes for the permissions overlay
   permissions_overlay.go  Admin permissions.json overlay (issue #71)
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers

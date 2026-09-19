@@ -60,8 +60,8 @@ Agent → Guardian proxy / library / admin → provider APIs
 | Area | Where | Notes |
 |------|-------|-------|
 | Entry, flags, routes, connector registration | `main.go` | Wrap nearly every route in `AuthMiddleware` |
-| Config + matching | `config.go` | Flat `services[]` + top-level `connections`; atomic saves via `atomicfile.go` |
-| Admin permissions overlay | `permissions_overlay.go` | `permissions.json` wins over guardian.json bootstrap; no secrets |
+| Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
+| Admin permissions overlay | `permissions_overlay.go` | `permissions.json` wins over guardian.json bootstrap; admin saves never rewrite guardian.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared proxy path | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request` |
