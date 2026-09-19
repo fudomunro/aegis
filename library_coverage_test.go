@@ -850,7 +850,6 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"Editable",
 		"data-perm-key",
 		"data-original-perms",
-		"Allow all",
 		"Liked tracks",
 		"Followed artists",
 		"Saved albums",
@@ -862,13 +861,16 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"Changes save immediately",
 		"applyPermissionsLocally",
 		`select[data-perm-key]`,
+		// Form sits under the card title (issue #69)
+		"svc-name",
+		"renderPermEditor(svc)",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)
 		}
 	}
 	// Advanced clutter from the old dialog should stay gone.
-	// Toggle/Save chrome is gone: form is always-on and live.
+	// Toggle/Save/Allow-all chrome is gone: form is always-on under the title.
 	for _, gone := range []string{
 		"perm-custom-key",
 		"perm-locked-select",
@@ -879,10 +881,13 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"Library aliases",
 		"perm-toggle",
 		"perm-save",
+		"perm-clear",
+		"Allow all",
 		"Edit permissions",
 		"Hide permissions",
 		">Save</button>",
 		"openPermEditors",
+		"perm-actions",
 	} {
 		if strings.Contains(body, gone) {
 			t.Fatalf("admin HTML still contains old permissions dialog piece %q", gone)
