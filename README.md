@@ -1098,16 +1098,15 @@ info.
 Each service card leads with **name**, **data flow** (agents → Guardian →
 service proxy, library fan-in kinds, and agent data access), and
 **connection status**. Card actions sit at the top right: **Connect** /
-**Reconnect** only when the service is not connected, plus **Edit
-permissions** (and **Pick photos…** when supported). Description, OAuth
-config, cache TTL, and paths sit in a details block below. There is an
-**Edit permissions** form: one control per core data type shown on the Map
-(playlists, liked tracks, saved albums, followed artists, contacts, photos),
-labeled in plain language. Available / Off always; **Editable** only when
-agents can truly change that data through Guardian (not mirror backups or
-picker sessions). Save writes `guardian.json` and clears the response cache.
-**Allow all** removes the permissions block. Keys not shown in the form are
-preserved on save.
+**Reconnect** only when the service is not connected, plus **Pick photos…**
+when supported. The **Agent data access** form is always visible under the
+card: one control per core data type shown on the Map (playlists, liked
+tracks, saved albums, followed artists, contacts, photos), labeled in plain
+language. Available / Off always; **Editable** only when agents can truly
+change that data through Guardian (not mirror backups or picker sessions).
+Each change saves immediately to `guardian.json` and refreshes the card’s
+data-flow summary. **Allow all** removes the permissions block. Keys not
+shown in the form are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)
 also show **Pick photos…** on the service card: it creates a session, opens

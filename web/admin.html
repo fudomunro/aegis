@@ -1023,7 +1023,6 @@
     { value: "read-write", label: "Editable" },
     { value: "none", label: "Off" },
   ];
-  const openPermEditors = new Set();
 
   function normalizeAccess(level) {
     const v = String(level || "").toLowerCase();
@@ -1109,15 +1108,15 @@
     }).join("");
 
     const original = JSON.stringify(perms || {});
-    return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
+    // Always-visible form: each control change saves immediately (issue #69).
+    return '<div class="perm-editor perm-live" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
       "<h4>Agent data access</h4>" +
-      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Saves write <code>guardian.json</code>.</p>' +
+      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>guardian.json</code>.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +
       '<div class="perm-actions">' +
-      '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save</button>' +
       '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Allow all</button>' +
       "</div>" +
       '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
@@ -1146,6 +1145,23 @@
     return parts.join(" · ");
   }
 
+  function applyPermissionsLocally(serviceId, permissions, clear) {
+    const next = clear ? {} : (permissions || {});
+    if (summary && Array.isArray(summary.services)) {
+      const svc = summary.services.find((s) => s.id === serviceId);
+      if (svc) {
+        svc.permissions = next;
+        const flow = document.querySelector('[data-service-flow="' + CSS.escape(serviceId) + '"]');
+        if (flow) flow.innerHTML = serviceFlowRows(svc);
+      }
+    }
+    const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
+    if (root) {
+      // collectPermEditor merges hidden keys; keep the server map as the new baseline.
+      root.setAttribute("data-original-perms", JSON.stringify(next));
+    }
+  }
+
   async function savePermissions(serviceId, permissions, clear) {
     const status = document.getElementById("perm-status-" + CSS.escape(serviceId));
     if (status) {
@@ -1159,13 +1175,11 @@
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      applyPermissionsLocally(serviceId, permissions, clear);
       if (status) {
         status.textContent = clear ? "Agents have unrestricted access." : "Saved.";
         status.className = "perm-status ok";
       }
-      await loadSummary();
-      openPermEditors.add(serviceId);
-      renderServices($("service-filter").value);
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -1297,8 +1311,6 @@
       actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
         "Pick photos…</button>");
     }
-    actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
-      (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
     return actions;
   }
 
@@ -1402,7 +1414,7 @@
           escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
         : "";
 
-      const editor = openPermEditors.has(svc.id) ? renderPermEditor(svc) : "";
+      const editor = renderPermEditor(svc);
       const pickStatus = svc.supports_photo_picker
         ? '<div class="perm-status photo-pick-status" id="photo-pick-status-' + escapeHtml(svc.id) + '"></div>'
         : "";
@@ -2200,23 +2212,24 @@
       startPhotoPick(serviceId);
       return;
     }
-    if (btn.classList.contains("perm-toggle")) {
-      if (openPermEditors.has(serviceId)) openPermEditors.delete(serviceId);
-      else openPermEditors.add(serviceId);
-      renderServices($("service-filter").value);
-      return;
-    }
-    if (btn.classList.contains("perm-save")) {
-      const map = collectPermEditor(serviceId);
-      if (!map) return;
-      savePermissions(serviceId, map, false);
-      return;
-    }
     if (btn.classList.contains("perm-clear")) {
       if (!confirm("Allow agents unrestricted access to " + serviceId + "?")) return;
       savePermissions(serviceId, {}, true);
       return;
     }
+  });
+
+  // Live permissions: each select change writes through immediately.
+  $("services-list").addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!sel || !sel.matches || !sel.matches("select[data-perm-key]")) return;
+    const root = sel.closest(".perm-editor");
+    if (!root) return;
+    const serviceId = root.getAttribute("data-service");
+    if (!serviceId) return;
+    const map = collectPermEditor(serviceId);
+    if (!map) return;
+    savePermissions(serviceId, map, false);
   });
 
   loadSummary();
