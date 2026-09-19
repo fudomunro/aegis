@@ -18,6 +18,7 @@ func main() {
 	configPath := flag.String("config", "guardian.json", "path to rules configuration file")
 	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
 	linkPath := flag.String("link-file", "entity_links.json", "path to user-confirmed entity links (playlists)")
+	permissionsPath := flag.String("permissions-file", "permissions.json", "path to admin permissions overlay (non-secret; admin permission saves write here instead of guardian.json)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
@@ -75,7 +76,11 @@ func main() {
 		slog.Error("failed to load config", "path", *configPath, "error", err)
 		os.Exit(1)
 	}
-	slog.Info("config loaded", "path", *configPath, "services", len(cfg.Services))
+	if err := cfg.InitPermissionsStore(*permissionsPath); err != nil {
+		slog.Error("failed to load permissions overlay", "path", *permissionsPath, "error", err)
+		os.Exit(1)
+	}
+	slog.Info("config loaded", "path", *configPath, "services", len(cfg.Services), "permissions_file", *permissionsPath)
 
 	tokens, err := NewTokenStore(*tokenPath, *tokenPass)
 	if err != nil {
