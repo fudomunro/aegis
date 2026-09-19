@@ -47,6 +47,11 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		// Photo picker shares the title-line connection cluster
 		"supports_photo_picker",
 		"Pick photos",
+		// Advanced toggle under the permissions form (flow + details)
+		"svc-advanced",
+		"data-service-advanced",
+		"openAdvanced",
+		"<summary>Advanced</summary>",
 		"serviceFlowRows",
 		"serviceConnectionStatus",
 		"serviceLibraryKinds",
