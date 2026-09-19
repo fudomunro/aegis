@@ -6,6 +6,8 @@ guardian
 # Local live-test state (issue #1)
 guardian.json
 tokens.json
+entity_links.json
+permissions.json
 .guardian-token-pass
 guardian.log
 *.log

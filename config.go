@@ -15,6 +15,12 @@ type Config struct {
 	Connections map[string]Connection `json:"connections,omitempty"`
 	Services    []Service             `json:"services"`
 	path        string
+	// permsPath is the admin permissions overlay file (permissions.json).
+	// Empty means legacy mode: permission saves rewrite guardian.json.
+	permsPath string
+	// permsOverlay is the loaded overlay map (service id → permissions;
+	// present key with nil value means explicitly cleared).
+	permsOverlay map[string]*Permissions
 }
 
 // Connection is a shared OAuth provider registration (issue #26). Multiple
@@ -119,6 +125,9 @@ func (c *Config) Reload() error {
 	}
 	c.Connections = fresh.Connections
 	c.Services = fresh.Services
+	if err := c.applyPermissionsOverlayLocked(); err != nil {
+		return err
+	}
 	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services), "connections", len(fresh.Connections))
 	return nil
 }
@@ -205,6 +214,9 @@ func (c *Config) GetConnection(id string) *Connection {
 
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
+// When a permissions overlay store is configured (permissions.json), only that
+// file is written — guardian.json bootstrap config and OAuth secrets stay put.
+// Without an overlay path, the whole guardian.json is rewritten (legacy).
 func (c *Config) SetServicePermissions(id string, p Permissions) error {
 	if err := ValidatePermissions(p); err != nil {
 		return err
@@ -227,12 +239,15 @@ func (c *Config) SetServicePermissions(id string, p Permissions) error {
 	if len(p) == 0 {
 		c.Services[idx].Permissions = nil
 	} else {
-		c.Services[idx].Permissions = p
+		c.Services[idx].Permissions = Permissions(p.Clone())
+	}
+	if c.permsPath != "" {
+		return c.setPermissionsOverlayEntryLocked(id, p)
 	}
 	return c.saveLocked()
 }
 
-// saveLocked writes the current services list to the config path.
+// saveLocked atomically writes the current services list to the config path.
 // Caller must hold c.mu.
 func (c *Config) saveLocked() error {
 	if c.path == "" {
@@ -250,7 +265,7 @@ func (c *Config) saveLocked() error {
 		return err
 	}
 	data = append(data, '\n')
-	if err := os.WriteFile(c.path, data, 0o644); err != nil {
+	if err := atomicWriteFile(c.path, data, 0o644); err != nil {
 		return err
 	}
 	slog.Info("config saved", "path", c.path, "services", len(c.Services))
