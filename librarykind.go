@@ -172,6 +172,28 @@ var libraryKinds = []LibraryKind{
 		HasProviders: func(s *Server) bool { return s.hasProvider[PhotoProvider]() },
 		Readable:     func(s *Server) bool { return s.libraryReadableFor("photos") },
 	},
+	{
+		ID:              "events",
+		Path:            "/v1/library/events",
+		PermType:        "events",
+		Label:           "calendar events",
+		Usage:           "calendar events, meetings, appointments, or their schedule",
+		Summary:         "all calendar events from every connected calendar service in one neutral list (title, description, start_at, end_at, all_day, location, status, organizer, attendees as Contact identities, sources[])",
+		SyncRule:        "Events merge on durable iCalUID when present (match=ical_uid); otherwise same title + start time + all-day flag (match=title_start). Event content stays on the source service.",
+		ExampleQuestion: "what is on my calendar?",
+		Keywords: []string{
+			"my calendar", "my schedule", "on my calendar",
+			"calendar events", "upcoming events", "upcoming meetings",
+			"what meetings", "meetings do i have", "meetings i have",
+			"appointments", "my events", "events this week",
+			"google calendar", "what's on my calendar", "whats on my calendar",
+		},
+		EmptyMsg:     "no calendar-capable services configured",
+		DenyMsg:      "permission denied: agent access to events is not allowed",
+		FailMsg:      "failed to fetch calendar events",
+		HasProviders: func(s *Server) bool { return s.hasProvider[CalendarEventProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("events") },
+	},
 }
 
 // LibraryKindByID returns the registered kind, or nil.
@@ -292,6 +314,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/artists":   s.HandleLibraryArtists,
 		"/v1/library/contacts":  s.HandleLibraryContacts,
 		"/v1/library/photos":    s.HandleLibraryPhotos,
+		"/v1/library/events":    s.HandleLibraryEvents,
 		"/v1/library/review":    s.HandleMergeReview,
 		"/v1/library/links":     s.HandleEntityLinks,
 		"/v1/library/links/":    s.HandleEntityLinks,

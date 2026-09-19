@@ -259,6 +259,85 @@ type PhotoList struct {
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
+// CalendarEvent is a user-facing calendar entry (meeting, appointment,
+// all-day block). Service identity lives in Sources. Guardian does not own
+// calendar content — the authoritative copy stays on a non-Guardian service
+// marked Canonical (issue #16).
+// https://github.com/fudomunro/aperture-guardian/issues/65
+type CalendarEvent struct {
+	// Title is the event summary/title.
+	Title string `json:"title,omitempty"`
+	// Description is the event body / notes, when present.
+	Description string `json:"description,omitempty"`
+	// StartAt is the start time in RFC3339 (date-only all-day events use
+	// midnight UTC of that date).
+	StartAt string `json:"start_at,omitempty"`
+	// EndAt is the end time in RFC3339 when known.
+	EndAt string `json:"end_at,omitempty"`
+	// AllDay marks date-bounded events without a clock time.
+	AllDay bool `json:"all_day,omitempty"`
+	// Location is a free-form place, room, or meeting link when known.
+	Location string `json:"location,omitempty"`
+	// Status is the provider status when known (confirmed, tentative, cancelled).
+	Status string `json:"status,omitempty"`
+	// CalendarID is the service-local calendar this entry belongs to.
+	CalendarID string `json:"calendar_id,omitempty"`
+	// CalendarName is the human calendar title, when known.
+	CalendarName string `json:"calendar_name,omitempty"`
+	// Organizer is the event organizer as a Contact, when known.
+	Organizer *Contact `json:"organizer,omitempty"`
+	// Attendees are invitees as Contact values (same identity matching as
+	// /v1/library/contacts and Photo.people[]).
+	Attendees []Contact `json:"attendees,omitempty"`
+	// EntityID is a durable cross-service id when a provider supplies one
+	// (Google Calendar iCalUID). Preferred over title+time matching.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records cross-service identity: "ical_uid" or "title_start".
+	// Empty on single-source events.
+	Match string `json:"match,omitempty"`
+	// Sources lists service-local copies of this event.
+	Sources []CalendarEventSource `json:"sources,omitempty"`
+	// Extra holds other service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// CalendarEventSource is a service-specific location of a calendar event.
+type CalendarEventSource struct {
+	// Service is the connector ID: "google-calendar", …
+	Service string `json:"service"`
+	// ServiceName is the human-readable label: "Google Calendar".
+	ServiceName string `json:"service_name,omitempty"`
+	// ID is the service-local event ID.
+	ID string `json:"id,omitempty"`
+	// CalendarID is the service-local calendar id for this copy.
+	CalendarID string `json:"calendar_id,omitempty"`
+	// URL is a deep link to the event on the service, when available.
+	URL string `json:"url,omitempty"`
+	// Status is this service's status for the copy, when known.
+	Status string `json:"status,omitempty"`
+	// Canonical is true when this service is the authoritative location for
+	// the event (issue #16). Set by connectors or config canonical_for.
+	Canonical bool `json:"canonical,omitempty"`
+	// Extra holds additional service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// CalendarEventList is the neutral response for listing calendar events —
+// either for a single service or aggregated across calendar-capable services.
+type CalendarEventList struct {
+	Events []CalendarEvent `json:"events"`
+	// Total is the number of events in this response.
+	Total int `json:"total"`
+	// Synced is true when the library merged events that shared an identity
+	// key (iCalUID, or title + start) into multi-source entries.
+	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream (or left the time window incomplete).
+	Truncated bool `json:"truncated,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
 // LibraryServiceStatus reports per-service results for an aggregate call.
 type LibraryServiceStatus struct {
 	// Status is "ok", "unauthorized", "error", or "skipped".
