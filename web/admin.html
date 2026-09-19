@@ -1310,7 +1310,7 @@
     };
   }
 
-  // Title-line connection cluster: status + time left + auth action, one line.
+  // Title-line cluster: status + time left + auth/photo actions, one line.
   function serviceConnectionInline(svc, status) {
     const parts = [status.badge];
     if (status.connected && status.note) {
@@ -1325,19 +1325,15 @@
         escapeHtml(svc.login_path) + '">' + label + "</a>"
       );
     }
+    if (svc.supports_photo_picker) {
+      parts.push(
+        '<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
+        "Pick photos…</button>"
+      );
+    }
     return '<div class="svc-connection" data-service-status="' + escapeHtml(svc.id) + '">' +
       parts.join(" ") +
       "</div>";
-  }
-
-  // Non-connection card actions (details footer).
-  function serviceSecondaryActions(svc) {
-    const actions = [];
-    if (svc.supports_photo_picker) {
-      actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
-        "Pick photos…</button>");
-    }
-    return actions;
   }
 
   // Data-flow lines: how agents reach this service, what it feeds into the
@@ -1434,7 +1430,6 @@
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
         : '<div class="meta">No OAuth configuration — add a <code>connection</code> in guardian.json to open agent data flow.</div>';
 
-      const secondary = serviceSecondaryActions(svc);
       const canonicalBadge = (svc.canonical_for && svc.canonical_for.length)
         ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
           escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
@@ -1462,7 +1457,6 @@
             (svc.proxy_path ? ' · proxy <code>' + escapeHtml(svc.proxy_path) + "</code>" : "") +
             (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
           "</div>" +
-          (secondary.length ? '<div class="actions">' + secondary.join(" ") + "</div>" : "") +
           pickStatus +
         "</div>" +
         "</article>";
