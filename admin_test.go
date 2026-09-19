@@ -467,19 +467,20 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 	body := w.Body.String()
 	// Primary: name + data flow + connection status. Details stay secondary.
 	for _, want := range []string{
-		"svc-primary",
+		"svc-title-row",
 		"svc-name",
 		"svc-flow",
-		"svc-status",
+		"svc-connection",
 		"svc-details",
-		"svc-actions-top",
-		"serviceCardActions",
+		"serviceConnectionInline",
 		"serviceFlowRows",
 		"Agents → Guardian → service",
 		"unified library",
 		"has_event_provider",
 		"has_message_provider",
 		"!status.connected",
+		// Connection cluster stays on one line on the title row
+		"flex-wrap: nowrap",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing service card marker %q", want)

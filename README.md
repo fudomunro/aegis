@@ -1095,18 +1095,20 @@ the map or on separate tabs: unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
-Each service card leads with **name**, the always-visible **Agent data
-access** form directly under the title, **data flow** (agents → Guardian →
-service proxy, library fan-in kinds, and agent data access), and
-**connection status**. Card actions sit at the top right: **Connect** /
-**Reconnect** only when the service is not connected, plus **Pick photos…**
-when supported. The permissions form has one control per core data type shown
-on the Map (playlists, liked tracks, saved albums, followed artists, contacts,
-photos), labeled in plain language. Available / Off always; **Editable** only
-when agents can truly change that data through Guardian (not mirror backups
-or picker sessions). Each change saves immediately to `guardian.json` and
-refreshes the card’s data-flow summary. Keys not shown in the form are
-preserved on save.
+Each service card leads with **name** on the title line and **connection
+status** on the same line to the right — badge, time left, and
+Connect/Reconnect sit inline with no line breaks between them. The
+always-visible **Agent data access** form sits directly under the title, then
+**data flow** (agents → Guardian → service proxy, library fan-in kinds, and
+agent data access). **Connect** / **Reconnect** appear on the title line only
+when the service is not connected; **Pick photos…** stays in the details
+footer when supported. The permissions form has one control per core data
+type shown on the Map (playlists, liked tracks, saved albums, followed
+artists, contacts, photos), labeled in plain language with icons. Available /
+Off always; **Editable** only when agents can truly change that data through
+Guardian (not mirror backups or picker sessions). Each change saves
+immediately to `guardian.json` and refreshes the card’s data-flow summary.
+Keys not shown in the form are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)
 also show **Pick photos…** on the service card: it creates a session, opens

@@ -75,13 +75,23 @@
   .meta code { font-size: 0.8rem; }
   .actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
   .svc-card { padding: 1.15rem 1.25rem; }
-  .svc-primary {
-    display: flex; flex-wrap: wrap; gap: 1rem 1.25rem;
-    justify-content: space-between; align-items: flex-start;
+  .svc-title-row {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 0.5rem 1rem; margin-bottom: 0.65rem;
   }
-  .svc-identity { flex: 1 1 260px; min-width: 0; }
-  .svc-name { font-size: 1.2rem; font-weight: 650; margin: 0 0 0.55rem; letter-spacing: -0.01em; }
-  .svc-flow { display: grid; gap: 0.35rem; }
+  .svc-name { font-size: 1.2rem; font-weight: 650; margin: 0; letter-spacing: -0.01em; flex: 1 1 auto; min-width: 0; }
+  .svc-connection {
+    display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 0.45rem;
+    margin-left: auto; white-space: nowrap; flex-shrink: 0;
+  }
+  .svc-connection .meta,
+  .svc-connection .badge,
+  .svc-connection .btn {
+    display: inline-flex; align-items: center; margin: 0; line-height: 1.2;
+  }
+  .svc-connection .btn { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+  .svc-body { min-width: 0; }
+  .svc-flow { display: grid; gap: 0.35rem; margin-top: 0.75rem; }
   .flow-row {
     display: grid; grid-template-columns: minmax(72px, 88px) 1fr;
     gap: 0.55rem; align-items: start; font-size: 0.9rem; line-height: 1.4;
@@ -92,25 +102,12 @@
   }
   .flow-value { color: var(--text); }
   .flow-value .flow-note { color: var(--dim); font-size: 0.82rem; }
-  .svc-status {
-    display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
-    min-width: 140px; text-align: right;
-  }
-  .svc-side {
-    display: flex; flex-direction: column; align-items: flex-end; gap: 0.55rem;
-    min-width: 160px; max-width: 100%;
-  }
-  .svc-actions-top {
-    display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end;
-    max-width: 280px;
-  }
-  .svc-actions-top .btn { white-space: nowrap; }
-  .svc-status-line { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; align-items: center; }
   .svc-details {
     margin-top: 0.9rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
   }
   .svc-details .meta { margin-bottom: 0.25rem; }
   .svc-details .meta:last-child { margin-bottom: 0; }
+  .svc-details .actions { margin-top: 0.65rem; }
   .badge {
     display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
@@ -1313,18 +1310,29 @@
     };
   }
 
-  // Card actions live top-right. Connect/Reconnect only when not connected.
-  function serviceCardActions(svc, status) {
-    const actions = [];
+  // Title-line connection cluster: status + time left + auth action, one line.
+  function serviceConnectionInline(svc, status) {
+    const parts = [status.badge];
+    if (status.connected && status.note) {
+      parts.push('<span class="meta">' + status.note + "</span>");
+    }
     if (svc.login_path && svc.has_oauth && !status.connected) {
       const label = status.reconnect || (svc.token && svc.token.has_token && svc.token.expired)
         ? "Reconnect"
         : "Connect";
-      actions.push(
-        '<a class="btn' + (label === "Connect" || label === "Reconnect" ? " btn-primary" : "") +
-        '" data-service-action="auth" href="' + escapeHtml(svc.login_path) + '">' + label + "</a>"
+      parts.push(
+        '<a class="btn btn-primary" data-service-action="auth" href="' +
+        escapeHtml(svc.login_path) + '">' + label + "</a>"
       );
     }
+    return '<div class="svc-connection" data-service-status="' + escapeHtml(svc.id) + '">' +
+      parts.join(" ") +
+      "</div>";
+  }
+
+  // Non-connection card actions (details footer).
+  function serviceSecondaryActions(svc) {
+    const actions = [];
     if (svc.supports_photo_picker) {
       actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
         "Pick photos…</button>");
@@ -1426,7 +1434,7 @@
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
         : '<div class="meta">No OAuth configuration — add a <code>connection</code> in guardian.json to open agent data flow.</div>';
 
-      const actions = serviceCardActions(svc, status);
+      const secondary = serviceSecondaryActions(svc);
       const canonicalBadge = (svc.canonical_for && svc.canonical_for.length)
         ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
           escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
@@ -1437,22 +1445,14 @@
         : "";
 
       return '<article class="card svc-card" data-service-card="' + escapeHtml(svc.id) + '">' +
-        '<div class="svc-primary">' +
-          '<div class="svc-identity">' +
-            '<h3 class="svc-name">' + escapeHtml(svc.name) + "</h3>" +
-            renderPermEditor(svc) +
-            '<div class="svc-flow" data-service-flow="' + escapeHtml(svc.id) + '">' +
-              serviceFlowRows(svc) +
-            "</div>" +
-          "</div>" +
-          '<div class="svc-side">' +
-            '<div class="svc-actions-top" data-service-actions="' + escapeHtml(svc.id) + '">' +
-              actions.join(" ") +
-            "</div>" +
-            '<div class="svc-status" data-service-status="' + escapeHtml(svc.id) + '">' +
-              '<div class="svc-status-line">' + status.badge + "</div>" +
-              (status.note ? '<div class="meta">' + status.note + "</div>" : "") +
-            "</div>" +
+        '<div class="svc-title-row">' +
+          '<h3 class="svc-name">' + escapeHtml(svc.name) + "</h3>" +
+          serviceConnectionInline(svc, status) +
+        "</div>" +
+        '<div class="svc-body">' +
+          renderPermEditor(svc) +
+          '<div class="svc-flow" data-service-flow="' + escapeHtml(svc.id) + '">' +
+            serviceFlowRows(svc) +
           "</div>" +
         "</div>" +
         '<div class="svc-details">' +
@@ -1462,6 +1462,7 @@
             (svc.proxy_path ? ' · proxy <code>' + escapeHtml(svc.proxy_path) + "</code>" : "") +
             (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
           "</div>" +
+          (secondary.length ? '<div class="actions">' + secondary.join(" ") + "</div>" : "") +
           pickStatus +
         "</div>" +
         "</article>";
