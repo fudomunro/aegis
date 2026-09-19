@@ -62,6 +62,10 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"Changes save immediately",
 		"applyPermissionsLocally",
 		"renderPermEditor(svc)",
+		// Data-type icons on permission form labels
+		"dataTypeIconHTML",
+		"perm-type-icon",
+		"data-type-icon",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)
