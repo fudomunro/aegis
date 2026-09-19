@@ -56,7 +56,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"has_message_provider",
 		// Connect/Reconnect only when not connected (issue #69 polish)
 		"!status.connected",
-		'"Reconnect"',
+		`"Reconnect"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)
