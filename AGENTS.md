@@ -45,8 +45,8 @@ them away.
   the floor when the suite grows; do **not** lower it to land untested write
   paths.
 - **Secrets stay out of git.** Never commit `guardian.json`, `tokens.json`,
-  `entity_links.json`, `.guardian-token-pass`, or live binaries. Example
-  config only via `guardian.example.json`.
+  `entity_links.json`, `permissions.json`, `.guardian-token-pass`, or live
+  binaries. Example config only via `guardian.example.json`.
 - **No Tailscale Funnel.** Guardian holds music OAuth tokens; it is a tailnet
   service. See `SECURITY.md`.
 
@@ -60,7 +60,8 @@ Agent → Guardian proxy / library / admin → provider APIs
 | Area | Where | Notes |
 |------|-------|-------|
 | Entry, flags, routes, connector registration | `main.go` | Wrap nearly every route in `AuthMiddleware` |
-| Config + matching | `config.go` | Flat `services[]` + top-level `connections` |
+| Config + matching | `config.go` | Flat `services[]` + top-level `connections`; atomic saves via `atomicfile.go` |
+| Admin permissions overlay | `permissions_overlay.go` | `permissions.json` wins over guardian.json bootstrap; no secrets |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared proxy path | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request` |
@@ -220,6 +221,7 @@ CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `proxy.go`, `connector_proxy.go`, `httpclient.go` |
 | Config schema / service matching | `config.go`, `guardian.example.json`, README “Configuration” |
+| Admin permission writes | `permissions_overlay.go`, `config.go` `SetServicePermissions`, README “Data permissions” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
 | Unified library + merge | `librarykind.go`, `match.go`, `models.go` |
 | Permissions / agent visibility | `permissions.go` |
