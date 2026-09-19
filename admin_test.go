@@ -458,3 +458,62 @@ func TestHandleAdmin_HTMLIncludesPhotoPick(t *testing.T) {
 		t.Fatal("expected enable-API link label in admin JS")
 	}
 }
+
+func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAdmin(w, req)
+	body := w.Body.String()
+	// Primary: name + data flow + connection status. Details stay secondary.
+	for _, want := range []string{
+		"svc-primary",
+		"svc-name",
+		"svc-flow",
+		"svc-status",
+		"svc-details",
+		"serviceFlowRows",
+		"Agents → Guardian → service",
+		"unified library",
+		"has_event_provider",
+		"has_message_provider",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin HTML missing service card marker %q", want)
+		}
+	}
+}
+
+func TestHandleAdminSummary_ProviderJSONFlags(t *testing.T) {
+	// Ensure library fan-in flags used by the Services flow block stay in the payload.
+	srv := testServerWithBase(&Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Connection: "spotify"},
+		},
+		Connections: map[string]Connection{
+			"spotify": {Name: "Spotify", ClientID: "cid", ClientSecret: "sec", Scopes: []string{"user-library-read"}},
+		},
+	}, "https://guardian.example.com")
+
+	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"has_event_provider"`) ||
+		!strings.Contains(w.Body.String(), `"has_message_provider"`) {
+		t.Fatalf("summary missing library fan-in flags for services flow block")
+	}
+	var summary AdminSummary
+	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(summary.Services) != 1 || summary.Services[0].ID != "spotify" {
+		t.Fatalf("services = %+v", summary.Services)
+	}
+	if !summary.Services[0].HasOAuth || summary.Services[0].Action != "inject" {
+		t.Fatalf("spotify flags = %+v", summary.Services[0])
+	}
+}
