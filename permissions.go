@@ -177,6 +177,9 @@ func DataTypeForPath(path string) string {
 		return "playlists"
 	case p == "/me/contacts" || strings.HasPrefix(p, "/contacts") || strings.HasPrefix(p, "/people"):
 		return "contacts"
+	case p == "/me/events" || strings.HasPrefix(p, "/events") || strings.HasPrefix(p, "/calendars") ||
+		p == "/me/calendars" || strings.HasPrefix(p, "/calendarList") || strings.HasPrefix(p, "/users/me/calendarList"):
+		return "events"
 	case p == "/me/photos" || strings.HasPrefix(p, "/photos") || strings.HasPrefix(p, "/mediaItems") || strings.HasPrefix(p, "/picker"):
 		return "photos"
 	// Self-hosted / foreign photo stores (Immich, …). /search/metadata is the

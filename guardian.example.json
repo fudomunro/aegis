@@ -9,7 +9,8 @@
       "scopes": [
         "https://www.googleapis.com/auth/youtube.readonly",
         "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
-        "https://www.googleapis.com/auth/contacts.readonly"
+        "https://www.googleapis.com/auth/contacts.readonly",
+        "https://www.googleapis.com/auth/calendar.readonly"
       ]
     },
     "spotify": {
@@ -138,6 +139,24 @@
       "permissions": {
         "default": "read",
         "contacts": "read"
+      }
+    },
+    {
+      "id": "google-calendar",
+      "name": "Google Calendar",
+      "aliases": ["google calendar", "calendar", "my calendar"],
+      "action": "inject",
+      "endpoint": "https://www.googleapis.com/calendar/v3",
+      "cache_ttl": "5m",
+      "description": "Lists Google Calendar events as neutral calendar entries so /v1/library/events can answer schedule questions. Event content stays on Google Calendar (non-Guardian canonical). Shares the Google connection.",
+      "canonical_for": ["events"],
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/calendar.readonly"
+      ],
+      "permissions": {
+        "default": "read",
+        "events": "read"
       }
     }
   ]
