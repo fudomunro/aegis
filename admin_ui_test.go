@@ -57,6 +57,10 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		// Connect/Reconnect only when not connected (issue #69 polish)
 		"!status.connected",
 		`"Reconnect"`,
+		// Always-on live permissions form
+		"perm-live",
+		"Changes save immediately",
+		"applyPermissionsLocally",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)

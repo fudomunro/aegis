@@ -843,6 +843,7 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 	srv.HandleAdmin(w, req)
 	body := w.Body.String()
 	// Issue #61: form is a simple per-type availability control for core Map types.
+	// Issue #69: form is always visible and saves live on change.
 	for _, want := range []string{
 		"Agent data access",
 		"Available",
@@ -857,12 +858,17 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"writable_data_types",
 		"allowWrite",
 		"never add capabilities",
+		"perm-live",
+		"Changes save immediately",
+		"applyPermissionsLocally",
+		'select[data-perm-key]',
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)
 		}
 	}
 	// Advanced clutter from the old dialog should stay gone.
+	// Toggle/Save chrome is gone: form is always-on and live.
 	for _, gone := range []string{
 		"perm-custom-key",
 		"perm-locked-select",
@@ -871,6 +877,12 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"class=\"perm-key\"",
 		"Playback",
 		"Library aliases",
+		"perm-toggle",
+		"perm-save",
+		"Edit permissions",
+		"Hide permissions",
+		">Save</button>",
+		"openPermEditors",
 	} {
 		if strings.Contains(body, gone) {
 			t.Fatalf("admin HTML still contains old permissions dialog piece %q", gone)
