@@ -59,6 +59,7 @@ Guardian starts with these endpoints:
 - `GET /v1/library/artists` — unified followed/top artists across all connected services
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
+- `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
@@ -211,7 +212,7 @@ Two layers set the flag:
 }
 ```
 
-Valid kinds: `playlists`, `tracks`, `albums`, `artists`, `contacts`, `photos`.
+Valid kinds: `playlists`, `tracks`, `albums`, `artists`, `contacts`, `photos`, `events`.
 At most **one** non-blocked service may claim each kind. After a library fetch,
 sources from a configured home service are stamped `canonical: true`.
 
@@ -820,6 +821,128 @@ This is the reference pattern for other local/foreign stores: configure
 `endpoint` + static `headers`, implement a library provider, mark
 `canonical_for`, and never cache content bytes in Guardian.
 
+### Calendar events as a data type
+
+`CalendarEvent` is Guardian's neutral representation of a calendar entry
+(meeting, appointment, all-day block). Service identity lives in `sources[]`,
+same as playlists, contacts, and photos. **Guardian does not store calendar
+content** — the authoritative copy stays on a non-Guardian service marked
+`canonical` (issue #16). Initial provider: **Google Calendar**
+([issue #65](https://github.com/fudomunro/aperture-guardian/issues/65)).
+
+Neutral calendar-event fields (user-facing):
+
+| Field | Description |
+|-------|-------------|
+| `title` | Event summary/title |
+| `description` | Event notes/body, when present |
+| `start_at` / `end_at` | RFC3339 times (all-day uses midnight UTC of that date) |
+| `all_day` | Date-bounded events without a clock time |
+| `location` | Free-form place, room, or meeting link |
+| `status` | Provider status when known (`confirmed`, `tentative`, `cancelled`) |
+| `calendar_id` / `calendar_name` | Service-local calendar this entry belongs to |
+| `organizer` | Organizer as a `Contact` value |
+| `attendees[]` | Invitees as `Contact` values; merged with contacts-library identity matching |
+| `entity_id` | Durable id when present (Google `iCalUID`) |
+| `match` | Cross-service identity: `ical_uid` or `title_start` (empty on single-source) |
+| `sources[]` | Service-local copies: `service`, `id`, `calendar_id`, `url`, `status`, `canonical` |
+
+Cross-service merge prefers **iCalUID** when a provider supplies it
+(`match=ical_uid`); otherwise **title + start time + all-day flag**
+(`match=title_start`). Two different meetings at the same time must not merge.
+
+```
+GET /v1/library/events
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Returns the user's calendar events from every connected calendar-capable
+service. Connectors opt in by implementing `CalendarEventProvider`
+(`ListCalendarEvents`). Permission key: `events` (paths `/events/*`,
+`/me/events`, `/calendars/*`, `/me/calendars`, and `/calendarList*` on the
+service proxy).
+
+```json
+{
+  "events": [
+    {
+      "title": "Standup",
+      "description": "Daily team sync",
+      "start_at": "2024-06-01T09:00:00Z",
+      "end_at": "2024-06-01T09:30:00Z",
+      "location": "Room 1",
+      "status": "confirmed",
+      "calendar_id": "primary",
+      "calendar_name": "Work",
+      "entity_id": "standup@google.com",
+      "organizer": {
+        "name": "Ada Lovelace",
+        "emails": ["ada@example.com"]
+      },
+      "attendees": [
+        {
+          "name": "Grace",
+          "emails": ["grace@example.com"]
+        }
+      ],
+      "sources": [
+        {
+          "service": "google-calendar",
+          "service_name": "Google Calendar",
+          "id": "ev1",
+          "calendar_id": "primary",
+          "url": "https://calendar.google.com/event?eid=...",
+          "canonical": true
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "google-calendar": { "status": "ok", "count": 1 }
+  }
+}
+```
+
+Organizer/attendee `Contact` values use the same identity matching as
+`/v1/library/contacts` and `Photo.people[]` (email → phone → handle → name).
+
+#### Google Calendar
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create or reuse an OAuth 2.0 Client ID (Web application)
+3. Add `https://your-guardian/v1/auth/google-calendar/callback` as an authorized redirect URI
+4. Enable the **Google Calendar API**
+5. Copy credentials into `guardian.json` (see `guardian.example.json`) with scope
+   `https://www.googleapis.com/auth/calendar.readonly`
+6. Authorize at `/v1/auth/google-calendar/login` (shares the Google OAuth
+   connection with YouTube Music, Photos, and Contacts; tokens are stored per
+   service id)
+
+The connector lists calendars via `GET /users/me/calendarList`, then events
+via `GET /calendars/{id}/events` with `singleEvents=true` and
+`orderBy=startTime`. The library window defaults to **30 days back + 90 days
+ahead** so "my calendar" covers recent meetings and upcoming plans; proxy
+calls may pass explicit `timeMin` / `timeMax`. Free/busy-only calendars are
+skipped. A failure on one calendar is logged and skipped (fail-open) so other
+calendars still appear.
+
+Agent-facing proxy paths return neutral shapes:
+
+```
+GET /v1/services/google-calendar/me/events
+GET /v1/services/google-calendar/me/calendars
+GET /v1/services/google-calendar/calendars/{calendarId}/events
+GET /v1/services/google-calendar/events/{id}
+```
+
+This phase is **read-only**. Capabilities do not advertise agent write ops
+(create/update/delete events), so the admin permissions form will not offer
+Editable for `events` and proxy mutations stay blocked
+([issue #61](https://github.com/fudomunro/aperture-guardian/issues/61)).
+Event content stays on Google Calendar.
+
 ### Service proxy
 
 ```
@@ -930,11 +1053,12 @@ aperture-guardian/
   config.go         Service/Config types, JSON loading, matching
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
-  models.go         Neutral data types (Playlist, Track, Contact, Photo, and their list wrappers)
+  models.go         Neutral data types (Playlist, Track, Contact, Photo, CalendarEvent, and their list wrappers)
   library.go        Library providers + thin per-kind handlers
   librarykind.go    LibraryKind registry + shared generic aggregate pipeline
   contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
   photos.go         Photo identity/merge, PhotoProvider, /v1/library/photos
+  events.go         CalendarEvent identity/merge, CalendarEventProvider, /v1/library/events
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement
@@ -951,6 +1075,7 @@ aperture-guardian/
   amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
   google-photos.go  Google Photos Picker connector (user-selected photos; bytes stay upstream)
   google-contacts.go Google Contacts / People API connector (ContactProvider)
+  google-calendar.go Google Calendar connector (CalendarEventProvider)
   guardian.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```

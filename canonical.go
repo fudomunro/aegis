@@ -9,7 +9,7 @@ import (
 // Known library kinds that may appear in a service's canonical_for list.
 // Keep in sync with libraryKinds IDs.
 var canonicalKindIDs = []string{
-	"playlists", "tracks", "albums", "artists", "contacts", "photos",
+	"playlists", "tracks", "albums", "artists", "contacts", "photos", "events",
 }
 
 func isCanonicalKindID(id string) bool {
@@ -151,6 +151,15 @@ func (p Photo) CanonicalService() string {
 	)
 }
 
+// CanonicalService returns the first source marked canonical, else primary.
+func (e CalendarEvent) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(e.Sources),
+		func(i int) bool { return e.Sources[i].Canonical },
+		func(i int) string { return e.Sources[i].Service },
+	)
+}
+
 func firstCanonicalOrPrimary(n int, isCanonical func(int) bool, serviceID func(int) string) string {
 	if n == 0 {
 		return ""
@@ -207,6 +216,17 @@ func markPhotoSourcesCanonical(items []Photo, serviceID string) {
 	}
 }
 
+// markCalendarEventSourcesCanonical stamps sources from serviceID as canonical.
+func markCalendarEventSourcesCanonical(items []CalendarEvent, serviceID string) {
+	for i := range items {
+		for j := range items[i].Sources {
+			if items[i].Sources[j].Service == serviceID {
+				items[i].Sources[j].Canonical = true
+			}
+		}
+	}
+}
+
 // stampPlaylistCanonical marks sources when serviceID is config-declared
 // canonical for playlists.
 func (s *Server) stampPlaylistCanonical(items []Playlist, serviceID string) {
@@ -240,6 +260,15 @@ func (s *Server) stampPhotoCanonical(items []Photo, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("photos") {
 		markPhotoSourcesCanonical(items, serviceID)
+	}
+}
+
+// stampCalendarEventCanonical marks sources when serviceID is config-declared
+// canonical for calendar events (connectors may already set Canonical).
+func (s *Server) stampCalendarEventCanonical(items []CalendarEvent, serviceID string) {
+	svc := s.config.GetService(serviceID)
+	if svc != nil && svc.IsCanonicalFor("events") {
+		markCalendarEventSourcesCanonical(items, serviceID)
 	}
 }
 

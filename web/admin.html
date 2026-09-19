@@ -255,6 +255,7 @@
           <button type="button" class="kind-btn" data-library-kind="artists" aria-pressed="false">Artists</button>
           <button type="button" class="kind-btn" data-library-kind="contacts" aria-pressed="false">Contacts</button>
           <button type="button" class="kind-btn" data-library-kind="photos" aria-pressed="false">Photos</button>
+          <button type="button" class="kind-btn" data-library-kind="events" aria-pressed="false">Events</button>
         </div>
         <div class="grow">
           <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
@@ -984,7 +985,7 @@
   // Core data types — same synced library kinds the Map shows (flow.go).
   // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
   // any explicit keys from guardian.json that are not rendered.
-  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos"];
+  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events"];
   const DATA_TYPE_LABELS = {
     playlists: "Playlists",
     tracks: "Liked tracks",
@@ -992,6 +993,7 @@
     artists: "Followed artists",
     contacts: "Contacts",
     photos: "Photos",
+    events: "Calendar events",
   };
   // User-facing access options. Backend still stores none/read/write/read-write.
   const ACCESS_CHOICES = [
@@ -1334,11 +1336,19 @@
       emptyAll: "No photos found. On Google Photos, use “Pick photos…” on the service card (user selects once; Guardian lists that selection). Then reload.",
       emptyFilter: "No photos match this filter.",
     },
+    events: {
+      path: "/v1/admin/library/events",
+      key: "events",
+      label: "calendar events",
+      filterPlaceholder: "Filter calendar events…",
+      emptyAll: "No calendar events found. Connect Google Calendar (or another calendar-capable service), authorize it, then reload.",
+      emptyFilter: "No calendar events match this filter.",
+    },
   };
 
   let libraryKind = "playlists";
   const libraryDataByKind = {
-    playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null,
+    playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null, events: null,
   };
   const PAGE_SIZE = 20;
   let libraryPage = 1;
@@ -1498,6 +1508,31 @@
     }).join("");
   }
 
+  function renderEventCards(items) {
+    return items.map((e) => {
+      const multi = (e.sources || []).length > 1;
+      const can = hasCanonicalSource(e.sources);
+      const when = e.start_at
+        ? (e.all_day ? e.start_at.slice(0, 10) + (e.end_at ? " → " + e.end_at.slice(0, 10) : "") : e.start_at + (e.end_at ? " → " + e.end_at : ""))
+        : "";
+      const people = [];
+      if (e.organizer && e.organizer.name) people.push("Organizer: " + e.organizer.name);
+      if ((e.attendees || []).length) people.push(e.attendees.length + " attendees");
+      return '<article class="card">' +
+        libraryCardHeader(e.title || "(untitled event)",
+          (multi ? '<span class="badge badge-blue">' + e.sources.length + " sources</span> " : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "") +
+          (e.status ? '<span class="badge badge-gray">' + escapeHtml(e.status) + "</span>" : "")) +
+        (when ? '<div class="meta">When: ' + escapeHtml(when) + "</div>" : "") +
+        (e.location ? '<div class="meta">Where: ' + escapeHtml(e.location) + "</div>" : "") +
+        (e.calendar_name ? '<div class="meta">Calendar: ' + escapeHtml(e.calendar_name) + "</div>" : "") +
+        (people.length ? '<div class="meta">' + escapeHtml(people.join(" · ")) + "</div>" : "") +
+        (e.description ? '<div class="meta">' + escapeHtml(String(e.description).slice(0, 160)) + "</div>" : "") +
+        '<div class="scopes">' + sourceBadges(e.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
   function renderAlbumCards(items) {
     return items.map((a) => {
       const multi = (a.sources || []).length > 1;
@@ -1564,6 +1599,17 @@
         return hay.indexOf(q) !== -1;
       });
     }
+    if (libraryKind === "events") {
+      return items.filter((e) => {
+        const hay = [e.title, e.description, e.location, e.status, e.calendar_name,
+          e.start_at, e.end_at,
+          e.organizer && e.organizer.name,
+          (e.attendees || []).map((a) => (a.name || "") + " " + (a.emails || []).join(" ")).join(" "),
+          (e.sources || []).map((s) => s.service).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
     return items.filter((p) => {
       const hay = [p.name, p.description, p.owner, (p.sources || []).map((s) => s.service).join(" ")]
         .join(" ").toLowerCase();
@@ -1605,6 +1651,7 @@
     else if (libraryKind === "artists") html = renderArtistCards(info.items);
     else if (libraryKind === "contacts") html = renderContactCards(info.items);
     else if (libraryKind === "photos") html = renderPhotoCards(info.items);
+    else if (libraryKind === "events") html = renderEventCards(info.items);
     else html = renderPlaylistCards(info.items);
 
     if (!html) {
@@ -1755,7 +1802,7 @@
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
-        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, and <code>/v1/services/{id}/…</code></div>' +
+        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
         '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
