@@ -9,7 +9,7 @@ import (
 // Known library kinds that may appear in a service's canonical_for list.
 // Keep in sync with libraryKinds IDs.
 var canonicalKindIDs = []string{
-	"playlists", "tracks", "albums", "artists", "contacts", "photos", "events",
+	"playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages",
 }
 
 func isCanonicalKindID(id string) bool {
@@ -152,6 +152,15 @@ func (p Photo) CanonicalService() string {
 }
 
 // CanonicalService returns the first source marked canonical, else primary.
+func (m Message) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(m.Sources),
+		func(i int) bool { return m.Sources[i].Canonical },
+		func(i int) string { return m.Sources[i].Service },
+	)
+}
+
+// CanonicalService returns the first source marked canonical, else primary.
 func (e CalendarEvent) CanonicalService() string {
 	return firstCanonicalOrPrimary(
 		len(e.Sources),
@@ -227,6 +236,17 @@ func markCalendarEventSourcesCanonical(items []CalendarEvent, serviceID string) 
 	}
 }
 
+// markMessageSourcesCanonical stamps sources from serviceID as canonical.
+func markMessageSourcesCanonical(items []Message, serviceID string) {
+	for i := range items {
+		for j := range items[i].Sources {
+			if items[i].Sources[j].Service == serviceID {
+				items[i].Sources[j].Canonical = true
+			}
+		}
+	}
+}
+
 // stampPlaylistCanonical marks sources when serviceID is config-declared
 // canonical for playlists.
 func (s *Server) stampPlaylistCanonical(items []Playlist, serviceID string) {
@@ -269,6 +289,15 @@ func (s *Server) stampCalendarEventCanonical(items []CalendarEvent, serviceID st
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("events") {
 		markCalendarEventSourcesCanonical(items, serviceID)
+	}
+}
+
+// stampMessageCanonical marks sources when serviceID is config-declared
+// canonical for messages (connectors may already set Canonical).
+func (s *Server) stampMessageCanonical(items []Message, serviceID string) {
+	svc := s.config.GetService(serviceID)
+	if svc != nil && svc.IsCanonicalFor("messages") {
+		markMessageSourcesCanonical(items, serviceID)
 	}
 }
 

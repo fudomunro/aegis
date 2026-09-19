@@ -180,6 +180,11 @@ func DataTypeForPath(path string) string {
 	case p == "/me/events" || strings.HasPrefix(p, "/events") || strings.HasPrefix(p, "/calendars") ||
 		p == "/me/calendars" || strings.HasPrefix(p, "/calendarList") || strings.HasPrefix(p, "/users/me/calendarList"):
 		return "events"
+	case p == "/me/messages" || strings.HasPrefix(p, "/messages") ||
+		p == "/me/threads" || strings.HasPrefix(p, "/threads") ||
+		strings.HasPrefix(p, "/me/mail") || strings.HasPrefix(p, "/gmail") ||
+		strings.HasPrefix(p, "/users/me/messages") || strings.HasPrefix(p, "/users/me/threads"):
+		return "messages"
 	case p == "/me/photos" || strings.HasPrefix(p, "/photos") || strings.HasPrefix(p, "/mediaItems") || strings.HasPrefix(p, "/picker"):
 		return "photos"
 	// Self-hosted / foreign photo stores (Immich, …). /search/metadata is the
