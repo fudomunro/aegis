@@ -63,11 +63,13 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		// Connect/Reconnect only when not connected (issue #69 polish)
 		"!status.connected",
 		`"Reconnect"`,
-		// Always-on live permissions form under the card title
-		"perm-live",
+		// Shared instructions above filter; form stays on each card
+		`id="agent-data-access-help"`,
 		"Changes save immediately",
-		"applyPermissionsLocally",
+		"never add capabilities",
 		"renderPermEditor(svc)",
+		"perm-live",
+		"applyPermissionsLocally",
 		// Data-type icons on permission form labels
 		"dataTypeIconHTML",
 		"perm-type-icon",
@@ -88,6 +90,9 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"Setup wizard",
 		"/v1/setup",
 		"Guardian Admin",
+		// Instructions are not repeated on every card form
+		"<h4>Agent data access</h4>",
+		"Choose what agents can use on this service",
 	} {
 		if strings.Contains(body, gone) {
 			t.Fatalf("admin HTML still contains removed piece %q", gone)
