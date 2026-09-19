@@ -60,6 +60,7 @@ Guardian starts with these endpoints:
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
+- `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/setup` — web-based setup wizard
@@ -943,6 +944,94 @@ Editable for `events` and proxy mutations stay blocked
 ([issue #61](https://github.com/fudomunro/aperture-guardian/issues/61)).
 Event content stays on Google Calendar.
 
+### Messages as a data type
+
+`Message` is Guardian's neutral representation of a message — email first,
+with reserved channel values for SMS/WhatsApp when a named OAuth-capable
+connector exists. Service identity lives in `sources[]`, same as playlists,
+contacts, photos, and calendar events. **Guardian does not store mailboxes or
+message bodies as the home copy** — the authoritative content stays on a
+non-Guardian service marked `canonical` (issue #16). Library listings carry
+subject/snippet metadata; agents fetch full body through the service proxy.
+Initial provider: **Gmail**
+([issue #60](https://github.com/fudomunro/aperture-guardian/issues/60)).
+
+Neutral message fields (user-facing):
+
+| Field | Description |
+|-------|-------------|
+| `channel` | `email`, `sms`, or `whatsapp` |
+| `subject` | Email subject or chat topic |
+| `snippet` | Short service-supplied body preview |
+| `body` | Full body when a detail proxy call includes it (usually empty in library lists) |
+| `from` / `to[]` / `cc[]` | Participants as `Contact` values |
+| `sent_at` / `received_at` | RFC3339 times |
+| `direction` | `inbound`, `outbound`, or `unknown` |
+| `read` | True when not marked unread on the source |
+| `thread_id` | Service-local conversation id |
+| `entity_id` | Durable id when present (RFC 5322 Message-ID) |
+| `match` | Cross-service identity: `message_id` or `subject_from_time` |
+| `labels[]` | Service-local labels (`INBOX`, `SENT`, `UNREAD`, …) |
+| `sources[]` | Service-local copies: `service`, `id`, `thread_id`, `url`, `mailbox`, `canonical` |
+
+Cross-service merge prefers **RFC Message-ID** when a provider supplies it
+(`match=message_id`); otherwise **subject + from + sent_at**
+(`match=subject_from_time`). Replies that share a subject but different
+Message-IDs or send times stay distinct.
+
+```
+GET /v1/library/messages
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Returns the user's messages from every connected message-capable service.
+Connectors opt in by implementing `MessageProvider` (`ListMessages`).
+Permission key: `messages` (paths `/messages/*`, `/me/messages`, `/threads/*`,
+`/me/threads`, `/users/me/messages`, and `/gmail*` on the service proxy).
+
+Participant `Contact` values use the same identity matching as
+`/v1/library/contacts` and calendar attendees (email → phone → handle → name).
+
+#### Gmail
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
+2. Create or reuse an OAuth 2.0 Client ID (Web application)
+3. Add `https://your-guardian/v1/auth/google-gmail/callback` as an authorized redirect URI
+4. Enable the **Gmail API**
+5. Copy credentials into `guardian.json` (see `guardian.example.json`) with scope
+   `https://www.googleapis.com/auth/gmail.readonly`
+6. Authorize at `/v1/auth/google-gmail/login` (shares the Google OAuth
+   connection with YouTube Music, Photos, Contacts, and Calendar; tokens are
+   stored per service id)
+
+The connector lists messages via `GET /users/me/messages` (default query
+`newer_than:30d`), then hydrates each id via
+`GET /users/me/messages/{id}?format=metadata`. The library hydrates at most
+**50 messages** per fetch so "my inbox" stays useful without unbounded detail
+calls; remaining upstream items set `truncated`. Individual message fetch
+failures are logged and skipped (fail-open).
+
+Agent-facing proxy paths return neutral shapes:
+
+```
+GET /v1/services/google-gmail/me/messages
+GET /v1/services/google-gmail/messages/{id}          # ?format=full includes decoded body
+GET /v1/services/google-gmail/me/threads
+GET /v1/services/google-gmail/threads/{id}
+```
+
+This phase is **read-only**. Capabilities do not advertise agent write ops
+(send/delete), so the admin permissions form will not offer Editable for
+`messages` and proxy mutations stay blocked
+([issue #61](https://github.com/fudomunro/aperture-guardian/issues/61)).
+Message bodies stay on Gmail.
+
+**SMS / WhatsApp:** the neutral `channel` field and library kind are ready,
+but no connector is registered for them yet. Personal SMS history has no
+simple OAuth surface; WhatsApp consumer history is not available through a
+Guardian-compatible named API. Follow-ups can plug in connectors that
+implement `MessageProvider` without changing the library contract.
+
 ### Service proxy
 
 ```
@@ -1059,6 +1148,8 @@ aperture-guardian/
   contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
   photos.go         Photo identity/merge, PhotoProvider, /v1/library/photos
   events.go         CalendarEvent identity/merge, CalendarEventProvider, /v1/library/events
+  messages.go       Message identity/merge, MessageProvider, /v1/library/messages
+  google-gmail.go   Gmail connector (MessageProvider; metadata/snippet library path)
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement

@@ -10,7 +10,8 @@
         "https://www.googleapis.com/auth/youtube.readonly",
         "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
         "https://www.googleapis.com/auth/contacts.readonly",
-        "https://www.googleapis.com/auth/calendar.readonly"
+        "https://www.googleapis.com/auth/calendar.readonly",
+        "https://www.googleapis.com/auth/gmail.readonly"
       ]
     },
     "spotify": {
@@ -157,6 +158,24 @@
       "permissions": {
         "default": "read",
         "events": "read"
+      }
+    },
+    {
+      "id": "google-gmail",
+      "name": "Gmail",
+      "aliases": ["gmail", "email", "google mail", "my inbox"],
+      "action": "inject",
+      "endpoint": "https://gmail.googleapis.com/gmail/v1",
+      "cache_ttl": "5m",
+      "description": "Lists Gmail messages as neutral message metadata so /v1/library/messages can answer email questions. Message bodies stay on Gmail (non-Guardian canonical). Shares the Google connection.",
+      "canonical_for": ["messages"],
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/gmail.readonly"
+      ],
+      "permissions": {
+        "default": "read",
+        "messages": "read"
       }
     }
   ]

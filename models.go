@@ -338,6 +338,99 @@ type CalendarEventList struct {
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
+// MessageChannel values for the neutral message type. Email is the first
+// named-service path (Gmail); SMS/WhatsApp remain reserved for connectors
+// that can authenticate a real user history (issue #60).
+const (
+	MessageChannelEmail    = "email"
+	MessageChannelSMS      = "sms"
+	MessageChannelWhatsApp = "whatsapp"
+)
+
+// Message is a user-facing message (email, and later SMS/WhatsApp when a
+// named connector exists). Service identity lives in Sources. Guardian does
+// not store message bodies as the home copy — the authoritative content stays
+// on a non-Guardian service marked Canonical (issue #16). Library listings
+// carry subject/snippet metadata; full body is only included when an agent
+// fetches detail through the service proxy.
+// https://github.com/fudomunro/aperture-guardian/issues/60
+type Message struct {
+	// Channel is the transport: "email", "sms", or "whatsapp".
+	Channel string `json:"channel,omitempty"`
+	// Subject is the email subject or chat topic, when present.
+	Subject string `json:"subject,omitempty"`
+	// Snippet is a short service-supplied preview of the body.
+	Snippet string `json:"snippet,omitempty"`
+	// Body is the full body text when a detail fetch includes it.
+	// Library list responses usually leave this empty.
+	Body string `json:"body,omitempty"`
+	// From is the sender as a Contact, when known.
+	From *Contact `json:"from,omitempty"`
+	// To are primary recipients as Contact values.
+	To []Contact `json:"to,omitempty"`
+	// CC are carbon-copy recipients as Contact values.
+	CC []Contact `json:"cc,omitempty"`
+	// SentAt is the send time in RFC3339, when known.
+	SentAt string `json:"sent_at,omitempty"`
+	// ReceivedAt is the time the service recorded receipt (RFC3339).
+	ReceivedAt string `json:"received_at,omitempty"`
+	// Direction is "inbound", "outbound", or "unknown".
+	Direction string `json:"direction,omitempty"`
+	// Read is true when the message is not marked unread on the source.
+	Read bool `json:"read,omitempty"`
+	// ThreadID is the service-local thread/conversation id, when known.
+	ThreadID string `json:"thread_id,omitempty"`
+	// EntityID is a durable cross-service id when a provider supplies one
+	// (RFC 5322 Message-ID for email). Preferred over subject matching.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records cross-service identity: "message_id" or "subject_from_time".
+	// Empty on single-source messages.
+	Match string `json:"match,omitempty"`
+	// Labels are service-local labels/tags (INBOX, SENT, UNREAD, …).
+	Labels []string `json:"labels,omitempty"`
+	// Sources lists service-local copies of this message.
+	Sources []MessageSource `json:"sources,omitempty"`
+	// Extra holds other service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// MessageSource is a service-specific location of a message.
+type MessageSource struct {
+	// Service is the connector ID: "google-gmail", …
+	Service string `json:"service"`
+	// ServiceName is the human-readable label: "Gmail".
+	ServiceName string `json:"service_name,omitempty"`
+	// ID is the service-local message ID.
+	ID string `json:"id,omitempty"`
+	// ThreadID is the service-local thread id for this copy.
+	ThreadID string `json:"thread_id,omitempty"`
+	// URL is a deep link to the message on the service, when available.
+	URL string `json:"url,omitempty"`
+	// Mailbox is the service-local mailbox/folder when known (INBOX, …).
+	Mailbox string `json:"mailbox,omitempty"`
+	// Canonical is true when this service is the authoritative location for
+	// the message (issue #16). Set by connectors or config canonical_for.
+	Canonical bool `json:"canonical,omitempty"`
+	// Extra holds additional service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// MessageList is the neutral response for listing messages — either for a
+// single service or aggregated across message-capable services.
+type MessageList struct {
+	Messages []Message `json:"messages"`
+	// Total is the number of messages in this response.
+	Total int `json:"total"`
+	// Synced is true when the library merged messages that shared an identity
+	// key (Message-ID, or subject+from+sent_at) into multi-source entries.
+	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page/cap with more items
+	// still upstream.
+	Truncated bool `json:"truncated,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
 // LibraryServiceStatus reports per-service results for an aggregate call.
 type LibraryServiceStatus struct {
 	// Status is "ok", "unauthorized", "error", or "skipped".

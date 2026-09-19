@@ -194,6 +194,29 @@ var libraryKinds = []LibraryKind{
 		HasProviders: func(s *Server) bool { return s.hasProvider[CalendarEventProvider]() },
 		Readable:     func(s *Server) bool { return s.libraryReadableFor("events") },
 	},
+	{
+		ID:              "messages",
+		Path:            "/v1/library/messages",
+		PermType:        "messages",
+		Label:           "messages",
+		Usage:           "emails, messages, inbox, mail, or recent correspondence",
+		Summary:         "all messages from every connected messaging/mail service in one neutral list (channel, subject, snippet, from/to/cc as Contact identities, sent_at, direction, read, entity_id, sources[])",
+		SyncRule:        "Messages merge on durable Message-ID when present (match=message_id); otherwise same subject + from + sent_at (match=subject_from_time). Message bodies stay on the source service. SMS/WhatsApp connectors are not implemented yet.",
+		ExampleQuestion: "what emails have I received recently?",
+		Keywords: []string{
+			"my email", "my emails", "my mail", "my inbox",
+			"recent email", "recent emails", "recent messages",
+			"emails have i", "emails i have", "emails i received",
+			"check my email", "check my mail", "check my inbox",
+			"messages in my inbox", "unread email", "unread emails",
+			"google mail", "gmail inbox", "correspondence",
+		},
+		EmptyMsg:     "no message-capable services configured",
+		DenyMsg:      "permission denied: agent access to messages is not allowed",
+		FailMsg:      "failed to fetch messages",
+		HasProviders: func(s *Server) bool { return s.hasProvider[MessageProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("messages") },
+	},
 }
 
 // LibraryKindByID returns the registered kind, or nil.
@@ -315,6 +338,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/contacts":  s.HandleLibraryContacts,
 		"/v1/library/photos":    s.HandleLibraryPhotos,
 		"/v1/library/events":    s.HandleLibraryEvents,
+		"/v1/library/messages":  s.HandleLibraryMessages,
 		"/v1/library/review":    s.HandleMergeReview,
 		"/v1/library/links":     s.HandleEntityLinks,
 		"/v1/library/links/":    s.HandleEntityLinks,
