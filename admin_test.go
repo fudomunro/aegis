@@ -474,6 +474,8 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 		"svc-details",
 		"serviceConnectionInline",
 		"serviceFlowRows",
+		"Pick photos",
+		"supports_photo_picker",
 		"Agents → Guardian → service",
 		"unified library",
 		"has_event_provider",

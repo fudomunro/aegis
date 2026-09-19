@@ -44,7 +44,9 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"svc-details",
 		"svc-body",
 		"serviceConnectionInline",
-		"serviceSecondaryActions",
+		// Photo picker shares the title-line connection cluster
+		"supports_photo_picker",
+		"Pick photos",
 		"serviceFlowRows",
 		"serviceConnectionStatus",
 		"serviceLibraryKinds",
