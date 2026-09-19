@@ -861,6 +861,13 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"Changes save immediately",
 		"applyPermissionsLocally",
 		`select[data-perm-key]`,
+		// Icons next to data types on permission rows
+		"dataTypeIconHTML",
+		"perm-type-icon",
+		"perm-type-label",
+		`data-type-icon=`,
+		`events: "M3.5 3h9v10.5h-9Z`,
+		`messages: "M2.5 3.5h11v9h-11Z`,
 		// Form sits under the card title (issue #69)
 		"svc-name",
 		"renderPermEditor(svc)",
