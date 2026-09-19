@@ -472,11 +472,14 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 		"svc-flow",
 		"svc-status",
 		"svc-details",
+		"svc-actions-top",
+		"serviceCardActions",
 		"serviceFlowRows",
 		"Agents → Guardian → service",
 		"unified library",
 		"has_event_provider",
 		"has_message_provider",
+		"!status.connected",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing service card marker %q", want)

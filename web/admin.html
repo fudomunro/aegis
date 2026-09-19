@@ -96,6 +96,15 @@
     display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
     min-width: 140px; text-align: right;
   }
+  .svc-side {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 0.55rem;
+    min-width: 160px; max-width: 100%;
+  }
+  .svc-actions-top {
+    display: flex; flex-wrap: wrap; gap: 0.4rem; justify-content: flex-end;
+    max-width: 280px;
+  }
+  .svc-actions-top .btn { white-space: nowrap; }
   .svc-status-line { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; align-items: center; }
   .svc-details {
     margin-top: 0.9rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
@@ -1243,12 +1252,14 @@
   function serviceConnectionStatus(svc) {
     const token = svc.token;
     if (!svc.has_oauth) {
-      return { badge: '<span class="badge badge-gray">No OAuth</span>', note: "No connection configured" };
+      return { badge: '<span class="badge badge-gray">No OAuth</span>', note: "No connection configured", connected: false, canAuth: false };
     }
     if (token && token.has_token && !token.expired) {
       return {
         badge: '<span class="badge badge-green">Connected</span>',
         note: token.expires_in ? "expires in " + escapeHtml(token.expires_in) : "",
+        connected: true,
+        canAuth: true,
       };
     }
     if (token && token.has_token && token.expired) {
@@ -1257,9 +1268,38 @@
           ? '<span class="badge badge-orange">Expired · auto-refresh</span>'
           : '<span class="badge badge-red">Expired</span>',
         note: "Reconnect to restore agent access",
+        connected: false,
+        canAuth: true,
+        reconnect: true,
       };
     }
-    return { badge: '<span class="badge badge-orange">Not connected</span>', note: "Authorize to open data flow" };
+    return {
+      badge: '<span class="badge badge-orange">Not connected</span>',
+      note: "Authorize to open data flow",
+      connected: false,
+      canAuth: true,
+    };
+  }
+
+  // Card actions live top-right. Connect/Reconnect only when not connected.
+  function serviceCardActions(svc, status) {
+    const actions = [];
+    if (svc.login_path && svc.has_oauth && !status.connected) {
+      const label = status.reconnect || (svc.token && svc.token.has_token && svc.token.expired)
+        ? "Reconnect"
+        : "Connect";
+      actions.push(
+        '<a class="btn' + (label === "Connect" || label === "Reconnect" ? " btn-primary" : "") +
+        '" data-service-action="auth" href="' + escapeHtml(svc.login_path) + '">' + label + "</a>"
+      );
+    }
+    if (svc.supports_photo_picker) {
+      actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
+        "Pick photos…</button>");
+    }
+    actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
+      (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
+    return actions;
   }
 
   // Data-flow lines: how agents reach this service, what it feeds into the
@@ -1356,21 +1396,11 @@
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
         : '<div class="meta">No OAuth configuration — add a <code>connection</code> in guardian.json to open agent data flow.</div>';
 
-      const actions = [];
-      if (svc.login_path && svc.has_oauth) {
-        actions.push('<a class="btn" href="' + escapeHtml(svc.login_path) + '">' +
-          (token && token.has_token ? "Reconnect" : "Connect") + "</a>");
-      }
-      if (svc.canonical_for && svc.canonical_for.length) {
-        actions.push('<span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
-          escapeHtml(svc.canonical_for.join(", ")) + "</span>");
-      }
-      if (svc.supports_photo_picker) {
-        actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
-          "Pick photos…</button>");
-      }
-      actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
-        (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
+      const actions = serviceCardActions(svc, status);
+      const canonicalBadge = (svc.canonical_for && svc.canonical_for.length)
+        ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
+          escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
+        : "";
 
       const editor = openPermEditors.has(svc.id) ? renderPermEditor(svc) : "";
       const pickStatus = svc.supports_photo_picker
@@ -1385,19 +1415,23 @@
               serviceFlowRows(svc) +
             "</div>" +
           "</div>" +
-          '<div class="svc-status" data-service-status="' + escapeHtml(svc.id) + '">' +
-            '<div class="svc-status-line">' + status.badge + "</div>" +
-            (status.note ? '<div class="meta">' + status.note + "</div>" : "") +
+          '<div class="svc-side">' +
+            '<div class="svc-actions-top" data-service-actions="' + escapeHtml(svc.id) + '">' +
+              actions.join(" ") +
+            "</div>" +
+            '<div class="svc-status" data-service-status="' + escapeHtml(svc.id) + '">' +
+              '<div class="svc-status-line">' + status.badge + "</div>" +
+              (status.note ? '<div class="meta">' + status.note + "</div>" : "") +
+            "</div>" +
           "</div>" +
         "</div>" +
         '<div class="svc-details">' +
           '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
-          aliases + oauthBits +
+          aliases + oauthBits + canonicalBadge +
           '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code>" +
             (svc.proxy_path ? ' · proxy <code>' + escapeHtml(svc.proxy_path) + "</code>" : "") +
             (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
           "</div>" +
-          '<div class="actions">' + actions.join(" ") + "</div>" +
           pickStatus +
           editor +
         "</div>" +

@@ -42,14 +42,21 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"svc-flow",
 		"svc-status",
 		"svc-details",
+		"svc-side",
+		"svc-actions-top",
+		"serviceCardActions",
 		"serviceFlowRows",
 		"serviceConnectionStatus",
 		"serviceLibraryKinds",
 		"data-service-flow",
 		"data-service-status",
+		"data-service-actions",
 		"Agents → Guardian → service",
 		"has_event_provider",
 		"has_message_provider",
+		// Connect/Reconnect only when not connected (issue #69 polish)
+		"!status.connected",
+		'"Reconnect"',
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)
