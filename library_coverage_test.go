@@ -866,8 +866,8 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"perm-type-icon",
 		"perm-type-label",
 		`data-type-icon=`,
-		`events: "M3.5 3h9v10.5h-9Z`,
-		`messages: "M2.5 3.5h11v9h-11Z`,
+		`events: "M3.5 3h9v10.5h-9zM3.5 6h9M6.5 2v2M9.5 2v2M6.5 9.5h3"`,
+		`messages: "M2.5 3.5h11v9h-11zM2.5 4 8 8.5 13.5 4"`,
 		// Form sits under the card title (issue #69)
 		"svc-name",
 		"renderPermEditor(svc)",
