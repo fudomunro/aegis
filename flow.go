@@ -573,6 +573,12 @@ func flowProvidesKind(connector ServiceConnector, kindID string) bool {
 	case "photos":
 		_, ok := connector.(PhotoProvider)
 		return ok
+	case "events":
+		_, ok := connector.(CalendarEventProvider)
+		return ok
+	case "messages":
+		_, ok := connector.(MessageProvider)
+		return ok
 	default:
 		return false
 	}

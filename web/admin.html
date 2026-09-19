@@ -256,6 +256,7 @@
           <button type="button" class="kind-btn" data-library-kind="contacts" aria-pressed="false">Contacts</button>
           <button type="button" class="kind-btn" data-library-kind="photos" aria-pressed="false">Photos</button>
           <button type="button" class="kind-btn" data-library-kind="events" aria-pressed="false">Events</button>
+          <button type="button" class="kind-btn" data-library-kind="messages" aria-pressed="false">Messages</button>
         </div>
         <div class="grow">
           <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
@@ -985,7 +986,7 @@
   // Core data types — same synced library kinds the Map shows (flow.go).
   // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
   // any explicit keys from guardian.json that are not rendered.
-  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events"];
+  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages"];
   const DATA_TYPE_LABELS = {
     playlists: "Playlists",
     tracks: "Liked tracks",
@@ -994,6 +995,7 @@
     contacts: "Contacts",
     photos: "Photos",
     events: "Calendar events",
+    messages: "Messages",
   };
   // User-facing access options. Backend still stores none/read/write/read-write.
   const ACCESS_CHOICES = [
@@ -1344,11 +1346,19 @@
       emptyAll: "No calendar events found. Connect Google Calendar (or another calendar-capable service), authorize it, then reload.",
       emptyFilter: "No calendar events match this filter.",
     },
+    messages: {
+      path: "/v1/admin/library/messages",
+      key: "messages",
+      label: "messages",
+      filterPlaceholder: "Filter messages…",
+      emptyAll: "No messages found. Connect Gmail (or another message-capable service), authorize it, then reload.",
+      emptyFilter: "No messages match this filter.",
+    },
   };
 
   let libraryKind = "playlists";
   const libraryDataByKind = {
-    playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null, events: null,
+    playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null, events: null, messages: null,
   };
   const PAGE_SIZE = 20;
   let libraryPage = 1;
@@ -1533,6 +1543,35 @@
     }).join("");
   }
 
+  function messageFromName(m) {
+    if (m.from && (m.from.name || (m.from.emails || []).length)) {
+      return m.from.name || (m.from.emails || [])[0] || "";
+    }
+    return "";
+  }
+
+  function renderMessageCards(items) {
+    return items.map((m) => {
+      const multi = (m.sources || []).length > 1;
+      const can = hasCanonicalSource(m.sources);
+      const from = messageFromName(m);
+      const toCount = (m.to || []).length;
+      return '<article class="card">' +
+        libraryCardHeader(m.subject || "(no subject)",
+          (multi ? '<span class="badge badge-blue">' + m.sources.length + " sources</span> " : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "") +
+          (m.channel ? '<span class="badge badge-gray">' + escapeHtml(m.channel) + "</span>" : "") +
+          (m.direction ? '<span class="badge badge-gray">' + escapeHtml(m.direction) + "</span>" : "") +
+          (m.read === false ? '<span class="badge badge-orange">unread</span>' : "")) +
+        (m.sent_at ? '<div class="meta">Sent: ' + escapeHtml(m.sent_at) + "</div>" : "") +
+        (from ? '<div class="meta">From: ' + escapeHtml(from) + "</div>" : "") +
+        (toCount ? '<div class="meta">To: ' + toCount + " recipient(s)</div>" : "") +
+        (m.snippet ? '<div class="meta">' + escapeHtml(String(m.snippet).slice(0, 160)) + "</div>" : "") +
+        '<div class="scopes">' + sourceBadges(m.sources) + "</div>" +
+        "</article>";
+    }).join("");
+  }
+
   function renderAlbumCards(items) {
     return items.map((a) => {
       const multi = (a.sources || []).length > 1;
@@ -1610,6 +1649,16 @@
         return hay.indexOf(q) !== -1;
       });
     }
+    if (libraryKind === "messages") {
+      return items.filter((m) => {
+        const hay = [m.subject, m.snippet, m.channel, m.direction, m.sent_at,
+          messageFromName(m),
+          (m.to || []).map((t) => (t.name || "") + " " + (t.emails || []).join(" ")).join(" "),
+          (m.sources || []).map((s) => s.service).join(" ")]
+          .join(" ").toLowerCase();
+        return hay.indexOf(q) !== -1;
+      });
+    }
     return items.filter((p) => {
       const hay = [p.name, p.description, p.owner, (p.sources || []).map((s) => s.service).join(" ")]
         .join(" ").toLowerCase();
@@ -1652,6 +1701,7 @@
     else if (libraryKind === "contacts") html = renderContactCards(info.items);
     else if (libraryKind === "photos") html = renderPhotoCards(info.items);
     else if (libraryKind === "events") html = renderEventCards(info.items);
+    else if (libraryKind === "messages") html = renderMessageCards(info.items);
     else html = renderPlaylistCards(info.items);
 
     if (!html) {
@@ -1802,7 +1852,7 @@
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
-        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, and <code>/v1/services/{id}/…</code></div>' +
+        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
         '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
