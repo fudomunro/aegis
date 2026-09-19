@@ -56,7 +56,7 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "Guardian Admin") {
+	if !strings.Contains(body, "Guardian — Admin") {
 		t.Fatal("expected admin page title")
 	}
 	if !strings.Contains(body, "/v1/admin/summary") {
@@ -67,6 +67,12 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 	}
 	if !strings.Contains(body, `id="library-pager"`) || !strings.Contains(body, `id="cache-pager"`) {
 		t.Fatal("expected library and cache pager containers")
+	}
+	if !strings.Contains(body, `id="tab-advanced"`) || !strings.Contains(body, `id="panel-advanced"`) {
+		t.Fatal("expected Advanced tab consolidating cache/runtime/map details")
+	}
+	if strings.Contains(body, "Guardian Admin") || strings.Contains(body, "status-strip") {
+		t.Fatal("expected top-bar stats/title removed in issue #69 cleanup")
 	}
 	if !strings.Contains(body, "PAGE_SIZE") || !strings.Contains(body, "paginate(") {
 		t.Fatal("expected client-side pagination helpers in admin JS")

@@ -63,8 +63,7 @@ Guardian starts with these endpoints:
 - `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
-- `GET /v1/setup` — web-based setup wizard
-- `GET /v1/admin` — admin dashboard for data-flow map, services, tokens, library, and cache
+- `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
 - `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32)
 - `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
 
@@ -321,10 +320,12 @@ Default mode is `auto` (identity if present, else API key). For a solo tailnet, 
 ## Connecting Services
 
 1. Register an OAuth app with each service (see below for per-service guides)
-2. Add the client ID and secret to your `guardian.json`
-3. Start Guardian and visit `https://your-guardian/v1/setup`
-4. Click **Connect** for each service — you'll be redirected to authorize
+2. Add the client ID and secret to your `guardian.json` (`connections` + service `connection` reference)
+3. Start Guardian and visit `https://your-guardian/v1/admin`
+4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
 5. Tokens are stored encrypted on disk and auto-refresh when expired
+
+If no services are connected yet, the Services tab shows extra help describing the OAuth flow.
 
 ### Spotify
 
@@ -1052,7 +1053,6 @@ Forwards to the configured upstream endpoint with OAuth tokens. Callers authenti
 | `/v1/auth/{id}/callback` | GET | OAuth callback (redirect target) |
 | `/v1/auth/status` | GET | Token status for all services |
 | `/v1/auth/{id}` | DELETE | Revoke stored token |
-| `/v1/setup` | GET | Web setup wizard |
 
 ### Admin dashboard
 
@@ -1071,6 +1071,11 @@ PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connect
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
 
+Tabs: **Map** (default), **Services**, **Library**, and **Advanced**.
+Connection management lives on **Services** — Connect/Reconnect, permissions,
+and empty-state help when nothing is authorized yet. There is no separate
+setup wizard.
+
 The **Library** tab loads datasets via `/v1/admin/library/{kind}` so browsing
 the admin UI does not inflate Map access counts. Agents still use
 `/v1/library/{kind}`; those requests are the ones the Map counts.
@@ -1084,6 +1089,11 @@ services. Service nodes are colored by status (connected, needs OAuth, expired,
 blocked). Photo services note that bytes stay upstream. Use it as a quick
 “what is this thing doing?” picture; the Services tab remains the place to
 edit permissions.
+
+The **Advanced** tab consolidates operational detail that used to sit below
+the map or on separate tabs: unified library dataset cards, recent access
+samples, the response cache inventory (with clear), and runtime/auth endpoint
+info.
 
 Each service card has an **Edit permissions** form: one control per core data
 type shown on the Map (playlists, liked tracks, saved albums, followed
@@ -1157,7 +1167,6 @@ aperture-guardian/
   oauth.go          OAuth2 login/callback/refresh flows
   tokens.go         AES-256-GCM encrypted token storage
   statestore.go     CSRF state validation with TTL
-  setup.go          Web-based setup wizard
   admin.go          Admin dashboard HTML + summary/cache APIs
   flow.go           Data-flow topology builder + /v1/admin/flow
   SECURITY.md       Tailnet auth model, ACLs, operational guidance
