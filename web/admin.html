@@ -16,21 +16,17 @@
   a:hover { text-decoration: underline; }
   code { background: var(--surface2); padding: 0.1rem 0.4rem; border-radius: 3px; font-size: 0.85rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
   .wrap { max-width: 1000px; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
-  header { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0.75rem; margin-bottom: 1.25rem; }
   h1 { font-size: 1.5rem; font-weight: 650; letter-spacing: -0.02em; }
   .sub { color: var(--dim); font-size: 0.9rem; }
-  .status-strip {
-    display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.75rem; margin-bottom: 1.5rem;
-  }
-  .stat {
+  .section-heading { font-size: 1.05rem; margin: 1.25rem 0 0.65rem; }
+  .help-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
-    padding: 0.85rem 1rem;
+    padding: 1.1rem 1.2rem; margin-bottom: 1rem; line-height: 1.55; color: var(--dim);
   }
-  .stat .label { color: var(--dim); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.25rem; }
-  .stat .value { font-size: 1.15rem; font-weight: 600; font-variant-numeric: tabular-nums; }
-  .stat .value.ok { color: var(--green); }
-  .stat .value.warn { color: var(--orange); }
+  .help-box h3 { color: var(--text); font-size: 1rem; margin-bottom: 0.45rem; }
+  .help-box p { margin-bottom: 0.45rem; font-size: 0.9rem; }
+  .help-box ol { margin: 0.35rem 0 0 1.25rem; font-size: 0.9rem; }
+  .help-box li { margin-bottom: 0.25rem; }
   nav { display: flex; gap: 0.35rem; border-bottom: 1px solid var(--border); margin-bottom: 1.25rem; overflow-x: auto; }
   .tab {
     background: none; border: none; color: var(--dim); padding: 0.65rem 0.9rem;
@@ -78,6 +74,54 @@
   .meta { color: var(--dim); font-size: 0.88rem; line-height: 1.5; }
   .meta code { font-size: 0.8rem; }
   .actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .svc-card { padding: 1.15rem 1.25rem; }
+  .svc-title-row {
+    display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between;
+    gap: 0.5rem 1rem; margin-bottom: 0.65rem;
+  }
+  .svc-name { font-size: 1.2rem; font-weight: 650; margin: 0; letter-spacing: -0.01em; flex: 1 1 auto; min-width: 0; }
+  .svc-connection {
+    display: inline-flex; flex-wrap: nowrap; align-items: center; gap: 0.45rem;
+    margin-left: auto; white-space: nowrap; flex-shrink: 0;
+  }
+  .svc-connection .meta,
+  .svc-connection .badge,
+  .svc-connection .btn {
+    display: inline-flex; align-items: center; margin: 0; line-height: 1.2;
+  }
+  .svc-connection .btn { padding: 0.35rem 0.7rem; font-size: 0.8rem; }
+  .svc-body { min-width: 0; }
+  .svc-advanced { margin-top: 0.75rem; }
+  .svc-advanced > summary {
+    cursor: pointer; color: var(--dim); font-size: 0.88rem; font-weight: 600;
+    list-style: none; display: inline-flex; align-items: center; gap: 0.35rem;
+    padding: 0.25rem 0; user-select: none;
+  }
+  .svc-advanced > summary::-webkit-details-marker { display: none; }
+  .svc-advanced > summary::before {
+    content: "▸"; display: inline-block; transition: transform 0.12s ease;
+    color: var(--accent); font-size: 0.75rem;
+  }
+  .svc-advanced[open] > summary::before { transform: rotate(90deg); }
+  .svc-advanced > summary:hover { color: var(--text); }
+  .svc-advanced > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+  .svc-flow { display: grid; gap: 0.35rem; margin-top: 0.65rem; }
+  .flow-row {
+    display: grid; grid-template-columns: minmax(72px, 88px) 1fr;
+    gap: 0.55rem; align-items: start; font-size: 0.9rem; line-height: 1.4;
+  }
+  .flow-label {
+    color: var(--dim); font-size: 0.72rem; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.04em; padding-top: 0.2rem;
+  }
+  .flow-value { color: var(--text); }
+  .flow-value .flow-note { color: var(--dim); font-size: 0.82rem; }
+  .svc-details {
+    margin-top: 0.75rem; padding-top: 0.75rem; border-top: 1px solid var(--border);
+  }
+  .svc-details .meta { margin-bottom: 0.25rem; }
+  .svc-details .meta:last-child { margin-bottom: 0; }
+  .svc-details .actions { margin-top: 0.65rem; }
   .badge {
     display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
@@ -115,16 +159,25 @@
     background: var(--surface2); border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.78rem;
   }
   .perm-editor {
-    margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
+    margin: 0 0 0.85rem;
   }
   .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.35rem; }
   .perm-help { margin-bottom: 0.65rem; }
-  .perm-list { margin-bottom: 0.35rem; }
+  .perm-list { margin-bottom: 0.25rem; }
   .perm-row {
     display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 180px);
     gap: 0.65rem; align-items: center; margin-bottom: 0.4rem;
   }
-  .perm-row label { font-size: 0.88rem; color: var(--text); line-height: 1.3; }
+  .perm-row label {
+    display: inline-flex; align-items: center; gap: 0.45rem;
+    font-size: 0.88rem; color: var(--text); line-height: 1.3;
+  }
+  .perm-type-icon {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 1.15rem; height: 1.15rem; color: var(--dim); flex-shrink: 0;
+  }
+  .perm-type-icon svg { display: block; }
+  .perm-type-label { min-width: 0; }
   .perm-row label .perm-key {
     display: block; color: var(--dim); font-size: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   }
@@ -133,7 +186,6 @@
     border-radius: 6px; padding: 0.45rem 0.55rem; font: inherit; font-size: 0.88rem;
   }
   .perm-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
-  .perm-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
   .perm-status { font-size: 0.82rem; color: var(--dim); margin-top: 0.45rem; min-height: 1.1em; }
   .perm-status.ok { color: var(--green); }
   .perm-status.err { color: var(--red); }
@@ -182,14 +234,6 @@
 </head>
 <body>
 <div class="wrap">
-  <header>
-    <div>
-      <h1>Guardian Admin</h1>
-      <p class="sub">Services, tokens, library, and cache under this instance</p>
-    </div>
-    <p class="sub"><a href="/v1/setup">Setup wizard</a></p>
-  </header>
-
   <div id="auth-gate" class="auth-box" hidden>
     <h2>API key required</h2>
     <p>Enter the Guardian API key. It is stored only in this browser tab.</p>
@@ -200,14 +244,11 @@
   </div>
 
   <div id="dashboard" hidden>
-    <div class="status-strip" id="status-strip"></div>
-
     <nav role="tablist" aria-label="Admin sections">
       <button class="tab" role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
       <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="false">Services</button>
       <button class="tab" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false">Library</button>
-      <button class="tab" role="tab" id="tab-cache" aria-controls="panel-cache" aria-selected="false">Cache</button>
-      <button class="tab" role="tab" id="tab-runtime" aria-controls="panel-runtime" aria-selected="false">Runtime</button>
+      <button class="tab" role="tab" id="tab-advanced" aria-controls="panel-advanced" aria-selected="false">Advanced</button>
     </nav>
 
     <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
@@ -232,11 +273,16 @@
         <span><i class="meta"></i> Meta / needs auth</span>
         <span><i class="denied"></i> Blocked</span>
       </div>
-      <div id="map-libraries" class="map-libraries"></div>
-      <div id="map-recent" class="map-recent" hidden></div>
     </section>
 
     <section id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services" hidden>
+      <div id="services-help" class="help-box" hidden></div>
+
+      <div id="agent-data-access-help" class="help-box">
+        <h3>Agent data access</h3>
+        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>guardian.json</code>.</p>
+      </div>
+
       <div class="toolbar">
         <div class="grow">
           <input type="search" id="service-filter" placeholder="Filter services…" aria-label="Filter services">
@@ -268,7 +314,13 @@
       <div id="library-pager" class="pager" hidden></div>
     </section>
 
-    <section id="panel-cache" class="panel" role="tabpanel" aria-labelledby="tab-cache" hidden>
+    <section id="panel-advanced" class="panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
+      <h2 class="section-heading">Library datasets</h2>
+      <div id="map-libraries" class="map-libraries"><div class="empty">Open Map to load topology details.</div></div>
+
+      <div id="map-recent" class="map-recent" hidden></div>
+
+      <h2 class="section-heading">Cache</h2>
       <div class="toolbar">
         <span class="meta" id="cache-summary"></span>
         <div class="grow"></div>
@@ -291,9 +343,8 @@
         </div>
       </div>
       <div id="cache-pager" class="pager" hidden></div>
-    </section>
 
-    <section id="panel-runtime" class="panel" role="tabpanel" aria-labelledby="tab-runtime" hidden>
+      <h2 class="section-heading">Runtime</h2>
       <div id="runtime-body"><div class="empty">Loading…</div></div>
     </section>
   </div>
@@ -392,6 +443,8 @@
     artists: "M8 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6ZM2.5 13.5c0-2.5 2.5-4.5 5.5-4.5s5.5 2 5.5 4.5",
     contacts: "M3 3.5h10v9H3zM5.5 6h5M5.5 8.5h5M5.5 11h3",
     photos: "M2.5 3.5h11v9h-11zM2.5 10l3-3 2.5 2.5L10 7l3.5 3.5M5.5 6.2a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
+    events: "M3.5 3h9v10.5h-9zM3.5 6h9M6.5 2v2M9.5 2v2M6.5 9.5h3",
+    messages: "M2.5 3.5h11v9h-11zM2.5 4 8 8.5 13.5 4",
     proxy: "M3 5h7.5M8.5 2.5 11 5 8.5 7.5M13 11H5.5M7.5 8.5 5 11l2.5 2.5",
   };
 
@@ -968,13 +1021,7 @@
   }
 
   function tokenBadge(token, hasOAuth) {
-    if (!hasOAuth) return '<span class="badge badge-gray">No OAuth</span>';
-    if (!token || !token.has_token) return '<span class="badge badge-orange">Not connected</span>';
-    if (token.expired) {
-      if (token.has_refresh) return '<span class="badge badge-orange">Expired · auto-refresh</span>';
-      return '<span class="badge badge-red">Expired</span>';
-    }
-    return '<span class="badge badge-green">Connected</span>';
+    return serviceConnectionStatus({ token: token, has_oauth: hasOAuth }).badge;
   }
 
   function actionBadge(action) {
@@ -1003,7 +1050,8 @@
     { value: "read-write", label: "Editable" },
     { value: "none", label: "Off" },
   ];
-  const openPermEditors = new Set();
+  // Per-service Advanced disclosure under the permissions form (issue #69).
+  const openAdvanced = new Set();
 
   function normalizeAccess(level) {
     const v = String(level || "").toLowerCase();
@@ -1053,9 +1101,22 @@
     return map;
   }
 
+  function dataTypeIconHTML(key, size) {
+    const d = FLOW_ICONS[key];
+    if (!d) return "";
+    const s = size || 16;
+    return '<span class="perm-type-icon" aria-hidden="true" data-type-icon="' + escapeHtml(key) + '">' +
+      '<svg width="' + s + '" height="' + s + '" viewBox="0 0 16 16" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="' + d + '"/></svg></span>';
+  }
+
   function permRow(key, level, allowWrite) {
     return '<div class="perm-row">' +
-      '<label for="perm-' + escapeHtml(key) + '">' + escapeHtml(dataTypeLabel(key)) + "</label>" +
+      '<label for="perm-' + escapeHtml(key) + '">' +
+      dataTypeIconHTML(key) +
+      '<span class="perm-type-label">' + escapeHtml(dataTypeLabel(key)) + "</span>" +
+      "</label>" +
       accessSelect(key, level, allowWrite).replace("<select ", '<select id="perm-' + escapeHtml(key) + '" ') +
       "</div>";
   }
@@ -1089,17 +1150,12 @@
     }).join("");
 
     const original = JSON.stringify(perms || {});
-    return '<div class="perm-editor" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
+    // Form stays on the card; instructions live once above the filter (#69).
+    return '<div class="perm-editor perm-live" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
-      "<h4>Agent data access</h4>" +
-      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Saves write <code>guardian.json</code>.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +
-      '<div class="perm-actions">' +
-      '<button type="button" class="btn btn-primary perm-save" data-service="' + escapeHtml(id) + '">Save</button>' +
-      '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Allow all</button>' +
-      "</div>" +
       '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
       "</div>";
   }
@@ -1126,26 +1182,39 @@
     return parts.join(" · ");
   }
 
-  async function savePermissions(serviceId, permissions, clear) {
+  function applyPermissionsLocally(serviceId, permissions) {
+    const next = permissions || {};
+    if (summary && Array.isArray(summary.services)) {
+      const svc = summary.services.find((s) => s.id === serviceId);
+      if (svc) {
+        svc.permissions = next;
+        const flow = document.querySelector('[data-service-flow="' + CSS.escape(serviceId) + '"]');
+        if (flow) flow.innerHTML = serviceFlowRows(svc);
+      }
+    }
+    const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
+    if (root) {
+      root.setAttribute("data-original-perms", JSON.stringify(next));
+    }
+  }
+
+  async function savePermissions(serviceId, permissions) {
     const status = document.getElementById("perm-status-" + CSS.escape(serviceId));
     if (status) {
-      status.textContent = clear ? "Clearing…" : "Saving…";
+      status.textContent = "Saving…";
       status.className = "perm-status";
     }
     try {
-      const body = clear ? { permissions: {} } : { permissions: permissions || {} };
       await api("/v1/admin/services/" + encodeURIComponent(serviceId) + "/permissions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ permissions: permissions || {} }),
       });
+      applyPermissionsLocally(serviceId, permissions);
       if (status) {
-        status.textContent = clear ? "Agents have unrestricted access." : "Saved.";
+        status.textContent = "Saved.";
         status.className = "perm-status ok";
       }
-      await loadSummary();
-      openPermEditors.add(serviceId);
-      renderServices($("service-filter").value);
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -1175,99 +1244,245 @@
     box.textContent = message || "";
   }
 
-  function renderStatusStrip(data) {
-    const connected = data.services.filter((s) => s.token && s.token.has_token && !s.token.expired).length;
-    const total = data.services.length;
-    const cache = data.cache;
-    const stats = [
-      { label: "Auth mode", value: escapeHtml(data.runtime.auth_mode || "—") },
-      { label: "Services", value: connected + " / " + total + " connected", cls: connected === total && total > 0 ? "ok" : (connected === 0 ? "warn" : "") },
-      { label: "Cache live", value: cache.live + " entries", cls: cache.live > 0 ? "ok" : "" },
-      { label: "Cache size", value: formatBytes(cache.bytes) },
-    ];
-    $("status-strip").innerHTML = stats.map((s) =>
-      '<div class="stat"><div class="label">' + escapeHtml(s.label) + '</div>' +
-      '<div class="value ' + (s.cls || "") + '">' + s.value + "</div></div>"
+  function renderServicesHelp(services) {
+    const root = $("services-help");
+    if (!root) return;
+    const total = services.length;
+    const oauthReady = services.filter((s) => s.has_oauth).length;
+    const connected = services.filter((s) => s.token && s.token.has_token && !s.token.expired).length;
+
+    if (total > 0 && connected > 0) {
+      root.hidden = true;
+      root.innerHTML = "";
+      return;
+    }
+
+    root.hidden = false;
+    if (total === 0) {
+      root.innerHTML =
+        "<h3>No services configured</h3>" +
+        "<p>Add named services to <code>guardian.json</code> (see the README and <code>guardian.example.json</code>), then restart Guardian. " +
+        "Each service should reference a top-level <code>connections</code> entry for OAuth.</p>" +
+        "<p>Once services appear here, use <strong>Connect</strong> on each card to authorize Guardian. Agents never handle tokens — Guardian stores them and injects proxy instructions.</p>";
+      return;
+    }
+
+    const missingOAuth = oauthReady === 0;
+    root.innerHTML =
+      "<h3>Connect your services</h3>" +
+      "<p>This page is where you manage service connections. " +
+      (missingOAuth
+        ? "None of the configured services have OAuth set up yet. Add a <code>connection</code> reference and client credentials in <code>guardian.json</code>, then restart."
+        : "Click <strong>Connect</strong> on a service card to authorize Guardian via OAuth.") + "</p>" +
+      "<ol>" +
+      "<li>Register an OAuth app with the provider and put the client ID/secret in <code>guardian.json</code> <code>connections</code>.</li>" +
+      "<li>Click <strong>Connect</strong> and finish the provider redirect.</li>" +
+      "<li>Tokens are stored encrypted on disk and refresh automatically.</li>" +
+      "<li>Agents call Guardian’s proxy/library APIs — they never see credentials.</li>" +
+      "</ol>" +
+      (total > 0 && connected === 0 && !missingOAuth
+        ? "<p>" + total + " service" + (total === 1 ? " is" : "s are") + " configured, but none are connected yet.</p>"
+        : "");
+  }
+
+  function serviceLibraryKinds(svc) {
+    const kinds = [];
+    if (svc.has_playlist_provider) kinds.push("playlists");
+    if (svc.has_liked_track_provider) kinds.push("liked tracks");
+    if (svc.has_album_provider) kinds.push("albums");
+    if (svc.has_artist_provider) kinds.push("artists");
+    if (svc.has_contact_provider) kinds.push("contacts");
+    if (svc.has_photo_provider) kinds.push("photos");
+    if (svc.has_event_provider) kinds.push("calendar events");
+    if (svc.has_message_provider) kinds.push("messages");
+    return kinds;
+  }
+
+  function serviceConnectionStatus(svc) {
+    const token = svc.token;
+    if (!svc.has_oauth) {
+      return { badge: '<span class="badge badge-gray">No OAuth</span>', note: "No connection configured", connected: false, canAuth: false };
+    }
+    if (token && token.has_token && !token.expired) {
+      return {
+        badge: '<span class="badge badge-green">Connected</span>',
+        note: token.expires_in ? "expires in " + escapeHtml(token.expires_in) : "",
+        connected: true,
+        canAuth: true,
+      };
+    }
+    if (token && token.has_token && token.expired) {
+      return {
+        badge: token.has_refresh
+          ? '<span class="badge badge-orange">Expired · auto-refresh</span>'
+          : '<span class="badge badge-red">Expired</span>',
+        note: "Reconnect to restore agent access",
+        connected: false,
+        canAuth: true,
+        reconnect: true,
+      };
+    }
+    return {
+      badge: '<span class="badge badge-orange">Not connected</span>',
+      note: "Authorize to open data flow",
+      connected: false,
+      canAuth: true,
+    };
+  }
+
+  // Title-line cluster: status + time left + auth/photo actions, one line.
+  function serviceConnectionInline(svc, status) {
+    const parts = [status.badge];
+    if (status.connected && status.note) {
+      parts.push('<span class="meta">' + status.note + "</span>");
+    }
+    if (svc.login_path && svc.has_oauth && !status.connected) {
+      const label = status.reconnect || (svc.token && svc.token.has_token && svc.token.expired)
+        ? "Reconnect"
+        : "Connect";
+      parts.push(
+        '<a class="btn btn-primary" data-service-action="auth" href="' +
+        escapeHtml(svc.login_path) + '">' + label + "</a>"
+      );
+    }
+    if (svc.supports_photo_picker) {
+      parts.push(
+        '<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
+        "Pick photos…</button>"
+      );
+    }
+    return '<div class="svc-connection" data-service-status="' + escapeHtml(svc.id) + '">' +
+      parts.join(" ") +
+      "</div>";
+  }
+
+  // Data-flow lines: how agents reach this service, what it feeds into the
+  // library, and which agent data types are currently allowed.
+  function serviceFlowRows(svc) {
+    const action = String(svc.action || "").toLowerCase();
+    const token = svc.token;
+    const connected = !!(token && token.has_token && !token.expired);
+    const kinds = serviceLibraryKinds(svc);
+    const rows = [];
+
+    let agentFlow;
+    let agentNote = "";
+    if (action === "block") {
+      agentFlow = "Blocked — no agent traffic";
+      agentNote = "Configured as block";
+    } else if (action === "inject") {
+      agentFlow = "Agents → Guardian → service";
+      agentNote = "proxy " + escapeHtml(svc.proxy_path || ("/v1/services/" + svc.id));
+      if (!svc.has_oauth) {
+        agentNote += " · needs OAuth config";
+      } else if (!connected) {
+        agentNote += " · token not ready";
+      }
+    } else {
+      agentFlow = escapeHtml(action || "configured");
+      agentNote = escapeHtml(svc.proxy_path || "");
+    }
+    rows.push({
+      label: "Agents",
+      value: (action === "block" || action === "inject" ? agentFlow : escapeHtml(agentFlow)) +
+        (agentNote ? ' <span class="flow-note">· ' + agentNote + "</span>" : ""),
+    });
+
+    if (kinds.length) {
+      rows.push({
+        label: "Library",
+        value: escapeHtml(kinds.join(", ")) +
+          ' <span class="flow-note">→ unified library (service → Guardian)</span>',
+      });
+    } else {
+      rows.push({
+        label: "Library",
+        value: 'Proxy only <span class="flow-note">· no library fan-in</span>',
+      });
+    }
+
+    const writable = new Set(svc.writable_data_types || []);
+    const access = permSummary(svc.permissions || {}, writable);
+    rows.push({
+      label: "Agent data",
+      value: escapeHtml(access) + (action === "block" ? ' <span class="flow-note">· blocked anyway</span>' : ""),
+    });
+
+    return rows.map((r) =>
+      '<div class="flow-row">' +
+      '<span class="flow-label">' + escapeHtml(r.label) + "</span>" +
+      '<span class="flow-value">' + r.value + "</span>" +
+      "</div>"
     ).join("");
   }
 
   function renderServices(filterText) {
     if (!summary) return;
     const q = (filterText || "").trim().toLowerCase();
-    const rows = summary.services.filter((svc) => {
+    const all = summary.services || [];
+    renderServicesHelp(all);
+    const rows = all.filter((svc) => {
       if (!q) return true;
-      const hay = [svc.id, svc.name, svc.action, svc.endpoint, (svc.aliases || []).join(" "), svc.description]
+      const kinds = serviceLibraryKinds(svc).join(" ");
+      const hay = [svc.id, svc.name, svc.action, svc.endpoint, (svc.aliases || []).join(" "), svc.description, kinds]
         .join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
 
     if (!rows.length) {
-      $("services-list").innerHTML = '<div class="empty">No services match this filter.</div>';
+      $("services-list").innerHTML = all.length
+        ? '<div class="empty">No services match this filter.</div>'
+        : '<div class="empty">Add services in guardian.json — connection management lives here.</div>';
       return;
     }
 
     $("services-list").innerHTML = rows.map((svc) => {
       const token = svc.token;
-      const expires = token && token.has_token && !token.expired
-        ? '<span class="dim"> · expires in ' + escapeHtml(token.expires_in) + "</span>"
-        : "";
+      const status = serviceConnectionStatus(svc);
       const scopes = (svc.oauth_scopes || []).map((s) => '<span class="playlist-source">' + escapeHtml(s) + "</span>").join("");
       const aliases = (svc.aliases || []).length
         ? '<div class="meta">Aliases: ' + svc.aliases.map((a) => "<code>" + escapeHtml(a) + "</code>").join(" ") + "</div>"
         : "";
       const oauthBits = svc.has_oauth
-        ? '<div class="meta">OAuth: client ID ' + (svc.has_client_id ? "set" : "missing") +
+        ? '<div class="meta">OAuth connection <code>' + escapeHtml(svc.connection_id || "") + "</code>" +
+          " · client ID " + (svc.has_client_id ? "set" : "missing") +
           " · secret " + (svc.has_client_secret ? "set" : "missing") +
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
-        : '<div class="meta">No OAuth configuration</div>';
+        : '<div class="meta">No OAuth configuration — add a <code>connection</code> in guardian.json to open agent data flow.</div>';
 
-      const perms = svc.permissions || {};
-      const permBits = '<div class="meta">Agent data: <em>' +
-        escapeHtml(permSummary(perms, svc.writable_data_types)) + "</em></div>";
+      const canonicalBadge = (svc.canonical_for && svc.canonical_for.length)
+        ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
+          escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
+        : "";
 
-      const actions = [];
-      if (svc.login_path && svc.has_oauth) {
-        actions.push('<a class="btn" href="' + escapeHtml(svc.login_path) + '">' +
-          (token && token.has_token ? "Reconnect" : "Connect") + "</a>");
-      }
-      actions.push('<code>' + escapeHtml(svc.proxy_path) + "</code>");
-      if (svc.canonical_for && svc.canonical_for.length) {
-        actions.push('<span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
-          escapeHtml(svc.canonical_for.join(", ")) + "</span>");
-      }
-      if (svc.has_playlist_provider || svc.has_liked_track_provider || svc.has_album_provider ||
-          svc.has_artist_provider || svc.has_contact_provider || svc.has_photo_provider) {
-        const kinds = [];
-        if (svc.has_playlist_provider) kinds.push("playlists");
-        if (svc.has_liked_track_provider) kinds.push("liked tracks");
-        if (svc.has_album_provider) kinds.push("albums");
-        if (svc.has_artist_provider) kinds.push("artists");
-        if (svc.has_contact_provider) kinds.push("contacts");
-        if (svc.has_photo_provider) kinds.push("photos");
-        actions.push('<span class="badge badge-blue">Library: ' + escapeHtml(kinds.join(", ")) + "</span>");
-      }
-      if (svc.supports_photo_picker) {
-        actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
-          "Pick photos…</button>");
-      }
-      actions.push('<button type="button" class="btn perm-toggle" data-service="' + escapeHtml(svc.id) + '">' +
-        (openPermEditors.has(svc.id) ? "Hide permissions" : "Edit permissions") + "</button>");
-
-      const editor = openPermEditors.has(svc.id) ? renderPermEditor(svc) : "";
       const pickStatus = svc.supports_photo_picker
         ? '<div class="perm-status photo-pick-status" id="photo-pick-status-' + escapeHtml(svc.id) + '"></div>'
         : "";
 
-      return '<article class="card" data-service-card="' + escapeHtml(svc.id) + '">' +
-        '<div class="card-header"><h3>' + escapeHtml(svc.name) + "</h3>" +
-        actionBadge(svc.action) + tokenBadge(token, svc.has_oauth) + expires + "</div>" +
-        '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
-        aliases + oauthBits +
-        '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code></div>" +
-        permBits +
-        '<div class="actions">' + actions.join(" ") + "</div>" +
-        pickStatus +
-        editor +
+      return '<article class="card svc-card" data-service-card="' + escapeHtml(svc.id) + '">' +
+        '<div class="svc-title-row">' +
+          '<h3 class="svc-name">' + escapeHtml(svc.name) + "</h3>" +
+          serviceConnectionInline(svc, status) +
+        "</div>" +
+        '<div class="svc-body">' +
+          renderPermEditor(svc) +
+          pickStatus +
+          '<details class="svc-advanced" data-service-advanced="' + escapeHtml(svc.id) + '"' +
+            (openAdvanced.has(svc.id) ? " open" : "") + ">" +
+            "<summary>Advanced</summary>" +
+            '<div class="svc-flow" data-service-flow="' + escapeHtml(svc.id) + '">' +
+              serviceFlowRows(svc) +
+            "</div>" +
+            '<div class="svc-details">' +
+              '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
+              aliases + oauthBits + canonicalBadge +
+              '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code>" +
+                (svc.proxy_path ? ' · proxy <code>' + escapeHtml(svc.proxy_path) + "</code>" : "") +
+                (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
+              "</div>" +
+            "</div>" +
+          "</details>" +
+        "</div>" +
         "</article>";
     }).join("");
   }
@@ -1853,7 +2068,7 @@
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, and <code>/v1/services/{id}/…</code></div>' +
-        '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Setup: <code>/v1/setup</code></div>' +
+        '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
         '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code></div>' +
       "</article>";
   }
@@ -1864,7 +2079,6 @@
       summary = await api("/v1/admin/summary");
       showAuthGate(false);
       $("dashboard").hidden = false;
-      renderStatusStrip(summary);
       renderServices($("service-filter").value);
       renderRuntime(summary);
       loadFlow();
@@ -1877,7 +2091,7 @@
     }
   }
 
-  const FLOW_TABS = ["map", "services", "library", "cache", "runtime"];
+  const FLOW_TABS = ["map", "services", "library", "advanced"];
 
   function selectTab(name) {
     FLOW_TABS.forEach((id) => {
@@ -1889,7 +2103,7 @@
     });
     if (name === "map") loadFlow();
     if (name === "library") loadAllLibraryKinds();
-    if (name === "cache") loadCache();
+    if (name === "advanced") loadCache();
   }
 
   FLOW_TABS.forEach((id) => {
@@ -2026,31 +2240,36 @@
 
   $("services-list").addEventListener("click", (e) => {
     const btn = e.target.closest("button");
-    if (!btn) return;
-    const serviceId = btn.getAttribute("data-service");
-    if (!serviceId) return;
+    if (btn) {
+      const serviceId = btn.getAttribute("data-service");
+      if (serviceId && btn.classList.contains("photo-pick")) {
+        startPhotoPick(serviceId);
+        return;
+      }
+    }
+  });
 
-    if (btn.classList.contains("photo-pick")) {
-      startPhotoPick(serviceId);
-      return;
-    }
-    if (btn.classList.contains("perm-toggle")) {
-      if (openPermEditors.has(serviceId)) openPermEditors.delete(serviceId);
-      else openPermEditors.add(serviceId);
-      renderServices($("service-filter").value);
-      return;
-    }
-    if (btn.classList.contains("perm-save")) {
-      const map = collectPermEditor(serviceId);
-      if (!map) return;
-      savePermissions(serviceId, map, false);
-      return;
-    }
-    if (btn.classList.contains("perm-clear")) {
-      if (!confirm("Allow agents unrestricted access to " + serviceId + "?")) return;
-      savePermissions(serviceId, {}, true);
-      return;
-    }
+  // Keep Advanced open/closed across list re-renders.
+  $("services-list").addEventListener("toggle", (e) => {
+    const details = e.target;
+    if (!details || !details.classList || !details.classList.contains("svc-advanced")) return;
+    const id = details.getAttribute("data-service-advanced");
+    if (!id) return;
+    if (details.open) openAdvanced.add(id);
+    else openAdvanced.delete(id);
+  }, true);
+
+  // Live permissions: each select change writes through immediately.
+  $("services-list").addEventListener("change", (e) => {
+    const sel = e.target;
+    if (!sel || !sel.matches || !sel.matches("select[data-perm-key]")) return;
+    const root = sel.closest(".perm-editor");
+    if (!root) return;
+    const serviceId = root.getAttribute("data-service");
+    if (!serviceId) return;
+    const map = collectPermEditor(serviceId);
+    if (!map) return;
+    savePermissions(serviceId, map);
   });
 
   loadSummary();
