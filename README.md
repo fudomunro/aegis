@@ -178,6 +178,13 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 
 - The reserved key `default` applies to data types not listed.
 - If `permissions` is omitted, agents keep unrestricted access (previous behavior).
+- **Bootstrap vs overlay (issue #71).** `guardian.json` may set default
+  `permissions` per service. Admin UI saves write a separate
+  `permissions.json` overlay (flag `-permissions-file`). A service present in
+  the overlay uses those permissions; a present key set to `null` means
+  unrestricted; services absent from the overlay keep the bootstrap map from
+  `guardian.json`. The overlay holds no secrets — admin permission edits never
+  rewrite OAuth client credentials.
 - Permissions **further constrain** the connector; they never add capabilities.
   The admin form only offers **Editable** for types with a true agent data-write
   operation on the connector. Mirror backup writes and photo-picker session
@@ -302,7 +309,8 @@ professional-data connectors remain follow-up work on
 | `-api-key` | | Shared API key (required only for `api-key` mode) |
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
-| `-config` | `guardian.json` | Config file path |
+| `-config` | `guardian.json` | Bootstrap config path (services, connections, secrets) |
+| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `guardian.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
@@ -1064,7 +1072,7 @@ GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
 GET /v1/admin/services/{id}/permissions  — current agent permission map + available/writable types
-PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes guardian.json)
+PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not guardian.json)
 ```
 
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
@@ -1099,8 +1107,10 @@ On the **Services** tab, shared **Agent data access** instructions sit above
 the filter (Available / Off always; **Editable** only when agents can truly
 change that data through Guardian — not mirror backups or picker sessions).
 Each service card keeps its own live permissions form under the title; every
-change saves immediately to `guardian.json`. Keys not shown in the form are
-preserved on save. Data-type rows use the Map icons.
+change saves immediately to `permissions.json` (the admin overlay). Bootstrap
+defaults remain in `guardian.json`; the overlay wins for any service the admin
+UI has saved. Keys not shown in the form are preserved on save. Data-type rows
+use the Map icons.
 
 Each service card leads with **name** on the title line and **connection
 status** on the same line to the right — badge, time left,
@@ -1156,6 +1166,8 @@ change that only adds untested write paths.
 aperture-guardian/
   main.go           Entry point, CLI flags, route wiring
   config.go         Service/Config types, JSON loading, matching
+  atomicfile.go     Atomic temp+rename writes for the permissions overlay
+  permissions_overlay.go  Admin permissions.json overlay (issue #71)
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
   models.go         Neutral data types (Playlist, Track, Contact, Photo, CalendarEvent, and their list wrappers)
