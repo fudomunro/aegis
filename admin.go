@@ -46,6 +46,8 @@ type AdminService struct {
 	HasArtist     bool         `json:"has_artist_provider"`
 	HasContact    bool         `json:"has_contact_provider"`
 	HasPhoto      bool         `json:"has_photo_provider"`
+	HasEvent      bool         `json:"has_event_provider"`
+	HasMessage    bool         `json:"has_message_provider"`
 	// SupportsPhotoPicker is true when the connector exposes a picker session
 	// create operation (e.g. Google Photos Picker API).
 	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`
@@ -178,6 +180,12 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			if _, isProvider := connector.(PhotoProvider); isProvider {
 				item.HasPhoto = true
+			}
+			if _, isProvider := connector.(CalendarEventProvider); isProvider {
+				item.HasEvent = true
+			}
+			if _, isProvider := connector.(MessageProvider); isProvider {
+				item.HasMessage = true
 			}
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
