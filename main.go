@@ -121,6 +121,8 @@ func main() {
 	srv.connectors[immichServiceID] = immichConn
 	gCalendarConn := NewGoogleCalendarConnector(srv)
 	srv.connectors[googleCalendarServiceID] = gCalendarConn
+	gGmailConn := NewGoogleGmailConnector(srv)
+	srv.connectors[googleGmailServiceID] = gGmailConn
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
