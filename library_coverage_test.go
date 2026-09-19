@@ -861,7 +861,7 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"perm-live",
 		"Changes save immediately",
 		"applyPermissionsLocally",
-		'select[data-perm-key]',
+		`select[data-perm-key]`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)
