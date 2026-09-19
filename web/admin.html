@@ -74,6 +74,34 @@
   .meta { color: var(--dim); font-size: 0.88rem; line-height: 1.5; }
   .meta code { font-size: 0.8rem; }
   .actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .svc-card { padding: 1.15rem 1.25rem; }
+  .svc-primary {
+    display: flex; flex-wrap: wrap; gap: 1rem 1.25rem;
+    justify-content: space-between; align-items: flex-start;
+  }
+  .svc-identity { flex: 1 1 260px; min-width: 0; }
+  .svc-name { font-size: 1.2rem; font-weight: 650; margin: 0 0 0.55rem; letter-spacing: -0.01em; }
+  .svc-flow { display: grid; gap: 0.35rem; }
+  .flow-row {
+    display: grid; grid-template-columns: minmax(72px, 88px) 1fr;
+    gap: 0.55rem; align-items: start; font-size: 0.9rem; line-height: 1.4;
+  }
+  .flow-label {
+    color: var(--dim); font-size: 0.72rem; font-weight: 650;
+    text-transform: uppercase; letter-spacing: 0.04em; padding-top: 0.2rem;
+  }
+  .flow-value { color: var(--text); }
+  .flow-value .flow-note { color: var(--dim); font-size: 0.82rem; }
+  .svc-status {
+    display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
+    min-width: 140px; text-align: right;
+  }
+  .svc-status-line { display: inline-flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; align-items: center; }
+  .svc-details {
+    margin-top: 0.9rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
+  }
+  .svc-details .meta { margin-bottom: 0.25rem; }
+  .svc-details .meta:last-child { margin-bottom: 0; }
   .badge {
     display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
@@ -957,13 +985,7 @@
   }
 
   function tokenBadge(token, hasOAuth) {
-    if (!hasOAuth) return '<span class="badge badge-gray">No OAuth</span>';
-    if (!token || !token.has_token) return '<span class="badge badge-orange">Not connected</span>';
-    if (token.expired) {
-      if (token.has_refresh) return '<span class="badge badge-orange">Expired · auto-refresh</span>';
-      return '<span class="badge badge-red">Expired</span>';
-    }
-    return '<span class="badge badge-green">Connected</span>';
+    return serviceConnectionStatus({ token: token, has_oauth: hasOAuth }).badge;
   }
 
   function actionBadge(action) {
@@ -1205,6 +1227,101 @@
         : "");
   }
 
+  function serviceLibraryKinds(svc) {
+    const kinds = [];
+    if (svc.has_playlist_provider) kinds.push("playlists");
+    if (svc.has_liked_track_provider) kinds.push("liked tracks");
+    if (svc.has_album_provider) kinds.push("albums");
+    if (svc.has_artist_provider) kinds.push("artists");
+    if (svc.has_contact_provider) kinds.push("contacts");
+    if (svc.has_photo_provider) kinds.push("photos");
+    if (svc.has_event_provider) kinds.push("calendar events");
+    if (svc.has_message_provider) kinds.push("messages");
+    return kinds;
+  }
+
+  function serviceConnectionStatus(svc) {
+    const token = svc.token;
+    if (!svc.has_oauth) {
+      return { badge: '<span class="badge badge-gray">No OAuth</span>', note: "No connection configured" };
+    }
+    if (token && token.has_token && !token.expired) {
+      return {
+        badge: '<span class="badge badge-green">Connected</span>',
+        note: token.expires_in ? "expires in " + escapeHtml(token.expires_in) : "",
+      };
+    }
+    if (token && token.has_token && token.expired) {
+      return {
+        badge: token.has_refresh
+          ? '<span class="badge badge-orange">Expired · auto-refresh</span>'
+          : '<span class="badge badge-red">Expired</span>',
+        note: "Reconnect to restore agent access",
+      };
+    }
+    return { badge: '<span class="badge badge-orange">Not connected</span>', note: "Authorize to open data flow" };
+  }
+
+  // Data-flow lines: how agents reach this service, what it feeds into the
+  // library, and which agent data types are currently allowed.
+  function serviceFlowRows(svc) {
+    const action = String(svc.action || "").toLowerCase();
+    const token = svc.token;
+    const connected = !!(token && token.has_token && !token.expired);
+    const kinds = serviceLibraryKinds(svc);
+    const rows = [];
+
+    let agentFlow;
+    let agentNote = "";
+    if (action === "block") {
+      agentFlow = "Blocked — no agent traffic";
+      agentNote = "Configured as block";
+    } else if (action === "inject") {
+      agentFlow = "Agents → Guardian → service";
+      agentNote = "proxy " + escapeHtml(svc.proxy_path || ("/v1/services/" + svc.id));
+      if (!svc.has_oauth) {
+        agentNote += " · needs OAuth config";
+      } else if (!connected) {
+        agentNote += " · token not ready";
+      }
+    } else {
+      agentFlow = escapeHtml(action || "configured");
+      agentNote = escapeHtml(svc.proxy_path || "");
+    }
+    rows.push({
+      label: "Agents",
+      value: (action === "block" || action === "inject" ? agentFlow : escapeHtml(agentFlow)) +
+        (agentNote ? ' <span class="flow-note">· ' + agentNote + "</span>" : ""),
+    });
+
+    if (kinds.length) {
+      rows.push({
+        label: "Library",
+        value: escapeHtml(kinds.join(", ")) +
+          ' <span class="flow-note">→ unified library (service → Guardian)</span>',
+      });
+    } else {
+      rows.push({
+        label: "Library",
+        value: 'Proxy only <span class="flow-note">· no library fan-in</span>',
+      });
+    }
+
+    const writable = new Set(svc.writable_data_types || []);
+    const access = permSummary(svc.permissions || {}, writable);
+    rows.push({
+      label: "Agent data",
+      value: escapeHtml(access) + (action === "block" ? ' <span class="flow-note">· blocked anyway</span>' : ""),
+    });
+
+    return rows.map((r) =>
+      '<div class="flow-row">' +
+      '<span class="flow-label">' + escapeHtml(r.label) + "</span>" +
+      '<span class="flow-value">' + r.value + "</span>" +
+      "</div>"
+    ).join("");
+  }
+
   function renderServices(filterText) {
     if (!summary) return;
     const q = (filterText || "").trim().toLowerCase();
@@ -1212,7 +1329,8 @@
     renderServicesHelp(all);
     const rows = all.filter((svc) => {
       if (!q) return true;
-      const hay = [svc.id, svc.name, svc.action, svc.endpoint, (svc.aliases || []).join(" "), svc.description]
+      const kinds = serviceLibraryKinds(svc).join(" ");
+      const hay = [svc.id, svc.name, svc.action, svc.endpoint, (svc.aliases || []).join(" "), svc.description, kinds]
         .join(" ").toLowerCase();
       return hay.indexOf(q) !== -1;
     });
@@ -1226,43 +1344,26 @@
 
     $("services-list").innerHTML = rows.map((svc) => {
       const token = svc.token;
-      const expires = token && token.has_token && !token.expired
-        ? '<span class="dim"> · expires in ' + escapeHtml(token.expires_in) + "</span>"
-        : "";
+      const status = serviceConnectionStatus(svc);
       const scopes = (svc.oauth_scopes || []).map((s) => '<span class="playlist-source">' + escapeHtml(s) + "</span>").join("");
       const aliases = (svc.aliases || []).length
         ? '<div class="meta">Aliases: ' + svc.aliases.map((a) => "<code>" + escapeHtml(a) + "</code>").join(" ") + "</div>"
         : "";
       const oauthBits = svc.has_oauth
-        ? '<div class="meta">OAuth: client ID ' + (svc.has_client_id ? "set" : "missing") +
+        ? '<div class="meta">OAuth connection <code>' + escapeHtml(svc.connection_id || "") + "</code>" +
+          " · client ID " + (svc.has_client_id ? "set" : "missing") +
           " · secret " + (svc.has_client_secret ? "set" : "missing") +
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
-        : '<div class="meta">No OAuth configuration</div>';
-
-      const perms = svc.permissions || {};
-      const permBits = '<div class="meta">Agent data: <em>' +
-        escapeHtml(permSummary(perms, svc.writable_data_types)) + "</em></div>";
+        : '<div class="meta">No OAuth configuration — add a <code>connection</code> in guardian.json to open agent data flow.</div>';
 
       const actions = [];
       if (svc.login_path && svc.has_oauth) {
         actions.push('<a class="btn" href="' + escapeHtml(svc.login_path) + '">' +
           (token && token.has_token ? "Reconnect" : "Connect") + "</a>");
       }
-      actions.push('<code>' + escapeHtml(svc.proxy_path) + "</code>");
       if (svc.canonical_for && svc.canonical_for.length) {
         actions.push('<span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
           escapeHtml(svc.canonical_for.join(", ")) + "</span>");
-      }
-      if (svc.has_playlist_provider || svc.has_liked_track_provider || svc.has_album_provider ||
-          svc.has_artist_provider || svc.has_contact_provider || svc.has_photo_provider) {
-        const kinds = [];
-        if (svc.has_playlist_provider) kinds.push("playlists");
-        if (svc.has_liked_track_provider) kinds.push("liked tracks");
-        if (svc.has_album_provider) kinds.push("albums");
-        if (svc.has_artist_provider) kinds.push("artists");
-        if (svc.has_contact_provider) kinds.push("contacts");
-        if (svc.has_photo_provider) kinds.push("photos");
-        actions.push('<span class="badge badge-blue">Library: ' + escapeHtml(kinds.join(", ")) + "</span>");
       }
       if (svc.supports_photo_picker) {
         actions.push('<button type="button" class="btn photo-pick" data-service="' + escapeHtml(svc.id) + '">' +
@@ -1276,16 +1377,30 @@
         ? '<div class="perm-status photo-pick-status" id="photo-pick-status-' + escapeHtml(svc.id) + '"></div>'
         : "";
 
-      return '<article class="card" data-service-card="' + escapeHtml(svc.id) + '">' +
-        '<div class="card-header"><h3>' + escapeHtml(svc.name) + "</h3>" +
-        actionBadge(svc.action) + tokenBadge(token, svc.has_oauth) + expires + "</div>" +
-        '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
-        aliases + oauthBits +
-        '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code></div>" +
-        permBits +
-        '<div class="actions">' + actions.join(" ") + "</div>" +
-        pickStatus +
-        editor +
+      return '<article class="card svc-card" data-service-card="' + escapeHtml(svc.id) + '">' +
+        '<div class="svc-primary">' +
+          '<div class="svc-identity">' +
+            '<h3 class="svc-name">' + escapeHtml(svc.name) + "</h3>" +
+            '<div class="svc-flow" data-service-flow="' + escapeHtml(svc.id) + '">' +
+              serviceFlowRows(svc) +
+            "</div>" +
+          "</div>" +
+          '<div class="svc-status" data-service-status="' + escapeHtml(svc.id) + '">' +
+            '<div class="svc-status-line">' + status.badge + "</div>" +
+            (status.note ? '<div class="meta">' + status.note + "</div>" : "") +
+          "</div>" +
+        "</div>" +
+        '<div class="svc-details">' +
+          '<div class="meta">' + escapeHtml(svc.description || svc.endpoint || "No description") + "</div>" +
+          aliases + oauthBits +
+          '<div class="meta">Cache TTL: <code>' + escapeHtml(svc.cache_ttl) + "</code>" +
+            (svc.proxy_path ? ' · proxy <code>' + escapeHtml(svc.proxy_path) + "</code>" : "") +
+            (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
+          "</div>" +
+          '<div class="actions">' + actions.join(" ") + "</div>" +
+          pickStatus +
+          editor +
+        "</div>" +
         "</article>";
     }).join("");
   }

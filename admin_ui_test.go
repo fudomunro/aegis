@@ -35,6 +35,21 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"FLOW_TABS",
 		`"advanced"`,
 		"map-svg-wrap",
+		// Services card hierarchy (polish): name + data flow + connection first
+		"svc-card",
+		"svc-primary",
+		"svc-name",
+		"svc-flow",
+		"svc-status",
+		"svc-details",
+		"serviceFlowRows",
+		"serviceConnectionStatus",
+		"serviceLibraryKinds",
+		"data-service-flow",
+		"data-service-status",
+		"Agents → Guardian → service",
+		"has_event_provider",
+		"has_message_provider",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)

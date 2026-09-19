@@ -1095,13 +1095,16 @@ the map or on separate tabs: unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
-Each service card has an **Edit permissions** form: one control per core data
-type shown on the Map (playlists, liked tracks, saved albums, followed
-artists, contacts, photos), labeled in plain language. Available / Off always;
-**Editable** only when agents can truly change that data through Guardian
-(not mirror backups or picker sessions). Save writes `guardian.json` and
-clears the response cache. **Allow all** removes the permissions block.
-Keys not shown in the form are preserved on save.
+Each service card leads with **name**, **data flow** (agents → Guardian →
+service proxy, library fan-in kinds, and agent data access), and
+**connection status**. Description, OAuth config, cache TTL, paths, and
+actions sit in a details block below. There is an **Edit permissions** form:
+one control per core data type shown on the Map (playlists, liked tracks, saved
+albums, followed artists, contacts, photos), labeled in plain language.
+Available / Off always; **Editable** only when agents can truly change that data
+through Guardian (not mirror backups or picker sessions). Save writes
+`guardian.json` and clears the response cache. **Allow all** removes the
+permissions block. Keys not shown in the form are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)
 also show **Pick photos…** on the service card: it creates a session, opens
