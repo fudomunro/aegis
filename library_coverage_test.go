@@ -845,6 +845,8 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 	// Issue #61: form is a simple per-type availability control for core Map types.
 	// Issue #69: form is always visible and saves live on change.
 	for _, want := range []string{
+		// Shared help above filter (not repeated per card)
+		`id="agent-data-access-help"`,
 		"Agent data access",
 		"Available",
 		"Editable",
@@ -857,8 +859,8 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"writable_data_types",
 		"allowWrite",
 		"never add capabilities",
-		"perm-live",
 		"Changes save immediately",
+		"perm-live",
 		"applyPermissionsLocally",
 		`select[data-perm-key]`,
 		// Icons next to data types on permission rows
@@ -868,9 +870,10 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		`data-type-icon=`,
 		`events: "M3.5 3h9v10.5h-9zM3.5 6h9M6.5 2v2M9.5 2v2M6.5 9.5h3"`,
 		`messages: "M2.5 3.5h11v9h-11zM2.5 4 8 8.5 13.5 4"`,
-		// Form sits under the card title (issue #69)
+		// Form still on each card under the title
 		"svc-name",
 		"renderPermEditor(svc)",
+		"svc-advanced",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing simplified permissions form marker %q", want)
@@ -895,6 +898,9 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		">Save</button>",
 		"openPermEditors",
 		"perm-actions",
+		// Card forms no longer duplicate the instructions paragraph
+		"<h4>Agent data access</h4>",
+		"Choose what agents can use on this service",
 	} {
 		if strings.Contains(body, gone) {
 			t.Fatalf("admin HTML still contains old permissions dialog piece %q", gone)

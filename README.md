@@ -1095,20 +1095,19 @@ the map or on separate tabs: unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
+On the **Services** tab, shared **Agent data access** instructions sit above
+the filter (Available / Off always; **Editable** only when agents can truly
+change that data through Guardian — not mirror backups or picker sessions).
+Each service card keeps its own live permissions form under the title; every
+change saves immediately to `guardian.json`. Keys not shown in the form are
+preserved on save. Data-type rows use the Map icons.
+
 Each service card leads with **name** on the title line and **connection
 status** on the same line to the right — badge, time left,
 Connect/Reconnect, and **Pick photos…** (when supported) sit inline with no
-line breaks between them. The always-visible **Agent data access** form sits
-directly under the title. Everything else (data flow rows, description, OAuth
+line breaks between them. **Connect** / **Reconnect** appear only when the
+service is not connected. Everything else (data flow rows, description, OAuth
 config, cache TTL, paths) is collapsed under an **Advanced** disclosure.
-**Connect** / **Reconnect** appear on the title line only when the service is
-not connected. The permissions form has one control per core data type shown
-on the Map (playlists, liked tracks, saved albums, followed artists, contacts,
-photos), labeled in plain language with icons. Available / Off always;
-**Editable** only when agents can truly change that data through Guardian
-(not mirror backups or picker sessions). Each change saves immediately to
-`guardian.json` and refreshes that service’s data-flow summary in Advanced.
-Keys not shown in the form are preserved on save.
 
 Photo connectors that expose a picker session create operation (Google Photos)
 also show **Pick photos…** on the service card: it creates a session, opens

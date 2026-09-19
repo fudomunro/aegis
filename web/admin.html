@@ -277,6 +277,12 @@
 
     <section id="panel-services" class="panel" role="tabpanel" aria-labelledby="tab-services" hidden>
       <div id="services-help" class="help-box" hidden></div>
+
+      <div id="agent-data-access-help" class="help-box">
+        <h3>Agent data access</h3>
+        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>guardian.json</code>.</p>
+      </div>
+
       <div class="toolbar">
         <div class="grow">
           <input type="search" id="service-filter" placeholder="Filter services…" aria-label="Filter services">
@@ -1144,11 +1150,9 @@
     }).join("");
 
     const original = JSON.stringify(perms || {});
-    // Always-visible form sits under the card title; each change saves immediately.
+    // Form stays on the card; instructions live once above the filter (#69).
     return '<div class="perm-editor perm-live" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
-      "<h4>Agent data access</h4>" +
-      '<p class="meta perm-help">Choose what agents can use on this service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>guardian.json</code>.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +
