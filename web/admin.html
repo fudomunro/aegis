@@ -148,11 +148,11 @@
     background: var(--surface2); border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.78rem;
   }
   .perm-editor {
-    margin-top: 0.85rem; padding-top: 0.85rem; border-top: 1px solid var(--border);
+    margin: 0 0 0.85rem;
   }
   .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.35rem; }
   .perm-help { margin-bottom: 0.65rem; }
-  .perm-list { margin-bottom: 0.35rem; }
+  .perm-list { margin-bottom: 0.25rem; }
   .perm-row {
     display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 180px);
     gap: 0.65rem; align-items: center; margin-bottom: 0.4rem;
@@ -166,7 +166,6 @@
     border-radius: 6px; padding: 0.45rem 0.55rem; font: inherit; font-size: 0.88rem;
   }
   .perm-row select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-color: var(--accent); }
-  .perm-actions { display: flex; flex-wrap: wrap; gap: 0.45rem; margin-top: 0.75rem; }
   .perm-status { font-size: 0.82rem; color: var(--dim); margin-top: 0.45rem; min-height: 1.1em; }
   .perm-status.ok { color: var(--green); }
   .perm-status.err { color: var(--red); }
@@ -1108,7 +1107,7 @@
     }).join("");
 
     const original = JSON.stringify(perms || {});
-    // Always-visible form: each control change saves immediately (issue #69).
+    // Always-visible form sits under the card title; each change saves immediately.
     return '<div class="perm-editor perm-live" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
       "<h4>Agent data access</h4>" +
@@ -1116,9 +1115,6 @@
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +
-      '<div class="perm-actions">' +
-      '<button type="button" class="btn btn-danger perm-clear" data-service="' + escapeHtml(id) + '">Allow all</button>' +
-      "</div>" +
       '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
       "</div>";
   }
@@ -1145,8 +1141,8 @@
     return parts.join(" · ");
   }
 
-  function applyPermissionsLocally(serviceId, permissions, clear) {
-    const next = clear ? {} : (permissions || {});
+  function applyPermissionsLocally(serviceId, permissions) {
+    const next = permissions || {};
     if (summary && Array.isArray(summary.services)) {
       const svc = summary.services.find((s) => s.id === serviceId);
       if (svc) {
@@ -1157,27 +1153,25 @@
     }
     const root = document.getElementById("perm-editor-" + CSS.escape(serviceId));
     if (root) {
-      // collectPermEditor merges hidden keys; keep the server map as the new baseline.
       root.setAttribute("data-original-perms", JSON.stringify(next));
     }
   }
 
-  async function savePermissions(serviceId, permissions, clear) {
+  async function savePermissions(serviceId, permissions) {
     const status = document.getElementById("perm-status-" + CSS.escape(serviceId));
     if (status) {
-      status.textContent = clear ? "Clearing…" : "Saving…";
+      status.textContent = "Saving…";
       status.className = "perm-status";
     }
     try {
-      const body = clear ? { permissions: {} } : { permissions: permissions || {} };
       await api("/v1/admin/services/" + encodeURIComponent(serviceId) + "/permissions", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({ permissions: permissions || {} }),
       });
-      applyPermissionsLocally(serviceId, permissions, clear);
+      applyPermissionsLocally(serviceId, permissions);
       if (status) {
-        status.textContent = clear ? "Agents have unrestricted access." : "Saved.";
+        status.textContent = "Saved.";
         status.className = "perm-status ok";
       }
     } catch (err) {
@@ -1414,7 +1408,6 @@
           escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
         : "";
 
-      const editor = renderPermEditor(svc);
       const pickStatus = svc.supports_photo_picker
         ? '<div class="perm-status photo-pick-status" id="photo-pick-status-' + escapeHtml(svc.id) + '"></div>'
         : "";
@@ -1423,6 +1416,7 @@
         '<div class="svc-primary">' +
           '<div class="svc-identity">' +
             '<h3 class="svc-name">' + escapeHtml(svc.name) + "</h3>" +
+            renderPermEditor(svc) +
             '<div class="svc-flow" data-service-flow="' + escapeHtml(svc.id) + '">' +
               serviceFlowRows(svc) +
             "</div>" +
@@ -1445,7 +1439,6 @@
             (svc.endpoint ? ' · endpoint <code>' + escapeHtml(svc.endpoint) + "</code>" : "") +
           "</div>" +
           pickStatus +
-          editor +
         "</div>" +
         "</article>";
     }).join("");
@@ -2212,11 +2205,6 @@
       startPhotoPick(serviceId);
       return;
     }
-    if (btn.classList.contains("perm-clear")) {
-      if (!confirm("Allow agents unrestricted access to " + serviceId + "?")) return;
-      savePermissions(serviceId, {}, true);
-      return;
-    }
   });
 
   // Live permissions: each select change writes through immediately.
@@ -2229,7 +2217,7 @@
     if (!serviceId) return;
     const map = collectPermEditor(serviceId);
     if (!map) return;
-    savePermissions(serviceId, map, false);
+    savePermissions(serviceId, map);
   });
 
   loadSummary();
