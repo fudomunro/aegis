@@ -8,9 +8,12 @@ guardian.json
 tokens.json
 entity_links.json
 permissions.json
+mail-archive.db
+mail-archive.db-*
 .guardian-token-pass
 guardian.log
 *.log
+coverage.out
 
 # IDE
 .idea/

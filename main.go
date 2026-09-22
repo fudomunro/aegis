@@ -19,6 +19,7 @@ func main() {
 	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
 	linkPath := flag.String("link-file", "entity_links.json", "path to user-confirmed entity links (playlists)")
 	permissionsPath := flag.String("permissions-file", "permissions.json", "path to admin permissions overlay (non-secret; admin permission saves write here instead of guardian.json)")
+	mailArchivePath := flag.String("mail-archive", "mail-archive.db", "path to local compressed mail archive (SQLite+FTS5; empty disables /v1/mail)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
@@ -94,6 +95,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	mailArchive, err := OpenMailArchive(*mailArchivePath)
+	if err != nil {
+		slog.Error("failed to open mail archive", "path", *mailArchivePath, "error", err)
+		os.Exit(1)
+	}
+	if mailArchive != nil {
+		defer mailArchive.Close()
+		slog.Info("mail archive ready", "path", mailArchive.Path())
+	} else {
+		slog.Info("mail archive disabled")
+	}
+
 	identity := buildIdentityResolver(*authMode, *tsSocket)
 
 	srv := &Server{
@@ -109,6 +122,7 @@ func main() {
 		connectors:    make(map[string]ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
+		mail:          mailArchive,
 	}
 
 	// Register service connectors.
@@ -135,6 +149,7 @@ func main() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
 	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(srv.HandleLibraryMirror))
+	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(srv.handleMailRoutes))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(srv.HandleServiceProxy))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
