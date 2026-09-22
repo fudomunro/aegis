@@ -139,6 +139,8 @@ type MailArchiveStatus struct {
 	LastSyncError string            `json:"last_sync_error,omitempty"`
 	SyncPageToken map[string]string `json:"sync_page_token,omitempty"`
 	SyncDone      map[string]bool   `json:"sync_done,omitempty"`
+	// TakeoutPath is the configured read-only Google Takeout export location.
+	TakeoutPath string `json:"takeout_path,omitempty"`
 }
 
 // MailSyncCursor is the durable per-service ingest cursor.
@@ -488,6 +490,7 @@ func (a *MailArchive) Status() (MailArchiveStatus, error) {
 	}
 	st.LastSyncAt, _ = a.getMeta("sync:last_at")
 	st.LastSyncError, _ = a.getMeta("sync:last_error")
+	st.TakeoutPath = a.TakeoutPath()
 	metaRows, err := a.db.Query(`SELECT key, value FROM mail_meta WHERE key LIKE 'sync:%:page_token' OR key LIKE 'sync:%:done'`)
 	if err != nil {
 		return st, err

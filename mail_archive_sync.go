@@ -28,6 +28,7 @@ type MailSyncResult struct {
 	Service    string `json:"service"`
 	Listed     int    `json:"listed"`
 	Stored     int    `json:"stored"`
+	Skipped    int    `json:"skipped,omitempty"`
 	Failed     int    `json:"failed"`
 	Truncated  bool   `json:"truncated"`
 	Done       bool   `json:"done"`
