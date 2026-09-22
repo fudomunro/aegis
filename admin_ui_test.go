@@ -74,6 +74,16 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"dataTypeIconHTML",
 		"perm-type-icon",
 		"data-type-icon",
+		// Mail archive sync controls on Advanced (local compressed mailbox)
+		`id="mail-archive-summary"`,
+		`id="mail-archive-body"`,
+		`id="sync-mail-archive"`,
+		`id="sync-mail-archive-restart"`,
+		`id="reload-mail-archive"`,
+		"/v1/admin/mail/status",
+		"/v1/admin/mail/sync",
+		"runMailArchiveSync",
+		"MAIL_SYNC_MAX_BATCHES",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)

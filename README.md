@@ -1063,6 +1063,13 @@ Sync is **resumable**: each call stores up to `max_messages` (default 200) and
 persists the Gmail page token. Repeat until `"done": true`. Default query is
 `in:anywhere` so spam/trash are included. Permission key: `messages`.
 
+The **Advanced** tab in `/v1/admin` exposes the same mechanism: archive counts,
+per-service page cursors, **Sync mail** (runs batches until complete or the
+client batch cap), and **Restart sync**. Admin routes
+`GET /v1/admin/mail/status` and `POST /v1/admin/mail/sync` skip the agent
+messages gate so the operator can maintain the archive even when agents are
+restricted.
+
 ```bash
 # First fill (continue until done)
 curl -X POST "$GUARDIAN/v1/mail/sync" -H "Authorization: Bearer $KEY" \

@@ -187,6 +187,39 @@ func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
 		return
 	}
+	s.handleMailSyncRequest(w, r, true)
+}
+
+// HandleAdminMailStatus is the admin UI status panel: GET /v1/admin/mail/status
+// Skips the agent messages permission gate — the operator owns the archive.
+func (s *Server) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	a := s.requireMailArchive(w)
+	if a == nil {
+		return
+	}
+	st, err := a.Status()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
+		return
+	}
+	writeMailJSON(w, st)
+}
+
+// HandleAdminMailSync is the admin UI ingest control: POST /v1/admin/mail/sync
+// Same body and resumable semantics as /v1/mail/sync, without the agent gate.
+func (s *Server) HandleAdminMailSync(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	s.handleMailSyncRequest(w, r, false)
+}
+
+func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, requireAgentMessagesRead bool) {
 	a := s.requireMailArchive(w)
 	if a == nil {
 		return
@@ -223,7 +256,8 @@ func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "service blocked")
 		return
 	}
-	if !svc.Permissions.AllowsRead(mailPermType) {
+	// Admin sync is operator-owned; only the agent surface honors messages=read.
+	if requireAgentMessagesRead && !svc.Permissions.AllowsRead(mailPermType) {
 		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
 		return
 	}
@@ -234,6 +268,8 @@ func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.mailSyncMu.Lock()
+	defer s.mailSyncMu.Unlock()
 	result, err := syncer.SyncMailArchive(r.Context(), a, MailSyncOptions{
 		MaxMessages: req.MaxMessages,
 		Query:       req.Query,
