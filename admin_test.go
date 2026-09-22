@@ -225,6 +225,96 @@ func TestHandleAdminCacheClear(t *testing.T) {
 	}
 }
 
+func TestHandleAdminMailStatusAndSync(t *testing.T) {
+	a := openTestMailArchive(t)
+	if err := a.Upsert(sampleMailRecord("m1", "Board notes", "Please review the board notes.")); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	srv := mailTestServer(t, a)
+	// Agent messages=none must not block the operator admin panel.
+	srv.config.Services[0].Permissions = Permissions{"messages": "none"}
+
+	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminMailStatus)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var st MailArchiveStatus
+	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	if st.MessageCount != 1 {
+		t.Fatalf("status = %+v", st)
+	}
+
+	// Route wiring used by the admin UI.
+	req = httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admin route status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "/users/me/messages/") {
+			w.Write([]byte(gmailPayloadJSON("m9")))
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]any{
+			"messages": []map[string]string{{"id": "m9"}},
+		})
+	}))
+	t.Cleanup(up.Close)
+	srv.config.GetService(googleGmailServiceID).Endpoint = up.URL
+	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+
+	req = httptest.NewRequest("POST", "/v1/admin/mail/sync", strings.NewReader(`{"max_messages":5,"reset_cursor":true}`))
+	req.Header.Set("X-Api-Key", "test-key")
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("sync = %d body=%s", w.Code, w.Body.String())
+	}
+	var res MailSyncResult
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("sync json: %v", err)
+	}
+	if res.Stored != 1 {
+		t.Fatalf("res = %+v", res)
+	}
+
+	// Agent /v1/mail/sync still enforces messages read.
+	req = httptest.NewRequest("POST", "/v1/mail/sync", strings.NewReader(`{"max_messages":1}`))
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleMailSync)(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("agent sync with messages=none = %d", w.Code)
+	}
+}
+
+func TestHandleAdminMailDisabled(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminMailStatus)(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("disabled status = %d body=%s", w.Code, w.Body.String())
+	}
+	req = httptest.NewRequest("POST", "/v1/admin/mail/sync", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("disabled sync = %d", w.Code)
+	}
+}
+
 func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/guardian.json"

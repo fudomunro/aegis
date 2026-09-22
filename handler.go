@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -81,6 +82,9 @@ type Server struct {
 	links *EntityLinkStore
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
+	// mailSyncMu serializes archive ingest so admin UI and agents cannot
+	// interleave two Gmail page cursors into the same store.
+	mailSyncMu sync.Mutex
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.

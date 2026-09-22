@@ -320,6 +320,36 @@
 
       <div id="map-recent" class="map-recent" hidden></div>
 
+      <h2 class="section-heading">Mail archive</h2>
+      <div class="help-box">
+        <h3>Local compressed mailbox</h3>
+        <p>Optional SQLite + FTS mirror of your mail for agent history search. Gmail stays canonical — this only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
+      </div>
+      <div class="toolbar">
+        <span class="meta" id="mail-archive-summary">Loading…</span>
+        <div class="grow"></div>
+        <button class="btn" id="reload-mail-archive" type="button">Refresh</button>
+        <button class="btn btn-primary" id="sync-mail-archive" type="button">Sync mail</button>
+        <button class="btn" id="sync-mail-archive-restart" type="button">Restart sync</button>
+      </div>
+      <div id="mail-archive-status" class="meta" style="margin-bottom:0.75rem"></div>
+      <div id="mail-archive-result"></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Messages</th>
+                <th>Page cursor</th>
+                <th>Done</th>
+              </tr>
+            </thead>
+            <tbody id="mail-archive-body"><tr><td colspan="4" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <h2 class="section-heading">Cache</h2>
       <div class="toolbar">
         <span class="meta" id="cache-summary"></span>
@@ -2052,6 +2082,116 @@
     renderCachePage();
   }
 
+  function setMailArchiveBusy(busy) {
+    ["sync-mail-archive", "sync-mail-archive-restart", "reload-mail-archive"].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = !!busy;
+    });
+  }
+
+  function renderMailArchiveStatus(data) {
+    if (!data) {
+      $("mail-archive-summary").textContent = "Mail archive disabled";
+      $("mail-archive-status").textContent = "Start Guardian with -mail-archive mail-archive.db to enable local history search.";
+      $("mail-archive-body").innerHTML = '<tr><td colspan="4" class="muted-num">Archive disabled.</td></tr>';
+      return;
+    }
+    const count = data.message_count || 0;
+    $("mail-archive-summary").textContent =
+      count + " archived · " + (data.path || "—") + (data.last_sync_at ? " · last sync " + new Date(data.last_sync_at).toLocaleString() : " · never synced");
+    $("mail-archive-status").innerHTML =
+      (data.last_sync_error
+        ? '<div class="error-box">Last sync error: ' + escapeHtml(data.last_sync_error) + "</div>"
+        : "") +
+      '<div class="meta">Agents search via <code>GET /v1/mail/search</code>. Sync uses <code>POST /v1/admin/mail/sync</code> (resumable, up to 200 messages per batch).</div>';
+    const byService = data.by_service || {};
+    const tokens = data.sync_page_token || {};
+    const done = data.sync_done || {};
+    const services = Object.keys(byService).concat(Object.keys(tokens)).filter((v, i, a) => a.indexOf(v) === i).sort();
+    if (!services.length) {
+      $("mail-archive-body").innerHTML = '<tr><td colspan="4" class="muted-num">No messages archived yet. Click Sync mail to ingest Gmail history.</td></tr>';
+      return;
+    }
+    $("mail-archive-body").innerHTML = services.map((svc) => {
+      const n = byService[svc] || 0;
+      const cursor = tokens[svc] || "";
+      const isDone = !!done[svc];
+      return "<tr>" +
+        '<td class="key">' + escapeHtml(svc) + "</td>" +
+        '<td class="num">' + n + "</td>" +
+        '<td class="num">' + (cursor ? escapeHtml(cursor.slice(0, 12)) + (cursor.length > 12 ? "…" : "") : "—") + "</td>" +
+        "<td>" + (isDone ? '<span class="badge badge-green">Done</span>' : '<span class="badge badge-gray">In progress</span>') + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  async function loadMailArchive() {
+    try {
+      const data = await api("/v1/admin/mail/status");
+      renderMailArchiveStatus(data);
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      if (err.status === 404) {
+        renderMailArchiveStatus(null);
+        return;
+      }
+      $("mail-archive-summary").textContent = "Failed to load mail archive status";
+      $("mail-archive-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed") + "</div>";
+    }
+  }
+
+  // Client-side loop so one click can fill a large mailbox without babysitting
+  // every 200-message batch. Each POST is still independently resumable.
+  const MAIL_SYNC_MAX_BATCHES = 50;
+  async function runMailArchiveSync(opts) {
+    const reset = !!(opts && opts.reset);
+    setMailArchiveBusy(true);
+    $("mail-archive-result").innerHTML = '<div class="meta">Syncing mail archive…</div>';
+    let stored = 0;
+    let failed = 0;
+    let listed = 0;
+    let batches = 0;
+    let last = null;
+    try {
+      for (; batches < MAIL_SYNC_MAX_BATCHES; batches++) {
+        const body = {
+          max_messages: 200,
+          reset_cursor: reset && batches === 0,
+        };
+        last = await api("/v1/admin/mail/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        stored += last.stored || 0;
+        failed += last.failed || 0;
+        listed += last.listed || 0;
+        $("mail-archive-result").innerHTML =
+          '<div class="meta">Batch ' + (batches + 1) + ": stored " + (last.stored || 0) +
+          " · failed " + (last.failed || 0) + " · total stored this run " + stored +
+          (last.done ? " · complete" : " · continuing…") + "</div>";
+        if (last.done || last.error) break;
+      }
+      const finished = last && last.done;
+      const hitCap = batches >= MAIL_SYNC_MAX_BATCHES && !(last && last.done);
+      $("mail-archive-result").innerHTML =
+        (last && last.error ? '<div class="error-box">' + escapeHtml(last.error) + "</div>" : "") +
+        '<div class="meta">Run finished: ' + batches + " batch(es) · listed " + listed +
+        " · stored " + stored + " · failed " + failed +
+        (finished ? " · archive complete" : hitCap ? " · stopped at batch cap — click Sync mail to continue" : "") +
+        "</div>";
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else $("mail-archive-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "sync failed") + "</div>";
+    } finally {
+      setMailArchiveBusy(false);
+      await loadMailArchive();
+    }
+  }
+
   function renderRuntime(data) {
     const rt = data.runtime;
     const logins = (rt.allowed_logins || []).length
@@ -2067,9 +2207,9 @@
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
-        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, and <code>/v1/services/{id}/…</code></div>' +
+        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -2103,7 +2243,10 @@
     });
     if (name === "map") loadFlow();
     if (name === "library") loadAllLibraryKinds();
-    if (name === "advanced") loadCache();
+    if (name === "advanced") {
+      loadCache();
+      loadMailArchive();
+    }
   }
 
   FLOW_TABS.forEach((id) => {
@@ -2138,6 +2281,12 @@
   });
   $("reload-library").addEventListener("click", () => loadAllLibraryKinds());
   $("reload-cache").addEventListener("click", () => loadCache());
+  $("reload-mail-archive").addEventListener("click", () => loadMailArchive());
+  $("sync-mail-archive").addEventListener("click", () => runMailArchiveSync({ reset: false }));
+  $("sync-mail-archive-restart").addEventListener("click", () => {
+    if (!confirm("Restart mail archive sync from the first Gmail page?")) return;
+    runMailArchiveSync({ reset: true });
+  });
   $("clear-cache").addEventListener("click", async () => {
     if (!confirm("Clear all cached responses?")) return;
     $("clear-cache").disabled = true;
