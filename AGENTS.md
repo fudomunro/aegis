@@ -20,7 +20,7 @@ It does two jobs:
 
 Module: `github.com/fudomunro/aperture-guardian`  
 Layout: **single package `main`** (flat `*.go` files at the repo root)  
-Runtime: Go **1.27.1** (`go.mod`); only external dep is `golang.org/x/crypto`
+Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
 ## Non-negotiable product rules
 
