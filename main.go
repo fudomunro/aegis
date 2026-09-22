@@ -213,6 +213,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminMailStatus)(w, r)
 	case path == "mail/sync":
 		s.AuthMiddleware(s.HandleAdminMailSync)(w, r)
+	case path == "mail/import":
+		s.AuthMiddleware(s.HandleAdminMailImport)(w, r)
 	case strings.HasPrefix(path, "library/"):
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):

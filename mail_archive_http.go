@@ -166,12 +166,16 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 // MailSyncRequest is the body for POST /v1/mail/sync.
 type MailSyncRequest struct {
 	// Service to ingest. Empty defaults to google-gmail when configured.
+	// "google-takeout" syncs the read-only Takeout export path.
 	Service string `json:"service,omitempty"`
-	// MaxMessages caps this run (default 200, max 1000). Call again to continue.
+	// Path sets/overrides the Takeout export location for this run
+	// (google-takeout only). Empty uses the stored path.
+	Path string `json:"path,omitempty"`
+	// MaxMessages caps this run (default 200 for Gmail, 5000 for Takeout).
 	MaxMessages int `json:"max_messages,omitempty"`
-	// Query overrides the provider list query (default in:anywhere for full archive).
+	// Query overrides the provider list query (Gmail only; default in:anywhere).
 	Query string `json:"query,omitempty"`
-	// ResetCursor restarts from the first page.
+	// ResetCursor restarts from the first page (Gmail) or rescans (Takeout).
 	ResetCursor bool `json:"reset_cursor,omitempty"`
 }
 
@@ -239,6 +243,13 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	if req.Service == "" {
 		req.Service = googleGmailServiceID
 	}
+
+	// Takeout is a read-only sync location (mbox / zip / directory on disk).
+	if req.Service == takeoutServiceID {
+		s.handleTakeoutSyncRequest(w, r, req, requireAgentMessagesRead)
+		return
+	}
+
 	if req.MaxMessages <= 0 {
 		req.MaxMessages = 200
 	}
@@ -280,6 +291,93 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	}
 	// Fail-open: report what was stored even when the upstream call failed mid-run.
 	writeMailJSON(w, result)
+}
+
+// handleTakeoutSyncRequest ingests from the configured read-only Takeout export.
+// No provider OAuth and no connector — the export is already on disk.
+func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request, req MailSyncRequest, requireAgentMessagesRead bool) {
+	a := s.requireMailArchive(w)
+	if a == nil {
+		return
+	}
+	// Takeout is not a live service in guardian.json; agent reads still need
+	// messages permission on some configured message-capable service.
+	if requireAgentMessagesRead && !s.mailReadable() {
+		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		return
+	}
+	if strings.TrimSpace(req.Path) != "" {
+		if err := a.SetTakeoutPath(req.Path); err != nil {
+			writeJSONError(w, http.StatusBadRequest, "failed to set takeout path: "+err.Error())
+			return
+		}
+	}
+	path := a.TakeoutPath()
+	if strings.TrimSpace(req.Path) != "" {
+		path = strings.TrimSpace(req.Path)
+	}
+	if path == "" {
+		writeJSONError(w, http.StatusBadRequest,
+			"takeout path not configured — set path in this request or via the admin UI")
+		return
+	}
+
+	// max_messages=0 with an explicit path is save-path-only (admin UI).
+	if req.MaxMessages == 0 && strings.TrimSpace(req.Path) != "" {
+		writeMailJSON(w, MailSyncResult{
+			Service: takeoutServiceID,
+			Query:   "takeout:" + path,
+			Done:    true,
+		})
+		return
+	}
+
+	s.mailSyncMu.Lock()
+	defer s.mailSyncMu.Unlock()
+	max := req.MaxMessages
+	if max <= 0 {
+		max = 5000
+	}
+	if max > 20000 {
+		max = 20000
+	}
+	result, err := a.ImportTakeout(path, max)
+	if err != nil && result.Error == "" {
+		result.Error = err.Error()
+	}
+	// Shape as a mail sync result so the admin UI can share one renderer.
+	writeMailJSON(w, MailSyncResult{
+		Service:   takeoutServiceID,
+		Listed:    result.Scanned,
+		Stored:    result.Stored,
+		Skipped:   result.Skipped,
+		Failed:    result.Failed,
+		Truncated: result.Truncated,
+		Done:      result.Done,
+		Query:     "takeout:" + path,
+		Error:     result.Error,
+	})
+}
+
+// HandleAdminMailImport syncs the read-only Takeout export:
+// POST /v1/admin/mail/import {"path":"…","max_messages":N}
+func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	// Force Takeout: this route is only for the export sync location.
+	var req MailSyncRequest
+	if r.Body != nil {
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil && r.ContentLength != 0 {
+			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			return
+		}
+	}
+	req.Service = takeoutServiceID
+	s.handleTakeoutSyncRequest(w, r, req, false)
 }
 
 func writeMailJSON(w http.ResponseWriter, v any) {

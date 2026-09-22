@@ -323,7 +323,7 @@
       <h2 class="section-heading">Mail archive</h2>
       <div class="help-box">
         <h3>Local compressed mailbox</h3>
-        <p>Optional SQLite + FTS mirror of your mail for agent history search. Gmail stays canonical — this only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
+        <p>Optional SQLite + FTS mirror of your mail for agent history search. Live providers and Google Takeout stay canonical/read-only sources — Guardian only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
       </div>
       <div class="toolbar">
         <span class="meta" id="mail-archive-summary">Loading…</span>
@@ -349,6 +349,20 @@
           </table>
         </div>
       </div>
+
+      <h2 class="section-heading">Google Takeout (read-only sync)</h2>
+      <div class="help-box">
+        <h3>Historical mail export</h3>
+        <p>Point Guardian at a Google Takeout export on this machine — an <code>.mbox</code> file, a folder of mbox files, or a Takeout <code>.zip</code>. Treated as a <strong>read-only sync location</strong>: re-running skips messages already in the archive (by Message-ID) and never writes back to the export.</p>
+      </div>
+      <div class="toolbar">
+        <div class="grow">
+          <input type="text" id="takeout-path" placeholder="/path/to/Takeout or mail export (.mbox / .zip / directory)" aria-label="Takeout export path" style="width:100%">
+        </div>
+        <button class="btn" id="save-takeout-path" type="button">Save path</button>
+        <button class="btn btn-primary" id="sync-takeout" type="button">Sync Takeout</button>
+      </div>
+      <div id="takeout-result" class="meta"></div>
 
       <h2 class="section-heading">Cache</h2>
       <div class="toolbar">
@@ -2104,12 +2118,19 @@
         ? '<div class="error-box">Last sync error: ' + escapeHtml(data.last_sync_error) + "</div>"
         : "") +
       '<div class="meta">Agents search via <code>GET /v1/mail/search</code>. Sync uses <code>POST /v1/admin/mail/sync</code> (resumable, up to 200 messages per batch).</div>';
+    const takeoutPath = data.takeout_path || "";
+    if ($("takeout-path") && document.activeElement !== $("takeout-path")) {
+      $("takeout-path").value = takeoutPath;
+    }
+    if ($("takeout-result") && takeoutPath && !$("takeout-result").innerHTML) {
+      $("takeout-result").textContent = "Takeout location: " + takeoutPath;
+    }
     const byService = data.by_service || {};
     const tokens = data.sync_page_token || {};
     const done = data.sync_done || {};
     const services = Object.keys(byService).concat(Object.keys(tokens)).filter((v, i, a) => a.indexOf(v) === i).sort();
     if (!services.length) {
-      $("mail-archive-body").innerHTML = '<tr><td colspan="4" class="muted-num">No messages archived yet. Click Sync mail to ingest Gmail history.</td></tr>';
+      $("mail-archive-body").innerHTML = '<tr><td colspan="4" class="muted-num">No messages archived yet. Click Sync mail to ingest Gmail history, or sync a Google Takeout export below.</td></tr>';
       return;
     }
     $("mail-archive-body").innerHTML = services.map((svc) => {
@@ -2188,6 +2209,57 @@
       else $("mail-archive-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "sync failed") + "</div>";
     } finally {
       setMailArchiveBusy(false);
+      await loadMailArchive();
+    }
+  }
+
+  function setTakeoutBusy(busy) {
+    ["save-takeout-path", "sync-takeout"].forEach((id) => {
+      const el = $(id);
+      if (el) el.disabled = !!busy;
+    });
+  }
+
+  async function runTakeoutSync() {
+    const path = ($("takeout-path").value || "").trim();
+    if (!path) {
+      $("takeout-result").innerHTML = '<div class="error-box">Enter a Takeout export path first.</div>';
+      return;
+    }
+    setTakeoutBusy(true);
+    $("takeout-result").textContent = "Syncing Takeout export…";
+    try {
+      // One call walks up to 5000 new messages; repeat until done.
+      let stored = 0;
+      let skipped = 0;
+      let scanned = 0;
+      let batches = 0;
+      let last = null;
+      for (; batches < 20; batches++) {
+        last = await api("/v1/admin/mail/import", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: path, max_messages: 5000 }),
+        });
+        stored += last.stored || 0;
+        skipped += last.skipped || 0;
+        scanned += last.listed || 0;
+        $("takeout-result").textContent =
+          "Takeout batch " + (batches + 1) + ": scanned " + (last.listed || 0) +
+          " · stored " + (last.stored || 0) + " · skipped " + (last.skipped || 0) +
+          (last.done ? " · complete" : " · continuing…");
+        if (last.done || last.error) break;
+      }
+      $("takeout-result").innerHTML =
+        (last && last.error ? '<div class="error-box">' + escapeHtml(last.error) + "</div>" : "") +
+        '<div class="meta">Takeout sync finished: scanned ' + scanned +
+        " · stored " + stored + " · skipped (already archived) " + skipped +
+        (last && last.done ? " · complete" : " · click Sync Takeout to continue") + "</div>";
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else $("takeout-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "takeout sync failed") + "</div>";
+    } finally {
+      setTakeoutBusy(false);
       await loadMailArchive();
     }
   }
@@ -2287,6 +2359,27 @@
     if (!confirm("Restart mail archive sync from the first Gmail page?")) return;
     runMailArchiveSync({ reset: true });
   });
+  $("save-takeout-path").addEventListener("click", async () => {
+    const path = ($("takeout-path").value || "").trim();
+    setTakeoutBusy(true);
+    try {
+      await api("/v1/admin/mail/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: path, max_messages: 0 }),
+      });
+      $("takeout-result").textContent = path
+        ? "Takeout path saved: " + path
+        : "Takeout path cleared.";
+      await loadMailArchive();
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else $("takeout-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to save path") + "</div>";
+    } finally {
+      setTakeoutBusy(false);
+    }
+  });
+  $("sync-takeout").addEventListener("click", () => runTakeoutSync());
   $("clear-cache").addEventListener("click", async () => {
     if (!confirm("Clear all cached responses?")) return;
     $("clear-cache").disabled = true;

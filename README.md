@@ -1082,6 +1082,30 @@ curl "$GUARDIAN/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_bod
 
 `mail-archive.db` is local state (like `tokens.json`) — do not commit it.
 
+##### Google Takeout (read-only sync location)
+
+A historical [Google Takeout](https://takeout.google.com) mail export is a
+**read-only sync location** alongside live Gmail — not a write target and not
+the canonical home. Point Guardian at an `.mbox` file, a directory of mbox
+files, or a Takeout `.zip`. Re-sync skips messages already stored (by RFC
+Message-ID) so you can run it as often as you like.
+
+```
+POST /v1/admin/mail/import
+{"path": "/Users/you/Downloads/Takeout", "max_messages": 5000}
+```
+
+- `max_messages: 0` + `path` only saves the location
+- Repeat with `max_messages > 0` until `"done": true` (already-present IDs count as `skipped`)
+- Admin **Advanced → Google Takeout** exposes the same controls
+- Messages are stored as service `google-takeout` with `TAKEOUT` + mbox labels
+
+```bash
+curl -X POST "$GUARDIAN/v1/admin/mail/import" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"path":"/Users/you/Downloads/Takeout","max_messages":5000}'
+```
+
 **SMS / WhatsApp:** the neutral `channel` field and library kind are ready,
 but no connector is registered for them yet. Personal SMS history has no
 simple OAuth surface; WhatsApp consumer history is not available through a
@@ -1229,6 +1253,7 @@ aperture-guardian/
   mail_archive.go   Local SQLite FTS5 mail archive (compressed payloads + search)
   mail_archive_http.go  /v1/mail/search|status|sync|messages routes
   mail_archive_sync.go  Resumable Gmail → archive ingest
+  mail_takeout.go   Read-only Google Takeout mbox/zip/directory sync
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement

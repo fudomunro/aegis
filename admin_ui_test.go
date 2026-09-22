@@ -82,8 +82,14 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="reload-mail-archive"`,
 		"/v1/admin/mail/status",
 		"/v1/admin/mail/sync",
+		"/v1/admin/mail/import",
 		"runMailArchiveSync",
 		"MAIL_SYNC_MAX_BATCHES",
+		"takeout-path",
+		"sync-takeout",
+		"runTakeoutSync",
+		"Google Takeout",
+		"read-only sync",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)
