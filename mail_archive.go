@@ -170,6 +170,16 @@ func OpenMailArchive(path string) (*MailArchive, error) {
 	// Single-process writer; keep the connection simple and avoid SQLITE_BUSY
 	// surprises under concurrent agent reads + background sync.
 	db.SetMaxOpenConns(1)
+	// WAL lets the long-running Takeout importer share the file with a live
+	// server instead of blocking on a full schema lock.
+	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
+		db.Close()
+		return nil, err
+	}
+	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
+		db.Close()
+		return nil, err
+	}
 	a := &MailArchive{db: db, path: path}
 	if err := a.init(); err != nil {
 		db.Close()
