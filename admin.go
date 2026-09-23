@@ -33,7 +33,7 @@ type AdminService struct {
 	// one mutating operation. The admin form only offers Editable for these;
 	// saved write levels are clamped so permissions cannot exceed the connector.
 	WritableDataTypes []string `json:"writable_data_types,omitempty"`
-	HasOAuth           bool     `json:"has_oauth"`
+	HasOAuth          bool     `json:"has_oauth"`
 	// ConnectionID is the shared provider connection this surface uses (issue #26).
 	ConnectionID  string       `json:"connection_id,omitempty"`
 	HasClientID   bool         `json:"has_client_id"`

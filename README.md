@@ -61,6 +61,11 @@ Guardian starts with these endpoints:
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
+- `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
+- `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
+- `GET /v1/mail/messages/{service}/{id}/raw` — decompressed provider payload JSON
+- `GET /v1/mail/status` — archive size and sync cursor
+- `POST /v1/mail/sync` — ingest a bounded batch of mail into the archive (resumable)
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
@@ -1033,7 +1038,73 @@ This phase is **read-only**. Capabilities do not advertise agent write ops
 (send/delete), so the admin permissions form will not offer Editable for
 `messages` and proxy mutations stay blocked
 ([issue #61](https://github.com/fudomunro/aperture-guardian/issues/61)).
-Message bodies stay on Gmail.
+Message bodies stay on Gmail as the **canonical** home copy.
+
+#### Local mail archive (`/v1/mail`)
+
+For full-history agent queries, Guardian can keep a **local compressed
+archive** (SQLite FTS5 + gzip provider payloads). This is a query mirror, not
+a new home copy — Gmail remains canonical for the mailbox (issue #16). Optimize
+for Guardian/agents: search and fetch by id without paging Gmail every turn.
+
+```bash
+./guardian ... -mail-archive mail-archive.db   # empty string disables
+```
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /v1/mail/search` | FTS + filters: `q`, `from`, `to`, `after`, `before`, `label`, `limit`, `offset`, `sort=asc\|desc`, `include_body` |
+| `GET /v1/mail/messages/{service}/{id}` | Neutral `Message` with `body` from the archive |
+| `GET /v1/mail/messages/{service}/{id}/raw` | Decompressed provider payload JSON |
+| `GET /v1/mail/status` | Message counts, last sync time/error, page cursors |
+| `POST /v1/mail/sync` | Ingest a bounded batch; body `{"service","max_messages","query","reset_cursor"}` |
+
+Sync is **resumable**: each call stores up to `max_messages` (default 200) and
+persists the Gmail page token. Repeat until `"done": true`. Default query is
+`in:anywhere` so spam/trash are included. Permission key: `messages`.
+
+The **Advanced** tab in `/v1/admin` exposes the same mechanism: archive counts,
+per-service page cursors, **Sync mail** (runs batches until complete or the
+client batch cap), and **Restart sync**. Admin routes
+`GET /v1/admin/mail/status` and `POST /v1/admin/mail/sync` skip the agent
+messages gate so the operator can maintain the archive even when agents are
+restricted.
+
+```bash
+# First fill (continue until done)
+curl -X POST "$GUARDIAN/v1/mail/sync" -H "Authorization: Bearer $KEY" \
+  -d '{"max_messages":200}'
+
+# Search history
+curl "$GUARDIAN/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1" \
+  -H "Authorization: Bearer $KEY"
+```
+
+`mail-archive.db` is local state (like `tokens.json`) — do not commit it.
+
+##### Google Takeout (read-only sync location)
+
+A historical [Google Takeout](https://takeout.google.com) mail export is a
+**read-only sync location** alongside live Gmail — not a write target and not
+the canonical home. Point Guardian at an `.mbox` file, a directory of mbox
+files, or a Takeout `.zip`. Re-sync skips messages already stored (by RFC
+Message-ID) so you can run it as often as you like.
+
+```
+POST /v1/admin/mail/import
+{"path": "/Users/you/Downloads/Takeout", "max_messages": 5000}
+```
+
+- `max_messages: 0` + `path` only saves the location
+- Repeat with `max_messages > 0` until `"done": true` (already-present IDs count as `skipped`)
+- Admin **Advanced → Google Takeout** exposes the same controls
+- Messages are stored as service `google-takeout` with `TAKEOUT` + mbox labels
+
+```bash
+curl -X POST "$GUARDIAN/v1/admin/mail/import" \
+  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -d '{"path":"/Users/you/Downloads/Takeout","max_messages":5000}'
+```
 
 **SMS / WhatsApp:** the neutral `channel` field and library kind are ready,
 but no connector is registered for them yet. Personal SMS history has no
@@ -1152,6 +1223,7 @@ go build -o guardian .
   -base-url http://localhost:8080 \
   -api-key dev-key \
   -token-pass dev-pass \
+  -mail-archive mail-archive.db \
   -log-level debug \
   -log-format text
 ```
@@ -1178,6 +1250,10 @@ aperture-guardian/
   events.go         CalendarEvent identity/merge, CalendarEventProvider, /v1/library/events
   messages.go       Message identity/merge, MessageProvider, /v1/library/messages
   google-gmail.go   Gmail connector (MessageProvider; metadata/snippet library path)
+  mail_archive.go   Local SQLite FTS5 mail archive (compressed payloads + search)
+  mail_archive_http.go  /v1/mail/search|status|sync|messages routes
+  mail_archive_sync.go  Resumable Gmail → archive ingest
+  mail_takeout.go   Read-only Google Takeout mbox/zip/directory sync
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement

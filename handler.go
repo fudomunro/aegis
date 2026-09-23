@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -79,6 +80,11 @@ type Server struct {
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
 	links *EntityLinkStore
+	// mail is the optional local compressed mail archive (/v1/mail/*).
+	mail *MailArchive
+	// mailSyncMu serializes archive ingest so admin UI and agents cannot
+	// interleave two Gmail page cursors into the same store.
+	mailSyncMu sync.Mutex
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.
@@ -279,6 +285,8 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	if len(matched) == 0 {
 		libraryInstructions = s.libraryHintsForMessage(payload.UserMessage)
 	}
+	// Local mail archive search is a separate surface from live provider listing.
+	libraryInstructions = append(libraryInstructions, s.mailArchiveHints(payload.UserMessage)...)
 
 	if len(matched) == 0 && len(libraryInstructions) == 0 {
 		logger.Debug("no services matched, allowing")
