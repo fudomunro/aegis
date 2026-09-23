@@ -19,6 +19,9 @@ func main() {
 	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
 	linkPath := flag.String("link-file", "entity_links.json", "path to user-confirmed entity links (playlists)")
 	permissionsPath := flag.String("permissions-file", "permissions.json", "path to admin permissions overlay (non-secret; admin permission saves write here instead of guardian.json)")
+	mailArchivePath := flag.String("mail-archive", "mail-archive.db", "path to local compressed mail archive (SQLite+FTS5; empty disables /v1/mail)")
+	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
+	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
@@ -26,6 +29,12 @@ func main() {
 
 	logger := initLogger(*logLevel, *logFormat)
 	slog.SetDefault(logger)
+
+	// One-shot Takeout ingest does not need OAuth, base URL, or a listening server.
+	if strings.TrimSpace(*importTakeout) != "" {
+		code := runImportTakeoutCLI(*mailArchivePath, *importTakeout, *importTakeoutBatch)
+		os.Exit(code)
+	}
 
 	if *apiKey == "" {
 		*apiKey = os.Getenv("APERTURE_GUARDIAN_API_KEY")
@@ -94,6 +103,18 @@ func main() {
 		os.Exit(1)
 	}
 
+	mailArchive, err := OpenMailArchive(*mailArchivePath)
+	if err != nil {
+		slog.Error("failed to open mail archive", "path", *mailArchivePath, "error", err)
+		os.Exit(1)
+	}
+	if mailArchive != nil {
+		defer mailArchive.Close()
+		slog.Info("mail archive ready", "path", mailArchive.Path())
+	} else {
+		slog.Info("mail archive disabled")
+	}
+
 	identity := buildIdentityResolver(*authMode, *tsSocket)
 
 	srv := &Server{
@@ -109,6 +130,7 @@ func main() {
 		connectors:    make(map[string]ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
+		mail:          mailArchive,
 	}
 
 	// Register service connectors.
@@ -135,6 +157,7 @@ func main() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
 	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(srv.HandleLibraryMirror))
+	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(srv.handleMailRoutes))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(srv.HandleServiceProxy))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
@@ -194,6 +217,12 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminCache)(w, r)
 	case path == "cache/clear":
 		s.AuthMiddleware(s.HandleAdminCacheClear)(w, r)
+	case path == "mail/status":
+		s.AuthMiddleware(s.HandleAdminMailStatus)(w, r)
+	case path == "mail/sync":
+		s.AuthMiddleware(s.HandleAdminMailSync)(w, r)
+	case path == "mail/import":
+		s.AuthMiddleware(s.HandleAdminMailImport)(w, r)
 	case strings.HasPrefix(path, "library/"):
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
@@ -201,6 +230,67 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
+}
+
+// runImportTakeoutCLI syncs a read-only Takeout export into the mail archive
+// and exits. Used for large local exports that should not go through HTTP.
+func runImportTakeoutCLI(archivePath, takeoutPath string, batch int) int {
+	archivePath = strings.TrimSpace(archivePath)
+	if archivePath == "" {
+		slog.Error("mail-archive path is required for -import-takeout")
+		return 1
+	}
+	a, err := OpenMailArchive(archivePath)
+	if err != nil {
+		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
+		return 1
+	}
+	if a == nil {
+		slog.Error("mail archive disabled — set -mail-archive")
+		return 1
+	}
+	defer a.Close()
+	if err := a.SetTakeoutPath(takeoutPath); err != nil {
+		slog.Error("failed to record takeout path", "path", takeoutPath, "error", err)
+		return 1
+	}
+	if batch <= 0 {
+		batch = 20000
+	}
+	var stored, skipped, scanned, failed int
+	for {
+		res, err := a.ImportTakeout(takeoutPath, batch)
+		stored += res.Stored
+		skipped += res.Skipped
+		scanned += res.Scanned
+		failed += res.Failed
+		slog.Info("takeout import batch",
+			"path", takeoutPath,
+			"scanned", res.Scanned,
+			"stored", res.Stored,
+			"skipped", res.Skipped,
+			"failed", res.Failed,
+			"done", res.Done,
+			"error", res.Error,
+		)
+		if err != nil && res.Error != "" && res.Stored == 0 && res.Scanned == 0 {
+			return 1
+		}
+		if res.Done {
+			break
+		}
+		if !res.Truncated {
+			break
+		}
+	}
+	slog.Info("takeout import finished",
+		"path", takeoutPath,
+		"scanned", scanned,
+		"stored", stored,
+		"skipped", skipped,
+		"failed", failed,
+	)
+	return 0
 }
 
 // handleAuthRoutes dispatches /v1/auth/* to the correct handler.
