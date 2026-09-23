@@ -1053,7 +1053,7 @@ for Guardian/agents: search and fetch by id without paging Gmail every turn.
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/mail/search` | FTS + filters: `q`, `from`, `to`, `after`, `before`, `label`, `limit`, `offset`, `include_body` |
+| `GET /v1/mail/search` | FTS + filters: `q`, `from`, `to`, `after`, `before`, `label`, `limit`, `offset`, `sort=asc\|desc`, `include_body` |
 | `GET /v1/mail/messages/{service}/{id}` | Neutral `Message` with `body` from the archive |
 | `GET /v1/mail/messages/{service}/{id}/raw` | Decompressed provider payload JSON |
 | `GET /v1/mail/status` | Message counts, last sync time/error, page cursors |

@@ -72,7 +72,7 @@ func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 // HandleMailSearch runs FTS + filters: GET /v1/mail/search
 //
 // Query params: q, from, to, after, before, label (repeatable), limit, offset,
-// include_body (1 to fill Message.body from the archive).
+// sort (asc|desc, default desc), include_body (1 to fill Message.body).
 func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -110,6 +110,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		Limit:    limit,
 		Offset:   offset,
 		WithBody: withBody,
+		Sort:     q.Get("sort"),
 	}
 	resp, err := a.Search(search)
 	if err != nil {
@@ -398,11 +399,13 @@ func (s *Server) mailArchiveHints(msg string) []string {
 	}
 	root := strings.TrimRight(s.baseURL, "/")
 	return []string{`The user wants the local mail archive (full history search). Prefer:
-GET ` + root + `/v1/mail/search?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&limit=50
+GET ` + root + `/v1/mail/search?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&limit=50&sort=desc
+GET ` + root + `/v1/mail/search?sort=asc&limit=1 — oldest archived message(s); use sort=asc for earliest/first/oldest questions
 GET ` + root + `/v1/mail/messages/{service}/{id} — one archived message with body
 GET ` + root + `/v1/mail/messages/{service}/{id}/raw — provider payload JSON
 GET ` + root + `/v1/mail/status — archive size and sync cursor
 POST ` + root + `/v1/mail/sync — ingest more mail (body: {"max_messages":200})
+Default sort is newest-first (desc). For "oldest", "earliest", or "first" message questions use sort=asc (and limit=1 when only one answer is needed).
 This searches the local compressed archive; live Gmail listing is only needed for brand-new mail that is not yet synced.`}
 }
 
@@ -413,6 +416,9 @@ func mentionsMailArchive(msg string) bool {
 		"mail archive", "email archive", "search my mail", "search my email",
 		"search all email", "search all mail", "all of my email", "all of my mail",
 		"full mail history", "full email history", "local mail", "local email",
+		"oldest message", "oldest email", "oldest mail", "earliest message",
+		"earliest email", "first message", "first email", "first mail",
+		"oldest available", "earliest available",
 	} {
 		if strings.Contains(m, k) {
 			return true
