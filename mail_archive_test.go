@@ -144,6 +144,25 @@ func TestMailArchiveUpsertGetSearch(t *testing.T) {
 		t.Fatalf("hostile fts query: %v", err)
 	}
 
+	// Oldest-first is required for "first/earliest message" questions.
+	oldest, err := a.Search(MailSearchQuery{Sort: "asc", Limit: 1})
+	if err != nil {
+		t.Fatalf("search asc: %v", err)
+	}
+	if len(oldest.Messages) != 1 {
+		t.Fatalf("oldest hits = %+v", oldest)
+	}
+	if oldest.Messages[0].SentAt != "2024-06-01T09:00:00Z" {
+		t.Fatalf("oldest sent_at = %q", oldest.Messages[0].SentAt)
+	}
+	newest, err := a.Search(MailSearchQuery{Sort: "desc", Limit: 1})
+	if err != nil {
+		t.Fatalf("search desc: %v", err)
+	}
+	if len(newest.Messages) != 1 || newest.Messages[0].Subject != "Lunch plans" {
+		t.Fatalf("newest = %+v", newest.Messages)
+	}
+
 	st, err := a.Status()
 	if err != nil {
 		t.Fatalf("status: %v", err)
@@ -380,6 +399,9 @@ func TestMailArchiveHints(t *testing.T) {
 	srv := mailTestServer(t, a)
 	if hints := srv.mailArchiveHints("search my email archive for invoices"); len(hints) == 0 {
 		t.Fatal("expected archive hints")
+	}
+	if hints := srv.mailArchiveHints("what is the oldest available message?"); len(hints) == 0 {
+		t.Fatal("expected archive hints for oldest-message questions")
 	}
 	if hints := srv.mailArchiveHints("play some jazz"); len(hints) != 0 {
 		t.Fatalf("unexpected hints: %v", hints)

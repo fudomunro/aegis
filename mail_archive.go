@@ -118,6 +118,8 @@ type MailSearchQuery struct {
 	Limit    int
 	Offset   int
 	WithBody bool
+	// Sort is "desc" (default, newest first) or "asc" (oldest first).
+	Sort string
 }
 
 // MailSearchResponse is the agent-facing search/list result.
@@ -371,6 +373,12 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	if offset < 0 {
 		offset = 0
 	}
+	// Oldest-first is a first-class query ("what is the earliest email?").
+	// Default remains newest-first to match live provider listings.
+	orderBy := `m.sent_at DESC, m.id DESC`
+	if strings.EqualFold(strings.TrimSpace(q.Sort), "asc") {
+		orderBy = `m.sent_at ASC, m.id ASC`
+	}
 
 	where := []string{"1=1"}
 	args := []any{}
@@ -412,7 +420,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 		querySQL = `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
        m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
        m.sent_at, m.received_at, m.direction, m.is_read, m.body_text ` + base +
-			` ORDER BY m.sent_at DESC, m.id DESC LIMIT ? OFFSET ?`
+			` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
 		countSQL := `SELECT COUNT(*) ` + base
 		var total int
 		countArgs := append([]any{match}, args...)
@@ -442,7 +450,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	querySQL = `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
        m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
        m.sent_at, m.received_at, m.direction, m.is_read, m.body_text ` + base +
-		` ORDER BY m.sent_at DESC, m.id DESC LIMIT ? OFFSET ?`
+		` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
 	countSQL := `SELECT COUNT(*) ` + base
 	var total int
 	if err := a.db.QueryRow(countSQL, args...).Scan(&total); err != nil {
