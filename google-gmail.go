@@ -359,7 +359,7 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, false, fmt.Errorf("gmail threads list returned %d", resp.StatusCode)
+			return nil, false, gmailListHTTPError("threads list", resp.StatusCode, data)
 		}
 		var raw googleGmailThreadList
 		if err := json.Unmarshal(data, &raw); err != nil {
@@ -531,7 +531,7 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, false, fmt.Errorf("gmail messages list returned %d", resp.StatusCode)
+			return nil, false, gmailListHTTPError("messages list", resp.StatusCode, data)
 		}
 		var raw googleGmailMessageList
 		if err := json.Unmarshal(data, &raw); err != nil {
@@ -604,7 +604,7 @@ func (c *GoogleGmailConnector) fetchGmailMessage(ctx context.Context, token, id,
 		return googleGmailMessage{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return googleGmailMessage{}, fmt.Errorf("gmail message get returned %d", resp.StatusCode)
+		return googleGmailMessage{}, gmailListHTTPError("message get", resp.StatusCode, data)
 	}
 	var raw googleGmailMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
@@ -887,6 +887,24 @@ func gmailBase64Decode(data string) string {
 		return ""
 	}
 	return string(out)
+}
+
+// gmailListHTTPError keeps the operator-facing reason (API disabled, quota,
+// insufficient scope) instead of a bare status code. Fail-open callers log this.
+func gmailListHTTPError(op string, status int, body []byte) error {
+	snippet := strings.TrimSpace(string(body))
+	if len(snippet) > 400 {
+		snippet = snippet[:400]
+	}
+	if strings.Contains(snippet, "accessNotConfigure") ||
+		strings.Contains(snippet, "has not been used in project") ||
+		strings.Contains(snippet, "it is disabled") {
+		return fmt.Errorf("gmail %s returned %d: Gmail API is not enabled on this Google Cloud project — enable https://console.developers.google.com/apis/api/gmail.googleapis.com/overview then retry", op, status)
+	}
+	if snippet == "" {
+		return fmt.Errorf("gmail %s returned %d", op, status)
+	}
+	return fmt.Errorf("gmail %s returned %d: %s", op, status, snippet)
 }
 
 // parseIntLoose parses a positive-ish integer from a query param.
