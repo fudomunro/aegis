@@ -15,7 +15,7 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// MailArchive is Guardian's local queryable mail mirror.
+// MailArchive is Aegis's local queryable mail mirror.
 //
 // Design (issue: local compressed mailbox for agents):
 //   - Gmail (or another named provider) stays canonical for the home copy and
@@ -26,7 +26,7 @@ import (
 //   - Path is a single file (default mail-archive.db). Empty path disables the
 //     archive and the /v1/mail/* routes return a clear error.
 //
-// Optimized for Guardian/agent queries (search, filter, fetch by id) rather
+// Optimized for Aegis/agent queries (search, filter, fetch by id) rather
 // than for offline mail clients.
 type MailArchive struct {
 	db   *sql.DB

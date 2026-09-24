@@ -27,7 +27,7 @@ func TestLookupArtistMBID_ConfidentHit(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	mbid := g.lookupArtistMBID(context.Background(), "Miles Davis")
 	if mbid != "b975d5a2-2c3b-4b1e-9f0a-0c0e0e0e0e0e" {
 		t.Fatalf("mbid = %q", mbid)
@@ -50,7 +50,7 @@ func TestLookupArtistMBID_RejectsLowScoreAndNameMismatch(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if got := g.lookupArtistMBID(context.Background(), "Miles Davis"); got != "" {
 		t.Fatalf("expected empty, got %q", got)
 	}
@@ -67,7 +67,7 @@ func TestLookupArtistMBID_StripsTopicSuffix(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if mbid := g.lookupArtistMBID(context.Background(), "Miles Davis - Topic"); mbid != "mb1" {
 		t.Fatalf("mbid = %q", mbid)
 	}
@@ -85,7 +85,7 @@ func TestResolveArtistEntities_BudgetAndAttach(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	artists := []Artist{
 		{Name: "Known Artist"},
 		{Name: "Already Has ID", EntityID: "keep-me"},
@@ -150,7 +150,7 @@ func TestMBIDCacheNegative(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if got := g.lookupArtistMBID(context.Background(), "Nobody"); got != "" {
 		t.Fatalf("got %q", got)
 	}
@@ -181,7 +181,7 @@ func TestLookupRecordingMBID(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if mbid := g.lookupRecordingMBID(context.Background(), "So What", "Miles Davis - Topic"); mbid != "rec-1" {
 		t.Fatalf("mbid = %q", mbid)
 	}
@@ -196,7 +196,7 @@ func TestResolveTrackEntities_KeepsISRC(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	tracks := []Track{
 		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
 		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "USRC123"},
@@ -222,7 +222,7 @@ func TestLookupReleaseGroupMBID(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if mbid := g.lookupReleaseGroupMBID(context.Background(), "Kind of Blue", "Miles Davis"); mbid != "rg-1" {
 		t.Fatalf("mbid = %q", mbid)
 	}
@@ -237,7 +237,7 @@ func TestResolveAlbumEntities_KeepsUPC(t *testing.T) {
 	mbLookupBase = srv.URL
 	defer func() { mbLookupBase = old }()
 
-	g := testServerWithBase(&Config{}, "https://guardian.example.com")
+	g := testServerWithBase(&Config{}, "https://aegis.example.com")
 	albums := []Album{
 		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
 		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "00123456789012"},

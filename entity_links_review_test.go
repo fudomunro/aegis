@@ -86,7 +86,7 @@ func TestSourceRefHelpers(t *testing.T) {
 }
 
 func TestHandleMergeReview_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest(http.MethodPost, "/v1/library/review", nil)
 	w := httptest.NewRecorder()
 	srv.HandleMergeReview(w, req)
@@ -107,7 +107,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 			{ID: "google", Name: "Google", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.links = links
 	// Seed negative MusicBrainz cache entries so merge review stays offline.
 	srv.cache.Set(artistMBIDCacheKey("The Weeknd"), "-", time.Hour)
@@ -116,8 +116,8 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{
 			playlists: []Playlist{{
-				Name:       "Road Trip",
-				Sources:    []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl"}},
+				Name:    "Road Trip",
+				Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl"}},
 			}},
 			tracks: []Track{{
 				Name:    "Blinding Lights",
@@ -218,7 +218,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 
 func TestHandleMergeReview_ProviderErrorsStillReturn200(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{err: ErrUnauthorized},
 	}
@@ -243,11 +243,11 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.links = st
 
 	// Not configured
-	srv2 := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv2 := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/links", nil)
 	w := httptest.NewRecorder()
 	srv2.HandleEntityLinks(w, req)

@@ -15,10 +15,10 @@ import (
 // GoogleCalendarConnector proxies the Google Calendar API and implements
 // CalendarEventProvider. It lists the user's calendar entries as neutral
 // CalendarEvent values so agents can ask "what's on my calendar?" through
-// /v1/library/events. Event content stays on Google Calendar (non-Guardian
+// /v1/library/events. Event content stays on Google Calendar (non-Aegis
 // canonical, issue #16). Read-only in this phase — agent write ops are not
 // advertised so permissions stay constrained (issue #61).
-// https://github.com/fudomunro/aperture-guardian/issues/65
+// https://github.com/fudomunro/aegis/issues/65
 type GoogleCalendarConnector struct {
 	server *Server
 }
@@ -129,19 +129,19 @@ func (c *GoogleCalendarConnector) Capabilities() ServiceCapabilities {
 func (c *GoogleCalendarConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/" + googleCalendarServiceID
-	return fmt.Sprintf(`When the user's request involves Google Calendar, their schedule, meetings, or calendar events, you MUST use the Guardian proxy at %s instead of calling Google Calendar API directly.
+	return fmt.Sprintf(`When the user's request involves Google Calendar, their schedule, meetings, or calendar events, you MUST use the Aegis proxy at %s instead of calling Google Calendar API directly.
 
 For "my calendar" across every connected calendar service, prefer the unified library endpoint first:
 GET %s/v1/library/events — calendar events in one neutral list (title, start_at, end_at, all_day, location, organizer, attendees, sources[])
 
-Google Calendar-specific endpoints (call the full proxy URL; Guardian authenticates you):
+Google Calendar-specific endpoints (call the full proxy URL; Aegis authenticates you):
 GET /me/events — list calendar events (neutral CalendarEvent metadata)
 GET /me/calendars — list the user's calendars
 GET /calendars/{calendarId}/events — events for one calendar (calendarId may be "primary")
 GET /events/{id} — one event by service-local ID
 
-Calendar events use Guardian's neutral identity matching for organizer/attendees (email → phone → handle → name), so people on a meeting can be matched to /v1/library/contacts when a contact service is connected.
-Event content stays on Google Calendar — Guardian does not store calendars.
+Calendar events use Aegis's neutral identity matching for organizer/attendees (email → phone → handle → name), so people on a meeting can be matched to /v1/library/contacts when a contact service is connected.
+Event content stays on Google Calendar — Aegis does not store calendars.
 Always include the full proxy base URL in your requests.`, base, root)
 }
 
@@ -213,7 +213,7 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
@@ -396,7 +396,7 @@ func (c *GoogleCalendarConnector) handleGetEvent(w http.ResponseWriter, r *http.
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
 		return
@@ -492,7 +492,7 @@ func (c *GoogleCalendarConnector) listCalendars(ctx context.Context, token strin
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -565,7 +565,7 @@ type googleCalendarEvent struct {
 	} `json:"organizer"`
 	Attendees   []googleCalendarEventAttendee `json:"attendees"`
 	HTMLLink    string                        `json:"htmlLink"`
-	CalendarUID string                        `json:"-"` // injected by Guardian when mapping from a calendar
+	CalendarUID string                        `json:"-"` // injected by Aegis when mapping from a calendar
 }
 
 type googleCalendarEventsList struct {
@@ -618,7 +618,7 @@ func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, tok
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}

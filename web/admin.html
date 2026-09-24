@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Guardian — Admin</title>
+<title>Aegis — Admin</title>
 <style>
   :root {
     --bg: #0d1117; --surface: #161b22; --surface2: #21262d; --border: #30363d;
@@ -236,7 +236,7 @@
 <div class="wrap">
   <div id="auth-gate" class="auth-box" hidden>
     <h2>API key required</h2>
-    <p>Enter the Guardian API key. It is stored only in this browser tab.</p>
+    <p>Enter the Aegis API key. It is stored only in this browser tab.</p>
     <form id="auth-form">
       <input type="password" id="api-key-input" placeholder="API key" autocomplete="current-password" required>
       <button class="btn btn-primary" type="submit">Connect</button>
@@ -253,7 +253,7 @@
 
     <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
       <div class="toolbar">
-        <span class="meta" id="map-meta">How agents, Guardian, and your services connect</span>
+        <span class="meta" id="map-meta">How agents, Aegis, and your services connect</span>
         <div class="grow"></div>
         <div class="map-window" role="group" aria-label="Access stats window">
           <button type="button" data-flow-window="5m" aria-pressed="false">5m</button>
@@ -280,7 +280,7 @@
 
       <div id="agent-data-access-help" class="help-box">
         <h3>Agent data access</h3>
-        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Guardian (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>guardian.json</code>.</p>
+        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>aegis.json</code>.</p>
       </div>
 
       <div class="toolbar">
@@ -323,7 +323,7 @@
       <h2 class="section-heading">Mail archive</h2>
       <div class="help-box">
         <h3>Local compressed mailbox</h3>
-        <p>Optional SQLite + FTS mirror of your mail for agent history search. Live providers and Google Takeout stay canonical/read-only sources — Guardian only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
+        <p>Optional SQLite + FTS mirror of your mail for agent history search. Live providers and Google Takeout stay canonical/read-only sources — Aegis only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
       </div>
       <div class="toolbar">
         <span class="meta" id="mail-archive-summary">Loading…</span>
@@ -353,7 +353,7 @@
       <h2 class="section-heading">Google Takeout (read-only sync)</h2>
       <div class="help-box">
         <h3>Historical mail export</h3>
-        <p>Point Guardian at a Google Takeout export on this machine — an <code>.mbox</code> file, a folder of mbox files, or a Takeout <code>.zip</code>. Treated as a <strong>read-only sync location</strong>: re-running skips messages already in the archive (by Message-ID) and never writes back to the export.</p>
+        <p>Point Aegis at a Google Takeout export on this machine — an <code>.mbox</code> file, a folder of mbox files, or a Takeout <code>.zip</code>. Treated as a <strong>read-only sync location</strong>: re-running skips messages already in the archive (by Message-ID) and never writes back to the export.</p>
       </div>
       <div class="toolbar">
         <div class="grow">
@@ -399,7 +399,7 @@
 <script>
 (function () {
   const $ = (id) => document.getElementById(id);
-  const KEY_STORAGE = "guardian.admin.apiKey";
+  const KEY_STORAGE = "aegis.admin.apiKey";
   let apiKey = sessionStorage.getItem(KEY_STORAGE) || "";
   let summary = null;
 
@@ -472,7 +472,7 @@
   const FLOW_ICONS = {
     agent: "M5.5 7a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Zm5.5 0a2 2 0 1 0 0-4 2 2 0 0 0 0 4ZM1.5 13.5c0-2.2 1.8-4 4-4s4 1.8 4 4M11 10c1.8.3 3.5 1.7 3.5 3.5",
     gateway: "M2 3.5h12v9H2zM5 12.5v-2h6v2M8 3.5v5M6 6.5 8 8.5l2-2",
-    guardian: "M8 1.5 2.5 4v4.2c0 3.2 2.3 5.4 5.5 6.3 3.2-.9 5.5-3.1 5.5-6.3V4L8 1.5ZM5.5 8.2 7.2 10l3.3-3.5",
+    aegis: "M8 1.5 2.5 4v4.2c0 3.2 2.3 5.4 5.5 6.3 3.2-.9 5.5-3.1 5.5-6.3V4L8 1.5ZM5.5 8.2 7.2 10l3.3-3.5",
     tokens: "M9.5 1.5a4 4 0 1 0-2.7 6.9L8 9.6V11h1.5v1.5H11V14h1.5v-4.2L9.8 7.1A4 4 0 0 0 9.5 1.5Zm.2 3.2a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Z",
     cache: "M2.5 4.5 8 2l5.5 2.5L8 7 2.5 4.5ZM2.5 8 8 10.5 13.5 8M2.5 11.5 8 14l5.5-2.5",
     spotify: "M3 6.2c3.4-1.2 7.2-.9 10 .9M3.8 9c2.7-.9 5.7-.7 8 .7M4.5 11.6c2-.6 4.2-.5 6 .5",
@@ -542,7 +542,7 @@
       const fromId = (e.from || "").replace(/^svc:/, "");
       if (services[fromId] && services[fromId].hits) return services[fromId].hits;
     }
-    if (e.style === "access" && e.to === "guardian") {
+    if (e.style === "access" && e.to === "aegis") {
       let total = 0;
       Object.keys(services).forEach((id) => { total += services[id].hits || 0; });
       Object.keys(libraries).forEach((id) => { total += libraries[id].hits || 0; });
@@ -569,7 +569,7 @@
     );
   }
 
-  // Nested layout: Aperture wraps Guardian; Guardian holds Token vault
+  // Nested layout: Aperture wraps Aegis; Aegis holds Token vault
   // (connection tokens) and Data cache (synced library data types).
   function layoutFlowMap(topo) {
     const nodes = topo.nodes || [];
@@ -593,21 +593,21 @@
     const tokenBlockH = titleH + tokenCount * (tokenRowH + tokenGap);
 
     const storeGap = 10;
-    const guardianTitleH = 36;
-    const guardianH = guardianTitleH + tokenBlockH + storeGap + typeBlockH + pad * 2;
+    const aegisTitleH = 36;
+    const aegisH = aegisTitleH + tokenBlockH + storeGap + typeBlockH + pad * 2;
     const apertureTitleH = 28;
     const aperturePad = 12;
-    const apertureH = apertureTitleH + guardianH + aperturePad * 2;
+    const apertureH = apertureTitleH + aegisH + aperturePad * 2;
     const apertureW = 420;
 
     const agents = { x: 20, y: 0, w: 130, h: 56, id: "agents" };
     const aperture = { x: 180, y: 20, w: apertureW, h: apertureH, id: "aperture" };
-    const guardian = {
+    const aegis = {
       x: aperture.x + aperturePad,
       y: aperture.y + apertureTitleH + aperturePad,
       w: aperture.w - aperturePad * 2,
-      h: guardianH,
-      id: "guardian",
+      h: aegisH,
+      id: "aegis",
     };
     agents.y = Math.floor(aperture.y + aperture.h / 2 - agents.h / 2);
 
@@ -618,16 +618,16 @@
       kind: "gateway",
       container: true,
     }, aperture);
-    pos.guardian = Object.assign({
-      label: byId.guardian ? byId.guardian.label : "Guardian",
-      kind: "guardian",
+    pos.aegis = Object.assign({
+      label: byId.aegis ? byId.aegis.label : "Aegis",
+      kind: "aegis",
       container: true,
       parent: "aperture",
-    }, guardian);
+    }, aegis);
 
-    const innerX = guardian.x + pad;
-    const innerW = guardian.w - pad * 2;
-    const tokensY = guardian.y + guardianTitleH + pad;
+    const innerX = aegis.x + pad;
+    const innerW = aegis.w - pad * 2;
+    const tokensY = aegis.y + aegisTitleH + pad;
     pos.tokens = {
       x: innerX,
       y: tokensY,
@@ -636,7 +636,7 @@
       id: "tokens",
       label: byId.tokens ? byId.tokens.label : "Token vault",
       kind: "store",
-      parent: "guardian",
+      parent: "aegis",
       container: true,
     };
     const tokenItems = tokens.map((n, i) => ({
@@ -662,7 +662,7 @@
       id: "cache",
       label: byId.cache ? byId.cache.label : "Data cache",
       kind: "store",
-      parent: "guardian",
+      parent: "aegis",
       container: true,
     };
     const typeOrigin = {
@@ -735,7 +735,7 @@
       const midY = Math.max(a.y, b.y) + 18;
       return "M " + a.x + " " + a.y + " C " + (a.x + 40) + " " + midY + ", " + (b.x - 40) + " " + midY + ", " + b.x + " " + b.y;
     }
-    // Access into nested Guardian: land on Aperture's left edge first.
+    // Access into nested Aegis: land on Aperture's left edge first.
     if (style === "access" && to.parent) {
       const outer = { x: to.x - 12, y: to.y - 40, w: to.w + 24, h: to.h + 52 };
       const ob = flowAnchor(outer, "left");
@@ -753,12 +753,12 @@
     return "M " + a.x + " " + a.y + " L " + b.x + " " + b.y;
   }
 
-  // Gateway cluster edges (agents ↔ Aperture/Guardian) are drawn as one
+  // Gateway cluster edges (agents ↔ Aperture/Aegis) are drawn as one
   // unlabeled bidirectional arrow — no room for useful edge text there.
   function isGatewayClusterEdge(e) {
     if (e.from === "aperture" || e.to === "aperture") return true;
-    if (e.from === "agents" && (e.to === "guardian" || e.to === "aperture")) return true;
-    if (e.to === "agents" && (e.from === "guardian" || e.from === "aperture")) return true;
+    if (e.from === "agents" && (e.to === "aegis" || e.to === "aperture")) return true;
+    if (e.to === "agents" && (e.from === "aegis" || e.from === "aperture")) return true;
     return false;
   }
 
@@ -766,7 +766,7 @@
     const layout = layoutFlowMap(topo);
     const pos = layout.pos;
     const parts = [];
-    parts.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + layout.width + " " + layout.height + '" width="' + layout.width + '" height="' + layout.height + '" role="img" aria-label="Guardian data-flow map">');
+    parts.push('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + layout.width + " " + layout.height + '" width="' + layout.width + '" height="' + layout.height + '" role="img" aria-label="Aegis data-flow map">');
     parts.push("<defs>");
     Object.keys(FLOW_EDGE_COLORS).forEach((style) => {
       parts.push('<marker id="flow-arrow-' + style + '" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="' + FLOW_EDGE_COLORS[style] + '"/></marker>');
@@ -793,7 +793,7 @@
       if (isGatewayClusterEdge(e)) return;
       // Library fan-in is drawn from each data-type row to its providers.
       if (e.style === "library") return;
-      // Auth/proxy-read lines are drawn from Token vault entries, not Guardian.
+      // Auth/proxy-read lines are drawn from Token vault entries, not Aegis.
       if (e.style === "data" || e.style === "meta") return;
 
       const from = pos[e.from];
@@ -827,8 +827,8 @@
     parts.push('<text x="' + (ap.x + 12) + '" y="' + (ap.y + 18) + '" fill="#bc8cff" font-size="12" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(ap.label) + '</text>');
     parts.push('<text x="' + (ap.x + ap.w - 12) + '" y="' + (ap.y + 18) + '" text-anchor="end" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">pre-request gateway</text>');
 
-    // Guardian container.
-    const g = pos.guardian;
+    // Aegis container.
+    const g = pos.aegis;
     parts.push('<rect x="' + g.x + '" y="' + g.y + '" width="' + g.w + '" height="' + g.h + '" rx="10" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>');
     parts.push('<text x="' + (g.x + 12) + '" y="' + (g.y + 18) + '" fill="#58a6ff" font-size="13" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(g.label) + '</text>');
     parts.push('<text x="' + (g.x + g.w - 12) + '" y="' + (g.y + 18) + '" text-anchor="end" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">hook · proxy · library</text>');
@@ -881,7 +881,7 @@
     });
 
     // Auth / proxy-read arrows: originate at each Token vault entry and draw
-    // above Aperture/Guardian fills (same treatment as data-type reads).
+    // above Aperture/Aegis fills (same treatment as data-type reads).
     const leafSvcNodes = (topo.nodes || []).filter((n) => n.kind === "service");
     tokenItems.forEach((token) => {
       leafSvcNodes.forEach((n) => {
@@ -909,7 +909,7 @@
       });
     });
 
-    // Data-type access arrows: drawn above Aperture/Guardian fills so the
+    // Data-type access arrows: drawn above Aperture/Aegis fills so the
     // origin at each type row stays visible (SVG paint order = z-index).
     (layout.typeItems || []).forEach((item) => {
       (item.providers || []).forEach((svcId) => {
@@ -1076,7 +1076,7 @@
 
   // Core data types — same synced library kinds the Map shows (flow.go).
   // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
-  // any explicit keys from guardian.json that are not rendered.
+  // any explicit keys from aegis.json that are not rendered.
   const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages"];
   const DATA_TYPE_LABELS = {
     playlists: "Playlists",
@@ -1132,7 +1132,7 @@
     if (!root) return null;
     const map = {};
     // Keep keys the simple form does not show (default, proxy-only types, custom)
-    // so Save does not drop them from guardian.json.
+    // so Save does not drop them from aegis.json.
     try {
       const original = root.getAttribute("data-original-perms");
       if (original) Object.assign(map, JSON.parse(original));
@@ -1305,9 +1305,9 @@
     if (total === 0) {
       root.innerHTML =
         "<h3>No services configured</h3>" +
-        "<p>Add named services to <code>guardian.json</code> (see the README and <code>guardian.example.json</code>), then restart Guardian. " +
+        "<p>Add named services to <code>aegis.json</code> (see the README and <code>aegis.example.json</code>), then restart Aegis. " +
         "Each service should reference a top-level <code>connections</code> entry for OAuth.</p>" +
-        "<p>Once services appear here, use <strong>Connect</strong> on each card to authorize Guardian. Agents never handle tokens — Guardian stores them and injects proxy instructions.</p>";
+        "<p>Once services appear here, use <strong>Connect</strong> on each card to authorize Aegis. Agents never handle tokens — Aegis stores them and injects proxy instructions.</p>";
       return;
     }
 
@@ -1316,13 +1316,13 @@
       "<h3>Connect your services</h3>" +
       "<p>This page is where you manage service connections. " +
       (missingOAuth
-        ? "None of the configured services have OAuth set up yet. Add a <code>connection</code> reference and client credentials in <code>guardian.json</code>, then restart."
-        : "Click <strong>Connect</strong> on a service card to authorize Guardian via OAuth.") + "</p>" +
+        ? "None of the configured services have OAuth set up yet. Add a <code>connection</code> reference and client credentials in <code>aegis.json</code>, then restart."
+        : "Click <strong>Connect</strong> on a service card to authorize Aegis via OAuth.") + "</p>" +
       "<ol>" +
-      "<li>Register an OAuth app with the provider and put the client ID/secret in <code>guardian.json</code> <code>connections</code>.</li>" +
+      "<li>Register an OAuth app with the provider and put the client ID/secret in <code>aegis.json</code> <code>connections</code>.</li>" +
       "<li>Click <strong>Connect</strong> and finish the provider redirect.</li>" +
       "<li>Tokens are stored encrypted on disk and refresh automatically.</li>" +
-      "<li>Agents call Guardian’s proxy/library APIs — they never see credentials.</li>" +
+      "<li>Agents call Aegis’s proxy/library APIs — they never see credentials.</li>" +
       "</ol>" +
       (total > 0 && connected === 0 && !missingOAuth
         ? "<p>" + total + " service" + (total === 1 ? " is" : "s are") + " configured, but none are connected yet.</p>"
@@ -1415,7 +1415,7 @@
       agentFlow = "Blocked — no agent traffic";
       agentNote = "Configured as block";
     } else if (action === "inject") {
-      agentFlow = "Agents → Guardian → service";
+      agentFlow = "Agents → Aegis → service";
       agentNote = "proxy " + escapeHtml(svc.proxy_path || ("/v1/services/" + svc.id));
       if (!svc.has_oauth) {
         agentNote += " · needs OAuth config";
@@ -1436,7 +1436,7 @@
       rows.push({
         label: "Library",
         value: escapeHtml(kinds.join(", ")) +
-          ' <span class="flow-note">→ unified library (service → Guardian)</span>',
+          ' <span class="flow-note">→ unified library (service → Aegis)</span>',
       });
     } else {
       rows.push({
@@ -1476,7 +1476,7 @@
     if (!rows.length) {
       $("services-list").innerHTML = all.length
         ? '<div class="empty">No services match this filter.</div>'
-        : '<div class="empty">Add services in guardian.json — connection management lives here.</div>';
+        : '<div class="empty">Add services in aegis.json — connection management lives here.</div>';
       return;
     }
 
@@ -1492,10 +1492,10 @@
           " · client ID " + (svc.has_client_id ? "set" : "missing") +
           " · secret " + (svc.has_client_secret ? "set" : "missing") +
           (scopes ? '<div class="scopes">' + scopes + "</div>" : "") + "</div>"
-        : '<div class="meta">No OAuth configuration — add a <code>connection</code> in guardian.json to open agent data flow.</div>';
+        : '<div class="meta">No OAuth configuration — add a <code>connection</code> in aegis.json to open agent data flow.</div>';
 
       const canonicalBadge = (svc.canonical_for && svc.canonical_for.length)
-        ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Guardian location for these types (issue #16)">canonical: ' +
+        ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Aegis location for these types (issue #16)">canonical: ' +
           escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
         : "";
 
@@ -1537,10 +1537,10 @@
       const label = src.canonical ? name + " · canonical" : name;
       if (src.url) {
         return '<a class="playlist-source" href="' + escapeHtml(src.url) + '" target="_blank" rel="noopener"' +
-          (src.canonical ? ' title="Authoritative non-Guardian location"' : "") + ">" + label + "</a>";
+          (src.canonical ? ' title="Authoritative non-Aegis location"' : "") + ">" + label + "</a>";
       }
       return '<span class="playlist-source"' +
-        (src.canonical ? ' title="Authoritative non-Guardian location"' : "") + ">" + label + "</span>";
+        (src.canonical ? ' title="Authoritative non-Aegis location"' : "") + ">" + label + "</span>";
     }).join("");
   }
 
@@ -1594,7 +1594,7 @@
       key: "photos",
       label: "photos",
       filterPlaceholder: "Filter photos…",
-      emptyAll: "No photos found. On Google Photos, use “Pick photos…” on the service card (user selects once; Guardian lists that selection). Then reload.",
+      emptyAll: "No photos found. On Google Photos, use “Pick photos…” on the service card (user selects once; Aegis lists that selection). Then reload.",
       emptyFilter: "No photos match this filter.",
     },
     events: {
@@ -1708,7 +1708,7 @@
         libraryCardHeader(p.name,
           '<span class="badge badge-gray">' + (p.track_count || 0) + " tracks</span>" +
           (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span>" : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "")) +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "")) +
         (p.description ? '<div class="meta">' + escapeHtml(p.description) + "</div>" : "") +
         (p.owner ? '<div class="meta">Owner: ' + escapeHtml(p.owner) + "</div>" : "") +
         '<div class="scopes">' + sourceBadges(p.sources) + "</div>" +
@@ -1729,7 +1729,7 @@
       return '<article class="card">' +
         libraryCardHeader(t.name,
           (multi ? '<span class="badge badge-blue">' + t.sources.length + " sources</span>" : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "")) +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "")) +
         (artists ? '<div class="meta">Artists: ' + escapeHtml(artists) + "</div>" : "") +
         (album ? '<div class="meta">Album: ' + escapeHtml(album) + "</div>" : "") +
         (t.duration ? '<div class="meta">Duration: ' + escapeHtml(t.duration) + "</div>" : "") +
@@ -1748,7 +1748,7 @@
       return '<article class="card">' +
         libraryCardHeader(c.name || "(unnamed)",
           (multi ? '<span class="badge badge-blue">' + c.sources.length + " sources</span>" : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "")) +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "")) +
         (emails ? '<div class="meta">Emails: ' + emails + "</div>" : "") +
         (phones ? '<div class="meta">Phones: ' + phones + "</div>" : "") +
         (handles ? '<div class="meta">Handles: ' + handles + "</div>" : "") +
@@ -1767,7 +1767,7 @@
       return '<article class="card">' +
         libraryCardHeader(title,
           (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span> " : "") +
-          (canonical ? '<span class="badge badge-gray">canonical off-guardian</span>' : "")) +
+          (canonical ? '<span class="badge badge-gray">canonical off-aegis</span>' : "")) +
         (p.taken_at ? '<div class="meta">Taken: ' + escapeHtml(p.taken_at) + "</div>" : "") +
         (dims ? '<div class="meta">Size: ' + escapeHtml(dims) +
           (p.mime_type ? " · " + escapeHtml(p.mime_type) : "") + "</div>" : "") +
@@ -1790,7 +1790,7 @@
       return '<article class="card">' +
         libraryCardHeader(e.title || "(untitled event)",
           (multi ? '<span class="badge badge-blue">' + e.sources.length + " sources</span> " : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
           (e.status ? '<span class="badge badge-gray">' + escapeHtml(e.status) + "</span>" : "")) +
         (when ? '<div class="meta">When: ' + escapeHtml(when) + "</div>" : "") +
         (e.location ? '<div class="meta">Where: ' + escapeHtml(e.location) + "</div>" : "") +
@@ -1818,7 +1818,7 @@
       return '<article class="card">' +
         libraryCardHeader(m.subject || "(no subject)",
           (multi ? '<span class="badge badge-blue">' + m.sources.length + " sources</span> " : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Guardian location">canonical</span>' : "") +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
           (m.channel ? '<span class="badge badge-gray">' + escapeHtml(m.channel) + "</span>" : "") +
           (m.direction ? '<span class="badge badge-gray">' + escapeHtml(m.direction) + "</span>" : "") +
           (m.read === false ? '<span class="badge badge-orange">unread</span>' : "")) +
@@ -2106,7 +2106,7 @@
   function renderMailArchiveStatus(data) {
     if (!data) {
       $("mail-archive-summary").textContent = "Mail archive disabled";
-      $("mail-archive-status").textContent = "Start Guardian with -mail-archive mail-archive.db to enable local history search.";
+      $("mail-archive-status").textContent = "Start Aegis with -mail-archive mail-archive.db to enable local history search.";
       $("mail-archive-body").innerHTML = '<tr><td colspan="4" class="muted-num">Archive disabled.</td></tr>';
       return;
     }

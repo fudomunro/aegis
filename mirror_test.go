@@ -26,7 +26,7 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: ts.URL, Permissions: perms},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{
 		AccessToken: "sp-token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -249,7 +249,7 @@ func TestHandleLibraryMirror_DefaultsSourceToCanonical(t *testing.T) {
 }
 
 func TestLibraryInstructions_MentionMirrorEndpoint(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.libraryInstructionsFor("playlists")
 	if !strings.Contains(instr, "/v1/library/mirror") {
 		t.Fatalf("instructions should mention mirror endpoint: %s", instr)

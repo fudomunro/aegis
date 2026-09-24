@@ -52,7 +52,7 @@ type AdminService struct {
 	// create operation (e.g. Google Photos Picker API).
 	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`
 	// CanonicalFor lists library kinds where this service is the configured
-	// authoritative non-Guardian location (issue #16).
+	// authoritative non-Aegis location (issue #16).
 	CanonicalFor []string `json:"canonical_for,omitempty"`
 	ProxyPath    string   `json:"proxy_path"`
 	LoginPath    string   `json:"login_path,omitempty"`
@@ -331,7 +331,7 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 				return
 			}
 		}
-		// Permissions may only further constrain Guardian — never grant write
+		// Permissions may only further constrain Aegis — never grant write
 		// where neither proxy ops nor mirror adapters can write that type.
 		saved := req.Permissions
 		if connector, ok := s.connectors[id]; ok && len(saved) > 0 {

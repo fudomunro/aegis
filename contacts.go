@@ -8,10 +8,10 @@ import (
 )
 
 // ContactProvider is implemented by connectors that can return the user's
-// contacts in Guardian's neutral format. The aggregate library endpoint uses
+// contacts in Aegis's neutral format. The aggregate library endpoint uses
 // this so agents can ask for "my contacts" once and receive every service.
 // Each returned Contact should carry one ContactSource for that service.
-// https://github.com/fudomunro/aperture-guardian/issues/12
+// https://github.com/fudomunro/aegis/issues/12
 type ContactProvider interface {
 	// ListUserContacts fetches the user's contacts from the upstream service
 	// and maps them into neutral Contact values (service identity in Sources).

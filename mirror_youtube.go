@@ -127,7 +127,7 @@ func (m *youtubeMirror) createPlaylistWithTracks(ctx context.Context, name strin
 		map[string]any{
 			"snippet": map[string]any{
 				"title":       name,
-				"description": "Copied by Aperture Guardian",
+				"description": "Copied by Aegis",
 			},
 			"status": map[string]any{"privacyStatus": "private"},
 		})

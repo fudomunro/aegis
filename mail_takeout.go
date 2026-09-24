@@ -19,7 +19,7 @@ import (
 
 // Google Takeout is a read-only sync location for the local mail archive —
 // same role as Gmail live sync, but the source is a frozen export on disk
-// (mbox file, directory of .mbox, or Takeout .zip). Guardian never writes
+// (mbox file, directory of .mbox, or Takeout .zip). Aegis never writes
 // back to the export; canonical home stays the live provider (issue #16).
 
 const (

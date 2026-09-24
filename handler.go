@@ -45,14 +45,14 @@ type GuardrailResponse struct {
 	Message     string          `json:"message,omitempty"` // human-readable reason
 }
 
-// AuthMode selects how Guardian authenticates inbound API requests.
+// AuthMode selects how Aegis authenticates inbound API requests.
 const (
 	// AuthModeAuto accepts Tailscale identity when present, otherwise an API key.
 	// Recommended default for tailnet-only deployments that also keep a key
 	// for external bridges.
 	AuthModeAuto = "auto"
 	// AuthModeTailnet requires Tailscale identity (Serve headers or WhoIs).
-	// API key is not used. This is the recommended mode when Guardian is
+	// API key is not used. This is the recommended mode when Aegis is
 	// only reachable inside the tailnet.
 	AuthModeTailnet = "tailnet"
 	// AuthModeAPIKey requires the shared API key only (legacy).
@@ -183,7 +183,7 @@ func withPeerLog(logger *slog.Logger, r *http.Request) *slog.Logger {
 }
 
 // warnIdentityMismatch logs when Aperture's claimed user differs from the
-// Tailscale peer that actually called Guardian (shared tailnet / bridge risk).
+// Tailscale peer that actually called Aegis (shared tailnet / bridge risk).
 func warnIdentityMismatch(logger *slog.Logger, apertureLogin string, r *http.Request) {
 	id := PeerIdentityFrom(r)
 	if id == nil || apertureLogin == "" || id.LoginName == "" {
@@ -314,7 +314,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build instructions for the agent to use Guardian's proxy endpoints.
+	// Build instructions for the agent to use Aegis's proxy endpoints.
 	var instructions []string
 	for _, svc := range matched {
 		if svc.Action != "inject" {
@@ -331,7 +331,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		} else {
 			proxyURL := fmt.Sprintf("%s/v1/services/%s", strings.TrimRight(s.baseURL, "/"), svc.ID)
 			instruction := fmt.Sprintf(
-				"When working with %s, you MUST use the Guardian proxy endpoint at %s "+
+				"When working with %s, you MUST use the Aegis proxy endpoint at %s "+
 					"instead of calling %s directly. All requests through this proxy are "+
 					"authenticated, cached, and audited.",
 				svc.Name, proxyURL, svc.Name,

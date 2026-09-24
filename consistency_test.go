@@ -40,7 +40,7 @@ func TestWarnIdentityMismatch_LogsWhenDifferent(t *testing.T) {
 }
 
 func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	connectors := []struct {
 		name string
 		svc  ServiceConnector
@@ -50,12 +50,12 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 		{"amazon-music", NewAmazonMusicConnector(srv)},
 	}
 	for _, c := range connectors {
-		instr := c.svc.SystemInstructions("https://guardian.example.com")
+		instr := c.svc.SystemInstructions("https://aegis.example.com")
 		if strings.Contains(instr, "all require Authorization header") {
 			t.Errorf("%s: still claims Authorization header is required", c.name)
 		}
-		if !strings.Contains(instr, "Guardian authenticates you") {
-			t.Errorf("%s: missing Guardian-authenticates wording", c.name)
+		if !strings.Contains(instr, "Aegis authenticates you") {
+			t.Errorf("%s: missing Aegis-authenticates wording", c.name)
 		}
 		if !strings.Contains(instr, "/v1/library/playlists") {
 			t.Errorf("%s: missing library endpoint mention", c.name)
@@ -64,7 +64,7 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 }
 
 func TestCapabilities_PlaylistFieldsUseSources(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	check := func(name string, caps ServiceCapabilities) {
 		t.Helper()
 		for _, dt := range caps.DataTypes {

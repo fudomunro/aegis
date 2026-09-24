@@ -1,4 +1,4 @@
-module github.com/fudomunro/aperture-guardian
+module github.com/fudomunro/aegis
 
 go 1.27.1
 

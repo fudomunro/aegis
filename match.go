@@ -22,7 +22,7 @@ const (
 // NormalizeIdentityKey produces a comparable key for cross-service identity
 // matching. It is intentionally simple (case/whitespace, YouTube " - Topic"):
 // good enough for v1, not a durable music-graph ID. Tracked in
-// https://github.com/fudomunro/aperture-guardian/issues/4
+// https://github.com/fudomunro/aegis/issues/4
 func NormalizeIdentityKey(name string) string {
 	s := strings.ToLower(strings.TrimSpace(name))
 	s = strings.ReplaceAll(s, " - topic", "")

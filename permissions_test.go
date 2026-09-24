@@ -192,7 +192,7 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	svc := cfg.GetService("spotify")
 
 	req := httptest.NewRequest("POST", "/v1/services/spotify/me/tracks", nil)
@@ -325,7 +325,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 		// does not implement (mirror write is a separate path).
 		Permissions: Permissions{"tracks": AccessFull, "playlists": AccessFull},
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 	svc := cfg.GetService("spotify")
 

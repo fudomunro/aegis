@@ -14,9 +14,9 @@ import (
 // Google page size 100. Exceeding it sets truncated=true on the response.
 const libraryPageCap = 200
 
-// guardianHTTPClient bounds upstream calls so a hung service cannot stall a
+// aegisHTTPClient bounds upstream calls so a hung service cannot stall a
 // library aggregate for the full request-context lifetime.
-var guardianHTTPClient = &http.Client{Timeout: 30 * time.Second}
+var aegisHTTPClient = &http.Client{Timeout: 30 * time.Second}
 
 // doUpstreamRequest is the shared bearer-token upstream call used by connectors
 // and library pagination.
@@ -28,7 +28,7 @@ func doUpstreamRequest(ctx context.Context, method, url string, body io.Reader, 
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}

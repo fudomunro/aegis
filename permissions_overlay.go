@@ -11,10 +11,10 @@ import (
 const permissionsFileVersion = 1
 
 // permissionsOverlayFile is the admin-edited agent permission overlay.
-// Bootstrap permissions stay in guardian.json; this file wins when a service
+// Bootstrap permissions stay in aegis.json; this file wins when a service
 // id is present. A present key with null clears the block (unrestricted).
 // Contains no secrets — safe to manage from the admin UI without rewriting
-// OAuth client credentials in guardian.json.
+// OAuth client credentials in aegis.json.
 type permissionsOverlayFile struct {
 	Version int `json:"version"`
 	// Services maps service id → permissions. Present+null means cleared.
@@ -77,7 +77,7 @@ func savePermissionsOverlay(path string, ov *permissionsOverlayFile) error {
 }
 
 // InitPermissionsStore overrides the overlay path and applies any existing
-// overlay onto bootstrap permissions from guardian.json. LoadConfig already
+// overlay onto bootstrap permissions from aegis.json. LoadConfig already
 // defaults the path to permissions.json beside the config file.
 func (c *Config) InitPermissionsStore(path string) error {
 	if path == "" {

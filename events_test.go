@@ -101,7 +101,7 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 		{ID: "google-calendar", Name: "Google Calendar", Action: "inject"},
 		{ID: "outlook-calendar", Name: "Outlook Calendar", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
 			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
@@ -150,7 +150,7 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 			CanonicalFor: []string{"events"},
 		},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
 			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
@@ -174,7 +174,7 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 }
 
 func TestHandleLibraryEvents_NoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -191,7 +191,7 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 		Action:      "inject",
 		Permissions: Permissions{"events": AccessNone},
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
 			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
@@ -208,7 +208,7 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 
 func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{err: ErrUnauthorized},
 	}
@@ -231,7 +231,7 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 
 func TestHandleLibraryEvents_ErrorService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{err: errors.New("boom")},
 	}
@@ -252,7 +252,7 @@ func TestHandleLibraryEvents_ErrorService(t *testing.T) {
 }
 
 func TestHandleLibraryEvents_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("POST", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -280,7 +280,7 @@ func TestLibraryKindEvents_Registered(t *testing.T) {
 }
 
 func TestLibraryEventsInstructions_MentionEndpoint(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.libraryCalendarEventsSystemInstructions()
 	for _, want := range []string{
 		"/v1/library/events",
@@ -298,7 +298,7 @@ func TestStampCalendarEventCanonical_OnlyWhenConfigured(t *testing.T) {
 		{ID: "google-calendar", Name: "Google Calendar", Action: "inject", CanonicalFor: []string{"events"}},
 		{ID: "other-cal", Name: "Other", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	items := []CalendarEvent{
 		{Sources: []CalendarEventSource{{Service: "google-calendar"}}},
 		{Sources: []CalendarEventSource{{Service: "other-cal"}}},

@@ -75,7 +75,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// If a connector is registered for this service, delegate to it.
 	if connector, ok := s.connectors[serviceID]; ok {
 		connector.HandleProxy(w, r, remainingPath)
-		s.recordProxyAccess(r, serviceID, dataType, w.Header().Get("X-Guardian-Cache"))
+		s.recordProxyAccess(r, serviceID, dataType, w.Header().Get("X-Aegis-Cache"))
 		return
 	}
 
@@ -97,7 +97,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		if cached, ok := s.cache.Get(cacheKey); ok {
 			logger.Debug("cache hit")
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Guardian-Cache", "hit")
+			w.Header().Set("X-Aegis-Cache", "hit")
 			io.WriteString(w, cached)
 			s.recordProxyAccess(r, serviceID, dataType, MetricCacheHit)
 			return
@@ -130,7 +130,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		upstreamReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 
-	resp, err := guardianHTTPClient.Do(upstreamReq)
+	resp, err := aegisHTTPClient.Do(upstreamReq)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("upstream request to %s failed", svc.Name))
@@ -161,7 +161,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	if ct := resp.Header.Get("Content-Type"); ct == "" {
 		w.Header().Set("Content-Type", "application/json")
 	}
-	w.Header().Set("X-Guardian-Cache", "miss")
+	w.Header().Set("X-Aegis-Cache", "miss")
 	w.WriteHeader(resp.StatusCode)
 	w.Write(data)
 	s.recordProxyAccess(r, serviceID, dataType, MetricCacheMiss)

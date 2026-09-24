@@ -87,7 +87,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 		{ID: "google-photos", Name: "Google Photos", Action: "inject"},
 		{ID: "icloud", Name: "iCloud", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10),
@@ -122,7 +122,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 }
 
 func TestHandleLibraryPhotos_NoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -139,7 +139,7 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 		Action:      "inject",
 		Permissions: Permissions{"photos": AccessNone},
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
@@ -159,7 +159,7 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 		{ID: "google-photos", Name: "Google Photos", Action: "inject"},
 		{ID: "icloud", Name: "iCloud", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
@@ -187,7 +187,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 		{ID: "google-photos", Name: "Google Photos", Action: "inject"},
 		{ID: "icloud", Name: "iCloud", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
@@ -215,7 +215,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 
 func TestHandleLibraryPhotos_MethodNotAllowed(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-photos", Name: "Google Photos", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{"google-photos": &fakePhotoProvider{}}
 	req := httptest.NewRequest("POST", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -272,7 +272,7 @@ func TestPreRequest_InjectsPhotoLibraryHint(t *testing.T) {
 	cfg := &Config{Services: []Service{
 		{ID: "google-photos", Name: "Google Photos", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example")
+	srv := testServerWithBase(cfg, "https://aegis.example")
 	srv.connectors["google-photos"] = &fakePhotoProvider{}
 
 	payload := PreRequestPayload{
@@ -304,7 +304,7 @@ func TestPreRequest_InjectsPhotoLibraryHint(t *testing.T) {
 }
 
 func TestHasPhotoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if srv.hasPhotoProviders() {
 		t.Fatal("expected no photo providers")
 	}
@@ -379,7 +379,7 @@ func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
 		Action:   "inject",
 		Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := NewGooglePhotosConnector(srv)
@@ -474,7 +474,7 @@ func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
 func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	conn := NewGooglePhotosConnector(srv)
 	_, _, err := conn.ListUserPhotos(context.Background())
 	if !errors.Is(err, ErrUnauthorized) {
@@ -483,14 +483,14 @@ func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 }
 
 func TestGooglePhotosConnector_SystemInstructions_MentionPicker(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewGooglePhotosConnector(srv)
-	instr := conn.SystemInstructions("https://guardian.example.com")
+	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/library/photos",
 		"/picker/sessions",
 		"Picker API",
-		"Guardian authenticates you",
+		"Aegis authenticates you",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)

@@ -151,11 +151,11 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, `<!DOCTYPE html>
-<html><head><title>Guardian — Authorized</title>
+<html><head><title>Aegis — Authorized</title>
 <style>body{font-family:system-ui;max-width:500px;margin:4rem auto;text-align:center;color:#e6edf3;background:#0d1117}
 h1{color:#3fb950}p{color:#8b949e}</style></head>
 <body><h1>%s Authorized</h1>
-<p>Guardian now has access to %s. You can close this page.</p>
+<p>Aegis now has access to %s. You can close this page.</p>
 <p style="font-size:0.85rem;color:#8b949e">Token expires: %s</p>
 </body></html>`,
 		svc.Name, displayName, tok.Expiry.Format(time.RFC3339))
@@ -262,7 +262,7 @@ func (s *Server) tokenRequest(tokenURL string, data url.Values) (*OAuthToken, er
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token request: %w", err)
 	}

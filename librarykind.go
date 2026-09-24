@@ -158,7 +158,7 @@ var libraryKinds = []LibraryKind{
 		Label:           "photos",
 		Usage:           "photos, pictures, or their photo library",
 		Summary:         "all user photos from every connected photo service in one neutral list (taken_at, dimensions, mime_type, filename, people[] as Contact identities, sources[] with canonical blob location). Google Photos contributes the user's last picker selection.",
-		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /v1/library/contacts. Photo bytes are never stored in Guardian. Google Photos uses the Picker API: the user must pick photos once before they appear here.",
+		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /v1/library/contacts. Photo bytes are never stored in Aegis. Google Photos uses the Picker API: the user must pick photos once before they appear here.",
 		ExampleQuestion: "what photos do I have?",
 		Keywords: []string{
 			"my photos", "photo library", "my pictures", "picture library",
@@ -251,7 +251,7 @@ func (k LibraryKind) Instructions(baseURL string) string {
 			"every connected service.\n"+
 			"Check response.truncated (and by_service[].truncated) before claiming the list is complete; "+
 			"when true, say so and note that some items may still be missing upstream.\n"+
-			"sources[].canonical marks the authoritative non-Guardian location for that item "+
+			"sources[].canonical marks the authoritative non-Aegis location for that item "+
 			"(issue #16); prefer that service for writes or mirrors.",
 		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, k.ExampleQuestion,
 	)
@@ -409,7 +409,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		logger.Debug("cache hit")
 		w.Header().Set("Content-Type", "application/json")
-		w.Header().Set("X-Guardian-Cache", "hit")
+		w.Header().Set("X-Aegis-Cache", "hit")
 		w.Write([]byte(cached))
 		s.recordAccessFrom(r, AccessEvent{
 			Agent:    agent,
@@ -536,7 +536,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 
 	s.cache.Set(cacheKey, string(result), 60*time.Second)
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
+	w.Header().Set("X-Aegis-Cache", "miss")
 	w.Write(result)
 	s.recordAccessFrom(r, AccessEvent{
 		Agent:    agent,

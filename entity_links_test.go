@@ -105,7 +105,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.links = st
 
 	// Create
