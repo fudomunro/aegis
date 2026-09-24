@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ f193059</title>
+<title>Aegis — Code Walkthrough @ c374627</title>
+<meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
     --bg: #0d1117;
@@ -289,27 +290,26 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>f193059</span>
-    <span class="version-meta">main · 2026-09-13 · feat/unified-taste-library merged · regenerate when the code moves</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>c374627</span>
+    <span class="version-meta">main · 2026-09-24 · Merge pull request #81 from fudomunro/chore/issue-80-rename-aegis · generated 2026-09-24 16:52 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
-    A Go service that sits between Tailscale Aperture and music APIs.
-    When an agent mentions Spotify, YouTube Music, or Amazon Music — or asks about
-    playlists/liked songs without naming a service — Aegis intercepts the LLM
-    request, injects instructions to call its proxy, then mediates real API calls
-    with OAuth, caching, permissions, and a neutral multi-source library model.
+    A Go service next to Tailscale Aperture. It intercepts LLM requests that mention
+    named services (or library questions), injects agent instructions to use Aegis’s
+    proxy and unified library, then mediates real provider calls with OAuth, caching,
+    permissions, and a neutral multi-source library model. Agents never hold provider tokens.
   </p>
   <div class="lang-badges">
     <span class="badge badge-go">Go (source of truth)</span>
     <span class="badge badge-py">Python (side-by-side equivalent)</span>
-    <span class="badge badge-neutral">Walkthrough for Python-leaning readers</span>
+    <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">~8.2k</div><div class="l">source LOC (no tests)</div></div>
-    <div class="stat"><div class="v">21</div><div class="l">Go source files</div></div>
-    <div class="stat"><div class="v">3</div><div class="l">service connectors</div></div>
-    <div class="stat"><div class="v">6</div><div class="l">library kinds</div></div>
+    <div class="stat"><div class="v">16,585</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">46</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">6</div><div class="l">service connectors</div></div>
+    <div class="stat"><div class="v">8</div><div class="l">library kinds</div></div>
   </div>
 </header>
 
@@ -319,14 +319,14 @@
     <li><a href="#why">Why Aegis exists</a></li>
     <li><a href="#architecture">Architecture at a glance</a></li>
     <li><a href="#startup">Startup: wiring the Server</a></li>
-    <li><a href="#auth">Two-legged auth</a></li>
-    <li><a href="#prerequest">Pre-request hook flow</a></li>
+    <li><a href="#auth">Auth model</a></li>
+    <li><a href="#prerequest">Pre-request hook</a></li>
     <li><a href="#connector">ServiceConnector interface</a></li>
-    <li><a href="#proxy">Service proxy</a></li>
+    <li><a href="#proxy">Service proxy pipeline</a></li>
     <li><a href="#library">Unified library pipeline</a></li>
-    <li><a href="#sync">Neutral models &amp; cross-service sync</a></li>
+    <li><a href="#sync">Neutral models, match, canonical</a></li>
     <li><a href="#permissions">Data permissions</a></li>
-    <li><a href="#oauth">OAuth &amp; token storage</a></li>
+    <li><a href="#oauth">OAuth connections &amp; tokens</a></li>
     <li><a href="#go-concepts">Go concepts for Python devs</a></li>
     <li><a href="#filemap">File map</a></li>
     <li><a href="#regen">Regenerating this page</a></li>
@@ -337,39 +337,39 @@
 <section id="why">
   <h2><span class="n">01</span>Why Aegis exists</h2>
   <p>
-    Aperture is Tailscale’s LLM gateway. Its <strong>guardrails</strong> can rewrite or block
-    provider-bound chat requests, but they do <em>not</em> intercept MCP tool calls.
-    You cannot “guard” an agent’s Spotify API call by sitting in front of the model alone.
+    Aperture is Tailscale’s LLM gateway. Guardrails can rewrite or block provider-bound
+    chat requests, but they do <em>not</em> intercept the agent’s later tool/API calls.
+    You cannot “guard” a Spotify request by sitting only in front of the model.
   </p>
-  <p>
-    Aegis uses a <strong>two-component architecture</strong> instead:
-  </p>
+  <p>Aegis therefore has two cooperating jobs:</p>
   <div class="two-col">
     <div class="card">
       <h4>1. Pre-request hook</h4>
       <p>
-        Aperture calls <code>POST /v1/pre-request</code> before the LLM sees the user message.
-        Aegis scans the text for service names <em>and</em> library keywords
-        (“what playlists do I have?”). If found, it returns
-        <code>{"action":"modify"}</code> with a system message telling the agent
-        to call Aegis’s proxy/library endpoints instead of external APIs.
+        Aperture calls <code>POST /v1/pre-request</code> before the LLM sees the message.
+        Aegis scans for service names and library keywords
+        (“what playlists do I have?”). Matches produce
+        <code>{"action":"modify"}</code> plus a system message that points the agent at
+        Aegis endpoints instead of raw provider APIs. Failures fail-open
+        (<code>allow</code>).
       </p>
     </div>
     <div class="card">
-      <h4>2. Service proxy + unified library</h4>
+      <h4>2. Proxy + unified library</h4>
       <p>
         Agents call <code>/v1/services/{id}/…</code> or
-        <code>/v1/library/{kind}</code>. Aegis attaches the user’s OAuth token,
-        maps verbose upstream JSON into a compact neutral shape, merges same-named
-        items across services, enforces per-data-type permissions, caches GETs,
-        and never exposes tokens to the agent.
+        <code>/v1/library/{kind}</code>. Aegis resolves OAuth connections, enforces
+        permissions, caches successful GETs, maps provider JSON into neutral models,
+        merges cross-service items, and keeps tokens off the agent.
       </p>
     </div>
   </div>
   <div class="explain good">
     <p>
-      <strong>Design rule:</strong> agents authenticate to Aegis (Tailscale identity or API key).
-      They never hold Spotify/YouTube/Amazon OAuth credentials.
+      <strong>Product rules that shape the code:</strong> named services first ·
+      fail-open on fetch/parse errors · Aegis owns OAuth · connections (not
+      per-surface OAuth) · Aegis does not store media · coverage floor 80% ·
+      no Tailscale Funnel.
     </p>
   </div>
 </section>
@@ -378,59 +378,65 @@
 <section id="architecture">
   <h2><span class="n">02</span>Architecture at a glance</h2>
   <div class="diagram">
-    <svg viewBox="0 0 880 440" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
+    <svg viewBox="0 0 900 460" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
       <defs>
         <marker id="mB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
         <marker id="mO" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
         <marker id="mG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
       </defs>
-      <rect x="20" y="170" width="130" height="72" rx="10" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
-      <text x="85" y="202" fill="#58a6ff" text-anchor="middle" font-weight="700">LLM Agent</text>
-      <text x="85" y="222" fill="#8b949e" text-anchor="middle" font-size="11">chat client / MCP host</text>
+      <rect x="20" y="180" width="130" height="72" rx="10" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
+      <text x="85" y="212" fill="#58a6ff" text-anchor="middle" font-weight="700">LLM Agent</text>
+      <text x="85" y="232" fill="#8b949e" text-anchor="middle" font-size="11">chat client / MCP host</text>
 
-      <rect x="210" y="170" width="140" height="72" rx="10" fill="#1f2937" stroke="#d29922" stroke-width="2"/>
-      <text x="280" y="200" fill="#d29922" text-anchor="middle" font-weight="700">Aperture</text>
-      <text x="280" y="220" fill="#8b949e" text-anchor="middle" font-size="11">pre_request hook</text>
+      <rect x="210" y="180" width="140" height="72" rx="10" fill="#1f2937" stroke="#d29922" stroke-width="2"/>
+      <text x="280" y="210" fill="#d29922" text-anchor="middle" font-weight="700">Aperture</text>
+      <text x="280" y="230" fill="#8b949e" text-anchor="middle" font-size="11">pre_request hook</text>
 
-      <rect x="410" y="70" width="220" height="280" rx="12" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
-      <text x="520" y="100" fill="#3fb950" text-anchor="middle" font-weight="700" font-size="14">Aegis</text>
-      <line x1="410" y1="114" x2="630" y2="114" stroke="#30363d"/>
-      <text x="520" y="138" fill="#e6edf3" text-anchor="middle" font-size="11">handler.go · auth + hook</text>
-      <text x="520" y="158" fill="#e6edf3" text-anchor="middle" font-size="11">proxy.go · delegate / forward</text>
-      <text x="520" y="178" fill="#e6edf3" text-anchor="middle" font-size="11">librarykind.go · generic fan-out</text>
-      <text x="520" y="198" fill="#e6edf3" text-anchor="middle" font-size="11">match.go · merge identities</text>
-      <text x="520" y="218" fill="#e6edf3" text-anchor="middle" font-size="11">permissions.go · data access</text>
-      <text x="520" y="238" fill="#e6edf3" text-anchor="middle" font-size="11">oauth.go · tokens.go · identity.go</text>
-      <text x="520" y="268" fill="#8b949e" text-anchor="middle" font-size="11">connectors map[string]ServiceConnector</text>
-      <text x="520" y="292" fill="#8b949e" text-anchor="middle" font-size="11">LibraryKind registry (playlists…photos)</text>
-      <text x="520" y="316" fill="#8b949e" text-anchor="middle" font-size="11">config + cache + neutral models</text>
+      <rect x="400" y="60" width="230" height="320" rx="12" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
+      <text x="515" y="90" fill="#3fb950" text-anchor="middle" font-weight="700" font-size="14">Aegis</text>
+      <line x1="400" y1="104" x2="630" y2="104" stroke="#30363d"/>
+      <text x="515" y="128" fill="#e6edf3" text-anchor="middle" font-size="11">handler.go · auth + hook</text>
+      <text x="515" y="148" fill="#e6edf3" text-anchor="middle" font-size="11">proxy.go · connector_proxy.go</text>
+      <text x="515" y="168" fill="#e6edf3" text-anchor="middle" font-size="11">librarykind.go · library.go</text>
+      <text x="515" y="188" fill="#e6edf3" text-anchor="middle" font-size="11">match.go · musicbrainz.go</text>
+      <text x="515" y="208" fill="#e6edf3" text-anchor="middle" font-size="11">permissions.go · canonical.go</text>
+      <text x="515" y="228" fill="#e6edf3" text-anchor="middle" font-size="11">oauth.go · tokens.go · connections</text>
+      <text x="515" y="258" fill="#8b949e" text-anchor="middle" font-size="11">connectors map[string]ServiceConnector</text>
+      <text x="515" y="280" fill="#8b949e" text-anchor="middle" font-size="11">playlists, tracks, albums, artists, contacts, photos, events, messages</text>
+      <text x="515" y="308" fill="#8b949e" text-anchor="middle" font-size="11">entity links · metrics · cache</text>
+      <text x="515" y="336" fill="#8b949e" text-anchor="middle" font-size="11">registered: spotify, youtube-music, amazon-music, google-photos, google, immich</text>
 
-      <rect x="700" y="40" width="160" height="40" rx="8" fill="#0d2818" stroke="#1DB954" stroke-width="1.5"/>
-      <text x="780" y="65" fill="#1DB954" text-anchor="middle" font-weight="600">SpotifyConnector</text>
-      <rect x="700" y="100" width="160" height="40" rx="8" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
-      <text x="780" y="125" fill="#58a6ff" text-anchor="middle" font-weight="600">YouTubeMusicConnector</text>
-      <rect x="700" y="160" width="160" height="40" rx="8" fill="#1f2937" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4 3"/>
-      <text x="780" y="185" fill="#8b949e" text-anchor="middle" font-weight="600">AmazonMusicConnector</text>
-      <rect x="700" y="280" width="160" height="40" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="780" y="305" fill="#bc8cff" text-anchor="middle">api.spotify.com</text>
-      <rect x="700" y="340" width="160" height="40" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="780" y="365" fill="#bc8cff" text-anchor="middle">googleapis.com/youtube</text>
+      <rect x="700" y="40" width="170" height="36" rx="8" fill="#0d2818" stroke="#1DB954" stroke-width="1.5"/>
+      <text x="785" y="63" fill="#1DB954" text-anchor="middle" font-weight="600">spotify</text>
+      <rect x="700" y="86" width="170" height="36" rx="8" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
+      <text x="785" y="109" fill="#58a6ff" text-anchor="middle" font-weight="600">youtube-music</text>
+      <rect x="700" y="132" width="170" height="36" rx="8" fill="#1f2937" stroke="#8b949e" stroke-width="1.5"/>
+      <text x="785" y="155" fill="#8b949e" text-anchor="middle" font-weight="600">amazon-music</text>
+      <rect x="700" y="178" width="170" height="36" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="785" y="201" fill="#bc8cff" text-anchor="middle" font-weight="600">google-photos</text>
+      <rect x="700" y="224" width="170" height="36" rx="8" fill="#1f2937" stroke="#bc8cff" stroke-width="1.5"/>
+      <text x="785" y="247" fill="#bc8cff" text-anchor="middle" font-weight="600">google (contacts)</text>
+      <rect x="700" y="270" width="170" height="36" rx="8" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
+      <text x="785" y="293" fill="#d29922" text-anchor="middle" font-weight="600">immich</text>
 
-      <line x1="150" y1="206" x2="205" y2="206" stroke="#58a6ff" stroke-width="2" marker-end="url(#mB)"/>
-      <text x="178" y="196" fill="#58a6ff" font-size="10" text-anchor="middle">chat</text>
-      <line x1="350" y1="195" x2="405" y2="175" stroke="#d29922" stroke-width="2" marker-end="url(#mO)" stroke-dasharray="5 3"/>
-      <text x="378" y="168" fill="#d29922" font-size="10" text-anchor="middle">hook</text>
-      <line x1="630" y1="130" x2="695" y2="65" stroke="#3fb950" stroke-width="1.5" marker-end="url(#mG)"/>
-      <line x1="630" y1="155" x2="695" y2="118" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#mB)"/>
-      <line x1="630" y1="185" x2="695" y2="178" stroke="#8b949e" stroke-width="1.5" marker-end="url(#mG)"/>
-      <line x1="780" y1="80" x2="780" y2="275" stroke="#3fb950" stroke-width="1.5" marker-end="url(#mG)"/>
-      <line x1="780" y1="140" x2="780" y2="335" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#mB)"/>
-      <path d="M85 242 L85 400 L520 400 L520 355" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#mG)"/>
-      <text x="300" y="392" fill="#3fb950" font-size="11">direct: /v1/library/{kind} or /v1/services/{id}/…</text>
-      <text x="430" y="50" fill="#8b949e" font-size="11">solid = data plane</text>
-      <text x="430" y="65" fill="#d29922" font-size="11">dashed orange = control plane (hook)</text>
+      <rect x="700" y="340" width="170" height="36" rx="8" fill="#0d1117" stroke="#3fb950" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="785" y="363" fill="#3fb950" text-anchor="middle" font-size="11">provider APIs (upstream)</text>
+
+      <line x1="150" y1="216" x2="205" y2="216" stroke="#58a6ff" stroke-width="2" marker-end="url(#mB)"/>
+      <text x="178" y="206" fill="#58a6ff" font-size="10" text-anchor="middle">chat</text>
+      <line x1="350" y1="205" x2="395" y2="175" stroke="#d29922" stroke-width="2" marker-end="url(#mO)" stroke-dasharray="5 3"/>
+      <text x="375" y="178" fill="#d29922" font-size="10" text-anchor="middle">hook</text>
+      <line x1="630" y1="140" x2="695" y2="58" stroke="#3fb950" stroke-width="1.5" marker-end="url(#mG)"/>
+      <line x1="630" y1="170" x2="695" y2="104" stroke="#58a6ff" stroke-width="1.5" marker-end="url(#mB)"/>
+      <line x1="630" y1="210" x2="695" y2="196" stroke="#bc8cff" stroke-width="1.5" marker-end="url(#mG)"/>
+      <path d="M85 252 L85 420 L515 420 L515 385" fill="none" stroke="#3fb950" stroke-width="1.5" stroke-dasharray="6 3" marker-end="url(#mG)"/>
+      <text x="300" y="412" fill="#3fb950" font-size="11">data plane: /v1/library/{kind} or /v1/services/{id}/…</text>
+      <text x="410" y="40" fill="#8b949e" font-size="11">solid = data plane · dashed orange = control plane</text>
     </svg>
-    <p class="diagram-label">Control plane (orange): Aperture asks Aegis what to do with the chat. Data plane (green/blue): the agent later calls Aegis’s library or proxy endpoints.</p>
+    <p class="diagram-label">
+      Control plane: Aperture asks Aegis what to do with the chat.
+      Data plane: the agent later calls Aegis library/proxy endpoints; connectors talk to providers with stored tokens.
+    </p>
   </div>
 </section>
 
@@ -439,14 +445,15 @@
   <h2><span class="n">03</span>Startup: wiring the Server</h2>
   <p>
     Everything hangs off one struct. <code>main()</code> parses flags, loads config,
-    builds the token store and identity resolver, registers three connectors,
-    then serves HTTP.
+    builds the token store, entity-link store, and identity resolver, registers
+    connectors, then serves HTTP. Nearly every route is wrapped in
+    <code>AuthMiddleware</code>.
   </p>
 
   <div class="code-compare">
     <div class="code-panel">
-      <div class="code-header code-header-go">Go — main.go + handler.go</div>
-<pre><code><span class="cm">// One struct holds all dependencies (handler.go).</span>
+      <div class="code-header code-header-go">Go — handler.go + main.go</div>
+<pre><code><span class="cm">// Shared dependencies (handler.go).</span>
 <span class="kw">type</span> <span class="tp">Server</span> <span class="kw">struct</span> {
     apiKey        <span class="tp">string</span>
     authMode      <span class="tp">string</span>              <span class="cm">// auto | tailnet | api-key</span>
@@ -457,29 +464,35 @@
     cache         *<span class="tp">Cache</span>
     tokens        *<span class="tp">TokenStore</span>
     oauthStates   *<span class="tp">StateStore</span>
+    refreshFlight <span class="tp">tokenFlight</span>         <span class="cm">// coalesce concurrent refresh</span>
     connectors    <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">ServiceConnector</span>
+    metrics       *<span class="tp">AccessMetrics</span>      <span class="cm">// admin map ring buffer</span>
+    links         *<span class="tp">EntityLinkStore</span>    <span class="cm">// user-confirmed merges</span>
 }
 
-<span class="cm">// main() registration (main.go)</span>
-srv := &amp;<span class="tp">Server</span>{ <span class="cm">/* … */</span> connectors: <span class="fn">make</span>(<span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">ServiceConnector</span>) }
-srv.connectors[<span class="str">"spotify"</span>]       = <span class="fn">NewSpotifyConnector</span>(srv)
-srv.connectors[<span class="str">"youtube-music"</span>] = <span class="fn">NewYouTubeMusicConnector</span>(srv)
-srv.connectors[<span class="str">"amazon-music"</span>]  = <span class="fn">NewAmazonMusicConnector</span>(srv)
+<span class="cm">// Registration (main.go) — note service IDs, not package names.</span>
+srv.connectors[<span class="str">"spotify"</span>]               = <span class="fn">NewSpotifyConnector</span>(srv)
+srv.connectors[<span class="str">"youtube-music"</span>]       = <span class="fn">NewYouTubeMusicConnector</span>(srv)
+srv.connectors[<span class="str">"amazon-music"</span>]        = <span class="fn">NewAmazonMusicConnector</span>(srv)
+srv.connectors[googlePhotosServiceID]  = <span class="fn">NewGooglePhotosConnector</span>(srv)   <span class="cm">// "google-photos"</span>
+srv.connectors[googleContactsServiceID]= <span class="fn">NewGoogleContactsConnector</span>(srv) <span class="cm">// "google"</span>
+srv.connectors[immichServiceID]        = <span class="fn">NewImmichConnector</span>(srv)          <span class="cm">// "immich"</span>
 
 mux := http.<span class="fn">NewServeMux</span>()
-mux.<span class="fn">HandleFunc</span>(<span class="str">"POST /v1/pre-request"</span>,
-    srv.<span class="fn">AuthMiddleware</span>(srv.HandlePreRequest))
+mux.<span class="fn">HandleFunc</span>(<span class="str">"POST /v1/pre-request"</span>, srv.<span class="fn">AuthMiddleware</span>(srv.HandlePreRequest))
 <span class="kw">for</span> path, handler := <span class="kw">range</span> srv.<span class="fn">libraryRouteHandlers</span>() {
     mux.<span class="fn">HandleFunc</span>(path, srv.<span class="fn">AuthMiddleware</span>(handler))
 }
-mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/services/"</span>,
-    srv.<span class="fn">AuthMiddleware</span>(srv.HandleServiceProxy))</code></pre>
+mux.<span class="fn">HandleFunc</span>(<span class="str">"POST /v1/library/mirror"</span>, srv.<span class="fn">AuthMiddleware</span>(srv.HandleLibraryMirror))
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/services/"</span>, srv.<span class="fn">AuthMiddleware</span>(srv.HandleServiceProxy))
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/auth/"</span>, srv.handleAuthRoutes)  <span class="cm">// login/callback public</span>
+mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/admin"</span>, srv.HandleAdmin)          <span class="cm">// shell public; JSON authed</span></code></pre>
     </div>
     <div class="code-panel">
       <div class="code-header code-header-py">Python — equivalent shape</div>
 <pre><code><span class="kw">class</span> <span class="tp">Server</span>:
-    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key, auth_mode, config,
-                 cache, tokens, identity, base_url):
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, api_key, auth_mode, config, cache,
+                 tokens, identity, base_url, links, metrics):
         self.api_key = api_key
         self.auth_mode = auth_mode
         self.config = config
@@ -487,51 +500,63 @@ mux.<span class="fn">HandleFunc</span>(<span class="str">"/v1/services/"</span>,
         self.tokens = tokens
         self.identity = identity
         self.base_url = base_url
+        self.links = links
+        self.metrics = metrics
         self.connectors: <span class="tp">dict</span>[<span class="tp">str</span>, <span class="tp">ServiceConnector</span>] = {}
+        self.refresh_flight = <span class="fn">TokenFlight</span>()
 
 srv = <span class="fn">Server</span>(...)
 srv.connectors[<span class="str">"spotify"</span>] = <span class="fn">SpotifyConnector</span>(srv)
 srv.connectors[<span class="str">"youtube-music"</span>] = <span class="fn">YouTubeMusicConnector</span>(srv)
+srv.connectors[<span class="str">"google-photos"</span>] = <span class="fn">GooglePhotosConnector</span>(srv)
+srv.connectors[<span class="str">"google"</span>] = <span class="fn">GoogleContactsConnector</span>(srv)
+srv.connectors[<span class="str">"immich"</span>] = <span class="fn">ImmichConnector</span>(srv)
 
-<span class="cm"># FastAPI / Starlette style</span>
 app.post(<span class="str">"/v1/pre-request"</span>)(auth(srv.handle_pre_request))
 <span class="kw">for</span> path, handler <span class="kw">in</span> srv.library_route_handlers().items():
-    app.get(path)(auth(handler))
+    app.post(path)(auth(handler))
 app.api_route(<span class="str">"/v1/services/{path:path}"</span>)(auth(srv.handle_service_proxy))</code></pre>
     </div>
   </div>
 
   <div class="explain">
     <p>
-      <strong>Why one Server struct?</strong> Go has no dependency-injection container.
-      Methods on <code>*Server</code> are ordinary functions that close over shared state.
-      The same pattern as a Python class holding <code>self.config</code>, <code>self.cache</code>,
-      and so on — except handlers are bound via method values
-      (<code>srv.HandlePreRequest</code>) rather than being free functions.
+      <strong>Why one Server struct?</strong> Go has no DI container. Methods on
+      <code>*Server</code> are ordinary functions with shared state — same idea as a
+      Python class holding <code>self.config</code> / <code>self.cache</code>.
+      Handlers are bound as method values: <code>srv.HandlePreRequest</code>.
+    </p>
+    <p>
+      <strong>Gotcha:</strong> Google Contacts uses connector/service ID
+      <code>google</code> (not <code>google-contacts</code>). Config, OAuth login URLs,
+      and proxy paths all use that ID.
     </p>
   </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="auth">
-  <h2><span class="n">04</span>Two-legged auth</h2>
-  <p>
-    Aegis has <strong>two callers</strong>, and they authenticate differently:
-  </p>
+  <h2><span class="n">04</span>Auth model</h2>
+  <p>Aegis authenticates <strong>callers of Aegis</strong>, not provider APIs:</p>
   <table>
     <thead>
-      <tr><th>Leg</th><th>Who calls Aegis</th><th>How they authenticate</th></tr>
+      <tr><th>Leg</th><th>Who</th><th>How</th></tr>
     </thead>
     <tbody>
       <tr>
         <td><strong>Hook</strong></td>
-        <td>Aperture (<code>POST /v1/pre-request</code>)</td>
-        <td>Usually the shared API key. In <code>tailnet</code> mode Aperture must also present tailnet identity.</td>
+        <td>Aperture → <code>POST /v1/pre-request</code></td>
+        <td>API key and/or tailnet identity, depending on mode.</td>
       </tr>
       <tr>
         <td><strong>Agent data</strong></td>
-        <td>The LLM agent (<code>/v1/library/…</code>, <code>/v1/services/…</code>)</td>
-        <td>Preferred: Tailscale identity (Serve headers or WhoIs). Fallback: API key in <code>auto</code>/<code>api-key</code> modes.</td>
+        <td>Agent → library / proxy / auth status</td>
+        <td>Preferred: Tailscale identity (Serve headers or WhoIs). Fallback: API key in <code>auto</code>/<code>api-key</code>.</td>
+      </tr>
+      <tr>
+        <td><strong>OAuth browser</strong></td>
+        <td>User → <code>/v1/auth/{id}/login|callback</code></td>
+        <td>Public by design (redirect flow). Tokens never returned to agents.</td>
       </tr>
     </tbody>
   </table>
@@ -551,7 +576,7 @@ app.api_route(<span class="str">"/v1/services/{path:path}"</span>)(auth(srv.hand
                 s.<span class="fn">deny</span>(…); <span class="kw">return</span>
             }
             <span class="fn">next</span>(w, <span class="fn">withPeerIdentity</span>(r, id)); <span class="kw">return</span>
-        <span class="kw">default</span>: <span class="cm">// auto</span>
+        <span class="kw">default</span>: <span class="cm">// auto — identity first, then API key</span>
             <span class="kw">if</span> id != <span class="kw">nil</span> &amp;&amp; <span class="fn">loginAllowed</span>(id, s.allowedLogins) {
                 <span class="fn">next</span>(w, <span class="fn">withPeerIdentity</span>(r, id)); <span class="kw">return</span>
             }
@@ -567,104 +592,94 @@ app.api_route(<span class="str">"/v1/services/{path:path}"</span>)(auth(srv.hand
       <div class="code-header code-header-py">Python</div>
 <pre><code><span class="kw">def</span> <span class="fn">auth_middleware</span>(s, next_handler):
     <span class="kw">def</span> <span class="fn">wrapper</span>(w, r):
-        peer, err = s.resolve_identity(r)
+        peer, _err = s.resolve_identity(r)
         <span class="kw">if</span> s.auth_mode == <span class="str">"api-key"</span>:
             <span class="kw">if not</span> s.check_api_key(r):
-                <span class="kw">return</span> s.deny(w, r, <span class="str">"missing or invalid API key"</span>)
+                <span class="kw">return</span> s.deny(w, r)
             <span class="kw">return</span> next_handler(w, r)
         <span class="kw">if</span> s.auth_mode == <span class="str">"tailnet"</span>:
             <span class="kw">if</span> peer <span class="kw">is None</span> <span class="kw">or not</span> login_allowed(peer, s.allowed_logins):
-                <span class="kw">return</span> s.deny(w, r, <span class="str">"tailnet identity required"</span>)
+                <span class="kw">return</span> s.deny(w, r)
             r.peer = peer
             <span class="kw">return</span> next_handler(w, r)
-        <span class="cm"># auto: identity first, then API key</span>
+        <span class="cm"># auto</span>
         <span class="kw">if</span> peer <span class="kw">is not None</span> <span class="kw">and</span> login_allowed(peer, s.allowed_logins):
             r.peer = peer
             <span class="kw">return</span> next_handler(w, r)
         <span class="kw">if</span> s.api_key <span class="kw">and</span> s.check_api_key(r):
             <span class="kw">return</span> next_handler(w, r)
-        <span class="kw">return</span> s.deny(w, r, <span class="str">"unauthorized"</span>)
+        <span class="kw">return</span> s.deny(w, r)
     <span class="kw">return</span> wrapper</code></pre>
     </div>
   </div>
 
   <div class="explain">
     <p>
-      <strong>Identity is two resolvers, not one.</strong>
-      <code>ServeHeaderResolver</code> trusts Tailscale Serve headers
-      (<code>Tailscale-User-Login</code>, tags). <code>WhoIsResolver</code> queries
-      <code>tailscaled</code> over a Unix socket. <code>MultiResolver</code> tries them in order.
-      Successful identity is stuffed into the request context via
-      <code>withPeerIdentity</code> — the Go equivalent of request-local state.
+      Identity is assembled from resolvers, not one global:
+      <code>ServeHeaderResolver</code> trusts Tailscale Serve headers;
+      <code>WhoIsResolver</code> queries <code>tailscaled</code> over a Unix socket;
+      <code>MultiResolver</code> tries them in order. Successful identity goes into
+      request context via <code>withPeerIdentity</code> — Go’s request-local state,
+      analogous to Flask <code>g</code> / middleware-stored attributes.
     </p>
   </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="prerequest">
-  <h2><span class="n">05</span>Pre-request hook flow</h2>
+  <h2><span class="n">05</span>Pre-request hook</h2>
   <div class="diagram">
-    <svg viewBox="0 0 860 520" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
+    <svg viewBox="0 0 900 320" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
       <defs>
-        <marker id="aB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
-        <marker id="aG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
-        <marker id="aR" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#f85149"/></marker>
-        <marker id="aO" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
+        <marker id="hA" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
       </defs>
-      <rect x="300" y="20" width="260" height="44" rx="8" fill="#1f2937" stroke="#d29922" stroke-width="1.5"/>
-      <text x="430" y="47" fill="#d29922" text-anchor="middle" font-weight="600">Aperture → POST /v1/pre-request</text>
+      <rect x="20" y="30" width="170" height="48" rx="8" fill="#1f2937" stroke="#d29922"/>
+      <text x="105" y="52" fill="#d29922" text-anchor="middle" font-weight="700">POST /v1/pre-request</text>
+      <text x="105" y="68" fill="#8b949e" text-anchor="middle" font-size="11">Aperture hook</text>
 
-      <rect x="300" y="90" width="260" height="44" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
-      <text x="430" y="117" fill="#e6edf3" text-anchor="middle">parse PreRequestPayload JSON</text>
+      <rect x="240" y="30" width="160" height="48" rx="8" fill="#161b22" stroke="#58a6ff"/>
+      <text x="320" y="50" fill="#e6edf3" text-anchor="middle">parse JSON body</text>
+      <text x="320" y="68" fill="#f85149" text-anchor="middle" font-size="11">fail → allow</text>
 
-      <rect x="300" y="160" width="260" height="44" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
-      <text x="430" y="187" fill="#e6edf3" text-anchor="middle">FindMatchingServices(user_message)</text>
+      <rect x="450" y="30" width="200" height="48" rx="8" fill="#161b22" stroke="#58a6ff"/>
+      <text x="550" y="50" fill="#e6edf3" text-anchor="middle">FindMatchingServices</text>
+      <text x="550" y="68" fill="#8b949e" text-anchor="middle" font-size="11">name / alias substring</text>
 
-      <rect x="40" y="250" width="220" height="50" rx="8" fill="#0d2818" stroke="#3fb950" stroke-width="1.5"/>
-      <text x="150" y="272" fill="#3fb950" text-anchor="middle" font-weight="600">match found</text>
-      <text x="150" y="290" fill="#8b949e" text-anchor="middle" font-size="11">block if action=block</text>
+      <rect x="700" y="30" width="170" height="48" rx="8" fill="#161b22" stroke="#3fb950"/>
+      <text x="785" y="50" fill="#e6edf3" text-anchor="middle">libraryHintsForMessage</text>
+      <text x="785" y="68" fill="#8b949e" text-anchor="middle" font-size="11">if no named service</text>
 
-      <rect x="320" y="250" width="220" height="50" rx="8" fill="#1c2129" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="430" y="272" fill="#bc8cff" text-anchor="middle" font-weight="600">no service match</text>
-      <text x="430" y="290" fill="#8b949e" text-anchor="middle" font-size="11">libraryHintsForMessage(msg)</text>
+      <rect x="240" y="120" width="200" height="48" rx="8" fill="#161b22" stroke="#f85149"/>
+      <text x="340" y="140" fill="#e6edf3" text-anchor="middle">any action==block?</text>
+      <text x="340" y="158" fill="#f85149" text-anchor="middle" font-size="11">yes → action:block</text>
 
-      <rect x="600" y="250" width="220" height="50" rx="8" fill="#1f2937" stroke="#8b949e" stroke-width="1.5"/>
-      <text x="710" y="272" fill="#8b949e" text-anchor="middle" font-weight="600">still nothing</text>
-      <text x="710" y="290" fill="#8b949e" text-anchor="middle" font-size="11">{"action":"allow"}</text>
+      <rect x="480" y="120" width="220" height="48" rx="8" fill="#161b22" stroke="#3fb950"/>
+      <text x="590" y="140" fill="#e6edf3" text-anchor="middle">connector.SystemInstructions</text>
+      <text x="590" y="158" fill="#8b949e" text-anchor="middle" font-size="11">+ permissions / write policy</text>
 
-      <rect x="40" y="340" width="280" height="50" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
-      <text x="180" y="362" fill="#e6edf3" text-anchor="middle">connector.SystemInstructions(baseURL)</text>
-      <text x="180" y="380" fill="#8b949e" text-anchor="middle" font-size="11">+ permissionNotice if denied types</text>
+      <rect x="740" y="120" width="140" height="48" rx="8" fill="#0d2818" stroke="#3fb950"/>
+      <text x="810" y="140" fill="#3fb950" text-anchor="middle" font-weight="700">action:modify</text>
+      <text x="810" y="158" fill="#8b949e" text-anchor="middle" font-size="11">prepend system msg</text>
 
-      <rect x="360" y="340" width="280" height="50" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="500" y="362" fill="#e6edf3" text-anchor="middle">kind.Instructions(baseURL)</text>
-      <text x="500" y="380" fill="#8b949e" text-anchor="middle" font-size="11">"use GET /v1/library/tracks …"</text>
+      <rect x="240" y="210" width="200" height="48" rx="8" fill="#0d2818" stroke="#3fb950"/>
+      <text x="340" y="230" fill="#3fb950" text-anchor="middle" font-weight="700">action:allow</text>
+      <text x="340" y="248" fill="#8b949e" text-anchor="middle" font-size="11">no match / no instructions</text>
 
-      <rect x="180" y="430" width="360" height="50" rx="8" fill="#1c2129" stroke="#58a6ff" stroke-width="2"/>
-      <text x="360" y="452" fill="#58a6ff" text-anchor="middle" font-weight="600">injectSystemMessage → {"action":"modify"}</text>
-      <text x="360" y="470" fill="#8b949e" text-anchor="middle" font-size="11">prepend system message, preserve other top-level fields</text>
-
-      <line x1="430" y1="64" x2="430" y2="86" stroke="#58a6ff" marker-end="url(#aB)"/>
-      <line x1="430" y1="134" x2="430" y2="156" stroke="#58a6ff" marker-end="url(#aB)"/>
-      <line x1="380" y1="204" x2="200" y2="246" stroke="#3fb950" marker-end="url(#aG)"/>
-      <line x1="480" y1="204" x2="430" y2="246" stroke="#bc8cff" marker-end="url(#aO)"/>
-      <line x1="540" y1="204" x2="680" y2="246" stroke="#8b949e" marker-end="url(#aB)"/>
-      <line x1="150" y1="300" x2="150" y2="336" stroke="#3fb950" marker-end="url(#aG)"/>
-      <line x1="430" y1="300" x2="500" y2="336" stroke="#bc8cff" marker-end="url(#aO)"/>
-      <line x1="180" y1="390" x2="300" y2="428" stroke="#3fb950" marker-end="url(#aG)"/>
-      <line x1="500" y1="390" x2="420" y2="428" stroke="#bc8cff" marker-end="url(#aO)"/>
-      <text x="40" y="100" fill="#8b949e" font-size="11">fail-open on parse errors → allow</text>
-      <text x="40" y="118" fill="#8b949e" font-size="11">blocked action → {"action":"block"} + 403</text>
+      <line x1="190" y1="54" x2="235" y2="54" stroke="#58a6ff" marker-end="url(#hA)"/>
+      <line x1="400" y1="54" x2="445" y2="54" stroke="#58a6ff" marker-end="url(#hA)"/>
+      <line x1="650" y1="54" x2="695" y2="54" stroke="#3fb950" marker-end="url(#hA)"/>
+      <line x1="550" y1="78" x2="400" y2="115" stroke="#f85149" marker-end="url(#hA)"/>
+      <line x1="440" y1="144" x2="475" y2="144" stroke="#3fb950" marker-end="url(#hA)"/>
+      <line x1="700" y1="144" x2="735" y2="144" stroke="#3fb950" marker-end="url(#hA)"/>
+      <line x1="340" y1="168" x2="340" y2="205" stroke="#3fb950" marker-end="url(#hA)"/>
     </svg>
-    <p class="diagram-label">Pre-request decision tree. Service match injects connector instructions; service-less library questions inject unified endpoints; otherwise allow.</p>
+    <p class="diagram-label">Handler: <code>handler.go HandlePreRequest</code>. Fail-open on parse errors; blocked services win over inject.</p>
   </div>
 
   <div class="code-compare">
     <div class="code-panel">
-      <div class="code-header code-header-go">Go — handler.go</div>
+      <div class="code-header code-header-go">Go — decision core</div>
 <pre><code>matched := s.config.<span class="fn">FindMatchingServices</span>(payload.UserMessage)
-
-<span class="kw">var</span> libraryInstructions []<span class="tp">string</span>
 <span class="kw">if</span> <span class="fn">len</span>(matched) == 0 {
     libraryInstructions = s.<span class="fn">libraryHintsForMessage</span>(payload.UserMessage)
 }
@@ -672,58 +687,66 @@ app.api_route(<span class="str">"/v1/services/{path:path}"</span>)(auth(srv.hand
     <span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{Action: ActionAllow})
     <span class="kw">return</span>
 }
-
-<span class="cm">// any blocked service rejects the whole chat request</span>
 <span class="kw">for</span> _, svc := <span class="kw">range</span> matched {
     <span class="kw">if</span> svc.Action == <span class="str">"block"</span> {
-        <span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{
-            Action: ActionBlock, Message: …})
+        <span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{Action: ActionBlock, …})
         <span class="kw">return</span>
     }
 }
-
 <span class="kw">for</span> _, svc := <span class="kw">range</span> matched {
-    <span class="kw">if</span> <span class="fn">allDataDenied</span>(svc.Permissions) { <span class="kw">continue</span> }
     <span class="kw">if</span> connector, ok := s.connectors[svc.ID]; ok {
-        instructions = <span class="fn">append</span>(instructions,
-            connector.<span class="fn">SystemInstructions</span>(s.baseURL))
+        instructions = <span class="fn">append</span>(instructions, connector.<span class="fn">SystemInstructions</span>(s.baseURL))
+    }
+    <span class="kw">if</span> notice := <span class="fn">permissionNotice</span>(svc.Permissions); notice != <span class="str">""</span> {
+        instructions = <span class="fn">append</span>(instructions, notice)
     }
 }
-instructions = <span class="fn">append</span>(instructions, libraryInstructions...)</code></pre>
+instructions = <span class="fn">append</span>(instructions, s.<span class="fn">writePolicyNotices</span>(matched)…)
+instructions = <span class="fn">append</span>(instructions, libraryInstructions…)
+modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody, systemContent)
+<span class="kw">if</span> err != <span class="kw">nil</span> {
+    <span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{Action: ActionAllow}) <span class="cm">// fail-open</span>
+    <span class="kw">return</span>
+}
+<span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{Action: ActionModify, RequestBody: modified})</code></pre>
     </div>
     <div class="code-panel">
       <div class="code-header code-header-py">Python</div>
-<pre><code>matched = s.config.find_matching_services(payload.user_message)
-
-library_instructions = []
-<span class="kw">if not</span> matched:
-    library_instructions = s.library_hints_for_message(payload.user_message)
-<span class="kw">if not</span> matched <span class="kw">and not</span> library_instructions:
-    <span class="kw">return</span> GuardrailResponse(action=<span class="str">"allow"</span>)
-
-<span class="kw">for</span> svc <span class="kw">in</span> matched:
-    <span class="kw">if</span> svc.action == <span class="str">"block"</span>:
-        <span class="kw">return</span> GuardrailResponse(
-            action=<span class="str">"block"</span>,
-            message=<span class="kw">f</span><span class="str">"blocked: access to {svc.name} not allowed"</span>)
-
-instructions = []
-<span class="kw">for</span> svc <span class="kw">in</span> matched:
-    <span class="kw">if</span> all_data_denied(svc.permissions):
-        <span class="kw">continue</span>
-    connector = s.connectors.get(svc.id)
-    <span class="kw">if</span> connector:
-        instructions.append(connector.system_instructions(s.base_url))
-
-instructions.extend(library_instructions)</code></pre>
+<pre><code><span class="kw">def</span> <span class="fn">handle_pre_request</span>(self, w, r):
+    payload = <span class="fn">parse</span>(r.body)  <span class="cm"># fail-open → allow</span>
+    matched = self.config.find_matching_services(payload.user_message)
+    lib = []
+    <span class="kw">if not</span> matched:
+        lib = self.library_hints_for_message(payload.user_message)
+    <span class="kw">if not</span> matched <span class="kw">and not</span> lib:
+        <span class="kw">return</span> guardrail(w, action=<span class="str">"allow"</span>)
+    <span class="kw">if</span> <span class="fn">any</span>(svc.action == <span class="str">"block"</span> <span class="kw">for</span> svc <span class="kw">in</span> matched):
+        <span class="kw">return</span> guardrail(w, action=<span class="str">"block"</span>, message=…)
+    instructions = []
+    <span class="kw">for</span> svc <span class="kw">in</span> matched:
+        <span class="kw">if</span> svc.action != <span class="str">"inject"</span>:
+            <span class="kw">continue</span>
+        conn = self.connectors.get(svc.id)
+        instructions.append(
+            conn.system_instructions(self.base_url) <span class="kw">if</span> conn
+            <span class="kw">else</span> <span class="fn">generic_proxy_instruction</span>(svc, self.base_url)
+        )
+        instructions.extend(permission_notices(svc.permissions))
+    instructions.extend(write_policy_notices(matched))
+    instructions.extend(lib)
+    modified = inject_system_message(payload.request_body, <span class="str">"\n\n"</span>.join(instructions))
+    <span class="kw">if</span> modified <span class="kw">is None</span>:
+        <span class="kw">return</span> guardrail(w, action=<span class="str">"allow"</span>)
+    <span class="kw">return</span> guardrail(w, action=<span class="str">"modify"</span>, request_body=modified)</code></pre>
     </div>
   </div>
 
-  <div class="explain">
+  <div class="explain warn">
     <p>
-      <strong>Fail-open.</strong> If the payload cannot be parsed, Aegis allows the request
-      rather than breaking every LLM call. The hook is advisory for <code>inject</code>
-      services and hard-blocking only for <code>action: "block"</code>.
+      <strong>Fail-open is intentional.</strong> Parse errors, missing injectable
+      services, and injection failures return <code>allow</code>. The hook must not
+      break chat when Aegis is unhealthy. Blocks are reserved for explicit
+      <code>action: "block"</code> service policy.
     </p>
   </div>
 </section>
@@ -732,131 +755,133 @@ instructions.extend(library_instructions)</code></pre>
 <section id="connector">
   <h2><span class="n">06</span>ServiceConnector interface</h2>
   <p>
-    Each music service is a connector that can describe itself, inject agent instructions,
-    and handle proxied paths. Optional provider interfaces let a connector opt into
-    unified library datasets without the core knowing Spotify vs YouTube.
+    Connectors are the extension point. Product behavior for a named service goes
+    through this interface — not ad-hoc special cases in <code>main</code>.
   </p>
 
   <div class="code-compare">
     <div class="code-panel">
-      <div class="code-header code-header-go">Go — interfaces</div>
+      <div class="code-header code-header-go">Go — handler.go</div>
 <pre><code><span class="kw">type</span> <span class="tp">ServiceConnector</span> <span class="kw">interface</span> {
     <span class="fn">Capabilities</span>() <span class="tp">ServiceCapabilities</span>
     <span class="fn">SystemInstructions</span>(baseURL <span class="tp">string</span>) <span class="tp">string</span>
     <span class="fn">HandleProxy</span>(w http.ResponseWriter, r *http.Request, remainingPath <span class="tp">string</span>)
 }
 
-<span class="cm">// Optional: library.go</span>
+<span class="cm">// Library fetches are separate optional interfaces (library.go):</span>
 <span class="kw">type</span> <span class="tp">PlaylistProvider</span> <span class="kw">interface</span> {
-    <span class="fn">ListUserPlaylists</span>(ctx context.Context) ([]<span class="tp">Playlist</span>, <span class="tp">bool</span>, <span class="tp">error</span>)
+    <span class="fn">ListUserPlaylists</span>(ctx context.Context) (playlists []<span class="tp">Playlist</span>, truncated <span class="tp">bool</span>, err <span class="tp">error</span>)
 }
-<span class="kw">type</span> <span class="tp">LikedTrackProvider</span> <span class="kw">interface</span> {
-    <span class="fn">ListUserLikedTracks</span>(ctx context.Context) ([]<span class="tp">Track</span>, <span class="tp">bool</span>, <span class="tp">error</span>)
-}
-<span class="cm">// + AlbumProvider, ArtistProvider, ContactProvider</span></code></pre>
+<span class="cm">// liked tracks / albums / artists / contacts / photos likewise.</span></code></pre>
     </div>
     <div class="code-panel">
-      <div class="code-header code-header-py">Python — protocols</div>
-<pre><code><span class="kw">from</span> typing <span class="kw">import</span> Protocol
-
-<span class="kw">class</span> <span class="tp">ServiceConnector</span>(Protocol):
-    <span class="kw">def</span> <span class="fn">capabilities</span>(self) -&gt; ServiceCapabilities: ...
-    <span class="kw">def</span> <span class="fn">system_instructions</span>(self, base_url: <span class="tp">str</span>) -&gt; <span class="tp">str</span>: ...
-    <span class="kw">def</span> <span class="fn">handle_proxy</span>(self, w, r, remaining_path: <span class="tp">str</span>) -&gt; <span class="kw">None</span>: ...
+      <div class="code-header code-header-py">Python — Protocol / ABC</div>
+<pre><code><span class="kw">class</span> <span class="tp">ServiceConnector</span>(Protocol):
+    <span class="kw">def</span> <span class="fn">capabilities</span>(self) -> <span class="tp">ServiceCapabilities</span>: ...
+    <span class="kw">def</span> <span class="fn">system_instructions</span>(self, base_url: <span class="tp">str</span>) -> <span class="tp">str</span>: ...
+    <span class="kw">def</span> <span class="fn">handle_proxy</span>(self, w, r, remaining_path: <span class="tp">str</span>) -> <span class="kw">None</span>: ...
 
 <span class="kw">class</span> <span class="tp">PlaylistProvider</span>(Protocol):
-    <span class="kw">def</span> <span class="fn">list_user_playlists</span>(self, ctx):
-        <span class="str">"→ (list[Playlist], truncated: bool)"</span>
+    <span class="kw">def</span> <span class="fn">list_user_playlists</span>(self, ctx) -> <span class="tp">tuple</span>[<span class="tp">list</span>[Playlist], <span class="tp">bool</span>, Exception | <span class="kw">None</span>]: ...
 
-<span class="cm"># Runtime check in Go:</span>
-<span class="cm">#   provider, ok := any(connector).(PlaylistProvider)</span>
-<span class="cm"># Python: isinstance(connector, PlaylistProvider)</span></code></pre>
+<span class="cm"># Go type assertion ≈ isinstance / runtime Protocol check</span>
+<span class="kw">if</span> isinstance(connector, PlaylistProvider):
+    playlists, truncated, err = connector.list_user_playlists(ctx)</code></pre>
     </div>
   </div>
 
-  <div class="explain good">
+  <div class="explain">
     <p>
-      <strong>Go insight:</strong> <code>any(connector).(P)</code> is a type assertion.
-      The library pipeline walks <code>s.connectors</code>, asserts each connector to
-      <code>PlaylistProvider</code> / <code>LikedTrackProvider</code> / etc., and only
-      fans out to services that implement the interface. Adding a new connector is
-      registering it in <code>main.go</code> — no switch on service ID in the core.
+      <strong>Empty operations still matter.</strong>
+      <code>DataTypeCapability.Operations</code> is a list of structured
+      <code>Operation</code> values (method, path, parameters, response spec) —
+      not bare strings. An empty list means “type recognized, not implemented”.
+    </p>
+    <p>
+      <strong>Never hardcode upstream bases.</strong> Connectors must read
+      <code>config.GetService(id).Endpoint</code> so mock tests and custom endpoints work.
     </p>
   </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="proxy">
-  <h2><span class="n">07</span>Service proxy</h2>
-  <p>
-    <code>HandleServiceProxy</code> is the data-plane entry point. It classifies the path,
-    checks permissions, then either delegates to a connector or does a generic
-    cache + OAuth + forward.
-  </p>
+  <h2><span class="n">07</span>Service proxy pipeline</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
+      <defs>
+        <marker id="pA" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
+      </defs>
+      <rect x="15" y="70" width="120" height="56" rx="8" fill="#1f2937" stroke="#58a6ff"/>
+      <text x="75" y="94" fill="#58a6ff" text-anchor="middle" font-weight="700">Agent</text>
+      <text x="75" y="112" fill="#8b949e" text-anchor="middle" font-size="11">/v1/services/{id}/…</text>
 
-  <div class="steps">
-    <div class="step">
-      <div class="t">Parse service ID and remaining path</div>
-      <div class="d"><code>/v1/services/spotify/me/tracks</code> → id=<code>spotify</code>, path=<code>/me/tracks</code></div>
-    </div>
-    <div class="step">
-      <div class="t">Lookup service; special-case <code>/capabilities</code></div>
-      <div class="d">Connector metadata filtered by that service’s permissions map.</div>
-    </div>
-    <div class="step">
-      <div class="t">Enforce <code>action: block</code> and data-type permissions</div>
-      <div class="d"><code>AllowDataPermission</code> classifies the path via <code>DataTypeForPath</code> (tracks, playlists, player, …).</div>
-    </div>
-    <div class="step">
-      <div class="t">Delegate to connector, or generic forward</div>
-      <div class="d">Connectors transform and paginate; generic path injects OAuth and caches GETs.</div>
-    </div>
+      <rect x="170" y="70" width="140" height="56" rx="8" fill="#161b22" stroke="#d29922"/>
+      <text x="240" y="92" fill="#e6edf3" text-anchor="middle">AuthMiddleware</text>
+      <text x="240" y="110" fill="#8b949e" text-anchor="middle" font-size="11">401 if unauthorized</text>
+
+      <rect x="345" y="70" width="150" height="56" rx="8" fill="#161b22" stroke="#58a6ff"/>
+      <text x="420" y="92" fill="#e6edf3" text-anchor="middle">HandleServiceProxy</text>
+      <text x="420" y="110" fill="#8b949e" text-anchor="middle" font-size="11">svc + permissions</text>
+
+      <rect x="530" y="20" width="160" height="48" rx="8" fill="#161b22" stroke="#bc8cff"/>
+      <text x="610" y="40" fill="#e6edf3" text-anchor="middle">/capabilities</text>
+      <text x="610" y="56" fill="#8b949e" text-anchor="middle" font-size="11">filter by permissions</text>
+
+      <rect x="530" y="90" width="160" height="56" rx="8" fill="#0d2818" stroke="#3fb950"/>
+      <text x="610" y="112" fill="#3fb950" text-anchor="middle" font-weight="600">connector.HandleProxy</text>
+      <text x="610" y="130" fill="#8b949e" text-anchor="middle" font-size="11">runConnectorProxy</text>
+
+      <rect x="720" y="90" width="160" height="56" rx="8" fill="#161b22" stroke="#8b949e" stroke-dasharray="4 3"/>
+      <text x="800" y="112" fill="#8b949e" text-anchor="middle">generic forward</text>
+      <text x="800" y="130" fill="#8b949e" text-anchor="middle" font-size="11">no connector registered</text>
+
+      <rect x="345" y="170" width="480" height="48" rx="8" fill="#0d1117" stroke="#3fb950"/>
+      <text x="585" y="190" fill="#e6edf3" text-anchor="middle" font-size="11">token → cache GET → mapUpstream → upstream → 401/429 → expandPages</text>
+      <text x="585" y="208" fill="#8b949e" text-anchor="middle" font-size="11">→ transform → cache-on-200 → JSON + X-Aegis-Cache</text>
+
+      <line x1="135" y1="98" x2="165" y2="98" stroke="#58a6ff" marker-end="url(#pA)"/>
+      <line x1="310" y1="98" x2="340" y2="98" stroke="#58a6ff" marker-end="url(#pA)"/>
+      <line x1="495" y1="90" x2="525" y2="50" stroke="#bc8cff" marker-end="url(#pA)"/>
+      <line x1="495" y1="105" x2="525" y2="112" stroke="#3fb950" marker-end="url(#pA)"/>
+      <line x1="420" y1="126" x2="420" y2="165" stroke="#3fb950" marker-end="url(#pA)"/>
+    </svg>
   </div>
 
-  <div class="code-compare">
-    <div class="code-panel">
-      <div class="code-header code-header-go">Go — proxy.go (generic path)</div>
-<pre><code><span class="cm">// GET cache lookup</span>
-cacheKey := serviceID + <span class="str">":"</span> + r.URL.<span class="fn">RequestURI</span>()
-<span class="kw">if</span> r.Method == http.MethodGet {
-    <span class="kw">if</span> cached, ok := s.cache.<span class="fn">Get</span>(cacheKey); ok {
-        w.Header().<span class="fn">Set</span>(<span class="str">"X-Aegis-Cache"</span>, <span class="str">"hit"</span>)
-        io.<span class="fn">WriteString</span>(w, cached)
+  <div class="code-single">
+    <div class="code-header code-header-go">Go — connector_proxy.go (shared OAuth path)</div>
+<pre><code><span class="kw">func</span> <span class="fn">runConnectorProxy</span>(s *<span class="tp">Server</span>, w http.ResponseWriter, r *http.Request, remainingPath <span class="tp">string</span>, opts <span class="tp">connectorProxyOpts</span>) {
+    token := s.<span class="fn">getValidToken</span>(opts.serviceID, logger)
+    <span class="kw">if</span> token == <span class="str">""</span> {
+        <span class="fn">writeJSONError</span>(w, http.StatusUnauthorized, <span class="str">"… authorize at /v1/auth/"</span>+opts.serviceID+<span class="str">"/login"</span>)
         <span class="kw">return</span>
     }
-}
-
-<span class="cm">// Build upstream request, copy headers, inject OAuth</span>
-upstreamReq, _ := http.<span class="fn">NewRequestWithContext</span>(
-    r.Context(), r.Method, upstreamURL, r.Body)
-<span class="kw">if</span> tok := s.<span class="fn">getValidToken</span>(serviceID, logger); tok != <span class="str">""</span> {
-    upstreamReq.Header.<span class="fn">Set</span>(<span class="str">"Authorization"</span>, <span class="str">"Bearer "</span>+tok)
-}
-resp, _ := http.DefaultClient.<span class="fn">Do</span>(upstreamReq)
-
-<span class="cm">// Cache GET responses (default TTL 5m)</span>
-<span class="kw">if</span> r.Method == http.MethodGet {
-    s.cache.<span class="fn">Set</span>(cacheKey, <span class="fn">string</span>(data), ttl)
+    <span class="cm">// optional mapUpstream(path, query) — provider path quirks stay in the connector</span>
+    cacheKey := opts.serviceID + <span class="str">":"</span> + r.URL.<span class="fn">RequestURI</span>()
+    <span class="kw">if</span> r.Method == http.MethodGet {
+        <span class="kw">if</span> cached, ok := s.cache.<span class="fn">Get</span>(cacheKey); ok {
+            w.Header().<span class="fn">Set</span>(<span class="str">"X-Aegis-Cache"</span>, <span class="str">"hit"</span>)
+            io.<span class="fn">WriteString</span>(w, cached); <span class="kw">return</span>
+        }
+    }
+    data, status, err := <span class="fn">doUpstreamRequest</span>(r.Context(), r.Method, upstreamURL, r.Body, token)
+    <span class="kw">if</span> status == http.StatusUnauthorized { <span class="cm">/* re-auth hint */</span> }
+    <span class="kw">if</span> status == http.StatusTooManyRequests { <span class="cm">/* Retry-After + 429 */</span> }
+    <span class="kw">if</span> opts.expandPages != <span class="kw">nil</span> &amp;&amp; r.Method == http.MethodGet { data = <span class="fn">mergePages</span>(…) }
+    transformed := opts.<span class="fn">transform</span>(remainingPath, data, logger)
+    <span class="kw">if</span> r.Method == http.MethodGet &amp;&amp; status == http.StatusOK {
+        s.cache.<span class="fn">Set</span>(cacheKey, <span class="fn">string</span>(result), ttl)  <span class="cm">// cache 200 GET only</span>
+    }
 }</code></pre>
-    </div>
-    <div class="code-panel">
-      <div class="code-header code-header-py">Python</div>
-<pre><code>cache_key = <span class="kw">f</span><span class="str">"{service_id}:{request_uri}"</span>
-<span class="kw">if</span> r.method == <span class="str">"GET"</span>:
-    cached = s.cache.get(cache_key)
-    <span class="kw">if</span> cached <span class="kw">is not None</span>:
-        w.headers[<span class="str">"X-Aegis-Cache"</span>] = <span class="str">"hit"</span>
-        <span class="kw">return</span> cached
+  </div>
 
-upstream_req = httpx.Request(r.method, upstream_url, content=r.body)
-tok = s.get_valid_token(service_id)
-<span class="kw">if</span> tok:
-    upstream_req.headers[<span class="str">"Authorization"</span>] = <span class="kw">f</span><span class="str">"Bearer {tok}"</span>
-resp = client.send(upstream_req)
-
-<span class="kw">if</span> r.method == <span class="str">"GET"</span>:
-    s.cache.set(cache_key, resp.text, ttl)</code></pre>
-    </div>
+  <div class="explain good">
+    <p>
+      <strong>Prefer shared helpers.</strong> New connector work should call
+      <code>runConnectorProxy</code> / <code>doUpstreamRequest</code> /
+      <code>aegisHTTPClient</code> instead of inventing another
+      <code>http.DefaultClient</code> call site.
+    </p>
   </div>
 </section>
 
@@ -864,214 +889,182 @@ resp = client.send(upstream_req)
 <section id="library">
   <h2><span class="n">08</span>Unified library pipeline</h2>
   <p>
-    The library is the heart of the “unified taste” design. Six datasets
-    (playlists, liked tracks, albums, artists, contacts, photos) share one generic
-    pipeline. Adding a kind is a registry entry plus a thin typed handler —
-    not another copy-paste fan-out.
+    The library answers questions like “what playlists do I have?” without forcing
+    the agent to know which provider holds which copy. A
+    <strong>LibraryKind registry</strong> plus one generic aggregate pipeline avoids
+    cloning the same fan-out logic for every dataset.
+  </p>
+  <p>
+    Registered kinds at this version:
+    <code>playlists</code>, <code>tracks</code>, <code>albums</code>, <code>artists</code>, <code>contacts</code>, <code>photos</code>, <code>events</code>, <code>messages</code>.
+    Extra library routes: <code>/v1/library/review</code>,
+    <code>/v1/library/links</code>, <code>POST /v1/library/mirror</code>.
   </p>
 
   <div class="diagram">
-    <svg viewBox="0 0 860 480" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
+    <svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
       <defs>
-        <marker id="lB" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#58a6ff"/></marker>
-        <marker id="lG" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
+        <marker id="lA" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#3fb950"/></marker>
       </defs>
-      <rect x="280" y="20" width="300" height="44" rx="8" fill="#1f2937" stroke="#58a6ff" stroke-width="1.5"/>
-      <text x="430" y="47" fill="#58a6ff" text-anchor="middle" font-weight="600">GET /v1/library/tracks</text>
+      <rect x="20" y="40" width="180" height="56" rx="8" fill="#161b22" stroke="#58a6ff"/>
+      <text x="110" y="64" fill="#58a6ff" text-anchor="middle" font-weight="700">GET /v1/library/{kind}</text>
+      <text x="110" y="82" fill="#8b949e" text-anchor="middle" font-size="11">auth → handler</text>
 
-      <rect x="280" y="90" width="300" height="44" rx="8" fill="#161b22" stroke="#58a6ff" stroke-width="1.5"/>
-      <text x="430" y="117" fill="#e6edf3" text-anchor="middle">handleLibraryAggregate[Track]</text>
+      <rect x="240" y="40" width="200" height="56" rx="8" fill="#161b22" stroke="#3fb950"/>
+      <text x="340" y="64" fill="#e6edf3" text-anchor="middle">handleLibraryAggregate</text>
+      <text x="340" y="82" fill="#8b949e" text-anchor="middle" font-size="11">librarykind.go generics</text>
 
-      <rect x="280" y="160" width="300" height="44" rx="8" fill="#161b22" stroke="#3fb950" stroke-width="1.5"/>
-      <text x="430" y="187" fill="#e6edf3" text-anchor="middle">cache hit? return library:tracks</text>
+      <rect x="480" y="10" width="180" height="40" rx="8" fill="#0d2818" stroke="#1DB954"/>
+      <text x="570" y="35" fill="#1DB954" text-anchor="middle">spotify provider</text>
+      <rect x="480" y="60" width="180" height="40" rx="8" fill="#0d1a28" stroke="#58a6ff"/>
+      <text x="570" y="85" fill="#58a6ff" text-anchor="middle">youtube-music provider</text>
+      <rect x="480" y="110" width="180" height="40" rx="8" fill="#1f2937" stroke="#8b949e"/>
+      <text x="570" y="135" fill="#8b949e" text-anchor="middle">other kind providers…</text>
 
-      <rect x="280" y="230" width="300" height="44" rx="8" fill="#161b22" stroke="#bc8cff" stroke-width="1.5"/>
-      <text x="430" y="257" fill="#e6edf3" text-anchor="middle">collectProviders → type-assert LikedTrackProvider</text>
+      <rect x="700" y="40" width="170" height="56" rx="8" fill="#161b22" stroke="#bc8cff"/>
+      <text x="785" y="64" fill="#e6edf3" text-anchor="middle">merge + stamp</text>
+      <text x="785" y="82" fill="#8b949e" text-anchor="middle" font-size="11">match / canonical</text>
 
-      <rect x="40" y="310" width="180" height="56" rx="8" fill="#0d2818" stroke="#1DB954" stroke-width="1.5"/>
-      <text x="130" y="334" fill="#1DB954" text-anchor="middle" font-weight="600">Spotify</text>
-      <text x="130" y="352" fill="#8b949e" text-anchor="middle" font-size="11">ListUserLikedTracks</text>
+      <rect x="240" y="160" width="630" height="110" rx="8" fill="#0d1117" stroke="#30363d"/>
+      <text x="555" y="185" fill="#e6edf3" text-anchor="middle" font-weight="600">Pipeline steps</text>
+      <text x="555" y="208" fill="#8b949e" text-anchor="middle" font-size="11">1. collectProviders[T,P] — type-assert connectors, skip blocked / denied</text>
+      <text x="555" y="228" fill="#8b949e" text-anchor="middle" font-size="11">2. fan-out parallel fetch per service (per-provider status / truncation)</text>
+      <text x="555" y="248" fill="#8b949e" text-anchor="middle" font-size="11">3. merge (ISRC/UPC/MBID/name) · optional enrich (MusicBrainz, links)</text>
+      <text x="555" y="268" fill="#8b949e" text-anchor="middle" font-size="11">4. stamp canonical · encode neutral list + by_service map</text>
 
-      <rect x="250" y="310" width="180" height="56" rx="8" fill="#0d1a28" stroke="#58a6ff" stroke-width="1.5"/>
-      <text x="340" y="334" fill="#58a6ff" text-anchor="middle" font-weight="600">YouTube Music</text>
-      <text x="340" y="352" fill="#8b949e" text-anchor="middle" font-size="11">ListUserLikedTracks</text>
-
-      <rect x="460" y="310" width="180" height="56" rx="8" fill="#1f2937" stroke="#8b949e" stroke-width="1.5"/>
-      <text x="550" y="334" fill="#8b949e" text-anchor="middle" font-weight="600">Amazon Music</text>
-      <text x="550" y="352" fill="#8b949e" text-anchor="middle" font-size="11">unauthorized / no token</text>
-
-      <rect x="120" y="400" width="520" height="50" rx="8" fill="#1c2129" stroke="#3fb950" stroke-width="2"/>
-      <text x="380" y="422" fill="#3fb950" text-anchor="middle" font-weight="600">sort → MergeTracksSync → TrackList + by_service</text>
-      <text x="380" y="440" fill="#8b949e" text-anchor="middle" font-size="11">cache 60s · X-Aegis-Cache: miss</text>
-
-      <line x1="430" y1="64" x2="430" y2="86" stroke="#58a6ff" marker-end="url(#lB)"/>
-      <line x1="430" y1="134" x2="430" y2="156" stroke="#58a6ff" marker-end="url(#lB)"/>
-      <line x1="430" y1="204" x2="430" y2="226" stroke="#3fb950" marker-end="url(#lG)"/>
-      <line x1="380" y1="274" x2="150" y2="306" stroke="#3fb950" marker-end="url(#lG)"/>
-      <line x1="430" y1="274" x2="340" y2="306" stroke="#58a6ff" marker-end="url(#lB)"/>
-      <line x1="480" y1="274" x2="530" y2="306" stroke="#8b949e" marker-end="url(#lB)"/>
-      <line x1="130" y1="366" x2="250" y2="398" stroke="#3fb950" marker-end="url(#lG)"/>
-      <line x1="340" y1="366" x2="380" y2="398" stroke="#58a6ff" marker-end="url(#lB)"/>
-      <text x="680" y="250" fill="#8b949e" font-size="11">concurrent goroutines</text>
-      <text x="680" y="266" fill="#8b949e" font-size="11">+ panic recovery per provider</text>
-      <text x="680" y="282" fill="#8b949e" font-size="11">by_service: ok / unauthorized / error</text>
+      <line x1="200" y1="68" x2="235" y2="68" stroke="#58a6ff" marker-end="url(#lA)"/>
+      <line x1="440" y1="60" x2="475" y2="35" stroke="#3fb950" marker-end="url(#lA)"/>
+      <line x1="440" y1="68" x2="475" y2="75" stroke="#3fb950" marker-end="url(#lA)"/>
+      <line x1="660" y1="40" x2="695" y2="55" stroke="#3fb950" marker-end="url(#lA)"/>
+      <line x1="340" y1="96" x2="340" y2="155" stroke="#30363d" stroke-dasharray="4 3"/>
     </svg>
-    <p class="diagram-label">Generic library pipeline. Connectors that implement the provider interface are fanned out in parallel; failures degrade to per-service status, not a 500.</p>
   </div>
 
   <div class="code-compare">
     <div class="code-panel">
-      <div class="code-header code-header-go">Go — librarykind.go (generics)</div>
-<pre><code><span class="kw">type</span> <span class="tp">LibraryKind</span> <span class="kw">struct</span> {
-    ID, Path, PermType, Label, Usage <span class="tp">string</span>
-    Keywords []<span class="tp">string</span>
-    HasProviders <span class="kw">func</span>(*<span class="tp">Server</span>) <span class="tp">bool</span>
-    Readable     <span class="kw">func</span>(*<span class="tp">Server</span>) <span class="tp">bool</span>
+      <div class="code-header code-header-go">Go — kind handler + providers</div>
+<pre><code><span class="cm">// library.go — one thin handler per kind, shared aggregate underneath.</span>
+<span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">HandleLibraryPlaylists</span>(w http.ResponseWriter, r *http.Request) {
+    kind := *<span class="fn">LibraryKindByID</span>(<span class="str">"playlists"</span>)
+    <span class="fn">handleLibraryAggregate</span>(s, w, r, libraryKindSpec[<span class="tp">Playlist</span>]{
+        kind: kind,
+        targets: <span class="kw">func</span>(s *<span class="tp">Server</span>) ([]namedLister[<span class="tp">Playlist</span>], []<span class="tp">string</span>) {
+            <span class="kw">return</span> <span class="fn">collectProviders</span>[<span class="tp">Playlist</span>, <span class="tp">PlaylistProvider</span>](s, kind.PermType,
+                <span class="kw">func</span>(p <span class="tp">PlaylistProvider</span>) <span class="kw">func</span>(context.Context) ([]<span class="tp">Playlist</span>, <span class="tp">bool</span>, <span class="tp">error</span>) {
+                    <span class="kw">return</span> p.ListUserPlaylists
+                })
+        },
+        merge: <span class="kw">func</span>(in []<span class="tp">Playlist</span>) []<span class="tp">Playlist</span> {
+            <span class="kw">return</span> <span class="fn">MergePlaylistsSyncLinked</span>(in, s.links.PlaylistLinkKey)
+        },
+        markCanonical: s.stampPlaylistCanonical,
+        encode: <span class="kw">func</span>(merged []<span class="tp">Playlist</span>, bySvc <span class="kw">map</span>[<span class="tp">string</span>]<span class="tp">LibraryServiceStatus</span>) <span class="tp">any</span> {
+            <span class="kw">return</span> <span class="tp">PlaylistList</span>{Playlists: merged, Total: <span class="fn">len</span>(merged), ByService: bySvc, …}
+        },
+    })
 }
 
-<span class="kw">func</span> <span class="fn">handleLibraryAggregate</span>[T <span class="tp">any</span>](
-    s *<span class="tp">Server</span>, w http.ResponseWriter, r *http.Request,
-    spec libraryKindSpec[T],
-) {
-    <span class="cm">// cache → collectProviders → fan-out goroutines → merge → encode</span>
-    <span class="kw">for</span> _, t := <span class="kw">range</span> targets {
-        wg.<span class="fn">Add</span>(1)
-        <span class="kw">go</span> <span class="kw">func</span>(t namedLister[T]) {
-            <span class="kw">defer</span> wg.<span class="fn">Done</span>()
-            <span class="kw">defer</span> <span class="kw">func</span>() {
-                <span class="kw">if</span> rec := <span class="fn">recover</span>(); rec != <span class="kw">nil</span> {
-                    err = <span class="fn">fmt.Errorf</span>(<span class="str">"provider panic: %v"</span>, rec)
-                }
-            }()
-            items, truncated, err = t.list(ctx)
-            <span class="cm">// map err → bySvc[id] = ok | unauthorized | error</span>
-        }(t)
+<span class="cm">// librarykind.go — hasProvider uses Go generics + type assertion</span>
+<span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">hasProvider</span>[P <span class="tp">any</span>]() <span class="tp">bool</span> {
+    <span class="kw">for</span> _, connector := <span class="kw">range</span> s.connectors {
+        <span class="kw">if</span> _, ok := <span class="fn">any</span>(connector).(P); ok { <span class="kw">return</span> <span class="kw">true</span> }
     }
-    wg.<span class="fn">Wait</span>()
-    merged := spec.<span class="fn">merge</span>(all)
-    s.cache.<span class="fn">Set</span>(kind.<span class="fn">CacheKey</span>(), result, 60*time.Second)
+    <span class="kw">return</span> <span class="kw">false</span>
 }</code></pre>
     </div>
     <div class="code-panel">
-      <div class="code-header code-header-py">Python — same shape without generics</div>
-<pre><code><span class="kw">def</span> <span class="fn">handle_library_aggregate</span>(s, w, r, spec):
-    cached = s.cache.get(spec.kind.cache_key())
-    <span class="kw">if</span> cached:
-        <span class="kw">return</span> cached
+      <div class="code-header code-header-py">Python — same idea without generics</div>
+<pre><code><span class="kw">def</span> <span class="fn">collect_providers</span>(s, protocol, list_method, perm_type):
+    targets, denied = [], []
+    <span class="kw">for</span> cid, connector <span class="kw">in</span> s.connectors.items():
+        svc = s.config.get_service(cid)
+        <span class="kw">if</span> svc <span class="kw">is None</span> <span class="kw">or</span> svc.action == <span class="str">"block"</span>:
+            <span class="kw">continue</span>
+        <span class="kw">if not</span> isinstance(connector, protocol):
+            <span class="kw">continue</span>
+        <span class="kw">if not</span> svc.permissions.allows_read(perm_type):
+            denied.append(cid); <span class="kw">continue</span>
+        targets.append((cid, getattr(connector, list_method)))
+    <span class="kw">return</span> targets, denied
 
-    targets, denied = spec.collect(s)
-    <span class="kw">if not</span> targets:
-        <span class="kw">return</span> 403 <span class="kw">if</span> denied <span class="kw">else</span> 404
-
-    <span class="kw">async def</span> <span class="fn">one</span>(t):
-        <span class="kw">try</span>:
-            <span class="kw">return</span> <span class="kw">await</span> t.list(ctx), <span class="str">"ok"</span>
-        <span class="kw">except</span> Unauthorized:
-            <span class="kw">return</span> [], <span class="str">"unauthorized"</span>
-        <span class="kw">except</span> Exception <span class="kw">as</span> e:
-            <span class="kw">return</span> [], <span class="str">"error"</span>
-
-    results = <span class="kw">await</span> asyncio.gather(*[one(t) <span class="kw">for</span> t <span class="kw">in</span> targets])
-    all_items = [i <span class="kw">for</span> items, _ <span class="kw">in</span> results <span class="kw">for</span> i <span class="kw">in</span> items]
-    merged = spec.merge(sorted(all_items, key=spec.sort_key))
-    s.cache.set(spec.kind.cache_key(), encode(merged), ttl=60)</code></pre>
+<span class="kw">async def</span> <span class="fn">handle_library_playlists</span>(s, r):
+    targets, denied = <span class="fn">collect_providers</span>(s, PlaylistProvider, <span class="str">"list_user_playlists"</span>, <span class="str">"playlists"</span>)
+    results = <span class="kw">await</span> asyncio.gather(*[<span class="fn">fetch</span>(fn) <span class="kw">for</span> _cid, fn <span class="kw">in</span> targets], return_exceptions=<span class="kw">True</span>)
+    merged = merge_playlists_sync_linked(items, s.links.playlist_link_key)
+    <span class="kw">return</span> PlaylistList(playlists=merged, by_service=…)</code></pre>
     </div>
   </div>
 
   <div class="explain">
     <p>
-      <strong>Why Go generics here?</strong>
-      <code>handleLibraryAggregate[T]</code> keeps the pipeline type-safe
-      (<code>[]Track</code>, <code>[]Playlist</code>, <code>[]Contact</code>) while sharing
-      one implementation. Python would use duck typing or <code>TypeVar</code>;
-      Go needs the type parameter so <code>namedLister[T].list</code> returns
-      the right slice type without <code>interface{}</code> casts everywhere.
+      <strong>Adding a library kind</strong> means registering a
+      <code>LibraryKind</code> and a thin typed handler — not cloning another
+      aggregate pipeline. Registry order is stable and drives route registration
+      and injection priority.
     </p>
   </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="sync">
-  <h2><span class="n">09</span>Neutral models &amp; cross-service sync</h2>
+  <h2><span class="n">09</span>Neutral models, match, canonical</h2>
   <p>
-    Service identity never lives on the user-facing object. A playlist is a
-    <code>Playlist</code> with a list of <code>sources[]</code> — one per service copy.
-    Same-named playlists on Spotify and YouTube become one entity.
+    Neutral models live at the library boundary (<code>models.go</code>). Provider
+    quirks stay inside connectors. Service-local identity is never top-level:
+    it lives in <code>sources[]</code> so one logical item can point at copies on
+    several services.
   </p>
 
-  <div class="code-compare">
-    <div class="code-panel">
-      <div class="code-header code-header-go">Go — models.go + match.go</div>
-<pre><code><span class="kw">type</span> <span class="tp">Playlist</span> <span class="kw">struct</span> {
-    Name        <span class="tp">string</span>            <span class="str">`json:"name"`</span>
-    Description <span class="tp">string</span>            <span class="str">`json:"description,omitempty"`</span>
-    Owner       <span class="tp">string</span>            <span class="str">`json:"owner,omitempty"`</span>
-    TrackCount  <span class="tp">int</span>               <span class="str">`json:"track_count"`</span>
-    Sources     []<span class="tp">PlaylistSource</span>  <span class="str">`json:"sources,omitempty"`</span>
+  <div class="code-single">
+    <div class="code-header code-header-go">Go — models.go (shape, abbreviated)</div>
+<pre><code><span class="kw">type</span> <span class="tp">Track</span> <span class="kw">struct</span> {
+    Name      <span class="tp">string</span>        <span class="cm">`json:"name"`</span>
+    Artists   []<span class="tp">Artist</span>      <span class="cm">`json:"artists,omitempty"`</span>
+    Album     *<span class="tp">Album</span>        <span class="cm">`json:"album,omitempty"`</span>
+    DurationMs <span class="tp">int</span>          <span class="cm">`json:"duration_ms,omitempty"`</span>
+    EntityID  <span class="tp">string</span>        <span class="cm">`json:"entity_id,omitempty"`</span> <span class="cm">// ISRC / MBID when known</span>
+    Match     <span class="tp">string</span>        <span class="cm">`json:"match,omitempty"`</span>      <span class="cm">// isrc | mbid | name</span>
+    Sources   []<span class="tp">TrackSource</span> <span class="cm">`json:"sources,omitempty"`</span>
 }
 
-<span class="kw">func</span> <span class="fn">NormalizeIdentityKey</span>(name <span class="tp">string</span>) <span class="tp">string</span> {
-    s := strings.<span class="fn">ToLower</span>(strings.<span class="fn">TrimSpace</span>(name))
-    s = strings.<span class="fn">ReplaceAll</span>(s, <span class="str">" - topic"</span>, <span class="str">""</span>)
-    s = strings.<span class="fn">Join</span>(strings.<span class="fn">Fields</span>(s), <span class="str">" "</span>)
-    <span class="kw">return</span> s
-}
+<span class="kw">type</span> <span class="tp">TrackSource</span> <span class="kw">struct</span> {
+    Service     <span class="tp">string</span> <span class="cm">`json:"service"`</span>            <span class="cm">// "spotify"</span>
+    ID          <span class="tp">string</span> <span class="cm">`json:"id,omitempty"`</span>
+    URL         <span class="tp">string</span> <span class="cm">`json:"url,omitempty"`</span>
+    Canonical   <span class="tp">bool</span>   <span class="cm">`json:"canonical,omitempty"`</span> <span class="cm">// issue #16 home copy</span>
+}</code></pre>
+  </div>
 
-<span class="cm">// MergePlaylistsSync groups by normalized name,</span>
-<span class="cm">// union of Sources, track_count = max.</span></code></pre>
+  <div class="two-col">
+    <div class="card">
+      <h4>Cross-service match priority</h4>
+      <p>
+        Tracks: ISRC / MusicBrainz recording MBID → title+artist (+duration guard).
+        Albums: UPC / release-group MBID → title+artist.
+        Artists: MBID → normalized name (strip YouTube “ - Topic”).
+        Playlists: explicit entity link → same title.
+        Preferred durable IDs beat name-only merges.
+      </p>
     </div>
-    <div class="code-panel">
-      <div class="code-header code-header-py">Python</div>
-<pre><code><span class="kw">@dataclass</span>
-<span class="kw">class</span> <span class="tp">PlaylistSource</span>:
-    service: <span class="tp">str</span>
-    id: <span class="tp">str</span>
-    url: <span class="tp">str</span> | <span class="kw">None</span> = <span class="kw">None</span>
-
-<span class="kw">@dataclass</span>
-<span class="kw">class</span> <span class="tp">Playlist</span>:
-    name: <span class="tp">str</span>
-    track_count: <span class="tp">int</span>
-    sources: <span class="tp">list</span>[PlaylistSource] = field(default_factory=<span class="tp">list</span>)
-    description: <span class="tp">str</span> = <span class="str">""</span>
-
-<span class="kw">def</span> <span class="fn">normalize_identity_key</span>(name: <span class="tp">str</span>) -&gt; <span class="tp">str</span>:
-    s = name.strip().lower().replace(<span class="str">" - topic"</span>, <span class="str">""</span>)
-    <span class="kw">return</span> <span class="str">" "</span>.join(s.split())</code></pre>
+    <div class="card">
+      <h4>Canonical + write policy</h4>
+      <p>
+        Aegis does not store media. Config <code>canonical_for</code> marks the
+        non-Aegis home per kind (at most one non-blocked service per kind).
+        Connectors may also mark inherent ownership (e.g. Google Photos bytes).
+        Pre-request injection tells agents to prefer the home for writes/mirrors.
+      </p>
     </div>
   </div>
 
   <div class="code-single">
-    <div class="code-header code-header-json">What an agent sees (neutral shape)</div>
-<pre><code>{
-  <span class="str">"tracks"</span>: [{
-    <span class="str">"name"</span>: <span class="str">"Blinding Lights"</span>,
-    <span class="str">"artists"</span>: [{ <span class="str">"name"</span>: <span class="str">"The Weeknd"</span>, <span class="str">"sources"</span>: [
-      { <span class="str">"service"</span>: <span class="str">"spotify"</span>, <span class="str">"name"</span>: <span class="str">"The Weeknd"</span> },
-      { <span class="str">"service"</span>: <span class="str">"youtube-music"</span>, <span class="str">"name"</span>: <span class="str">"The Weeknd - Topic"</span> }
-    ]}],
-    <span class="str">"album"</span>: { <span class="str">"name"</span>: <span class="str">"After Hours"</span> },
-    <span class="str">"sources"</span>: [
-      { <span class="str">"service"</span>: <span class="str">"spotify"</span>, <span class="str">"id"</span>: <span class="str">"t1"</span> },
-      { <span class="str">"service"</span>: <span class="str">"youtube-music"</span>, <span class="str">"id"</span>: <span class="str">"vid1"</span> }
-    ]
-  }],
-  <span class="str">"total"</span>: 1,
-  <span class="str">"synced"</span>: <span class="kw">true</span>,
-  <span class="str">"by_service"</span>: {
-    <span class="str">"spotify"</span>: { <span class="str">"status"</span>: <span class="str">"ok"</span>, <span class="str">"count"</span>: 120 },
-    <span class="str">"youtube-music"</span>: { <span class="str">"status"</span>: <span class="str">"ok"</span>, <span class="str">"count"</span>: 45 }
-  }
+    <div class="code-header code-header-go">Go — match.go identity key</div>
+<pre><code><span class="kw">func</span> <span class="fn">NormalizeIdentityKey</span>(name <span class="tp">string</span>) <span class="tp">string</span> {
+    s := strings.<span class="fn">ToLower</span>(strings.<span class="fn">TrimSpace</span>(name))
+    s = strings.<span class="fn">ReplaceAll</span>(s, <span class="str">" - topic"</span>, <span class="str">""</span>)
+    s = strings.<span class="fn">Join</span>(strings.<span class="fn">Fields</span>(s), <span class="str">" "</span>)
+    <span class="kw">return</span> s
 }</code></pre>
-  </div>
-
-  <div class="explain warn">
-    <p>
-      <strong>v1 matching is text-based.</strong> Contacts prefer email → phone → handle → name
-      (union-find). Music uses <code>NormalizeIdentityKey</code> only.
-      Better entity resolution (MBIDs, ISRC, fuzzy names) is intentionally deferred —
-      tracked in issue #4.
-    </p>
   </div>
 </section>
 
@@ -1080,102 +1073,118 @@ resp = client.send(upstream_req)
   <h2><span class="n">10</span>Data permissions</h2>
   <p>
     Beyond <code>action: inject|block</code>, each service can restrict
-    <strong>what kind of access agents have to specific data types</strong>:
+    <strong>which data types agents may touch</strong>. Permissions are data on the
+    service config, enforced on proxy, library, capabilities, and injection.
   </p>
-
-  <div class="code-compare">
-    <div class="code-panel">
-      <div class="code-header code-header-json">aegis.json</div>
-<pre><code><span class="str">"permissions"</span>: {
-  <span class="str">"default"</span>: <span class="str">"read"</span>,
-  <span class="str">"playlists"</span>: <span class="str">"read"</span>,
-  <span class="str">"tracks"</span>: <span class="str">"read"</span>,
-  <span class="str">"player"</span>: <span class="str">"none"</span>,
-  <span class="str">"recommendations"</span>: <span class="str">"none"</span>
-}</code></pre>
-    </div>
-    <div class="code-panel">
-      <div class="code-header code-header-go">Go — permissions.go</div>
-<pre><code><span class="kw">func</span> (p <span class="tp">Permissions</span>) <span class="fn">For</span>(dataType <span class="tp">string</span>) <span class="tp">string</span> {
-    <span class="kw">if</span> p == <span class="kw">nil</span> {
-        <span class="kw">return</span> DefaultAccessType <span class="cm">// read-write</span>
-    }
-    <span class="kw">if</span> level, ok := p[dataType]; ok {
-        <span class="kw">return</span> <span class="fn">normalizeAccess</span>(level)
-    }
-    <span class="kw">if</span> level, ok := p[PermissionDefaultKey]; ok {
-        <span class="kw">return</span> <span class="fn">normalizeAccess</span>(level)
-    }
-    <span class="kw">return</span> DefaultAccessType
-}
-
-<span class="cm">// DataTypeForPath: /me/tracks → "tracks"</span>
-<span class="cm">//                  /me/player → "player"</span>
-<span class="cm">//                  /playlists → "playlists"</span></code></pre>
-    </div>
-  </div>
-
   <table>
     <thead><tr><th>Level</th><th>Allowed methods</th></tr></thead>
     <tbody>
-      <tr><td><code>none</code></td><td>none — 403 for that data type</td></tr>
+      <tr><td><code>none</code></td><td>none — 403 for that type</td></tr>
       <tr><td><code>read</code></td><td><code>GET</code>, <code>HEAD</code></td></tr>
       <tr><td><code>write</code></td><td><code>POST</code>, <code>PUT</code>, <code>PATCH</code>, <code>DELETE</code></td></tr>
-      <tr><td><code>read-write</code></td><td>both (also accepts <code>full</code> / <code>rw</code>)</td></tr>
+      <tr><td><code>read-write</code></td><td>both (also <code>full</code> / <code>rw</code>)</td></tr>
     </tbody>
   </table>
-
-  <p>
-    Enforcement happens in three places: the service proxy, the unified library endpoints,
-    and the <code>/capabilities</code> response (denied types/operations are hidden from agents).
-    Pre-request injection also lists denied types so agents do not try them.
-  </p>
+  <div class="code-single">
+    <div class="code-header code-header-go">Go — permissions.go</div>
+<pre><code><span class="kw">func</span> (p <span class="tp">Permissions</span>) <span class="fn">For</span>(dataType <span class="tp">string</span>) <span class="tp">string</span> {
+    <span class="kw">if</span> p == <span class="kw">nil</span> { <span class="kw">return</span> DefaultAccessType } <span class="cm">// unrestricted</span>
+    <span class="kw">if</span> level, ok := p[dataType]; ok { <span class="kw">return</span> <span class="fn">normalizeAccess</span>(level) }
+    <span class="kw">if</span> level, ok := p[PermissionDefaultKey]; ok { <span class="kw">return</span> <span class="fn">normalizeAccess</span>(level) }
+    <span class="kw">return</span> DefaultAccessType
+}</code></pre>
+  </div>
+  <div class="explain warn">
+    <p>
+      Known types include <code>user</code>, <code>tracks</code>, <code>albums</code>,
+      <code>artists</code>, <code>playlists</code>, <code>search</code>,
+      <code>player</code>, <code>channels</code>, <code>library</code>,
+      <code>recommendations</code>, <code>contacts</code>, <code>photos</code>.
+      Unknown paths fall through to <code>default</code>. Denied types are hidden
+      from agent capabilities and omitted from injection.
+    </p>
+  </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="oauth">
-  <h2><span class="n">11</span>OAuth &amp; token storage</h2>
-  <div class="steps">
-    <div class="step">
-      <div class="t">Login</div>
-      <div class="d"><code>GET /v1/auth/{id}/login</code> generates CSRF state (TTL 10m), redirects to the provider with scopes.</div>
-    </div>
-    <div class="step">
-      <div class="t">Callback</div>
-      <div class="d"><code>GET /v1/auth/{id}/callback</code> validates state (one-shot delete), exchanges the code for tokens, saves encrypted.</div>
-    </div>
-    <div class="step">
-      <div class="t">Refresh on use</div>
-      <div class="d"><code>getValidToken</code> refreshes if expired (30s skew). Refresh failure falls back to the expired access token as last resort.</div>
-    </div>
+  <h2><span class="n">11</span>OAuth connections &amp; tokens</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system,sans-serif" font-size="12">
+      <defs>
+        <marker id="oA" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6" fill="#d29922"/></marker>
+      </defs>
+      <rect x="30" y="40" width="180" height="70" rx="8" fill="#1f2937" stroke="#58a6ff"/>
+      <text x="120" y="70" fill="#58a6ff" text-anchor="middle" font-weight="700">Service surface</text>
+      <text x="120" y="90" fill="#8b949e" text-anchor="middle" font-size="11">youtube-music</text>
+      <text x="120" y="106" fill="#8b949e" text-anchor="middle" font-size="11">oauth_scopes: …</text>
+
+      <rect x="270" y="40" width="180" height="70" rx="8" fill="#161b22" stroke="#d29922"/>
+      <text x="360" y="70" fill="#d29922" text-anchor="middle" font-weight="700">Connection</text>
+      <text x="360" y="90" fill="#8b949e" text-anchor="middle" font-size="11">connections.google</text>
+      <text x="360" y="106" fill="#8b949e" text-anchor="middle" font-size="11">client_id/secret + URLs</text>
+
+      <rect x="510" y="40" width="160" height="70" rx="8" fill="#0d2818" stroke="#3fb950"/>
+      <text x="590" y="70" fill="#3fb950" text-anchor="middle" font-weight="700">TokenStore</text>
+      <text x="590" y="90" fill="#8b949e" text-anchor="middle" font-size="11">one token / connection</text>
+      <text x="590" y="106" fill="#8b949e" text-anchor="middle" font-size="11">AES-256-GCM + PBKDF2</text>
+
+      <rect x="720" y="40" width="150" height="70" rx="8" fill="#161b22" stroke="#bc8cff"/>
+      <text x="795" y="70" fill="#bc8cff" text-anchor="middle" font-weight="700">Provider</text>
+      <text x="795" y="90" fill="#8b949e" text-anchor="middle" font-size="11">accounts.google.com</text>
+      <text x="795" y="106" fill="#8b949e" text-anchor="middle" font-size="11">token endpoint</text>
+
+      <rect x="30" y="150" width="840" height="70" rx="8" fill="#0d1117" stroke="#30363d"/>
+      <text x="450" y="175" fill="#e6edf3" text-anchor="middle" font-weight="600">Rules encoded in the code</text>
+      <text x="450" y="196" fill="#8b949e" text-anchor="middle" font-size="11">Surfaces reference a connection — not per-service inline OAuth. Missing surface scopes degrade that surface to unauthorized, not the whole connection.</text>
+      <text x="450" y="214" fill="#8b949e" text-anchor="middle" font-size="11">Refresh uses singleflight. Token encrypt/persist happens outside the map lock. Agents never see tokens.</text>
+
+      <line x1="210" y1="75" x2="265" y2="75" stroke="#d29922" marker-end="url(#oA)"/>
+      <line x1="450" y1="75" x2="505" y2="75" stroke="#d29922" marker-end="url(#oA)"/>
+      <line x1="670" y1="75" x2="715" y2="75" stroke="#3fb950" marker-end="url(#oA)"/>
+    </svg>
   </div>
 
   <div class="code-compare">
     <div class="code-panel">
-      <div class="code-header code-header-go">Go — tokens.go (AES-256-GCM)</div>
-<pre><code><span class="cm">// PBKDF2-SHA256, 100k iterations → AES-256 key</span>
-<span class="kw">func</span> <span class="fn">deriveKey</span>(pass <span class="tp">string</span>, salt []<span class="tp">byte</span>) []<span class="tp">byte</span> {
-    <span class="kw">return</span> pbkdf2.<span class="fn">Key</span>(
-        []<span class="tp">byte</span>(pass), salt, pbkdf2Iter, pbkdf2KeyLen, sha256.New)
-}
-
-<span class="cm">// On disk: {"version":1,"salt":"…","tokens":{"spotify":"b64…"}}</span>
-<span class="cm">// Each token value is base64(AES-GCM(json(OAuthToken)))</span>
-
-<span class="kw">func</span> (tok *<span class="tp">OAuthToken</span>) <span class="fn">IsExpired</span>(skew time.Duration) <span class="tp">bool</span> {
-    <span class="kw">return</span> tok.Expiry.<span class="fn">Add</span>(-skew).<span class="fn">Before</span>(time.<span class="fn">Now</span>())
+      <div class="code-header code-header-go">Go — proxy.go token path</div>
+<pre><code><span class="kw">func</span> (s *<span class="tp">Server</span>) <span class="fn">getValidToken</span>(serviceID <span class="tp">string</span>, logger *slog.Logger) <span class="tp">string</span> {
+    connectionID := s.config.<span class="fn">connectionIDForService</span>(serviceID)
+    tok := s.tokens.<span class="fn">Get</span>(connectionID)   <span class="cm">// keyed by connection, not surface</span>
+    <span class="kw">if</span> tok == <span class="kw">nil</span> { <span class="kw">return</span> <span class="str">""</span> }
+    <span class="kw">if</span> !<span class="fn">scopesSatisfy</span>(tok.Scopes, s.config.<span class="fn">requiredScopes</span>(serviceID)) {
+        <span class="kw">return</span> <span class="str">""</span>  <span class="cm">// surface unauthorized; connection may still be fine</span>
+    }
+    <span class="kw">if</span> !tok.<span class="fn">IsExpired</span>(<span class="num">30</span> * time.Second) { <span class="kw">return</span> tok.AccessToken }
+    refreshed, err := s.<span class="fn">RefreshToken</span>(connectionID) <span class="cm">// singleflight</span>
+    <span class="kw">if</span> err != <span class="kw">nil</span> { <span class="kw">return</span> tok.AccessToken } <span class="cm">// try stale as fallback</span>
+    <span class="kw">return</span> refreshed.AccessToken
 }</code></pre>
     </div>
     <div class="code-panel">
       <div class="code-header code-header-py">Python</div>
-<pre><code><span class="kw">from</span> cryptography.hazmat.primitives.kdf.pbkdf2 <span class="kw">import</span> PBKDF2HMAC
-<span class="kw">from</span> cryptography.hazmat.primitives.ciphers.aead <span class="kw">import</span> AESGCM
-
-key = <span class="fn">PBKDF2HMAC</span>(algorithm=hashes.SHA256(),
-               length=32, salt=salt, iterations=100_000)
-aes = <span class="fn">AESGCM</span>(key.derive(passphrase.encode()))
-blob = aes.<span class="fn">encrypt</span>(nonce, json.dumps(token).encode(), <span class="kw">None</span>)</code></pre>
+<pre><code><span class="kw">def</span> <span class="fn">get_valid_token</span>(self, service_id, logger):
+    connection_id = self.config.connection_id_for_service(service_id)
+    tok = self.tokens.get(connection_id)
+    <span class="kw">if</span> tok <span class="kw">is None</span>:
+        <span class="kw">return</span> <span class="str">""</span>
+    <span class="kw">if not</span> scopes_satisfy(tok.scopes, self.config.required_scopes(service_id)):
+        <span class="kw">return</span> <span class="str">""</span>
+    <span class="kw">if not</span> tok.is_expired(<span class="num">30</span>):
+        <span class="kw">return</span> tok.access_token
+    refreshed = self.refresh_token(connection_id)  <span class="cm"># coalesced</span>
+    <span class="kw">if</span> refreshed <span class="kw">is None</span>:
+        <span class="kw">return</span> tok.access_token
+    <span class="kw">return</span> refreshed.access_token</code></pre>
     </div>
+  </div>
+
+  <div class="explain">
+    <p>
+      Admin/API responses expose token <strong>presence, scopes, and expiry</strong> only —
+      never client secrets, access tokens, or refresh tokens. Secrets stay out of git
+      (<code>aegis.json</code>, <code>tokens.json</code> are local).
+    </p>
   </div>
 </section>
 
@@ -1183,118 +1192,115 @@ blob = aes.<span class="fn">encrypt</span>(nonce, json.dumps(token).encode(), <s
 <section id="go-concepts">
   <h2><span class="n">12</span>Go concepts for Python devs</h2>
 
-  <h3>Interfaces are structural</h3>
+  <h3>Structs + methods vs classes</h3>
   <div class="code-compare">
     <div class="code-panel">
       <div class="code-header code-header-go">Go</div>
-<pre><code><span class="kw">type</span> <span class="tp">PlaylistProvider</span> <span class="kw">interface</span> {
-    <span class="fn">ListUserPlaylists</span>(ctx context.Context) ([]<span class="tp">Playlist</span>, <span class="tp">bool</span>, <span class="tp">error</span>)
-}
-
-<span class="cm">// SpotifyConnector implements it just by having the method.</span>
-<span class="cm">// No "implements PlaylistProvider" declaration.</span>
-provider, ok := any(connector).(<span class="tp">PlaylistProvider</span>)</code></pre>
-    </div>
-    <div class="code-panel">
-      <div class="code-header code-header-py">Python</div>
-<pre><code><span class="kw">class</span> <span class="tp">PlaylistProvider</span>(Protocol):
-    <span class="kw">def</span> <span class="fn">list_user_playlists</span>(self, ctx) -&gt; <span class="tp">tuple</span>[<span class="tp">list</span>[Playlist], <span class="tp">bool</span>]: ...
-
-<span class="cm"># Structural typing — no inheritance required.</span>
-<span class="kw">if</span> isinstance(connector, PlaylistProvider): ...</code></pre>
-    </div>
-  </div>
-
-  <h3>sync.RWMutex</h3>
-  <div class="code-compare">
-    <div class="code-panel">
-      <div class="code-header code-header-go">Go — many readers, one writer</div>
 <pre><code><span class="kw">type</span> <span class="tp">Cache</span> <span class="kw">struct</span> {
     mu    <span class="tp">sync.RWMutex</span>
     items <span class="kw">map</span>[<span class="tp">string</span>]cacheEntry
 }
-
 <span class="kw">func</span> (c *<span class="tp">Cache</span>) <span class="fn">Get</span>(key <span class="tp">string</span>) (<span class="tp">string</span>, <span class="tp">bool</span>) {
     c.mu.<span class="fn">RLock</span>()
     <span class="kw">defer</span> c.mu.<span class="fn">RUnlock</span>()
-}
-
-<span class="kw">func</span> (c *<span class="tp">Cache</span>) <span class="fn">Set</span>(key, value <span class="tp">string</span>, ttl time.Duration) {
-    c.mu.<span class="fn">Lock</span>()          <span class="cm">// exclusive</span>
-    <span class="kw">defer</span> c.mu.<span class="fn">Unlock</span>()
+    …
 }</code></pre>
     </div>
     <div class="code-panel">
       <div class="code-header code-header-py">Python</div>
-<pre><code><span class="kw">from</span> threading <span class="kw">import</span> RLock
-
-<span class="kw">class</span> <span class="tp">Cache</span>:
+<pre><code><span class="kw">class</span> <span class="tp">Cache</span>:
     <span class="kw">def</span> <span class="fn">__init__</span>(self):
         self._lock = <span class="fn">RLock</span>()
         self.items = {}
-
     <span class="kw">def</span> <span class="fn">get</span>(self, key):
         <span class="kw">with</span> self._lock:
-            <span class="kw">return</span> self.items.get(key)
-
-<span class="cm"># asyncio: use asyncio.Lock() — no reader/writer split.</span></code></pre>
+            …
+<span class="cm"># defer ≈ contextlib.ExitStack / with-block around the whole function</span></code></pre>
     </div>
   </div>
 
-  <h3>defer, sentinel errors, fail-open</h3>
+  <h3>Interfaces are structural</h3>
   <div class="code-single">
-    <div class="code-header code-header-go">patterns used throughout</div>
-<pre><code><span class="cm">// defer runs when the function returns — unlock, close body, etc.</span>
-c.mu.<span class="fn">RLock</span>()
-<span class="kw">defer</span> c.mu.<span class="fn">RUnlock</span>()
+    <div class="code-header code-header-go">No “implements” keyword</div>
+<pre><code><span class="cm">// If the method set matches, the value satisfies the interface.</span>
+<span class="kw">if</span> provider, ok := <span class="fn">any</span>(connector).(<span class="tp">PlaylistProvider</span>); ok {
+    playlists, truncated, err := provider.<span class="fn">ListUserPlaylists</span>(ctx)
+}
+<span class="cm">// Python: runtime_checkable Protocol + isinstance is the closest analogue.</span></code></pre>
+  </div>
 
-<span class="cm">// sentinel errors instead of exception types</span>
-<span class="kw">var</span> ErrUnauthorized = errors.<span class="fn">New</span>(<span class="str">"unauthorized"</span>)
+  <h3>Errors are values; this project often fails open</h3>
+  <div class="code-single">
+    <div class="code-header code-header-go">Sentinel + policy</div>
+<pre><code><span class="kw">var</span> ErrUnauthorized = errors.<span class="fn">New</span>(<span class="str">"unauthorized"</span>)
 <span class="kw">if</span> errors.<span class="fn">Is</span>(err, ErrUnauthorized) { … }
 
-<span class="cm">// fail-open policy (project rule)</span>
-<span class="kw">if</span> err := json.<span class="fn">Unmarshal</span>(body, &amp;payload); err != <span class="kw">nil</span> {
-    <span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{
-        Action: ActionAllow,   <span class="cm">// let the request through</span>
-        Message: <span class="str">"failed to parse payload"</span>,
-    })
-    <span class="kw">return</span>
-}</code></pre>
+<span class="cm">// Hook policy: do not fail the chat on Aegis errors.</span>
+<span class="fn">writeGuardrailResponse</span>(w, <span class="tp">GuardrailResponse</span>{Action: ActionAllow})
+<span class="cm">// Proxy policy: GET + HTTP 200 only are cached; error bodies never persist.</span></code></pre>
   </div>
 </section>
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ f193059</h2>
-
+  <h2><span class="n">13</span>File map @ c374627</h2>
+  <p>
+    LOC counts are computed at generation time from non-test Go sources
+    (plus <code>web/admin.html</code> when present). Roles are curated in
+    <code>docs/generate_walkthrough.py</code>.
+  </p>
   <table>
     <thead>
       <tr><th>File</th><th>LOC</th><th>Role</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>main.go</code></td><td>225</td><td>Flags, env, Server wiring, connector registration, routes</td></tr>
-      <tr><td><code>handler.go</code></td><td>388</td><td>Server, AuthMiddleware, ServiceConnector, capabilities, pre-request hook</td></tr>
-      <tr><td><code>proxy.go</code></td><td>189</td><td>Service proxy: capabilities, connector vs generic, OAuth inject, cache</td></tr>
-      <tr><td><code>library.go</code></td><td>210</td><td>Provider interfaces + thin per-kind handlers</td></tr>
-      <tr><td><code>librarykind.go</code></td><td>434</td><td>LibraryKind registry + shared generic aggregate pipeline</td></tr>
-      <tr><td><code>models.go</code></td><td>288</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo + sources</td></tr>
-      <tr><td><code>match.go</code></td><td>379</td><td>NormalizeIdentityKey, MergePlaylistsSync, artist/album/track merge</td></tr>
-      <tr><td><code>contacts.go</code></td><td>387</td><td>Contact identity, union-find merge, ContactProvider</td></tr>
-      <tr><td><code>photos.go</code></td><td>241</td><td>Photo identity/merge, PhotoProvider, non-Aegis canonical sources</td></tr>
-      <tr><td><code>permissions.go</code></td><td>282</td><td>Access levels, path classification, enforcement helpers</td></tr>
-      <tr><td><code>config.go</code></td><td>201</td><td>Service config, Duration JSON, matching, reload, save</td></tr>
-      <tr><td><code>identity.go</code></td><td>262</td><td>Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
-      <tr><td><code>oauth.go</code></td><td>242</td><td>Login, callback, exchange, refresh, revoke</td></tr>
-      <tr><td><code>tokens.go</code></td><td>231</td><td>AES-256-GCM token store, PBKDF2, status</td></tr>
-      <tr><td><code>statestore.go</code></td><td>41</td><td>CSRF state TTL map</td></tr>
-      <tr><td><code>cache.go</code></td><td>99</td><td>In-memory TTL cache + admin snapshot</td></tr>
-      <tr><td><code>setup.go</code></td><td>115</td><td>Web setup wizard HTML</td></tr>
-      <tr><td><code>admin.go</code></td><td>1424</td><td>Admin dashboard HTML + summary/cache/permissions APIs</td></tr>
-      <tr><td><code>spotify.go</code></td><td>1132</td><td>Spotify connector (proxy + providers + transforms)</td></tr>
-      <tr><td><code>youtube.go</code></td><td>1055</td><td>YouTube Music connector</td></tr>
-      <tr><td><code>amazonmusic.go</code></td><td>682</td><td>Amazon Music connector</td></tr>
-      <tr><td><code>google-photos.go</code></td><td>382</td><td>Google Photos connector (metadata only; bytes stay upstream)</td></tr>
-      <tr><td><code>httpclient.go</code></td><td>14</td><td>Shared HTTP client helper</td></tr>
+      <tr><td><code>main.go</code></td><td class="mono">312</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
+      <tr><td><code>handler.go</code></td><td class="mono">362</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
+      <tr><td><code>config.go</code></td><td class="mono">234</td><td>Services + shared OAuth connections, matching, reload</td></tr>
+      <tr><td><code>identity.go</code></td><td class="mono">243</td><td>Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
+      <tr><td><code>permissions.go</code></td><td class="mono">443</td><td>Access levels, path classification, enforcement</td></tr>
+      <tr><td><code>proxy.go</code></td><td class="mono">210</td><td>Generic service proxy + connector delegation + cache</td></tr>
+      <tr><td><code>connector_proxy.go</code></td><td class="mono">111</td><td>Shared OAuth connector pipeline (token→cache→upstream→transform)</td></tr>
+      <tr><td><code>library.go</code></td><td class="mono">192</td><td>Provider interfaces + thin per-kind library handlers</td></tr>
+      <tr><td><code>librarykind.go</code></td><td class="mono">519</td><td>LibraryKind registry + generic parallel aggregate pipeline</td></tr>
+      <tr><td><code>models.go</code></td><td class="mono">475</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
+      <tr><td><code>match.go</code></td><td class="mono">669</td><td>Cross-service identity keys and merge algorithms</td></tr>
+      <tr><td><code>musicbrainz.go</code></td><td class="mono">278</td><td>Optional durable IDs (MBID) for artists/tracks/albums</td></tr>
+      <tr><td><code>entity_links.go</code></td><td class="mono">193</td><td>User-confirmed cross-service entity links</td></tr>
+      <tr><td><code>entity_links_handlers.go</code></td><td class="mono">261</td><td>Admin/API handlers for links and merge review</td></tr>
+      <tr><td><code>canonical.go</code></td><td class="mono">377</td><td>Canonical-source stamping and write-policy notices</td></tr>
+      <tr><td><code>mirror.go</code></td><td class="mono">387</td><td>Playlist / liked-tracks backup copy orchestration</td></tr>
+      <tr><td><code>mirror_spotify.go</code></td><td class="mono">253</td><td>Spotify side of mirror reads/writes</td></tr>
+      <tr><td><code>mirror_youtube.go</code></td><td class="mono">218</td><td>YouTube Music side of mirror reads/writes</td></tr>
+      <tr><td><code>contacts.go</code></td><td class="mono">358</td><td>Contact identity, union-find merge, ContactProvider</td></tr>
+      <tr><td><code>photos.go</code></td><td class="mono">236</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
+      <tr><td><code>oauth.go</code></td><td class="mono">267</td><td>Login, callback, code exchange, token refresh, revoke</td></tr>
+      <tr><td><code>tokens.go</code></td><td class="mono">248</td><td>AES-256-GCM token store (PBKDF2), keyed by connection ID</td></tr>
+      <tr><td><code>connections.go</code></td><td class="mono">133</td><td>Connection ↔ service surface resolution helpers</td></tr>
+      <tr><td><code>statestore.go</code></td><td class="mono">48</td><td>CSRF OAuth state TTL map</td></tr>
+      <tr><td><code>flight.go</code></td><td class="mono">34</td><td>Singleflight for concurrent token refresh</td></tr>
+      <tr><td><code>cache.go</code></td><td class="mono">148</td><td>In-memory TTL cache (GET 200 only)</td></tr>
+      <tr><td><code>httpclient.go</code></td><td class="mono">49</td><td>Shared outbound HTTP client + configured upstream base</td></tr>
+      <tr><td><code>metrics.go</code></td><td class="mono">268</td><td>In-memory access ring buffer for the admin map</td></tr>
+      <tr><td><code>flow.go</code></td><td class="mono">544</td><td>Admin data-flow topology + recent access stats</td></tr>
+      <tr><td><code>admin.go</code></td><td class="mono">346</td><td>Admin dashboard shell + JSON summary endpoints</td></tr>
+      <tr><td><code>spotify.go</code></td><td class="mono">1025</td><td>Spotify connector (proxy, providers, transforms)</td></tr>
+      <tr><td><code>youtube.go</code></td><td class="mono">1063</td><td>YouTube Music connector</td></tr>
+      <tr><td><code>amazonmusic.go</code></td><td class="mono">560</td><td>Amazon Music connector</td></tr>
+      <tr><td><code>google-photos.go</code></td><td class="mono">524</td><td>Google Photos connector (metadata only)</td></tr>
+      <tr><td><code>google-contacts.go</code></td><td class="mono">363</td><td>Google Contacts connector (service id: google)</td></tr>
+      <tr><td><code>immich.go</code></td><td class="mono">393</td><td>Immich local/foreign canonical photo connector</td></tr>
+      <tr><td><code>atomicfile.go</code></td><td class="mono">43</td><td>Supporting code</td></tr>
+      <tr><td><code>events.go</code></td><td class="mono">264</td><td>Supporting code</td></tr>
+      <tr><td><code>google-calendar.go</code></td><td class="mono">717</td><td>Supporting code</td></tr>
+      <tr><td><code>google-gmail.go</code></td><td class="mono">851</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_archive.go</code></td><td class="mono">759</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_archive_http.go</code></td><td class="mono">408</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_archive_sync.go</code></td><td class="mono">177</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_takeout.go</code></td><td class="mono">590</td><td>Supporting code</td></tr>
+      <tr><td><code>messages.go</code></td><td class="mono">306</td><td>Supporting code</td></tr>
+      <tr><td><code>permissions_overlay.go</code></td><td class="mono">126</td><td>Supporting code</td></tr>
+      <tr><td><code>web/admin.html</code></td><td class="mono">2377</td><td>Admin SPA markup (//go:embed)</td></tr>
     </tbody>
   </table>
 
@@ -1302,10 +1308,12 @@ c.mu.<span class="fn">RLock</span>()
     <p>
       <strong>Suggested reading order for a Python developer:</strong>
       <code>main.go</code> → <code>handler.go</code> (Server + auth + hook)
-      → <code>models.go</code> + <code>match.go</code> (neutral data)
-      → <code>librarykind.go</code> + <code>library.go</code> (fan-out pipeline)
-      → <code>proxy.go</code> → one connector (<code>spotify.go</code>)
-      → <code>oauth.go</code> + <code>tokens.go</code> → <code>permissions.go</code>.
+      → <code>config.go</code> + <code>permissions.go</code>
+      → <code>models.go</code> + <code>match.go</code>
+      → <code>librarykind.go</code> + <code>library.go</code>
+      → <code>proxy.go</code> + <code>connector_proxy.go</code>
+      → one connector (<code>spotify.go</code>)
+      → <code>oauth.go</code> + <code>tokens.go</code>.
     </p>
   </div>
 </section>
@@ -1314,27 +1322,46 @@ c.mu.<span class="fn">RLock</span>()
 <section id="regen">
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
-    This file is a <strong>snapshot of the codebase at commit
-    <code>f193059</code></strong> (merge of <code>feat/unified-taste-library</code>).
-    When the architecture, public endpoints, or core interfaces change, regenerate or edit
-    <code>docs/index.html</code> and bump the version badge at the top
-    (and in the footer) so readers know which tree they are looking at.
-  </p>
-  <p>
-    Check current version with:
+    This HTML is a <strong>snapshot of the tree at
+    <code>c374627</code></strong>
+    (main · 2026-09-24 · Merge pull request #81 from fudomunro/chore/issue-80-rename-aegis).
+    Prose and diagrams live in the template; version stamp, stats, connector list,
+    library kinds, and file-map LOC are filled from the live tree.
   </p>
   <div class="code-single">
-<pre><code>git rev-parse --short HEAD
-git log -1 --oneline</code></pre>
+    <div class="code-header code-header-ok">Regenerate when the code evolves</div>
+<pre><code><span class="cm"># from repo root</span>
+python3 docs/generate_walkthrough.py
+
+<span class="cm"># verify the stamp matches HEAD</span>
+git rev-parse --short HEAD
+<span class="cm"># → should equal the badge at the top of docs/index.html</span></code></pre>
+  </div>
+  <table>
+    <thead><tr><th>File</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr><td><code>docs/walkthrough.template.html</code></td><td>Editable walkthrough content; tokens are double-brace names (COMMIT, SOURCE_LOC, FILE_MAP_ROWS, …)</td></tr>
+      <tr><td><code>docs/generate_walkthrough.py</code></td><td>Harvests git + tree facts, writes stamped <code>docs/index.html</code></td></tr>
+      <tr><td><code>docs/index.html</code></td><td>Generated snapshot — do not hand-edit the version badge</td></tr>
+    </tbody>
+  </table>
+  <div class="explain warn">
+    <p>
+      When architecture, public endpoints, or core interfaces change, update the
+      template prose/diagrams <em>and</em> regenerate so the badge and stats match
+      the commit readers are studying.
+    </p>
   </div>
 </section>
 
 <hr>
 <footer>
-  Generated for <strong>f193059</strong>
-  · aegis code walkthrough
+  Generated for <strong>c374627</strong>
+  · aperture-aegis code walkthrough
+  · module <code>github.com/fudomunro/aperture-aegis</code>
   · Go source of truth, Python for comparison
-  · regenerate when the code evolves
+  · 46 files · 16,585 LOC · 6 connectors · 8 library kinds
+  · 2026-09-24 16:52 UTC
 </footer>
 
 </div>

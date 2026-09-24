@@ -1,0 +1,241 @@
+#!/usr/bin/env python3
+"""Regenerate docs/index.html from walkthrough.template.html + live tree facts.
+
+Usage (from repo root or docs/):
+    python3 docs/generate_walkthrough.py
+"""
+
+from __future__ import annotations
+
+import re
+import subprocess
+import sys
+from datetime import datetime, timezone
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parents[1]
+DOCS = REPO / "docs"
+TEMPLATE = DOCS / "walkthrough.template.html"
+OUTPUT = DOCS / "index.html"
+
+# Human labels for files the file-map section should explain.
+FILE_ROLES = {
+    "main.go": "Flags, env, Server wiring, connector registration, HTTP routes",
+    "handler.go": "Server, AuthMiddleware, ServiceConnector, pre-request hook",
+    "config.go": "Services + shared OAuth connections, matching, reload",
+    "identity.go": "Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity",
+    "oauth.go": "Login, callback, code exchange, token refresh, revoke",
+    "tokens.go": "AES-256-GCM token store (PBKDF2), keyed by connection ID",
+    "statestore.go": "CSRF OAuth state TTL map",
+    "connections.go": "Connection ↔ service surface resolution helpers",
+    "permissions.go": "Access levels, path classification, enforcement",
+    "proxy.go": "Generic service proxy + connector delegation + cache",
+    "connector_proxy.go": "Shared OAuth connector pipeline (token→cache→upstream→transform)",
+    "httpclient.go": "Shared outbound HTTP client + configured upstream base",
+    "library.go": "Provider interfaces + thin per-kind library handlers",
+    "librarykind.go": "LibraryKind registry + generic parallel aggregate pipeline",
+    "models.go": "Neutral Playlist / Track / Artist / Album / Contact / Photo",
+    "match.go": "Cross-service identity keys and merge algorithms",
+    "musicbrainz.go": "Optional durable IDs (MBID) for artists/tracks/albums",
+    "entity_links.go": "User-confirmed cross-service entity links",
+    "entity_links_handlers.go": "Admin/API handlers for links and merge review",
+    "canonical.go": "Canonical-source stamping and write-policy notices",
+    "mirror.go": "Playlist / liked-tracks backup copy orchestration",
+    "mirror_spotify.go": "Spotify side of mirror reads/writes",
+    "mirror_youtube.go": "YouTube Music side of mirror reads/writes",
+    "contacts.go": "Contact identity, union-find merge, ContactProvider",
+    "photos.go": "Photo identity/merge; bytes stay on the source service",
+    "metrics.go": "In-memory access ring buffer for the admin map",
+    "flow.go": "Admin data-flow topology + recent access stats",
+    "cache.go": "In-memory TTL cache (GET 200 only)",
+    "flight.go": "Singleflight for concurrent token refresh",
+    "setup.go": "Web setup wizard",
+    "admin.go": "Admin dashboard shell + JSON summary endpoints",
+    "web/admin.html": "Admin SPA markup (//go:embed)",
+    "spotify.go": "Spotify connector (proxy, providers, transforms)",
+    "youtube.go": "YouTube Music connector",
+    "amazonmusic.go": "Amazon Music connector",
+    "google-photos.go": "Google Photos connector (metadata only)",
+    "google-contacts.go": "Google Contacts connector (service id: google)",
+    "immich.go": "Immich local/foreign canonical photo connector",
+}
+
+# Preferred reading order for the file-map table (unknown files append after).
+READING_ORDER = [
+    "main.go",
+    "handler.go",
+    "config.go",
+    "identity.go",
+    "permissions.go",
+    "proxy.go",
+    "connector_proxy.go",
+    "library.go",
+    "librarykind.go",
+    "models.go",
+    "match.go",
+    "musicbrainz.go",
+    "entity_links.go",
+    "entity_links_handlers.go",
+    "canonical.go",
+    "mirror.go",
+    "mirror_spotify.go",
+    "mirror_youtube.go",
+    "contacts.go",
+    "photos.go",
+    "oauth.go",
+    "tokens.go",
+    "connections.go",
+    "statestore.go",
+    "flight.go",
+    "cache.go",
+    "httpclient.go",
+    "metrics.go",
+    "flow.go",
+    "setup.go",
+    "admin.go",
+    "spotify.go",
+    "youtube.go",
+    "amazonmusic.go",
+    "google-photos.go",
+    "google-contacts.go",
+    "immich.go",
+]
+
+
+def run_git(*args: str) -> str:
+    out = subprocess.check_output(["git", *args], cwd=REPO, text=True)
+    return out.strip()
+
+
+def go_sources() -> list[Path]:
+    files = sorted(REPO.glob("*.go"))
+    return [p for p in files if not p.name.endswith("_test.go")]
+
+
+def loc_of(path: Path) -> int:
+    return sum(1 for line in path.read_text(encoding="utf-8", errors="replace").splitlines() if line.strip())
+
+
+def extract_connectors() -> list[str]:
+    main = (REPO / "main.go").read_text(encoding="utf-8")
+    ids: list[str] = []
+    # Literal keys: srv.connectors["spotify"] = ...
+    ids.extend(re.findall(r'srv\.connectors\["([^"]+)"\]', main))
+    # Constant keys: srv.connectors[googlePhotosServiceID] = ...
+    const_map = {
+        "googlePhotosServiceID": "google-photos",
+        "googleContactsServiceID": "google",
+        "immichServiceID": "immich",
+    }
+    for const, value in const_map.items():
+        if re.search(rf"srv\.connectors\[{const}\]", main):
+            ids.append(value)
+    # Preserve registration order, drop dupes.
+    seen: set[str] = set()
+    ordered: list[str] = []
+    for i in ids:
+        if i not in seen:
+            seen.add(i)
+            ordered.append(i)
+    return ordered
+
+
+def extract_library_kinds() -> list[str]:
+    text = (REPO / "librarykind.go").read_text(encoding="utf-8")
+    # Only the registry block IDs (first assignments after libraryKinds =).
+    block = text.split("var libraryKinds", 1)[-1].split("func ", 1)[0]
+    return re.findall(r'ID:\s*"([^"]+)"', block)
+
+
+def file_map_rows() -> str:
+    entries: list[tuple[str, int, str]] = []
+    for path in go_sources():
+        name = path.name
+        entries.append((name, loc_of(path), FILE_ROLES.get(name, "Supporting code")))
+
+    admin_html = REPO / "web" / "admin.html"
+    if admin_html.exists():
+        entries.append(
+            (
+                "web/admin.html",
+                loc_of(admin_html),
+                FILE_ROLES["web/admin.html"],
+            )
+        )
+
+    order_index = {name: i for i, name in enumerate(READING_ORDER)}
+    entries.sort(key=lambda e: (order_index.get(e[0], 999), e[0]))
+
+    rows = []
+    for name, loc, role in entries:
+        rows.append(
+            f"      <tr><td><code>{name}</code></td>"
+            f"<td class=\"mono\">{loc}</td><td>{role}</td></tr>"
+        )
+    return "\n".join(rows)
+
+
+def main() -> int:
+    if not TEMPLATE.exists():
+        print(f"missing template: {TEMPLATE}", file=sys.stderr)
+        return 1
+
+    commit = run_git("rev-parse", "--short", "HEAD")
+    commit_full = run_git("rev-parse", "HEAD")
+    try:
+        subject = run_git("log", "-1", "--format=%s")
+        commit_date = run_git("log", "-1", "--format=%cs")
+        branch = run_git("rev-parse", "--abbrev-ref", "HEAD")
+    except subprocess.CalledProcessError:
+        subject = "(unknown)"
+        commit_date = "(unknown)"
+        branch = "(unknown)"
+
+    sources = go_sources()
+    source_files = len(sources)
+    source_loc = sum(loc_of(p) for p in sources)
+    connectors = extract_connectors()
+    kinds = extract_library_kinds()
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    replacements = {
+        "COMMIT": commit,
+        "COMMIT_FULL": commit_full,
+        "COMMIT_DATE": commit_date,
+        "COMMIT_SUBJECT": subject,
+        "BRANCH": branch,
+        "GENERATED_AT": generated_at,
+        "SOURCE_FILES": str(source_files),
+        "SOURCE_LOC": f"{source_loc:,}",
+        "CONNECTOR_COUNT": str(len(connectors)),
+        "CONNECTOR_LIST": ", ".join(connectors),
+        "CONNECTOR_LIST_HTML": ", ".join(f"<code>{c}</code>" for c in connectors),
+        "KIND_COUNT": str(len(kinds)),
+        "KIND_LIST": ", ".join(kinds),
+        "KIND_LIST_HTML": ", ".join(f"<code>{k}</code>" for k in kinds),
+        "FILE_MAP_ROWS": file_map_rows(),
+        "GO_MODULE": "github.com/fudomunro/aperture-aegis",
+    }
+
+    html = TEMPLATE.read_text(encoding="utf-8")
+    for key, value in replacements.items():
+        html = html.replace("{{" + key + "}}", value)
+
+    leftover = re.findall(r"\{\{[A-Z0-9_]+\}\}", html)
+    if leftover:
+        print(f"unreplaced placeholders: {sorted(set(leftover))}", file=sys.stderr)
+        return 1
+
+    OUTPUT.write_text(html, encoding="utf-8")
+    print(f"wrote {OUTPUT.relative_to(REPO)}")
+    print(f"  version  {commit} ({branch}) — {commit_date}")
+    print(f"  subject  {subject}")
+    print(f"  sources  {source_files} files · {source_loc:,} LOC")
+    print(f"  connectors ({len(connectors)}): {', '.join(connectors)}")
+    print(f"  library kinds ({len(kinds)}): {', '.join(kinds)}")
+    print(f"  generated {generated_at}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
