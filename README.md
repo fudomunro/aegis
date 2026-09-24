@@ -29,8 +29,12 @@ git clone https://github.com/fudomunro/aegis.git
 cd aegis
 go build -o aegis .
 
-# Create your config (see aegis.example.json)
-cp aegis.example.json aegis.json
+# Local state lives under one data directory (issue #74):
+#   macOS:   ~/Library/Application Support/Aegis/
+#   Linux:   ${XDG_DATA_HOME:-~/.local/share}/aegis/
+# Override anytime with -data-dir /path or AEGIS_DATA_DIR.
+mkdir -p ~/Library/Application Support/Aegis   # or the Linux path above
+cp aegis.example.json ~/Library/Application\ Support/Aegis/aegis.json
 # Edit aegis.json with your OAuth client IDs and secrets
 
 # Run (recommended: tailnet identity via Tailscale Serve or WhoIs)
@@ -39,7 +43,6 @@ cp aegis.example.json aegis.json
   -base-url https://aegis.your-tailnet.ts.net \
   -auth-mode tailnet \
   -allowed-logins you@example.com \
-  -config aegis.json \
   -token-pass your-encryption-passphrase
 
 # Or keep a shared API key for non-tailnet clients
@@ -47,9 +50,13 @@ cp aegis.example.json aegis.json
   -addr :8080 \
   -base-url https://aegis.your-tailnet.ts.net \
   -api-key your-secret-key \
-  -config aegis.json \
   -token-pass your-encryption-passphrase
 ```
+
+Path flags (`-config`, `-token-file`, `-permissions-file`, `-link-file`,
+`-mail-archive`, `-log-file`) still accept absolute or relative paths and
+override the data-dir defaults — useful for existing ops that keep files
+beside the binary.
 
 Aegis starts with these endpoints:
 - `POST /v1/pre-request` — Aperture hook
@@ -303,6 +310,51 @@ professional-data connectors remain follow-up work on
 | `AEGIS_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
 | `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
+| `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](#data-directory-issue-74)) |
+
+### Data directory (issue #74)
+
+Aegis keeps **all local state** under one data directory so backups, migration,
+and wipe are one folder — not whatever directory the binary happened to start in.
+
+| OS | Default `-data-dir` |
+|----|---------------------|
+| macOS | `~/Library/Application Support/Aegis/` |
+| Linux / other | `$XDG_DATA_HOME/aegis` (or `~/.local/share/aegis`) |
+| Windows | `%AppData%\Aegis` |
+
+Override with `-data-dir /path` or `AEGIS_DATA_DIR`. The directory is created
+on first run with mode `0700` (it holds secrets).
+
+```
+<data-dir>/
+  aegis.json              # bootstrap config (OAuth clients live here)
+  permissions.json        # admin permissions overlay (non-secret)
+  entity_links.json       # confirmed playlist/entity links
+  tokens.json             # encrypted OAuth tokens (0600)
+  mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
+  logs/aegis.log          # process log (also mirrored to stderr)
+  cache/                  # reserved for future cache spill
+```
+
+Every path above is the default **when the corresponding flag is omitted**.
+An explicit flag always wins:
+
+| Flag | Default under `-data-dir` | Notes |
+|------|---------------------------|-------|
+| `-config` | `aegis.json` | Bootstrap config (services, connections, secrets) |
+| `-permissions-file` | `permissions.json` | Admin overlay; `aegis.json` is never rewritten |
+| `-token-file` | `tokens.json` | Encrypted token storage |
+| `-link-file` | `entity_links.json` | User-confirmed entity links |
+| `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
+| `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
+
+Startup logs the resolved data directory (`data directory ready` / `data_dir`
+on `starting server`). The admin **Runtime** panel shows the same path.
+
+**Migrating from cwd defaults:** if you previously kept `aegis.json`,
+`tokens.json`, and friends next to the binary, either move them into the data
+directory or keep passing the explicit path flags.
 
 ### All flags
 
@@ -314,9 +366,13 @@ professional-data connectors remain follow-up work on
 | `-api-key` | | Shared API key (required only for `api-key` mode) |
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
-| `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
-| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
-| `-token-file` | `tokens.json` | Encrypted token storage path |
+| `-data-dir` | OS app data dir | Local state root (see [Data directory](#data-directory-issue-74)) |
+| `-config` | `<data-dir>/aegis.json` | Bootstrap config path (services, connections, secrets) |
+| `-permissions-file` | `<data-dir>/permissions.json` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
+| `-token-file` | `<data-dir>/tokens.json` | Encrypted token storage path |
+| `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
+| `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
+| `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-token-pass` | | Token encryption passphrase (required) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
@@ -523,7 +579,7 @@ POST   /v1/library/links   {"kind":"playlist","sources":[{"service":"spotify","i
 DELETE /v1/library/links/{id}
 ```
 
-Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` (`-link-file`).
+Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` under the [data directory](#data-directory-issue-74) (`-link-file` overrides).
 
 **Merge review:** `GET /v1/library/review` lists multi-source entities joined by **name only** (no shared ISRC/UPC/MBID/link) so they can be checked or explicitly linked.
 
@@ -1048,7 +1104,7 @@ a new home copy — Gmail remains canonical for the mailbox (issue #16). Optimiz
 for Aegis/agents: search and fetch by id without paging Gmail every turn.
 
 ```bash
-./aegis ... -mail-archive mail-archive.db   # empty string disables
+./aegis ... -mail-archive mail-archive.db   # default under <data-dir>; empty disables
 ```
 
 | Endpoint | Purpose |
@@ -1080,7 +1136,8 @@ curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1
   -H "Authorization: Bearer $KEY"
 ```
 
-`mail-archive.db` is local state (like `tokens.json`) — do not commit it.
+`mail-archive.db` is local state (like `tokens.json`) and lives under the
+[data directory](#data-directory-issue-74) — do not commit it.
 
 ##### Google Takeout (read-only sync location)
 
@@ -1225,7 +1282,6 @@ go build -o aegis .
   -base-url http://localhost:8080 \
   -api-key dev-key \
   -token-pass dev-pass \
-  -mail-archive mail-archive.db \
   -log-level debug \
   -log-format text
 ```
@@ -1239,6 +1295,7 @@ change that only adds untested write paths.
 ```
 aegis/
   main.go           Entry point, CLI flags, route wiring
+  datadir.go        Data directory resolution + state path layout (issue #74)
   config.go         Service/Config types, JSON loading, matching
   atomicfile.go     Atomic temp+rename writes for the permissions overlay
   permissions_overlay.go  Admin permissions.json overlay (issue #71)

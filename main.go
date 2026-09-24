@@ -2,9 +2,12 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -15,24 +18,69 @@ func main() {
 	authMode := flag.String("auth-mode", "", "auth mode: auto, tailnet, or api-key (reads AEGIS_AUTH_MODE; default auto)")
 	allowedLogins := flag.String("allowed-logins", "", "comma-separated Tailscale logins allowed to call the API (reads AEGIS_ALLOWED_LOGINS; empty allows any tailnet identity)")
 	tsSocket := flag.String("ts-socket", "", "path to tailscaled LocalAPI socket for WhoIs (default: auto-detect /var/run/tailscale/tailscaled.sock)")
-	configPath := flag.String("config", "aegis.json", "path to rules configuration file")
-	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
-	linkPath := flag.String("link-file", "entity_links.json", "path to user-confirmed entity links (playlists)")
-	permissionsPath := flag.String("permissions-file", "permissions.json", "path to admin permissions overlay (non-secret; admin permission saves write here instead of aegis.json)")
-	mailArchivePath := flag.String("mail-archive", "mail-archive.db", "path to local compressed mail archive (SQLite+FTS5; empty disables /v1/mail)")
+	dataDirFlag := flag.String("data-dir", "", "data directory for local state (reads AEGIS_DATA_DIR if empty; default: OS application data dir for Aegis)")
+	configPath := flag.String("config", "", "path to rules configuration file (default: <data-dir>/aegis.json)")
+	tokenPath := flag.String("token-file", "", "path to encrypted token storage (default: <data-dir>/tokens.json)")
+	linkPath := flag.String("link-file", "", "path to user-confirmed entity links (default: <data-dir>/entity_links.json)")
+	permissionsPath := flag.String("permissions-file", "", "path to admin permissions overlay (default: <data-dir>/permissions.json; admin saves write here instead of aegis.json)")
+	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
+	logFile := flag.String("log-file", "", "optional process log file (default: <data-dir>/logs/aegis.log; empty disables file logging)")
 	flag.Parse()
 
-	logger := initLogger(*logLevel, *logFormat)
+	setFlags := visitedFlags()
+	paths, err := ResolveStatePaths(StatePathOverrides{
+		Dir:            *dataDirFlag,
+		Config:         *configPath,
+		Permissions:    *permissionsPath,
+		Tokens:         *tokenPath,
+		Links:          *linkPath,
+		MailArchive:    *mailArchivePath,
+		MailArchiveSet: setFlags["mail-archive"],
+		LogFile:        *logFile,
+		LogFileSet:     setFlags["log-file"],
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "aegis: resolving data directory: %v\n", err)
+		os.Exit(1)
+	}
+	if err := EnsureDataPaths(paths); err != nil {
+		fmt.Fprintf(os.Stderr, "aegis: %v\n", err)
+		os.Exit(1)
+	}
+
+	logOut := io.Writer(os.Stderr)
+	if paths.LogFile != "" {
+		if err := os.MkdirAll(filepath.Dir(paths.LogFile), 0o700); err == nil {
+			f, err := os.OpenFile(paths.LogFile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+			if err == nil {
+				defer f.Close()
+				logOut = io.MultiWriter(os.Stderr, f)
+			} else {
+				fmt.Fprintf(os.Stderr, "aegis: cannot open log file %s: %v\n", paths.LogFile, err)
+			}
+		}
+	}
+
+	logger := initLogger(*logLevel, *logFormat, logOut)
 	slog.SetDefault(logger)
+	slog.Info("data directory ready",
+		"path", paths.Dir,
+		"config", paths.Config,
+		"tokens", paths.Tokens,
+		"permissions", paths.Permissions,
+		"links", paths.Links,
+		"mail_archive", paths.MailArchive,
+		"log_file", paths.LogFile,
+	)
 
 	// One-shot Takeout ingest does not need OAuth, base URL, or a listening server.
 	if strings.TrimSpace(*importTakeout) != "" {
-		code := runImportTakeoutCLI(*mailArchivePath, *importTakeout, *importTakeoutBatch)
+		code := runImportTakeoutCLI(paths.MailArchive, *importTakeout, *importTakeoutBatch)
 		os.Exit(code)
 	}
 
@@ -80,32 +128,32 @@ func main() {
 		os.Exit(1)
 	}
 
-	cfg, err := LoadConfig(*configPath)
+	cfg, err := LoadConfig(paths.Config)
 	if err != nil {
-		slog.Error("failed to load config", "path", *configPath, "error", err)
+		slog.Error("failed to load config", "path", paths.Config, "error", err)
 		os.Exit(1)
 	}
-	if err := cfg.InitPermissionsStore(*permissionsPath); err != nil {
-		slog.Error("failed to load permissions overlay", "path", *permissionsPath, "error", err)
+	if err := cfg.InitPermissionsStore(paths.Permissions); err != nil {
+		slog.Error("failed to load permissions overlay", "path", paths.Permissions, "error", err)
 		os.Exit(1)
 	}
-	slog.Info("config loaded", "path", *configPath, "services", len(cfg.Services), "permissions_file", *permissionsPath)
+	slog.Info("config loaded", "path", paths.Config, "services", len(cfg.Services), "permissions_file", paths.Permissions)
 
-	tokens, err := NewTokenStore(*tokenPath, *tokenPass)
+	tokens, err := NewTokenStore(paths.Tokens, *tokenPass)
 	if err != nil {
-		slog.Error("failed to load token store", "path", *tokenPath, "error", err)
-		os.Exit(1)
-	}
-
-	links, err := NewEntityLinkStore(*linkPath)
-	if err != nil {
-		slog.Error("failed to load entity link store", "path", *linkPath, "error", err)
+		slog.Error("failed to load token store", "path", paths.Tokens, "error", err)
 		os.Exit(1)
 	}
 
-	mailArchive, err := OpenMailArchive(*mailArchivePath)
+	links, err := NewEntityLinkStore(paths.Links)
 	if err != nil {
-		slog.Error("failed to open mail archive", "path", *mailArchivePath, "error", err)
+		slog.Error("failed to load entity link store", "path", paths.Links, "error", err)
+		os.Exit(1)
+	}
+
+	mailArchive, err := OpenMailArchive(paths.MailArchive)
+	if err != nil {
+		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
 		os.Exit(1)
 	}
 	if mailArchive != nil {
@@ -123,6 +171,7 @@ func main() {
 		allowedLogins: parseLoginList(*allowedLogins),
 		identity:      identity,
 		baseURL:       *baseURL,
+		dataDir:       paths.Dir,
 		config:        cfg,
 		cache:         NewCache(),
 		tokens:        tokens,
@@ -170,6 +219,7 @@ func main() {
 		"auth_mode", *authMode,
 		"api_key_configured", *apiKey != "",
 		"allowed_logins", len(srv.allowedLogins),
+		"data_dir", paths.Dir,
 	)
 	if err := http.ListenAndServe(*addr, mux); err != nil {
 		slog.Error("server failed", "error", err)
@@ -315,7 +365,7 @@ func (s *Server) handleAuthRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func initLogger(level, format string) *slog.Logger {
+func initLogger(level, format string, w io.Writer) *slog.Logger {
 	var lvl slog.Level
 	switch level {
 	case "debug":
@@ -329,13 +379,24 @@ func initLogger(level, format string) *slog.Logger {
 	}
 
 	opts := &slog.HandlerOptions{Level: lvl}
+	if w == nil {
+		w = os.Stderr
+	}
 
 	var handler slog.Handler
 	if format == "text" {
-		handler = slog.NewTextHandler(os.Stderr, opts)
+		handler = slog.NewTextHandler(w, opts)
 	} else {
-		handler = slog.NewJSONHandler(os.Stderr, opts)
+		handler = slog.NewJSONHandler(w, opts)
 	}
 
 	return slog.New(handler)
+}
+
+// visitedFlags returns the names of flags explicitly set on the command line.
+// Needed for flags where empty is a meaningful override (e.g. -mail-archive "").
+func visitedFlags() map[string]bool {
+	set := make(map[string]bool)
+	flag.Visit(func(f *flag.Flag) { set[f.Name] = true })
+	return set
 }

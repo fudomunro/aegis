@@ -21,7 +21,7 @@ func TestInitLogger_LevelsAndFormats(t *testing.T) {
 		{"", "json"}, // defaults to info
 	}
 	for _, tc := range cases {
-		logger := initLogger(tc.level, tc.format)
+		logger := initLogger(tc.level, tc.format, nil)
 		if logger == nil {
 			t.Fatalf("initLogger(%q, %q) returned nil", tc.level, tc.format)
 		}
@@ -30,13 +30,13 @@ func TestInitLogger_LevelsAndFormats(t *testing.T) {
 }
 
 func TestInitLogger_EnabledLevels(t *testing.T) {
-	if !initLogger("info", "json").Enabled(context.Background(), slog.LevelInfo) {
+	if !initLogger("info", "json", nil).Enabled(context.Background(), slog.LevelInfo) {
 		t.Fatal("info should be enabled at info level")
 	}
-	if initLogger("error", "json").Enabled(context.Background(), slog.LevelInfo) {
+	if initLogger("error", "json", nil).Enabled(context.Background(), slog.LevelInfo) {
 		t.Fatal("info should be disabled at error level")
 	}
-	if !initLogger("debug", "text").Enabled(context.Background(), slog.LevelDebug) {
+	if !initLogger("debug", "text", nil).Enabled(context.Background(), slog.LevelDebug) {
 		t.Fatal("debug should be enabled at debug level")
 	}
 }

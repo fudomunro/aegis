@@ -64,6 +64,8 @@ type AdminRuntime struct {
 	BaseURL          string   `json:"base_url"`
 	APIKeyConfigured bool     `json:"api_key_configured"`
 	AllowedLogins    []string `json:"allowed_logins,omitempty"`
+	// DataDir is the resolved local state directory (issue #74).
+	DataDir string `json:"data_dir,omitempty"`
 }
 
 // AdminCacheStats summarizes the in-memory response cache.
@@ -220,6 +222,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			BaseURL:          s.baseURL,
 			APIKeyConfigured: s.apiKey != "",
 			AllowedLogins:    allowed,
+			DataDir:          s.dataDir,
 		},
 		Services: services,
 		Cache: AdminCacheStats{

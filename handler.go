@@ -67,8 +67,11 @@ type Server struct {
 	// call the API. Empty means any authenticated tailnet peer is allowed.
 	allowedLogins []string
 	// identity resolves Tailscale peer identity. Optional in api-key mode.
-	identity    IdentityResolver
-	baseURL     string
+	identity IdentityResolver
+	baseURL  string
+	// dataDir is the resolved local state directory (issue #74). Surfaced
+	// on the admin Runtime panel so the layout is discoverable.
+	dataDir     string
 	config      *Config
 	cache       *Cache
 	tokens      *TokenStore
