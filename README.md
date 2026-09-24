@@ -1097,6 +1097,8 @@ POST /v1/admin/mail/import
 
 - `max_messages: 0` + `path` only saves the location
 - Repeat with `max_messages > 0` until `"done": true` (already-present IDs count as `skipped`)
+- A durable byte cursor resumes mid-export so each batch continues instead of
+  re-reading the whole mbox (issue #75). `"reset_cursor": true` restarts.
 - Admin **Advanced → Google Takeout** exposes the same controls
 - Messages are stored as service `google-takeout` with `TAKEOUT` + mbox labels
 
