@@ -1072,11 +1072,11 @@ restricted.
 
 ```bash
 # First fill (continue until done)
-curl -X POST "$GUARDIAN/v1/mail/sync" -H "Authorization: Bearer $KEY" \
+curl -X POST "$AEGIS/v1/mail/sync" -H "Authorization: Bearer $KEY" \
   -d '{"max_messages":200}'
 
 # Search history
-curl "$GUARDIAN/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1" \
+curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1" \
   -H "Authorization: Bearer $KEY"
 ```
 
@@ -1103,7 +1103,7 @@ POST /v1/admin/mail/import
 - Messages are stored as service `google-takeout` with `TAKEOUT` + mbox labels
 
 ```bash
-curl -X POST "$GUARDIAN/v1/admin/mail/import" \
+curl -X POST "$AEGIS/v1/admin/mail/import" \
   -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
   -d '{"path":"/Users/you/Downloads/Takeout","max_messages":5000}'
 ```
