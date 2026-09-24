@@ -234,6 +234,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
 CREATE INDEX IF NOT EXISTS mail_messages_sent ON mail_messages(sent_at);
 CREATE INDEX IF NOT EXISTS mail_messages_thread ON mail_messages(service, thread_id);
 CREATE INDEX IF NOT EXISTS mail_messages_from ON mail_messages(from_email);
+CREATE INDEX IF NOT EXISTS mail_messages_message_id ON mail_messages(message_id);
 CREATE VIRTUAL TABLE IF NOT EXISTS mail_fts USING fts5(
   subject,
   from_email,
