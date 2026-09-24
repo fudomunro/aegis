@@ -77,8 +77,8 @@ func savePermissionsOverlay(path string, ov *permissionsOverlayFile) error {
 }
 
 // InitPermissionsStore overrides the overlay path and applies any existing
-// overlay onto bootstrap permissions from aegis.json. LoadConfig already
-// defaults the path to permissions.json beside the config file.
+// overlay onto bootstrap permissions from aegis.json. Production startup
+// passes the data-dir default or an explicit -permissions-file value.
 func (c *Config) InitPermissionsStore(path string) error {
 	if path == "" {
 		return fmt.Errorf("permissions overlay path is required")

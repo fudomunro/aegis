@@ -90,6 +90,9 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"runTakeoutSync",
 		"Google Takeout",
 		"read-only sync",
+		// Data directory surface (issue #74)
+		"data_dir",
+		"Data dir:",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)

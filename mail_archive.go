@@ -23,7 +23,7 @@ import (
 //     search history without paging the provider on every turn.
 //   - Metadata lives in SQLite columns; body text is FTS5-indexed; the full
 //     provider payload is gzip-compressed for cheap retention.
-//   - Path is a single file (default mail-archive.db). Empty path disables the
+//   - Path is a single file (default <data-dir>/mail-archive.db). Empty path disables the
 //     archive and the /v1/mail/* routes return a clear error.
 //
 // Optimized for Aegis/agent queries (search, filter, fetch by id) rather

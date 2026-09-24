@@ -280,7 +280,7 @@
 
       <div id="agent-data-access-help" class="help-box">
         <h3>Agent data access</h3>
-        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to <code>aegis.json</code>.</p>
+        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
       </div>
 
       <div class="toolbar">
@@ -2276,6 +2276,7 @@
         '<div class="meta">Base URL: <code>' + escapeHtml(rt.base_url) + "</code></div>" +
         '<div class="meta">API key configured: ' + (rt.api_key_configured ? "yes" : "no") + "</div>" +
         '<div class="meta">Allowed logins: ' + logins + "</div>" +
+        (rt.data_dir ? '<div class="meta">Data dir: <code>' + escapeHtml(rt.data_dir) + "</code></div>" : "") +
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
