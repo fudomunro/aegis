@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime"
@@ -13,6 +14,7 @@ import (
 	"net/mail"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -27,7 +29,19 @@ const (
 	takeoutServiceName = "Google Takeout"
 	// takeoutPathMetaKey stores the configured export path in mail_meta.
 	takeoutPathMetaKey = "takeout:path"
+	// takeoutCursorMetaKey stores a durable walk cursor so multi-batch imports
+	// continue instead of re-reading the export from byte 0 (issue #75).
+	takeoutCursorMetaKey = "takeout:cursor"
 )
+
+// takeoutCursor is the durable read position for a Takeout export walk.
+type takeoutCursor struct {
+	Root     string `json:"root"`
+	FileIdx  int    `json:"file_idx"`
+	EntryIdx int    `json:"entry_idx"`
+	Offset   int64  `json:"offset"`
+	Done     bool   `json:"done"`
+}
 
 // TakeoutSyncResult reports one bounded walk of the export.
 type TakeoutSyncResult struct {
@@ -55,6 +69,12 @@ func (a *MailArchive) SetTakeoutPath(path string) error {
 	if err != nil {
 		return err
 	}
+	// Changing the export location invalidates a mid-file cursor.
+	if prev := a.TakeoutPath(); prev != abs {
+		if err := a.ResetTakeoutCursor(); err != nil {
+			return err
+		}
+	}
 	return a.setMeta(takeoutPathMetaKey, abs)
 }
 
@@ -67,9 +87,44 @@ func (a *MailArchive) TakeoutPath() string {
 	return p
 }
 
+// ResetTakeoutCursor restarts the export walk at the first byte.
+func (a *MailArchive) ResetTakeoutCursor() error {
+	if a == nil || a.db == nil {
+		return fmt.Errorf("mail archive disabled")
+	}
+	return a.setMeta(takeoutCursorMetaKey, "")
+}
+
+func (a *MailArchive) loadTakeoutCursor(root string) takeoutCursor {
+	raw, _ := a.getMeta(takeoutCursorMetaKey)
+	if strings.TrimSpace(raw) == "" {
+		return takeoutCursor{EntryIdx: -1}
+	}
+	var cur takeoutCursor
+	if err := json.Unmarshal([]byte(raw), &cur); err != nil {
+		return takeoutCursor{EntryIdx: -1}
+	}
+	if cur.Root != root {
+		return takeoutCursor{EntryIdx: -1}
+	}
+	return cur
+}
+
+func (a *MailArchive) saveTakeoutCursor(cur takeoutCursor) error {
+	if cur.EntryIdx < 0 {
+		cur.EntryIdx = -1
+	}
+	raw, err := json.Marshal(cur)
+	if err != nil {
+		return err
+	}
+	return a.setMeta(takeoutCursorMetaKey, string(raw))
+}
+
 // ImportTakeout walks the read-only export and upserts messages into the
-// archive. Already-present message IDs are skipped so re-sync is cheap.
-// maxMessages bounds one call (0 = 5000); repeat until Done.
+// archive. A durable byte cursor resumes mid-export so repeat calls are O(new
+// messages), not a full re-scan (issue #75). maxMessages bounds one call
+// (0 = 5000); repeat until Done.
 func (a *MailArchive) ImportTakeout(path string, maxMessages int) (TakeoutSyncResult, error) {
 	res := TakeoutSyncResult{Service: takeoutServiceID, Path: path}
 	if a == nil || a.db == nil {
@@ -84,13 +139,24 @@ func (a *MailArchive) ImportTakeout(path string, maxMessages int) (TakeoutSyncRe
 		res.Error = "takeout path not configured"
 		return res, fmt.Errorf("takeout path not configured")
 	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
 	res.Path = path
 	if maxMessages <= 0 {
 		maxMessages = 5000
 	}
 
+	cursor := a.loadTakeoutCursor(abs)
+	cursor.Root = abs
+	if cursor.Done {
+		res.Done = true
+		return res, nil
+	}
+
 	var storeErr error
-	walk := func(raw []byte, source string) error {
+	handle := func(raw []byte, source string) error {
 		if res.Stored >= maxMessages {
 			res.Truncated = true
 			return errTakeoutCap
@@ -119,17 +185,29 @@ func (a *MailArchive) ImportTakeout(path string, maxMessages int) (TakeoutSyncRe
 		return nil
 	}
 
-	err := walkTakeoutPath(path, walk)
-	if err == errTakeoutCap {
+	walkErr := walkTakeoutFrom(abs, &cursor, handle)
+	if walkErr == errTakeoutCap {
+		if err := a.saveTakeoutCursor(cursor); err != nil {
+			res.Error = err.Error()
+			return res, err
+		}
 		return res, nil
 	}
-	if err != nil {
-		res.Error = err.Error()
-		return res, err
+	if walkErr != nil {
+		res.Error = walkErr.Error()
+		// Keep progress even when the walk fails mid-file.
+		_ = a.saveTakeoutCursor(cursor)
+		return res, walkErr
 	}
 	if storeErr != nil {
 		res.Error = storeErr.Error()
+		_ = a.saveTakeoutCursor(cursor)
 		return res, storeErr
+	}
+	cursor.Done = true
+	if err := a.saveTakeoutCursor(cursor); err != nil {
+		res.Error = err.Error()
+		return res, err
 	}
 	res.Done = !res.Truncated
 	return res, nil
@@ -149,62 +227,107 @@ func (a *MailArchive) hasMailIdentity(rec MailArchiveRecord) (bool, error) {
 	return n > 0, err
 }
 
-// walkTakeoutPath reads every mbox message under a file, directory, or zip.
-func walkTakeoutPath(path string, fn func(raw []byte, source string) error) error {
-	info, err := os.Stat(path)
+// walkTakeoutFrom continues a cursor-aware walk of file/dir/zip.
+// On errTakeoutCap, cursor points at the unprocessed message to retry.
+func walkTakeoutFrom(root string, cursor *takeoutCursor, handle func(raw []byte, source string) error) error {
+	info, err := os.Stat(root)
 	if err != nil {
 		return err
 	}
-	if info.IsDir() {
-		var files []string
-		err := filepath.Walk(path, func(p string, fi os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if fi.IsDir() {
-				return nil
-			}
-			ext := strings.ToLower(filepath.Ext(p))
-			if ext == ".mbox" || ext == ".zip" || looksLikeMboxName(fi.Name()) {
-				files = append(files, p)
-			}
-			return nil
-		})
+	if !info.IsDir() {
+		return walkTakeoutFile(root, cursor, handle)
+	}
+	files, err := listTakeoutFiles(root)
+	if err != nil {
+		return err
+	}
+	startFile := cursor.FileIdx
+	if startFile < 0 {
+		startFile = 0
+	}
+	for i := startFile; i < len(files); i++ {
+		if i != cursor.FileIdx {
+			cursor.FileIdx = i
+			cursor.Offset = 0
+			cursor.EntryIdx = -1
+		}
+		if err := walkTakeoutFile(files[i], cursor, handle); err != nil {
+			return err
+		}
+		cursor.FileIdx = i + 1
+		cursor.Offset = 0
+		cursor.EntryIdx = -1
+	}
+	cursor.Done = true
+	return nil
+}
+
+func listTakeoutFiles(root string) ([]string, error) {
+	var files []string
+	err := filepath.Walk(root, func(p string, fi os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		for _, f := range files {
-			if err := walkTakeoutPath(f, fn); err != nil {
-				return err
-			}
+		if fi.IsDir() {
+			return nil
+		}
+		ext := strings.ToLower(filepath.Ext(p))
+		if ext == ".mbox" || ext == ".zip" || looksLikeMboxName(fi.Name()) {
+			files = append(files, p)
 		}
 		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
+	sort.Strings(files)
+	return files, nil
+}
+
+func walkTakeoutFile(path string, cursor *takeoutCursor, handle func(raw []byte, source string) error) error {
 	ext := strings.ToLower(filepath.Ext(path))
 	if ext == ".zip" {
-		return walkTakeoutZip(path, fn)
+		return walkTakeoutZip(path, cursor, handle)
 	}
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	return walkMbox(f, filepath.Base(path), fn)
+	start := cursor.Offset
+	if start < 0 {
+		start = 0
+	}
+	// Per-message callback: advance the durable offset after each handled row.
+	return walkMboxFrom(f, start, filepath.Base(path), func(raw []byte, source string, msgStart, msgNext int64) error {
+		if err := handle(raw, source); err != nil {
+			if err == errTakeoutCap {
+				// Retry this message on the next batch.
+				cursor.Offset = msgStart
+			}
+			return err
+		}
+		cursor.Offset = msgNext
+		return nil
+	})
 }
 
 func looksLikeMboxName(name string) bool {
 	lower := strings.ToLower(name)
-	return strings.HasSuffix(lower, ".mbox") ||
-		strings.Contains(lower, "all mail") ||
-		strings.HasSuffix(lower, ".mbox")
+	return strings.HasSuffix(lower, ".mbox") || strings.Contains(lower, "all mail")
 }
 
-func walkTakeoutZip(path string, fn func(raw []byte, source string) error) error {
+func walkTakeoutZip(path string, cursor *takeoutCursor, handle func(raw []byte, source string) error) error {
 	zr, err := zip.OpenReader(path)
 	if err != nil {
 		return err
 	}
 	defer zr.Close()
+	entryIdx := 0
+	startEntry := cursor.EntryIdx
+	if startEntry < 0 {
+		startEntry = 0
+	}
 	for _, f := range zr.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -214,25 +337,66 @@ func walkTakeoutZip(path string, fn func(raw []byte, source string) error) error
 		if !strings.HasSuffix(lower, ".mbox") && !strings.Contains(lower, "mail") {
 			continue
 		}
+		idx := entryIdx
+		entryIdx++
+		if idx < startEntry {
+			continue
+		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		err = walkMbox(rc, name, fn)
+		start := int64(0)
+		if idx == cursor.EntryIdx && cursor.Offset > 0 {
+			start = cursor.Offset
+		}
+		cursor.EntryIdx = idx
+		// Zip streams are not seekable; discard up to the resume offset.
+		if start > 0 {
+			if _, err := io.CopyN(io.Discard, rc, start); err != nil && err != io.EOF {
+				rc.Close()
+				return err
+			}
+		}
+		err = walkMboxFrom(rc, start, name, func(raw []byte, source string, msgStart, msgNext int64) error {
+			if err := handle(raw, source); err != nil {
+				if err == errTakeoutCap {
+					cursor.Offset = msgStart
+				}
+				return err
+			}
+			cursor.Offset = msgNext
+			return nil
+		})
 		rc.Close()
 		if err != nil {
 			return err
 		}
+		cursor.Offset = 0
+		cursor.EntryIdx = idx + 1
 	}
 	return nil
 }
 
-// walkMbox splits an mbox stream on Unix "From " separator lines.
-func walkMbox(r io.Reader, source string, fn func(raw []byte, source string) error) error {
+// walkMboxFrom splits an mbox stream on Unix "From " separators, starting at
+// byte start (must be a message boundary). The callback receives each raw
+// message and the byte range [msgStart, msgNext) it occupied in the stream.
+func walkMboxFrom(r io.Reader, start int64, source string, fn func(raw []byte, source string, msgStart, msgNext int64) error) error {
+	if start < 0 {
+		start = 0
+	}
+	if rs, ok := r.(io.ReadSeeker); ok && start > 0 {
+		if _, err := rs.Seek(start, io.SeekStart); err != nil {
+			return err
+		}
+	}
 	br := bufio.NewReaderSize(r, 1<<20)
+	pos := start
 	var cur bytes.Buffer
+	msgStart := start
 	inMsg := false
-	flush := func() error {
+
+	flush := func(next int64) error {
 		if !inMsg {
 			return nil
 		}
@@ -242,16 +406,20 @@ func walkMbox(r io.Reader, source string, fn func(raw []byte, source string) err
 		if len(bytes.TrimSpace(raw)) == 0 {
 			return nil
 		}
-		return fn(raw, source)
+		return fn(raw, source, msgStart, next)
 	}
+
 	for {
 		line, err := br.ReadBytes('\n')
+		n := int64(len(line))
+		lineStart := pos
+		pos += n
 		if isMboxFromLine(line) {
-			if err2 := flush(); err2 != nil {
+			if err2 := flush(lineStart); err2 != nil {
 				return err2
 			}
 			inMsg = true
-			// Drop the "From " separator line itself.
+			msgStart = lineStart
 			if err == io.EOF {
 				break
 			}
@@ -261,7 +429,7 @@ func walkMbox(r io.Reader, source string, fn func(raw []byte, source string) err
 			cur.Write(line)
 		}
 		if err == io.EOF {
-			if err2 := flush(); err2 != nil {
+			if err2 := flush(pos); err2 != nil {
 				return err2
 			}
 			break

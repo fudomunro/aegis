@@ -69,13 +69,25 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 		t.Fatalf("res = %+v", res)
 	}
 
-	// Re-sync is a no-op for already-present Message-IDs (read-only source).
+	// Completed export is a cheap no-op until the cursor is reset.
 	res2, err := a.ImportTakeout(path, 10)
 	if err != nil {
 		t.Fatalf("import2: %v", err)
 	}
-	if res2.Stored != 0 || res2.Skipped != 3 {
+	if res2.Scanned != 0 || res2.Stored != 0 || !res2.Done {
 		t.Fatalf("res2 = %+v", res2)
+	}
+
+	// After reset, re-sync skips already-present Message-IDs (read-only source).
+	if err := a.ResetTakeoutCursor(); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	res3, err := a.ImportTakeout(path, 10)
+	if err != nil {
+		t.Fatalf("import3: %v", err)
+	}
+	if res3.Stored != 0 || res3.Skipped != 3 {
+		t.Fatalf("res3 = %+v", res3)
 	}
 
 	hits, err := a.Search(MailSearchQuery{Q: "takeout", WithBody: true})
@@ -226,6 +238,54 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	srv2.handleAdminRoutes(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("missing path = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestTakeoutImportResumesWithoutFullRescan(t *testing.T) {
+	a := openTestMailArchive(t)
+	dir := t.TempDir()
+	path := writeTakeoutMbox(t, dir) // 3 messages
+
+	// First batch stores 2 and leaves the third for later.
+	res1, err := a.ImportTakeout(path, 2)
+	if err != nil {
+		t.Fatalf("batch1: %v", err)
+	}
+	if res1.Scanned != 2 || res1.Stored != 2 || !res1.Truncated || res1.Done {
+		t.Fatalf("batch1 = %+v", res1)
+	}
+
+	// Second batch must continue at the cursor — not re-scan the first two.
+	res2, err := a.ImportTakeout(path, 10)
+	if err != nil {
+		t.Fatalf("batch2: %v", err)
+	}
+	if res2.Scanned != 1 || res2.Stored != 1 || !res2.Done {
+		t.Fatalf("batch2 should resume at cursor, got %+v", res2)
+	}
+	if res2.Skipped != 0 {
+		t.Fatalf("batch2 skipped (would indicate a re-scan) = %d", res2.Skipped)
+	}
+
+	// A completed export is a cheap no-op.
+	res3, err := a.ImportTakeout(path, 10)
+	if err != nil {
+		t.Fatalf("batch3: %v", err)
+	}
+	if !res3.Done || res3.Scanned != 0 || res3.Stored != 0 {
+		t.Fatalf("batch3 = %+v", res3)
+	}
+
+	// Explicit reset walks again and skips via identity.
+	if err := a.ResetTakeoutCursor(); err != nil {
+		t.Fatalf("reset: %v", err)
+	}
+	res4, err := a.ImportTakeout(path, 10)
+	if err != nil {
+		t.Fatalf("batch4: %v", err)
+	}
+	if res4.Scanned != 3 || res4.Stored != 0 || res4.Skipped != 3 || !res4.Done {
+		t.Fatalf("batch4 after reset = %+v", res4)
 	}
 }
 
