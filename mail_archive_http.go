@@ -247,6 +247,12 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 
 	// Takeout is a read-only sync location (mbox / zip / directory on disk).
 	if req.Service == takeoutServiceID {
+		if req.ResetCursor {
+			if err := a.ResetTakeoutCursor(); err != nil {
+				writeJSONError(w, http.StatusInternalServerError, "failed to reset takeout cursor")
+				return
+			}
+		}
 		s.handleTakeoutSyncRequest(w, r, req, requireAgentMessagesRead)
 		return
 	}
