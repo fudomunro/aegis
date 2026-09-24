@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -487,5 +488,32 @@ func TestGmailHelpers_HeaderAndDirection(t *testing.T) {
 	odd := mapGmailAddressHeader("not-an-address")
 	if len(odd) != 1 || odd[0].Name != "not-an-address" {
 		t.Fatalf("odd = %+v", odd)
+	}
+}
+
+func TestGmailListHTTPError(t *testing.T) {
+	disabled := gmailListHTTPError("messages list", 403, []byte(`{"error":{"status":"PERMISSION_DENIED","message":"Gmail API has not been used in project 123 before or it is disabled"}}`))
+	if !strings.Contains(disabled.Error(), "Gmail API is not enabled") ||
+		!strings.Contains(disabled.Error(), "gmail.googleapis.com") {
+		t.Fatalf("disabled error = %v", disabled)
+	}
+	if !strings.Contains(disabled.Error(), "messages list") || !strings.Contains(disabled.Error(), "403") {
+		t.Fatalf("disabled error should keep op/status: %v", disabled)
+	}
+
+	quota := gmailListHTTPError("threads list", 429, []byte(`{"error":{"message":"Quota exceeded"}}`))
+	if !strings.Contains(quota.Error(), "Quota exceeded") || !strings.Contains(quota.Error(), "threads list") {
+		t.Fatalf("quota error = %v", quota)
+	}
+
+	empty := gmailListHTTPError("message get", 500, nil)
+	if empty.Error() != "gmail message get returned 500" {
+		t.Fatalf("empty body error = %v", empty)
+	}
+
+	longBody := bytes.Repeat([]byte("x"), 500)
+	long := gmailListHTTPError("messages list", 400, longBody)
+	if !strings.Contains(long.Error(), strings.Repeat("x", 400)) || strings.Contains(long.Error(), strings.Repeat("x", 401)) {
+		t.Fatalf("long body should clip at 400: len=%d", len(long.Error()))
 	}
 }
