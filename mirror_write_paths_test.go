@@ -356,9 +356,9 @@ func TestYouTubeMirror_LoadPlaylistAndItems(t *testing.T) {
 				writeMirrorJSON(w, map[string]any{
 					"items": []any{
 						map[string]any{"snippet": map[string]any{
-							"title":                   "Song One",
-							"videoOwnerChannelTitle":  "Artist One - Topic",
-							"resourceId":              map[string]any{"videoId": "vid1"},
+							"title":                  "Song One",
+							"videoOwnerChannelTitle": "Artist One - Topic",
+							"resourceId":             map[string]any{"videoId": "vid1"},
 						}},
 						map[string]any{"snippet": map[string]any{
 							"title":      "No Video",
@@ -600,9 +600,9 @@ func TestYouTubeMirror_LoadLikedTracks(t *testing.T) {
 					"items": []any{map[string]any{
 						"id": "vid-liked",
 						"snippet": map[string]any{
-							"title":           "Liked Track",
-							"channelTitle":    "Liked Artist - Topic",
-							"categoryId":      "10",
+							"title":                  "Liked Track",
+							"channelTitle":           "Liked Artist - Topic",
+							"categoryId":             "10",
 							"videoOwnerChannelTitle": "Liked Artist - Topic",
 						},
 						"contentDetails": map[string]any{"duration": "PT3M"},
@@ -650,7 +650,7 @@ func TestMirrorTrackFromSpotify_PartialShapes(t *testing.T) {
 }
 
 func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	logger := slog.Default()
 
 	t.Run("unauthorized sentinel", func(t *testing.T) {

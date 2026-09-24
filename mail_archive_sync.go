@@ -104,7 +104,7 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 			return c.finishMailSync(archive, res, cursor, err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return c.finishMailSync(archive, res, cursor, err)
 		}

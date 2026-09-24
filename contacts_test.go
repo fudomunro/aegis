@@ -203,7 +203,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 			{ID: "outlook", Name: "Outlook", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{
 			contacts: []Contact{
@@ -268,7 +268,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 
 func TestHandleLibraryContacts_NoProviders(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": NewSpotifyConnector(srv),
 	}
@@ -295,7 +295,7 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{
 			contacts: []Contact{{Name: "Ada", Sources: []ContactSource{{Service: "google", ID: "1"}}}},
@@ -319,7 +319,7 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 			{ID: "outlook", Name: "Outlook", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{
 			contacts: []Contact{
@@ -353,7 +353,7 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{{ID: "google", Name: "Google", Action: "inject"}},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{err: errors.New("upstream boom")},
 	}
@@ -379,7 +379,7 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 }
 
 func TestHandleLibraryContacts_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("POST", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -437,7 +437,7 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 			{ID: "google", Name: "Google", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{},
 	}
@@ -472,7 +472,7 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 }
 
 func TestHasContactProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{}
 	if srv.hasContactProviders() {
 		t.Fatal("empty connectors should have no contact providers")

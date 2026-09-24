@@ -46,7 +46,7 @@ func TestCache_SnapshotStatsClear(t *testing.T) {
 }
 
 func TestHandleAdmin_HTMLShell(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 
@@ -56,7 +56,7 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, "Guardian — Admin") {
+	if !strings.Contains(body, "Aegis — Admin") {
 		t.Fatal("expected admin page title")
 	}
 	if !strings.Contains(body, "/v1/admin/summary") {
@@ -71,7 +71,7 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 	if !strings.Contains(body, `id="tab-advanced"`) || !strings.Contains(body, `id="panel-advanced"`) {
 		t.Fatal("expected Advanced tab consolidating cache/runtime/map details")
 	}
-	if strings.Contains(body, "Guardian Admin") || strings.Contains(body, "status-strip") {
+	if strings.Contains(body, "Aegis Admin") || strings.Contains(body, "status-strip") {
 		t.Fatal("expected top-bar stats/title removed in issue #69 cleanup")
 	}
 	if !strings.Contains(body, "PAGE_SIZE") || !strings.Contains(body, "paginate(") {
@@ -108,7 +108,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 			{ID: "tidal", Name: "Tidal", Action: "block"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Tokens["spotify"] = &OAuthToken{
 		AccessToken:  "access-token-secret",
 		RefreshToken: "refresh-token-secret",
@@ -164,7 +164,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 }
 
 func TestAdminRoutes_AuthRequired(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	// HTML shell is public.
 	req := httptest.NewRequest("GET", "/v1/admin/", nil)
@@ -208,7 +208,7 @@ func TestAdminRoutes_AuthRequired(t *testing.T) {
 }
 
 func TestHandleAdminCacheClear(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.cache.Set("k", "v", time.Minute)
 
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
@@ -298,7 +298,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 }
 
 func TestHandleAdminMailDisabled(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
@@ -317,7 +317,7 @@ func TestHandleAdminMailDisabled(t *testing.T) {
 
 func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	dir := t.TempDir()
-	path := dir + "/guardian.json"
+	path := dir + "/aegis.json"
 	initial := `{
 		"services": [
 			{
@@ -349,7 +349,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatal("in-memory player permission not applied")
 	}
 
-	// Reloaded: overlay applied on top of bootstrap guardian.json.
+	// Reloaded: overlay applied on top of bootstrap aegis.json.
 	fresh, err := LoadConfig(path)
 	if err != nil {
 		t.Fatalf("reload: %v", err)
@@ -385,7 +385,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 
 func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	dir := t.TempDir()
-	path := dir + "/guardian.json"
+	path := dir + "/aegis.json"
 	initial := `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`
 	if err := writeFile(path, initial); err != nil {
 		t.Fatal(err)
@@ -394,7 +394,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 	srv.cache.Set("stale", "x", time.Minute)
 
@@ -479,7 +479,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 
 func TestAdminSummary_IncludesAvailableDataTypes(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
@@ -504,7 +504,7 @@ func TestAdminSummary_SupportsPhotoPicker(t *testing.T) {
 		{ID: "google-photos", Name: "Google Photos", Action: "inject"},
 		{ID: "spotify", Name: "Spotify", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-photos"] = NewGooglePhotosConnector(srv)
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 
@@ -530,7 +530,7 @@ func TestAdminSummary_SupportsPhotoPicker(t *testing.T) {
 }
 
 func TestHandleAdmin_HTMLIncludesPhotoPick(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
@@ -550,7 +550,7 @@ func TestHandleAdmin_HTMLIncludesPhotoPick(t *testing.T) {
 }
 
 func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
@@ -575,7 +575,7 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 		"serviceFlowRows",
 		"Pick photos",
 		"supports_photo_picker",
-		"Agents → Guardian → service",
+		"Agents → Aegis → service",
 		"unified library",
 		"has_event_provider",
 		"has_message_provider",
@@ -598,7 +598,7 @@ func TestHandleAdminSummary_ProviderJSONFlags(t *testing.T) {
 		Connections: map[string]Connection{
 			"spotify": {Name: "Spotify", ClientID: "cid", ClientSecret: "sec", Scopes: []string{"user-library-read"}},
 		},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")

@@ -23,7 +23,7 @@ func TestGooglePhotosConnector_DeleteSession_Success(t *testing.T) {
 
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject", Endpoint: upstream.URL,
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGooglePhotosConnector(srv)
 
@@ -61,7 +61,7 @@ func TestGooglePhotosConnector_DeleteSession_UpstreamError(t *testing.T) {
 
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject", Endpoint: upstream.URL,
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGooglePhotosConnector(srv)
 
@@ -80,7 +80,7 @@ func TestGooglePhotosConnector_DeleteSession_UpstreamError(t *testing.T) {
 func TestGooglePhotosConnector_DeleteSession_UpstreamDown(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject", Endpoint: "http://127.0.0.1:1",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGooglePhotosConnector(srv)
 
@@ -95,7 +95,7 @@ func TestGooglePhotosConnector_DeleteSession_UpstreamDown(t *testing.T) {
 func TestGooglePhotosConnector_HandleProxy_SessionRouting(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	conn := NewGooglePhotosConnector(srv)
 
 	// No token → 401
@@ -185,7 +185,7 @@ func TestWriteGooglePhotosUpstreamError(t *testing.T) {
 }
 
 func TestGoogleContactsConnector_Capabilities(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewGoogleContactsConnector(srv)
 	caps := conn.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "contacts" {
@@ -205,7 +205,7 @@ func TestGoogleContactsConnector_Capabilities(t *testing.T) {
 }
 
 func TestImmichConnector_Capabilities(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewImmichConnector(srv)
 	caps := conn.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "photos" {
@@ -235,7 +235,7 @@ func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
 		t.Fatalf("albumServiceName = %q", got)
 	}
 
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.libraryPhotosSystemInstructions()
 	if !strings.Contains(instr, "/v1/library/photos") {
 		t.Fatalf("photos instructions missing endpoint: %s", instr)

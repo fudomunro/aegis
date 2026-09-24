@@ -10,7 +10,7 @@ import (
 )
 
 func TestAuthMiddleware_ValidBearer(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	called := false
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -33,7 +33,7 @@ func TestAuthMiddleware_ValidBearer(t *testing.T) {
 }
 
 func TestAuthMiddleware_ValidAPIKey(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	called := false
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		called = true
@@ -52,7 +52,7 @@ func TestAuthMiddleware_ValidAPIKey(t *testing.T) {
 }
 
 func TestAuthMiddleware_InvalidAuth(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		t.Fatal("inner handler should not be called")
 	}
@@ -75,7 +75,7 @@ func TestHandlePreRequest_NoServiceMatch(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-1"},
@@ -103,7 +103,7 @@ func TestHandlePreRequest_BlockService(t *testing.T) {
 			{ID: "tidal", Name: "Tidal", Action: "block", Description: "not permitted"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-2"},
@@ -138,7 +138,7 @@ func TestHandlePreRequest_InjectService(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	originalReq := map[string]any{
 		"model": "gpt-4",
@@ -182,7 +182,7 @@ func TestHandlePreRequest_InjectService(t *testing.T) {
 		t.Fatalf("first message role = %q, want %q", sysMsg["role"], "system")
 	}
 	content := sysMsg["content"].(string)
-	if !strings.Contains(content, "https://guardian.example.com/v1/services/spotify") {
+	if !strings.Contains(content, "https://aegis.example.com/v1/services/spotify") {
 		t.Fatalf("system message missing proxy URL: %q", content)
 	}
 	if !strings.Contains(content, "Spotify") {
@@ -196,7 +196,7 @@ func TestHandlePreRequest_AliasMatch(t *testing.T) {
 			{ID: "ytm", Name: "YouTube Music", Aliases: []string{"yt music", "ytmusic"}, Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-4"},
@@ -233,7 +233,7 @@ func TestHandlePreRequest_InjectNoEndpoint(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-5"},
@@ -259,7 +259,7 @@ func TestHandlePreRequest_InjectNoEndpoint(t *testing.T) {
 }
 
 func TestHandlePreRequest_InvalidPayload(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader([]byte("{bad")))
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -281,7 +281,7 @@ func TestHandlePreRequest_BlockTakesPriorityOverInject(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "block"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-6"},
@@ -307,7 +307,7 @@ func TestHandlePreRequest_MultipleServices(t *testing.T) {
 			{ID: "ytm", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	payload := PreRequestPayload{
 		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-7"},
@@ -420,7 +420,7 @@ func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	originalReq := map[string]any{
 		"model": "gpt-4",

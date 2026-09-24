@@ -63,7 +63,7 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 		Action:   "inject",
 		Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := NewGoogleContactsConnector(srv)
@@ -112,7 +112,7 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 func TestGoogleContactsConnector_ListUserContacts_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	conn := NewGoogleContactsConnector(srv)
 	_, _, err := conn.ListUserContacts(context.Background())
 	if !errors.Is(err, ErrUnauthorized) {
@@ -142,7 +142,7 @@ func TestGoogleContactsConnector_ListUserContacts_PaginatesAndTruncates(t *testi
 	cfg := &Config{Services: []Service{{
 		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := NewGoogleContactsConnector(srv)
@@ -176,7 +176,7 @@ func TestGoogleContactsConnector_HandleProxy_List(t *testing.T) {
 	cfg := &Config{Services: []Service{{
 		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleContactsConnector(srv)
 
@@ -211,7 +211,7 @@ func TestGoogleContactsConnector_HandleProxy_GetByID(t *testing.T) {
 	cfg := &Config{Services: []Service{{
 		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleContactsConnector(srv)
 
@@ -258,16 +258,16 @@ func TestContactIDFromProxyPath(t *testing.T) {
 }
 
 func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewGoogleContactsConnector(srv)
-	instr := conn.SystemInstructions("https://guardian.example.com")
+	instr := conn.SystemInstructions("https://aegis.example.com")
 	if !strings.Contains(instr, "/v1/library/contacts") {
 		t.Fatalf("missing library endpoint: %s", instr)
 	}
 	if !strings.Contains(instr, "/v1/services/google") {
 		t.Fatalf("missing proxy base: %s", instr)
 	}
-	if !strings.Contains(instr, "Guardian authenticates you") {
+	if !strings.Contains(instr, "Aegis authenticates you") {
 		t.Fatalf("missing authenticates wording: %s", instr)
 	}
 	if !strings.Contains(instr, "Photo.people") {
@@ -276,7 +276,7 @@ func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 }
 
 func TestGoogleContactsConnector_ImplementsContactProvider(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	var _ ContactProvider = NewGoogleContactsConnector(srv)
 	var _ ServiceConnector = NewGoogleContactsConnector(srv)
 }
@@ -355,7 +355,7 @@ func TestDataTypeForPath_PeopleAPI(t *testing.T) {
 }
 
 func TestHasContactProviders_GoogleContacts(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		googleContactsServiceID: NewGoogleContactsConnector(srv),
 	}

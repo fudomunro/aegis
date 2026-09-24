@@ -70,7 +70,7 @@ func TestGetConnection(t *testing.T) {
 }
 
 func TestLibraryRouteHandlers_Registry(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	routes := srv.libraryRouteHandlers()
 	want := []string{
 		"/v1/library/playlists",
@@ -103,7 +103,7 @@ func TestTokenDisplayName(t *testing.T) {
 		Services: []Service{
 			{ID: "spotify", Name: "Spotify"},
 		},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 
 	if got := srv.tokenDisplayName("google"); got != "Google Workspace" {
 		t.Fatalf("connection name = %q", got)
@@ -125,7 +125,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 		ID:          "spotify",
 		OAuthScopes: []string{"user-library-read", "playlist-modify"},
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	logger := slog.Default()
 
 	if srv.getValidToken("spotify", logger) != "" {
@@ -209,7 +209,7 @@ func TestScopesSatisfy_CoverageHelpers(t *testing.T) {
 
 func TestHandleAdminRoutesStillRegistered(t *testing.T) {
 	// Smoke: library route handlers are wired and method-checked.
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	handler := srv.libraryRouteHandlers()["/v1/library/review"]
 	req := httptest.NewRequest(http.MethodHead, "/v1/library/review", nil)
 	w := httptest.NewRecorder()

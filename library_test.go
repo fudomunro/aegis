@@ -32,7 +32,7 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []Playlist{
@@ -95,7 +95,7 @@ func TestHandleLibraryPlaylists_UnauthorizedService(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []Playlist{
@@ -138,7 +138,7 @@ func TestHandleLibraryPlaylists_ErrorService(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{err: errors.New("upstream boom")},
 	}
@@ -170,7 +170,7 @@ func TestPreRequest_PlaylistWithoutServiceName(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": NewSpotifyConnector(srv),
 	}
@@ -210,7 +210,7 @@ func TestPreRequest_NoServiceNoPlaylistKeyword(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": NewSpotifyConnector(srv),
 	}
@@ -254,7 +254,7 @@ func TestSpotifyConnector_ListUserPlaylists_MockAPI(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -285,7 +285,7 @@ func TestSpotifyConnector_ListUserPlaylists_Unauthorized(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	_, _, err := conn.ListUserPlaylists(context.Background())
@@ -303,7 +303,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []Playlist{{Name: "Jazz", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
@@ -333,7 +333,7 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []Playlist{{Name: "Jazz", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
@@ -381,7 +381,7 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{
 			tracks: []Track{
@@ -465,7 +465,7 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{
 			tracks: []Track{
@@ -504,7 +504,7 @@ func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{
 			tracks: []Track{{Name: "Solo", Sources: []TrackSource{{Service: "spotify", ID: "sp1"}}}},
@@ -527,7 +527,7 @@ func TestPreRequest_LikedSongsWithoutServiceName(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": NewSpotifyConnector(srv),
 	}
@@ -586,7 +586,7 @@ func TestSpotifyConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -647,7 +647,7 @@ func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -714,7 +714,7 @@ func TestYouTubeConnector_ListUserLikedTracks_FiltersNonMusic(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -812,7 +812,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeAlbumProvider{
 			albums: []Album{
@@ -851,7 +851,7 @@ func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{"albums": AccessNone}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeAlbumProvider{albums: []Album{{Name: "X", Sources: []AlbumSource{{Service: "spotify", ID: "1"}}}}},
 	}
@@ -872,7 +872,7 @@ func TestHandleLibraryArtists_AggregatesAndMerges(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeArtistProvider{
 			artists: []Artist{
@@ -918,7 +918,7 @@ func TestPreRequest_AlbumsWithoutServiceName(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{"spotify": NewSpotifyConnector(srv)}
 
 	payload := PreRequestPayload{
@@ -961,7 +961,7 @@ func TestSpotifyConnector_ListUserSavedAlbums_MockAPI(t *testing.T) {
 	defer mock.Close()
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	albums, _, err := NewSpotifyConnector(srv).ListUserSavedAlbums(context.Background())
@@ -988,7 +988,7 @@ func TestSpotifyConnector_ListUserFollowedArtists_MockAPI(t *testing.T) {
 	defer mock.Close()
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	artists, _, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
@@ -1016,7 +1016,7 @@ func TestYouTubeConnector_ListUserFollowedArtists_MockAPI(t *testing.T) {
 	defer mock.Close()
 
 	cfg := &Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	artists, _, err := NewYouTubeMusicConnector(srv).ListUserFollowedArtists(context.Background())

@@ -15,9 +15,9 @@ func mustWriteFile(t *testing.T, path, content string) {
 	}
 }
 
-func TestPermissionsOverlay_PersistsWithoutTouchingGuardianJSON(t *testing.T) {
+func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "guardian.json")
+	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "permissions.json")
 	initial := `{
 		"connections": {
@@ -53,7 +53,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingGuardianJSON(t *testing.T) {
 	if err := cfg.InitPermissionsStore(permsPath); err != nil {
 		t.Fatalf("InitPermissionsStore: %v", err)
 	}
-	// Bootstrap from guardian.json still applies when overlay is empty.
+	// Bootstrap from aegis.json still applies when overlay is empty.
 	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != AccessRead {
 		t.Fatalf("bootstrap tracks = %q, want read", got)
 	}
@@ -70,10 +70,10 @@ func TestPermissionsOverlay_PersistsWithoutTouchingGuardianJSON(t *testing.T) {
 		t.Fatal(err)
 	}
 	if string(before) != string(after) {
-		t.Fatalf("guardian.json was rewritten:\nbefore=%s\nafter=%s", before, after)
+		t.Fatalf("aegis.json was rewritten:\nbefore=%s\nafter=%s", before, after)
 	}
 	if !strings.Contains(string(after), "super-secret") {
-		t.Fatal("guardian.json lost OAuth secret")
+		t.Fatal("aegis.json lost OAuth secret")
 	}
 
 	ovRaw, err := os.ReadFile(permsPath)
@@ -125,19 +125,19 @@ func TestPermissionsOverlay_PersistsWithoutTouchingGuardianJSON(t *testing.T) {
 		t.Fatalf("clear must override bootstrap, got %+v", fresh.GetService("spotify").Permissions)
 	}
 
-	// guardian.json still untouched after clear.
+	// aegis.json still untouched after clear.
 	after2, err := os.ReadFile(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if string(before) != string(after2) {
-		t.Fatal("guardian.json was rewritten after clear")
+		t.Fatal("aegis.json was rewritten after clear")
 	}
 }
 
 func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "guardian.json")
+	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "permissions.json")
 	mustWriteFile(t, cfgPath, `{
 		"services": [
@@ -178,7 +178,7 @@ func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T
 
 func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "guardian.json")
+	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "does-not-exist.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"player":"none"}}]}`)
 	cfg, err := LoadConfig(cfgPath)
@@ -195,7 +195,7 @@ func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 
 func TestPermissionsOverlay_InvalidLevelRejectedOnLoad(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "guardian.json")
+	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "permissions.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
 	mustWriteFile(t, permsPath, `{"version":1,"services":{"spotify":{"tracks":"maybe"}}}`)
@@ -206,7 +206,7 @@ func TestPermissionsOverlay_InvalidLevelRejectedOnLoad(t *testing.T) {
 
 func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "guardian.json")
+	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "permissions.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"default":"read"}}]}`)
 	mustWriteFile(t, permsPath, `{"version":1,"services":{"spotify":{"default":"none"}}}`)
@@ -220,7 +220,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 		t.Fatalf("overlay tracks = %q, want none", got)
 	}
 
-	// Simulate external guardian.json edit (bootstrap change), then reload.
+	// Simulate external aegis.json edit (bootstrap change), then reload.
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"default":"read","player":"read"}}]}`)
 	if err := cfg.Reload(); err != nil {
 		t.Fatalf("Reload: %v", err)
@@ -233,7 +233,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 
 func TestInitPermissionsStore_EmptyPathRejected(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "guardian.json")
+	cfgPath := filepath.Join(dir, "aegis.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {

@@ -11,10 +11,10 @@ import (
 )
 
 // GoogleContactsConnector proxies the Google People API and implements
-// ContactProvider. It lists the user's address-book contacts in Guardian's
+// ContactProvider. It lists the user's address-book contacts in Aegis's
 // neutral Contact shape so photo.people[] and other cross-type links can
 // share the same identity matching (email → phone → handle → name).
-// https://github.com/fudomunro/aperture-guardian/issues/22
+// https://github.com/fudomunro/aegis/issues/22
 type GoogleContactsConnector struct {
 	server *Server
 }
@@ -87,16 +87,16 @@ func (c *GoogleContactsConnector) Capabilities() ServiceCapabilities {
 func (c *GoogleContactsConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/" + googleContactsServiceID
-	return fmt.Sprintf(`When the user's request involves Google Contacts or their address book, you MUST use the Guardian proxy at %s instead of calling Google People API directly.
+	return fmt.Sprintf(`When the user's request involves Google Contacts or their address book, you MUST use the Aegis proxy at %s instead of calling Google People API directly.
 
 For "my contacts" across every connected contact service, prefer the unified library endpoint first:
 GET %s/v1/library/contacts — contacts in one neutral list (name, emails, phones, organization, sources[])
 
-Google Contacts-specific endpoints (call the full proxy URL; Guardian authenticates you):
+Google Contacts-specific endpoints (call the full proxy URL; Aegis authenticates you):
 GET /me/contacts — list address-book contacts (neutral Contact metadata)
 GET /contacts/{id} — one contact (id is people/… resource name or bare ID)
 
-Contacts use Guardian's neutral identity matching (email → phone → handle → name). Photo.people[] entries are Contact values, so a person from this address book can be matched to someone listed on a photo when a connector reports them.
+Contacts use Aegis's neutral identity matching (email → phone → handle → name). Photo.people[] entries are Contact values, so a person from this address book can be matched to someone listed on a photo when a connector reports them.
 Always include the full proxy base URL in your requests.`, base, root)
 }
 
@@ -146,7 +146,7 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
@@ -222,7 +222,7 @@ func (c *GoogleContactsConnector) handleGetContact(w http.ResponseWriter, r *htt
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		logger.Error("contact request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
@@ -292,7 +292,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]Conta
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}

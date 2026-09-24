@@ -53,7 +53,7 @@ func TestServeHeaderResolver_NoIdentity(t *testing.T) {
 }
 
 func TestAuthMiddleware_TailnetMode_RequiresIdentity(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeTailnet
 	srv.identity = ServeHeaderResolver{}
 	srv.apiKey = "unused"
@@ -85,7 +85,7 @@ func TestAuthMiddleware_TailnetMode_RequiresIdentity(t *testing.T) {
 }
 
 func TestAuthMiddleware_TailnetMode_Allowlist(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeTailnet
 	srv.identity = ServeHeaderResolver{}
 	srv.allowedLogins = []string{"alice@example.com"}
@@ -113,7 +113,7 @@ func TestAuthMiddleware_TailnetMode_Allowlist(t *testing.T) {
 }
 
 func TestAuthMiddleware_AutoMode_PrefersIdentity(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeAuto
 	srv.apiKey = "test-key"
 	srv.identity = ServeHeaderResolver{}
@@ -136,7 +136,7 @@ func TestAuthMiddleware_AutoMode_PrefersIdentity(t *testing.T) {
 }
 
 func TestAuthMiddleware_AutoMode_FallsBackToAPIKey(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeAuto
 	srv.apiKey = "test-key"
 	srv.identity = ServeHeaderResolver{}
@@ -168,7 +168,7 @@ func TestAuthMiddleware_AutoMode_FallsBackToAPIKey(t *testing.T) {
 }
 
 func TestAuthMiddleware_APIKeyMode_IgnoresTailnetHeaders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeAPIKey
 	srv.apiKey = "test-key"
 	srv.identity = ServeHeaderResolver{}
@@ -230,7 +230,7 @@ func TestMultiResolver_FirstHitWins(t *testing.T) {
 
 // Ensure JSON error body shape stays stable for unauthorized responses.
 func TestDenyWritesJSON(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeAPIKey
 	srv.apiKey = "k"
 	srv.AuthMiddleware(func(http.ResponseWriter, *http.Request) {})(httptest.NewRecorder(), httptest.NewRequest("GET", "/", nil))

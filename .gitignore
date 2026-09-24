@@ -1,16 +1,20 @@
 # Binaries
+aegis
 aperture-guardian
 guardian
 *.exe
 
 # Local live-test state (issue #1)
+aegis.json
 guardian.json
 tokens.json
 entity_links.json
 permissions.json
 mail-archive.db
 mail-archive.db-*
+.aegis-token-pass
 .guardian-token-pass
+aegis.log
 guardian.log
 *.log
 coverage.out

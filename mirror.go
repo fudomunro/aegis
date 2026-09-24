@@ -96,7 +96,7 @@ func (t mirrorTrack) searchQuery() string {
 }
 
 // HandleLibraryMirror copies a playlist or liked-tracks list from one service
-// to another (issue #16 phase 3). Guardian still stores no media; it reads
+// to another (issue #16 phase 3). Aegis still stores no media; it reads
 // from the source service and writes through the target's upstream API using
 // the stored OAuth token.
 //
@@ -213,11 +213,11 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		if req.Kind == MirrorKindPlaylists {
 			name = srcRef.Name
 		} else {
-			name = "Guardian liked tracks backup"
+			name = "Aegis liked tracks backup"
 		}
 	}
 	if name == "" {
-		name = "Guardian mirror"
+		name = "Aegis mirror"
 	}
 
 	result := MirrorResult{
@@ -397,7 +397,7 @@ func (s *Server) mirrorUpstream(ctx context.Context, serviceID, method, path str
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}

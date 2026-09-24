@@ -79,7 +79,7 @@ func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
 		Action:   "inject",
 		Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := NewGoogleCalendarConnector(srv)
@@ -124,7 +124,7 @@ func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
 func TestGoogleCalendarConnector_ListCalendarEvents_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	conn := NewGoogleCalendarConnector(srv)
 	_, _, err := conn.ListCalendarEvents(context.Background())
 	if !errors.Is(err, ErrUnauthorized) {
@@ -161,7 +161,7 @@ func TestGoogleCalendarConnector_ListCalendarEvents_PaginatesAndTruncates(t *tes
 	cfg := &Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := NewGoogleCalendarConnector(srv)
@@ -205,7 +205,7 @@ func TestGoogleCalendarConnector_HandleProxy_ListEvents(t *testing.T) {
 	cfg := &Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleCalendarConnector(srv)
 
@@ -243,7 +243,7 @@ func TestGoogleCalendarConnector_HandleProxy_ListCalendars(t *testing.T) {
 	cfg := &Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleCalendarConnector(srv)
 
@@ -283,7 +283,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventByID(t *testing.T) {
 	cfg := &Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleCalendarConnector(srv)
 
@@ -322,7 +322,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventFromCalendarPath(t *testing
 	cfg := &Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleCalendarConnector(srv)
 
@@ -347,7 +347,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventFromCalendarPath(t *testing
 func TestGoogleCalendarConnector_HandleProxy_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 	conn := NewGoogleCalendarConnector(srv)
 
@@ -362,7 +362,7 @@ func TestGoogleCalendarConnector_HandleProxy_MethodNotAllowed(t *testing.T) {
 func TestGoogleCalendarConnector_HandleProxy_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject",
-	}}}, "https://guardian.example.com")
+	}}}, "https://aegis.example.com")
 	conn := NewGoogleCalendarConnector(srv)
 	req := httptest.NewRequest("GET", "/me/events", nil)
 	w := httptest.NewRecorder()
@@ -373,15 +373,15 @@ func TestGoogleCalendarConnector_HandleProxy_Unauthorized(t *testing.T) {
 }
 
 func TestGoogleCalendarConnector_SystemInstructions_MentionLibrary(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewGoogleCalendarConnector(srv)
-	instr := conn.SystemInstructions("https://guardian.example.com")
+	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/library/events",
 		"/me/events",
 		"/me/calendars",
 		"Google Calendar",
-		"Guardian authenticates you",
+		"Aegis authenticates you",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)
@@ -390,7 +390,7 @@ func TestGoogleCalendarConnector_SystemInstructions_MentionLibrary(t *testing.T)
 }
 
 func TestGoogleCalendarConnector_Capabilities_ReadOnlyEvents(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewGoogleCalendarConnector(srv)
 	caps := conn.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "events" {

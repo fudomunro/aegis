@@ -122,18 +122,18 @@ func (c *ImmichConnector) Capabilities() ServiceCapabilities {
 func (c *ImmichConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	proxy := root + "/v1/services/" + immichServiceID
-	return fmt.Sprintf(`When the user's request involves Immich (self-hosted photos), you MUST use the Guardian proxy at %s instead of calling Immich directly. Guardian adds the Immich API key (X-API-Key header from config) — do not ask the user for it.
+	return fmt.Sprintf(`When the user's request involves Immich (self-hosted photos), you MUST use the Aegis proxy at %s instead of calling Immich directly. Aegis adds the Immich API key (X-API-Key header from config) — do not ask the user for it.
 
 Preferred unified library first:
 GET %s/v1/library/photos — all photo metadata from every connected photo service, including Immich (bytes stay on Immich).
 
-Immich-specific endpoints (call the full proxy URL; Guardian authenticates you):
+Immich-specific endpoints (call the full proxy URL; Aegis authenticates you):
 POST /search/metadata — {"page":1,"size":250,"withExif":true} list assets
 GET /assets/{id}/original — download original bytes for one asset
 GET /assets/{id}/thumbnail — thumbnail bytes
 GET /albums — list albums
 
-Photos are metadata-only in the library. Use sources[].blob_url (Guardian proxy URL) to fetch bytes; Immich holds the authoritative copy (foreign canonical).
+Photos are metadata-only in the library. Use sources[].blob_url (Aegis proxy URL) to fetch bytes; Immich holds the authoritative copy (foreign canonical).
 Always include the full proxy base URL in your requests.`, proxy, root)
 }
 
@@ -170,7 +170,7 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 	}
 	c.applyImmichAuth(req, logger)
 
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		logger.Error("immich request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Immich request failed")
@@ -220,7 +220,7 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 
 // ListUserPhotos implements PhotoProvider. It pages Immich POST /search/metadata
 // and maps assets to neutral Photo values with canonical sources pointing at
-// Immich (via Guardian proxy download URLs).
+// Immich (via Aegis proxy download URLs).
 func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, error) {
 	logger := slog.Default()
 	upstream := c.immichUpstreamBase() + "/search/metadata"
@@ -246,7 +246,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, er
 		req.Header.Set("Content-Type", "application/json")
 		c.applyImmichAuth(req, logger)
 
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -292,7 +292,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, er
 	return all, truncated, nil
 }
 
-// neutralPhoto maps one Immich asset to Guardian's Photo shape.
+// neutralPhoto maps one Immich asset to Aegis's Photo shape.
 func (c *ImmichConnector) neutralPhoto(a immichAsset) Photo {
 	taken := ""
 	if a.Exif.DateTimeOriginal != "" {

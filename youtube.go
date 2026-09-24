@@ -128,7 +128,7 @@ func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
 func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/youtube-music"
-	return fmt.Sprintf(`When the user's request involves YouTube Music, you MUST use the Guardian proxy at %s instead of calling YouTube directly.
+	return fmt.Sprintf(`When the user's request involves YouTube Music, you MUST use the Aegis proxy at %s instead of calling YouTube directly.
 
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
@@ -136,7 +136,7 @@ GET %s/v1/library/playlists — all user playlists in one neutral list (synced a
 For "liked songs" / liked music across every connected music service:
 GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[]). YouTube likes are filtered to music-shaped videos (not every liked YouTube video).
 
-YouTube Music-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send YouTube tokens or an API key unless your deployment uses api-key mode):
+YouTube Music-specific endpoints (call the full proxy URL; Aegis authenticates you — do not send YouTube tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user's YouTube channel info
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)
@@ -148,7 +148,7 @@ GET /search?q=QUERY — Search YouTube Music (filters to music category)
 GET /videos/{id} — Get video details by ID
 GET /channels/{id} — Get channel details by ID
 
-Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
+Playlist responses use Aegis's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
 Always include the full proxy base URL in your requests.`, base, root, root)
@@ -379,7 +379,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -434,7 +434,7 @@ const youtubeMusicCategoryID = "10"
 // isMusicShapedYouTubeVideo reports whether a videos.list resource looks like
 // music (category Music, or an official catalog channel ending in " - Topic").
 // Used to keep non-music YouTube likes out of the neutral liked-tracks library.
-// See https://github.com/fudomunro/aperture-guardian/issues/43.
+// See https://github.com/fudomunro/aegis/issues/43.
 func isMusicShapedYouTubeVideo(categoryID, channelTitle string) bool {
 	if categoryID == youtubeMusicCategoryID {
 		return true
@@ -462,7 +462,7 @@ func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, u
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -495,7 +495,7 @@ func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, u
 // playlist is all-time YouTube likes (not music-only). Items are filtered to
 // music-shaped videos via videos.list so the neutral library, agent answers,
 // and mirror do not treat tutorials/vlogs as liked songs.
-// https://github.com/fudomunro/aperture-guardian/issues/43
+// https://github.com/fudomunro/aegis/issues/43
 func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
 	token := c.server.getValidToken("youtube-music", slog.Default())
 	if token == "" {
@@ -527,7 +527,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -619,7 +619,7 @@ func youtubePlaylistItemVideoID(item map[string]any) string {
 }
 
 // ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
-// and returns them in Guardian's neutral format.
+// and returns them in Aegis's neutral format.
 func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
 	token := c.server.getValidToken("youtube-music", slog.Default())
 	if token == "" {
@@ -643,7 +643,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playli
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}

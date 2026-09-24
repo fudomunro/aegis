@@ -11,10 +11,10 @@ import (
 )
 
 func TestAmazonMusicConnector_SystemInstructions(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
-	instructions := conn.SystemInstructions("https://guardian.example.com")
+	instructions := conn.SystemInstructions("https://aegis.example.com")
 
 	if !strings.Contains(instructions, "/v1/services/amazon-music") {
 		t.Fatal("instructions missing proxy base URL")
@@ -31,7 +31,7 @@ func TestAmazonMusicConnector_SystemInstructions(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformUser(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	// Standard format.
@@ -68,7 +68,7 @@ func TestAmazonMusicConnector_TransformUser(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	raw := map[string]any{
@@ -100,7 +100,7 @@ func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformSearch(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	// Categorized results.
@@ -142,7 +142,7 @@ func TestAmazonMusicConnector_TransformSearch(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformSearch_FlatList(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	// Flat items list (no categories).
@@ -166,7 +166,7 @@ func TestAmazonMusicConnector_TransformSearch_FlatList(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformTrack(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	// Direct track object.
@@ -187,7 +187,7 @@ func TestAmazonMusicConnector_TransformTrack(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformAlbum(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	raw := map[string]any{
@@ -218,7 +218,7 @@ func TestAmazonMusicConnector_TransformAlbum(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_TransformArtist(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	raw := map[string]any{
@@ -234,7 +234,7 @@ func TestAmazonMusicConnector_TransformArtist(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_ExtractArtistName(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	// Direct string.
@@ -261,7 +261,7 @@ func TestAmazonMusicConnector_HandleProxy_NoToken(t *testing.T) {
 			{ID: "amazon-music", Name: "Amazon Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"amazon-music": NewAmazonMusicConnector(srv),
 	}
@@ -300,7 +300,7 @@ func TestAmazonMusicConnector_HandleProxy_WithMockAPI(t *testing.T) {
 			{ID: "amazon-music", Name: "Amazon Music", Action: "inject", Endpoint: mockAPI.URL + "/v1"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("amazon-music", &OAuthToken{
 		AccessToken: "mock-amz-token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -357,7 +357,7 @@ func TestAmazonMusicConnector_HandleProxy_UpstreamDown(t *testing.T) {
 			{ID: "amazon-music", Name: "Amazon Music", Action: "inject", Endpoint: "http://127.0.0.1:1"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("amazon-music", &OAuthToken{
 		AccessToken: "token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -378,7 +378,7 @@ func TestAmazonMusicConnector_HandleProxy_UpstreamDown(t *testing.T) {
 }
 
 func TestAmazonMusicConnector_FirstNonNil(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	m := map[string]any{"a": nil, "b": "found", "c": "also"}

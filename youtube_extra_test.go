@@ -13,7 +13,7 @@ import (
 )
 
 func TestYouTubeSimplifyAndIsPaginated(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -38,7 +38,7 @@ func TestYouTubeSimplifyAndIsPaginated(t *testing.T) {
 }
 
 func TestYouTubeItemsKeyForPath(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	cases := map[string]string{
@@ -55,7 +55,7 @@ func TestYouTubeItemsKeyForPath(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_NoToken(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	if _, err := conn.getLikedPlaylistID(); err == nil {
 		t.Fatal("expected error without token")
@@ -63,10 +63,10 @@ func TestYouTubeGetLikedPlaylistID_NoToken(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
-	// getLikedPlaylistID may hit the real host; intercept via guardianHTTPClient.
-	orig := guardianHTTPClient
-	defer func() { guardianHTTPClient = orig }()
-	guardianHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	// getLikedPlaylistID may hit the real host; intercept via aegisHTTPClient.
+	orig := aegisHTTPClient
+	defer func() { aegisHTTPClient = orig }()
+	aegisHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			return &http.Response{
 				StatusCode: http.StatusUnauthorized,
@@ -83,7 +83,7 @@ func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
 		}, nil
 	})}
 
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.tokens.Tokens["youtube-music"] = &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -99,9 +99,9 @@ func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_NoChannel(t *testing.T) {
-	orig := guardianHTTPClient
-	defer func() { guardianHTTPClient = orig }()
-	guardianHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	orig := aegisHTTPClient
+	defer func() { aegisHTTPClient = orig }()
+	aegisHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(`{"items":[]}`)),
@@ -110,7 +110,7 @@ func TestYouTubeGetLikedPlaylistID_NoChannel(t *testing.T) {
 		}, nil
 	})}
 
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.tokens.Tokens["youtube-music"] = &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -126,7 +126,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestYouTubeListUserPlaylists_Unauthorized(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	if _, _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
 		t.Fatalf("err = %v", err)
@@ -148,7 +148,7 @@ func TestYouTubeListUserPlaylists_Success(t *testing.T) {
 
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "youtube-music", Endpoint: ts.URL}},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	srv.tokens.Tokens["youtube-music"] = &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -167,7 +167,7 @@ func TestYouTubeListUserPlaylists_Success(t *testing.T) {
 }
 
 func TestYouTubeFetchAllPages_NoToken(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	page := map[string]any{"items": []any{map[string]any{"id": "1"}}}
 	got := conn.fetchAllPagesRaw(context.Background(), "/playlists", nil, page, "tok", slog.Default())
@@ -191,7 +191,7 @@ func TestYouTubeFetchAllPages_WithPagination(t *testing.T) {
 
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "youtube-music", Endpoint: ts.URL}},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	first := map[string]any{
@@ -212,7 +212,7 @@ func TestYouTubeFetchAllPages_WithPagination(t *testing.T) {
 }
 
 func TestYouTubeMapPath(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	apiPath, params, err := conn.mapPath("/me", nil)
@@ -252,7 +252,7 @@ func TestYouTubeMapPath(t *testing.T) {
 }
 
 func TestYouTubeTransformResponse_Default(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	out := conn.transformResponse("/other", []byte(`{"items":[{"id":"1"}],"nextPageToken":"x","href":"drop"}`), slog.Default())
 	m, ok := out.(map[string]any)
@@ -265,7 +265,7 @@ func TestYouTubeTransformResponse_Default(t *testing.T) {
 }
 
 func TestYouTubeTransformResponse_ErrorPassthrough(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	out := conn.transformResponse("/me", []byte(`{"error":{"code":401}}`), slog.Default())
 	m := out.(map[string]any)
@@ -275,7 +275,7 @@ func TestYouTubeTransformResponse_ErrorPassthrough(t *testing.T) {
 }
 
 func TestYouTubeFetchAllPages_NonMap(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	got := conn.fetchAllPages(context.Background(), "/me", nil, "not-a-map", "tok", slog.Default())
 	if got != "not-a-map" {
@@ -284,7 +284,7 @@ func TestYouTubeFetchAllPages_NonMap(t *testing.T) {
 }
 
 func TestYouTubeFetchAllPages_EmptyItemsKey(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	page := map[string]any{
 		"items":         []any{map[string]any{"id": "1"}},

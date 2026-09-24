@@ -62,7 +62,7 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 		if cached, ok := s.cache.Get(cacheKey); ok {
 			logger.Debug("cache hit")
 			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Guardian-Cache", "hit")
+			w.Header().Set("X-Aegis-Cache", "hit")
 			io.WriteString(w, cached)
 			return
 		}
@@ -118,7 +118,7 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("X-Guardian-Cache", "miss")
+	w.Header().Set("X-Aegis-Cache", "miss")
 	w.WriteHeader(status)
 	w.Write(result)
 }

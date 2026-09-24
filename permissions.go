@@ -135,7 +135,7 @@ func allowsMethod(level, method string) bool {
 	}
 }
 
-// DataTypeForPath classifies a service-proxy path into a Guardian data type.
+// DataTypeForPath classifies a service-proxy path into a Aegis data type.
 // Unknown paths return "" so callers fall through to the default access level.
 func DataTypeForPath(path string) string {
 	p := strings.TrimSpace(path)
