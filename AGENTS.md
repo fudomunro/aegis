@@ -1,4 +1,4 @@
-# AGENTS.md — Aperture Guardian
+# AGENTS.md — Aegis
 
 Instructions for coding agents working in this repository. Read this before
 touching code, config, or docs. `README.md` holds the full product/API surface;
@@ -11,14 +11,14 @@ A private Go service that sits next to [Tailscale Aperture](https://tailscale.co
 It does two jobs:
 
 1. **Pre-request hook** (`POST /v1/pre-request`) — detect named services in an
-   LLM request and inject instructions that point the agent at Guardian’s
+   LLM request and inject instructions that point the agent at Aegis’s
    proxy/library APIs.
 2. **Service proxy + unified library** — agents call
    `/v1/services/{id}/...` and `/v1/library/{kind}` instead of provider APIs.
-   Guardian attaches OAuth tokens, caches, enforces permissions, and returns
+   Aegis attaches OAuth tokens, caches, enforces permissions, and returns
    neutral models.
 
-Module: `github.com/fudomunro/aperture-guardian`  
+Module: `github.com/fudomunro/aegis`  
 Layout: **single package `main`** (flat `*.go` files at the repo root)  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
@@ -33,35 +33,35 @@ them away.
 - **Fail-open.** Fetch failures, missing endpoints, bad payloads, and
   non-actionable match results must **pass through unchanged**. The hook
   returns `allow` on parse/log errors. Do not invent fail-closed behavior.
-- **Guardian owns OAuth.** Agents never see tokens and must never be prompted
+- **Aegis owns OAuth.** Agents never see tokens and must never be prompted
   to authorize services directly. Tokens live encrypted on disk; proxy
   auto-refreshes; admin/API responses expose presence/scopes/expiry only.
 - **Connections, not per-surface OAuth.** Surfaces reference a top-level
   `connections` entry (`connection` + `oauth_scopes`). Do not reintroduce
   per-service inline OAuth dual paths.
-- **Guardian does not store media.** Canonical content stays on the source
-  service. `canonical_for` marks the non-Guardian home per library kind.
+- **Aegis does not store media.** Canonical content stays on the source
+  service. `canonical_for` marks the non-Aegis home per library kind.
 - **Coverage floor stays.** CI fails below **80%** statement coverage. Raise
   the floor when the suite grows; do **not** lower it to land untested write
   paths.
-- **Secrets stay out of git.** Never commit `guardian.json`, `tokens.json`,
-  `entity_links.json`, `permissions.json`, `.guardian-token-pass`, or live
-  binaries. Example config only via `guardian.example.json`.
-- **No Tailscale Funnel.** Guardian holds music OAuth tokens; it is a tailnet
+- **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
+  `entity_links.json`, `permissions.json`, `.aegis-token-pass`, or live
+  binaries. Example config only via `aegis.example.json`.
+- **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
   service. See `SECURITY.md`.
 
 ## Architecture map
 
 ```
-Agent → Aperture → Guardian pre-request hook → LLM
-Agent → Guardian proxy / library / admin → provider APIs
+Agent → Aperture → Aegis pre-request hook → LLM
+Agent → Aegis proxy / library / admin → provider APIs
 ```
 
 | Area | Where | Notes |
 |------|-------|-------|
 | Entry, flags, routes, connector registration | `main.go` | Wrap nearly every route in `AuthMiddleware` |
 | Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
-| Admin permissions overlay | `permissions_overlay.go` | `permissions.json` wins over guardian.json bootstrap; admin saves never rewrite guardian.json |
+| Admin permissions overlay | `permissions_overlay.go` | `permissions.json` wins over aegis.json bootstrap; admin saves never rewrite aegis.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared proxy path | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request` |
@@ -90,7 +90,7 @@ type ServiceConnector interface {
 - New library kinds plug into `LibraryKind` registry in `librarykind.go`.
 - Connectors must read **configured** `GetService(id).Endpoint` — never hardcode
   upstream base URLs (breaks mock tests and custom endpoints).
-- Prefer `runConnectorProxy` / `doUpstreamRequest` / `guardianHTTPClient`
+- Prefer `runConnectorProxy` / `doUpstreamRequest` / `aegisHTTPClient`
   over new `http.DefaultClient` call sites.
 
 ## How work happens here
@@ -108,7 +108,7 @@ Observed pattern across sessions (and the reason this file exists):
    - `test/…` coverage-only
    - `docs/…` documentation
 3. **Git worktree per branch.** Main worktree stays on `main`; feature work
-   runs in sibling dirs like `/Users/alec/Work/aperture-guardian-<slug>`.
+   runs in sibling dirs like `/Users/alec/Work/aegis-<slug>`.
    Do not mutate `main` in place for feature work.
 4. **PR before merge.** Merge commits are the normal landing path
    (`Merge pull request #N from …`). Body starts with `## Summary` and lists
@@ -118,7 +118,7 @@ Observed pattern across sessions (and the reason this file exists):
 6. **README is the product contract.** Config fields, endpoints, scopes, and
    canonical/mirror semantics must stay accurate when behavior changes.
 7. **User prefers Go** for this service (aligns with Tailscale stack). Do not
-   introduce another runtime for Guardian itself.
+   introduce another runtime for Aegis itself.
 8. **`learn.md` still applies to docs/index.html:** walkthrough page should
    mark the **current code version** (commit) when regenerated.
 
@@ -139,10 +139,10 @@ go test -count=1 ./...
 go test -v -count=1 -run TestName ./...
 
 # Build
-go build -o guardian .
+go build -o aegis .
 
 # Dev server (values are local-only examples)
-./guardian \
+./aegis \
   -addr :8080 \
   -base-url http://localhost:8080 \
   -api-key dev-key \
@@ -152,7 +152,7 @@ go build -o guardian .
 ```
 
 CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
-**80% floor**, and `go build -o aperture-guardian .`.
+**80% floor**, and `go build -o aegis .`.
 
 ## Code conventions
 
@@ -168,7 +168,7 @@ CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
   path classification in `permissions.go` must stay enforced on proxy,
   library, capabilities output, and pre-request injection.
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
-- **Outbound HTTP.** Use `guardianHTTPClient` and
+- **Outbound HTTP.** Use `aegisHTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
   token persist happens outside the map mutex; refresh uses singleflight.
 - **HTML in embed files.** Admin/setup markup belongs in `web/` +
@@ -205,7 +205,7 @@ CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
 | Fail-closed on fetch/parse errors | Fail-open / allow, log, continue |
 | Agents prompting users for OAuth | Central connections + setup/admin flows |
 | Caching 401/404/502 bodies | Cache 200 GET only |
-| `http.DefaultClient` / `http.PostForm` without timeout | `guardianHTTPClient` + context |
+| `http.DefaultClient` / `http.PostForm` without timeout | `aegisHTTPClient` + context |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Large admin HTML pasted back into `admin.go` | Keep `web/admin.html` embed |
@@ -220,7 +220,7 @@ CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
 |------|------------|
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `proxy.go`, `connector_proxy.go`, `httpclient.go` |
-| Config schema / service matching | `config.go`, `guardian.example.json`, README “Configuration” |
+| Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
 | Admin permission writes | `permissions_overlay.go`, `config.go` `SetServicePermissions`, README “Data permissions” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
 | Unified library + merge | `librarykind.go`, `match.go`, `models.go` |

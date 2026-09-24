@@ -111,7 +111,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/tracks", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -141,8 +141,8 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	req2.Header.Set("X-Api-Key", "test-key")
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleServiceProxy)(w2, req2)
-	if w2.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Guardian-Cache"))
+	if w2.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Aegis-Cache"))
 	}
 	snap = srv.metricsSnapshot(time.Hour)
 	st = snap.Services["spotify"]
@@ -162,7 +162,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = &fakePlaylistProvider{
 		playlists: []Playlist{{Name: "Mix", Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
@@ -195,7 +195,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = &fakePlaylistProvider{
 		playlists: []Playlist{{Name: "Mix", Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
@@ -230,8 +230,8 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("cached admin status = %d body=%s", w2.Code, w2.Body.String())
 	}
-	if w2.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Guardian-Cache"))
+	if w2.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("cache header = %q, want hit", w2.Header().Get("X-Aegis-Cache"))
 	}
 	snap = srv.metricsSnapshot(time.Hour)
 	if snap.TotalHits != 0 || snap.Libraries["playlists"].Hits != 0 {
@@ -254,7 +254,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 }
 
 func TestHandleAdminLibrary_UnknownKind(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, path := range []string{
 		"/v1/admin/library/",
 		"/v1/admin/library/nope",
@@ -280,7 +280,7 @@ func TestHandleAdminLibrary_UnknownKind(t *testing.T) {
 }
 
 func TestHandleAdminRoutes_LibraryRequiresAuth(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
 	w := httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)

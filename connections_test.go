@@ -161,7 +161,7 @@ func TestValidateConfig_SharedConnectionOK(t *testing.T) {
 
 func TestLoadConfig_SharedConnections(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "guardian.json")
+	path := filepath.Join(dir, "aegis.json")
 	body := `{
 		"connections": {
 			"google": {
@@ -199,7 +199,7 @@ func TestLoadConfig_SharedConnections(t *testing.T) {
 
 func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 	cfg := googleSharedConfig()
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	// Token only has YouTube scope — Photos surface must not use it.
 	srv.tokens.Save("google", &OAuthToken{

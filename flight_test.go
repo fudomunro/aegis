@@ -35,7 +35,7 @@ func TestRefreshToken_Singleflight(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Connection: "spotify", OAuthScopes: []string{"user-library-read"}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{
 		AccessToken:  "old",
 		RefreshToken: "rt",

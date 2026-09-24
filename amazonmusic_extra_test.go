@@ -10,7 +10,7 @@ import (
 )
 
 func TestAmazonSimplify(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 	raw := map[string]any{
 		"id":            "1",
@@ -28,7 +28,7 @@ func TestAmazonSimplify(t *testing.T) {
 }
 
 func TestAmazonListUserPlaylists_Unauthorized(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 	if _, _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
 		t.Fatalf("err = %v", err)
@@ -54,7 +54,7 @@ func TestAmazonListUserPlaylists_Success(t *testing.T) {
 
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "amazon-music", Endpoint: ts.URL}},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	srv.tokens.Tokens["amazon-music"] = &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -86,7 +86,7 @@ func TestAmazonListUserPlaylists_NextTokenTruncated(t *testing.T) {
 
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "amazon-music", Endpoint: ts.URL}},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	srv.tokens.Tokens["amazon-music"] = &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -112,7 +112,7 @@ func TestAmazonListUserPlaylists_HTTPError(t *testing.T) {
 
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "amazon-music", Endpoint: ts.URL}},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	srv.tokens.Tokens["amazon-music"] = &OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
@@ -124,7 +124,7 @@ func TestAmazonListUserPlaylists_HTTPError(t *testing.T) {
 }
 
 func TestAmazonNeutralAmazonTrack(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	tr := conn.neutralAmazonTrack(map[string]any{
@@ -155,7 +155,7 @@ func TestAmazonNeutralAmazonTrack(t *testing.T) {
 }
 
 func TestAmazonTransformLibrary(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	got := conn.transformLibrary(map[string]any{
@@ -171,7 +171,7 @@ func TestAmazonTransformLibrary(t *testing.T) {
 }
 
 func TestAmazonTransformRecommendations(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	got := conn.transformRecommendations(map[string]any{
@@ -186,7 +186,7 @@ func TestAmazonTransformRecommendations(t *testing.T) {
 }
 
 func TestAmazonTransformPlaylistDetail(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	detail := conn.transformPlaylistDetail(map[string]any{
@@ -220,7 +220,7 @@ func TestAmazonTransformPlaylistDetail(t *testing.T) {
 }
 
 func TestAmazonTransformTrackListAndSingle(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	listed := conn.transformTrack(map[string]any{
@@ -243,7 +243,7 @@ func TestAmazonTransformTrackListAndSingle(t *testing.T) {
 }
 
 func TestAmazonTransformAlbum(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	got := conn.transformAlbum(map[string]any{
@@ -265,7 +265,7 @@ func TestAmazonTransformAlbum(t *testing.T) {
 }
 
 func TestAmazonExtractHelpers(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 
 	if items := conn.extractItems(map[string]any{"results": []any{1}}); len(items) != 1 {
@@ -297,7 +297,7 @@ func TestAmazonExtractHelpers(t *testing.T) {
 }
 
 func TestAmazonFirstNonNil(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
 	m := map[string]any{"a": nil, "b": "val"}
 	if got := conn.firstNonNil(m, "a", "b"); got != "val" {

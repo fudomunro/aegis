@@ -10,26 +10,26 @@ import (
 var ErrUnauthorized = errors.New("unauthorized")
 
 // PlaylistProvider is implemented by connectors that can return the user's
-// playlists in Guardian's neutral format. truncated is true when the page cap
+// playlists in Aegis's neutral format. truncated is true when the page cap
 // was hit with more items still upstream.
 type PlaylistProvider interface {
 	ListUserPlaylists(ctx context.Context) (playlists []Playlist, truncated bool, err error)
 }
 
 // LikedTrackProvider is implemented by connectors that can return the user's
-// liked/saved tracks in Guardian's neutral format.
+// liked/saved tracks in Aegis's neutral format.
 type LikedTrackProvider interface {
 	ListUserLikedTracks(ctx context.Context) (tracks []Track, truncated bool, err error)
 }
 
 // AlbumProvider is implemented by connectors that can return the user's
-// saved albums in Guardian's neutral format.
+// saved albums in Aegis's neutral format.
 type AlbumProvider interface {
 	ListUserSavedAlbums(ctx context.Context) (albums []Album, truncated bool, err error)
 }
 
 // ArtistProvider is implemented by connectors that can return the user's
-// followed or top artists in Guardian's neutral format.
+// followed or top artists in Aegis's neutral format.
 type ArtistProvider interface {
 	ListUserFollowedArtists(ctx context.Context) (artists []Artist, truncated bool, err error)
 }

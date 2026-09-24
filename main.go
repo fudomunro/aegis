@@ -10,19 +10,19 @@ import (
 
 func main() {
 	addr := flag.String("addr", ":8080", "listen address")
-	baseURL := flag.String("base-url", "", "public base URL of this Guardian instance (reads GUARDIAN_BASE_URL env if empty)")
-	apiKey := flag.String("api-key", "", "API key for authenticating requests (reads APERTURE_GUARDIAN_API_KEY env if empty; optional in tailnet/auto modes)")
-	authMode := flag.String("auth-mode", "", "auth mode: auto, tailnet, or api-key (reads GUARDIAN_AUTH_MODE; default auto)")
-	allowedLogins := flag.String("allowed-logins", "", "comma-separated Tailscale logins allowed to call the API (reads GUARDIAN_ALLOWED_LOGINS; empty allows any tailnet identity)")
+	baseURL := flag.String("base-url", "", "public base URL of this Aegis instance (reads AEGIS_BASE_URL env if empty)")
+	apiKey := flag.String("api-key", "", "API key for authenticating requests (reads AEGIS_API_KEY env if empty; optional in tailnet/auto modes)")
+	authMode := flag.String("auth-mode", "", "auth mode: auto, tailnet, or api-key (reads AEGIS_AUTH_MODE; default auto)")
+	allowedLogins := flag.String("allowed-logins", "", "comma-separated Tailscale logins allowed to call the API (reads AEGIS_ALLOWED_LOGINS; empty allows any tailnet identity)")
 	tsSocket := flag.String("ts-socket", "", "path to tailscaled LocalAPI socket for WhoIs (default: auto-detect /var/run/tailscale/tailscaled.sock)")
-	configPath := flag.String("config", "guardian.json", "path to rules configuration file")
+	configPath := flag.String("config", "aegis.json", "path to rules configuration file")
 	tokenPath := flag.String("token-file", "tokens.json", "path to encrypted token storage")
 	linkPath := flag.String("link-file", "entity_links.json", "path to user-confirmed entity links (playlists)")
-	permissionsPath := flag.String("permissions-file", "permissions.json", "path to admin permissions overlay (non-secret; admin permission saves write here instead of guardian.json)")
+	permissionsPath := flag.String("permissions-file", "permissions.json", "path to admin permissions overlay (non-secret; admin permission saves write here instead of aegis.json)")
 	mailArchivePath := flag.String("mail-archive", "mail-archive.db", "path to local compressed mail archive (SQLite+FTS5; empty disables /v1/mail)")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
-	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads GUARDIAN_TOKEN_PASS env if empty)")
+	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
 	flag.Parse()
@@ -37,10 +37,10 @@ func main() {
 	}
 
 	if *apiKey == "" {
-		*apiKey = os.Getenv("APERTURE_GUARDIAN_API_KEY")
+		*apiKey = os.Getenv("AEGIS_API_KEY")
 	}
 	if *authMode == "" {
-		*authMode = os.Getenv("GUARDIAN_AUTH_MODE")
+		*authMode = os.Getenv("AEGIS_AUTH_MODE")
 	}
 	if *authMode == "" {
 		*authMode = AuthModeAuto
@@ -53,11 +53,11 @@ func main() {
 	}
 
 	if *allowedLogins == "" {
-		*allowedLogins = os.Getenv("GUARDIAN_ALLOWED_LOGINS")
+		*allowedLogins = os.Getenv("AEGIS_ALLOWED_LOGINS")
 	}
 
 	if *authMode == AuthModeAPIKey && *apiKey == "" {
-		slog.Error("api-key is required in api-key auth mode (flag or APERTURE_GUARDIAN_API_KEY env)")
+		slog.Error("api-key is required in api-key auth mode (flag or AEGIS_API_KEY env)")
 		os.Exit(1)
 	}
 	if *authMode == AuthModeAuto && *apiKey == "" {
@@ -65,18 +65,18 @@ func main() {
 	}
 
 	if *baseURL == "" {
-		*baseURL = os.Getenv("GUARDIAN_BASE_URL")
+		*baseURL = os.Getenv("AEGIS_BASE_URL")
 	}
 	if *baseURL == "" {
-		slog.Error("base-url is required (flag or GUARDIAN_BASE_URL env)")
+		slog.Error("base-url is required (flag or AEGIS_BASE_URL env)")
 		os.Exit(1)
 	}
 
 	if *tokenPass == "" {
-		*tokenPass = os.Getenv("GUARDIAN_TOKEN_PASS")
+		*tokenPass = os.Getenv("AEGIS_TOKEN_PASS")
 	}
 	if *tokenPass == "" {
-		slog.Error("token-pass is required (flag or GUARDIAN_TOKEN_PASS env)")
+		slog.Error("token-pass is required (flag or AEGIS_TOKEN_PASS env)")
 		os.Exit(1)
 	}
 
@@ -201,7 +201,7 @@ func buildIdentityResolver(authMode, tsSocket string) IdentityResolver {
 }
 
 // handleAdminRoutes dispatches /v1/admin. The HTML shell is public (no
-// secrets in markup); JSON data endpoints require normal Guardian auth.
+// secrets in markup); JSON data endpoints require normal Aegis auth.
 func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/")
 	path = strings.Trim(path, "/")

@@ -9,12 +9,12 @@ import (
 )
 
 // MessageProvider is implemented by connectors that can return the user's
-// messages in Guardian's neutral format. The aggregate library endpoint uses
+// messages in Aegis's neutral format. The aggregate library endpoint uses
 // this so agents can ask for "my email" once and receive every connected
 // service. Each returned Message should carry one MessageSource for that
-// service. Guardian never stores message bodies as the home copy — the
+// service. Aegis never stores message bodies as the home copy — the
 // authoritative content stays on the source service (issue #16).
-// https://github.com/fudomunro/aperture-guardian/issues/60
+// https://github.com/fudomunro/aegis/issues/60
 type MessageProvider interface {
 	// ListMessages fetches messages from the upstream service and maps them
 	// into neutral Message values (service identity in Sources). Return

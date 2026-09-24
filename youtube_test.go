@@ -11,10 +11,10 @@ import (
 )
 
 func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
-	instructions := conn.SystemInstructions("https://guardian.example.com")
+	instructions := conn.SystemInstructions("https://aegis.example.com")
 
 	if !strings.Contains(instructions, "/v1/services/youtube-music") {
 		t.Fatal("instructions missing proxy base URL")
@@ -34,7 +34,7 @@ func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_MapPath(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	query := map[string][]string{}
 
@@ -72,7 +72,7 @@ func TestYouTubeMusicConnector_MapPath(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_MapPath_SearchWithType(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	query := map[string][]string{"type": {"playlist"}}
 
@@ -93,7 +93,7 @@ func TestYouTubeMusicConnector_MapPath_SearchWithType(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_TransformChannel(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -132,7 +132,7 @@ func TestYouTubeMusicConnector_TransformChannel(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_TransformPlaylistList(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -171,7 +171,7 @@ func TestYouTubeMusicConnector_TransformPlaylistList(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -210,7 +210,7 @@ func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_TransformSearch(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -250,7 +250,7 @@ func TestYouTubeMusicConnector_TransformSearch(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_TransformVideo(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -286,7 +286,7 @@ func TestYouTubeMusicConnector_TransformVideo(t *testing.T) {
 }
 
 func TestYouTubeMusicConnector_TransformSubscriptions(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
@@ -326,7 +326,7 @@ func TestYouTubeMusicConnector_HandleProxy_NoToken(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"youtube-music": NewYouTubeMusicConnector(srv),
 	}
@@ -386,7 +386,7 @@ func TestYouTubeMusicConnector_Playlists_ReadList(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mockYT.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -460,7 +460,7 @@ func TestYouTubeMusicConnector_Playlists_ReadList_Cached(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mockYT.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -477,8 +477,8 @@ func TestYouTubeMusicConnector_Playlists_ReadList_Cached(t *testing.T) {
 	w := httptest.NewRecorder()
 	handler(w, req)
 
-	if w.Header().Get("X-Guardian-Cache") != "miss" {
-		t.Fatalf("first request: cache = %q, want miss", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "miss" {
+		t.Fatalf("first request: cache = %q, want miss", w.Header().Get("X-Aegis-Cache"))
 	}
 
 	// Second request — cache hit.
@@ -487,8 +487,8 @@ func TestYouTubeMusicConnector_Playlists_ReadList_Cached(t *testing.T) {
 	w = httptest.NewRecorder()
 	handler(w, req)
 
-	if w.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("second request: cache = %q, want hit", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("second request: cache = %q, want hit", w.Header().Get("X-Aegis-Cache"))
 	}
 
 	if callCount != 1 {
@@ -528,7 +528,7 @@ func TestYouTubeMusicConnector_Playlists_GetByID(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mockYT.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -613,7 +613,7 @@ func TestYouTubeMusicConnector_Playlists_ReadItems(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mockYT.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
@@ -694,7 +694,7 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mockYT.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),

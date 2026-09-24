@@ -10,11 +10,11 @@ import (
 
 // Flow topology node kinds.
 const (
-	FlowKindAgent    = "agent"
-	FlowKindGateway  = "gateway"
-	FlowKindGuardian = "guardian"
-	FlowKindStore    = "store"
-	FlowKindService  = "service"
+	FlowKindAgent   = "agent"
+	FlowKindGateway = "gateway"
+	FlowKindAegis   = "aegis"
+	FlowKindStore   = "store"
+	FlowKindService = "service"
 	// FlowKindToken is one OAuth connection held inside the token vault.
 	FlowKindToken = "token"
 )
@@ -41,11 +41,11 @@ const (
 // FlowNode is one actor, location, or store in the data-flow graph.
 type FlowNode struct {
 	ID string `json:"id"`
-	// Kind is agent, gateway, guardian, store, or service.
+	// Kind is agent, gateway, aegis, store, or service.
 	Kind   string `json:"kind"`
 	Label  string `json:"label"`
 	Detail string `json:"detail,omitempty"`
-	// Parent nests this node inside another (e.g. guardian inside aperture).
+	// Parent nests this node inside another (e.g. aegis inside aperture).
 	Parent string `json:"parent,omitempty"`
 	// Status applies mainly to services (connected, needs-auth, …).
 	Status    string   `json:"status,omitempty"`
@@ -87,7 +87,7 @@ type FlowLibrary struct {
 }
 
 // FlowDataType is one synced library data type shown on the admin map.
-// Map chips are limited to library kinds Guardian merges; proxy-only
+// Map chips are limited to library kinds Aegis merges; proxy-only
 // connector surfaces are not listed here.
 type FlowDataType struct {
 	ID string `json:"id"`
@@ -195,18 +195,18 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			ID:     "agents",
 			Kind:   FlowKindAgent,
 			Label:  "LLM Agents",
-			Detail: "Tailnet (or API-key) clients that talk to Guardian",
+			Detail: "Tailnet (or API-key) clients that talk to Aegis",
 		},
 		{
 			ID:     "aperture",
 			Kind:   FlowKindGateway,
 			Label:  "Aperture",
-			Detail: "Gateway shell — pre-request hook injects Guardian URLs into agent prompts",
+			Detail: "Gateway shell — pre-request hook injects Aegis URLs into agent prompts",
 		},
 		{
-			ID:     "guardian",
-			Kind:   FlowKindGuardian,
-			Label:  "Guardian",
+			ID:     "aegis",
+			Kind:   FlowKindAegis,
+			Label:  "Aegis",
 			Detail: "Hook · service proxy · unified library · permissions",
 			Parent: "aperture",
 		},
@@ -215,14 +215,14 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Kind:   FlowKindStore,
 			Label:  "Token vault",
 			Detail: "Encrypted OAuth tokens on disk",
-			Parent: "guardian",
+			Parent: "aegis",
 		},
 		{
 			ID:     "cache",
 			Kind:   FlowKindStore,
 			Label:  "Data cache",
 			Detail: "In-memory cache of synced library data types and proxied GETs",
-			Parent: "guardian",
+			Parent: "aegis",
 		},
 	}
 
@@ -251,8 +251,8 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 
 	edges := []FlowEdge{
 		{From: "agents", To: "aperture", Label: "LLM traffic", Style: FlowEdgeHook},
-		{From: "aperture", To: "guardian", Label: "POST /v1/pre-request", Style: FlowEdgeHook},
-		{From: "agents", To: "guardian", Label: "proxy + library API", Style: FlowEdgeAccess},
+		{From: "aperture", To: "aegis", Label: "POST /v1/pre-request", Style: FlowEdgeHook},
+		{From: "agents", To: "aegis", Label: "proxy + library API", Style: FlowEdgeAccess},
 	}
 
 	// Library kinds this server can aggregate, with which services feed them.
@@ -317,14 +317,14 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 				edgeLabel = "configured proxy"
 			}
 			edges = append(edges, FlowEdge{
-				From:  "guardian",
+				From:  "aegis",
 				To:    node.ID,
 				Label: edgeLabel,
 				Style: style,
 			})
 		} else {
 			edges = append(edges, FlowEdge{
-				From:  "guardian",
+				From:  "aegis",
 				To:    node.ID,
 				Label: "blocked",
 				Style: FlowEdgeDenied,
@@ -343,7 +343,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 				}
 				edges = append(edges, FlowEdge{
 					From:  node.ID,
-					To:    "guardian",
+					To:    "aegis",
 					Label: kind.Label + " → library",
 					Style: FlowEdgeLibrary,
 					Kind:  kindID,
@@ -424,8 +424,8 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			AuthMode: s.authMode,
 			BaseURL:  s.baseURL,
 		},
-		Narrative: "Agents reach Guardian through Aperture’s hook and Guardian’s proxy/library APIs. " +
-			"Guardian (nested inside Aperture) holds the token vault and response cache, attaches OAuth " +
+		Narrative: "Agents reach Aegis through Aperture’s hook and Aegis’s proxy/library APIs. " +
+			"Aegis (nested inside Aperture) holds the token vault and response cache, attaches OAuth " +
 			"tokens, reads your services, and merges library items into one neutral list. Photo bytes " +
 			"stay on the source service.",
 		Nodes:     nodes,
@@ -503,7 +503,7 @@ func flowKindOrder(kind string) int {
 		return 0
 	case FlowKindGateway:
 		return 1
-	case FlowKindGuardian:
+	case FlowKindAegis:
 		return 2
 	case FlowKindStore:
 		return 3

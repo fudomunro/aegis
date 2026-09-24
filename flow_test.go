@@ -58,7 +58,7 @@ func flowTestServer() *Server {
 			{ID: "tidal", Name: "Tidal", Action: "block"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 	srv.connectors["youtube-music"] = NewYouTubeMusicConnector(srv)
 	srv.connectors["google-photos"] = NewGooglePhotosConnector(srv)
@@ -120,7 +120,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	for _, n := range topo.Nodes {
 		byID[n.ID] = n
 	}
-	for _, id := range []string{"agents", "aperture", "guardian", "tokens", "cache", "svc:spotify", "svc:tidal"} {
+	for _, id := range []string{"agents", "aperture", "aegis", "tokens", "cache", "svc:spotify", "svc:tidal"} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("missing node %q", id)
 		}
@@ -140,14 +140,14 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		t.Fatalf("tidal status = %q, want blocked", byID["svc:tidal"].Status)
 	}
 
-	if byID["guardian"].Parent != "aperture" {
-		t.Fatalf("guardian parent = %q, want aperture", byID["guardian"].Parent)
+	if byID["aegis"].Parent != "aperture" {
+		t.Fatalf("aegis parent = %q, want aperture", byID["aegis"].Parent)
 	}
-	if byID["tokens"].Parent != "guardian" {
-		t.Fatalf("tokens parent = %q, want guardian", byID["tokens"].Parent)
+	if byID["tokens"].Parent != "aegis" {
+		t.Fatalf("tokens parent = %q, want aegis", byID["tokens"].Parent)
 	}
-	if byID["cache"].Parent != "guardian" {
-		t.Fatalf("cache parent = %q, want guardian", byID["cache"].Parent)
+	if byID["cache"].Parent != "aegis" {
+		t.Fatalf("cache parent = %q, want aegis", byID["cache"].Parent)
 	}
 	if byID["cache"].Label != "Data cache" {
 		t.Fatalf("cache label = %q, want Data cache", byID["cache"].Label)
@@ -219,24 +219,24 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	foundDenied := false
 	foundLibrary := false
 	for _, e := range topo.Edges {
-		if e.From == "aperture" && e.To == "guardian" && e.Style == FlowEdgeHook {
+		if e.From == "aperture" && e.To == "aegis" && e.Style == FlowEdgeHook {
 			foundHook = true
 		}
-		if e.From == "guardian" && e.To == "svc:tidal" && e.Style == FlowEdgeDenied {
+		if e.From == "aegis" && e.To == "svc:tidal" && e.Style == FlowEdgeDenied {
 			foundDenied = true
 		}
-		if e.From == "svc:spotify" && e.To == "guardian" && e.Style == FlowEdgeLibrary {
+		if e.From == "svc:spotify" && e.To == "aegis" && e.Style == FlowEdgeLibrary {
 			foundLibrary = true
 		}
 	}
 	if !foundHook {
-		t.Fatal("expected aperture → guardian hook edge")
+		t.Fatal("expected aperture → aegis hook edge")
 	}
 	if !foundDenied {
-		t.Fatal("expected guardian → tidal denied edge")
+		t.Fatal("expected aegis → tidal denied edge")
 	}
 	if !foundLibrary {
-		t.Fatal("expected spotify → guardian library fan-in edge")
+		t.Fatal("expected spotify → aegis library fan-in edge")
 	}
 
 	var playlists *FlowLibrary
@@ -270,7 +270,7 @@ func TestHandleAdminFlow_MethodNotAllowed(t *testing.T) {
 }
 
 func TestAdminFlow_RouteRequiresAuth(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	w := httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -409,7 +409,7 @@ func TestHandleAdminFlow_WindowParam(t *testing.T) {
 }
 
 func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)

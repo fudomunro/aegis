@@ -16,7 +16,7 @@ import (
 // Tailscale Serve identity headers or from tailscaled's LocalAPI WhoIs.
 type PeerIdentity struct {
 	// LoginName is the user login (e.g. alice@example.com) or a synthetic
-	// tag identity for tagged devices (e.g. tag:guardian-client).
+	// tag identity for tagged devices (e.g. tag:aegis-client).
 	LoginName string `json:"login_name"`
 	// DisplayName is the human-readable name, when known.
 	DisplayName string `json:"display_name,omitempty"`
@@ -28,7 +28,7 @@ type PeerIdentity struct {
 
 // IdentityResolver extracts Tailscale peer identity from an inbound request.
 // Implementations must not trust values the client could have forged when
-// Guardian is exposed directly; Serve headers are only trustworthy when
+// Aegis is exposed directly; Serve headers are only trustworthy when
 // requests arrive through Tailscale Serve, and WhoIs is only trustworthy
 // when the connection is on the tailnet.
 type IdentityResolver interface {
@@ -39,7 +39,7 @@ type IdentityResolver interface {
 }
 
 // ServeHeaderResolver trusts Tailscale Serve identity headers. Only use when
-// Guardian is not directly reachable except via `tailscale serve` (or an
+// Aegis is not directly reachable except via `tailscale serve` (or an
 // equivalent reverse proxy that strips and re-sets these headers).
 type ServeHeaderResolver struct{}
 
@@ -101,7 +101,7 @@ func parseTagsHeader(v string) []string {
 }
 
 // WhoIsResolver queries tailscaled's LocalAPI over a Unix socket. This works
-// when Guardian shares a host with Tailscale (system daemon or compatible),
+// when Aegis shares a host with Tailscale (system daemon or compatible),
 // without embedding tsnet.
 type WhoIsResolver struct {
 	// SocketPath is the tailscaled LocalAPI socket. Empty uses default.

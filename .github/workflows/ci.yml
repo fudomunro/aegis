@@ -65,4 +65,4 @@ jobs:
           cache: true
 
       - name: Build
-        run: go build -o aperture-guardian .
+        run: go build -o aegis .

@@ -10,7 +10,7 @@ import (
 // Issue #69 UI cleanup markers: no top-bar stats, Advanced tab consolidates
 // cache/runtime/map details, setup wizard removed, Services help when empty.
 func TestAdminHTML_UICleanup(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
@@ -57,7 +57,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"serviceLibraryKinds",
 		"data-service-flow",
 		"data-service-status",
-		"Agents → Guardian → service",
+		"Agents → Aegis → service",
 		"has_event_provider",
 		"has_message_provider",
 		// Connect/Reconnect only when not connected (issue #69 polish)
@@ -105,7 +105,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="panel-runtime"`,
 		"Setup wizard",
 		"/v1/setup",
-		"Guardian Admin",
+		"Aegis Admin",
 		// Instructions are not repeated on every card form
 		"<h4>Agent data access</h4>",
 		"Choose what agents can use on this service",
@@ -119,7 +119,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 func TestHandleSetup_Removed(t *testing.T) {
 	// The setup wizard route is gone; /v1/setup must not be a documented admin path.
 	// Route wiring lives in main(); assert the HTML/markup no longer advertises it.
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)

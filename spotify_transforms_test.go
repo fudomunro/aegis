@@ -10,7 +10,7 @@ import (
 )
 
 func TestSimplify(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -29,7 +29,7 @@ func TestSimplify(t *testing.T) {
 }
 
 func TestIsPaginated(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	if !conn.isPaginated("/me/playlists") {
@@ -41,7 +41,7 @@ func TestIsPaginated(t *testing.T) {
 }
 
 func TestTransformSavedAlbums(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -66,7 +66,7 @@ func TestTransformSavedAlbums(t *testing.T) {
 }
 
 func TestTransformRecentlyPlayed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -94,7 +94,7 @@ func TestTransformRecentlyPlayed(t *testing.T) {
 }
 
 func TestTransformTrackListAndArtistList(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	tracks := conn.transformTrackList(map[string]any{
@@ -125,7 +125,7 @@ func TestTransformTrackListAndArtistList(t *testing.T) {
 }
 
 func TestTransformTrackAndAlbum(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	track := conn.transformTrack(map[string]any{
@@ -208,7 +208,7 @@ func TestSpotifyNeutralTrack(t *testing.T) {
 }
 
 func TestTransformPlaylistDetail(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	detail := conn.transformPlaylistDetail(map[string]any{
@@ -253,7 +253,7 @@ func TestFetchAllPagesRaw(t *testing.T) {
 	defer ts.Close()
 	page2URL = ts.URL + "/page2"
 
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	first := map[string]any{
@@ -341,7 +341,7 @@ func TestFirstSourceID(t *testing.T) {
 }
 
 func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	out := conn.transformResponse("/unknown/path", []byte(`{"id":"1","name":"n","href":"drop"}`), slog.Default())
@@ -364,7 +364,7 @@ func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
 }
 
 func TestSpotify_NeutralPlaylistMissingExternalURL(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 	p := conn.neutralPlaylist(map[string]any{
 		"id":   "pl1",

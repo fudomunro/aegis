@@ -16,7 +16,7 @@ import (
 // service APIs only give display names or lack ISRC/UPC (issue #4).
 const (
 	musicBrainzBase      = "https://musicbrainz.org/ws/2"
-	musicBrainzUserAgent = "ApertureGuardian/1.0 (https://github.com/fudomunro/aperture-guardian)"
+	musicBrainzUserAgent = "Aegis/1.0 (https://github.com/fudomunro/aegis)"
 	// mbLookupBudget caps remote lookups per library request so a large
 	// list cannot stall the handler or hammer the public API.
 	mbLookupBudget = 8
@@ -67,7 +67,7 @@ func (s *Server) mbGetJSON(ctx context.Context, path, query string) ([]byte, boo
 	req.Header.Set("User-Agent", musicBrainzUserAgent)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		slog.Debug("musicbrainz lookup failed", "path", path, "error", err)
 		return nil, false

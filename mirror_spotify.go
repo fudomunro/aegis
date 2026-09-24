@@ -148,7 +148,7 @@ func (m *spotifyMirror) createPlaylistWithTracks(ctx context.Context, name strin
 
 	created, _, err := m.s.mirrorUpstream(ctx, "spotify", "POST",
 		"/users/"+url.PathEscape(userID)+"/playlists", nil,
-		map[string]any{"name": name, "public": false, "description": "Copied by Aperture Guardian"})
+		map[string]any{"name": name, "public": false, "description": "Copied by Aegis"})
 	if err != nil {
 		return "", "", 0, nil, err
 	}

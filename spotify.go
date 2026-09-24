@@ -164,7 +164,7 @@ func (c *SpotifyConnector) Capabilities() ServiceCapabilities {
 func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/spotify"
-	return fmt.Sprintf(`When the user's request involves Spotify, you MUST use the Guardian proxy at %s instead of calling Spotify directly.
+	return fmt.Sprintf(`When the user's request involves Spotify, you MUST use the Aegis proxy at %s instead of calling Spotify directly.
 
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
@@ -176,7 +176,7 @@ For saved albums and followed artists across every connected music service:
 GET %s/v1/library/albums — all saved albums in one neutral list (name, artists, sources[])
 GET %s/v1/library/artists — all followed artists in one neutral list (name, sources[])
 
-Spotify-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send Spotify tokens or an API key unless your deployment uses api-key mode):
+Spotify-specific endpoints (call the full proxy URL; Aegis authenticates you — do not send Spotify tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user profile
 GET /me/playlists — List user's playlists in neutral format (paginated, use ?limit=N&offset=N)
@@ -194,7 +194,7 @@ GET /artists/{id}/top-tracks — Artist's top tracks
 GET /albums/{id} — Get an album by ID
 GET /playlists/{id} — Get a playlist by ID with tracks
 
-Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
+Playlist responses use Aegis's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Paginated endpoints return all items automatically when possible.
 Always include the full proxy base URL in your requests.`, base, root, root, root, root)
@@ -284,7 +284,7 @@ func (c *SpotifyConnector) transformUser(raw map[string]any) map[string]any {
 }
 
 // ListUserSavedAlbums implements AlbumProvider. Fetches Spotify saved albums
-// and returns them in Guardian's neutral format.
+// and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
@@ -304,7 +304,7 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bo
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -338,7 +338,7 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bo
 }
 
 // ListUserFollowedArtists implements ArtistProvider. Fetches Spotify followed
-// artists and returns them in Guardian's neutral format.
+// artists and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
@@ -358,7 +358,7 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artis
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -472,7 +472,7 @@ func spotifyNeutralArtist(artist map[string]any) Artist {
 }
 
 // ListUserLikedTracks implements LikedTrackProvider. Fetches Spotify saved
-// tracks and returns them in Guardian's neutral format.
+// tracks and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
@@ -492,7 +492,7 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bo
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -526,7 +526,7 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bo
 }
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Spotify playlists
-// and returns them in Guardian's neutral format.
+// and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
 	token := c.server.getValidToken("spotify", slog.Default())
 	if token == "" {
@@ -546,7 +546,7 @@ func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, b
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}

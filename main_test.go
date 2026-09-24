@@ -98,9 +98,9 @@ func TestServeHeaderResolver_Variants(t *testing.T) {
 		},
 		{
 			name:    "tags only",
-			headers: map[string]string{headerTags: "tag:guardian-client"},
-			login:   "tag:guardian-client",
-			tags:    []string{"tag:guardian-client"},
+			headers: map[string]string{headerTags: "tag:aegis-client"},
+			login:   "tag:aegis-client",
+			tags:    []string{"tag:aegis-client"},
 		},
 		{
 			name:    "no headers",

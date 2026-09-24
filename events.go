@@ -9,12 +9,12 @@ import (
 )
 
 // CalendarEventProvider is implemented by connectors that can return the
-// user's calendar entries in Guardian's neutral format. The aggregate library
+// user's calendar entries in Aegis's neutral format. The aggregate library
 // endpoint uses this so agents can ask for "my calendar" once and receive
 // every connected service. Each returned CalendarEvent should carry one
-// CalendarEventSource for that service. Guardian never stores calendar content
+// CalendarEventSource for that service. Aegis never stores calendar content
 // — the authoritative copy stays on the source service (issue #16).
-// https://github.com/fudomunro/aperture-guardian/issues/65
+// https://github.com/fudomunro/aegis/issues/65
 type CalendarEventProvider interface {
 	// ListCalendarEvents fetches calendar entries from the upstream service
 	// and maps them into neutral CalendarEvent values (service identity in

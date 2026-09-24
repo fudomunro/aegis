@@ -18,10 +18,10 @@ import (
 // GoogleGmailConnector proxies the Gmail API and implements MessageProvider.
 // It lists the user's recent messages as neutral Message values so agents can
 // ask "what email have I received?" through /v1/library/messages. Message
-// content stays on Gmail (non-Guardian canonical, issue #16). Read-only in
+// content stays on Gmail (non-Aegis canonical, issue #16). Read-only in
 // this phase — agent write ops are not advertised (issue #61). SMS/WhatsApp
 // are out of scope until a named OAuth-capable connector exists (issue #60).
-// https://github.com/fudomunro/aperture-guardian/issues/60
+// https://github.com/fudomunro/aegis/issues/60
 type GoogleGmailConnector struct {
 	server *Server
 }
@@ -132,19 +132,19 @@ func (c *GoogleGmailConnector) Capabilities() ServiceCapabilities {
 func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/" + googleGmailServiceID
-	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, you MUST use the Guardian proxy at %s instead of calling Gmail API directly.
+	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, you MUST use the Aegis proxy at %s instead of calling Gmail API directly.
 
 For "my email" across every connected mail/message service, prefer the unified library endpoint first:
 GET %s/v1/library/messages — messages in one neutral list (subject, snippet, from/to as Contact identities, sent_at, direction, read, sources[])
 
-Gmail-specific endpoints (call the full proxy URL; Guardian authenticates you):
+Gmail-specific endpoints (call the full proxy URL; Aegis authenticates you):
 GET /me/messages — list messages (neutral Message metadata; default query newer_than:30d)
 GET /messages/{id} — one message (add ?format=full to include decoded body)
 GET /me/threads — list recent threads
 GET /threads/{id} — one thread with its messages
 
-Messages use Guardian's neutral identity matching for from/to/cc (email → phone → handle → name), so senders can be matched to /v1/library/contacts when a contact service is connected.
-Message bodies stay on Gmail — Guardian does not store mailboxes. Cross-service merges prefer RFC Message-ID.
+Messages use Aegis's neutral identity matching for from/to/cc (email → phone → handle → name), so senders can be matched to /v1/library/contacts when a contact service is connected.
+Message bodies stay on Gmail — Aegis does not store mailboxes. Cross-service merges prefer RFC Message-ID.
 Always include the full proxy base URL in your requests.`, base, root)
 }
 
@@ -212,7 +212,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Gmail request failed")
@@ -349,7 +349,7 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -422,7 +422,7 @@ func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Re
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "Gmail thread request failed")
 		return
@@ -521,7 +521,7 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -594,7 +594,7 @@ func (c *GoogleGmailConnector) fetchGmailMessage(ctx context.Context, token, id,
 		return googleGmailMessage{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		return googleGmailMessage{}, err
 	}

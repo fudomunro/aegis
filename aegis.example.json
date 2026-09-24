@@ -47,7 +47,7 @@
       "action": "inject",
       "endpoint": "https://api.spotify.com/v1",
       "cache_ttl": "10m",
-      "description": "Proxies Spotify API calls through Guardian for caching and auditing",
+      "description": "Proxies Spotify API calls through Aegis for caching and auditing",
       "canonical_for": ["playlists", "tracks"],
       "connection": "spotify",
       "permissions": {
@@ -72,7 +72,7 @@
       "permissions": {
         "default": "read"
       },
-      "description": "Proxies YouTube Music API calls through Guardian (shares the Google connection)"
+      "description": "Proxies YouTube Music API calls through Aegis (shares the Google connection)"
     },
     {
       "id": "amazon-music",
@@ -81,7 +81,7 @@
       "action": "inject",
       "endpoint": "https://api.amazonmusic.com/v1",
       "cache_ttl": "15m",
-      "description": "Proxies Amazon Music API calls through Guardian",
+      "description": "Proxies Amazon Music API calls through Aegis",
       "connection": "amazon"
     },
     {
@@ -97,7 +97,7 @@
       "action": "inject",
       "endpoint": "https://photospicker.googleapis.com/v1",
       "cache_ttl": "15m",
-      "description": "Google Photos via the Picker API: the user selects photos once; Guardian lists that selection as neutral metadata. Photo bytes stay on Google Photos (non-Guardian canonical). Shares the Google connection with YouTube and Contacts.",
+      "description": "Google Photos via the Picker API: the user selects photos once; Aegis lists that selection as neutral metadata. Photo bytes stay on Google Photos (non-Aegis canonical). Shares the Google connection with YouTube and Contacts.",
       "canonical_for": ["photos"],
       "connection": "google",
       "oauth_scopes": [
@@ -149,7 +149,7 @@
       "action": "inject",
       "endpoint": "https://www.googleapis.com/calendar/v3",
       "cache_ttl": "5m",
-      "description": "Lists Google Calendar events as neutral calendar entries so /v1/library/events can answer schedule questions. Event content stays on Google Calendar (non-Guardian canonical). Shares the Google connection.",
+      "description": "Lists Google Calendar events as neutral calendar entries so /v1/library/events can answer schedule questions. Event content stays on Google Calendar (non-Aegis canonical). Shares the Google connection.",
       "canonical_for": ["events"],
       "connection": "google",
       "oauth_scopes": [
@@ -167,7 +167,7 @@
       "action": "inject",
       "endpoint": "https://gmail.googleapis.com/gmail/v1",
       "cache_ttl": "5m",
-      "description": "Lists Gmail messages as neutral message metadata so /v1/library/messages can answer email questions. Message bodies stay on Gmail (non-Guardian canonical). Shares the Google connection.",
+      "description": "Lists Gmail messages as neutral message metadata so /v1/library/messages can answer email questions. Message bodies stay on Gmail (non-Aegis canonical). Shares the Google connection.",
       "canonical_for": ["messages"],
       "connection": "google",
       "oauth_scopes": [

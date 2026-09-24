@@ -345,7 +345,7 @@ func sortContactSourcesCanonicalFirst(src []ContactSource) {
 func multiSourceMutationRule() string {
 	return "Multi-source mutation: when an item has multiple sources[], write to the " +
 		"canonical source first (sources[].canonical, or the configured home service). " +
-		"Guardian does not auto-mirror writes to secondary services — ask the user before updating other copies. " +
+		"Aegis does not auto-mirror writes to secondary services — ask the user before updating other copies. " +
 		"To copy a playlist or liked tracks onto another service deliberately, use POST /v1/library/mirror " +
 		"({\"kind\":\"playlists\"|\"tracks\", \"source_service\", \"source_id\", \"target_service\", \"dry_run\"})."
 }
