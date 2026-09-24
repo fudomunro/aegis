@@ -47,12 +47,12 @@ func (c *AmazonMusicConnector) Capabilities() ServiceCapabilities {
 func (c *AmazonMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/amazon-music"
-	return fmt.Sprintf(`When the user's request involves Amazon Music, you MUST use the Guardian proxy at %s instead of calling Amazon Music directly.
+	return fmt.Sprintf(`When the user's request involves Amazon Music, you MUST use the Aegis proxy at %s instead of calling Amazon Music directly.
 
 For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
 GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
 
-Amazon Music-specific endpoints (call the full proxy URL; Guardian authenticates you — do not send Amazon tokens or an API key unless your deployment uses api-key mode):
+Amazon Music-specific endpoints (call the full proxy URL; Aegis authenticates you — do not send Amazon tokens or an API key unless your deployment uses api-key mode):
 
 GET /me — Current user profile
 GET /me/playlists — List user's playlists in neutral format
@@ -66,7 +66,7 @@ GET /artists/{id} — Get artist details by ID
 
 Note: Amazon Music API availability may vary. If an endpoint returns
 an error, inform the user that the feature may not be available.
-Playlist responses use Guardian's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
+Playlist responses use Aegis's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
 All responses are transformed to a compact, LLM-friendly format.
 Always include the full proxy base URL in your requests.`, base, root)
 }
@@ -165,7 +165,7 @@ func asInt(v any) (int, bool) {
 }
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
-// and returns them in Guardian's neutral format.
+// and returns them in Aegis's neutral format.
 func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
 	token := c.server.getValidToken("amazon-music", slog.Default())
 	if token == "" {
@@ -186,7 +186,7 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}

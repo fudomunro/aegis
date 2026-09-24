@@ -1,18 +1,18 @@
-# Aperture Guardian
+# Aegis
 
 A service proxy for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), mediates access through local proxy endpoints, and enforces rules with OAuth-based authentication and caching.
 
 ## How It Works
 
-Guardian runs as two components:
+Aegis runs as two components:
 
-1. **Pre-request hook** — Aperture calls Guardian before forwarding requests to LLM providers. Guardian detects service references in the user's message and injects instructions telling the agent to use Guardian's proxy endpoints instead of external APIs.
+1. **Pre-request hook** — Aperture calls Aegis before forwarding requests to LLM providers. Aegis detects service references in the user's message and injects instructions telling the agent to use Aegis's proxy endpoints instead of external APIs.
 
-2. **Service proxy** — Agents call `GET/POST /v1/services/{id}/...` instead of hitting external APIs directly. Guardian adds OAuth tokens, forwards to the real service, caches responses, and returns the data.
+2. **Service proxy** — Agents call `GET/POST /v1/services/{id}/...` instead of hitting external APIs directly. Aegis adds OAuth tokens, forwards to the real service, caches responses, and returns the data.
 
 ```
-Agent → Aperture → Guardian (hook: inject proxy URL) → LLM
-Agent → Guardian (proxy) → Spotify API / YouTube Music API / ...
+Agent → Aperture → Aegis (hook: inject proxy URL) → LLM
+Agent → Aegis (proxy) → Spotify API / YouTube Music API / ...
 ```
 
 ## Prerequisites
@@ -25,33 +25,33 @@ Agent → Guardian (proxy) → Spotify API / YouTube Music API / ...
 
 ```bash
 # Clone and build
-git clone https://github.com/fudomunro/aperture-guardian.git
-cd aperture-guardian
-go build -o guardian .
+git clone https://github.com/fudomunro/aegis.git
+cd aegis
+go build -o aegis .
 
-# Create your config (see guardian.example.json)
-cp guardian.example.json guardian.json
-# Edit guardian.json with your OAuth client IDs and secrets
+# Create your config (see aegis.example.json)
+cp aegis.example.json aegis.json
+# Edit aegis.json with your OAuth client IDs and secrets
 
 # Run (recommended: tailnet identity via Tailscale Serve or WhoIs)
-./guardian \
+./aegis \
   -addr :8080 \
-  -base-url https://guardian.your-tailnet.ts.net \
+  -base-url https://aegis.your-tailnet.ts.net \
   -auth-mode tailnet \
   -allowed-logins you@example.com \
-  -config guardian.json \
+  -config aegis.json \
   -token-pass your-encryption-passphrase
 
 # Or keep a shared API key for non-tailnet clients
-./guardian \
+./aegis \
   -addr :8080 \
-  -base-url https://guardian.your-tailnet.ts.net \
+  -base-url https://aegis.your-tailnet.ts.net \
   -api-key your-secret-key \
-  -config guardian.json \
+  -config aegis.json \
   -token-pass your-encryption-passphrase
 ```
 
-Guardian starts with these endpoints:
+Aegis starts with these endpoints:
 - `POST /v1/pre-request` — Aperture hook
 - `GET /v1/library/playlists` — unified playlists across all connected services
 - `GET /v1/library/tracks` — unified liked/saved tracks across all connected services
@@ -75,7 +75,7 @@ Guardian starts with these endpoints:
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 ## Configuration
 
-Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.example.json) for the full format.
+Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.json) for the full format.
 
 ### Service definition
 
@@ -103,7 +103,7 @@ Guardian is configured via a JSON file. See [`guardian.example.json`](guardian.e
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
 | `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
-| `canonical_for` | Optional list of library kinds where this service is the authoritative non-Guardian home (see [Canonical sources](#canonical-sources-non-guardian-issue-16)) |
+| `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis-issue-16)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
 
@@ -143,7 +143,7 @@ multiple surfaces can share one provider registration and one token:
 }
 ```
 
-- Guardian stores **one** encrypted token (access + refresh) per connection ID.
+- Aegis stores **one** encrypted token (access + refresh) per connection ID.
 - Login at `/v1/auth/{service_id}/login` resolves to the surface’s connection
   and requests the connection’s scope union.
 - Google logins send `access_type=offline` and `include_granted_scopes=true`,
@@ -155,9 +155,9 @@ multiple surfaces can share one provider registration and one token:
 
 Register **all** surface callback URLs on the same OAuth client, e.g.:
 
-- `https://your-guardian/v1/auth/youtube-music/callback`
-- `https://your-guardian/v1/auth/google-photos/callback`
-- `https://your-guardian/v1/auth/google/callback`
+- `https://your-aegis/v1/auth/youtube-music/callback`
+- `https://your-aegis/v1/auth/google-photos/callback`
+- `https://your-aegis/v1/auth/google/callback`
 
 ### Data permissions
 
@@ -183,12 +183,12 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 
 - The reserved key `default` applies to data types not listed.
 - If `permissions` is omitted, agents keep unrestricted access (previous behavior).
-- **Bootstrap vs overlay (issue #71).** `guardian.json` may set default
+- **Bootstrap vs overlay (issue #71).** `aegis.json` may set default
   `permissions` per service. Admin UI saves write a separate
   `permissions.json` overlay (flag `-permissions-file`). A service present in
   the overlay uses those permissions; a present key set to `null` means
   unrestricted; services absent from the overlay keep the bootstrap map from
-  `guardian.json`. The overlay holds no secrets — admin permission edits never
+  `aegis.json`. The overlay holds no secrets — admin permission edits never
   rewrite OAuth client credentials.
 - Permissions **further constrain** the connector; they never add capabilities.
   The admin form only offers **Editable** for types with a true agent data-write
@@ -205,16 +205,16 @@ Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`. Paths that do not map to a
 known type fall through to the `default` level.
 
-### Canonical sources (non-Guardian, issue #16)
+### Canonical sources (non-Aegis, issue #16)
 
-Guardian does **not** store library content. The authoritative copy for each
-item lives on a service outside Guardian. That location is marked
+Aegis does **not** store library content. The authoritative copy for each
+item lives on a service outside Aegis. That location is marked
 `canonical` on the item's `sources[]` entry.
 
 Two layers set the flag:
 
 1. **Connector** — a provider may mark inherent ownership. Google Photos always
-   sets `canonical: true` because photo bytes stay on Google (never in Guardian).
+   sets `canonical: true` because photo bytes stay on Google (never in Aegis).
 2. **Config** — declare a home service per library kind:
 
 ```json
@@ -244,7 +244,7 @@ pre-request injection adds a short write-policy block:
 
 Library instructions always include the multi-source mutation rule: write to
 `sources[].canonical` first, then ask the user before updating other copies.
-Guardian still does **not** route or mirror writes automatically — agents call
+Aegis still does **not** route or mirror writes automatically — agents call
 the service proxy for whichever service they choose. Use
 [POST /v1/library/mirror](#mirror--backup-sync-issue-16-phase-3) for a
 deliberate copy to a secondary service.
@@ -286,23 +286,23 @@ review them before treating a mirror as a complete backup. A single call
 copies at most 200 tracks (`truncated: true` when more remain).
 
 Requires **write** permission on the target for that kind and **read** on the
-source. Guardian stores no media; it reads source metadata and writes through
+source. Aegis stores no media; it reads source metadata and writes through
 the target's API using the stored OAuth token.
 
 Immich is supported as a **local/foreign canonical photo source** (see
 [Immich](#immich-local--foreign-canonical)). Additional foreign-DB /
 professional-data connectors remain follow-up work on
-[issue #16](https://github.com/fudomunro/aperture-guardian/issues/16).
+[issue #16](https://github.com/fudomunro/aegis/issues/16).
 
 ### Environment variables
 
 | Variable | Flag equivalent | Description |
 |----------|----------------|-------------|
-| `APERTURE_GUARDIAN_API_KEY` | `-api-key` | API key for authenticating requests (optional in `auto`/`tailnet` modes) |
-| `GUARDIAN_AUTH_MODE` | `-auth-mode` | `auto` (default), `tailnet`, or `api-key` |
-| `GUARDIAN_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
-| `GUARDIAN_BASE_URL` | `-base-url` | Public URL of this Guardian instance |
-| `GUARDIAN_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
+| `AEGIS_API_KEY` | `-api-key` | API key for authenticating requests (optional in `auto`/`tailnet` modes) |
+| `AEGIS_AUTH_MODE` | `-auth-mode` | `auto` (default), `tailnet`, or `api-key` |
+| `AEGIS_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
+| `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
+| `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
 
 ### All flags
 
@@ -314,8 +314,8 @@ professional-data connectors remain follow-up work on
 | `-api-key` | | Shared API key (required only for `api-key` mode) |
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
-| `-config` | `guardian.json` | Bootstrap config path (services, connections, secrets) |
-| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `guardian.json` is never rewritten |
+| `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
+| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
@@ -323,7 +323,7 @@ professional-data connectors remain follow-up work on
 
 ### Authentication
 
-Guardian can authenticate callers two ways:
+Aegis can authenticate callers two ways:
 
 1. **Tailscale identity** (recommended) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
 2. **API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools.
@@ -333,8 +333,8 @@ Default mode is `auto` (identity if present, else API key). For a solo tailnet, 
 ## Connecting Services
 
 1. Register an OAuth app with each service (see below for per-service guides)
-2. Add the client ID and secret to your `guardian.json` (`connections` + service `connection` reference)
-3. Start Guardian and visit `https://your-guardian/v1/admin`
+2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference)
+3. Start Aegis and visit `https://your-aegis/v1/admin`
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
 5. Tokens are stored encrypted on disk and auto-refresh when expired
 
@@ -344,10 +344,10 @@ If no services are connected yet, the Services tab shows extra help describing t
 
 1. Go to [Spotify Developer Dashboard](https://developer.spotify.com/dashboard)
 2. Create an app
-3. Set the redirect URI to `https://your-guardian/v1/auth/spotify/callback`
-4. Copy the Client ID and Client Secret into `guardian.json`
+3. Set the redirect URI to `https://your-aegis/v1/auth/spotify/callback`
+4. Copy the Client ID and Client Secret into `aegis.json`
 
-Spotify scopes (see `guardian.example.json`):
+Spotify scopes (see `aegis.example.json`):
 
 | Scope | Needed for |
 |-------|------------|
@@ -356,16 +356,16 @@ Spotify scopes (see `guardian.example.json`):
 | `playlist-read-private` / `playlist-read-collaborative` | Private and collaborative playlists |
 | `user-read-playback-state` | Player state (optional; often denied via permissions) |
 
-**Reconnect after adding scopes.** OAuth tokens keep the scopes from the original consent. After you add `user-follow-read` (or any new scope) to `guardian.json`, visit `/v1/auth/spotify/login` again so Spotify re-issues a token with the expanded grant. Without that, `/v1/library/artists` returns an upstream 403 even though saved tracks still work.
+**Reconnect after adding scopes.** OAuth tokens keep the scopes from the original consent. After you add `user-follow-read` (or any new scope) to `aegis.json`, visit `/v1/auth/spotify/login` again so Spotify re-issues a token with the expanded grant. Without that, `/v1/library/artists` returns an upstream 403 even though saved tracks still work.
 
 ### YouTube Music (Google)
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create an OAuth 2.0 Client ID (Web application)
 3. Add redirect URIs for every Google surface you use:
-   - `https://your-guardian/v1/auth/youtube-music/callback`
-   - `https://your-guardian/v1/auth/google-photos/callback`
-   - `https://your-guardian/v1/auth/google/callback`
+   - `https://your-aegis/v1/auth/youtube-music/callback`
+   - `https://your-aegis/v1/auth/google-photos/callback`
+   - `https://your-aegis/v1/auth/google/callback`
 4. Enable the APIs you need (YouTube Data API v3, People API, Photos Picker API)
 5. Put the **same** client ID/secret in the shared `connections.google` block
    (see [Provider connections](#provider-connections-issue-26))
@@ -374,19 +374,19 @@ Spotify scopes (see `guardian.example.json`):
 
 1. Go to [Login with Amazon](https://developer.amazon.com/loginwithamazon/console/site/lwa/overview.html)
 2. Create a new application
-3. Add `https://your-guardian/v1/auth/amazon-music/callback` as an allowed return URL
-4. Copy the Client ID and Client Secret into `guardian.json`
+3. Add `https://your-aegis/v1/auth/amazon-music/callback` as an allowed return URL
+4. Copy the Client ID and Client Secret into `aegis.json`
 
 ## Integrating with Aperture
 
-Add Guardian as a pre-request hook in your Aperture configuration:
+Add Aegis as a pre-request hook in your Aperture configuration:
 
 ```json
 {
   "hooks": {
-    "guardian": {
-      "url": "https://your-guardian/v1/pre-request",
-      "apikey": "your-guardian-api-key",
+    "aegis": {
+      "url": "https://your-aegis/v1/pre-request",
+      "apikey": "your-aegis-api-key",
       "timeout": "5s"
     }
   },
@@ -399,7 +399,7 @@ Add Guardian as a pre-request hook in your Aperture configuration:
             "models": "**",
             "send_hooks": [
               {
-                "name": "guardian",
+                "name": "aegis",
                 "events": ["pre_request"],
                 "send": ["user_message", "request_body"]
               }
@@ -414,14 +414,14 @@ Add Guardian as a pre-request hook in your Aperture configuration:
 
 ### Two-legged auth
 
-Guardian has **two** callers, and they authenticate differently:
+Aegis has **two** callers, and they authenticate differently:
 
-| Leg | Who calls Guardian | How they authenticate |
+| Leg | Who calls Aegis | How they authenticate |
 |-----|--------------------|------------------------|
 | **Hook** | Aperture (`POST /v1/pre-request`) | Usually the shared API key in the Aperture hook config (`"apikey"`). In `tailnet` mode Aperture must also present tailnet identity (Serve headers / WhoIs). |
 | **Agent data** | The LLM agent (`/v1/library/playlists`, `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: API key if `auth-mode` is `auto` or `api-key`. |
 
-Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Guardian attaches those when proxying. With `-auth-mode tailnet` and no API key, agents on the tailnet call Guardian without a shared secret.
+Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Aegis attaches those when proxying. With `-auth-mode tailnet` and no API key, agents on the tailnet call Aegis without a shared secret.
 
 ## API Reference
 
@@ -439,7 +439,7 @@ Receives Aperture's `pre_request` payload. Returns one of:
 - `{"action": "modify", "request_body": {...}}` — LLM request with injected proxy instructions (Aperture requires the `request_body` field)
 - `{"action": "block", "message": "..."}` — request rejected (403)
 
-When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Guardian injects instructions for the unified library endpoint so agents can answer across every connected service. The same applies to liked songs ("what songs have I liked?") via `/v1/library/tracks`.
+When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Aegis injects instructions for the unified library endpoint so agents can answer across every connected service. The same applies to liked songs ("what songs have I liked?") via `/v1/library/tracks`.
 
 ### Unified library
 
@@ -448,7 +448,7 @@ GET /v1/library/playlists
 Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
-Returns the user's playlists from every connected music service in Guardian's **neutral format**, regardless of whether they live on Spotify, YouTube Music, Amazon Music, etc.
+Returns the user's playlists from every connected music service in Aegis's **neutral format**, regardless of whether they live on Spotify, YouTube Music, Amazon Music, etc.
 
 ```json
 {
@@ -511,9 +511,9 @@ Neutral playlist fields (user-facing):
 
 ### Cross-service sync (v1)
 
-The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Guardian merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
+The library endpoint treats **same-named playlists** on different services as one user-facing playlist: Aegis merges their `sources` and sets `"synced": true`. It does **not** copy tracks between services yet.
 
-Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id`** when a service provides one or Guardian resolves one (track **ISRC** or MusicBrainz **recording** MBID, album **UPC** or **release-group** MBID, artist **MBID**); otherwise it falls back to **text** (`NormalizeIdentityKey`) (`match: "name"`). MusicBrainz lookups are budgeted and cached; failures keep name matching.
+Tracks carry unified `artists` / `album` objects. Cross-service matching prefers a durable **`entity_id`** when a service provides one or Aegis resolves one (track **ISRC** or MusicBrainz **recording** MBID, album **UPC** or **release-group** MBID, artist **MBID**); otherwise it falls back to **text** (`NormalizeIdentityKey`) (`match: "name"`). MusicBrainz lookups are budgeted and cached; failures keep name matching.
 
 **Playlists** have no catalog IDs. Same-name playlists still merge (`match: "name"`), but users can confirm identity explicitly:
 
@@ -534,25 +534,25 @@ Linked playlists merge even when names differ (`match: "link"`). Links persist i
 3. Prefer durable IDs for identity; treat name merges as provisional until reviewed or linked.
 4. Clients that only compared display names should prefer `entity_id` + `sources[]` instead.
 
-Tracked in [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4).
+Tracked in [issue #4](https://github.com/fudomunro/aegis/issues/4).
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
 ### Sync completeness
 
-Guardian aims to surface a user’s **full** library, not a prefix. Two layers matter:
+Aegis aims to surface a user’s **full** library, not a prefix. Two layers matter:
 
 1. **Pagination safety valve** — connectors and proxy auto-pagination follow up to `libraryPageCap` pages (currently 200, about 10k items at page size 50 / 20k at 100). That cap exists only to stop a looping upstream; it is not a product limit. When a connector hits it with more pages still upstream, it sets `by_service[service].truncated = true`, and the library response also sets a top-level `"truncated": true`. Proxy auto-pagination responses set `"truncated": true` in the combined payload the same way.
 
-2. **Provider / API gaps** — some datasets are incomplete for reasons Guardian cannot fix by paginating harder:
+2. **Provider / API gaps** — some datasets are incomplete for reasons Aegis cannot fix by paginating harder:
 
 | Gap | Why | How it is reported |
 |-----|-----|--------------------|
-| **Google Photos full library** | Library API reads require Google app verification; unverified apps get 403. Guardian uses the Picker API instead — only the user’s last selection. | Empty library until a pick; system instructions tell agents to run the picker flow. Not a `truncated` flag — the library is intentionally a selection, not a full dump. |
+| **Google Photos full library** | Library API reads require Google app verification; unverified apps get 403. Aegis uses the Picker API instead — only the user’s last selection. | Empty library until a pick; system instructions tell agents to run the picker flow. Not a `truncated` flag — the library is intentionally a selection, not a full dump. |
 | **YouTube Music albums** | No public saved-albums API. | `/v1/library/albums` simply has no YouTube source. |
 | **Amazon Music** | No public developer REST API; playlist pagination may return an unfollowed `nextToken`. | When `nextToken` is present and not followed, `truncated` is set rather than claiming completeness. |
 | **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via the service proxy for a specific playlist. |
-| **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — [issue #4](https://github.com/fudomunro/aperture-guardian/issues/4). |
+| **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — [issue #4](https://github.com/fudomunro/aegis/issues/4). |
 
 **Always check `truncated` before answering “is this everything?”** Library system instructions tell agents to do the same. Admin Library badges turn orange and say `truncated` when a service hit its page cap.
 
@@ -563,7 +563,7 @@ GET /v1/library/tracks
 Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
-Returns the user's liked/saved tracks from every connected music service in Guardian's neutral `Track` format. Connectors opt in by implementing `LikedTrackProvider` (`ListUserLikedTracks`). Permission key: `tracks` (also covers proxy paths `/me/tracks` and `/me/liked`).
+Returns the user's liked/saved tracks from every connected music service in Aegis's neutral `Track` format. Connectors opt in by implementing `LikedTrackProvider` (`ListUserLikedTracks`). Permission key: `tracks` (also covers proxy paths `/me/tracks` and `/me/liked`).
 
 ```json
 {
@@ -589,7 +589,7 @@ Returns the user's liked/saved tracks from every connected music service in Guar
 
 When any service hits its page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`.
 
-Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks ([#43](https://github.com/fudomunro/aperture-guardian/issues/43), [#4](https://github.com/fudomunro/aperture-guardian/issues/4)).
+Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks ([#43](https://github.com/fudomunro/aegis/issues/43), [#4](https://github.com/fudomunro/aegis/issues/4)).
 
 ### Unified albums and artists
 
@@ -607,7 +607,7 @@ Saved albums and followed/top artists follow the same library pattern. Connector
 
 ### Contact as a data type
 
-`Contact` is Guardian's neutral representation of a **person or other entity**
+`Contact` is Aegis's neutral representation of a **person or other entity**
 who appears in personal data — someone in a photo, an email correspondent, a
 playlist collaborator, etc. Future data types (mail, photos, calendar) can
 embed `Contact` references the same way tracks embed `Artist`/`Album`.
@@ -676,9 +676,9 @@ on the service proxy).
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create an OAuth 2.0 Client ID (Web application)
-3. Add `https://your-guardian/v1/auth/google/callback` as an authorized redirect URI
+3. Add `https://your-aegis/v1/auth/google/callback` as an authorized redirect URI
 4. Enable the **People API**
-5. Copy credentials into `guardian.json` (see `guardian.example.json`)
+5. Copy credentials into `aegis.json` (see `aegis.example.json`)
 
 Scope: `https://www.googleapis.com/auth/contacts.readonly`. The connector lists
 address-book connections via `GET /people/me/connections` and maps them to
@@ -693,13 +693,13 @@ empty until a provider supplies them — the merge path is ready.
 
 ### Photos as a data type
 
-`Photo` is Guardian's neutral representation of a photo (or video still).
+`Photo` is Aegis's neutral representation of a photo (or video still).
 Service identity lives in `sources[]`, same as playlists and contacts.
 
-**Guardian never stores photo bytes.** The authoritative copy stays on a
-non-Guardian service marked `canonical` (see
-[Canonical sources](#canonical-sources-non-guardian-issue-16) /
-[issue #16](https://github.com/fudomunro/aperture-guardian/issues/16)).
+**Aegis never stores photo bytes.** The authoritative copy stays on a
+non-Aegis service marked `canonical` (see
+[Canonical sources](#canonical-sources-non-aegis-issue-16) /
+[issue #16](https://github.com/fudomunro/aegis/issues/16)).
 `blob_url` points at the retrievable image when the source exposes one; Google
 Photos `baseUrl` values expire in about an hour, so agents must not treat them
 as permanent links.
@@ -762,15 +762,15 @@ Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, `/picker/*`, and
 #### Google Photos (Picker API)
 
 Full Library API reads (`photoslibrary.readonly`) require Google app
-verification; unverified apps get 403. Guardian therefore uses the
+verification; unverified apps get 403. Aegis therefore uses the
 **[Photos Picker API](https://developers.google.com/photos/picker/guides/get-started-picker)**:
 the user explicitly selects photos once; agents only see that selection.
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create or reuse an OAuth 2.0 Client ID (Web application)
-3. Add `https://your-guardian/v1/auth/google-photos/callback` as an authorized redirect URI
+3. Add `https://your-aegis/v1/auth/google-photos/callback` as an authorized redirect URI
 4. Enable the **Photos Picker API** (not the Library API)
-5. Copy credentials into `guardian.json` (see `guardian.example.json`) with scope
+5. Copy credentials into `aegis.json` (see `aegis.example.json`) with scope
    `https://www.googleapis.com/auth/photospicker.mediaitems.readonly`
 6. Re-authorize at `/v1/auth/google-photos/login` if you previously used the library scope
 
@@ -790,16 +790,16 @@ GET /v1/services/google-photos/picker/mediaItems?sessionId={id}
 ```
 
 `/v1/library/photos` returns the **last completed Google Photos pick** (empty
-until the user has picked once). Metadata only — Guardian still never downloads
+until the user has picked once). Metadata only — Aegis still never downloads
 or stores image bytes; `blob_url` values expire in about an hour.
 
 Ownership / provenance proofs for photos are intentionally deferred:
-[issue #20](https://github.com/fudomunro/aperture-guardian/issues/20).
+[issue #20](https://github.com/fudomunro/aegis/issues/20).
 
 #### Immich (local / foreign canonical)
 
-Immich is a self-hosted photo library. Guardian treats it as a **foreign/local
-canonical** source: metadata is listed through Guardian; **bytes stay on
+Immich is a self-hosted photo library. Aegis treats it as a **foreign/local
+canonical** source: metadata is listed through Aegis; **bytes stay on
 Immich**. Auth is an API key in service headers — no OAuth app.
 
 ```json
@@ -820,7 +820,7 @@ Immich is the home copy, remove that key from `google-photos` (or omit it).
 
 The connector implements `PhotoProvider` via Immich `POST /search/metadata`
 (with EXIF). Library photos get `sources[].canonical: true` and
-`blob_url` / `thumbnail_url` pointing at the **Guardian proxy**
+`blob_url` / `thumbnail_url` pointing at the **Aegis proxy**
 (`/v1/services/immich/assets/{id}/original`), so agents never need the Immich
 API key. Proxy paths under `/assets/*` and `/search/metadata` are classified
 as the `photos` permission.
@@ -834,16 +834,16 @@ GET  /v1/services/immich/assets/{id}/thumbnail
 
 This is the reference pattern for other local/foreign stores: configure
 `endpoint` + static `headers`, implement a library provider, mark
-`canonical_for`, and never cache content bytes in Guardian.
+`canonical_for`, and never cache content bytes in Aegis.
 
 ### Calendar events as a data type
 
-`CalendarEvent` is Guardian's neutral representation of a calendar entry
+`CalendarEvent` is Aegis's neutral representation of a calendar entry
 (meeting, appointment, all-day block). Service identity lives in `sources[]`,
-same as playlists, contacts, and photos. **Guardian does not store calendar
-content** — the authoritative copy stays on a non-Guardian service marked
+same as playlists, contacts, and photos. **Aegis does not store calendar
+content** — the authoritative copy stays on a non-Aegis service marked
 `canonical` (issue #16). Initial provider: **Google Calendar**
-([issue #65](https://github.com/fudomunro/aperture-guardian/issues/65)).
+([issue #65](https://github.com/fudomunro/aegis/issues/65)).
 
 Neutral calendar-event fields (user-facing):
 
@@ -927,9 +927,9 @@ Organizer/attendee `Contact` values use the same identity matching as
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create or reuse an OAuth 2.0 Client ID (Web application)
-3. Add `https://your-guardian/v1/auth/google-calendar/callback` as an authorized redirect URI
+3. Add `https://your-aegis/v1/auth/google-calendar/callback` as an authorized redirect URI
 4. Enable the **Google Calendar API**
-5. Copy credentials into `guardian.json` (see `guardian.example.json`) with scope
+5. Copy credentials into `aegis.json` (see `aegis.example.json`) with scope
    `https://www.googleapis.com/auth/calendar.readonly`
 6. Authorize at `/v1/auth/google-calendar/login` (shares the Google OAuth
    connection with YouTube Music, Photos, and Contacts; tokens are stored per
@@ -955,20 +955,20 @@ GET /v1/services/google-calendar/events/{id}
 This phase is **read-only**. Capabilities do not advertise agent write ops
 (create/update/delete events), so the admin permissions form will not offer
 Editable for `events` and proxy mutations stay blocked
-([issue #61](https://github.com/fudomunro/aperture-guardian/issues/61)).
+([issue #61](https://github.com/fudomunro/aegis/issues/61)).
 Event content stays on Google Calendar.
 
 ### Messages as a data type
 
-`Message` is Guardian's neutral representation of a message — email first,
+`Message` is Aegis's neutral representation of a message — email first,
 with reserved channel values for SMS/WhatsApp when a named OAuth-capable
 connector exists. Service identity lives in `sources[]`, same as playlists,
-contacts, photos, and calendar events. **Guardian does not store mailboxes or
+contacts, photos, and calendar events. **Aegis does not store mailboxes or
 message bodies as the home copy** — the authoritative content stays on a
-non-Guardian service marked `canonical` (issue #16). Library listings carry
+non-Aegis service marked `canonical` (issue #16). Library listings carry
 subject/snippet metadata; agents fetch full body through the service proxy.
 Initial provider: **Gmail**
-([issue #60](https://github.com/fudomunro/aperture-guardian/issues/60)).
+([issue #60](https://github.com/fudomunro/aegis/issues/60)).
 
 Neutral message fields (user-facing):
 
@@ -1010,9 +1010,9 @@ Participant `Contact` values use the same identity matching as
 
 1. Go to [Google Cloud Console](https://console.cloud.google.com/apis/credentials)
 2. Create or reuse an OAuth 2.0 Client ID (Web application)
-3. Add `https://your-guardian/v1/auth/google-gmail/callback` as an authorized redirect URI
+3. Add `https://your-aegis/v1/auth/google-gmail/callback` as an authorized redirect URI
 4. Enable the **Gmail API**
-5. Copy credentials into `guardian.json` (see `guardian.example.json`) with scope
+5. Copy credentials into `aegis.json` (see `aegis.example.json`) with scope
    `https://www.googleapis.com/auth/gmail.readonly`
 6. Authorize at `/v1/auth/google-gmail/login` (shares the Google OAuth
    connection with YouTube Music, Photos, Contacts, and Calendar; tokens are
@@ -1037,18 +1037,18 @@ GET /v1/services/google-gmail/threads/{id}
 This phase is **read-only**. Capabilities do not advertise agent write ops
 (send/delete), so the admin permissions form will not offer Editable for
 `messages` and proxy mutations stay blocked
-([issue #61](https://github.com/fudomunro/aperture-guardian/issues/61)).
+([issue #61](https://github.com/fudomunro/aegis/issues/61)).
 Message bodies stay on Gmail as the **canonical** home copy.
 
 #### Local mail archive (`/v1/mail`)
 
-For full-history agent queries, Guardian can keep a **local compressed
+For full-history agent queries, Aegis can keep a **local compressed
 archive** (SQLite FTS5 + gzip provider payloads). This is a query mirror, not
 a new home copy — Gmail remains canonical for the mailbox (issue #16). Optimize
-for Guardian/agents: search and fetch by id without paging Gmail every turn.
+for Aegis/agents: search and fetch by id without paging Gmail every turn.
 
 ```bash
-./guardian ... -mail-archive mail-archive.db   # empty string disables
+./aegis ... -mail-archive mail-archive.db   # empty string disables
 ```
 
 | Endpoint | Purpose |
@@ -1086,7 +1086,7 @@ curl "$GUARDIAN/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_bod
 
 A historical [Google Takeout](https://takeout.google.com) mail export is a
 **read-only sync location** alongside live Gmail — not a write target and not
-the canonical home. Point Guardian at an `.mbox` file, a directory of mbox
+the canonical home. Point Aegis at an `.mbox` file, a directory of mbox
 files, or a Takeout `.zip`. Re-sync skips messages already stored (by RFC
 Message-ID) so you can run it as often as you like.
 
@@ -1111,7 +1111,7 @@ curl -X POST "$GUARDIAN/v1/admin/mail/import" \
 **SMS / WhatsApp:** the neutral `channel` field and library kind are ready,
 but no connector is registered for them yet. Personal SMS history has no
 simple OAuth surface; WhatsApp consumer history is not available through a
-Guardian-compatible named API. Follow-ups can plug in connectors that
+Aegis-compatible named API. Follow-ups can plug in connectors that
 implement `MessageProvider` without changing the library contract.
 
 ### Service proxy
@@ -1121,8 +1121,8 @@ GET/POST /v1/services/{service_id}/{path}
 Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
-Forwards to the configured upstream endpoint with OAuth tokens. Callers authenticate to Guardian; they do not need the upstream service’s OAuth tokens.
-- `X-Guardian-Cache: hit` or `miss` in response headers
+Forwards to the configured upstream endpoint with OAuth tokens. Callers authenticate to Aegis; they do not need the upstream service’s OAuth tokens.
+- `X-Aegis-Cache: hit` or `miss` in response headers
 - GET responses cached per-service
 - POST requests forwarded without caching
 
@@ -1145,7 +1145,7 @@ GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
 GET /v1/admin/services/{id}/permissions  — current agent permission map + available/writable types
-PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not guardian.json)
+PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not aegis.json)
 ```
 
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
@@ -1162,7 +1162,7 @@ the admin UI does not inflate Map access counts. Agents still use
 `/v1/library/{kind}`; those requests are the ones the Map counts.
 
 The **Map** tab (default) is a live SVG overview of how data moves. Aperture
-is drawn as a container around Guardian; Guardian nests the token vault and
+is drawn as a container around Aegis; Aegis nests the token vault and
 response cache and lists every data type available on this instance (unified
 library kinds plus proxy-only types). Agents connect via the hook and
 proxy/library APIs; edges show OAuth reads, library fan-in, and blocked
@@ -1178,10 +1178,10 @@ info.
 
 On the **Services** tab, shared **Agent data access** instructions sit above
 the filter (Available / Off always; **Editable** only when agents can truly
-change that data through Guardian — not mirror backups or picker sessions).
+change that data through Aegis — not mirror backups or picker sessions).
 Each service card keeps its own live permissions form under the title; every
 change saves immediately to `permissions.json` (the admin overlay). Bootstrap
-defaults remain in `guardian.json`; the overlay wins for any service the admin
+defaults remain in `aegis.json`; the overlay wins for any service the admin
 UI has saved. Keys not shown in the form are preserved on save. Data-type rows
 use the Map icons.
 
@@ -1198,7 +1198,7 @@ Google’s picker in a new tab, polls until the user finishes selecting, then
 refreshes the photos library view. (Session create is a POST — the service’s
 `photos` permission must allow write.)
 
-Admin APIs use the same auth as the rest of Guardian. Secrets never appear in
+Admin APIs use the same auth as the rest of Aegis. Secrets never appear in
 admin responses: client secrets, access tokens, and refresh tokens are omitted;
 only presence flags, scopes, and expiry status are shown.
 
@@ -1217,10 +1217,10 @@ go tool cover -func=coverage.out | tail -n 1
 go tool cover -func=coverage.out | sort -t$'\t' -k3 -n | head -n 20
 
 # Build
-go build -o guardian .
+go build -o aegis .
 
 # Run with text logging for development
-./guardian \
+./aegis \
   -addr :8080 \
   -base-url http://localhost:8080 \
   -api-key dev-key \
@@ -1237,7 +1237,7 @@ change that only adds untested write paths.
 ### Project structure
 
 ```
-aperture-guardian/
+aegis/
   main.go           Entry point, CLI flags, route wiring
   config.go         Service/Config types, JSON loading, matching
   atomicfile.go     Atomic temp+rename writes for the permissions overlay
@@ -1272,7 +1272,7 @@ aperture-guardian/
   google-photos.go  Google Photos Picker connector (user-selected photos; bytes stay upstream)
   google-contacts.go Google Contacts / People API connector (ContactProvider)
   google-calendar.go Google Calendar connector (CalendarEventProvider)
-  guardian.example.json   Example configuration
+  aegis.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
 ```
 

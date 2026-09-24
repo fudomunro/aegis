@@ -17,14 +17,14 @@ type Config struct {
 	Services    []Service             `json:"services"`
 	path        string
 	// permsPath is the admin permissions overlay file (permissions.json).
-	// Admin permission saves always write here — never guardian.json.
+	// Admin permission saves always write here — never aegis.json.
 	permsPath string
 	// permsOverlay is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared).
 	permsOverlay map[string]*Permissions
 }
 
-// defaultPermissionsPath returns the overlay path beside a guardian.json path.
+// defaultPermissionsPath returns the overlay path beside a aegis.json path.
 func defaultPermissionsPath(configPath string) string {
 	dir := filepath.Dir(configPath)
 	if dir == "" || dir == "." {
@@ -35,7 +35,7 @@ func defaultPermissionsPath(configPath string) string {
 
 // Connection is a shared OAuth provider registration (issue #26). Multiple
 // service surfaces can reference one connection so the user authorizes once
-// and Guardian keeps a single token/refresh path per provider.
+// and Aegis keeps a single token/refresh path per provider.
 type Connection struct {
 	Name         string `json:"name,omitempty"`
 	ClientID     string `json:"client_id"`
@@ -47,7 +47,7 @@ type Connection struct {
 }
 
 // Service represents a named external service (e.g. Spotify, YouTube Music)
-// that Guardian can intercept and enrich requests for.
+// that Aegis can intercept and enrich requests for.
 type Service struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
@@ -61,7 +61,7 @@ type Service struct {
 	// Nil means unrestricted. See permissions.go for levels and the "default" key.
 	Permissions Permissions `json:"permissions,omitempty"`
 	// CanonicalFor lists library kinds where this service is the authoritative
-	// non-Guardian location (issue #16). At most one non-blocked service may
+	// non-Aegis location (issue #16). At most one non-blocked service may
 	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
 	CanonicalFor []string `json:"canonical_for,omitempty"`
 	// Connection names the shared provider connection this surface uses
@@ -228,7 +228,7 @@ func (c *Config) GetConnection(id string) *Connection {
 
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
-// Always writes the permissions overlay (permissions.json) — never guardian.json.
+// Always writes the permissions overlay (permissions.json) — never aegis.json.
 func (c *Config) SetServicePermissions(id string, p Permissions) error {
 	if err := ValidatePermissions(p); err != nil {
 		return err

@@ -37,7 +37,7 @@ func oauthConfig(tokenURL, authURL string) *Config {
 }
 
 func TestHandleAuthLogin_RedirectsWithState(t *testing.T) {
-	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/login", nil)
 	w := httptest.NewRecorder()
@@ -61,7 +61,7 @@ func TestHandleAuthLogin_RedirectsWithState(t *testing.T) {
 	if q.Get("response_type") != "code" {
 		t.Fatalf("response_type = %q", q.Get("response_type"))
 	}
-	if q.Get("redirect_uri") != "https://guardian.example.com/v1/auth/spotify/callback" {
+	if q.Get("redirect_uri") != "https://aegis.example.com/v1/auth/spotify/callback" {
 		t.Fatalf("redirect_uri = %q", q.Get("redirect_uri"))
 	}
 	state := q.Get("state")
@@ -74,7 +74,7 @@ func TestHandleAuthLogin_RedirectsWithState(t *testing.T) {
 }
 
 func TestHandleAuthLogin_UnknownService(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/auth/unknown/login", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAuthLogin(w, req)
@@ -87,7 +87,7 @@ func TestHandleAuthLogin_UnknownService(t *testing.T) {
 func TestHandleAuthLogin_NoOAuthConfig(t *testing.T) {
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "tidal", Name: "Tidal"}},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/auth/tidal/login", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAuthLogin(w, req)
@@ -115,7 +115,7 @@ func TestHandleAuthLogin_GoogleOfflineAccess(t *testing.T) {
 			OAuthScopes: []string{"https://www.googleapis.com/auth/youtube.readonly"},
 		}},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/youtube-music/login", nil)
 	rec := httptest.NewRecorder()
@@ -142,14 +142,14 @@ func TestHandleAuthLogin_GoogleOfflineAccess(t *testing.T) {
 	if q.Get("prompt") != "consent" {
 		t.Fatalf("prompt = %q, want consent", q.Get("prompt"))
 	}
-	if q.Get("redirect_uri") != "https://guardian.example.com/v1/auth/youtube-music/callback" {
+	if q.Get("redirect_uri") != "https://aegis.example.com/v1/auth/youtube-music/callback" {
 		t.Fatalf("redirect_uri = %q", q.Get("redirect_uri"))
 	}
 }
 
 func TestHandleAuthLogin_SpotifyOmitsGoogleParams(t *testing.T) {
 	cfg := oauthConfig("https://accounts.spotify.com/api/token", "https://accounts.spotify.com/authorize")
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/spotify/login", nil)
 	rec := httptest.NewRecorder()
@@ -166,7 +166,7 @@ func TestHandleAuthLogin_SpotifyOmitsGoogleParams(t *testing.T) {
 }
 
 func TestHandleAuthCallback_MissingParams(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAuthCallback(w, req)
@@ -177,7 +177,7 @@ func TestHandleAuthCallback_MissingParams(t *testing.T) {
 }
 
 func TestHandleAuthCallback_InvalidState(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=abc&state=bad", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAuthCallback(w, req)
@@ -203,7 +203,7 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
 	srv.oauthStates.Set("spotify:good-state", true, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=auth-code&state=good-state", nil)
@@ -232,7 +232,7 @@ func TestHandleAuthCallback_TokenExchangeFails(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
 	srv.oauthStates.Set("spotify:st", true, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=x&state=st", nil)
@@ -245,7 +245,7 @@ func TestHandleAuthCallback_TokenExchangeFails(t *testing.T) {
 }
 
 func TestHandleAuthStatus_AndRevoke(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.tokens.Tokens["spotify"] = &OAuthToken{
 		AccessToken:  "at",
 		RefreshToken: "rt",
@@ -294,7 +294,7 @@ func TestRefreshToken_Success(t *testing.T) {
 	}))
 	defer tokenSrv.Close()
 
-	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
 	srv.tokens.Tokens["spotify"] = &OAuthToken{
 		AccessToken:  "old-at",
 		RefreshToken: "old-rt",
@@ -318,7 +318,7 @@ func TestRefreshToken_Success(t *testing.T) {
 }
 
 func TestRefreshToken_NoRefreshToken(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.tokens.Tokens["spotify"] = &OAuthToken{AccessToken: "at"}
 
 	if _, err := srv.RefreshToken("spotify"); err == nil {
@@ -327,7 +327,7 @@ func TestRefreshToken_NoRefreshToken(t *testing.T) {
 }
 
 func TestRefreshToken_UnconfiguredService(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.tokens.Tokens["unknown"] = &OAuthToken{RefreshToken: "rt"}
 
 	if _, err := srv.RefreshToken("unknown"); err == nil {
@@ -341,8 +341,8 @@ func TestTokenRequest_Non200(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	guardian := testServerWithBase(&Config{}, "https://guardian.example.com")
-	if _, err := guardian.tokenRequest(srv.URL, url.Values{"grant_type": {"authorization_code"}}); err == nil {
+	aegis := testServerWithBase(&Config{}, "https://aegis.example.com")
+	if _, err := aegis.tokenRequest(srv.URL, url.Values{"grant_type": {"authorization_code"}}); err == nil {
 		t.Fatal("expected error from non-200 token endpoint")
 	}
 }
@@ -362,7 +362,7 @@ func TestGenerateState_Unique(t *testing.T) {
 }
 
 func TestHandleAuthRoutes_Dispatch(t *testing.T) {
-	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://guardian.example.com")
+	srv := testServerWithBase(oauthConfig("https://tokens.example.com/token", "https://accounts.example.com/authorize"), "https://aegis.example.com")
 
 	// login is public
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/login", nil)
@@ -407,7 +407,7 @@ func TestHandleAuthRoutes_Dispatch(t *testing.T) {
 
 func TestHandleAuthLogin_SharedGoogleConnection(t *testing.T) {
 	cfg := googleSharedConfig()
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/google-photos/login", nil)
 	rec := httptest.NewRecorder()
@@ -444,14 +444,14 @@ func TestHandleAuthLogin_SharedGoogleConnection(t *testing.T) {
 	if q.Get("prompt") != "consent" {
 		t.Fatalf("prompt = %q, want consent on first connect", q.Get("prompt"))
 	}
-	if q.Get("redirect_uri") != "https://guardian.example.com/v1/auth/google-photos/callback" {
+	if q.Get("redirect_uri") != "https://aegis.example.com/v1/auth/google-photos/callback" {
 		t.Fatalf("redirect_uri = %q", q.Get("redirect_uri"))
 	}
 }
 
 func TestHandleAuthLogin_SharedConnectionSkipsPromptWhenRefreshExists(t *testing.T) {
 	cfg := googleSharedConfig()
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("google", &OAuthToken{
 		AccessToken:  "at",
 		RefreshToken: "rt",
@@ -487,7 +487,7 @@ func TestHandleAuthCallback_SharedConnectionStoresUnderConnectionID(t *testing.T
 	gconn := cfg.Connections["google"]
 	gconn.TokenURL = tokenSrv.URL
 	cfg.Connections["google"] = gconn
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.oauthStates.Set("google-photos:ok", true, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/google-photos/callback?code=auth-code&state=ok", nil)
@@ -520,7 +520,7 @@ func TestHandleAuthCallback_PreservesRefreshTokenAndScopes(t *testing.T) {
 	gconn := cfg.Connections["google"]
 	gconn.TokenURL = tokenSrv.URL
 	cfg.Connections["google"] = gconn
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("google", &OAuthToken{
 		AccessToken:  "old",
 		RefreshToken: "keep-rt",
@@ -550,7 +550,7 @@ func TestHandleAuthCallback_PreservesRefreshTokenAndScopes(t *testing.T) {
 
 func TestHandleAuthRevoke_SharedConnection(t *testing.T) {
 	cfg := googleSharedConfig()
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("google", &OAuthToken{AccessToken: "at", Expiry: time.Now().Add(time.Hour)})
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/auth/google-photos", nil)

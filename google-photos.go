@@ -15,16 +15,16 @@ import (
 
 // GooglePhotosConnector uses the Google Photos Picker API and implements
 // PhotoProvider. Full Library API reads require app verification (post-2025
-// scope restrictions), so Guardian demos and day-to-day use go through
+// scope restrictions), so Aegis demos and day-to-day use go through
 // user-selected picker sessions: the human picks photos once; agents then
 // list that selection as neutral Photo metadata. Bytes stay on Google Photos
-// (non-Guardian canonical, issue #16).
-// https://github.com/fudomunro/aperture-guardian/issues/21
+// (non-Aegis canonical, issue #16).
+// https://github.com/fudomunro/aegis/issues/21
 type GooglePhotosConnector struct {
 	server *Server
 
 	mu sync.Mutex
-	// lastSessionID is the most recent picker session Guardian created or
+	// lastSessionID is the most recent picker session Aegis created or
 	// observed as complete. ListUserPhotos serves that selection so
 	// /v1/library/photos works after the user finishes picking.
 	lastSessionID string
@@ -66,7 +66,7 @@ func (c *GooglePhotosConnector) Capabilities() ServiceCapabilities {
 		DataTypes: []DataTypeCapability{
 			{
 				Name:        "photos",
-				Description: "Photos via the Google Photos Picker API — user selects photos; Guardian lists only that selection (metadata only; bytes stay on Google Photos)",
+				Description: "Photos via the Google Photos Picker API — user selects photos; Aegis lists only that selection (metadata only; bytes stay on Google Photos)",
 				Operations: []Operation{
 					{
 						Name:        "create_picker_session",
@@ -116,18 +116,18 @@ func (c *GooglePhotosConnector) Capabilities() ServiceCapabilities {
 func (c *GooglePhotosConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	base := root + "/v1/services/" + googlePhotosServiceID
-	return fmt.Sprintf(`When the user's request involves Google Photos, you MUST use the Guardian proxy at %s instead of calling Google Photos directly.
+	return fmt.Sprintf(`When the user's request involves Google Photos, you MUST use the Aegis proxy at %s instead of calling Google Photos directly.
 
 Google Photos uses the Picker API: the user must explicitly select photos once. Full library sync is not available without Google app verification.
 
-Picker flow (call the full proxy URL; Guardian authenticates you):
+Picker flow (call the full proxy URL; Aegis authenticates you):
 1. POST /picker/sessions — create a session; return picker_uri to the user and ask them to open it
 2. GET /picker/sessions/{id} — poll until media_items_set is true (follow pollingConfig in the response when present)
 3. GET /picker/mediaItems?sessionId={id} — list the selection as neutral Photo metadata
 4. For photos across every connected photo service after a pick, also try:
 GET %s/v1/library/photos — last completed Google Photos pick plus other photo services
 
-Photos are metadata-only. Guardian never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour) — do not treat it as a permanent link.
+Photos are metadata-only. Aegis never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour) — do not treat it as a permanent link.
 Always include the full proxy base URL in your requests.`, base, root)
 }
 
@@ -190,7 +190,7 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Google Photos request failed")
@@ -211,7 +211,7 @@ func (c *GooglePhotosConnector) handleCreateSession(w http.ResponseWriter, r *ht
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		slog.Error("picker session create failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, "Google Photos picker session create failed")
@@ -253,7 +253,7 @@ func (c *GooglePhotosConnector) handleGetSession(w http.ResponseWriter, r *http.
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "Google Photos picker session get failed")
 		return
@@ -293,7 +293,7 @@ func (c *GooglePhotosConnector) handleDeleteSession(w http.ResponseWriter, r *ht
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := guardianHTTPClient.Do(req)
+	resp, err := aegisHTTPClient.Do(req)
 	if err != nil {
 		writeJSONError(w, http.StatusBadGateway, "Google Photos picker session delete failed")
 		return
@@ -412,7 +412,7 @@ func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, se
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := guardianHTTPClient.Do(req)
+		resp, err := aegisHTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}

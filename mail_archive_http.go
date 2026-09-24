@@ -36,7 +36,7 @@ func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
 func (s *Server) requireMailArchive(w http.ResponseWriter) *MailArchive {
 	if s.mail == nil {
 		writeJSONError(w, http.StatusNotFound,
-			"mail archive disabled — start Guardian with -mail-archive mail-archive.db")
+			"mail archive disabled — start Aegis with -mail-archive mail-archive.db")
 		return nil
 	}
 	return s.mail
@@ -307,7 +307,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	if a == nil {
 		return
 	}
-	// Takeout is not a live service in guardian.json; agent reads still need
+	// Takeout is not a live service in aegis.json; agent reads still need
 	// messages permission on some configured message-capable service.
 	if requireAgentMessagesRead && !s.mailReadable() {
 		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")

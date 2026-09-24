@@ -11,10 +11,10 @@ import (
 )
 
 func TestSpotifyConnector_SystemInstructions(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
-	instructions := conn.SystemInstructions("https://guardian.example.com")
+	instructions := conn.SystemInstructions("https://aegis.example.com")
 
 	if !strings.Contains(instructions, "/v1/services/spotify") {
 		t.Fatal("instructions missing proxy base URL")
@@ -31,7 +31,7 @@ func TestSpotifyConnector_SystemInstructions(t *testing.T) {
 }
 
 func TestSpotifyConnector_TransformUser(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -59,7 +59,7 @@ func TestSpotifyConnector_TransformUser(t *testing.T) {
 }
 
 func TestSpotifyConnector_TransformPlaylistList(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	// Legacy shape: tracks.total.
@@ -103,7 +103,7 @@ func TestSpotifyConnector_TransformPlaylistList(t *testing.T) {
 }
 
 func TestSpotifyConnector_TransformPlaylistList_ItemsTotal(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	// Current Web API shape: items.total (2026 live check).
@@ -132,7 +132,7 @@ func TestSpotifyConnector_TransformPlaylistList_ItemsTotal(t *testing.T) {
 }
 
 func TestSpotifyConnector_TransformPlaylistDetail_CurrentItemsShape(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -194,7 +194,7 @@ func TestSpotifyConnector_TransformPlaylistDetail_CurrentItemsShape(t *testing.T
 }
 
 func TestSpotifyConnector_TransformPlayer(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	// Active playback.
@@ -232,7 +232,7 @@ func TestSpotifyConnector_TransformPlayer(t *testing.T) {
 }
 
 func TestSpotifyConnector_TransformSearch(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -263,7 +263,7 @@ func TestSpotifyConnector_TransformSearch(t *testing.T) {
 }
 
 func TestSpotifyConnector_TransformSavedTracks(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 
 	raw := map[string]any{
@@ -300,7 +300,7 @@ func TestSpotifyConnector_HandleProxy_NoToken(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": NewSpotifyConnector(srv),
 	}
@@ -340,7 +340,7 @@ func TestSpotifyConnector_HandleProxy_WithMockSpotify(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mockSpotify.URL + "/v1"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	// Store a mock token.
 	srv.tokens.Save("spotify", &OAuthToken{
@@ -390,7 +390,7 @@ func TestSpotifyConnector_HandleProxy_PassthroughForUnknownPaths(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mockSpotify.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{
 		AccessToken: "mock-token",
 		Expiry:      futureTime(),

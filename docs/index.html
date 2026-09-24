@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aperture Guardian — Code Walkthrough @ f193059</title>
+<title>Aegis — Code Walkthrough @ f193059</title>
 <style>
   :root {
     --bg: #0d1117;
@@ -292,11 +292,11 @@
     <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>f193059</span>
     <span class="version-meta">main · 2026-09-13 · feat/unified-taste-library merged · regenerate when the code moves</span>
   </div>
-  <h1>Aperture Guardian</h1>
+  <h1>Aegis</h1>
   <p class="lede">
     A Go service that sits between Tailscale Aperture and music APIs.
     When an agent mentions Spotify, YouTube Music, or Amazon Music — or asks about
-    playlists/liked songs without naming a service — Guardian intercepts the LLM
+    playlists/liked songs without naming a service — Aegis intercepts the LLM
     request, injects instructions to call its proxy, then mediates real API calls
     with OAuth, caching, permissions, and a neutral multi-source library model.
   </p>
@@ -316,7 +316,7 @@
 <nav class="toc" aria-label="Contents">
   <h2>Contents</h2>
   <ol>
-    <li><a href="#why">Why Guardian exists</a></li>
+    <li><a href="#why">Why Aegis exists</a></li>
     <li><a href="#architecture">Architecture at a glance</a></li>
     <li><a href="#startup">Startup: wiring the Server</a></li>
     <li><a href="#auth">Two-legged auth</a></li>
@@ -335,31 +335,31 @@
 
 <!-- ============================================================ -->
 <section id="why">
-  <h2><span class="n">01</span>Why Guardian exists</h2>
+  <h2><span class="n">01</span>Why Aegis exists</h2>
   <p>
     Aperture is Tailscale’s LLM gateway. Its <strong>guardrails</strong> can rewrite or block
     provider-bound chat requests, but they do <em>not</em> intercept MCP tool calls.
     You cannot “guard” an agent’s Spotify API call by sitting in front of the model alone.
   </p>
   <p>
-    Guardian uses a <strong>two-component architecture</strong> instead:
+    Aegis uses a <strong>two-component architecture</strong> instead:
   </p>
   <div class="two-col">
     <div class="card">
       <h4>1. Pre-request hook</h4>
       <p>
         Aperture calls <code>POST /v1/pre-request</code> before the LLM sees the user message.
-        Guardian scans the text for service names <em>and</em> library keywords
+        Aegis scans the text for service names <em>and</em> library keywords
         (“what playlists do I have?”). If found, it returns
         <code>{"action":"modify"}</code> with a system message telling the agent
-        to call Guardian’s proxy/library endpoints instead of external APIs.
+        to call Aegis’s proxy/library endpoints instead of external APIs.
       </p>
     </div>
     <div class="card">
       <h4>2. Service proxy + unified library</h4>
       <p>
         Agents call <code>/v1/services/{id}/…</code> or
-        <code>/v1/library/{kind}</code>. Guardian attaches the user’s OAuth token,
+        <code>/v1/library/{kind}</code>. Aegis attaches the user’s OAuth token,
         maps verbose upstream JSON into a compact neutral shape, merges same-named
         items across services, enforces per-data-type permissions, caches GETs,
         and never exposes tokens to the agent.
@@ -368,7 +368,7 @@
   </div>
   <div class="explain good">
     <p>
-      <strong>Design rule:</strong> agents authenticate to Guardian (Tailscale identity or API key).
+      <strong>Design rule:</strong> agents authenticate to Aegis (Tailscale identity or API key).
       They never hold Spotify/YouTube/Amazon OAuth credentials.
     </p>
   </div>
@@ -393,7 +393,7 @@
       <text x="280" y="220" fill="#8b949e" text-anchor="middle" font-size="11">pre_request hook</text>
 
       <rect x="410" y="70" width="220" height="280" rx="12" fill="#161b22" stroke="#3fb950" stroke-width="2"/>
-      <text x="520" y="100" fill="#3fb950" text-anchor="middle" font-weight="700" font-size="14">Guardian</text>
+      <text x="520" y="100" fill="#3fb950" text-anchor="middle" font-weight="700" font-size="14">Aegis</text>
       <line x1="410" y1="114" x2="630" y2="114" stroke="#30363d"/>
       <text x="520" y="138" fill="#e6edf3" text-anchor="middle" font-size="11">handler.go · auth + hook</text>
       <text x="520" y="158" fill="#e6edf3" text-anchor="middle" font-size="11">proxy.go · delegate / forward</text>
@@ -430,7 +430,7 @@
       <text x="430" y="50" fill="#8b949e" font-size="11">solid = data plane</text>
       <text x="430" y="65" fill="#d29922" font-size="11">dashed orange = control plane (hook)</text>
     </svg>
-    <p class="diagram-label">Control plane (orange): Aperture asks Guardian what to do with the chat. Data plane (green/blue): the agent later calls Guardian’s library or proxy endpoints.</p>
+    <p class="diagram-label">Control plane (orange): Aperture asks Aegis what to do with the chat. Data plane (green/blue): the agent later calls Aegis’s library or proxy endpoints.</p>
   </div>
 </section>
 
@@ -516,11 +516,11 @@ app.api_route(<span class="str">"/v1/services/{path:path}"</span>)(auth(srv.hand
 <section id="auth">
   <h2><span class="n">04</span>Two-legged auth</h2>
   <p>
-    Guardian has <strong>two callers</strong>, and they authenticate differently:
+    Aegis has <strong>two callers</strong>, and they authenticate differently:
   </p>
   <table>
     <thead>
-      <tr><th>Leg</th><th>Who calls Guardian</th><th>How they authenticate</th></tr>
+      <tr><th>Leg</th><th>Who calls Aegis</th><th>How they authenticate</th></tr>
     </thead>
     <tbody>
       <tr>
@@ -721,7 +721,7 @@ instructions.extend(library_instructions)</code></pre>
 
   <div class="explain">
     <p>
-      <strong>Fail-open.</strong> If the payload cannot be parsed, Guardian allows the request
+      <strong>Fail-open.</strong> If the payload cannot be parsed, Aegis allows the request
       rather than breaking every LLM call. The hook is advisory for <code>inject</code>
       services and hard-blocking only for <code>action: "block"</code>.
     </p>
@@ -820,7 +820,7 @@ instructions.extend(library_instructions)</code></pre>
 cacheKey := serviceID + <span class="str">":"</span> + r.URL.<span class="fn">RequestURI</span>()
 <span class="kw">if</span> r.Method == http.MethodGet {
     <span class="kw">if</span> cached, ok := s.cache.<span class="fn">Get</span>(cacheKey); ok {
-        w.Header().<span class="fn">Set</span>(<span class="str">"X-Guardian-Cache"</span>, <span class="str">"hit"</span>)
+        w.Header().<span class="fn">Set</span>(<span class="str">"X-Aegis-Cache"</span>, <span class="str">"hit"</span>)
         io.<span class="fn">WriteString</span>(w, cached)
         <span class="kw">return</span>
     }
@@ -845,7 +845,7 @@ resp, _ := http.DefaultClient.<span class="fn">Do</span>(upstreamReq)
 <span class="kw">if</span> r.method == <span class="str">"GET"</span>:
     cached = s.cache.get(cache_key)
     <span class="kw">if</span> cached <span class="kw">is not None</span>:
-        w.headers[<span class="str">"X-Guardian-Cache"</span>] = <span class="str">"hit"</span>
+        w.headers[<span class="str">"X-Aegis-Cache"</span>] = <span class="str">"hit"</span>
         <span class="kw">return</span> cached
 
 upstream_req = httpx.Request(r.method, upstream_url, content=r.body)
@@ -902,7 +902,7 @@ resp = client.send(upstream_req)
 
       <rect x="120" y="400" width="520" height="50" rx="8" fill="#1c2129" stroke="#3fb950" stroke-width="2"/>
       <text x="380" y="422" fill="#3fb950" text-anchor="middle" font-weight="600">sort → MergeTracksSync → TrackList + by_service</text>
-      <text x="380" y="440" fill="#8b949e" text-anchor="middle" font-size="11">cache 60s · X-Guardian-Cache: miss</text>
+      <text x="380" y="440" fill="#8b949e" text-anchor="middle" font-size="11">cache 60s · X-Aegis-Cache: miss</text>
 
       <line x1="430" y1="64" x2="430" y2="86" stroke="#58a6ff" marker-end="url(#lB)"/>
       <line x1="430" y1="134" x2="430" y2="156" stroke="#58a6ff" marker-end="url(#lB)"/>
@@ -1085,7 +1085,7 @@ resp = client.send(upstream_req)
 
   <div class="code-compare">
     <div class="code-panel">
-      <div class="code-header code-header-json">guardian.json</div>
+      <div class="code-header code-header-json">aegis.json</div>
 <pre><code><span class="str">"permissions"</span>: {
   <span class="str">"default"</span>: <span class="str">"read"</span>,
   <span class="str">"playlists"</span>: <span class="str">"read"</span>,
@@ -1280,7 +1280,7 @@ c.mu.<span class="fn">RLock</span>()
       <tr><td><code>models.go</code></td><td>288</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo + sources</td></tr>
       <tr><td><code>match.go</code></td><td>379</td><td>NormalizeIdentityKey, MergePlaylistsSync, artist/album/track merge</td></tr>
       <tr><td><code>contacts.go</code></td><td>387</td><td>Contact identity, union-find merge, ContactProvider</td></tr>
-      <tr><td><code>photos.go</code></td><td>241</td><td>Photo identity/merge, PhotoProvider, non-Guardian canonical sources</td></tr>
+      <tr><td><code>photos.go</code></td><td>241</td><td>Photo identity/merge, PhotoProvider, non-Aegis canonical sources</td></tr>
       <tr><td><code>permissions.go</code></td><td>282</td><td>Access levels, path classification, enforcement helpers</td></tr>
       <tr><td><code>config.go</code></td><td>201</td><td>Service config, Duration JSON, matching, reload, save</td></tr>
       <tr><td><code>identity.go</code></td><td>262</td><td>Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
@@ -1332,7 +1332,7 @@ git log -1 --oneline</code></pre>
 <hr>
 <footer>
   Generated for <strong>f193059</strong>
-  · aperture-guardian code walkthrough
+  · aegis code walkthrough
   · Go source of truth, Python for comparison
   · regenerate when the code evolves
 </footer>

@@ -29,7 +29,7 @@ func TestHandleServiceProxy_GetForwarding(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -40,8 +40,8 @@ func TestHandleServiceProxy_GetForwarding(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	if w.Header().Get("X-Guardian-Cache") != "miss" {
-		t.Fatalf("cache header = %q, want miss", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "miss" {
+		t.Fatalf("cache header = %q, want miss", w.Header().Get("X-Aegis-Cache"))
 	}
 	body := w.Body.String()
 	if !strings.Contains(body, "jazz") {
@@ -62,7 +62,7 @@ func TestHandleServiceProxy_CacheHit(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -70,15 +70,15 @@ func TestHandleServiceProxy_CacheHit(t *testing.T) {
 	// First request — miss.
 	w := httptest.NewRecorder()
 	srv.HandleServiceProxy(w, req)
-	if w.Header().Get("X-Guardian-Cache") != "miss" {
-		t.Fatalf("first request: cache = %q, want miss", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "miss" {
+		t.Fatalf("first request: cache = %q, want miss", w.Header().Get("X-Aegis-Cache"))
 	}
 
 	// Second request — hit.
 	w = httptest.NewRecorder()
 	srv.HandleServiceProxy(w, req)
-	if w.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("second request: cache = %q, want hit", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("second request: cache = %q, want hit", w.Header().Get("X-Aegis-Cache"))
 	}
 
 	if callCount != 1 {
@@ -101,7 +101,7 @@ func TestHandleServiceProxy_ErrorGETNotCached(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL, CacheTTL: Duration{Duration: time.Hour}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -112,8 +112,8 @@ func TestHandleServiceProxy_ErrorGETNotCached(t *testing.T) {
 		if w.Code != http.StatusInternalServerError {
 			t.Fatalf("request %d: status = %d, want 500", i, w.Code)
 		}
-		if w.Header().Get("X-Guardian-Cache") != "miss" {
-			t.Fatalf("request %d: cache = %q, want miss (errors must not cache)", i, w.Header().Get("X-Guardian-Cache"))
+		if w.Header().Get("X-Aegis-Cache") != "miss" {
+			t.Fatalf("request %d: cache = %q, want miss (errors must not cache)", i, w.Header().Get("X-Aegis-Cache"))
 		}
 	}
 	if callCount != 2 {
@@ -140,7 +140,7 @@ func TestHandleServiceProxy_PostNotCached(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	postBody := `{"query":"jazz playlists"}`
 	req := httptest.NewRequest("POST", "/v1/services/spotify/search", strings.NewReader(postBody))
@@ -163,7 +163,7 @@ func TestHandleServiceProxy_PostNotCached(t *testing.T) {
 
 func TestHandleServiceProxy_ServiceNotFound(t *testing.T) {
 	cfg := &Config{Services: []Service{}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/nonexistent/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -182,7 +182,7 @@ func TestHandleServiceProxy_BlockedService(t *testing.T) {
 			{ID: "tidal", Name: "Tidal", Action: "block", Description: "not allowed"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/tidal/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -207,7 +207,7 @@ func TestHandleServiceProxy_NoEndpoint(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -226,7 +226,7 @@ func TestHandleServiceProxy_UpstreamDown(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: "http://127.0.0.1:1"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -258,7 +258,7 @@ func TestHandleServiceProxy_ServiceHeadersApplied(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -284,7 +284,7 @@ func TestHandleServiceProxy_QueryParamsForwarded(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/search?q=jazz&limit=10", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -311,7 +311,7 @@ func TestHandleServiceProxy_RootPath(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: upstream.URL},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -326,7 +326,7 @@ func TestHandleServiceProxy_RootPath(t *testing.T) {
 
 func TestHandleServiceProxy_Unauthorized(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/data", nil)
 	req.Header.Set("Authorization", "Bearer wrong-key")
@@ -345,7 +345,7 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
@@ -435,7 +435,7 @@ func TestHandleServiceProxy_Capabilities_AmazonMusic(t *testing.T) {
 			{ID: "amazon-music", Name: "Amazon Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["amazon-music"] = NewAmazonMusicConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/amazon-music/capabilities", nil)
@@ -469,7 +469,7 @@ func TestHandleServiceProxy_Capabilities_NoConnector(t *testing.T) {
 			{ID: "deezer", Name: "Deezer", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/deezer/capabilities", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -491,7 +491,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/player", nil)
@@ -517,7 +517,7 @@ func TestHandleServiceProxy_Capabilities_FilteredByPermission(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)

@@ -10,11 +10,11 @@ import (
 )
 
 // PhotoProvider is implemented by connectors that can return the user's photos
-// in Guardian's neutral format. The aggregate library endpoint uses this so
+// in Aegis's neutral format. The aggregate library endpoint uses this so
 // agents can ask for "my photos" once and receive every service. Each returned
 // Photo should carry one PhotoSource for that service. Connectors must not
 // download or cache photo bytes — only metadata and service-provided URLs.
-// https://github.com/fudomunro/aperture-guardian/issues/19
+// https://github.com/fudomunro/aegis/issues/19
 type PhotoProvider interface {
 	// ListUserPhotos fetches the user's photo metadata from the upstream
 	// service and maps them into neutral Photo values (service identity in

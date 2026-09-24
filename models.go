@@ -55,7 +55,7 @@ type Track struct {
 	Duration string `json:"duration,omitempty"`
 	// EntityID is a durable catalog ID when a service provides one (ISRC).
 	// Preferred cross-service identity over display-name matching.
-	// https://github.com/fudomunro/aperture-guardian/issues/4
+	// https://github.com/fudomunro/aegis/issues/4
 	EntityID string `json:"entity_id,omitempty"`
 	// Match records how this unified track's cross-service identity was
 	// established: "isrc" (shared EntityID) or "name" (title+artist fallback).
@@ -138,7 +138,7 @@ type PlaylistDetail struct {
 // in a photo, an email correspondent, a playlist collaborator, etc. Service
 // identity lives in Sources, same as Playlist/Artist. Cross-service matching
 // prefers email, then phone, then handle, then display name.
-// https://github.com/fudomunro/aperture-guardian/issues/12
+// https://github.com/fudomunro/aegis/issues/12
 type Contact struct {
 	// Name is the preferred display name (first non-empty across sources).
 	Name string `json:"name,omitempty"`
@@ -195,9 +195,9 @@ type ContactList struct {
 }
 
 // Photo is a user-facing photo (or video still). Service identity lives in
-// Sources. Guardian never stores photo bytes — the authoritative copy stays on
-// a non-Guardian service marked Canonical (issue #16). Ownership / provenance
-// claims are intentionally deferred: https://github.com/fudomunro/aperture-guardian/issues/20
+// Sources. Aegis never stores photo bytes — the authoritative copy stays on
+// a non-Aegis service marked Canonical (issue #16). Ownership / provenance
+// claims are intentionally deferred: https://github.com/fudomunro/aegis/issues/20
 type Photo struct {
 	// TakenAt is the capture time in RFC3339, when the service provides it.
 	TakenAt string `json:"taken_at,omitempty"`
@@ -213,14 +213,14 @@ type Photo struct {
 	// People lists known people in the photo (Contact identity matching).
 	People []Contact `json:"people,omitempty"`
 	// Sources lists service-local copies. At least one source should be
-	// Canonical when the blob lives outside Guardian.
+	// Canonical when the blob lives outside Aegis.
 	Sources []PhotoSource `json:"sources,omitempty"`
 	// Extra holds other service-specific fields.
 	Extra map[string]any `json:"extra,omitempty"`
 }
 
 // PhotoSource is a service-specific location of a photo. Bytes are never
-// stored in Guardian; Canonical/BlobURL point at the real copy.
+// stored in Aegis; Canonical/BlobURL point at the real copy.
 type PhotoSource struct {
 	// Service is the connector ID: "google-photos", …
 	Service string `json:"service"`
@@ -231,10 +231,10 @@ type PhotoSource struct {
 	// URL is a deep link to the item on the service, when available.
 	URL string `json:"url,omitempty"`
 	// Canonical is true when this service holds the authoritative photo bytes.
-	// This is the non-Guardian-canonical slice of issue #16: photo binaries
-	// stay on the source service, not in Guardian's cache or disk.
+	// This is the non-Aegis-canonical slice of issue #16: photo binaries
+	// stay on the source service, not in Aegis's cache or disk.
 	Canonical bool `json:"canonical,omitempty"`
-	// BlobURL points at the retrievable image when bytes live outside Guardian.
+	// BlobURL points at the retrievable image when bytes live outside Aegis.
 	// Some services (Google Photos baseUrl) issue short-lived URLs.
 	BlobURL string `json:"blob_url,omitempty"`
 	// ThumbnailURL is a smaller preview, when available.
@@ -260,10 +260,10 @@ type PhotoList struct {
 }
 
 // CalendarEvent is a user-facing calendar entry (meeting, appointment,
-// all-day block). Service identity lives in Sources. Guardian does not own
-// calendar content — the authoritative copy stays on a non-Guardian service
+// all-day block). Service identity lives in Sources. Aegis does not own
+// calendar content — the authoritative copy stays on a non-Aegis service
 // marked Canonical (issue #16).
-// https://github.com/fudomunro/aperture-guardian/issues/65
+// https://github.com/fudomunro/aegis/issues/65
 type CalendarEvent struct {
 	// Title is the event summary/title.
 	Title string `json:"title,omitempty"`
@@ -348,12 +348,12 @@ const (
 )
 
 // Message is a user-facing message (email, and later SMS/WhatsApp when a
-// named connector exists). Service identity lives in Sources. Guardian does
+// named connector exists). Service identity lives in Sources. Aegis does
 // not store message bodies as the home copy — the authoritative content stays
-// on a non-Guardian service marked Canonical (issue #16). Library listings
+// on a non-Aegis service marked Canonical (issue #16). Library listings
 // carry subject/snippet metadata; full body is only included when an agent
 // fetches detail through the service proxy.
-// https://github.com/fudomunro/aperture-guardian/issues/60
+// https://github.com/fudomunro/aegis/issues/60
 type Message struct {
 	// Channel is the transport: "email", "sms", or "whatsapp".
 	Channel string `json:"channel,omitempty"`

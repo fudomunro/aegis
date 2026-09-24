@@ -186,7 +186,7 @@ func TestLibraryPlaylists_ConfigCanonicalForStampsAndSorts(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify":       twoSourcePlaylistProvider{},
 		"youtube-music": youtubePlaylistProvider{},
@@ -224,7 +224,7 @@ func TestLibraryInstructions_MentionCanonical(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"tracks"}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	instr := srv.libraryTracksSystemInstructions()
 	if !strings.Contains(instr, "canonical") {
 		t.Fatalf("instructions should mention canonical: %s", instr)
@@ -240,7 +240,7 @@ func TestAdminSummary_IncludesCanonicalFor(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdminSummary(w, req)
@@ -260,12 +260,12 @@ func TestAdminSummary_IncludesCanonicalFor(t *testing.T) {
 }
 
 func TestAdminHTML_ShowsCanonicalBadges(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
 	body := w.Body.String()
-	for _, want := range []string{"canonical_for", "hasCanonicalSource", "Authoritative non-Guardian location"} {
+	for _, want := range []string{"canonical_for", "hasCanonicalSource", "Authoritative non-Aegis location"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing %q", want)
 		}
@@ -278,7 +278,7 @@ func TestFlowTopology_NotesConfiguredCanonical(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdminFlow(w, req)

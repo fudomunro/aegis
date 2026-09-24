@@ -27,7 +27,7 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	home := srv.writePolicyNotice(cfg.Services[0])
 	if !strings.Contains(home, "canonical home for playlists") {
@@ -65,14 +65,14 @@ func TestWritePolicyNotice_EmptyWithoutWriteOrHome(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{"default": AccessRead}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	if got := srv.writePolicyNotice(cfg.Services[0]); got != "" {
 		t.Fatalf("expected empty notice, got %q", got)
 	}
 }
 
 func TestLibraryInstructions_MultiSourceMutationRule(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.libraryInstructionsFor("playlists")
 	if !strings.Contains(instr, "Multi-source mutation") {
 		t.Fatalf("missing multi-source rule: %s", instr)
@@ -96,7 +96,7 @@ func TestPreRequest_InjectsWritePolicy(t *testing.T) {
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	body, _ := json.Marshal(map[string]any{
 		"metadata":     map[string]any{"request_id": "req-wp", "login_name": "alice", "model": "gpt-4"},
@@ -153,7 +153,7 @@ func TestWritePolicyNotices_DedupesIdentical(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}, Permissions: Permissions{"playlists": AccessWrite}},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	notices := srv.writePolicyNotices([]Service{svc, svc})
 	if len(notices) != 1 {
 		t.Fatalf("expected 1 deduped notice, got %d: %#v", len(notices), notices)

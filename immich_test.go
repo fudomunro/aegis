@@ -26,7 +26,7 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 			},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors[immichServiceID] = NewImmichConnector(srv)
 	return srv, ts
 }
@@ -34,8 +34,8 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 func TestImmichConnector_SystemInstructions(t *testing.T) {
 	conn := NewImmichConnector(testServerWithBase(&Config{Services: []Service{{
 		ID: immichServiceID, Endpoint: "http://immich.local:2283/api",
-	}}}, "https://guardian.example.com"))
-	instr := conn.SystemInstructions("https://guardian.example.com")
+	}}}, "https://aegis.example.com"))
+	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/services/immich",
 		"/v1/library/photos",

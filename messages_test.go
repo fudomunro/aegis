@@ -90,7 +90,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 		{ID: "google-gmail", Name: "Gmail", Action: "inject"},
 		{ID: "outlook-mail", Name: "Outlook Mail", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	a := newMessage("google-gmail", "Gmail", "g1", MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
 	a.EntityID = "standup@example.com"
 	from := Contact{Emails: []string{"ada@example.com"}}
@@ -140,7 +140,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 			CanonicalFor: []string{"messages"},
 		},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{messages: []Message{
 			newMessage("google-gmail", "Gmail", "g1", MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
@@ -163,7 +163,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 }
 
 func TestHandleLibraryMessages_NoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -180,7 +180,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 		Action:      "inject",
 		Permissions: Permissions{"messages": AccessNone},
 	}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{messages: []Message{
 			newMessage("google-gmail", "Gmail", "g1", MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
@@ -197,7 +197,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 
 func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{err: ErrUnauthorized},
 	}
@@ -219,7 +219,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 
 func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{err: errors.New("boom")},
 	}
@@ -240,7 +240,7 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 }
 
 func TestHandleLibraryMessages_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("POST", "/v1/library/messages", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -268,7 +268,7 @@ func TestLibraryKindMessages_Registered(t *testing.T) {
 }
 
 func TestLibraryMessagesInstructions_MentionEndpoint(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.libraryMessagesSystemInstructions()
 	for _, want := range []string{
 		"/v1/library/messages",
@@ -286,7 +286,7 @@ func TestStampMessageCanonical_OnlyWhenConfigured(t *testing.T) {
 		{ID: "google-gmail", Name: "Gmail", Action: "inject", CanonicalFor: []string{"messages"}},
 		{ID: "other-mail", Name: "Other", Action: "inject"},
 	}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	items := []Message{
 		{Sources: []MessageSource{{Service: "google-gmail"}}},
 		{Sources: []MessageSource{{Service: "other-mail"}}},
@@ -314,7 +314,7 @@ func TestMentionsMessages_Keyword(t *testing.T) {
 }
 
 func TestHasMessageProviders_UsesRegistry(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{},
 	}

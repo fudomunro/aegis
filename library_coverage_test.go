@@ -12,7 +12,7 @@ import (
 )
 
 func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, h := range []http.HandlerFunc{
 		srv.HandleLibraryTracks,
 		srv.HandleLibraryAlbums,
@@ -33,7 +33,7 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 
 func TestLibraryTracks_CacheHit(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{tracks: []Track{{Name: "Solo"}}},
 	}
@@ -47,8 +47,8 @@ func TestLibraryTracks_CacheHit(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	if w.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("cache header = %q", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("cache header = %q", w.Header().Get("X-Aegis-Cache"))
 	}
 	if !strings.Contains(w.Body.String(), "Cached") {
 		t.Fatalf("body = %s", w.Body.String())
@@ -57,7 +57,7 @@ func TestLibraryTracks_CacheHit(t *testing.T) {
 
 func TestLibraryTracks_ErrorService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{err: errors.New("boom")},
 	}
@@ -80,7 +80,7 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 }
 
 func TestLibraryTracks_NoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -97,7 +97,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify":       &fakeAlbumProvider{err: ErrUnauthorized},
 		"youtube-music": &fakeAlbumProvider{err: errors.New("upstream")},
@@ -124,7 +124,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 }
 
 func TestLibraryAlbums_NoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -141,7 +141,7 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 			{ID: "tidal", Name: "Tidal", Action: "block"},
 		},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeAlbumProvider{albums: []Album{{Name: "A", Sources: []AlbumSource{{Service: "spotify", ID: "1"}}}}},
 		"tidal":   &fakeAlbumProvider{albums: []Album{{Name: "Blocked", Sources: []AlbumSource{{Service: "tidal", ID: "2"}}}}},
@@ -166,7 +166,7 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 
 func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeArtistProvider{err: ErrUnauthorized},
 	}
@@ -190,14 +190,14 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	srv.connectors["spotify"] = &fakeArtistProvider{artists: []Artist{newArtist("spotify", "Spotify", "1", "X")}}
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryArtists)(w2, req)
-	if w2.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("expected cache hit, got %q", w2.Header().Get("X-Guardian-Cache"))
+	if w2.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("expected cache hit, got %q", w2.Header().Get("X-Aegis-Cache"))
 	}
 }
 
 func TestLibraryArtists_ErrorService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeArtistProvider{err: errors.New("nope")},
 	}
@@ -223,7 +223,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 			Permissions: Permissions{"artists": AccessNone},
 		}},
 	}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeArtistProvider{artists: []Artist{newArtist("spotify", "Spotify", "1", "X")}},
 	}
@@ -238,7 +238,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 }
 
 func TestLibraryArtists_NoProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -258,7 +258,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 				"playlists": AccessNone, "contacts": AccessNone, "photos": AccessNone,
 			}},
 		},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 
 	if !srv.tracksLibraryReadable() {
 		t.Fatal("service a should allow tracks read")
@@ -274,7 +274,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 			{ID: "b", Name: "B", Action: "block"},
 			{ID: "c", Name: "C", Action: "inject", Permissions: Permissions{"default": AccessNone}},
 		},
-	}, "https://guardian.example.com")
+	}, "https://aegis.example.com")
 	if srv2.tracksLibraryReadable() || srv2.albumsLibraryReadable() || srv2.artistsLibraryReadable() ||
 		srv2.libraryReadable() || srv2.contactsLibraryReadable() || srv2.photosLibraryReadable() {
 		t.Fatal("expected no readable library types")
@@ -282,7 +282,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 }
 
 func TestHasLibraryProviders(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	if srv.hasPlaylistProviders() || srv.hasLikedTrackProviders() || srv.hasAlbumProviders() ||
 		srv.hasArtistProviders() || srv.hasContactProviders() || srv.hasPhotoProviders() {
 		t.Fatal("empty connectors should report no providers")
@@ -296,7 +296,7 @@ func TestHasLibraryProviders(t *testing.T) {
 }
 
 func TestLibrarySystemInstructions_ContainEndpoints(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, s := range []string{
 		srv.librarySystemInstructions(),
 		srv.libraryTracksSystemInstructions(),
@@ -304,7 +304,7 @@ func TestLibrarySystemInstructions_ContainEndpoints(t *testing.T) {
 		srv.libraryArtistsSystemInstructions(),
 		srv.libraryContactsSystemInstructions(),
 	} {
-		if !strings.Contains(s, "https://guardian.example.com/v1/library/") {
+		if !strings.Contains(s, "https://aegis.example.com/v1/library/") {
 			t.Fatalf("instructions missing base library path: %s", s)
 		}
 	}
@@ -318,7 +318,7 @@ func TestLibrarySystemInstructions_ContainEndpoints(t *testing.T) {
 
 func TestPreRequest_ArtistsWithoutServiceName(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{"spotify": NewSpotifyConnector(srv)}
 
 	payload := PreRequestPayload{
@@ -483,7 +483,7 @@ func TestNormalizeHandleList(t *testing.T) {
 }
 
 func TestHandleAdminCache_ListsEntries(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.cache.Set("library:tracks", `{"tracks":[]}`, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/admin/cache", nil)
@@ -511,7 +511,7 @@ func TestHandleAdminCache_ListsEntries(t *testing.T) {
 }
 
 func TestHandleAdmin_CaseAndMethod(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	req := httptest.NewRequest("POST", "/v1/admin", nil)
 	w := httptest.NewRecorder()
@@ -537,7 +537,7 @@ func TestHandleAdmin_CaseAndMethod(t *testing.T) {
 
 func TestAdminSummary_ReportsTasteProviders(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{"spotify": NewSpotifyConnector(srv)}
 
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
@@ -560,7 +560,7 @@ func TestAdminSummary_ReportsTasteProviders(t *testing.T) {
 }
 
 func TestSpotifyProviders_Unauthorized(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://aegis.example.com")
 	conn := NewSpotifyConnector(srv)
 	if _, _, err := conn.ListUserSavedAlbums(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("albums err = %v", err)
@@ -580,7 +580,7 @@ func TestSpotifyProviders_HTTPError(t *testing.T) {
 	defer mock.Close()
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn := NewSpotifyConnector(srv)
 
@@ -596,7 +596,7 @@ func TestSpotifyProviders_HTTPError(t *testing.T) {
 }
 
 func TestYouTubeProviders_UnauthorizedAndError(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject"}}}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject"}}}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
 	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, ErrUnauthorized) {
 		t.Fatalf("artists err = %v", err)
@@ -610,7 +610,7 @@ func TestYouTubeProviders_UnauthorizedAndError(t *testing.T) {
 	}))
 	defer mock.Close()
 	cfg := &Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL}}}
-	srv2 := testServerWithBase(cfg, "https://guardian.example.com")
+	srv2 := testServerWithBase(cfg, "https://aegis.example.com")
 	srv2.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn2 := NewYouTubeMusicConnector(srv2)
 	if _, _, err := conn2.ListUserFollowedArtists(context.Background()); err == nil {
@@ -630,7 +630,7 @@ func TestSpotifyFollowing_FlatItemsShape(t *testing.T) {
 	defer mock.Close()
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	artists, _, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
@@ -649,7 +649,7 @@ func TestSpotifyFollowing_MissingFollowScopeExplainsReconnect(t *testing.T) {
 	defer mock.Close()
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	_, _, err := NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
@@ -662,7 +662,7 @@ func TestSpotifyFollowing_MissingFollowScopeExplainsReconnect(t *testing.T) {
 }
 
 func TestHandleAdminCache_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("POST", "/v1/admin/cache", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -674,7 +674,7 @@ func TestHandleAdminCache_MethodNotAllowed(t *testing.T) {
 
 func TestLibraryAlbums_CacheHit(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeAlbumProvider{albums: []Album{{Name: "Fresh"}}},
 	}
@@ -684,8 +684,8 @@ func TestLibraryAlbums_CacheHit(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
-	if w.Header().Get("X-Guardian-Cache") != "hit" {
-		t.Fatalf("cache header = %q", w.Header().Get("X-Guardian-Cache"))
+	if w.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("cache header = %q", w.Header().Get("X-Aegis-Cache"))
 	}
 	if !strings.Contains(w.Body.String(), "CachedAlbum") {
 		t.Fatalf("body = %s", w.Body.String())
@@ -728,7 +728,7 @@ func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 		ID: "spotify", Name: "Spotify",
 		Permissions: Permissions{"default": AccessRead, "artists": AccessNone},
 	}
-	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/following?type=artist", nil)
 	w := httptest.NewRecorder()
@@ -748,7 +748,7 @@ func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 
 func TestNeutralYouTubeTrack_DeletedItemNoPanic(t *testing.T) {
 	// No contentDetails and no resourceId — used to panic on type assertion.
-	conn := NewYouTubeMusicConnector(testServerWithBase(&Config{}, "https://guardian.example.com"))
+	conn := NewYouTubeMusicConnector(testServerWithBase(&Config{}, "https://aegis.example.com"))
 	track, ok := conn.neutralYouTubeTrack(map[string]any{
 		"snippet": map[string]any{"title": "Deleted video"},
 	})
@@ -773,7 +773,7 @@ func (panickingArtistProvider) ListUserFollowedArtists(context.Context) ([]Artis
 
 func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{"spotify": panickingArtistProvider{}}
 
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
@@ -795,7 +795,7 @@ func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
 
 func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://guardian.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &truncatingTrackProvider{},
 	}
@@ -818,7 +818,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 }
 
 func TestLibrarySystemInstructions_MentionTruncated(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	instr := srv.libraryTracksSystemInstructions()
 	if !strings.Contains(instr, "truncated") {
 		t.Fatalf("tracks instructions should tell agents to check truncated: %s", instr)
@@ -837,7 +837,7 @@ func (truncatingTrackProvider) ListUserLikedTracks(context.Context) ([]Track, bo
 }
 
 func TestAdminHTML_SimplePermForm(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://guardian.example.com")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
 	w := httptest.NewRecorder()
 	srv.HandleAdmin(w, req)
