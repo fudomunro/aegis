@@ -25,6 +25,16 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="tab-library"`,
 		`id="tab-advanced"`,
 		`id="panel-advanced"`,
+		// Aperture setup guide + live gateway link
+		`id="tab-aperture"`,
+		`id="panel-aperture"`,
+		`id="aperture-open"`,
+		`id="aperture-config-snippet"`,
+		`id="aperture-health-summary"`,
+		"Point Aperture at Aegis",
+		"loadApertureSetup",
+		"expectedApertureConfig",
+		"/v1/admin/hook-health",
 		`id="services-help"`,
 		`id="map-libraries"`,
 		`id="map-recent"`,
@@ -90,6 +100,9 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"runTakeoutSync",
 		"Google Takeout",
 		"read-only sync",
+		// Data directory surface (issue #74)
+		"data_dir",
+		"Data dir:",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)

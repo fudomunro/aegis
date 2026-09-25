@@ -36,7 +36,7 @@ func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
 func (s *Server) requireMailArchive(w http.ResponseWriter) *MailArchive {
 	if s.mail == nil {
 		writeJSONError(w, http.StatusNotFound,
-			"mail archive disabled — start Aegis with -mail-archive mail-archive.db")
+			"mail archive disabled — start Aegis with a mail archive path (default: <data-dir>/mail-archive.db)")
 		return nil
 	}
 	return s.mail

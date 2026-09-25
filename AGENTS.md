@@ -46,7 +46,8 @@ them away.
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
   `entity_links.json`, `permissions.json`, `.aegis-token-pass`, or live
-  binaries. Example config only via `aegis.example.json`.
+  binaries. Example config only via `aegis.example.json`. Prefer the OS
+  data directory (issue #74) over the git worktree for runtime state.
 - **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
   service. See `SECURITY.md`.
 
@@ -60,6 +61,7 @@ Agent → Aegis proxy / library / admin → provider APIs
 | Area | Where | Notes |
 |------|-------|-------|
 | Entry, flags, routes, connector registration | `main.go` | Wrap nearly every route in `AuthMiddleware` |
+| Data directory + state path layout | `datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `permissions_overlay.go` | `permissions.json` wins over aegis.json bootstrap; admin saves never rewrite aegis.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
@@ -92,6 +94,26 @@ type ServiceConnector interface {
   upstream base URLs (breaks mock tests and custom endpoints).
 - Prefer `runConnectorProxy` / `doUpstreamRequest` / `aegisHTTPClient`
   over new `http.DefaultClient` call sites.
+
+### Local state layout (issue #74)
+
+All mutable local state defaults under one data directory (override with
+`-data-dir` / `AEGIS_DATA_DIR`):
+
+| OS | Default |
+|----|---------|
+| macOS | `~/Library/Application Support/Aegis/` |
+| Linux | `$XDG_DATA_HOME/aegis` or `~/.local/share/aegis` |
+
+```
+<data-dir>/aegis.json, permissions.json, entity_links.json, tokens.json,
+mail-archive.db, logs/aegis.log, cache/
+```
+
+Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
+empty `-log-file` disables file logging. Startup logs the resolved directory
+and `/v1/admin/summary` exposes `runtime.data_dir`. Do not reintroduce cwd
+defaults for these files.
 
 ## How work happens here
 

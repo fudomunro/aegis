@@ -67,8 +67,11 @@ type Server struct {
 	// call the API. Empty means any authenticated tailnet peer is allowed.
 	allowedLogins []string
 	// identity resolves Tailscale peer identity. Optional in api-key mode.
-	identity    IdentityResolver
-	baseURL     string
+	identity IdentityResolver
+	baseURL  string
+	// dataDir is the resolved local state directory (issue #74). Surfaced
+	// on the admin Runtime panel so the layout is discoverable.
+	dataDir     string
 	config      *Config
 	cache       *Cache
 	tokens      *TokenStore
@@ -85,6 +88,11 @@ type Server struct {
 	// mailSyncMu serializes archive ingest so admin UI and agents cannot
 	// interleave two Gmail page cursors into the same store.
 	mailSyncMu sync.Mutex
+	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
+	hookHealth *HookHealth
+	// apertureURL is the optional public base URL of the Aperture gateway.
+	// Used only for admin live links / setup guide — never required for proxying.
+	apertureURL string
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.
@@ -157,7 +165,21 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, 
 		attrs = append(attrs, "login", id.LoginName, "identity_source", id.Source)
 	}
 	slog.Warn("unauthorized request", attrs...)
+	if r.URL != nil && r.URL.Path == hookPath {
+		s.hookHealth.Record(HookObservation{Action: "auth_fail", Host: requestHost(r)})
+	}
 	writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+}
+
+// requestHost returns Host or X-Forwarded-Host for hook diagnostics.
+func requestHost(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	if h := r.Header.Get("X-Forwarded-Host"); h != "" {
+		return h
+	}
+	return r.Host
 }
 
 type peerIdentityKey struct{}
@@ -252,6 +274,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		slog.Error("failed to read request body", "error", err)
+		s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
 		writeGuardrailResponse(w, GuardrailResponse{
 			Action:  ActionAllow,
 			Message: "failed to read request body",
@@ -262,12 +285,23 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	var payload PreRequestPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		slog.Error("failed to parse payload", "error", err)
+		s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
 		writeGuardrailResponse(w, GuardrailResponse{
 			Action:  ActionAllow,
 			Message: "failed to parse payload",
 		})
 		return
 	}
+	obs := HookObservation{
+		Host:           requestHost(r),
+		Action:         ActionAllow,
+		HasUserMessage: strings.TrimSpace(payload.UserMessage) != "",
+		HasRequestBody: len(payload.RequestBody) > 0,
+		Model:          payload.Metadata.Model,
+		Provider:       payload.Metadata.Provider,
+		Login:          payload.Metadata.LoginName,
+	}
+	defer func() { s.hookHealth.Record(obs) }()
 
 	logger := slog.With(
 		"request_id", payload.Metadata.RequestID,
@@ -290,6 +324,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	if len(matched) == 0 && len(libraryInstructions) == 0 {
 		logger.Debug("no services matched, allowing")
+		obs.Action = ActionAllow
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
@@ -306,6 +341,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	for _, svc := range matched {
 		if svc.Action == "block" {
 			logger.Warn("request blocked by service policy", "service", svc.ID, "reason", svc.Description)
+			obs.Action = ActionBlock
 			writeGuardrailResponse(w, GuardrailResponse{
 				Action:  ActionBlock,
 				Message: fmt.Sprintf("blocked: access to %s is not allowed. %s", svc.Name, svc.Description),
@@ -348,6 +384,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	if len(instructions) == 0 {
 		logger.Debug("no injectable services, allowing")
+		obs.Action = ActionAllow
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
@@ -357,11 +394,13 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	modified, err := injectSystemMessage(payload.RequestBody, systemContent)
 	if err != nil {
 		logger.Error("failed to inject system message", "error", err)
+		obs.Action = ActionAllow
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
 
 	logger.Info("request modified with proxy instructions", "services", len(instructions))
+	obs.Action = ActionModify
 	writeGuardrailResponse(w, GuardrailResponse{
 		Action:      ActionModify,
 		RequestBody: modified,

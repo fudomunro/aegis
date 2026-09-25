@@ -113,7 +113,8 @@ from other LAN interfaces.
    requests and attaches tailnet identity to library/proxy logs. Pre-request
    also warns when Aperture’s `login_name` does not match the Tailscale peer.
 8. **Encrypt tokens at rest** (`-token-pass` / `AEGIS_TOKEN_PASS`) as today —
-   tailnet auth does not replace disk encryption of `tokens.json`.
+   tailnet auth does not replace disk encryption of `tokens.json` (under the
+   [data directory](README.md#data-directory-issue-74), mode 0700/0600).
 9. **OAuth login/callback stay public** on purpose (browser redirects from
    Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
 
@@ -144,7 +145,7 @@ unrestricted access for authorized callers.
 - [ ] `tailscale serve` in front **or** Aegis bound to localhost/Tailscale IP
 - [ ] `auth-mode=tailnet` (or `auto` while migrating)
 - [ ] `allowed-logins` set if the tailnet is shared
-- [ ] `AEGIS_TOKEN_PASS` set and `tokens.json` not world-readable
+- [ ] `AEGIS_TOKEN_PASS` set and `tokens.json` (under the data directory) not world-readable
 - [ ] API key removed or stored outside agent-accessible paths
 
 ## References
