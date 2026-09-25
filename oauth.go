@@ -152,9 +152,14 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html><head><title>Aegis — Authorized</title>
+<link rel="icon" href="/favicon.ico" sizes="any">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <style>body{font-family:system-ui;max-width:500px;margin:4rem auto;text-align:center;color:#e6edf3;background:#0d1117}
+.brand-mark{width:48px;height:48px;color:#58a6ff;margin-bottom:0.75rem}
 h1{color:#3fb950}p{color:#8b949e}</style></head>
-<body><h1>%s Authorized</h1>
+<body><img class="brand-mark" src="/logo.svg" alt="" width="48" height="48">
+<h1>%s Authorized</h1>
 <p>Aegis now has access to %s. You can close this page.</p>
 <p style="font-size:0.85rem;color:#8b949e">Token expires: %s</p>
 </body></html>`,

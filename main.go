@@ -208,6 +208,7 @@ func main() {
 	srv.connectors[googleGmailServiceID] = gGmailConn
 
 	mux := http.NewServeMux()
+	registerBrandRoutes(mux, srv)
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))

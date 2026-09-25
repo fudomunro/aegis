@@ -103,6 +103,13 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		// Data directory surface (issue #74)
 		"data_dir",
 		"Data dir:",
+		// Branding (issue #87): favicon + logo
+		`rel="icon"`,
+		"/favicon.ico",
+		"/favicon.svg",
+		"/logo.svg",
+		"brand-mark",
+		"brand-name",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)
