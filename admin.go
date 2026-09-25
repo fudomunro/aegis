@@ -62,8 +62,11 @@ type AdminService struct {
 type AdminRuntime struct {
 	AuthMode         string   `json:"auth_mode"`
 	BaseURL          string   `json:"base_url"`
+	ApertureURL      string   `json:"aperture_url,omitempty"`
 	APIKeyConfigured bool     `json:"api_key_configured"`
 	AllowedLogins    []string `json:"allowed_logins,omitempty"`
+	// DataDir is the resolved local state directory (issue #74).
+	DataDir string `json:"data_dir,omitempty"`
 }
 
 // AdminCacheStats summarizes the in-memory response cache.
@@ -218,8 +221,10 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		Runtime: AdminRuntime{
 			AuthMode:         s.authMode,
 			BaseURL:          s.baseURL,
+			ApertureURL:      s.apertureURL,
 			APIKeyConfigured: s.apiKey != "",
 			AllowedLogins:    allowed,
+			DataDir:          s.dataDir,
 		},
 		Services: services,
 		Cache: AdminCacheStats{
@@ -363,6 +368,35 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 			"permissions": perms,
 			"status":      "saved",
 		})
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
+// HandleAdminHookHealth reports Aperture pre-request hook wiring health and
+// optionally validates a pasted Aperture policy/hooks JSON document.
+//
+// GET  /v1/admin/hook-health
+// POST /v1/admin/hook-health/check   body: Aperture policy or hooks JSON
+func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		rep := s.hookHealth.Snapshot(s.baseURL)
+		sortHookIssues(rep.Issues)
+		writeJSON(w, rep)
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "failed to read body")
+			return
+		}
+		if len(strings.TrimSpace(string(body))) == 0 {
+			writeJSONError(w, http.StatusBadRequest, "paste Aperture policy/hooks JSON in the request body")
+			return
+		}
+		rep := s.CheckApertureConfig(body)
+		sortHookIssues(rep.Issues)
+		writeJSON(w, rep)
 	default:
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
