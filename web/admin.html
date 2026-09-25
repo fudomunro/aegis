@@ -249,6 +249,7 @@
       <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="false">Services</button>
       <button class="tab" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false">Library</button>
       <button class="tab" role="tab" id="tab-advanced" aria-controls="panel-advanced" aria-selected="false">Advanced</button>
+      <button class="tab" role="tab" id="tab-aperture" aria-controls="panel-aperture" aria-selected="false">Aperture</button>
     </nav>
 
     <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
@@ -390,6 +391,74 @@
 
       <h2 class="section-heading">Runtime</h2>
       <div id="runtime-body"><div class="empty">Loading…</div></div>
+    </section>
+
+    <section id="panel-aperture" class="panel" role="tabpanel" aria-labelledby="tab-aperture" hidden>
+      <div class="toolbar">
+        <span class="meta" id="aperture-link-meta">Aperture gateway link</span>
+        <div class="grow"></div>
+        <a class="btn" id="aperture-open" href="#" target="_blank" rel="noopener noreferrer">Open Aperture</a>
+        <a class="btn" id="aperture-open-config" href="#" target="_blank" rel="noopener noreferrer">Open Aperture Configuration</a>
+        <button class="btn" id="reload-aperture" type="button">Refresh health</button>
+      </div>
+
+      <div class="help-box">
+        <h3>Point Aperture at Aegis</h3>
+        <p>
+          Aegis is a synchronous <code>pre_request</code> hook. In Aperture, add a hook named
+          <strong>aegis</strong> whose URL is this instance’s <code>/v1/pre-request</code>,
+          and a grant with <code>send_hooks</code> that sends
+          <code>user_message</code> and <code>request_body</code>. Use fail-open so chat
+          keeps working if Aegis is down. Full operator notes live in
+          <code>docs/configuring-aperture.md</code>.
+        </p>
+      </div>
+
+      <h2 class="section-heading">Expected Aperture config</h2>
+      <p class="meta" style="margin-bottom:0.6rem">
+        Merge into your existing Aperture configuration (do not overwrite providers or other grants).
+        Copy the <code>hooks</code> and <code>grants</code> fragments below.
+      </p>
+      <div class="card" style="padding:0.85rem 1rem">
+        <div class="toolbar" style="margin-bottom:0.5rem">
+          <span class="meta">hooks + grants for this Aegis</span>
+          <div class="grow"></div>
+          <button class="btn" id="copy-aperture-config" type="button">Copy JSON</button>
+        </div>
+        <pre id="aperture-config-snippet" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"></pre>
+      </div>
+
+      <h2 class="section-heading">Setup checklist</h2>
+      <ol class="meta" style="line-height:1.7; padding-left:1.25rem; margin:0 0 1rem">
+        <li>Open <strong>Aperture Configuration</strong> (link above) or Administration → Configuration.</li>
+        <li>Add the <code>hooks.aegis</code> object — URL must match Aegis base URL + <code>/v1/pre-request</code>.</li>
+        <li>Add a grant with <code>send_hooks</code> named <code>aegis</code>, events <code>["pre_request"]</code>, send <code>["user_message","request_body"]</code>.</li>
+        <li>Set hook <code>apikey</code> if Aegis auth-mode is <code>auto</code> or <code>api-key</code> (same value as <code>AEGIS_API_KEY</code>).</li>
+        <li>Send any chat through Aperture, then <strong>Refresh health</strong>.</li>
+        <li>Fix any <code>legacy_*</code> / <code>stale_hook_host</code> / auth issues listed below.</li>
+      </ol>
+
+      <h2 class="section-heading">Hook health</h2>
+      <div class="toolbar">
+        <span class="meta" id="aperture-health-summary">Loading…</span>
+      </div>
+      <div id="aperture-health-issues" class="help-box"><div class="empty">No hook-health data yet.</div></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Host</th>
+                <th>Action</th>
+                <th>user_message</th>
+                <th>request_body</th>
+              </tr>
+            </thead>
+            <tbody id="aperture-health-recent"><tr><td colspan="5" class="muted-num">No recent hook calls</td></tr></tbody>
+          </table>
+        </div>
+      </div>
     </section>
   </div>
 
@@ -2294,6 +2363,8 @@
       $("dashboard").hidden = false;
       renderServices($("service-filter").value);
       renderRuntime(summary);
+      renderApertureLinks();
+      renderApertureSnippet();
       loadFlow();
     } catch (err) {
       if (err.status === 401) {
@@ -2304,9 +2375,140 @@
     }
   }
 
-  const FLOW_TABS = ["map", "services", "library", "advanced"];
+  const FLOW_TABS = ["map", "services", "library", "advanced", "aperture"];
 
-  function selectTab(name) {
+  function apertureBase() {
+    const fromSummary = summary && summary.runtime && summary.runtime.aperture_url;
+    return (fromSummary || "").replace(/\/+$/, "");
+  }
+
+  function expectedApertureConfig(baseURL) {
+    const hookURL = String(baseURL || "").replace(/\/+$/, "") + "/v1/pre-request";
+    return {
+      hooks: {
+        aegis: {
+          url: hookURL,
+          apikey: "<AEGIS_API_KEY if auth-mode is auto/api-key>",
+          timeout: "5s",
+          fail_policy: "fail_open"
+        }
+      },
+      grants: [
+        {
+          src: ["*"],
+          app: {
+            "tailscale.com/cap/aperture": [
+              {
+                models: "**",
+                send_hooks: [
+                  {
+                    name: "aegis",
+                    events: ["pre_request"],
+                    send: ["user_message", "request_body"]
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    };
+  }
+
+  function renderApertureLinks() {
+    const base = apertureBase();
+    const open = $("aperture-open");
+    const cfg = $("aperture-open-config");
+    const meta = $("aperture-link-meta");
+    if (!base) {
+      open.href = "#";
+      open.removeAttribute("href");
+      open.setAttribute("aria-disabled", "true");
+      open.classList.add("disabled");
+      cfg.href = "#";
+      cfg.removeAttribute("href");
+      cfg.setAttribute("aria-disabled", "true");
+      cfg.classList.add("disabled");
+      meta.textContent = "Set -aperture-url (or AEGIS_APERTURE_URL) to enable live Aperture links";
+      return;
+    }
+    open.classList.remove("disabled");
+    cfg.classList.remove("disabled");
+    open.removeAttribute("aria-disabled");
+    cfg.removeAttribute("aria-disabled");
+    open.href = base + "/";
+    cfg.href = base + "/";
+    meta.textContent = "Live link → " + base + " · use Administration → Configuration";
+  }
+
+  function renderApertureSnippet() {
+    const base = (summary && summary.runtime && summary.runtime.base_url) || "";
+    const doc = expectedApertureConfig(base);
+    $("aperture-config-snippet").textContent = JSON.stringify(doc, null, 2);
+    $("copy-aperture-config").onclick = async () => {
+      try {
+        await navigator.clipboard.writeText(JSON.stringify(doc, null, 2));
+        $("copy-aperture-config").textContent = "Copied";
+        setTimeout(() => { $("copy-aperture-config").textContent = "Copy JSON"; }, 1200);
+      } catch (e) {
+        $("copy-aperture-config").textContent = "Copy failed";
+      }
+    };
+  }
+
+  function renderHookHealth(rep) {
+    const status = (rep && rep.status) || "unknown";
+    $("aperture-health-summary").textContent =
+      "status: " + status +
+      (rep && rep.expected_url ? " · expected " + rep.expected_url : "") +
+      (rep && rep.last_hook_at ? " · last hook " + rep.last_hook_at : " · no hook traffic yet");
+    const issues = (rep && rep.issues) || [];
+    const box = $("aperture-health-issues");
+    if (!issues.length) {
+      box.innerHTML = '<h3>No issues</h3><p>Hook wiring looks healthy.</p>';
+    } else {
+      const rows = issues.map((is) => {
+        const fix = is.fix ? (' <em>' + escapeHTML(is.fix) + '</em>') : "";
+        return '<p><strong>' + escapeHTML(is.severity) + "</strong> · " +
+          escapeHTML(is.code) + " — " + escapeHTML(is.message) + fix + "</p>";
+      }).join("");
+      box.innerHTML = '<h3>Issues</h3>' + rows;
+    }
+    const recent = (rep && rep.recent) || [];
+    const tbody = $("aperture-health-recent");
+    if (!recent.length) {
+      tbody.innerHTML = '<tr><td colspan="5" class="muted-num">No recent hook calls</td></tr>';
+    } else {
+      tbody.innerHTML = recent.map((o) => {
+        return "<tr><td>" + escapeHTML(o.at || "") + "</td><td>" + escapeHTML(o.host || "") +
+          "</td><td>" + escapeHTML(o.action || "") +
+          "</td><td>" + (o.has_user_message ? "yes" : "no") +
+          "</td><td>" + (o.has_request_body ? "yes" : "no") + "</td></tr>";
+      }).join("");
+    }
+  }
+
+  function escapeHTML(s) {
+    return String(s).replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
+    })[c]);
+  }
+
+  async function loadApertureSetup() {
+    renderApertureLinks();
+    renderApertureSnippet();
+    try {
+      const rep = await api("/v1/admin/hook-health");
+      renderHookHealth(rep);
+    } catch (e) {
+      $("aperture-health-summary").textContent = "hook-health unavailable";
+      $("aperture-health-issues").innerHTML = '<h3>Unavailable</h3><p>' + escapeHTML(e.message || String(e)) + "</p>";
+    }
+  }
+
+  $("reload-aperture").addEventListener("click", () => loadApertureSetup());
+
+function selectTab(name) {
     FLOW_TABS.forEach((id) => {
       const tab = $("tab-" + id);
       const panel = $("panel-" + id);
@@ -2319,6 +2521,9 @@
     if (name === "advanced") {
       loadCache();
       loadMailArchive();
+    }
+    if (name === "aperture") {
+      loadApertureSetup();
     }
   }
 

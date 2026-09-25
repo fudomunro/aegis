@@ -30,6 +30,7 @@ func main() {
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
 	logFile := flag.String("log-file", "", "optional process log file (default: <data-dir>/logs/aegis.log; empty disables file logging)")
+	apertureURL := flag.String("aperture-url", "", "public base URL of the Aperture gateway this Aegis hooks into (reads AEGIS_APERTURE_URL env if empty; used for admin live links)")
 	flag.Parse()
 
 	setFlags := visitedFlags()
@@ -123,6 +124,10 @@ func main() {
 	if *tokenPass == "" {
 		*tokenPass = os.Getenv("AEGIS_TOKEN_PASS")
 	}
+	if *apertureURL == "" {
+		*apertureURL = os.Getenv("AEGIS_APERTURE_URL")
+	}
+	*apertureURL = strings.TrimRight(strings.TrimSpace(*apertureURL), "/")
 	if *tokenPass == "" {
 		slog.Error("token-pass is required (flag or AEGIS_TOKEN_PASS env)")
 		os.Exit(1)
@@ -180,6 +185,8 @@ func main() {
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
 		mail:          mailArchive,
+		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
+		apertureURL:   *apertureURL,
 	}
 
 	// Register service connectors.
@@ -267,6 +274,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminCache)(w, r)
 	case path == "cache/clear":
 		s.AuthMiddleware(s.HandleAdminCacheClear)(w, r)
+	case path == "hook-health":
+		s.AuthMiddleware(s.HandleAdminHookHealth)(w, r)
 	case path == "mail/status":
 		s.AuthMiddleware(s.HandleAdminMailStatus)(w, r)
 	case path == "mail/sync":

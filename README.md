@@ -77,6 +77,7 @@ Aegis starts with these endpoints:
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
 - `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32)
+- `GET /v1/admin/hook-health` — Aperture pre-request hook wiring diagnostics (stale Guardian names/URLs, auth failures, missing `send` fields)
 - `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
@@ -355,6 +356,7 @@ on `starting server`). The admin **Runtime** panel shows the same path.
 **Migrating from cwd defaults:** if you previously kept `aegis.json`,
 `tokens.json`, and friends next to the binary, either move them into the data
 directory or keep passing the explicit path flags.
+| `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 
 ### All flags
 
@@ -373,6 +375,10 @@ directory or keep passing the explicit path flags.
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
+| `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
+| `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
+| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
+| `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
@@ -467,6 +473,37 @@ Add Aegis as a pre-request hook in your Aperture configuration:
   ]
 }
 ```
+
+### Hook health check
+
+Aegis can tell whether the Aperture hook is still wired for the **Aegis**
+names and URL, not leftover Guardian config.
+
+```bash
+# Live traffic diagnostics + copyable expected hooks/grants snippet
+curl -H "Authorization: Bearer $KEY" "$AEGIS/v1/admin/hook-health"
+
+# Validate a pasted Aperture policy (or bare hooks map)
+curl -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  --data-binary @aperture-policy.json \
+  "$AEGIS/v1/admin/hook-health/check"
+```
+
+Reported issues include:
+
+| Code | Meaning |
+|------|---------|
+| `stale_hook_host` / `legacy_hook_url` | Call or config still uses `guardian.*` |
+| `legacy_hook_name` / `legacy_send_hook_name` | Hook key still named `guardian` |
+| `hook_url_mismatch` | Hook `url` does not match Aegis `-base-url` + `/v1/pre-request` |
+| `hook_auth_failures` | Pre-request calls failing auth (bad `apikey` / auth-mode) |
+| `missing_user_message` / `send_missing_user_message` | Aperture is not sending `user_message` (service matching breaks) |
+| `missing_request_body` / `send_missing_request_body` | Aperture is not sending `request_body` (instruction injection breaks) |
+| `no_hook_traffic` | No `POST /v1/pre-request` observed since startup |
+| `no_pre_request_hook` / `grants_missing_pre_request` | Config never enables the pre_request hook |
+
+`status` is `ok`, `warn`, or `error`. `expected_hook_config` is a ready-to-paste
+`hooks` + `grants` snippet using the live base URL and the hook name `aegis`.
 
 ### Two-legged auth
 
@@ -1198,6 +1235,8 @@ Forwards to the configured upstream endpoint with OAuth tokens. Callers authenti
 GET /v1/admin              — HTML dashboard (shell only; no secrets)
 GET /v1/admin/summary      — redacted services, token status, cache stats
 GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries)
+GET /v1/admin/hook-health  — Aperture hook health + expected config snippet
+POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
