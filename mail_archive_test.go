@@ -229,6 +229,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		links:       mustLinks(t),
 		mail:        archive,
+		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 	}
 	srv.connectors[googleGmailServiceID] = NewGoogleGmailConnector(srv)
 	return srv
