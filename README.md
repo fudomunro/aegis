@@ -1244,6 +1244,14 @@ GET /v1/admin/services/{id}/permissions  — current agent permission map + avai
 PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not aegis.json)
 ```
 
+Public brand assets (no auth; issue #87) are served from the process root:
+
+```
+GET /favicon.ico, /favicon.svg, /favicon-16.png, /favicon-32.png
+GET /apple-touch-icon.png
+GET /logo.svg
+```
+
 `/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
 Serve identity the page works with no extra setup. In API-key mode, enter the
 key when prompted (kept only in that tab’s `sessionStorage`).
@@ -1360,6 +1368,7 @@ aegis/
   tokens.go         AES-256-GCM encrypted token storage
   statestore.go     CSRF state validation with TTL
   admin.go          Admin dashboard HTML + summary/cache APIs
+  brand.go          Public favicon/logo embed + routes (issue #87)
   flow.go           Data-flow topology builder + /v1/admin/flow
   SECURITY.md       Tailnet auth model, ACLs, operational guidance
   spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
