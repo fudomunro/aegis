@@ -25,6 +25,7 @@ func main() {
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
+	apertureURL := flag.String("aperture-url", "", "public base URL of the Aperture gateway this Aegis hooks into (reads AEGIS_APERTURE_URL env if empty; used for admin live links)")
 	flag.Parse()
 
 	logger := initLogger(*logLevel, *logFormat)
@@ -75,6 +76,10 @@ func main() {
 	if *tokenPass == "" {
 		*tokenPass = os.Getenv("AEGIS_TOKEN_PASS")
 	}
+	if *apertureURL == "" {
+		*apertureURL = os.Getenv("AEGIS_APERTURE_URL")
+	}
+	*apertureURL = strings.TrimRight(strings.TrimSpace(*apertureURL), "/")
 	if *tokenPass == "" {
 		slog.Error("token-pass is required (flag or AEGIS_TOKEN_PASS env)")
 		os.Exit(1)
@@ -132,6 +137,7 @@ func main() {
 		links:         links,
 		mail:          mailArchive,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
+		apertureURL:   *apertureURL,
 	}
 
 	// Register service connectors.
