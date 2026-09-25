@@ -217,6 +217,12 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 	if !strings.Contains(body, "Spotify Authorized") {
 		t.Fatalf("body missing authorized page: %s", body)
 	}
+	// Issue #87 branding on the OAuth success page.
+	for _, want := range []string{`rel="icon"`, "/favicon.svg", "/logo.svg"} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("authorized page missing %q: %s", want, body)
+		}
+	}
 	tok := srv.tokens.Get("spotify")
 	if tok == nil || tok.AccessToken != "at" || tok.RefreshToken != "rt" {
 		t.Fatalf("stored token = %+v", tok)
