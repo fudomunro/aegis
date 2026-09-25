@@ -290,3 +290,30 @@ func TestIsStaleHookHost(t *testing.T) {
 		t.Fatal("aegis host is not stale")
 	}
 }
+
+func TestAdminSummary_IncludesApertureURL(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.apertureURL = "https://aperture.example.com"
+	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var rep struct {
+		Runtime struct {
+			BaseURL     string `json:"base_url"`
+			ApertureURL string `json:"aperture_url"`
+		} `json:"runtime"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &rep); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if rep.Runtime.ApertureURL != "https://aperture.example.com" {
+		t.Fatalf("aperture_url = %q", rep.Runtime.ApertureURL)
+	}
+	if rep.Runtime.BaseURL != "https://aegis.example.com" {
+		t.Fatalf("base_url = %q", rep.Runtime.BaseURL)
+	}
+}

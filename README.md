@@ -304,6 +304,7 @@ professional-data connectors remain follow-up work on
 | `AEGIS_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
 | `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
+| `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 
 ### All flags
 
@@ -316,6 +317,7 @@ professional-data connectors remain follow-up work on
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
 | `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
+| `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
 | `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required) |

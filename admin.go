@@ -62,6 +62,7 @@ type AdminService struct {
 type AdminRuntime struct {
 	AuthMode         string   `json:"auth_mode"`
 	BaseURL          string   `json:"base_url"`
+	ApertureURL      string   `json:"aperture_url,omitempty"`
 	APIKeyConfigured bool     `json:"api_key_configured"`
 	AllowedLogins    []string `json:"allowed_logins,omitempty"`
 }
@@ -218,6 +219,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		Runtime: AdminRuntime{
 			AuthMode:         s.authMode,
 			BaseURL:          s.baseURL,
+			ApertureURL:      s.apertureURL,
 			APIKeyConfigured: s.apiKey != "",
 			AllowedLogins:    allowed,
 		},

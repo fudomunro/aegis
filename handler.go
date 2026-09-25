@@ -87,6 +87,9 @@ type Server struct {
 	mailSyncMu sync.Mutex
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *HookHealth
+	// apertureURL is the optional public base URL of the Aperture gateway.
+	// Used only for admin live links / setup guide — never required for proxying.
+	apertureURL string
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.
