@@ -131,6 +131,7 @@ func main() {
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
 		mail:          mailArchive,
+		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
 	}
 
 	// Register service connectors.
@@ -217,6 +218,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminCache)(w, r)
 	case path == "cache/clear":
 		s.AuthMiddleware(s.HandleAdminCacheClear)(w, r)
+	case path == "hook-health":
+		s.AuthMiddleware(s.HandleAdminHookHealth)(w, r)
 	case path == "mail/status":
 		s.AuthMiddleware(s.HandleAdminMailStatus)(w, r)
 	case path == "mail/sync":

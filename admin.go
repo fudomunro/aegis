@@ -367,3 +367,32 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
+
+// HandleAdminHookHealth reports Aperture pre-request hook wiring health and
+// optionally validates a pasted Aperture policy/hooks JSON document.
+//
+// GET  /v1/admin/hook-health
+// POST /v1/admin/hook-health/check   body: Aperture policy or hooks JSON
+func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		rep := s.hookHealth.Snapshot(s.baseURL)
+		sortHookIssues(rep.Issues)
+		writeJSON(w, rep)
+	case http.MethodPost:
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, "failed to read body")
+			return
+		}
+		if len(strings.TrimSpace(string(body))) == 0 {
+			writeJSONError(w, http.StatusBadRequest, "paste Aperture policy/hooks JSON in the request body")
+			return
+		}
+		rep := s.CheckApertureConfig(body)
+		sortHookIssues(rep.Issues)
+		writeJSON(w, rep)
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
