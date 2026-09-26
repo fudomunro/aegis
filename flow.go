@@ -280,7 +280,6 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	for _, kind := range libraryKinds {
 		libraryProviders[kind.ID] = nil
 	}
-	serviceIDs := make(map[string]bool)
 
 	for _, svc := range s.config.ServiceSnapshots() {
 		node := FlowNode{
@@ -373,7 +372,6 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		}
 
 		nodes = append(nodes, node)
-		serviceIDs[node.ID] = true
 	}
 
 	// Stable service order for the diagram.
@@ -407,7 +405,9 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	}
 
 	stats := s.buildFlowStats(window, windowLabel)
-	// Individual agent nodes + access arrows to the data they used (issue #114).
+	// Individual agent nodes + access arrows to library data types they used
+	// (issue #114). Agent → service arrows are omitted so the map keeps focus
+	// on data types rather than backends.
 	for _, ad := range stats.Agents.Detail {
 		nodes = append(nodes, FlowNode{
 			ID:     "agent:" + ad.ID,
@@ -418,17 +418,6 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Hits:   ad.Hits,
 			Agents: 1,
 		})
-		for svcID, hits := range ad.Services {
-			if !serviceIDs["svc:"+svcID] {
-				continue
-			}
-			edges = append(edges, FlowEdge{
-				From:  "agent:" + ad.ID,
-				To:    "svc:" + svcID,
-				Label: accessEdgeLabel(hits),
-				Style: FlowEdgeAccess,
-			})
-		}
 		for libID, hits := range ad.Libraries {
 			edges = append(edges, FlowEdge{
 				From:  "agent:" + ad.ID,

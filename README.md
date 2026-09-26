@@ -77,7 +77,7 @@ Aegis starts with these endpoints:
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
-- `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32). Includes per-agent nodes and access breakdowns so the Map can draw which agents touched which services/data (issue #114)
+- `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32). Includes per-agent nodes and access arrows to library data types so the Map can draw which agents touched which data (issue #114)
 - `GET /v1/admin/hook-health` — Aperture pre-request hook wiring diagnostics (stale Guardian names/URLs, auth failures, missing `send` fields)
 - `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
 
@@ -537,6 +537,8 @@ Spotify scopes (see `aegis.example.json`):
 
 ## Integrating with Aperture
 
+Full operator guide (minimal config, config API apply, Guardian migration, verification): **[docs/configuring-aperture.md](docs/configuring-aperture.md)**.
+
 Add Aegis as a pre-request hook in your Aperture configuration:
 
 ```json
@@ -612,6 +614,8 @@ Aegis has **two** callers, and they authenticate differently:
 | **Agent data** | The LLM agent (`/v1/library/playlists`, `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: API key if `auth-mode` is `auto` or `api-key`. |
 
 Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Aegis attaches those when proxying. With `-auth-mode tailnet` and no API key, agents on the tailnet call Aegis without a shared secret.
+
+After wiring the hook, confirm it with [`GET /v1/admin/hook-health`](docs/configuring-aperture.md#verify-with-hook-health) — it flags leftover Guardian names, wrong URLs, and missing `send` fields.
 
 ## API Reference
 
