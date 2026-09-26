@@ -363,23 +363,3 @@ func contactServiceName(c Contact) string {
 	}
 	return ""
 }
-
-// hasContactProviders reports whether any registered connector can list contacts.
-func (s *Server) hasContactProviders() bool {
-	return LibraryKindByID("contacts").HasProviders(s)
-}
-
-// contactsLibraryReadable reports whether any service allows contact reads.
-func (s *Server) contactsLibraryReadable() bool {
-	return LibraryKindByID("contacts").Readable(s)
-}
-
-// libraryContactsSystemInstructions tells agents about the contacts endpoint.
-func (s *Server) libraryContactsSystemInstructions() string {
-	return s.libraryInstructionsFor("contacts")
-}
-
-// mentionsContacts detects contact-oriented questions that don't name a service.
-func mentionsContacts(msg string) bool {
-	return LibraryKindByID("contacts").Mentions(msg)
-}

@@ -414,8 +414,8 @@ func TestMentionsContacts(t *testing.T) {
 		"list my contacts",
 	}
 	for _, msg := range yes {
-		if !mentionsContacts(msg) {
-			t.Errorf("mentionsContacts(%q) = false, want true", msg)
+		if !LibraryKindByID("contacts").Mentions(msg) {
+			t.Errorf("Mentions(%q) = false, want true", msg)
 		}
 	}
 	no := []string{
@@ -425,8 +425,8 @@ func TestMentionsContacts(t *testing.T) {
 		"contact the support team", // "contact" alone is not enough
 	}
 	for _, msg := range no {
-		if mentionsContacts(msg) {
-			t.Errorf("mentionsContacts(%q) = true, want false", msg)
+		if LibraryKindByID("contacts").Mentions(msg) {
+			t.Errorf("Mentions(%q) = true, want false", msg)
 		}
 	}
 }
@@ -474,11 +474,11 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 func TestHasContactProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{}
-	if srv.hasContactProviders() {
+	if LibraryKindByID("contacts").HasProviders(srv) {
 		t.Fatal("empty connectors should have no contact providers")
 	}
 	srv.connectors["google"] = &fakeContactProvider{}
-	if !srv.hasContactProviders() {
+	if !LibraryKindByID("contacts").HasProviders(srv) {
 		t.Fatal("fake provider should register as contact provider")
 	}
 }

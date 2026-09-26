@@ -308,23 +308,3 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 		stampCopies:   s.stampMessageCopies,
 	})
 }
-
-// hasMessageProviders reports whether any registered connector can list messages.
-func (s *Server) hasMessageProviders() bool {
-	return LibraryKindByID("messages").HasProviders(s)
-}
-
-// messagesLibraryReadable reports whether any service allows message reads.
-func (s *Server) messagesLibraryReadable() bool {
-	return LibraryKindByID("messages").Readable(s)
-}
-
-// libraryMessagesSystemInstructions tells agents about the messages endpoint.
-func (s *Server) libraryMessagesSystemInstructions() string {
-	return s.libraryInstructionsFor("messages")
-}
-
-// mentionsMessages detects message/mail-oriented questions that don't name a service.
-func mentionsMessages(msg string) bool {
-	return LibraryKindByID("messages").Mentions(msg)
-}

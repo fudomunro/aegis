@@ -225,7 +225,7 @@ func TestLibraryInstructions_MentionCanonical(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	instr := srv.libraryTracksSystemInstructions()
+	instr := srv.libraryInstructionsFor("tracks")
 	if !strings.Contains(instr, "canonical") {
 		t.Fatalf("instructions should mention canonical: %s", instr)
 	}
