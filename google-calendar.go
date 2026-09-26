@@ -44,11 +44,7 @@ const (
 
 // googleCalendarUpstreamBase returns the configured Calendar API base.
 func (c *GoogleCalendarConnector) googleCalendarUpstreamBase() string {
-	const defaultBase = "https://www.googleapis.com/calendar/v3"
-	if svc := c.server.config.GetService(googleCalendarServiceID); svc != nil && svc.Endpoint != "" {
-		return strings.TrimRight(svc.Endpoint, "/")
-	}
-	return defaultBase
+	return c.server.upstreamBaseFor(googleCalendarServiceID, "https://www.googleapis.com/calendar/v3")
 }
 
 // Capabilities returns what Google Calendar data types and operations are supported.

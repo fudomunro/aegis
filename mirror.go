@@ -382,7 +382,7 @@ func (s *Server) mirrorUpstream(ctx context.Context, serviceID, method, path str
 		return nil, 0, ErrUnauthorized
 	}
 
-	u := strings.TrimRight(svc.Endpoint, "/") + path
+	u := trimRightSlash(svc.Endpoint) + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}

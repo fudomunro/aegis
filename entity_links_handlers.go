@@ -107,7 +107,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		itemsMu.Unlock()
 	}
 
-	if s.tracksLibraryReadable() {
+	if LibraryKindByID("tracks").Readable(s) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -188,7 +188,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if s.libraryReadable() {
+	if LibraryKindByID("playlists").Readable(s) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

@@ -96,7 +96,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build the upstream URL: service endpoint + remaining path + original query string.
-	upstreamURL := strings.TrimRight(svc.Endpoint, "/") + remainingPath
+	upstreamURL := trimRightSlash(svc.Endpoint) + remainingPath
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
