@@ -268,7 +268,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 		})
 	}))
 	t.Cleanup(up.Close)
-	srv.config.GetService(googleGmailServiceID).Endpoint = up.URL
+	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	req = httptest.NewRequest("POST", "/v1/admin/mail/sync", strings.NewReader(`{"max_messages":5,"reset_cursor":true}`))

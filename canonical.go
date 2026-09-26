@@ -103,7 +103,7 @@ func (c *Config) canonicalServiceIDs(kind string) map[string]bool {
 // canonicalServiceName returns the display name of the configured canonical
 // service for kind, or "".
 func (s *Server) canonicalServiceName(kind string) string {
-	for _, svc := range s.config.Services {
+	for _, svc := range s.config.ServiceSnapshots() {
 		if svc.IsCanonicalFor(kind) {
 			if svc.Name != "" {
 				return svc.Name

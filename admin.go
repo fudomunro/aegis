@@ -138,8 +138,9 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokens := s.tokens.Status()
-	services := make([]AdminService, 0, len(s.config.Services))
-	for _, svc := range s.config.Services {
+	snapshots := s.config.ServiceSnapshots()
+	services := make([]AdminService, 0, len(snapshots))
+	for _, svc := range snapshots {
 		item := AdminService{
 			ID:           svc.ID,
 			Name:         svc.Name,

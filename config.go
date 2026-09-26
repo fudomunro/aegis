@@ -168,6 +168,32 @@ func validateConfig(cfg *Config) error {
 	return nil
 }
 
+// clone returns a copy of the service whose maps and slices are independent
+// of the config's live state, so callers can read outside the config lock
+// while Reload / SetServicePermissions mutate the store (issue #95).
+func (s Service) clone() Service {
+	cp := s
+	if s.Aliases != nil {
+		cp.Aliases = append([]string(nil), s.Aliases...)
+	}
+	if s.Headers != nil {
+		cp.Headers = make(map[string]string, len(s.Headers))
+		for k, v := range s.Headers {
+			cp.Headers[k] = v
+		}
+	}
+	if s.Permissions != nil {
+		cp.Permissions = Permissions(s.Permissions.Clone())
+	}
+	if s.CanonicalFor != nil {
+		cp.CanonicalFor = append([]string(nil), s.CanonicalFor...)
+	}
+	if s.OAuthScopes != nil {
+		cp.OAuthScopes = append([]string(nil), s.OAuthScopes...)
+	}
+	return cp
+}
+
 func (c *Config) serviceByID(id string) *Service {
 	for i := range c.Services {
 		if c.Services[i].ID == id {
@@ -185,9 +211,9 @@ func (c *Config) FindMatchingServices(userMessage string) []Service {
 
 	lower := strings.ToLower(userMessage)
 	var matched []Service
-	for _, svc := range c.Services {
-		if matchesService(svc, lower) {
-			matched = append(matched, svc)
+	for i := range c.Services {
+		if matchesService(c.Services[i], lower) {
+			matched = append(matched, c.Services[i].clone())
 		}
 	}
 	return matched
@@ -205,14 +231,54 @@ func matchesService(svc Service, lowerMessage string) bool {
 	return false
 }
 
-// GetService returns the service with the given ID, or nil.
+// GetService returns a snapshot of the service with the given ID, or nil.
+// The result is a copy: callers may read it without holding the config lock,
+// and later config mutations will not race with those reads (issue #95).
 func (c *Config) GetService(id string) *Service {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	return c.serviceByID(id)
+	svc := c.serviceByID(id)
+	if svc == nil {
+		return nil
+	}
+	cp := svc.clone()
+	return &cp
 }
 
-// GetConnection returns the named shared provider connection, or nil.
+// ServiceSnapshots returns copies of every configured service, safe to range
+// without the config lock (issue #95).
+func (c *Config) ServiceSnapshots() []Service {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := make([]Service, 0, len(c.Services))
+	for i := range c.Services {
+		out = append(out, c.Services[i].clone())
+	}
+	return out
+}
+
+// ServiceCount returns the number of configured services.
+func (c *Config) ServiceCount() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.Services)
+}
+
+// updateService applies mut to a service under the write lock. Intended for
+// tests that install mock endpoints; production mutates via LoadConfig,
+// Reload, and SetServicePermissions.
+func (c *Config) updateService(id string, mut func(*Service)) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	svc := c.serviceByID(id)
+	if svc == nil {
+		return false
+	}
+	mut(svc)
+	return true
+}
+
+// GetConnection returns a snapshot of the named shared provider connection, or nil.
 func (c *Config) GetConnection(id string) *Connection {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
@@ -223,7 +289,11 @@ func (c *Config) GetConnection(id string) *Connection {
 	if !ok {
 		return nil
 	}
-	return &conn
+	cp := conn
+	if conn.Scopes != nil {
+		cp.Scopes = append([]string(nil), conn.Scopes...)
+	}
+	return &cp
 }
 
 // SetServicePermissions validates and persists agent permissions for a service.
