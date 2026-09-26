@@ -211,8 +211,9 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 - Pre-request injection also lists denied types so agents do not try them.
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
-`player`, `channels`, `library`, `recommendations`, `contacts`, `photos`. Paths that do not map to a
-known type fall through to the `default` level.
+`player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
+`events`, `messages`. Paths that do not map to a known type fall through to the
+`default` level.
 
 ### Canonical sources (non-Aegis, issue #16)
 
@@ -233,8 +234,8 @@ Two layers set the flag:
 }
 ```
 
-Valid kinds: `playlists`, `tracks`, `albums`, `artists`, `contacts`, `photos`, `events`.
-At most **one** non-blocked service may claim each kind. After a library fetch,
+Valid kinds: `playlists`, `tracks`, `albums`, `artists`, `contacts`, `photos`,
+`events`, `messages`. At most **one** non-blocked service may claim each kind. After a library fetch,
 sources from a configured home service are stamped `canonical: true`.
 
 Merge sorts canonical sources first. `CanonicalService()` (and the JSON
@@ -1367,6 +1368,11 @@ only presence flags, scopes, and expiry status are shown.
 
 ## Development
 
+Adding or maturing a unified library data type? Follow
+[docs/adding-data-types.md](docs/adding-data-types.md) — the checklist for
+neutral models, provider interfaces, merge identity, locations/copies,
+permissions, and sample fixtures (issue #92).
+
 ```bash
 # Run tests
 go test ./...
@@ -1489,6 +1495,7 @@ aegis/
   google-calendar.go Google Calendar connector (CalendarEventProvider)
   aegis.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
+  docs/adding-data-types.md  Guide: defining a new library data type (issue #92)
 ```
 
 ## License
