@@ -589,6 +589,7 @@ Reported issues include:
 | `hook_auth_failures` | Pre-request calls failing auth (bad `apikey` / auth-mode) |
 | `missing_user_message` / `send_missing_user_message` | Aperture is not sending `user_message` (service matching breaks) |
 | `missing_request_body` / `send_missing_request_body` | Aperture is not sending `request_body` (instruction injection breaks) |
+| `unrecognized_body_shape` | Request body is not a supported LLM wire format, so instructions were not injected |
 | `no_hook_traffic` | No `POST /v1/pre-request` observed since startup |
 | `no_pre_request_hook` / `grants_missing_pre_request` | Config never enables the pre_request hook |
 
@@ -618,9 +619,21 @@ Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
 Receives Aperture's `pre_request` payload. Returns one of:
-- `{"action": "allow"}` — no service matched
+- `{"action": "allow"}` — no service matched, or the LLM request already carries the Aegis instructions
 - `{"action": "modify", "request_body": {...}}` — LLM request with injected proxy instructions (Aperture requires the `request_body` field)
 - `{"action": "block", "message": "..."}` — request rejected (403)
+
+Instruction injection understands three provider wire shapes (issue #103):
+
+| Wire shape | How Aegis detects it | Where instructions go |
+|------------|----------------------|------------------------|
+| OpenAI chat completions | top-level `messages` | prepended `{"role":"system"}` message |
+| Anthropic Messages | top-level `system` and/or `metadata` provider/model (`anthropic`, `claude`) | top-level `system` (string or content blocks) |
+| OpenAI Responses | top-level `input` (without `messages`) | prepended system item in `input` (or `instructions` when `input` is absent) |
+
+Injection is idempotent: if the same instruction block is already present, Aegis
+returns `allow` and leaves the body unchanged. Unrecognized body shapes fail open
+(`allow`) and are counted in hook health as `unrecognized_body_shape`.
 
 When the user asks about playlists without naming a service (e.g. "what playlists do I have?"), Aegis injects instructions for the unified library endpoint so agents can answer across every connected service. The same applies to liked songs ("what songs have I liked?") via `/v1/library/tracks`.
 
