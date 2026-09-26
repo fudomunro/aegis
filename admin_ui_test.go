@@ -110,6 +110,21 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"/logo.svg",
 		"brand-mark",
 		"brand-name",
+		// Copy ledger visualization (issue #90)
+		`id="copy-status-filter"`,
+		`data-copy-filter`,
+		"copySummaryBadge",
+		"copyStatusChip",
+		"sourceCopyDetailLines",
+		"sourceSection",
+		`id="copies-summary"`,
+		`id="copies-body"`,
+		`id="reload-copies"`,
+		`data-copies-status`,
+		"/v1/library/copies",
+		"Copy ledger",
+		"matchesCopyFilter",
+		"copyStatusOfSources",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing UI cleanup marker %q", want)

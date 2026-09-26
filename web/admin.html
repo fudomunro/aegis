@@ -170,6 +170,19 @@
     display: inline-flex; align-items: center; gap: 0.3rem; margin: 0.15rem 0.25rem 0.15rem 0;
     background: var(--surface2); border-radius: 4px; padding: 0.15rem 0.45rem; font-size: 0.78rem;
   }
+  .copy-chip {
+    display: inline-flex; align-items: center; gap: 0.25rem; margin: 0.15rem 0.25rem 0.15rem 0;
+    border-radius: 4px; padding: 0.12rem 0.4rem; font-size: 0.72rem; font-weight: 600;
+  }
+  .copy-chip-in_sync { background: rgba(63,185,80,0.15); color: var(--green); }
+  .copy-chip-stale { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .copy-chip-missing { background: rgba(248,81,73,0.15); color: var(--red); }
+  .copy-chip-unknown { background: var(--surface2); color: var(--dim); }
+  .source-copy-line {
+    display: block; margin-top: 0.2rem; color: var(--dim); font-size: 0.72rem; line-height: 1.35;
+  }
+  .copy-filter { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+  .copy-filter .kind-btn { padding: 0.35rem 0.65rem; font-size: 0.78rem; }
   .perm-editor {
     margin: 0 0 0.85rem;
   }
@@ -328,6 +341,13 @@
         <div class="grow">
           <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
         </div>
+        <div class="copy-filter kind-switch" role="group" aria-label="Copy status filter" id="copy-status-filter">
+          <button type="button" class="kind-btn" data-copy-filter="" aria-pressed="true">All copies</button>
+          <button type="button" class="kind-btn" data-copy-filter="in_sync" aria-pressed="false">In sync</button>
+          <button type="button" class="kind-btn" data-copy-filter="stale" aria-pressed="false">Stale</button>
+          <button type="button" class="kind-btn" data-copy-filter="missing" aria-pressed="false">Missing</button>
+          <button type="button" class="kind-btn" data-copy-filter="unchecked" aria-pressed="false">Unchecked</button>
+        </div>
         <button class="btn" id="reload-library" type="button">Reload from services</button>
       </div>
       <div id="library-meta" class="meta" style="margin-bottom:0.75rem"></div>
@@ -384,6 +404,44 @@
         <button class="btn btn-primary" id="sync-takeout" type="button">Sync Takeout</button>
       </div>
       <div id="takeout-result" class="meta"></div>
+
+      <h2 class="section-heading">Copy ledger</h2>
+      <div class="help-box">
+        <h3>Where copies exist</h3>
+        <p>Durable memory of known copies and freshness (issue #76). Library cards also show per-item copy badges; this panel is the full ledger. Missing rows never hide library content (fail-open).</p>
+      </div>
+      <div class="toolbar">
+        <div class="copy-filter kind-switch" role="group" aria-label="Copy ledger status filter" id="copies-panel-filter">
+          <button type="button" class="kind-btn" data-copies-status="" aria-pressed="true">All</button>
+          <button type="button" class="kind-btn" data-copies-status="in_sync" aria-pressed="false">In sync</button>
+          <button type="button" class="kind-btn" data-copies-status="stale" aria-pressed="false">Stale</button>
+          <button type="button" class="kind-btn" data-copies-status="missing" aria-pressed="false">Missing</button>
+          <button type="button" class="kind-btn" data-copies-status="unknown" aria-pressed="false">Unchecked</button>
+        </div>
+        <div class="grow"></div>
+        <button class="btn" id="reload-copies" type="button">Refresh</button>
+      </div>
+      <div id="copies-summary" class="meta" style="margin-bottom:0.75rem"></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Entity</th>
+                <th>Service</th>
+                <th>Role</th>
+                <th>Sync</th>
+                <th>Status</th>
+                <th>As of</th>
+                <th>Checked</th>
+              </tr>
+            </thead>
+            <tbody id="copies-body"><tr><td colspan="8" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="copies-pager" class="pager" hidden></div>
 
       <h2 class="section-heading">Cache</h2>
       <div class="toolbar">
@@ -1620,21 +1678,111 @@
     }).join("");
   }
 
+  function sourceCopyDetailLines(sources) {
+    return (sources || []).filter((src) => src && src.copy).map((src) => {
+      const name = escapeHtml(src.service_name || src.service);
+      const c = src.copy;
+      const bits = [];
+      if (c.role) bits.push(c.role);
+      if (c.sync_mode) bits.push(c.sync_mode);
+      if (c.as_of) bits.push("as of " + c.as_of);
+      if (c.checked_at) bits.push("checked " + c.checked_at);
+      if (c.provenance) bits.push(c.provenance);
+      if (c.note) bits.push(c.note);
+      return '<div class="source-copy-line">' + name + ": " + escapeHtml(bits.join(" · ")) + "</div>";
+    }).join("");
+  }
+
+  function sourceSection(sources) {
+    const chips = sourceBadges(sources);
+    const details = sourceCopyDetailLines(sources);
+    return '<div class="scopes">' + chips + "</div>" + details;
+  }
+
   function sourceBadges(sources) {
     return (sources || []).map((src) => {
       const name = escapeHtml(src.service_name || src.service);
       const label = src.canonical ? name + " · canonical" : name;
+      const chip = src.copy ? " " + copyStatusChip(src.copy.sync_status) : "";
       if (src.url) {
         return '<a class="playlist-source" href="' + escapeHtml(src.url) + '" target="_blank" rel="noopener"' +
-          (src.canonical ? ' title="Authoritative non-Aegis location"' : "") + ">" + label + "</a>";
+          (src.canonical ? ' title="Authoritative non-Aegis location"' : "") + ">" + label + chip + "</a>";
       }
       return '<span class="playlist-source"' +
-        (src.canonical ? ' title="Authoritative non-Aegis location"' : "") + ">" + label + "</span>";
+        (src.canonical ? ' title="Authoritative non-Aegis location"' : "") + ">" + label + chip + "</span>";
     }).join("");
   }
 
   function hasCanonicalSource(sources) {
     return (sources || []).some((src) => !!src.canonical);
+  }
+
+  const COPY_STATUS_LABELS = {
+    in_sync: "in sync",
+    stale: "stale",
+    missing: "missing",
+    unknown: "unchecked",
+  };
+
+  function copyStatusLabel(status) {
+    return COPY_STATUS_LABELS[status] || status || "unchecked";
+  }
+
+  function copyStatusChip(status, extraTitle) {
+    const key = status || "unknown";
+    const cls = "copy-chip copy-chip-" + (COPY_STATUS_LABELS[key] ? key : "unknown");
+    const title = extraTitle || ("Copy status: " + copyStatusLabel(key));
+    return '<span class="' + cls + '" title="' + escapeHtml(title) + '">' +
+      escapeHtml(copyStatusLabel(key)) + "</span>";
+  }
+
+  // Per-item summary: "2 copies · 1 stale" from sources[].copy (issue #90).
+  // No ledger rows → no badge (fail-open; library content still shows).
+  function copySummaryBadge(sources) {
+    const stamped = (sources || []).filter((s) => s && s.copy);
+    if (!stamped.length) return "";
+    let stale = 0, missing = 0, unknown = 0, inSync = 0;
+    stamped.forEach((s) => {
+      const st = (s.copy && s.copy.sync_status) || "unknown";
+      if (st === "stale") stale++;
+      else if (st === "missing") missing++;
+      else if (st === "in_sync") inSync++;
+      else unknown++;
+    });
+    const parts = [stamped.length + (stamped.length === 1 ? " copy" : " copies")];
+    if (stale) parts.push(stale + " stale");
+    if (missing) parts.push(missing + " missing");
+    if (unknown) parts.push(unknown + " unchecked");
+    if (!stale && !missing && !unknown && inSync) parts.push("all in sync");
+    let cls = "badge-green";
+    if (missing) cls = "badge-red";
+    else if (stale) cls = "badge-orange";
+    else if (unknown) cls = "badge-gray";
+    const title = stamped.map((s) => {
+      const c = s.copy || {};
+      return (s.service_name || s.service) + ": " + copyStatusLabel(c.sync_status) +
+        (c.role ? " · " + c.role : "") +
+        (c.sync_mode ? " · " + c.sync_mode : "");
+    }).join("; ");
+    return '<span class="badge ' + cls + '" title="' + escapeHtml(title) + '">' +
+      escapeHtml(parts.join(" · ")) + "</span>";
+  }
+
+  function copyStatusOfSources(sources) {
+    const stamped = (sources || []).filter((s) => s && s.copy);
+    if (!stamped.length) return "unchecked";
+    const statuses = stamped.map((s) => (s.copy && s.copy.sync_status) || "unknown");
+    if (statuses.indexOf("missing") !== -1) return "missing";
+    if (statuses.indexOf("stale") !== -1) return "stale";
+    if (statuses.indexOf("in_sync") !== -1) return "in_sync";
+    return "unchecked";
+  }
+
+  function matchesCopyFilter(item, filter) {
+    if (!filter) return true;
+    const st = copyStatusOfSources(item && item.sources);
+    if (filter === "unchecked") return st === "unchecked";
+    return st === filter;
   }
 
   const LIBRARY_KINDS = {
@@ -1705,6 +1853,10 @@
   };
 
   let libraryKind = "playlists";
+  let libraryCopyFilter = "";
+  let copiesStatusFilter = "";
+  let copiesRows = [];
+  let copiesPage = 1;
   const libraryDataByKind = {
     playlists: null, tracks: null, albums: null, artists: null, contacts: null, photos: null, events: null, messages: null,
   };
@@ -1797,10 +1949,11 @@
         libraryCardHeader(p.name,
           '<span class="badge badge-gray">' + (p.track_count || 0) + " tracks</span>" +
           (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span>" : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "")) +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
+          copySummaryBadge(p.sources)) +
         (p.description ? '<div class="meta">' + escapeHtml(p.description) + "</div>" : "") +
         (p.owner ? '<div class="meta">Owner: ' + escapeHtml(p.owner) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(p.sources) + "</div>" +
+        sourceSection(p.sources) +
         "</article>";
     }).join("");
   }
@@ -1818,11 +1971,12 @@
       return '<article class="card">' +
         libraryCardHeader(t.name,
           (multi ? '<span class="badge badge-blue">' + t.sources.length + " sources</span>" : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "")) +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
+          copySummaryBadge(t.sources)) +
         (artists ? '<div class="meta">Artists: ' + escapeHtml(artists) + "</div>" : "") +
         (album ? '<div class="meta">Album: ' + escapeHtml(album) + "</div>" : "") +
         (t.duration ? '<div class="meta">Duration: ' + escapeHtml(t.duration) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(t.sources) + "</div>" +
+        sourceSection(t.sources) +
         "</article>";
     }).join("");
   }
@@ -1837,12 +1991,13 @@
       return '<article class="card">' +
         libraryCardHeader(c.name || "(unnamed)",
           (multi ? '<span class="badge badge-blue">' + c.sources.length + " sources</span>" : "") +
-          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "")) +
+          (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
+          copySummaryBadge(c.sources)) +
         (emails ? '<div class="meta">Emails: ' + emails + "</div>" : "") +
         (phones ? '<div class="meta">Phones: ' + phones + "</div>" : "") +
         (handles ? '<div class="meta">Handles: ' + handles + "</div>" : "") +
         (c.organization ? '<div class="meta">Org: ' + escapeHtml(c.organization) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(c.sources) + "</div>" +
+        sourceSection(c.sources) +
         "</article>";
     }).join("");
   }
@@ -1856,12 +2011,13 @@
       return '<article class="card">' +
         libraryCardHeader(title,
           (multi ? '<span class="badge badge-blue">' + p.sources.length + " sources</span> " : "") +
-          (canonical ? '<span class="badge badge-gray">canonical off-aegis</span>' : "")) +
+          (canonical ? '<span class="badge badge-gray">canonical off-aegis</span>' : "") +
+          copySummaryBadge(p.sources)) +
         (p.taken_at ? '<div class="meta">Taken: ' + escapeHtml(p.taken_at) + "</div>" : "") +
         (dims ? '<div class="meta">Size: ' + escapeHtml(dims) +
           (p.mime_type ? " · " + escapeHtml(p.mime_type) : "") + "</div>" : "") +
         (p.caption && p.caption !== p.filename ? '<div class="meta">' + escapeHtml(p.caption) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(p.sources) + "</div>" +
+        sourceSection(p.sources) +
         "</article>";
     }).join("");
   }
@@ -1880,13 +2036,14 @@
         libraryCardHeader(e.title || "(untitled event)",
           (multi ? '<span class="badge badge-blue">' + e.sources.length + " sources</span> " : "") +
           (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
-          (e.status ? '<span class="badge badge-gray">' + escapeHtml(e.status) + "</span>" : "")) +
+          (e.status ? '<span class="badge badge-gray">' + escapeHtml(e.status) + "</span>" : "") +
+          copySummaryBadge(e.sources)) +
         (when ? '<div class="meta">When: ' + escapeHtml(when) + "</div>" : "") +
         (e.location ? '<div class="meta">Where: ' + escapeHtml(e.location) + "</div>" : "") +
         (e.calendar_name ? '<div class="meta">Calendar: ' + escapeHtml(e.calendar_name) + "</div>" : "") +
         (people.length ? '<div class="meta">' + escapeHtml(people.join(" · ")) + "</div>" : "") +
         (e.description ? '<div class="meta">' + escapeHtml(String(e.description).slice(0, 160)) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(e.sources) + "</div>" +
+        sourceSection(e.sources) +
         "</article>";
     }).join("");
   }
@@ -1910,12 +2067,13 @@
           (can ? '<span class="badge badge-gray" title="Authoritative non-Aegis location">canonical</span>' : "") +
           (m.channel ? '<span class="badge badge-gray">' + escapeHtml(m.channel) + "</span>" : "") +
           (m.direction ? '<span class="badge badge-gray">' + escapeHtml(m.direction) + "</span>" : "") +
-          (m.read === false ? '<span class="badge badge-orange">unread</span>' : "")) +
+          (m.read === false ? '<span class="badge badge-orange">unread</span>' : "") +
+          copySummaryBadge(m.sources)) +
         (m.sent_at ? '<div class="meta">Sent: ' + escapeHtml(m.sent_at) + "</div>" : "") +
         (from ? '<div class="meta">From: ' + escapeHtml(from) + "</div>" : "") +
         (toCount ? '<div class="meta">To: ' + toCount + " recipient(s)</div>" : "") +
         (m.snippet ? '<div class="meta">' + escapeHtml(String(m.snippet).slice(0, 160)) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(m.sources) + "</div>" +
+        sourceSection(m.sources) +
         "</article>";
     }).join("");
   }
@@ -1926,9 +2084,10 @@
       const artists = artistNames(a.artists);
       return '<article class="card">' +
         libraryCardHeader(a.name,
-          multi ? '<span class="badge badge-blue">' + a.sources.length + " sources</span>" : "") +
+          (multi ? '<span class="badge badge-blue">' + a.sources.length + " sources</span>" : "") +
+          copySummaryBadge(a.sources)) +
         (artists ? '<div class="meta">Artists: ' + escapeHtml(artists) + "</div>" : "") +
-        '<div class="scopes">' + sourceBadges(a.sources) + "</div>" +
+        sourceSection(a.sources) +
         "</article>";
     }).join("");
   }
@@ -1938,8 +2097,9 @@
       const multi = (a.sources || []).length > 1;
       return '<article class="card">' +
         libraryCardHeader(a.name,
-          multi ? '<span class="badge badge-blue">' + a.sources.length + " sources</span>" : "") +
-        '<div class="scopes">' + sourceBadges(a.sources) + "</div>" +
+          (multi ? '<span class="badge badge-blue">' + a.sources.length + " sources</span>" : "") +
+          copySummaryBadge(a.sources)) +
+        sourceSection(a.sources) +
         "</article>";
     }).join("");
   }
@@ -2038,7 +2198,11 @@
       (statusBits ? '<div class="scopes" style="margin-top:0.4rem">' + statusBits + "</div>" : "");
 
     const q = ($("library-filter").value || "").trim().toLowerCase();
-    const filtered = filterLibraryItems(items, q);
+    let filtered = filterLibraryItems(items, q);
+    const copyFilter = libraryCopyFilter || "";
+    if (copyFilter) {
+      filtered = filtered.filter((item) => matchesCopyFilter(item, copyFilter));
+    }
     const info = paginate(filtered, libraryPage);
     libraryPage = info.page;
 
@@ -2123,6 +2287,107 @@
 
   function loadAllLibraryKinds() {
     Object.keys(LIBRARY_KINDS).forEach((k) => loadLibrary(k));
+  }
+
+  function setLibraryCopyFilter(filter) {
+    libraryCopyFilter = filter || "";
+    document.querySelectorAll("[data-copy-filter]").forEach((btn) => {
+      const on = (btn.getAttribute("data-copy-filter") || "") === libraryCopyFilter;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    libraryPage = 1;
+    if (libraryDataByKind[libraryKind]) renderLibrary(libraryDataByKind[libraryKind]);
+  }
+
+  function copiesRowMatches(rec, filter) {
+    if (!filter) return true;
+    const st = rec.status || "unknown";
+    if (filter === "unknown") return st === "unknown" || st === "";
+    return st === filter;
+  }
+
+  function renderCopies() {
+    const summary = $("copies-summary");
+    const body = $("copies-body");
+    const pager = $("copies-pager");
+    const rows = copiesRows.filter((rec) => copiesRowMatches(rec, copiesStatusFilter));
+    const info = paginate(rows, copiesPage);
+    copiesPage = info.page;
+    const byStatus = {};
+    copiesRows.forEach((rec) => {
+      const st = rec.status || "unknown";
+      byStatus[st] = (byStatus[st] || 0) + 1;
+    });
+    if (summary) {
+      const bits = [copiesRows.length + " ledger row" + (copiesRows.length === 1 ? "" : "s")];
+      ["in_sync", "stale", "missing", "unknown"].forEach((st) => {
+        if (byStatus[st]) bits.push(byStatus[st] + " " + copyStatusLabel(st));
+      });
+      summary.textContent = bits.join(" · ");
+    }
+    if (!info.items.length) {
+      body.innerHTML = '<tr><td colspan="8" class="muted-num">No copy ledger rows' +
+        (copiesStatusFilter ? " match this filter." : " yet.") + "</td></tr>";
+      if (pager) {
+        pager.hidden = true;
+        pager.innerHTML = "";
+      }
+      return;
+    }
+    body.innerHTML = info.items.map((rec) => {
+      return "<tr>" +
+        '<td class="key">' + escapeHtml(rec.kind || "") + "</td>" +
+        '<td class="key">' + escapeHtml(rec.entity_key || "") + "</td>" +
+        "<td>" + escapeHtml(rec.service || "") +
+          (rec.external_id ? '<div class="meta">' + escapeHtml(rec.external_id) + "</div>" : "") +
+        "</td>" +
+        "<td>" + escapeHtml(rec.role || "") +
+          (rec.sync_mode ? '<div class="meta">' + escapeHtml(rec.sync_mode) + "</div>" : "") +
+        "</td>" +
+        "<td>" + escapeHtml(rec.sync_mode || "") + "</td>" +
+        "<td>" + copyStatusChip(rec.status) + "</td>" +
+        '<td class="num">' + escapeHtml(rec.last_synced_at || rec.watermark || "—") + "</td>" +
+        '<td class="num">' + escapeHtml(rec.last_checked_at || "—") + "</td>" +
+        "</tr>";
+    }).join("");
+    renderPager(pager, info, (page) => {
+      copiesPage = page;
+      renderCopies();
+    });
+  }
+
+  async function loadCopies() {
+    const body = $("copies-body");
+    const summary = $("copies-summary");
+    if (summary) summary.textContent = "Loading copy ledger…";
+    if (body) body.innerHTML = '<tr><td colspan="8" class="muted-num">Loading…</td></tr>';
+    try {
+      const data = await api("/v1/library/copies");
+      copiesRows = data.copies || [];
+      copiesPage = 1;
+      renderCopies();
+    } catch (err) {
+      copiesRows = [];
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      if (summary) summary.textContent = "";
+      if (body) {
+        body.innerHTML = '<tr><td colspan="8"><div class="error-box">' +
+          escapeHtml(err.message || "Failed to load copy ledger") + "</div></td></tr>";
+      }
+    }
+  }
+
+  function setCopiesStatusFilter(filter) {
+    copiesStatusFilter = filter || "";
+    document.querySelectorAll("[data-copies-status]").forEach((btn) => {
+      const on = (btn.getAttribute("data-copies-status") || "") === copiesStatusFilter;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    copiesPage = 1;
+    renderCopies();
   }
 
   async function loadCache() {
@@ -2541,6 +2806,7 @@ function selectTab(name) {
     if (name === "advanced") {
       loadCache();
       loadMailArchive();
+      loadCopies();
     }
     if (name === "aperture") {
       loadApertureSetup();
@@ -2566,6 +2832,14 @@ function selectTab(name) {
   document.querySelectorAll("[data-library-kind]").forEach((btn) => {
     btn.addEventListener("click", () => setLibraryKind(btn.getAttribute("data-library-kind")));
   });
+  document.querySelectorAll("[data-copy-filter]").forEach((btn) => {
+    btn.addEventListener("click", () => setLibraryCopyFilter(btn.getAttribute("data-copy-filter")));
+  });
+  document.querySelectorAll("[data-copies-status]").forEach((btn) => {
+    btn.addEventListener("click", () => setCopiesStatusFilter(btn.getAttribute("data-copies-status")));
+  });
+  const reloadCopiesBtn = $("reload-copies");
+  if (reloadCopiesBtn) reloadCopiesBtn.addEventListener("click", () => loadCopies());
   $("reload-summary").addEventListener("click", () => loadSummary());
   $("reload-flow").addEventListener("click", () => loadFlow());
   document.querySelectorAll("[data-flow-window]").forEach((btn) => {
