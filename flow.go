@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -17,6 +18,9 @@ const (
 	FlowKindService = "service"
 	// FlowKindToken is one OAuth connection held inside the token vault.
 	FlowKindToken = "token"
+	// FlowKindAgentInstance is one named agent (issue #114). The aggregate
+	// "agents" node remains FlowKindAgent for the gateway cluster.
+	FlowKindAgentInstance = "agent-instance"
 )
 
 // Flow topology node statuses for services.
@@ -109,10 +113,26 @@ type FlowRuntime struct {
 	BaseURL  string `json:"base_url"`
 }
 
+// FlowAgentDetail is one agent's access breakdown for map nodes/arrows
+// (issue #114).
+type FlowAgentDetail struct {
+	ID   string `json:"id"`
+	Hits int    `json:"hits"`
+	// Services maps service id → proxy hits.
+	Services map[string]int `json:"services,omitempty"`
+	// Libraries maps library kind id → unified library hits.
+	Libraries map[string]int `json:"libraries,omitempty"`
+	// DataTypes maps recorded data type → hits.
+	DataTypes map[string]int `json:"data_types,omitempty"`
+	LastAt    time.Time      `json:"last_at,omitempty"`
+}
+
 // FlowAgentStats is the distinct-agent summary for the active window.
 type FlowAgentStats struct {
 	Distinct int      `json:"distinct"`
 	Sample   []string `json:"sample,omitempty"`
+	// Detail lists each agent with the services/data they touched (issue #114).
+	Detail []FlowAgentDetail `json:"detail,omitempty"`
 }
 
 // FlowEndpointStats is recent hit counts for one service or library.
@@ -260,6 +280,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	for _, kind := range libraryKinds {
 		libraryProviders[kind.ID] = nil
 	}
+	serviceIDs := make(map[string]bool)
 
 	for _, svc := range s.config.ServiceSnapshots() {
 		node := FlowNode{
@@ -352,6 +373,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		}
 
 		nodes = append(nodes, node)
+		serviceIDs[node.ID] = true
 	}
 
 	// Stable service order for the diagram.
@@ -385,6 +407,55 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	}
 
 	stats := s.buildFlowStats(window, windowLabel)
+	// Individual agent nodes + access arrows to the data they used (issue #114).
+	for _, ad := range stats.Agents.Detail {
+		nodes = append(nodes, FlowNode{
+			ID:     "agent:" + ad.ID,
+			Kind:   FlowKindAgentInstance,
+			Label:  ad.ID,
+			Detail: "Active in the selected access window",
+			Parent: "agents",
+			Hits:   ad.Hits,
+			Agents: 1,
+		})
+		for svcID, hits := range ad.Services {
+			if !serviceIDs["svc:"+svcID] {
+				continue
+			}
+			edges = append(edges, FlowEdge{
+				From:  "agent:" + ad.ID,
+				To:    "svc:" + svcID,
+				Label: accessEdgeLabel(hits),
+				Style: FlowEdgeAccess,
+			})
+		}
+		for libID, hits := range ad.Libraries {
+			edges = append(edges, FlowEdge{
+				From:  "agent:" + ad.ID,
+				To:    "lib:" + libID,
+				Label: accessEdgeLabel(hits),
+				Style: FlowEdgeData,
+			})
+		}
+	}
+
+	// Re-sort after agent nodes/edges were appended.
+	sort.SliceStable(nodes, func(i, j int) bool {
+		if nodes[i].Kind != nodes[j].Kind {
+			return flowKindOrder(nodes[i].Kind) < flowKindOrder(nodes[j].Kind)
+		}
+		return strings.ToLower(nodes[i].Label) < strings.ToLower(nodes[j].Label)
+	})
+	sort.SliceStable(edges, func(i, j int) bool {
+		if edges[i].From != edges[j].From {
+			return edges[i].From < edges[j].From
+		}
+		if edges[i].To != edges[j].To {
+			return edges[i].To < edges[j].To
+		}
+		return edges[i].Label < edges[j].Label
+	})
+
 	// Stamp recent hit counts onto nodes and library chips for the map UI.
 	for i := range nodes {
 		switch {
@@ -468,11 +539,30 @@ func (s *Server) buildFlowStats(window time.Duration, windowLabel string) FlowSt
 		Agents: FlowAgentStats{
 			Distinct: snap.Agents.Distinct,
 			Sample:   snap.Agents.Sample,
+			Detail:   flowAgentDetailsFromMetrics(snap.Agents.Detail),
 		},
 		Services:  services,
 		Libraries: libraries,
 		Recent:    recent,
 	}
+}
+
+func flowAgentDetailsFromMetrics(detail []MetricsAgentDetail) []FlowAgentDetail {
+	if len(detail) == 0 {
+		return nil
+	}
+	out := make([]FlowAgentDetail, 0, len(detail))
+	for _, d := range detail {
+		out = append(out, FlowAgentDetail{
+			ID:        d.ID,
+			Hits:      d.Hits,
+			Services:  d.Services,
+			Libraries: d.Libraries,
+			DataTypes: d.DataTypes,
+			LastAt:    d.LastAt,
+		})
+	}
+	return out
 }
 
 func flowEndpointFromMetrics(st MetricsEndpointStats) FlowEndpointStats {
@@ -501,17 +591,27 @@ func flowKindOrder(kind string) int {
 	switch kind {
 	case FlowKindAgent:
 		return 0
-	case FlowKindGateway:
+	case FlowKindAgentInstance:
 		return 1
-	case FlowKindAegis:
+	case FlowKindGateway:
 		return 2
-	case FlowKindStore:
+	case FlowKindAegis:
 		return 3
-	case FlowKindToken:
+	case FlowKindStore:
 		return 4
-	default:
+	case FlowKindToken:
 		return 5
+	default:
+		return 6
 	}
+}
+
+// accessEdgeLabel formats the hover label for agent → data access edges.
+func accessEdgeLabel(hits int) string {
+	if hits == 1 {
+		return "1 hit"
+	}
+	return strconv.Itoa(hits) + " hits"
 }
 
 // tokenDisplayName returns a human label for a vault connection id.
