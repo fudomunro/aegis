@@ -1337,6 +1337,56 @@ CI fails if statement coverage drops below the floor in `.github/workflows/ci.ym
 (currently 80%). Raise the floor when the suite grows; do not lower it to land a
 change that only adds untested write paths.
 
+### Sample data (issue #77)
+
+Synthetic fixtures cover every neutral library kind plus the mail archive so
+search, sort, filters, merge, and agent-facing endpoints can be exercised
+without OAuth, provider quotas, or real personal mail. All generated data is
+fictional (`example.com` addresses, invented titles) and safe to regenerate.
+
+```bash
+# Small CI-sized set (default 24 mail rows + edge cases) into the data dir
+./aegis -seed-sample
+
+# Larger stress set for local ingest/search benchmarks (issue #75)
+./aegis -seed-sample -seed-sample-stress
+
+# Explicit row count
+./aegis -seed-sample -seed-sample-count 500
+```
+
+`-seed-sample` writes under `<data-dir>/sample/` and loads the mail set into
+the configured mail archive (`mail-archive.db`), then exits:
+
+| File | Purpose |
+|------|---------|
+| `mail-archive.db` | Queryable archive for `/v1/mail/search` |
+| `sample-mail.mbox` | Same messages as a Takeout-shaped mbox (importer round-trip) |
+| `sample-library.json` | Neutral `Playlist` / `Track` / `Contact` / … fixtures for mock upstreams |
+
+The generator lives in `sampledata.go` (`GenerateSampleMail`,
+`GenerateSampleLibrary`). Tests load it via `SeedMailArchive` /
+`SeedSampleArchive` and run the query checklist in `sampledata_query_test.go`:
+
+- oldest / newest (`sort=asc|desc`) — dateless rows sort last so they cannot win
+- date window (`after` / `before`)
+- from / to / label filters
+- FTS `q=` multi-word and hostile operator strings
+- pagination (`limit` / `offset`) with stable order
+- fetch by id + `raw`
+- library merge (`sources[]`, `entity_id`, `match`) for ISRC tracks, contact
+  identity chains, and Message-ID / subject+from+time messages
+- permission-denied services and `truncated` page caps
+
+Run the checklist alone:
+
+```bash
+go test -count=1 -run 'TestMailQuery|TestLibraryMerge|TestLibraryAggregates|TestGenerateSample' .
+```
+
+CI uses only the small set. Do not commit large binary fixtures — generate
+stress data locally with `-seed-sample-stress`.
+
 ### Project structure
 
 ```
@@ -1360,6 +1410,7 @@ aegis/
   mail_archive_http.go  /v1/mail/search|status|sync|messages routes
   mail_archive_sync.go  Resumable Gmail → archive ingest
   mail_takeout.go   Read-only Google Takeout mbox/zip/directory sync
+  sampledata.go     Synthetic sample mail + library fixtures (issue #77)
   match.go          Cross-service name identity + playlist sync merge
   proxy.go          Service proxy: cache, forward, inject tokens
   permissions.go    Agent data-type access levels, path classification, enforcement
