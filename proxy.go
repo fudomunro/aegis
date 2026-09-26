@@ -22,6 +22,15 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		remainingPath = "/" + parts[1]
 	}
 
+	// Canonicalize once so permission classification, connector routing, and
+	// the upstream URL cannot diverge (issue #94). Non-canonical paths 400.
+	canonical, err := canonicalProxyPath(remainingPath)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "invalid request path")
+		return
+	}
+	remainingPath = canonical
+
 	logger := withPeerLog(slog.With("service", serviceID, "method", r.Method, "path", remainingPath), r)
 
 	svc := s.config.GetService(serviceID)
@@ -44,6 +53,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dataType := DataTypeForPath(remainingPath)
+	accessLevel := svc.Permissions.accessForDataType(dataType)
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)
@@ -61,7 +71,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	if !s.AllowDataPermission(w, r, svc, remainingPath) {
 		logger.Warn("permission denied",
 			"data_type", dataType,
-			"permission", svc.Permissions.For(dataType),
+			"permission", accessLevel,
 		)
 		s.recordAccess(AccessEvent{
 			Agent:    agentForRequest(r),
