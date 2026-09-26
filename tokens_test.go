@@ -1,7 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -71,13 +75,166 @@ func TestTokenStore_WrongPassphrase(t *testing.T) {
 		Expiry:      time.Now().Add(time.Hour),
 	})
 
-	// Reload with wrong passphrase — should load but fail to decrypt.
+	// Reload with wrong passphrase — must refuse, not look like an empty store.
 	ts2, err := NewTokenStore(path, "wrong")
+	if err == nil {
+		t.Fatal("expected error with wrong passphrase")
+	}
+	if ts2 != nil {
+		t.Fatal("expected nil store with wrong passphrase")
+	}
+	if !strings.Contains(err.Error(), "passphrase") {
+		t.Fatalf("error should name the likely cause, got: %v", err)
+	}
+
+	// Original passphrase still decrypts the existing tokens.
+	ts3, err := NewTokenStore(path, "correct")
+	if err != nil {
+		t.Fatalf("reload with correct passphrase: %v", err)
+	}
+	got := ts3.Get("spotify")
+	if got == nil || got.AccessToken != "secret" {
+		t.Fatal("original tokens must survive a wrong-passphrase open")
+	}
+}
+
+func TestTokenStore_WrongPassphraseEmptyStore(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+
+	ts1, err := NewTokenStore(path, "correct")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ts2.Get("spotify") != nil {
-		t.Fatal("expected nil token with wrong passphrase")
+	// Persist an empty store so the file (and key check) exist on disk.
+	if err := ts1.persist(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewTokenStore(path, "wrong"); err == nil {
+		t.Fatal("expected error for wrong passphrase on empty store")
+	}
+	if _, err := NewTokenStore(path, "correct"); err != nil {
+		t.Fatalf("correct passphrase should load empty store: %v", err)
+	}
+}
+
+func TestTokenStore_LegacyFileAllDecryptFail(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+
+	// Build a store, then strip key_check to simulate a pre-issue-100 file.
+	ts1, _ := NewTokenStore(path, "correct")
+	ts1.Save("spotify", &OAuthToken{AccessToken: "secret", Expiry: time.Now().Add(time.Hour)})
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	delete(raw, "key_check")
+	legacy, err := json.Marshal(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, legacy, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := NewTokenStore(path, "wrong"); err == nil {
+		t.Fatal("expected error for wrong passphrase on legacy file")
+	}
+	ts3, err := NewTokenStore(path, "correct")
+	if err != nil {
+		t.Fatalf("correct passphrase should load legacy file: %v", err)
+	}
+	if got := ts3.Get("spotify"); got == nil || got.AccessToken != "secret" {
+		t.Fatal("legacy token not loaded")
+	}
+}
+
+func TestTokenStore_PartialDecryptBlocksPersist(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+
+	ts1, _ := NewTokenStore(path, "correct")
+	ts1.Save("spotify", &OAuthToken{AccessToken: "keep", Expiry: time.Now().Add(time.Hour)})
+	ts1.Save("youtube", &OAuthToken{AccessToken: "also", Expiry: time.Now().Add(time.Hour)})
+
+	// Corrupt one ciphertext so a correct passphrase still has an unreadable entry.
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tf tokenFile
+	if err := json.Unmarshal(data, &tf); err != nil {
+		t.Fatal(err)
+	}
+	for id := range tf.Tokens {
+		if id == "youtube" {
+			tf.Tokens[id] = base64.StdEncoding.EncodeToString([]byte("not-a-valid-ciphertext"))
+		}
+	}
+	corrupt, err := json.MarshalIndent(tf, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, corrupt, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	before := string(corrupt)
+	ts2, err := NewTokenStore(path, "correct")
+	if err != nil {
+		t.Fatalf("partial load should return a store: %v", err)
+	}
+	if ts2.Get("spotify") == nil || ts2.Get("spotify").AccessToken != "keep" {
+		t.Fatal("intact token should load")
+	}
+	if ts2.Get("youtube") != nil {
+		t.Fatal("corrupt token should not load")
+	}
+
+	// Save must refuse and leave the on-disk file untouched.
+	err = ts2.Save("new-service", &OAuthToken{AccessToken: "x", Expiry: time.Now().Add(time.Hour)})
+	if err == nil {
+		t.Fatal("Save must refuse after a partial decrypt failure")
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != before {
+		t.Fatal("token file must not be rewritten after partial decrypt failure")
+	}
+}
+
+func TestTokenStore_SaveWritesKeyCheck(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+
+	ts, _ := NewTokenStore(path, "pass")
+	if err := ts.Save("spotify", &OAuthToken{AccessToken: "x", Expiry: time.Now().Add(time.Hour)}); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var tf tokenFile
+	if err := json.Unmarshal(data, &tf); err != nil {
+		t.Fatal(err)
+	}
+	if tf.KeyCheck == "" {
+		t.Fatal("expected key_check in token file")
+	}
+	plain, err := (&TokenStore{key: ts.key}).decrypt(tf.KeyCheck)
+	if err != nil || string(plain) != keyCheckPlaintext {
+		t.Fatalf("key check did not seal the known plaintext: %v %q", err, plain)
 	}
 }
 
