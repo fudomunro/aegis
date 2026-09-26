@@ -76,6 +76,10 @@ Agent → Aegis proxy / library / admin → provider APIs
 
 ### Extension points agents must use
 
+**New library data types** follow `docs/adding-data-types.md`: neutral model +
+provider interface + `LibraryKind` registry entry + thin
+`handleLibraryAggregate` handler. Do not clone an aggregate pipeline.
+
 **New or changed service behavior** goes through `ServiceConnector`:
 
 ```go
@@ -240,6 +244,7 @@ CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
 
 | Task | Start here |
 |------|------------|
+| New library data type / kind | `docs/adding-data-types.md` (checklist), then `librarykind.go` |
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `proxy.go`, `connector_proxy.go`, `httpclient.go` |
 | Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
