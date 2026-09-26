@@ -300,7 +300,7 @@ func (s *Server) hasProvider[P any]() bool {
 // libraryReadableFor reports whether at least one non-blocked service allows
 // read access to the given permission/data type.
 func (s *Server) libraryReadableFor(permType string) bool {
-	for _, svc := range s.config.Services {
+	for _, svc := range s.config.ServiceSnapshots() {
 		if svc.Action == "block" {
 			continue
 		}

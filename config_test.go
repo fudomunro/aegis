@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 )
@@ -213,4 +214,112 @@ func TestDuration_MarshalJSON(t *testing.T) {
 	if string(b) != `"3h0m0s"` {
 		t.Fatalf("got %s, want %q", string(b), "3h0m0s")
 	}
+}
+
+func TestGetService_ReturnsSnapshot(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Permissions: Permissions{"player": AccessNone}},
+		},
+	}
+
+	svc := cfg.GetService("spotify")
+	if svc == nil {
+		t.Fatal("expected service")
+	}
+	// Mutating the snapshot must not touch the live store.
+	svc.Endpoint = "https://mutated.example"
+	svc.Permissions["player"] = AccessFull
+
+	live := cfg.GetService("spotify")
+	if live.Endpoint != "" {
+		t.Fatalf("Endpoint leaked to store: %q", live.Endpoint)
+	}
+	if live.Permissions.For("player") != AccessNone {
+		t.Fatalf("Permissions mutated via snapshot: %q", live.Permissions.For("player"))
+	}
+
+	if !cfg.updateService("spotify", func(s *Service) { s.Endpoint = "https://mock.example" }) {
+		t.Fatal("updateService should find spotify")
+	}
+	if got := cfg.GetService("spotify").Endpoint; got != "https://mock.example" {
+		t.Fatalf("Endpoint after updateService = %q", got)
+	}
+	if cfg.updateService("missing", func(*Service) {}) {
+		t.Fatal("updateService should report missing id")
+	}
+}
+
+// Issue #95: concurrent admin permission writes must not race proxy/library
+// readers that snapshot services.
+func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{PermissionDefaultKey: AccessRead, "player": AccessNone}},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Permissions: Permissions{PermissionDefaultKey: AccessRead}},
+		},
+	}
+	permsPath := filepath.Join(t.TempDir(), "permissions.json")
+	if err := cfg.InitPermissionsStore(permsPath); err != nil {
+		t.Fatal(err)
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+
+	const iterations = 200
+	var wg sync.WaitGroup
+	wg.Add(4)
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			p := Permissions{PermissionDefaultKey: AccessRead, "player": AccessNone, "tracks": AccessNone}
+			if i%2 == 0 {
+				p = Permissions{"player": AccessNone, "default": AccessRead, "playlists": AccessRead}
+			}
+			if err := cfg.SetServicePermissions("spotify", p); err != nil {
+				t.Errorf("SetServicePermissions: %v", err)
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			svc := cfg.GetService("spotify")
+			if svc == nil {
+				t.Error("GetService returned nil")
+				return
+			}
+			_ = svc.Permissions.AllowsRead("tracks")
+			_ = svc.Permissions.accessForDataType("")
+			_ = svc.Endpoint
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			for _, svc := range cfg.ServiceSnapshots() {
+				_ = svc.Permissions.AllowsRead("tracks")
+				_ = svc.IsCanonicalFor("playlists")
+			}
+			_ = srv.libraryReadableFor("tracks")
+			_ = srv.canonicalServiceName("playlists")
+			_ = srv.defaultMirrorSource("playlists")
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for i := 0; i < iterations; i++ {
+			matched := cfg.FindMatchingServices("play something on spotify")
+			for _, svc := range matched {
+				_ = svc.Permissions.For("player")
+			}
+			_ = cfg.ServiceCount()
+		}
+	}()
+
+	wg.Wait()
 }
