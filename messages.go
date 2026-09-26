@@ -305,6 +305,7 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 			return MessageList{Messages: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampMessageCanonical,
+		stampCopies:   s.stampMessageCopies,
 	})
 }
 

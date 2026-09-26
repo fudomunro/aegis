@@ -248,6 +248,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		result.Target = MirrorRef{Service: req.TargetService, ID: id, Name: name, URL: url, Count: copied}
 		result.Copied = copied
 		skips = sk
+		s.recordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, id, name, copied, "")
 	case MirrorKindTracks:
 		copied, sk, err := dst.saveLikedTracks(ctx, tracks)
 		if err != nil {
@@ -257,6 +258,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		result.Target = MirrorRef{Service: req.TargetService, Name: "liked/saved tracks", Count: copied}
 		result.Copied = copied
 		skips = sk
+		s.recordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", copied, "")
 	}
 	result.Skips = skips
 	result.Skipped = len(skips)

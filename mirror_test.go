@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -36,6 +37,10 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 		Expiry:      time.Now().Add(time.Hour),
 	})
 	srv.connectors["youtube-music"] = NewYouTubeMusicConnector(srv)
+	if ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db")); err == nil {
+		t.Cleanup(func() { ledger.Close() })
+		srv.copies = ledger
+	}
 	return srv, ts
 }
 
@@ -213,6 +218,24 @@ func TestHandleLibraryMirror_SpotifyToYouTubePlaylist(t *testing.T) {
 	}
 	if len(res.Skips) != 1 || !strings.Contains(res.Skips[0].Name, "Missing Song") {
 		t.Fatalf("skips = %+v", res.Skips)
+	}
+	// Successful mirror records a copy-ledger row (issue #76).
+	if srv.copies == nil || !srv.copies.Enabled() {
+		t.Fatal("expected copy ledger on mirror server")
+	}
+	rec, ok := srv.copies.Get("playlists", "youtube-music", "yt-pl-1")
+	if !ok {
+		t.Fatal("expected copy ledger row for mirrored playlist")
+	}
+	if rec.SourceService != "spotify" || rec.SourceID != "p1" {
+		t.Fatalf("source = %s:%s", rec.SourceService, rec.SourceID)
+	}
+	if rec.Role != CopyRoleMirror || rec.Status != CopyStatusInSync {
+		t.Fatalf("record = %+v", rec)
+	}
+	info := srv.copyInfoFor("playlists", "youtube-music", "yt-pl-1")
+	if info == nil || info.SyncMode != CopySyncModeFull {
+		t.Fatalf("stamp = %+v", info)
 	}
 }
 

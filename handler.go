@@ -83,6 +83,8 @@ type Server struct {
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
 	links *EntityLinkStore
+	// copies is the durable copy ledger (issue #76). May be disabled.
+	copies *CopyLedger
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
 	// mailSyncMu serializes archive ingest so admin UI and agents cannot

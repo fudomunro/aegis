@@ -260,6 +260,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 			return CalendarEventList{Events: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampCalendarEventCanonical,
+		stampCopies:   s.stampEventCopies,
 	})
 }
 
