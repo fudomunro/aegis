@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -387,6 +388,430 @@ func TestInjectSystemMessage_InvalidJSON(t *testing.T) {
 	_, err := injectSystemMessage([]byte("{bad"), "test")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestInjectRequestInstructions_Anthropic(t *testing.T) {
+	original := map[string]any{
+		"model":      "claude-sonnet-4-5",
+		"max_tokens": 1024,
+		"system":     "You are helpful.",
+		"messages": []map[string]string{
+			{"role": "user", "content": "play Spotify"},
+		},
+	}
+	origBytes, _ := json.Marshal(original)
+
+	res, err := injectRequestInstructions(origBytes, "USE AEGIS PROXY", "anthropic", "claude-sonnet-4-5")
+	if err != nil {
+		t.Fatalf("injectRequestInstructions: %v", err)
+	}
+	if res.Shape != bodyShapeAnthropic {
+		t.Fatalf("shape = %q, want anthropic", res.Shape)
+	}
+	if res.AlreadyPresent {
+		t.Fatal("expected fresh injection")
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(res.Body, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	sys, _ := result["system"].(string)
+	if !strings.Contains(sys, "USE AEGIS PROXY") || !strings.Contains(sys, "You are helpful.") {
+		t.Fatalf("system = %q", sys)
+	}
+	// Anthropic must not grow a role:system entry inside messages.
+	msgs := result["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("messages len = %d, want 1", len(msgs))
+	}
+	if msgs[0].(map[string]any)["role"] != "user" {
+		t.Fatalf("messages[0] = %v", msgs[0])
+	}
+}
+
+func TestInjectRequestInstructions_AnthropicSystemBlocks(t *testing.T) {
+	original := map[string]any{
+		"model": "claude-sonnet-4-5",
+		"system": []map[string]string{
+			{"type": "text", "text": "Existing system."},
+		},
+		"messages": []map[string]string{
+			{"role": "user", "content": "hi"},
+		},
+	}
+	origBytes, _ := json.Marshal(original)
+
+	res, err := injectRequestInstructions(origBytes, "USE AEGIS PROXY", "", "claude-sonnet-4-5")
+	if err != nil {
+		t.Fatalf("injectRequestInstructions: %v", err)
+	}
+	if res.Shape != bodyShapeAnthropic {
+		t.Fatalf("shape = %q, want anthropic", res.Shape)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(res.Body, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	blocks, ok := result["system"].([]any)
+	if !ok || len(blocks) != 2 {
+		t.Fatalf("system blocks = %#v", result["system"])
+	}
+	first := blocks[0].(map[string]any)
+	if first["type"] != "text" || first["text"] != "USE AEGIS PROXY" {
+		t.Fatalf("first block = %v", first)
+	}
+}
+
+func TestInjectRequestInstructions_Responses(t *testing.T) {
+	original := map[string]any{
+		"model": "gpt-4o",
+		"input": []map[string]string{
+			{"role": "user", "content": "play Spotify"},
+		},
+	}
+	origBytes, _ := json.Marshal(original)
+
+	res, err := injectRequestInstructions(origBytes, "USE AEGIS PROXY", "openai", "gpt-4o")
+	if err != nil {
+		t.Fatalf("injectRequestInstructions: %v", err)
+	}
+	if res.Shape != bodyShapeResponses {
+		t.Fatalf("shape = %q, want responses", res.Shape)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(res.Body, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	items := result["input"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("input len = %d, want 2", len(items))
+	}
+	sys := items[0].(map[string]any)
+	if sys["role"] != "system" || sys["content"] != "USE AEGIS PROXY" {
+		t.Fatalf("input[0] = %v", sys)
+	}
+	if _, ok := result["messages"]; ok {
+		t.Fatal("responses body must not gain a messages key")
+	}
+}
+
+func TestInjectRequestInstructions_ResponsesStringInput(t *testing.T) {
+	original := map[string]any{
+		"model": "gpt-4o",
+		"input": "play Spotify",
+	}
+	origBytes, _ := json.Marshal(original)
+
+	res, err := injectRequestInstructions(origBytes, "USE AEGIS PROXY", "openai", "gpt-4o")
+	if err != nil {
+		t.Fatalf("injectRequestInstructions: %v", err)
+	}
+	if res.Shape != bodyShapeResponses {
+		t.Fatalf("shape = %q, want responses", res.Shape)
+	}
+
+	var result map[string]any
+	if err := json.Unmarshal(res.Body, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	items := result["input"].([]any)
+	if len(items) != 2 {
+		t.Fatalf("input len = %d, want 2", len(items))
+	}
+	if items[0].(map[string]any)["role"] != "system" {
+		t.Fatalf("input[0] = %v", items[0])
+	}
+	user := items[1].(map[string]any)
+	if user["role"] != "user" || user["content"] != "play Spotify" {
+		t.Fatalf("input[1] = %v", user)
+	}
+}
+
+func TestInjectRequestInstructions_ResponsesNoInputUsesInstructions(t *testing.T) {
+	original := map[string]any{
+		"model":                "gpt-4o",
+		"previous_response_id": "resp_123",
+	}
+	origBytes, _ := json.Marshal(original)
+
+	res, err := injectRequestInstructions(origBytes, "USE AEGIS PROXY", "openai", "gpt-4o")
+	if err != nil {
+		t.Fatalf("injectRequestInstructions: %v", err)
+	}
+	if res.Shape != bodyShapeResponses {
+		t.Fatalf("shape = %q, want responses", res.Shape)
+	}
+	var result map[string]any
+	if err := json.Unmarshal(res.Body, &result); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if result["instructions"] != "USE AEGIS PROXY" {
+		t.Fatalf("instructions = %v", result["instructions"])
+	}
+}
+
+func TestInjectRequestInstructions_Idempotent(t *testing.T) {
+	original := map[string]any{
+		"model": "gpt-4",
+		"messages": []map[string]string{
+			{"role": "user", "content": "play Spotify"},
+		},
+	}
+	origBytes, _ := json.Marshal(original)
+	const content = "USE AEGIS PROXY"
+
+	first, err := injectRequestInstructions(origBytes, content, "", "")
+	if err != nil {
+		t.Fatalf("first inject: %v", err)
+	}
+	if first.AlreadyPresent {
+		t.Fatal("first inject should modify")
+	}
+
+	second, err := injectRequestInstructions(first.Body, content, "", "")
+	if err != nil {
+		t.Fatalf("second inject: %v", err)
+	}
+	if !second.AlreadyPresent {
+		t.Fatal("second inject should detect already-present instructions")
+	}
+	if string(second.Body) != string(first.Body) {
+		t.Fatalf("second inject mutated body:\n%s\n%s", second.Body, first.Body)
+	}
+
+	// Anthropic idempotency
+	anth := map[string]any{
+		"model":    "claude-sonnet-4-5",
+		"system":   content,
+		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+	}
+	anthBytes, _ := json.Marshal(anth)
+	again, err := injectRequestInstructions(anthBytes, content, "anthropic", "claude-sonnet-4-5")
+	if err != nil {
+		t.Fatalf("anthropic re-inject: %v", err)
+	}
+	if !again.AlreadyPresent {
+		t.Fatal("anthropic re-inject should be idempotent")
+	}
+}
+
+func TestInjectRequestInstructions_UnrecognizedShape(t *testing.T) {
+	for _, body := range []string{
+		`{}`,
+		`{"foo":"bar"}`,
+		`[1,2,3]`,
+		`"just a string"`,
+	} {
+		res, err := injectRequestInstructions([]byte(body), "USE AEGIS PROXY", "openai", "gpt-4o")
+		if !errors.Is(err, errUnrecognizedBodyShape) {
+			t.Fatalf("body %s: err = %v, want errUnrecognizedBodyShape", body, err)
+		}
+		if res.Shape != bodyShapeUnknown {
+			t.Fatalf("body %s: shape = %q", body, res.Shape)
+		}
+	}
+}
+
+func TestDetectBodyShape(t *testing.T) {
+	cases := []struct {
+		name     string
+		body     string
+		provider string
+		model    string
+		want     string
+	}{
+		{"chat", `{"messages":[{"role":"user","content":"hi"}]}`, "", "gpt-4", bodyShapeChat},
+		{"anthropic_system", `{"system":"s","messages":[]}`, "anthropic", "claude-x", bodyShapeAnthropic},
+		{"anthropic_meta", `{"messages":[]}`, "anthropic", "claude-x", bodyShapeAnthropic},
+		{"anthropic_model_only", `{"messages":[]}`, "", "claude-3-5-sonnet", bodyShapeAnthropic},
+		{"responses", `{"input":"hi"}`, "openai", "gpt-4o", bodyShapeResponses},
+		{"responses_prev", `{"previous_response_id":"resp_1"}`, "openai", "gpt-4o", bodyShapeResponses},
+		{"responses_instructions", `{"instructions":"sys"}`, "openai", "gpt-4o", bodyShapeResponses},
+		{"unknown", `{"foo":1}`, "", "", bodyShapeUnknown},
+		{"unknown_model_only", `{"model":"gpt-4o"}`, "openai", "gpt-4o", bodyShapeUnknown},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var full map[string]json.RawMessage
+			if err := json.Unmarshal([]byte(tc.body), &full); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			got := detectBodyShape(full, tc.provider, tc.model)
+			if got != tc.want {
+				t.Fatalf("detectBodyShape = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestHandlePreRequest_AnthropicBody(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+
+	payload := PreRequestPayload{
+		Metadata: RequestMetadata{
+			LoginName: "alice",
+			Model:     "claude-sonnet-4-5",
+			Provider:  "anthropic",
+			RequestID: "req-anthropic",
+		},
+		UserMessage: "play Spotify",
+		RequestBody: []byte(`{"model":"claude-sonnet-4-5","max_tokens":100,"messages":[{"role":"user","content":"play Spotify"}]}`),
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.HandlePreRequest(w, req)
+
+	var resp GuardrailResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Action != ActionModify {
+		t.Fatalf("action = %q, want modify", resp.Action)
+	}
+
+	var modified map[string]any
+	json.Unmarshal(resp.RequestBody, &modified)
+	sys, _ := modified["system"].(string)
+	if !strings.Contains(sys, "/v1/services/spotify") {
+		t.Fatalf("anthropic system missing proxy URL: %q", sys)
+	}
+	msgs := modified["messages"].([]any)
+	if len(msgs) != 1 {
+		t.Fatalf("messages len = %d, want 1 (no system role in Anthropic messages)", len(msgs))
+	}
+}
+
+func TestHandlePreRequest_ResponsesBody(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+
+	payload := PreRequestPayload{
+		Metadata: RequestMetadata{
+			LoginName: "alice",
+			Model:     "gpt-4o",
+			Provider:  "openai",
+			RequestID: "req-responses",
+		},
+		UserMessage: "play Spotify",
+		RequestBody: []byte(`{"model":"gpt-4o","input":[{"role":"user","content":"play Spotify"}]}`),
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.HandlePreRequest(w, req)
+
+	var resp GuardrailResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Action != ActionModify {
+		t.Fatalf("action = %q, want modify", resp.Action)
+	}
+
+	var modified map[string]any
+	json.Unmarshal(resp.RequestBody, &modified)
+	items := modified["input"].([]any)
+	sys := items[0].(map[string]any)
+	content, _ := sys["content"].(string)
+	if sys["role"] != "system" || !strings.Contains(content, "/v1/services/spotify") {
+		t.Fatalf("input[0] = %v", sys)
+	}
+}
+
+func TestHandlePreRequest_UnrecognizedShapeAllowsAndRecords(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+
+	payload := PreRequestPayload{
+		Metadata:    RequestMetadata{LoginName: "alice", Model: "m", RequestID: "req-unknown"},
+		UserMessage: "play Spotify",
+		RequestBody: []byte(`{"foo":1}`),
+	}
+	body, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.HandlePreRequest(w, req)
+
+	var resp GuardrailResponse
+	json.NewDecoder(w.Body).Decode(&resp)
+	if resp.Action != ActionAllow {
+		t.Fatalf("action = %q, want allow (fail-open)", resp.Action)
+	}
+	if !strings.Contains(resp.Message, "unrecognized") {
+		t.Fatalf("message = %q, want unrecognized shape diagnostic", resp.Message)
+	}
+
+	rep := srv.hookHealth.Snapshot("https://aegis.example.com")
+	if rep.UnrecognizedShapes == 0 {
+		t.Fatal("expected unrecognized_shapes count in hook health")
+	}
+	found := false
+	for _, is := range rep.Issues {
+		if is.Code == "unrecognized_body_shape" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("issues = %+v", rep.Issues)
+	}
+}
+
+func TestHandlePreRequest_RepeatInjectionIdempotent(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+
+	payload := PreRequestPayload{
+		Metadata:    RequestMetadata{LoginName: "alice", Model: "gpt-4", RequestID: "req-idem"},
+		UserMessage: "play Spotify",
+		RequestBody: []byte(`{"model":"gpt-4","messages":[{"role":"user","content":"play Spotify"}]}`),
+	}
+	body, _ := json.Marshal(payload)
+
+	do := func() GuardrailResponse {
+		req := httptest.NewRequest("POST", "/v1/pre-request", bytes.NewReader(body))
+		req.Header.Set("Authorization", "Bearer test-key")
+		w := httptest.NewRecorder()
+		srv.HandlePreRequest(w, req)
+		var resp GuardrailResponse
+		json.NewDecoder(w.Body).Decode(&resp)
+		return resp
+	}
+
+	first := do()
+	if first.Action != ActionModify {
+		t.Fatalf("first action = %q, want modify", first.Action)
+	}
+
+	// Feed the already-modified body back through the hook.
+	payload.RequestBody = first.RequestBody
+	body, _ = json.Marshal(payload)
+	second := do()
+	if second.Action != ActionAllow {
+		t.Fatalf("second action = %q, want allow (already injected)", second.Action)
 	}
 }
 

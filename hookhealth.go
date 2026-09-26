@@ -21,12 +21,13 @@ type HookHealth struct {
 	count        int
 	capacity     int
 
-	authFailures  int
-	parseFailures int
-	staleHostHits int
-	lastAt        time.Time
-	lastHost      string
-	lastAction    string
+	authFailures       int
+	parseFailures      int
+	staleHostHits      int
+	unrecognizedShapes int
+	lastAt             time.Time
+	lastHost           string
+	lastAction         string
 }
 
 // HookObservation is one redacted pre-request hook outcome.
@@ -39,6 +40,9 @@ type HookObservation struct {
 	Model          string    `json:"model,omitempty"`
 	Provider       string    `json:"provider,omitempty"`
 	Login          string    `json:"login,omitempty"`
+	// BodyShape is the LLM request wire shape used for instruction injection
+	// (chat, anthropic, responses, unknown). Empty when no request_body.
+	BodyShape string `json:"body_shape,omitempty"`
 }
 
 // HookIssue is one actionable hook-config problem.
@@ -61,6 +65,7 @@ type HookHealthReport struct {
 	AuthFailures       int               `json:"auth_failures"`
 	ParseFailures      int               `json:"parse_failures"`
 	StaleHostHits      int               `json:"stale_host_hits"`
+	UnrecognizedShapes int               `json:"unrecognized_shapes"`
 	Recent             []HookObservation `json:"recent,omitempty"`
 	Issues             []HookIssue       `json:"issues"`
 	ExpectedHookConfig json.RawMessage   `json:"expected_hook_config,omitempty"`
@@ -112,6 +117,9 @@ func (h *HookHealth) Record(obs HookObservation) {
 	case "parse_fail":
 		h.parseFailures++
 	}
+	if obs.BodyShape == bodyShapeUnknown {
+		h.unrecognizedShapes++
+	}
 	if obs.Host != "" && isStaleHookHost(obs.Host) {
 		h.staleHostHits++
 	}
@@ -139,6 +147,7 @@ func (h *HookHealth) Snapshot(baseURL string) HookHealthReport {
 	rep.AuthFailures = h.authFailures
 	rep.ParseFailures = h.parseFailures
 	rep.StaleHostHits = h.staleHostHits
+	rep.UnrecognizedShapes = h.unrecognizedShapes
 	rep.LastHost = h.lastHost
 	rep.LastAction = h.lastAction
 	if !h.lastAt.IsZero() {
@@ -180,6 +189,11 @@ func (h *HookHealth) Snapshot(baseURL string) HookHealthReport {
 			rep.Issues = append(rep.Issues, hookIssueWarn("hook_parse_failures",
 				fmt.Sprintf("%d pre-request payload(s) failed to parse", rep.ParseFailures),
 				"confirm Aperture is posting JSON to "+expected))
+		}
+		if rep.UnrecognizedShapes > 0 {
+			rep.Issues = append(rep.Issues, hookIssueWarn("unrecognized_body_shape",
+				fmt.Sprintf("%d request body(s) used an unrecognized LLM wire shape; instructions were not injected", rep.UnrecognizedShapes),
+				"Aegis can augment OpenAI chat completions (messages), Anthropic Messages (system+messages), and OpenAI Responses (input)"))
 		}
 		// Payload shape: modify needs request_body; matching needs user_message.
 		missingBody, missingUser := 0, 0
