@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -234,6 +235,11 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&req); err != nil && err.Error() != "EOF" {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				writeBodyReadError(w, err)
+				return
+			}
 			// Empty body is fine; other decode errors are client faults.
 			if r.ContentLength != 0 {
 				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
@@ -382,6 +388,11 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&req); err != nil && r.ContentLength != 0 {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				writeBodyReadError(w, err)
+				return
+			}
 			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}

@@ -4,7 +4,6 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -116,6 +115,10 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 
 // HandleAdmin serves the HTML admin dashboard (shell only; data loads via API).
 // GET /v1/admin
+//
+// The shell contains no secrets or live data — only markup and client JS.
+// It is still wrapped in AuthMiddleware so the API surface is not advertised
+// to unauthenticated peers (issue #98). OAuth callback pages remain public.
 func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/v1/admin" && r.URL.Path != "/v1/admin/" {
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
@@ -325,9 +328,8 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 			"writable_data_types":  writable,
 		})
 	case http.MethodPut:
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "failed to read request body")
+		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		if !ok {
 			return
 		}
 		var req adminPermissionsRequest
@@ -386,9 +388,8 @@ func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 		sortHookIssues(rep.Issues)
 		writeJSON(w, rep)
 	case http.MethodPost:
-		body, err := io.ReadAll(r.Body)
-		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "failed to read body")
+		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		if !ok {
 			return
 		}
 		if len(strings.TrimSpace(string(body))) == 0 {

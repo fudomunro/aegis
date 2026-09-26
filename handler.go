@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -155,10 +156,11 @@ func (s *Server) checkAPIKey(r *http.Request) bool {
 	if s.apiKey == "" {
 		return false
 	}
-	if r.Header.Get("Authorization") == "Bearer "+s.apiKey {
+	authz := r.Header.Get("Authorization")
+	if strings.HasPrefix(authz, "Bearer ") && constantTimeEqual(strings.TrimPrefix(authz, "Bearer "), s.apiKey) {
 		return true
 	}
-	return r.Header.Get("X-Api-Key") == s.apiKey
+	return constantTimeEqual(r.Header.Get("X-Api-Key"), s.apiKey)
 }
 
 func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, reason string) {
@@ -273,8 +275,18 @@ type ResponseSpec struct {
 }
 
 func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
+	// Cap the hook body so a huge conversation cannot exhaust memory (issue #97).
+	r.Body = http.MaxBytesReader(w, r.Body, maxHookBodyBytes)
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			slog.Error("pre-request body too large", "limit", maxErr.Limit)
+			s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
+			writeJSONError(w, http.StatusRequestEntityTooLarge,
+				fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
+			return
+		}
 		slog.Error("failed to read request body", "error", err)
 		s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
 		writeGuardrailResponse(w, GuardrailResponse{
