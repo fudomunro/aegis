@@ -376,9 +376,11 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	}
 	// Oldest-first is a first-class query ("what is the earliest email?").
 	// Default remains newest-first to match live provider listings.
-	orderBy := `m.sent_at DESC, m.id DESC`
+	// Rows with empty sent_at sort last in both directions so they cannot
+	// win "oldest"/"newest" answers (issue #77 edge-missing-sent).
+	orderBy := `CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at DESC, m.id DESC`
 	if strings.EqualFold(strings.TrimSpace(q.Sort), "asc") {
-		orderBy = `m.sent_at ASC, m.id ASC`
+		orderBy = `CASE WHEN m.sent_at = '' THEN 1 ELSE 0 END, m.sent_at ASC, m.id ASC`
 	}
 
 	where := []string{"1=1"}

@@ -26,6 +26,9 @@ func main() {
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
+	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit (issue #77)")
+	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
+	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
@@ -79,7 +82,12 @@ func main() {
 		"log_file", paths.LogFile,
 	)
 
-	// One-shot Takeout ingest does not need OAuth, base URL, or a listening server.
+	// One-shot sample seeding and Takeout ingest do not need OAuth, base URL,
+	// or a listening server.
+	if *seedSample {
+		code := runSeedSampleCLI(paths.Dir, paths.MailArchive, *seedSampleCount, *seedSampleStress)
+		os.Exit(code)
+	}
 	if strings.TrimSpace(*importTakeout) != "" {
 		code := runImportTakeoutCLI(paths.MailArchive, *importTakeout, *importTakeoutBatch)
 		os.Exit(code)
@@ -290,6 +298,46 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
+}
+
+// runSeedSampleCLI writes synthetic sample fixtures under the data directory
+// and loads the mail set into the configured archive, then exits.
+// Data is fictional; safe to regenerate. See README "Sample data".
+func runSeedSampleCLI(dataDir, archivePath string, count int, stress bool) int {
+	count = seedSampleCountOrDefault(count, stress)
+	sampleDir := filepath.Join(dataDir, "sample")
+	mboxPath, libraryPath, _, err := WriteSampleFiles(sampleDir, count)
+	if err != nil {
+		slog.Error("failed to write sample files", "dir", sampleDir, "error", err)
+		return 1
+	}
+	set, err := SeedSampleArchive(archivePath, count)
+	if err != nil {
+		slog.Error("failed to seed mail archive", "path", archivePath, "error", err)
+		return 1
+	}
+	slog.Info("sample data ready (all synthetic)",
+		"mail_messages", len(set.Records),
+		"oldest_id", set.OldestID,
+		"newest_id", set.NewestID,
+		"mail_archive", archivePath,
+		"mbox", mboxPath,
+		"library_json", libraryPath,
+	)
+	return 0
+}
+
+func seedSampleCountOrDefault(count int, stress bool) int {
+	if stress {
+		if count > 0 && count != SampleMailCount {
+			return count
+		}
+		return SampleMailStressCount
+	}
+	if count <= 0 {
+		return SampleMailCount
+	}
+	return count
 }
 
 // runImportTakeoutCLI syncs a read-only Takeout export into the mail archive
