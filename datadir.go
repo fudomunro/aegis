@@ -16,6 +16,7 @@ const (
 	defaultPermissionsName = "permissions.json"
 	defaultTokensName      = "tokens.json"
 	defaultLinksName       = "entity_links.json"
+	defaultCopyLedgerName  = "copy_ledger.db"
 	defaultMailArchiveName = "mail-archive.db"
 	defaultLogFileName     = "aegis.log"
 	dataDirLogsSubdir      = "logs"
@@ -35,6 +36,8 @@ type DataPaths struct {
 	Tokens string
 	// Links is the entity-link store (playlists).
 	Links string
+	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
+	CopyLedger string
 	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
 	// LogFile is the optional process log path. Empty logs to stderr only.
@@ -54,6 +57,8 @@ type StatePathOverrides struct {
 	Permissions    string
 	Tokens         string
 	Links          string
+	CopyLedger     string
+	CopyLedgerSet  bool
 	MailArchive    string
 	MailArchiveSet bool
 	LogFile        string
@@ -145,6 +150,15 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		Links:       resolveUnderDataDir(ov.Links, dir, defaultLinksName),
 		LogsDir:     filepath.Join(dir, dataDirLogsSubdir),
 		CacheDir:    filepath.Join(dir, dataDirCacheSubdir),
+	}
+	// Copy ledger: omitted → default under data dir; explicitly empty → disabled.
+	switch {
+	case !ov.CopyLedgerSet:
+		paths.CopyLedger = filepath.Join(dir, defaultCopyLedgerName)
+	case strings.TrimSpace(ov.CopyLedger) == "":
+		paths.CopyLedger = ""
+	default:
+		paths.CopyLedger = expandUserPath(ov.CopyLedger)
 	}
 	// Mail archive: omitted → default under data dir; explicitly empty → disabled.
 	switch {
