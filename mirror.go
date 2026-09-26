@@ -322,7 +322,7 @@ func (s *Server) requireMirrorReadable(serviceID, kind string) error {
 
 // defaultMirrorSource picks the canonical home for kind, else "".
 func (s *Server) defaultMirrorSource(kind string) string {
-	for _, svc := range s.config.Services {
+	for _, svc := range s.config.ServiceSnapshots() {
 		if svc.IsCanonicalFor(kind) {
 			return svc.ID
 		}

@@ -261,7 +261,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		libraryProviders[kind.ID] = nil
 	}
 
-	for _, svc := range s.config.Services {
+	for _, svc := range s.config.ServiceSnapshots() {
 		node := FlowNode{
 			ID:       "svc:" + svc.ID,
 			Kind:     FlowKindService,
