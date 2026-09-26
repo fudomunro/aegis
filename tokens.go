@@ -254,6 +254,7 @@ type TokenStatus struct {
 // by AES + filesystem work.
 // Skips disk writes if no path is configured (in-memory store).
 // Refuses to write if the store was loaded with unreadable entries (issue #100).
+// Uses atomic temp+rename so a crash cannot leave a truncated tokens.json (issue #99).
 func (ts *TokenStore) persist() error {
 	ts.persistMu.Lock()
 	defer ts.persistMu.Unlock()
@@ -307,7 +308,7 @@ func (ts *TokenStore) persist() error {
 	if err != nil {
 		return fmt.Errorf("marshaling token file: %w", err)
 	}
-	return os.WriteFile(path, data, tokenFilePerms)
+	return atomicWriteFile(path, data, tokenFilePerms)
 }
 
 func encryptWith(key, plaintext []byte) (string, error) {
