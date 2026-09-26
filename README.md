@@ -191,6 +191,12 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 | `read-write` | both (also accepts `full` / `rw`) |
 
 - The reserved key `default` applies to data types not listed.
+- **Unknown proxy paths** (not a mapped data type) use the **strictest**
+  configured level, not `default`, so a tight type cannot be bypassed by an
+  unmapped endpoint (issue #94).
+- Proxy paths are **canonicalized before classification**. Duplicate slashes
+  (including `%2f`) collapse to the real type; `.` / `..` segments are rejected
+  with `400`. Classification and upstream routing always see the same path.
 - If `permissions` is omitted, agents keep unrestricted access (previous behavior).
 - **Bootstrap vs overlay (issue #71).** `aegis.json` may set default
   `permissions` per service. Admin UI saves write a separate
