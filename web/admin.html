@@ -689,7 +689,6 @@
       const detail = ((stats.agents && stats.agents.detail) || []).find((d) => d.id === agentId);
       if (detail) {
         const to = String(e.to || "");
-        if (to.indexOf("svc:") === 0) return (detail.services || {})[to.slice(4)] || 0;
         if (to.indexOf("lib:") === 0) return (detail.libraries || {})[to.slice(4)] || 0;
       }
     }
@@ -1138,9 +1137,9 @@
       });
     });
 
-    // Agent → data access arrows (issue #114). Drawn above container fills
-    // so each individual agent node connects to the services / library data
-    // it actually used in the selected window.
+    // Agent → library data access arrows (issue #114). Drawn above container
+    // fills so each individual agent node connects to the data types it used.
+    // Agent → service arrows are omitted so the map stays type-focused.
     (topo.edges || []).forEach((e) => {
       if (!isAgentAccessEdge(e)) return;
       const from = pos[e.from];
@@ -1272,7 +1271,7 @@
       "Access window " + (stats.window || "1h") +
       " · " + agents + (agents === 1 ? " agent" : " agents") +
       sampleTxt +
-      " · arrows show what each agent touched" +
+      " · arrows show which data types each agent touched" +
       " · admin-only, no request bodies";
   }
 
