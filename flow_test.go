@@ -393,15 +393,15 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 	foundAgentServiceEdge := false
 	foundAgentLibraryEdge := false
 	for _, e := range topo.Edges {
-		if e.From == "agent:alice@example.com" && e.To == "svc:spotify" && e.Style == FlowEdgeAccess {
+		if e.From == "agent:alice@example.com" && e.To == "svc:spotify" {
 			foundAgentServiceEdge = true
 		}
 		if e.From == "agent:alice@example.com" && e.To == "lib:playlists" && e.Style == FlowEdgeData {
 			foundAgentLibraryEdge = true
 		}
 	}
-	if !foundAgentServiceEdge {
-		t.Fatal("expected agent → service access edge")
+	if foundAgentServiceEdge {
+		t.Fatal("did not expect agent → service edge; map should focus on data types")
 	}
 	if !foundAgentLibraryEdge {
 		t.Fatal("expected agent → library data edge")
