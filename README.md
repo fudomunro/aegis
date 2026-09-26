@@ -77,7 +77,7 @@ Aegis starts with these endpoints:
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
 - `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
-- `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32)
+- `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32). Includes per-agent nodes and access breakdowns so the Map can draw which agents touched which services/data (issue #114)
 - `GET /v1/admin/hook-health` — Aperture pre-request hook wiring diagnostics (stale Guardian names/URLs, auth failures, missing `send` fields)
 - `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
 
@@ -1348,7 +1348,7 @@ under `/v1/auth/` remain public so browsers can finish the redirect.
 ```
 GET /v1/admin              — HTML dashboard (shell only; no secrets; auth required)
 GET /v1/admin/summary      — redacted services, token status, cache stats
-GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries)
+GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries) + per-agent access detail (issue #114)
 GET /v1/admin/hook-health  — Aperture hook health + expected config snippet
 POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
 GET /v1/admin/cache        — in-memory cache inventory

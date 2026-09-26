@@ -366,6 +366,73 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 	if byID["agents"].Agents != 2 {
 		t.Fatalf("agents node agents = %d, want 2", byID["agents"].Agents)
 	}
+
+	// Individual agent nodes + access edges (issue #114).
+	if len(topo.Stats.Agents.Detail) != 2 {
+		t.Fatalf("agent detail = %d, want 2", len(topo.Stats.Agents.Detail))
+	}
+	byAgentID := map[string]FlowNode{}
+	for _, n := range topo.Nodes {
+		if n.Kind == FlowKindAgentInstance {
+			byAgentID[n.ID] = n
+		}
+	}
+	for _, id := range []string{"agent:alice@example.com", "agent:bob@example.com"} {
+		n, ok := byAgentID[id]
+		if !ok {
+			t.Fatalf("missing agent node %q in %v", id, byAgentID)
+		}
+		if n.Parent != "agents" {
+			t.Fatalf("%s parent = %q, want agents", id, n.Parent)
+		}
+	}
+	if byAgentID["agent:alice@example.com"].Hits != 2 {
+		t.Fatalf("alice node hits = %d, want 2", byAgentID["agent:alice@example.com"].Hits)
+	}
+
+	foundAgentServiceEdge := false
+	foundAgentLibraryEdge := false
+	for _, e := range topo.Edges {
+		if e.From == "agent:alice@example.com" && e.To == "svc:spotify" && e.Style == FlowEdgeAccess {
+			foundAgentServiceEdge = true
+		}
+		if e.From == "agent:alice@example.com" && e.To == "lib:playlists" && e.Style == FlowEdgeData {
+			foundAgentLibraryEdge = true
+		}
+	}
+	if !foundAgentServiceEdge {
+		t.Fatal("expected agent → service access edge")
+	}
+	if !foundAgentLibraryEdge {
+		t.Fatal("expected agent → library data edge")
+	}
+}
+
+func TestHandleAdminFlow_AgentDetailWithoutHits(t *testing.T) {
+	srv := flowTestServer()
+	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminFlow)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var topo FlowTopology
+	if err := json.Unmarshal(w.Body.Bytes(), &topo); err != nil {
+		t.Fatalf("parse flow: %v", err)
+	}
+	if len(topo.Stats.Agents.Detail) != 0 {
+		t.Fatalf("expected empty agent detail with no traffic, got %v", topo.Stats.Agents.Detail)
+	}
+	hasInstance := false
+	for _, n := range topo.Nodes {
+		if n.Kind == FlowKindAgentInstance {
+			hasInstance = true
+		}
+	}
+	if hasInstance {
+		t.Fatal("expected no agent-instance nodes without access events")
+	}
 }
 
 func TestHandleAdminFlow_WindowParam(t *testing.T) {
@@ -450,5 +517,17 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	}
 	if !strings.Contains(body, "connection_id") {
 		t.Fatal("expected service connection_id for token-origin auth arrows")
+	}
+	if !strings.Contains(body, "agent-instance") {
+		t.Fatal("expected individual agent node kind")
+	}
+	if !strings.Contains(body, "isAgentAccessEdge") {
+		t.Fatal("expected agent access arrow helper")
+	}
+	if !strings.Contains(body, "agentItems") {
+		t.Fatal("expected stacked agent node layout")
+	}
+	if !strings.Contains(body, "truncateMapLabel") {
+		t.Fatal("expected agent label truncation")
 	}
 }

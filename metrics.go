@@ -75,10 +75,27 @@ func (m *AccessMetrics) Record(ev AccessEvent) {
 	m.start = (m.start + 1) % m.capacity
 }
 
+// MetricsAgentDetail is one agent's access breakdown in the stats window
+// (issue #114). Identifiers are service ids / library kind ids only — never
+// paths or bodies.
+type MetricsAgentDetail struct {
+	ID   string `json:"id"`
+	Hits int    `json:"hits"`
+	// Services maps service id → hits on the proxy surface.
+	Services map[string]int `json:"services,omitempty"`
+	// Libraries maps library kind id → hits on the unified library surface.
+	Libraries map[string]int `json:"libraries,omitempty"`
+	// DataTypes maps recorded data type → hits across both surfaces.
+	DataTypes map[string]int `json:"data_types,omitempty"`
+	LastAt    time.Time      `json:"last_at,omitempty"`
+}
+
 // MetricsAgentStats summarizes distinct callers in a window.
 type MetricsAgentStats struct {
 	Distinct int      `json:"distinct"`
 	Sample   []string `json:"sample,omitempty"`
+	// Detail lists each agent with what they touched (issue #114).
+	Detail []MetricsAgentDetail `json:"detail,omitempty"`
 }
 
 // MetricsEndpointStats is hit counts for one service or library kind.
@@ -113,6 +130,10 @@ type MetricsSnapshot struct {
 const metricsSampleLimit = 8
 const metricsRecentLimit = 12
 
+// metricsAgentDetailLimit caps per-agent map nodes so a noisy window cannot
+// explode the admin SVG (issue #114).
+const metricsAgentDetailLimit = 8
+
 // Snapshot aggregates ring-buffer events within the given window.
 func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 	snap := MetricsSnapshot{
@@ -132,6 +153,7 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 	defer m.mu.Unlock()
 	cutoff := time.Now().Add(-window)
 	agents := make(map[string]bool)
+	agentDetail := make(map[string]*MetricsAgentDetail)
 	recent := make([]MetricsRecentAccess, 0, metricsRecentLimit)
 
 	for i := 0; i < m.count; i++ {
@@ -141,6 +163,28 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 		}
 		if ev.Agent != "" {
 			agents[ev.Agent] = true
+			d := agentDetail[ev.Agent]
+			if d == nil {
+				d = &MetricsAgentDetail{
+					ID:        ev.Agent,
+					Services:  make(map[string]int),
+					Libraries: make(map[string]int),
+					DataTypes: make(map[string]int),
+				}
+				agentDetail[ev.Agent] = d
+			}
+			d.Hits++
+			if ev.Surface == MetricSurfaceLibrary {
+				d.Libraries[ev.Target]++
+			} else if ev.Target != "" {
+				d.Services[ev.Target]++
+			}
+			if ev.DataType != "" {
+				d.DataTypes[ev.DataType]++
+			}
+			if ev.At.After(d.LastAt) {
+				d.LastAt = ev.At
+			}
 		}
 		snap.TotalHits++
 
@@ -217,6 +261,23 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 		names = names[:metricsSampleLimit]
 	}
 	snap.Agents.Sample = names
+
+	// Per-agent breakdown for map nodes/arrows (issue #114). Busiest first
+	// so the map draws the most active agents when the list is truncated.
+	detail := make([]MetricsAgentDetail, 0, len(agentDetail))
+	for _, d := range agentDetail {
+		detail = append(detail, *d)
+	}
+	sort.Slice(detail, func(i, j int) bool {
+		if detail[i].Hits != detail[j].Hits {
+			return detail[i].Hits > detail[j].Hits
+		}
+		return detail[i].ID < detail[j].ID
+	})
+	if len(detail) > metricsAgentDetailLimit {
+		detail = detail[:metricsAgentDetailLimit]
+	}
+	snap.Agents.Detail = detail
 
 	// Oldest → newest for the recent sample.
 	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
