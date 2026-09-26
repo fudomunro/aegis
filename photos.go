@@ -235,23 +235,3 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 		stampCopies:   s.stampPhotoCopies,
 	})
 }
-
-// hasPhotoProviders reports whether any registered connector can list photos.
-func (s *Server) hasPhotoProviders() bool {
-	return LibraryKindByID("photos").HasProviders(s)
-}
-
-// photosLibraryReadable reports whether any service allows photo reads.
-func (s *Server) photosLibraryReadable() bool {
-	return LibraryKindByID("photos").Readable(s)
-}
-
-// libraryPhotosSystemInstructions tells agents about the photos endpoint.
-func (s *Server) libraryPhotosSystemInstructions() string {
-	return s.libraryInstructionsFor("photos")
-}
-
-// mentionsPhotos detects photo-oriented questions that don't name a service.
-func mentionsPhotos(msg string) bool {
-	return LibraryKindByID("photos").Mentions(msg)
-}

@@ -35,11 +35,7 @@ const (
 
 // immichUpstreamBase returns the configured Immich API base (…/api).
 func (c *ImmichConnector) immichUpstreamBase() string {
-	const defaultBase = "http://localhost:2283/api"
-	if svc := c.server.config.GetService(immichServiceID); svc != nil && svc.Endpoint != "" {
-		return strings.TrimRight(svc.Endpoint, "/")
-	}
-	return defaultBase
+	return c.server.upstreamBaseFor(immichServiceID, "http://localhost:2283/api")
 }
 
 // immichWebBase derives the Immich web UI origin from the API endpoint

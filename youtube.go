@@ -20,6 +20,9 @@ type YouTubeMusicConnector struct {
 }
 
 // NewYouTubeMusicConnector creates a connector wired to the given server.
+// youtubeAPIBase is the default YouTube Data API v3 root; config endpoint overrides it.
+const youtubeAPIBase = "https://www.googleapis.com/youtube/v3"
+
 func NewYouTubeMusicConnector(srv *Server) *YouTubeMusicConnector {
 	return &YouTubeMusicConnector{server: srv}
 }
@@ -159,7 +162,7 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
 		serviceID:   "youtube-music",
 		displayName: "YouTube",
-		defaultBase: "https://www.googleapis.com/youtube/v3",
+		defaultBase: youtubeAPIBase,
 		defaultTTL:  60 * time.Second,
 		mapUpstream: func(path string, query url.Values) (string, url.Values, error) {
 			apiPath, extraParams, err := c.mapPath(path, query)
@@ -179,11 +182,6 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 		},
 		transform: c.transformResponse,
 	})
-}
-
-// doYouTubeRequest executes an HTTP request to the YouTube Data API.
-func (c *YouTubeMusicConnector) doYouTubeRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
-	return doUpstreamRequest(ctx, method, url, body, token)
 }
 
 // mapPath translates friendly proxy paths to YouTube Data API v3 calls.
@@ -263,12 +261,9 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 		return "", fmt.Errorf("no valid token")
 	}
 
-	upstreamBase := "https://www.googleapis.com/youtube/v3"
-	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("youtube-music", youtubeAPIBase)
 	url := upstreamBase + "/channels?part=contentDetails&mine=true"
-	data, status, err := c.doYouTubeRequest(context.Background(), "GET", url, nil, token)
+	data, status, err := doUpstreamRequest(context.Background(), "GET", url, nil, token)
 	if err != nil {
 		return "", err
 	}
@@ -362,10 +357,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://www.googleapis.com/youtube/v3"
-	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("youtube-music", youtubeAPIBase)
 
 	var all []Artist
 	pageToken := ""
@@ -507,10 +499,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 		return nil, false, err
 	}
 
-	upstreamBase := "https://www.googleapis.com/youtube/v3"
-	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("youtube-music", youtubeAPIBase)
 
 	var likedItems []map[string]any
 	var videoIDs []string
@@ -626,10 +615,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playli
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://www.googleapis.com/youtube/v3"
-	if svc := c.server.config.GetService("youtube-music"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("youtube-music", youtubeAPIBase)
 
 	var all []Playlist
 	pageToken := ""
@@ -1011,11 +997,7 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path strin
 
 	allItems, _ := firstPage["items"].([]any)
 
-	svc := c.server.config.GetService("youtube-music")
-	upstreamBase := "https://www.googleapis.com/youtube/v3"
-	if svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("youtube-music", youtubeAPIBase)
 
 	apiPath, extraParams, _ := c.mapPath(path, query)
 
@@ -1034,7 +1016,7 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path strin
 
 		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
 
-		data, status, err := c.doYouTubeRequest(ctx, "GET", upstreamURL, nil, token)
+		data, status, err := doUpstreamRequest(ctx, "GET", upstreamURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
 			break
@@ -1083,11 +1065,7 @@ func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, 
 	maxPages := libraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		// Build the next page URL.
-		svc := c.server.config.GetService("youtube-music")
-		upstreamBase := "https://www.googleapis.com/youtube/v3"
-		if svc != nil && svc.Endpoint != "" {
-			upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-		}
+		upstreamBase := c.server.upstreamBaseFor("youtube-music", youtubeAPIBase)
 
 		apiPath, extraParams, _ := c.mapPath(path, query)
 		q := map[string][]string{}
@@ -1101,7 +1079,7 @@ func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, 
 
 		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
 
-		data, status, err := c.doYouTubeRequest(ctx, "GET", upstreamURL, nil, token)
+		data, status, err := doUpstreamRequest(ctx, "GET", upstreamURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
 			break

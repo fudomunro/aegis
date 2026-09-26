@@ -35,11 +35,7 @@ const googleContactsPersonFields = "names,emailAddresses,phoneNumbers,organizati
 
 // googleContactsUpstreamBase returns the configured People API base.
 func (c *GoogleContactsConnector) googleContactsUpstreamBase() string {
-	const defaultBase = "https://people.googleapis.com/v1"
-	if svc := c.server.config.GetService(googleContactsServiceID); svc != nil && svc.Endpoint != "" {
-		return strings.TrimRight(svc.Endpoint, "/")
-	}
-	return defaultBase
+	return c.server.upstreamBaseFor(googleContactsServiceID, "https://people.googleapis.com/v1")
 }
 
 // Capabilities returns what Google Contacts data types and operations are supported.

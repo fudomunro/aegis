@@ -269,7 +269,7 @@ func TestLibraryKindMessages_Registered(t *testing.T) {
 
 func TestLibraryMessagesInstructions_MentionEndpoint(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryMessagesSystemInstructions()
+	instr := srv.libraryInstructionsFor("messages")
 	for _, want := range []string{
 		"/v1/library/messages",
 		"messages",
@@ -305,10 +305,10 @@ func TestStampMessageCanonical_OnlyWhenConfigured(t *testing.T) {
 }
 
 func TestMentionsMessages_Keyword(t *testing.T) {
-	if !mentionsMessages("what emails have I received?") {
+	if !LibraryKindByID("messages").Mentions("what emails have I received?") {
 		t.Fatal("expected email keyword match")
 	}
-	if mentionsMessages("play some jazz") {
+	if LibraryKindByID("messages").Mentions("play some jazz") {
 		t.Fatal("unexpected match")
 	}
 }
@@ -318,10 +318,10 @@ func TestHasMessageProviders_UsesRegistry(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{},
 	}
-	if !srv.hasMessageProviders() {
+	if !LibraryKindByID("messages").HasProviders(srv) {
 		t.Fatal("expected message provider")
 	}
-	if !srv.messagesLibraryReadable() {
+	if !LibraryKindByID("messages").Readable(srv) {
 		t.Fatal("expected readable")
 	}
 }

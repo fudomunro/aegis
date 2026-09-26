@@ -20,6 +20,9 @@ type SpotifyConnector struct {
 }
 
 // NewSpotifyConnector creates a connector wired to the given server.
+// spotifyAPIBase is the default Spotify Web API root; config endpoint overrides it.
+const spotifyAPIBase = "https://api.spotify.com/v1"
+
 func NewSpotifyConnector(srv *Server) *SpotifyConnector {
 	return &SpotifyConnector{server: srv}
 }
@@ -205,7 +208,7 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
 		serviceID:   "spotify",
 		displayName: "Spotify",
-		defaultBase: "https://api.spotify.com/v1",
+		defaultBase: spotifyAPIBase,
 		defaultTTL:  60 * time.Second,
 		expandPages: func(ctx context.Context, path string, _ url.Values, raw map[string]any, token string, logger *slog.Logger) map[string]any {
 			if c.isPaginated(path) {
@@ -215,11 +218,6 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 		},
 		transform: c.transformResponse,
 	})
-}
-
-// doSpotifyRequest executes an HTTP request to the Spotify API.
-func (c *SpotifyConnector) doSpotifyRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
-	return doUpstreamRequest(ctx, method, url, body, token)
 }
 
 // transformResponse converts Spotify's verbose JSON into a compact format
@@ -291,10 +289,7 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bo
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://api.spotify.com/v1"
-	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Album
 	nextURL := upstreamBase + "/me/albums?limit=50"
@@ -345,10 +340,7 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artis
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://api.spotify.com/v1"
-	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Artist
 	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
@@ -479,10 +471,7 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bo
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://api.spotify.com/v1"
-	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Track
 	nextURL := upstreamBase + "/me/tracks?limit=50"
@@ -533,10 +522,7 @@ func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, b
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://api.spotify.com/v1"
-	if svc := c.server.config.GetService("spotify"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Playlist
 	nextURL := upstreamBase + "/me/playlists?limit=50"
@@ -1035,7 +1021,7 @@ func (c *SpotifyConnector) fetchAllPagesRaw(ctx context.Context, first map[strin
 	// not silently cut off. Hit the cap → mark truncated for the caller.
 	maxPages := libraryPageCap
 	for i := 0; i < maxPages && nextURL != ""; i++ {
-		data, status, err := c.doSpotifyRequest(ctx, "GET", nextURL, nil, token)
+		data, status, err := doUpstreamRequest(ctx, "GET", nextURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", nextURL, "status", status, "error", err)
 			break
