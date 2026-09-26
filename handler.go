@@ -405,46 +405,416 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	// Inject instructions into the request body.
 	systemContent := strings.Join(instructions, "\n\n")
-	modified, err := injectSystemMessage(payload.RequestBody, systemContent)
+	result, err := injectRequestInstructions(payload.RequestBody, systemContent,
+		payload.Metadata.Provider, payload.Metadata.Model)
+	obs.BodyShape = result.Shape
 	if err != nil {
+		if errors.Is(err, errUnrecognizedBodyShape) {
+			logger.Warn("unrecognized request body shape, allowing without injection",
+				"provider", payload.Metadata.Provider, "model", payload.Metadata.Model)
+			obs.Action = ActionAllow
+			writeGuardrailResponse(w, GuardrailResponse{
+				Action:  ActionAllow,
+				Message: "unrecognized request body shape; instructions not injected",
+			})
+			return
+		}
 		logger.Error("failed to inject system message", "error", err)
 		obs.Action = ActionAllow
 		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
 		return
 	}
+	if result.AlreadyPresent {
+		logger.Debug("instructions already present, skipping injection")
+		obs.Action = ActionAllow
+		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
+		return
+	}
 
-	logger.Info("request modified with proxy instructions", "services", len(instructions))
+	logger.Info("request modified with proxy instructions",
+		"services", len(instructions), "body_shape", result.Shape)
 	obs.Action = ActionModify
 	writeGuardrailResponse(w, GuardrailResponse{
 		Action:      ActionModify,
-		RequestBody: modified,
+		RequestBody: result.Body,
 	})
 }
 
-// injectSystemMessage inserts a system message into an OpenAI-compatible request body.
-func injectSystemMessage(original []byte, content string) (json.RawMessage, error) {
-	var req struct {
-		Messages []json.RawMessage `json:"messages"`
+// Request body wire shapes Aegis can augment (issue #103).
+const (
+	bodyShapeChat      = "chat"      // OpenAI chat completions: top-level messages[]
+	bodyShapeAnthropic = "anthropic" // Anthropic Messages API: top-level system + messages[]
+	bodyShapeResponses = "responses" // OpenAI Responses API: top-level input
+	bodyShapeUnknown   = "unknown"
+)
+
+// errUnrecognizedBodyShape is returned when the request body is not one of the
+// supported LLM wire formats. Callers fail open (allow) and record diagnostics.
+var errUnrecognizedBodyShape = errors.New("unrecognized request body shape")
+
+// injectResult is the outcome of an instruction-injection attempt.
+type injectResult struct {
+	Body json.RawMessage
+	// Shape is bodyShapeChat, bodyShapeAnthropic, bodyShapeResponses, or bodyShapeUnknown.
+	Shape string
+	// AlreadyPresent is true when the instruction block was already in the body.
+	AlreadyPresent bool
+}
+
+// injectRequestInstructions inserts system-level instructions into an LLM request
+// body, choosing the correct carrier for the detected wire shape. Repeated calls
+// with the same content are idempotent. provider/model come from Aperture
+// metadata and are used when the body alone is ambiguous.
+func injectRequestInstructions(original []byte, content, provider, model string) (injectResult, error) {
+	if len(original) == 0 {
+		return injectResult{Shape: bodyShapeUnknown}, errUnrecognizedBodyShape
 	}
-	if err := json.Unmarshal(original, &req); err != nil {
-		return nil, err
+	var full map[string]json.RawMessage
+	if err := json.Unmarshal(original, &full); err != nil {
+		// Non-object JSON (or corrupt bytes) is not a wire shape we can augment.
+		return injectResult{Shape: bodyShapeUnknown}, errUnrecognizedBodyShape
+	}
+	shape := detectBodyShape(full, provider, model)
+	res := injectResult{Shape: shape}
+
+	if containsContent(instructionCarrierText(full, shape), content) {
+		res.Body = original
+		res.AlreadyPresent = true
+		return res, nil
 	}
 
-	sysMsg, _ := json.Marshal(map[string]string{
+	var err error
+	switch shape {
+	case bodyShapeChat:
+		err = injectChatMessages(full, content)
+	case bodyShapeAnthropic:
+		err = injectAnthropicSystem(full, content)
+	case bodyShapeResponses:
+		err = injectResponsesInput(full, content)
+	default:
+		return res, errUnrecognizedBodyShape
+	}
+	if err != nil {
+		return res, err
+	}
+	out, err := json.Marshal(full)
+	if err != nil {
+		return res, err
+	}
+	res.Body = out
+	return res, nil
+}
+
+// injectSystemMessage inserts a system message into an OpenAI chat-completions body.
+func injectSystemMessage(original []byte, content string) (json.RawMessage, error) {
+	res, err := injectRequestInstructions(original, content, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return res.Body, nil
+}
+
+// detectBodyShape prefers explicit Aperture metadata, then sniffs body keys.
+func detectBodyShape(full map[string]json.RawMessage, provider, model string) string {
+	_, hasMessages := full["messages"]
+	_, hasInput := full["input"]
+	_, hasSystem := full["system"]
+	_, hasInstructions := full["instructions"]
+	_, hasPrevResponse := full["previous_response_id"]
+
+	metaAnthropic := metaLooksAnthropic(provider, model)
+
+	// Responses API is the only supported shape that uses `input` (or
+	// `instructions` / `previous_response_id`) as conversation carriers and
+	// typically has no `messages` array.
+	if (hasInput || hasInstructions || hasPrevResponse) && !hasMessages {
+		return bodyShapeResponses
+	}
+	if hasMessages {
+		// Top-level `system` is Anthropic's system prompt slot; OpenAI chat
+		// keeps system content inside messages[]. Metadata disambiguates
+		// Anthropic bodies that omit system on first turn.
+		if hasSystem || metaAnthropic {
+			return bodyShapeAnthropic
+		}
+		return bodyShapeChat
+	}
+	if metaAnthropic {
+		return bodyShapeAnthropic
+	}
+	if hasInput {
+		return bodyShapeResponses
+	}
+	return bodyShapeUnknown
+}
+
+func metaLooksAnthropic(provider, model string) bool {
+	p := strings.ToLower(provider)
+	m := strings.ToLower(model)
+	return strings.Contains(p, "anthropic") ||
+		strings.Contains(p, "claude") ||
+		strings.Contains(m, "claude")
+}
+
+// containsContent reports whether needle is already carried in the instruction text.
+func containsContent(haystack, needle string) bool {
+	needle = strings.TrimSpace(needle)
+	if needle == "" {
+		return true
+	}
+	return strings.Contains(haystack, needle)
+}
+
+// instructionCarrierText extracts existing system/instruction text for dedupe.
+func instructionCarrierText(full map[string]json.RawMessage, shape string) string {
+	switch shape {
+	case bodyShapeAnthropic:
+		return contentText(full["system"])
+	case bodyShapeResponses:
+		parts := []string{contentText(full["instructions"])}
+		parts = append(parts, inputCarrierText(full["input"])...)
+		return strings.Join(parts, "\n")
+	default:
+		raw, ok := full["messages"]
+		if !ok {
+			return ""
+		}
+		var msgs []json.RawMessage
+		if err := json.Unmarshal(raw, &msgs); err != nil {
+			return ""
+		}
+		var parts []string
+		for _, m := range msgs {
+			var obj struct {
+				Role    string          `json:"role"`
+				Content json.RawMessage `json:"content"`
+			}
+			if err := json.Unmarshal(m, &obj); err != nil {
+				continue
+			}
+			if obj.Role == "system" || obj.Role == "developer" {
+				parts = append(parts, contentText(obj.Content))
+			}
+		}
+		return strings.Join(parts, "\n")
+	}
+}
+
+func inputCarrierText(raw json.RawMessage) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return nil // user text, not instruction carrier
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil
+	}
+	var parts []string
+	for _, item := range items {
+		var obj struct {
+			Role    string          `json:"role"`
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(item, &obj); err != nil {
+			continue
+		}
+		if obj.Role == "system" || obj.Role == "developer" {
+			parts = append(parts, contentText(obj.Content))
+		}
+	}
+	return parts
+}
+
+// contentText flattens a JSON string or content-block array into plain text.
+func contentText(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	var blocks []json.RawMessage
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return ""
+	}
+	var parts []string
+	for _, b := range blocks {
+		var obj struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(b, &obj); err != nil {
+			continue
+		}
+		if obj.Text != "" {
+			parts = append(parts, obj.Text)
+		}
+	}
+	return strings.Join(parts, "\n")
+}
+
+func injectChatMessages(full map[string]json.RawMessage, content string) error {
+	raw, ok := full["messages"]
+	if !ok {
+		return errUnrecognizedBodyShape
+	}
+	var msgs []json.RawMessage
+	if err := json.Unmarshal(raw, &msgs); err != nil {
+		return errUnrecognizedBodyShape
+	}
+	sysMsg, err := json.Marshal(map[string]string{
 		"role":    "system",
 		"content": content,
 	})
-
-	// Prepend the system message.
-	req.Messages = append([]json.RawMessage{sysMsg}, req.Messages...)
-
-	// Rebuild the full body, preserving all other top-level fields.
-	var full map[string]json.RawMessage
-	if err := json.Unmarshal(original, &full); err != nil {
-		return nil, err
+	if err != nil {
+		return err
 	}
-	full["messages"], _ = json.Marshal(req.Messages)
-	return json.Marshal(full)
+	msgs = append([]json.RawMessage{sysMsg}, msgs...)
+	out, err := json.Marshal(msgs)
+	if err != nil {
+		return err
+	}
+	full["messages"] = out
+	return nil
+}
+
+func injectAnthropicSystem(full map[string]json.RawMessage, content string) error {
+	raw, ok := full["system"]
+	if !ok {
+		out, err := json.Marshal(content)
+		if err != nil {
+			return err
+		}
+		full["system"] = out
+		return nil
+	}
+
+	// Preserve Anthropic's system shapes: plain string or content-block array.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		merged := content
+		if s != "" {
+			merged = content + "\n\n" + s
+		}
+		out, err := json.Marshal(merged)
+		if err != nil {
+			return err
+		}
+		full["system"] = out
+		return nil
+	}
+
+	var blocks []json.RawMessage
+	if err := json.Unmarshal(raw, &blocks); err != nil {
+		return errUnrecognizedBodyShape
+	}
+	sysBlock, err := json.Marshal(map[string]string{
+		"type": "text",
+		"text": content,
+	})
+	if err != nil {
+		return err
+	}
+	blocks = append([]json.RawMessage{sysBlock}, blocks...)
+	out, err := json.Marshal(blocks)
+	if err != nil {
+		return err
+	}
+	full["system"] = out
+	return nil
+}
+
+func injectResponsesInput(full map[string]json.RawMessage, content string) error {
+	sysMsg, err := json.Marshal(map[string]string{
+		"role":    "system",
+		"content": content,
+	})
+	if err != nil {
+		return err
+	}
+
+	raw, ok := full["input"]
+	if !ok {
+		// No conversation yet: instructions field is the Responses system slot.
+		if err := mergeInstructions(full, content); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	// String input is shorthand for a single user message — expand to items.
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		userMsg, err := json.Marshal(map[string]string{
+			"role":    "user",
+			"content": s,
+		})
+		if err != nil {
+			return err
+		}
+		items := []json.RawMessage{sysMsg, userMsg}
+		out, err := json.Marshal(items)
+		if err != nil {
+			return err
+		}
+		full["input"] = out
+		return nil
+	}
+
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err == nil {
+		items = append([]json.RawMessage{sysMsg}, items...)
+		out, err := json.Marshal(items)
+		if err != nil {
+			return err
+		}
+		full["input"] = out
+		return nil
+	}
+
+	// Single input item object.
+	var obj map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &obj); err != nil {
+		return errUnrecognizedBodyShape
+	}
+	items = []json.RawMessage{sysMsg, raw}
+	out, err := json.Marshal(items)
+	if err != nil {
+		return err
+	}
+	full["input"] = out
+	return nil
+}
+
+// mergeInstructions sets or prepends the Responses API `instructions` field.
+func mergeInstructions(full map[string]json.RawMessage, content string) error {
+	raw, ok := full["instructions"]
+	if !ok {
+		out, err := json.Marshal(content)
+		if err != nil {
+			return err
+		}
+		full["instructions"] = out
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return errUnrecognizedBodyShape
+	}
+	merged := content
+	if s != "" {
+		merged = content + "\n\n" + s
+	}
+	out, err := json.Marshal(merged)
+	if err != nil {
+		return err
+	}
+	full["instructions"] = out
+	return nil
 }
 
 func writeGuardrailResponse(w http.ResponseWriter, resp GuardrailResponse) {
