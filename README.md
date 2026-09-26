@@ -362,8 +362,14 @@ Missing ledger rows never hide or alter library items (fail-open). Status
 values: `unknown`, `in_sync`, `stale`, `missing`. Freshness **checks**
 (`last_checked_at` / `stale`) are observational — Aegis still does not
 auto-sync secondary copies. Repair / re-mirror is
-[#86](https://github.com/fudomunro/aegis/issues/86); library UI visualization
-is [#90](https://github.com/fudomunro/aegis/issues/90).
+[#86](https://github.com/fudomunro/aegis/issues/86).
+
+**Admin UI (issue #90)** surfaces the same fields read-only: library cards
+show a per-item copy badge (“2 copies · 1 stale”), source chips/detail show
+`role` / `sync_mode` / `as_of` / `checked_at` / `sync_status`, the Library
+tab filters by copy status (in sync / stale / missing / unchecked), and
+Advanced → Copy ledger lists `GET /v1/library/copies` rows with the same
+filters.
 
 ### Environment variables
 
