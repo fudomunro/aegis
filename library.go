@@ -83,6 +83,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampPlaylistCanonical,
+		stampCopies:   s.stampPlaylistCopies,
 	})
 }
 
@@ -107,6 +108,7 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 			return TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampTrackCanonical,
+		stampCopies:   s.stampTrackCopies,
 	})
 }
 

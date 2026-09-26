@@ -107,13 +107,13 @@ All mutable local state defaults under one data directory (override with
 
 ```
 <data-dir>/aegis.json, permissions.json, entity_links.json, tokens.json,
-mail-archive.db, logs/aegis.log, cache/
+copy_ledger.db, mail-archive.db, logs/aegis.log, cache/
 ```
 
 Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
-empty `-log-file` disables file logging. Startup logs the resolved directory
-and `/v1/admin/summary` exposes `runtime.data_dir`. Do not reintroduce cwd
-defaults for these files.
+empty `-copy-ledger` disables the copy ledger; empty `-log-file` disables file
+logging. Startup logs the resolved directory and `/v1/admin/summary` exposes
+`runtime.data_dir`. Do not reintroduce cwd defaults for these files.
 
 ## How work happens here
 

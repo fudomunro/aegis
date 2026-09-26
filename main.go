@@ -22,6 +22,7 @@ func main() {
 	configPath := flag.String("config", "", "path to rules configuration file (default: <data-dir>/aegis.json)")
 	tokenPath := flag.String("token-file", "", "path to encrypted token storage (default: <data-dir>/tokens.json)")
 	linkPath := flag.String("link-file", "", "path to user-confirmed entity links (default: <data-dir>/entity_links.json)")
+	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
 	permissionsPath := flag.String("permissions-file", "", "path to admin permissions overlay (default: <data-dir>/permissions.json; admin saves write here instead of aegis.json)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
@@ -43,6 +44,8 @@ func main() {
 		Permissions:    *permissionsPath,
 		Tokens:         *tokenPath,
 		Links:          *linkPath,
+		CopyLedger:     *copyLedgerPath,
+		CopyLedgerSet:  setFlags["copy-ledger"],
 		MailArchive:    *mailArchivePath,
 		MailArchiveSet: setFlags["mail-archive"],
 		LogFile:        *logFile,
@@ -78,6 +81,7 @@ func main() {
 		"tokens", paths.Tokens,
 		"permissions", paths.Permissions,
 		"links", paths.Links,
+		"copy_ledger", paths.CopyLedger,
 		"mail_archive", paths.MailArchive,
 		"log_file", paths.LogFile,
 	)
@@ -89,7 +93,7 @@ func main() {
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*importTakeout) != "" {
-		code := runImportTakeoutCLI(paths.MailArchive, *importTakeout, *importTakeoutBatch)
+		code := runImportTakeoutCLI(paths.MailArchive, paths.CopyLedger, *importTakeout, *importTakeoutBatch)
 		os.Exit(code)
 	}
 
@@ -164,6 +168,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	copies, err := OpenCopyLedger(paths.CopyLedger)
+	if err != nil {
+		slog.Error("failed to open copy ledger", "path", paths.CopyLedger, "error", err)
+		os.Exit(1)
+	}
+	if copies != nil {
+		defer copies.Close()
+		slog.Info("copy ledger ready", "path", copies.Path(), "enabled", copies.Enabled())
+	}
+
 	mailArchive, err := OpenMailArchive(paths.MailArchive)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
@@ -192,6 +206,7 @@ func main() {
 		connectors:    make(map[string]ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
+		copies:        copies,
 		mail:          mailArchive,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
 		apertureURL:   *apertureURL,
@@ -342,7 +357,7 @@ func seedSampleCountOrDefault(count int, stress bool) int {
 
 // runImportTakeoutCLI syncs a read-only Takeout export into the mail archive
 // and exits. Used for large local exports that should not go through HTTP.
-func runImportTakeoutCLI(archivePath, takeoutPath string, batch int) int {
+func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch int) int {
 	archivePath = strings.TrimSpace(archivePath)
 	if archivePath == "" {
 		slog.Error("mail-archive path is required for -import-takeout")
@@ -358,6 +373,14 @@ func runImportTakeoutCLI(archivePath, takeoutPath string, batch int) int {
 		return 1
 	}
 	defer a.Close()
+	copies, err := OpenCopyLedger(copyLedgerPath)
+	if err != nil {
+		slog.Error("failed to open copy ledger", "path", copyLedgerPath, "error", err)
+		return 1
+	}
+	if copies != nil {
+		defer copies.Close()
+	}
 	if err := a.SetTakeoutPath(takeoutPath); err != nil {
 		slog.Error("failed to record takeout path", "path", takeoutPath, "error", err)
 		return 1
@@ -366,6 +389,7 @@ func runImportTakeoutCLI(archivePath, takeoutPath string, batch int) int {
 		batch = 20000
 	}
 	var stored, skipped, scanned, failed int
+	done := false
 	for {
 		res, err := a.ImportTakeout(takeoutPath, batch)
 		stored += res.Stored
@@ -385,12 +409,14 @@ func runImportTakeoutCLI(archivePath, takeoutPath string, batch int) int {
 			return 1
 		}
 		if res.Done {
+			done = true
 			break
 		}
 		if !res.Truncated {
 			break
 		}
 	}
+	copies.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done)
 	slog.Info("takeout import finished",
 		"path", takeoutPath,
 		"scanned", scanned,

@@ -232,6 +232,7 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 			return PhotoList{Photos: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampPhotoCanonical,
+		stampCopies:   s.stampPhotoCopies,
 	})
 }
 

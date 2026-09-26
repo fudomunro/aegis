@@ -110,6 +110,7 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 		"Permissions": filepath.Join(dir, "permissions.json"),
 		"Tokens":      filepath.Join(dir, "tokens.json"),
 		"Links":       filepath.Join(dir, "entity_links.json"),
+		"CopyLedger":  filepath.Join(dir, "copy_ledger.db"),
 		"MailArchive": filepath.Join(dir, "mail-archive.db"),
 		"LogFile":     filepath.Join(dir, "logs", "aegis.log"),
 		"LogsDir":     filepath.Join(dir, "logs"),
@@ -127,6 +128,9 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	}
 	if paths.Links != checks["Links"] {
 		t.Fatalf("Links = %q, want %q", paths.Links, checks["Links"])
+	}
+	if paths.CopyLedger != checks["CopyLedger"] {
+		t.Fatalf("CopyLedger = %q, want %q", paths.CopyLedger, checks["CopyLedger"])
 	}
 	if paths.MailArchive != checks["MailArchive"] {
 		t.Fatalf("MailArchive = %q, want %q", paths.MailArchive, checks["MailArchive"])
@@ -151,7 +155,10 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 		Permissions: filepath.Join(ext, "perms.json"),
 		Tokens:      filepath.Join(ext, "tok.json"),
 		Links:       filepath.Join(ext, "links.json"),
-		MailArchive: filepath.Join(ext, "mail.db"),
+		CopyLedger:  filepath.Join(ext, "copy.db"),
+		// CopyLedgerSet true with non-empty path
+		CopyLedgerSet: true,
+		MailArchive:   filepath.Join(ext, "mail.db"),
 		// MailArchiveSet true with non-empty path
 		MailArchiveSet: true,
 	})
@@ -169,6 +176,9 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 	}
 	if paths.Links != filepath.Join(ext, "links.json") {
 		t.Fatalf("Links = %q", paths.Links)
+	}
+	if paths.CopyLedger != filepath.Join(ext, "copy.db") {
+		t.Fatalf("CopyLedger = %q", paths.CopyLedger)
 	}
 	if paths.MailArchive != filepath.Join(ext, "mail.db") {
 		t.Fatalf("MailArchive = %q", paths.MailArchive)
@@ -191,6 +201,21 @@ func TestResolveStatePaths_MailArchiveExplicitEmptyDisables(t *testing.T) {
 	}
 	if paths.MailArchive != "" {
 		t.Fatalf("MailArchive = %q, want empty (disabled)", paths.MailArchive)
+	}
+}
+
+func TestResolveStatePaths_CopyLedgerExplicitEmptyDisables(t *testing.T) {
+	dir := t.TempDir()
+	paths, err := ResolveStatePaths(StatePathOverrides{
+		Dir:           dir,
+		CopyLedger:    "  ",
+		CopyLedgerSet: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if paths.CopyLedger != "" {
+		t.Fatalf("CopyLedger = %q, want empty (disabled)", paths.CopyLedger)
 	}
 }
 

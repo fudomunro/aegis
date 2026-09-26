@@ -352,6 +352,9 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	if err != nil && result.Error == "" {
 		result.Error = err.Error()
 	}
+	if result.Error == "" {
+		s.recordTakeoutSnapshot(path, result.Scanned, result.Stored, result.Skipped, result.Done)
+	}
 	// Shape as a mail sync result so the admin UI can share one renderer.
 	writeMailJSON(w, MailSyncResult{
 		Service:   takeoutServiceID,
