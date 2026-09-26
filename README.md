@@ -439,7 +439,7 @@ directory or keep passing the explicit path flags.
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
 | `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
-| `-token-pass` | | Token encryption passphrase (required) |
+| `-token-pass` | | Token encryption passphrase (required). Wrong passphrase refuses to start and never overwrites `tokens.json` (issue #100) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
 
@@ -458,7 +458,7 @@ Default mode is `auto` (identity if present, else API key). For a solo tailnet, 
 2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference)
 3. Start Aegis and visit `https://your-aegis/v1/admin`
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
-5. Tokens are stored encrypted on disk and auto-refresh when expired
+5. Tokens are stored encrypted on disk and auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed.
 
 If no services are connected yet, the Services tab shows extra help describing the OAuth flow.
 
