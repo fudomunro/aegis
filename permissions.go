@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -33,6 +34,9 @@ const PermissionDefaultKey = "default"
 type Permissions map[string]string
 
 // For returns the access level for a data type.
+// Unknown/empty data types fall through to "default" (or DefaultAccessType).
+// Proxy callers with an unclassified path must use Strictest instead so
+// unknown surface cannot outrank a tighter type (issue #94).
 func (p Permissions) For(dataType string) string {
 	if p == nil {
 		return DefaultAccessType
@@ -45,6 +49,52 @@ func (p Permissions) For(dataType string) string {
 		return normalizeAccess(level)
 	}
 	return DefaultAccessType
+}
+
+// Strictest returns the most restrictive access level configured on the map.
+// Used when a proxy path does not map to a known data type: unknown endpoints
+// must not inherit "default" if any type is tighter (issue #94). A nil or empty
+// map is unrestricted. If reads and writes both appear, no single level is
+// tighter than every known type for an unknown method class — deny.
+func (p Permissions) Strictest() string {
+	if len(p) == 0 {
+		return DefaultAccessType
+	}
+	hasNone, hasRead, hasWrite, hasFull := false, false, false, false
+	for _, v := range p {
+		switch normalizeAccess(v) {
+		case AccessNone:
+			hasNone = true
+		case AccessRead:
+			hasRead = true
+		case AccessWrite:
+			hasWrite = true
+		case AccessFull:
+			hasFull = true
+		}
+	}
+	if hasNone || (hasRead && hasWrite) {
+		return AccessNone
+	}
+	if hasRead {
+		return AccessRead
+	}
+	if hasWrite {
+		return AccessWrite
+	}
+	if hasFull {
+		return AccessFull
+	}
+	return DefaultAccessType
+}
+
+// accessForDataType resolves the effective level for a classified path.
+// Unclassified paths use Strictest, never the default key (issue #94).
+func (p Permissions) accessForDataType(dataType string) string {
+	if dataType == "" {
+		return p.Strictest()
+	}
+	return p.For(dataType)
 }
 
 // Allows reports whether the given HTTP method is permitted for the data type.
@@ -135,24 +185,66 @@ func allowsMethod(level, method string) bool {
 	}
 }
 
+// errNonCanonicalPath is returned for proxy paths that are not in canonical
+// form (dot segments, backslashes, NUL). Callers must reject with 400 rather
+// than classify or forward them (issue #94).
+var errNonCanonicalPath = errors.New("non-canonical path")
+
+// canonicalProxyPath normalizes a service-proxy remaining path so permission
+// classification and upstream routing see the same string (issue #94).
+// Duplicate slashes are collapsed. "." / ".." segments and other non-canonical
+// forms are rejected. Empty means the service root.
+func canonicalProxyPath(remaining string) (string, error) {
+	if remaining == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(remaining, "/") {
+		remaining = "/" + remaining
+	}
+	// URL.Path is already percent-decoded (%2f → /). Reject leftover characters
+	// that can still smuggle alternate path forms through to upstream.
+	if strings.ContainsAny(remaining, "\\\x00") {
+		return "", errNonCanonicalPath
+	}
+	segs := strings.Split(remaining, "/")
+	out := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		switch seg {
+		case "":
+			// Collapse leading/duplicate/trailing slashes.
+			continue
+		case ".", "..":
+			return "", errNonCanonicalPath
+		default:
+			out = append(out, seg)
+		}
+	}
+	if len(out) == 0 {
+		return "/", nil
+	}
+	return "/" + strings.Join(out, "/"), nil
+}
+
 // DataTypeForPath classifies a service-proxy path into a Aegis data type.
-// Unknown paths return "" so callers fall through to the default access level.
+// Unknown or non-canonical paths return "" so callers must apply the
+// strictest configured permission (not "default") — see accessForDataType.
 func DataTypeForPath(path string) string {
 	p := strings.TrimSpace(path)
 	if p == "" {
 		return ""
 	}
-	if !strings.HasPrefix(p, "/") {
-		p = "/" + p
-	}
 	// Drop query string if present.
 	if i := strings.IndexByte(p, '?'); i >= 0 {
 		p = p[:i]
 	}
-	// Normalize trailing slash (except root).
-	if len(p) > 1 && strings.HasSuffix(p, "/") {
-		p = strings.TrimRight(p, "/")
+	clean, err := canonicalProxyPath(p)
+	if err != nil {
+		return ""
 	}
+	if clean == "" || clean == "/" {
+		return ""
+	}
+	p = clean
 
 	switch {
 	case p == "/me":
@@ -405,6 +497,8 @@ func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool 
 // Returns true when the request may proceed. On denial it writes a 403 JSON error.
 // Permissions further constrain the connector: a write level never unlocks
 // mutating calls the connector does not implement.
+// remainingPath should already be canonical; unclassified paths use the
+// strictest configured level, never "default" (issue #94).
 func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc *Service, remainingPath string) bool {
 	if svc == nil {
 		return false
@@ -414,6 +508,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		return true
 	}
 	dataType := DataTypeForPath(remainingPath)
+	level := svc.Permissions.accessForDataType(dataType)
 	if s.connectorWriteBlocked(svc.ID, dataType, r.Method) {
 		label := dataType
 		if label == "" {
@@ -425,10 +520,9 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		))
 		return false
 	}
-	if svc.Permissions.Allows(dataType, r.Method) {
+	if allowsMethod(level, r.Method) {
 		return true
 	}
-	level := svc.Permissions.For(dataType)
 	label := dataType
 	if label == "" {
 		label = "this data"

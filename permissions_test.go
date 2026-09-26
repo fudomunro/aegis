@@ -142,11 +142,97 @@ func TestDataTypeForPath(t *testing.T) {
 		"/me/recommendations":        "recommendations",
 		"/unknown/thing":             "",
 		"":                           "",
+		// Issue #94: non-canonical forms must not change classification.
+		"//me/player":      "player",
+		"///me//player":    "player",
+		"/me/player/":      "player",
+		"/me/./player":     "",
+		"/me/../player":    "",
+		"/./me/player":     "",
+		"/../me/player":    "",
+		"/me/player/../x":  "",
+		"/me\\player":      "",
+		"/unknown/./thing": "",
 	}
 	for path, want := range cases {
 		if got := DataTypeForPath(path); got != want {
 			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
+	}
+}
+
+func TestCanonicalProxyPath(t *testing.T) {
+	ok := map[string]string{
+		"":            "",
+		"/":           "/",
+		"//":          "/",
+		"/me/player":  "/me/player",
+		"//me/player": "/me/player",
+		"/me//player": "/me/player",
+		"/me/player/": "/me/player",
+		"///a//b/":    "/a/b",
+	}
+	for in, want := range ok {
+		got, err := canonicalProxyPath(in)
+		if err != nil {
+			t.Errorf("canonicalProxyPath(%q) error: %v", in, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("canonicalProxyPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+
+	bad := []string{
+		"/me/./player",
+		"/me/../player",
+		"/.",
+		"/..",
+		"/a/..",
+		"/a/.",
+		"/me\\player",
+		"/me\x00player",
+	}
+	for _, in := range bad {
+		if got, err := canonicalProxyPath(in); err == nil {
+			t.Errorf("canonicalProxyPath(%q) = %q, want error", in, got)
+		}
+	}
+}
+
+func TestPermissions_Strictest(t *testing.T) {
+	cases := []struct {
+		p    Permissions
+		want string
+	}{
+		{nil, DefaultAccessType},
+		{Permissions{}, DefaultAccessType},
+		{Permissions{"player": AccessNone}, AccessNone},
+		{Permissions{PermissionDefaultKey: AccessRead, "player": AccessNone}, AccessNone},
+		{Permissions{PermissionDefaultKey: AccessRead, "player": AccessRead}, AccessRead},
+		{Permissions{"tracks": AccessRead, "playlists": AccessFull}, AccessRead},
+		{Permissions{"tracks": AccessWrite, "playlists": AccessFull}, AccessWrite},
+		{Permissions{"tracks": AccessRead, "playlists": AccessWrite}, AccessNone},
+		{Permissions{"tracks": AccessFull, "playlists": AccessFull}, AccessFull},
+	}
+	for _, tc := range cases {
+		if got := tc.p.Strictest(); got != tc.want {
+			t.Errorf("Strictest(%v) = %q, want %q", map[string]string(tc.p), got, tc.want)
+		}
+	}
+}
+
+func TestAccessForDataType(t *testing.T) {
+	p := Permissions{PermissionDefaultKey: AccessRead, "player": AccessNone, "playlists": AccessFull}
+	if got := p.accessForDataType("player"); got != AccessNone {
+		t.Fatalf("player = %q", got)
+	}
+	if got := p.accessForDataType("playlists"); got != AccessFull {
+		t.Fatalf("playlists = %q", got)
+	}
+	// Unclassified must not inherit default=read while player is none.
+	if got := p.accessForDataType(""); got != AccessNone {
+		t.Fatalf("unclassified = %q, want none", got)
 	}
 }
 
