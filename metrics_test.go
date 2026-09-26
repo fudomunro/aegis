@@ -9,6 +9,73 @@ import (
 	"time"
 )
 
+func TestAccessMetrics_AgentDetailBreakdown(t *testing.T) {
+	m := NewAccessMetrics(16)
+	now := time.Now()
+
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", DataType: "tracks"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", DataType: "tracks"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceLibrary, Target: "playlists", DataType: "playlists"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "bob@example.com", Surface: MetricSurfaceService, Target: "youtube-music", DataType: "tracks"})
+
+	snap := m.Snapshot(time.Hour)
+	if snap.Agents.Distinct != 2 {
+		t.Fatalf("distinct = %d, want 2", snap.Agents.Distinct)
+	}
+	if len(snap.Agents.Detail) != 2 {
+		t.Fatalf("detail = %d agents, want 2", len(snap.Agents.Detail))
+	}
+
+	// Busiest first: alice has 3 hits, bob has 1.
+	alice := snap.Agents.Detail[0]
+	if alice.ID != "alice@example.com" {
+		t.Fatalf("detail[0].ID = %q, want alice@example.com", alice.ID)
+	}
+	if alice.Hits != 3 {
+		t.Fatalf("alice hits = %d, want 3", alice.Hits)
+	}
+	if alice.Services["spotify"] != 2 {
+		t.Fatalf("alice spotify = %d, want 2", alice.Services["spotify"])
+	}
+	if alice.Libraries["playlists"] != 1 {
+		t.Fatalf("alice playlists = %d, want 1", alice.Libraries["playlists"])
+	}
+	if alice.DataTypes["tracks"] != 2 || alice.DataTypes["playlists"] != 1 {
+		t.Fatalf("alice data types = %v, want tracks=2 playlists=1", alice.DataTypes)
+	}
+	if alice.LastAt.IsZero() {
+		t.Fatal("expected alice last_at")
+	}
+
+	bob := snap.Agents.Detail[1]
+	if bob.ID != "bob@example.com" || bob.Hits != 1 {
+		t.Fatalf("detail[1] = %+v, want bob 1 hit", bob)
+	}
+	if bob.Services["youtube-music"] != 1 {
+		t.Fatalf("bob youtube-music = %d, want 1", bob.Services["youtube-music"])
+	}
+}
+
+func TestAccessMetrics_AgentDetailLimit(t *testing.T) {
+	m := NewAccessMetrics(64)
+	now := time.Now()
+	for i := 0; i < 12; i++ {
+		m.Record(AccessEvent{
+			At:      now,
+			Agent:   "agent-" + string(rune('a'+i)),
+			Surface: MetricSurfaceService,
+			Target:  "spotify",
+		})
+	}
+	snap := m.Snapshot(time.Hour)
+	if snap.Agents.Distinct != 12 {
+		t.Fatalf("distinct = %d, want 12", snap.Agents.Distinct)
+	}
+	if len(snap.Agents.Detail) != metricsAgentDetailLimit {
+		t.Fatalf("detail = %d, want cap %d", len(snap.Agents.Detail), metricsAgentDetailLimit)
+	}
+}
+
 func TestAccessMetrics_RecordAndSnapshotWindows(t *testing.T) {
 	m := NewAccessMetrics(16)
 	now := time.Now()

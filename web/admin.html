@@ -683,6 +683,16 @@
     if (e.style === "library" && e.kind && libraries[e.kind]) {
       return libraries[e.kind].hits || 0;
     }
+    // Per-agent access edges (issue #114) carry their own hit counts.
+    if (e.from && String(e.from).indexOf("agent:") === 0) {
+      const agentId = String(e.from).slice(6);
+      const detail = ((stats.agents && stats.agents.detail) || []).find((d) => d.id === agentId);
+      if (detail) {
+        const to = String(e.to || "");
+        if (to.indexOf("svc:") === 0) return (detail.services || {})[to.slice(4)] || 0;
+        if (to.indexOf("lib:") === 0) return (detail.libraries || {})[to.slice(4)] || 0;
+      }
+    }
     if (e.style === "access" || e.style === "data") {
       const svcId = (e.to || "").replace(/^svc:/, "");
       if (services[svcId] && services[svcId].hits) return services[svcId].hits;
@@ -696,6 +706,12 @@
       return total;
     }
     return 0;
+  }
+
+  function truncateMapLabel(text, max) {
+    const s = String(text == null ? "" : text);
+    if (s.length <= max) return s;
+    return s.slice(0, Math.max(1, max - 1)) + "…";
   }
 
   function edgeStrokeWidth(hits) {
@@ -718,11 +734,13 @@
 
   // Nested layout: Aperture wraps Aegis; Aegis holds Token vault
   // (connection tokens) and Data cache (synced library data types).
+  // Individual agents stack on the left when the window has access data (issue #114).
   function layoutFlowMap(topo) {
     const nodes = topo.nodes || [];
     const dataTypes = topo.data_types || [];
     const services = nodes.filter((n) => n.kind === "service");
     const tokens = nodes.filter((n) => n.kind === "token" || (n.parent === "tokens" && n.id.indexOf("tok:") === 0));
+    const agentInstances = nodes.filter((n) => n.kind === "agent-instance" || (n.parent === "agents" && String(n.id).indexOf("agent:") === 0));
     const byId = {};
     nodes.forEach((n) => { byId[n.id] = n; });
 
@@ -747,8 +765,18 @@
     const apertureH = apertureTitleH + aegisH + aperturePad * 2;
     const apertureW = 420;
 
-    const agents = { x: 20, y: 0, w: 130, h: 56, id: "agents" };
-    const aperture = { x: 180, y: 20, w: apertureW, h: apertureH, id: "aperture" };
+    // Agent stack: one node per active agent, or a single empty placeholder.
+    const agentRowH = 30;
+    const agentGap = 6;
+    const agentW = 156;
+    const agentsHaveDetail = agentInstances.length > 0;
+    const agentCount = agentsHaveDetail ? agentInstances.length : 1;
+    const agentStackH = agentsHaveDetail
+      ? titleH + agentCount * (agentRowH + agentGap) + pad
+      : 56;
+
+    const agents = { x: 20, y: 0, w: agentW, h: agentStackH, id: "agents" };
+    const aperture = { x: 196, y: 20, w: apertureW, h: apertureH, id: "aperture" };
     const aegis = {
       x: aperture.x + aperturePad,
       y: aperture.y + apertureTitleH + aperturePad,
@@ -759,7 +787,11 @@
     agents.y = Math.floor(aperture.y + aperture.h / 2 - agents.h / 2);
 
     const pos = {};
-    pos.agents = Object.assign({ label: byId.agents ? byId.agents.label : "LLM Agents", kind: "agent" }, agents);
+    pos.agents = Object.assign({
+      label: byId.agents ? byId.agents.label : "LLM Agents",
+      kind: "agent",
+      container: agentsHaveDetail,
+    }, agents);
     pos.aperture = Object.assign({
       label: byId.aperture ? byId.aperture.label : "Aperture",
       kind: "gateway",
@@ -771,6 +803,20 @@
       container: true,
       parent: "aperture",
     }, aegis);
+
+    const agentItems = agentInstances.map((n, i) => ({
+      id: n.id,
+      x: agents.x + pad,
+      y: agents.y + titleH + i * (agentRowH + agentGap),
+      w: agents.w - pad * 2,
+      h: agentRowH,
+      label: n.label || String(n.id).replace(/^agent:/, ""),
+      hits: n.hits || 0,
+      kind: "agent-instance",
+      parent: "agents",
+      detail: n.detail || "",
+    }));
+    agentItems.forEach((item) => { pos[item.id] = item; });
 
     const innerX = aegis.x + pad;
     const innerW = aegis.w - pad * 2;
@@ -829,6 +875,11 @@
       providers: dt.providers || [],
       readable: !!dt.readable,
     }));
+    // Register type rows under lib:<id> so agent access edges can land on them.
+    typeItems.forEach((item) => {
+      pos["lib:" + item.id] = item;
+      pos[item.id] = item;
+    });
 
     const svcW = 200;
     const svcH = 52;
@@ -862,6 +913,8 @@
       typeItems: typeItems,
       dataTypes: dataTypes,
       tokenItems: tokenItems,
+      agentItems: agentItems,
+      agentsHaveDetail: agentsHaveDetail,
       width: 870,
       height: bottom,
     };
@@ -909,6 +962,10 @@
     return false;
   }
 
+  function isAgentAccessEdge(e) {
+    return !!(e && e.from && String(e.from).indexOf("agent:") === 0);
+  }
+
   function renderFlowMap(topo) {
     const layout = layoutFlowMap(topo);
     const pos = layout.pos;
@@ -940,6 +997,8 @@
       if (isGatewayClusterEdge(e)) return;
       // Library fan-in is drawn from each data-type row to its providers.
       if (e.style === "library") return;
+      // Agent → data arrows are drawn above container fills (issue #114).
+      if (isAgentAccessEdge(e)) return;
       // Auth/proxy-read lines are drawn from Token vault entries, not Aegis.
       if (e.style === "data" || e.style === "meta") return;
 
@@ -1079,46 +1138,94 @@
       });
     });
 
-    // Agents + services (leaf boxes).
+    // Agent → data access arrows (issue #114). Drawn above container fills
+    // so each individual agent node connects to the services / library data
+    // it actually used in the selected window.
+    (topo.edges || []).forEach((e) => {
+      if (!isAgentAccessEdge(e)) return;
+      const from = pos[e.from];
+      const to = pos[e.to];
+      if (!from || !to) return;
+      const ax = from.x + from.w;
+      const ay = from.y + from.h / 2;
+      const bx = to.x;
+      const by = to.y + to.h / 2;
+      const midX = (ax + bx) / 2;
+      const d = "M " + ax + " " + ay + " C " + midX + " " + ay + ", " + midX + " " + by + ", " + bx + " " + by;
+      const color = e.style === "data" ? FLOW_EDGE_COLORS.data : FLOW_EDGE_COLORS.access;
+      const hits = edgeHitsFor(topo, e);
+      const sw = Math.min(3.2, edgeStrokeWidth(hits) * 0.75);
+      const title = (e.label ? e.label + " · " : "") + (e.from.indexOf("agent:") === 0 ? e.from.slice(6) : e.from) +
+        " → " + (to.label || e.to);
+      parts.push(
+        '<path d="' + d + '" fill="none" stroke="' + color + '" stroke-opacity="0.55" stroke-width="' + sw + '"' +
+        ' marker-end="url(#flow-arrow-' + (e.style === "data" ? "data" : "access") + ')"><title>' +
+        escapeHtml(title) + "</title></path>"
+      );
+    });
+
+    // Agents column: stacked individual agent nodes when the window has
+    // access data (issue #114); otherwise a single empty placeholder box.
+    const agentItems = layout.agentItems || [];
+    if (layout.agentsHaveDetail && pos.agents) {
+      const ap = pos.agents;
+      const agentCount = agentItems.length;
+      parts.push('<rect x="' + ap.x + '" y="' + ap.y + '" width="' + ap.w + '" height="' + ap.h + '" rx="10" fill="#12161c" stroke="#8b949e" stroke-width="1.3"/>');
+      parts.push(flowIconSVG("agent", ap.x + 16, ap.y + 12, 12, "#8b949e"));
+      parts.push('<text x="' + (ap.x + 28) + '" y="' + (ap.y + 12) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="650" font-family="system-ui,sans-serif">' + escapeHtml(ap.label || "LLM Agents") + "</text>");
+      parts.push('<text x="' + (ap.x + ap.w - 10) + '" y="' + (ap.y + 12) + '" text-anchor="end" dominant-baseline="central" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + agentCount + (agentCount === 1 ? " agent" : " agents") + "</text>");
+      agentItems.forEach((item) => {
+        const title = item.label + (item.hits ? " · " + item.hits + " hits" : "") + (item.detail ? " · " + item.detail : "");
+        parts.push('<g><title>' + escapeHtml(title) + "</title>");
+        parts.push('<rect x="' + item.x + '" y="' + item.y + '" width="' + item.w + '" height="' + item.h + '" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.2"/>');
+        parts.push(flowIconSVG("agent", item.x + 14, item.y + item.h / 2, 12, "#58a6ff"));
+        parts.push('<text x="' + (item.x + 26) + '" y="' + (item.y + item.h / 2) + '" dominant-baseline="central" fill="#e6edf3" font-size="11" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(truncateMapLabel(item.label, 16)) + "</text>");
+        if (item.hits) {
+          parts.push(hitBadgeSVG(item.x + item.w - 36, item.y + (item.h - 16) / 2, item.hits, "#58a6ff"));
+        }
+        parts.push("</g>");
+      });
+    } else if (pos.agents) {
+      const p = pos.agents;
+      const title = p.label + (p.agents ? " · " + p.agents + " agents" : "");
+      parts.push('<g><title>' + escapeHtml(title) + "</title>");
+      parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#161b22" stroke="#8b949e" stroke-width="1.5"/>');
+      parts.push(flowIconSVG("agent", p.x + 20, p.y + p.h / 2 - (p.agents ? 6 : 0), 16, "#8b949e"));
+      parts.push('<text x="' + (p.x + 36) + '" y="' + (p.y + p.h / 2 - (p.agents ? 6 : 0)) + '" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
+      if (p.agents != null) {
+        const agentLabel = p.agents === 1 ? "1 agent" : p.agents + " agents";
+        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h - 10) + '" text-anchor="middle" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(agentLabel) + (p.hits ? " · " + formatHits(p.hits) + " hits" : "") + "</text>");
+      }
+      parts.push("</g>");
+    }
+
+    // Service leaf boxes.
     const leafServices = (topo.nodes || []).filter((n) => n.kind === "service");
-    [pos.agents].concat(leafServices.map((n) => pos[n.id])).forEach((p) => {
+    leafServices.map((n) => pos[n.id]).forEach((p) => {
       if (!p) return;
-      const stroke = p.kind === "service"
-        ? (FLOW_STATUS_COLORS[p.status] || "#30363d")
-        : "#8b949e";
+      const stroke = FLOW_STATUS_COLORS[p.status] || "#30363d";
       const n = (topo.nodes || []).find((x) => x.id === p.id) || {};
-      const title = p.kind === "service"
-        ? p.label + (p.status ? " · " + p.status : "") + (p.hits ? " · " + p.hits + " hits" : "")
-        : p.label + (p.agents ? " · " + p.agents + " agents" : "");
+      const title = p.label + (p.status ? " · " + p.status : "") + (p.hits ? " · " + p.hits + " hits" : "");
       parts.push('<g><title>' + escapeHtml(title) + "</title>");
       parts.push('<rect x="' + p.x + '" y="' + p.y + '" width="' + p.w + '" height="' + p.h + '" rx="8" fill="#161b22" stroke="' + stroke + '" stroke-width="1.5"/>');
-      const iconId = p.kind === "service" ? (p.serviceId || "") : "agent";
+      const iconId = p.serviceId || "";
       let textX = p.x + p.w / 2;
-      if (p.kind === "service") {
-        if (FLOW_ICONS[iconId]) {
-          parts.push(flowIconSVG(iconId, p.x + 18, p.y + p.h / 2 - (n.status ? 6 : 0), 16, stroke));
-          textX = p.x + 34;
-        } else {
-          // Monogram fallback keeps a mark when no icon exists.
-          parts.push('<circle cx="' + (p.x + 18) + '" cy="' + (p.y + p.h / 2 - (n.status ? 6 : 0)) + '" r="9" fill="none" stroke="' + stroke + '" stroke-width="1.2"/>');
-          parts.push('<text x="' + (p.x + 18) + '" y="' + (p.y + p.h / 2 - (n.status ? 6 : 0)) + '" text-anchor="middle" dominant-baseline="central" fill="' + stroke + '" font-size="8" font-weight="700" font-family="system-ui,sans-serif">' + escapeHtml(serviceMonogram(p.label)) + "</text>");
-          textX = p.x + 34;
-        }
+      if (FLOW_ICONS[iconId]) {
+        parts.push(flowIconSVG(iconId, p.x + 18, p.y + p.h / 2 - (n.status ? 6 : 0), 16, stroke));
+        textX = p.x + 34;
       } else {
-        parts.push(flowIconSVG("agent", p.x + 20, p.y + p.h / 2 - (p.agents ? 6 : 0), 16, stroke));
-        textX = p.x + 36;
+        // Monogram fallback keeps a mark when no icon exists.
+        parts.push('<circle cx="' + (p.x + 18) + '" cy="' + (p.y + p.h / 2 - (n.status ? 6 : 0)) + '" r="9" fill="none" stroke="' + stroke + '" stroke-width="1.2"/>');
+        parts.push('<text x="' + (p.x + 18) + '" y="' + (p.y + p.h / 2 - (n.status ? 6 : 0)) + '" text-anchor="middle" dominant-baseline="central" fill="' + stroke + '" font-size="8" font-weight="700" font-family="system-ui,sans-serif">' + escapeHtml(serviceMonogram(p.label)) + "</text>");
+        textX = p.x + 34;
       }
-      const subY = p.y + p.h / 2 - (n.status || p.agents ? 6 : 0);
+      const subY = p.y + p.h / 2 - (n.status ? 6 : 0);
       parts.push('<text x="' + textX + '" y="' + subY + '" dominant-baseline="central" fill="#e6edf3" font-size="13" font-weight="600" font-family="system-ui,sans-serif">' + escapeHtml(p.label) + "</text>");
       if (n.status) {
         parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h / 2 + 12) + '" text-anchor="middle" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' + escapeHtml(n.status) + "</text>");
       }
-      if (p.kind === "service" && p.hits) {
+      if (p.hits) {
         parts.push(hitBadgeSVG(p.x + p.w - 40, p.y + 6, p.hits, "#58a6ff"));
-      }
-      if (p.kind === "agent" && p.agents != null) {
-        const agentLabel = p.agents === 1 ? "1 agent" : p.agents + " agents";
-        parts.push('<text x="' + (p.x + p.w / 2) + '" y="' + (p.y + p.h - 10) + '" text-anchor="middle" fill="#8b949e" font-size="9" font-family="system-ui,sans-serif">' + escapeHtml(agentLabel) + (p.hits ? " · " + formatHits(p.hits) + " hits" : "") + "</text>");
       }
       parts.push("</g>");
     });
@@ -1165,6 +1272,7 @@
       "Access window " + (stats.window || "1h") +
       " · " + agents + (agents === 1 ? " agent" : " agents") +
       sampleTxt +
+      " · arrows show what each agent touched" +
       " · admin-only, no request bodies";
   }
 
