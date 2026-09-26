@@ -260,11 +260,11 @@ func TestLibraryReadableHelpers(t *testing.T) {
 		},
 	}, "https://aegis.example.com")
 
-	if !srv.tracksLibraryReadable() {
+	if !LibraryKindByID("tracks").Readable(srv) {
 		t.Fatal("service a should allow tracks read")
 	}
-	if !srv.albumsLibraryReadable() || !srv.artistsLibraryReadable() || !srv.libraryReadable() ||
-		!srv.contactsLibraryReadable() || !srv.photosLibraryReadable() {
+	if !LibraryKindByID("albums").Readable(srv) || !LibraryKindByID("artists").Readable(srv) || !LibraryKindByID("playlists").Readable(srv) ||
+		!LibraryKindByID("contacts").Readable(srv) || !LibraryKindByID("photos").Readable(srv) {
 		t.Fatal("service a should allow all library reads")
 	}
 
@@ -275,22 +275,22 @@ func TestLibraryReadableHelpers(t *testing.T) {
 			{ID: "c", Name: "C", Action: "inject", Permissions: Permissions{"default": AccessNone}},
 		},
 	}, "https://aegis.example.com")
-	if srv2.tracksLibraryReadable() || srv2.albumsLibraryReadable() || srv2.artistsLibraryReadable() ||
-		srv2.libraryReadable() || srv2.contactsLibraryReadable() || srv2.photosLibraryReadable() {
+	if LibraryKindByID("tracks").Readable(srv2) || LibraryKindByID("albums").Readable(srv2) || LibraryKindByID("artists").Readable(srv2) ||
+		LibraryKindByID("playlists").Readable(srv2) || LibraryKindByID("contacts").Readable(srv2) || LibraryKindByID("photos").Readable(srv2) {
 		t.Fatal("expected no readable library types")
 	}
 }
 
 func TestHasLibraryProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	if srv.hasPlaylistProviders() || srv.hasLikedTrackProviders() || srv.hasAlbumProviders() ||
-		srv.hasArtistProviders() || srv.hasContactProviders() || srv.hasPhotoProviders() {
+	if LibraryKindByID("playlists").HasProviders(srv) || LibraryKindByID("tracks").HasProviders(srv) || LibraryKindByID("albums").HasProviders(srv) ||
+		LibraryKindByID("artists").HasProviders(srv) || LibraryKindByID("contacts").HasProviders(srv) || LibraryKindByID("photos").HasProviders(srv) {
 		t.Fatal("empty connectors should report no providers")
 	}
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": NewSpotifyConnector(srv),
 	}
-	if !srv.hasPlaylistProviders() || !srv.hasLikedTrackProviders() || !srv.hasAlbumProviders() || !srv.hasArtistProviders() {
+	if !LibraryKindByID("playlists").HasProviders(srv) || !LibraryKindByID("tracks").HasProviders(srv) || !LibraryKindByID("albums").HasProviders(srv) || !LibraryKindByID("artists").HasProviders(srv) {
 		t.Fatal("spotify connector implements playlist/track/album/artist providers")
 	}
 }
@@ -298,20 +298,20 @@ func TestHasLibraryProviders(t *testing.T) {
 func TestLibrarySystemInstructions_ContainEndpoints(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, s := range []string{
-		srv.librarySystemInstructions(),
-		srv.libraryTracksSystemInstructions(),
-		srv.libraryAlbumsSystemInstructions(),
-		srv.libraryArtistsSystemInstructions(),
-		srv.libraryContactsSystemInstructions(),
+		srv.libraryInstructionsFor("playlists"),
+		srv.libraryInstructionsFor("tracks"),
+		srv.libraryInstructionsFor("albums"),
+		srv.libraryInstructionsFor("artists"),
+		srv.libraryInstructionsFor("contacts"),
 	} {
 		if !strings.Contains(s, "https://aegis.example.com/v1/library/") {
 			t.Fatalf("instructions missing base library path: %s", s)
 		}
 	}
-	if !strings.Contains(srv.libraryArtistsSystemInstructions(), "/v1/library/artists") {
+	if !strings.Contains(srv.libraryInstructionsFor("artists"), "/v1/library/artists") {
 		t.Fatal("artists instructions missing endpoint")
 	}
-	if !strings.Contains(srv.libraryAlbumsSystemInstructions(), "/v1/library/albums") {
+	if !strings.Contains(srv.libraryInstructionsFor("albums"), "/v1/library/albums") {
 		t.Fatal("albums instructions missing endpoint")
 	}
 }
@@ -710,15 +710,15 @@ func TestMentionsAlbumsAndArtists_Keywords(t *testing.T) {
 		"top artists this year":     true,
 	}
 	for msg, want := range cases {
-		got := mentionsAlbums(msg) || mentionsArtists(msg) || mentionsPlaylists(msg) || mentionsLikedTracks(msg)
+		got := LibraryKindByID("albums").Mentions(msg) || LibraryKindByID("artists").Mentions(msg) || LibraryKindByID("playlists").Mentions(msg) || LibraryKindByID("tracks").Mentions(msg)
 		if got != want {
 			t.Fatalf("%q got %v want %v", msg, got, want)
 		}
 	}
-	if !mentionsAlbums("favorite album right now") {
+	if !LibraryKindByID("albums").Mentions("favorite album right now") {
 		t.Fatal("favorite album")
 	}
-	if !mentionsArtists("favorite artist") {
+	if !LibraryKindByID("artists").Mentions("favorite artist") {
 		t.Fatal("favorite artist")
 	}
 }
@@ -819,7 +819,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 
 func TestLibrarySystemInstructions_MentionTruncated(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryTracksSystemInstructions()
+	instr := srv.libraryInstructionsFor("tracks")
 	if !strings.Contains(instr, "truncated") {
 		t.Fatalf("tracks instructions should tell agents to check truncated: %s", instr)
 	}

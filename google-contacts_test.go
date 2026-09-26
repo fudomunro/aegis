@@ -359,7 +359,7 @@ func TestHasContactProviders_GoogleContacts(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		googleContactsServiceID: NewGoogleContactsConnector(srv),
 	}
-	if !srv.hasContactProviders() {
+	if !LibraryKindByID("contacts").HasProviders(srv) {
 		t.Fatal("Google Contacts connector should register as ContactProvider")
 	}
 }

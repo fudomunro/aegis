@@ -49,11 +49,7 @@ const (
 
 // googleGmailUpstreamBase returns the configured Gmail API base.
 func (c *GoogleGmailConnector) googleGmailUpstreamBase() string {
-	const defaultBase = "https://gmail.googleapis.com/gmail/v1"
-	if svc := c.server.config.GetService(googleGmailServiceID); svc != nil && svc.Endpoint != "" {
-		return strings.TrimRight(svc.Endpoint, "/")
-	}
-	return defaultBase
+	return c.server.upstreamBaseFor(googleGmailServiceID, "https://gmail.googleapis.com/gmail/v1")
 }
 
 // Capabilities returns what Gmail data types and operations are supported.

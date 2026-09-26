@@ -236,15 +236,15 @@ func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryPhotosSystemInstructions()
+	instr := srv.libraryInstructionsFor("photos")
 	if !strings.Contains(instr, "/v1/library/photos") {
 		t.Fatalf("photos instructions missing endpoint: %s", instr)
 	}
 
-	if !mentionsPhotos("what photos do I have?") {
+	if !LibraryKindByID("photos").Mentions("what photos do I have?") {
 		t.Fatal("expected photo mention")
 	}
-	if mentionsPhotos("play my jazz playlists") {
+	if LibraryKindByID("photos").Mentions("play my jazz playlists") {
 		t.Fatal("playlists should not trigger photos hint")
 	}
 }

@@ -21,6 +21,9 @@ type AmazonMusicConnector struct {
 }
 
 // NewAmazonMusicConnector creates a connector wired to the given server.
+// amazonMusicAPIBase is the default Amazon Music API root; config endpoint overrides it.
+const amazonMusicAPIBase = "https://api.amazonmusic.com/v1"
+
 func NewAmazonMusicConnector(srv *Server) *AmazonMusicConnector {
 	return &AmazonMusicConnector{server: srv}
 }
@@ -76,15 +79,10 @@ func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
 		serviceID:   "amazon-music",
 		displayName: "Amazon Music",
-		defaultBase: "https://api.amazonmusic.com/v1",
+		defaultBase: amazonMusicAPIBase,
 		defaultTTL:  60 * time.Second,
 		transform:   c.transformResponse,
 	})
-}
-
-// doAmazonRequest executes an HTTP request to the Amazon Music API.
-func (c *AmazonMusicConnector) doAmazonRequest(ctx context.Context, method, url string, body io.Reader, token string) ([]byte, int, error) {
-	return doUpstreamRequest(ctx, method, url, body, token)
 }
 
 // transformResponse converts Amazon Music's JSON into a compact format.
@@ -172,10 +170,7 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := "https://api.amazonmusic.com/v1"
-	if svc := c.server.config.GetService("amazon-music"); svc != nil && svc.Endpoint != "" {
-		upstreamBase = strings.TrimRight(svc.Endpoint, "/")
-	}
+	upstreamBase := c.server.upstreamBaseFor("amazon-music", amazonMusicAPIBase)
 
 	nextURL := upstreamBase + "/me/playlists"
 	var all []Playlist

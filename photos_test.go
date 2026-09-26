@@ -305,11 +305,11 @@ func TestPreRequest_InjectsPhotoLibraryHint(t *testing.T) {
 
 func TestHasPhotoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	if srv.hasPhotoProviders() {
+	if LibraryKindByID("photos").HasProviders(srv) {
 		t.Fatal("expected no photo providers")
 	}
 	srv.connectors["google-photos"] = &fakePhotoProvider{}
-	if !srv.hasPhotoProviders() {
+	if !LibraryKindByID("photos").HasProviders(srv) {
 		t.Fatal("expected photo provider after registration")
 	}
 }

@@ -263,23 +263,3 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 		stampCopies:   s.stampEventCopies,
 	})
 }
-
-// hasCalendarEventProviders reports whether any registered connector can list events.
-func (s *Server) hasCalendarEventProviders() bool {
-	return LibraryKindByID("events").HasProviders(s)
-}
-
-// calendarEventsLibraryReadable reports whether any service allows event reads.
-func (s *Server) calendarEventsLibraryReadable() bool {
-	return LibraryKindByID("events").Readable(s)
-}
-
-// libraryCalendarEventsSystemInstructions tells agents about the events endpoint.
-func (s *Server) libraryCalendarEventsSystemInstructions() string {
-	return s.libraryInstructionsFor("events")
-}
-
-// mentionsCalendarEvents detects calendar-oriented questions that don't name a service.
-func mentionsCalendarEvents(msg string) bool {
-	return LibraryKindByID("events").Mentions(msg)
-}

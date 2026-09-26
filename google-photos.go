@@ -41,11 +41,7 @@ const googlePhotosServiceName = "Google Photos"
 
 // googlePhotosUpstreamBase returns the configured Photos Picker API base.
 func (c *GooglePhotosConnector) googlePhotosUpstreamBase() string {
-	const defaultBase = "https://photospicker.googleapis.com/v1"
-	if svc := c.server.config.GetService(googlePhotosServiceID); svc != nil && svc.Endpoint != "" {
-		return strings.TrimRight(svc.Endpoint, "/")
-	}
-	return defaultBase
+	return c.server.upstreamBaseFor(googlePhotosServiceID, "https://photospicker.googleapis.com/v1")
 }
 
 func (c *GooglePhotosConnector) setLastSession(id string) {

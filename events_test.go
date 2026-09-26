@@ -281,7 +281,7 @@ func TestLibraryKindEvents_Registered(t *testing.T) {
 
 func TestLibraryEventsInstructions_MentionEndpoint(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	instr := srv.libraryCalendarEventsSystemInstructions()
+	instr := srv.libraryInstructionsFor("events")
 	for _, want := range []string{
 		"/v1/library/events",
 		"calendar events",
