@@ -154,7 +154,7 @@ func main() {
 		slog.Error("failed to load permissions overlay", "path", paths.Permissions, "error", err)
 		os.Exit(1)
 	}
-	slog.Info("config loaded", "path", paths.Config, "services", len(cfg.Services), "permissions_file", paths.Permissions)
+	slog.Info("config loaded", "path", paths.Config, "services", cfg.ServiceCount(), "permissions_file", paths.Permissions)
 
 	tokens, err := NewTokenStore(paths.Tokens, *tokenPass)
 	if err != nil {

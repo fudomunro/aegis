@@ -615,7 +615,7 @@ func TestYouTubeMirror_LoadLikedTracks(t *testing.T) {
 		t.Cleanup(upstream.Close)
 
 		srv, _ := testMirrorServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), true)
-		srv.config.GetService("youtube-music").Endpoint = upstream.URL
+		srv.config.updateService("youtube-music", func(svc *Service) { svc.Endpoint = upstream.URL })
 		srv.connectors["youtube-music"] = NewYouTubeMusicConnector(srv)
 		m := &youtubeMirror{s: srv}
 		tracks, truncated, err := m.loadLikedTracks(context.Background())
