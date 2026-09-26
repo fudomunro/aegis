@@ -348,3 +348,122 @@ func TestTokenStore_Status(t *testing.T) {
 		t.Fatal("expected 1 scope")
 	}
 }
+
+func TestTokenStore_PersistAtomic(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+
+	ts, err := NewTokenStore(path, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.Save("spotify", &OAuthToken{
+		AccessToken: "atomic",
+		Expiry:      time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// No leftover temp files from the atomic write path.
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "tokens.json" {
+		names := make([]string, 0, len(entries))
+		for _, e := range entries {
+			names = append(names, e.Name())
+		}
+		t.Fatalf("directory entries = %v, want only tokens.json", names)
+	}
+
+	// tokenFilePerms (0600) must survive the temp+chmod+rename path.
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != tokenFilePerms {
+		t.Fatalf("mode = %v, want %v", info.Mode().Perm(), tokenFilePerms)
+	}
+
+	// File is a complete parseable token store after the write.
+	reloaded, err := NewTokenStore(path, "pass")
+	if err != nil {
+		t.Fatalf("reload after atomic write: %v", err)
+	}
+	got := reloaded.Get("spotify")
+	if got == nil || got.AccessToken != "atomic" {
+		t.Fatal("token missing after atomic write")
+	}
+}
+
+func TestTokenStore_PersistSurvivesInterruptedWrite(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tokens.json")
+
+	ts, err := NewTokenStore(path, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ts.Save("spotify", &OAuthToken{
+		AccessToken: "keep-me",
+		Expiry:      time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate a crash mid-write: a truncated same-directory temp file left
+	// behind next to a complete tokens.json (what atomic rename avoids for
+	// the real file, and what a leftover must not corrupt).
+	partial := filepath.Join(dir, ".tokens.json.tmpcrashed")
+	if err := os.WriteFile(partial, []byte(`{"version":1,"salt":"`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	// Real file is still the complete previous snapshot and still loads.
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(after) != string(before) {
+		t.Fatal("tokens.json changed after a simulated interrupted write")
+	}
+	reloaded, err := NewTokenStore(path, "pass")
+	if err != nil {
+		t.Fatalf("load after interrupted write: %v", err)
+	}
+	if got := reloaded.Get("spotify"); got == nil || got.AccessToken != "keep-me" {
+		t.Fatal("tokens must remain loadable after interrupted write")
+	}
+
+	// A subsequent persist replaces the store cleanly and ignores the leftover.
+	ts2, err := NewTokenStore(path, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ts2.Save("spotify", &OAuthToken{
+		AccessToken: "updated",
+		Expiry:      time.Now().Add(time.Hour),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	final, err := NewTokenStore(path, "pass")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := final.Get("spotify"); got == nil || got.AccessToken != "updated" {
+		t.Fatal("persist after interrupted write should write a complete store")
+	}
+	// tokens.json must still be the only live store file (temp leftovers aside).
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != tokenFilePerms {
+		t.Fatalf("mode after rewrite = %v, want %v", info.Mode().Perm(), tokenFilePerms)
+	}
+}
