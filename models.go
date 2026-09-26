@@ -37,6 +37,9 @@ type PlaylistSource struct {
 	// Canonical is true when this service is the authoritative location for
 	// the playlist (issue #16). Set by connectors or config canonical_for.
 	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy *CopyInfo `json:"copy,omitempty"`
 	// Extra holds additional service-specific fields (uri, published_at, …).
 	Extra map[string]any `json:"extra,omitempty"`
 }
@@ -75,8 +78,11 @@ type TrackSource struct {
 	URL         string `json:"url,omitempty"`
 	// Canonical is true when this service is the authoritative location for
 	// the track (issue #16). Set by connectors or config canonical_for.
-	Canonical bool           `json:"canonical,omitempty"`
-	Extra     map[string]any `json:"extra,omitempty"`
+	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy  *CopyInfo      `json:"copy,omitempty"`
+	Extra map[string]any `json:"extra,omitempty"`
 }
 
 // Artist is a unified artist/channel identity. Matching prefers EntityID
@@ -174,6 +180,9 @@ type ContactSource struct {
 	// Canonical is true when this service is the authoritative location for
 	// the contact (issue #16). Set by connectors or config canonical_for.
 	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy *CopyInfo `json:"copy,omitempty"`
 	// Extra holds additional service-specific fields.
 	Extra map[string]any `json:"extra,omitempty"`
 }
@@ -234,6 +243,9 @@ type PhotoSource struct {
 	// This is the non-Aegis-canonical slice of issue #16: photo binaries
 	// stay on the source service, not in Aegis's cache or disk.
 	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy *CopyInfo `json:"copy,omitempty"`
 	// BlobURL points at the retrievable image when bytes live outside Aegis.
 	// Some services (Google Photos baseUrl) issue short-lived URLs.
 	BlobURL string `json:"blob_url,omitempty"`
@@ -318,6 +330,9 @@ type CalendarEventSource struct {
 	// Canonical is true when this service is the authoritative location for
 	// the event (issue #16). Set by connectors or config canonical_for.
 	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy *CopyInfo `json:"copy,omitempty"`
 	// Extra holds additional service-specific fields.
 	Extra map[string]any `json:"extra,omitempty"`
 }
@@ -411,6 +426,9 @@ type MessageSource struct {
 	// Canonical is true when this service is the authoritative location for
 	// the message (issue #16). Set by connectors or config canonical_for.
 	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy *CopyInfo `json:"copy,omitempty"`
 	// Extra holds additional service-specific fields.
 	Extra map[string]any `json:"extra,omitempty"`
 }

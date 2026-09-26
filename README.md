@@ -68,6 +68,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
+- `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
 - `GET /v1/mail/messages/{service}/{id}/raw` — decompressed provider payload JSON
@@ -302,6 +303,61 @@ Immich is supported as a **local/foreign canonical photo source** (see
 professional-data connectors remain follow-up work on
 [issue #16](https://github.com/fudomunro/aegis/issues/16).
 
+### Copy ledger (issue #76)
+
+`sources[]` is **live inventory** (what each provider returns right now).
+The copy ledger is Aegis’s **durable memory** of where copies exist and which
+version of the data sits there — so the system can answer “is this backup
+current?” without re-scanning entire mailboxes.
+
+Stored in SQLite at `<data-dir>/copy_ledger.db` (`-copy-ledger` overrides;
+empty path disables). Rows are written when Aegis actually places or imports a
+copy:
+
+| Producer | What is recorded |
+|----------|------------------|
+| `POST /v1/library/mirror` | One row per mirrored playlist / liked-tracks list (target service + id, item count, name) |
+| Google Takeout import | One **optimistic snapshot** row per export path (watermark + stored counts) |
+
+**Sync fidelity is per kind** (issue #76):
+
+| Kind | Mode | Version token | Incremental rule |
+|------|------|---------------|------------------|
+| `photos` | `full` | `content_hash` / `modified_at` | Re-check metadata; change ⇒ stale |
+| `playlists`, `tracks` | `full` | `snapshot_id` / `item_count` | Snapshot mismatch ⇒ stale |
+| `messages` | `optimistic` | Takeout watermark / ingest cursor | Only material newer than the watermark; force-full is repair work ([#86](https://github.com/fudomunro/aegis/issues/86)) |
+| `contacts`, `events` | `full` | etag / `updated` | Cheap metadata check |
+
+**Read surface:**
+
+```
+GET /v1/library/copies?kind=&service=&status=&entity_key=
+```
+
+Returns `copies[]` (`role`, `sync_mode`, `status`, `version`, `watermark`,
+`last_synced_at`, `last_checked_at`, `provenance`) plus `by_status` /
+`sync_modes` / `by_service` counts.
+
+Library `sources[]` also carry a `copy` stamp **only when** a ledger row
+matches that `(service, id)`:
+
+```json
+"copy": {
+  "role": "mirror",
+  "sync_mode": "full",
+  "sync_status": "in_sync",
+  "as_of": "2026-09-25T12:00:00Z",
+  "provenance": "mirror"
+}
+```
+
+Missing ledger rows never hide or alter library items (fail-open). Status
+values: `unknown`, `in_sync`, `stale`, `missing`. Freshness **checks**
+(`last_checked_at` / `stale`) are observational — Aegis still does not
+auto-sync secondary copies. Repair / re-mirror is
+[#86](https://github.com/fudomunro/aegis/issues/86); library UI visualization
+is [#90](https://github.com/fudomunro/aegis/issues/90).
+
 ### Environment variables
 
 | Variable | Flag equivalent | Description |
@@ -333,6 +389,7 @@ on first run with mode `0700` (it holds secrets).
   permissions.json        # admin permissions overlay (non-secret)
   entity_links.json       # confirmed playlist/entity links
   tokens.json             # encrypted OAuth tokens (0600)
+  copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)
   mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
   logs/aegis.log          # process log (also mirrored to stderr)
   cache/                  # reserved for future cache spill
@@ -347,6 +404,7 @@ An explicit flag always wins:
 | `-permissions-file` | `permissions.json` | Admin overlay; `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage |
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
+| `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
@@ -373,6 +431,7 @@ directory or keep passing the explicit path flags.
 | `-permissions-file` | `<data-dir>/permissions.json` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `<data-dir>/tokens.json` | Encrypted token storage path |
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
+| `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables (issue #76) |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
@@ -599,7 +658,7 @@ Neutral playlist fields (user-facing):
 | `description` | Playlist description, if any |
 | `owner` | Owner display name, when known |
 | `track_count` | Item count (max across synced sources) |
-| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `url`, `canonical`, `extra` |
+| `sources[]` | Service-local copies: `service`, `service_name`, `id`, `url`, `canonical`, `copy` (issue #76), `extra` |
 | `extra` | Other service-specific fields |
 
 ### Cross-service sync (v1)
@@ -807,7 +866,7 @@ Neutral photo fields (user-facing):
 | `filename` | Original filename or service display name |
 | `caption` | Description, when present |
 | `people[]` | Known people as `Contact` values; merged with contacts-library identity matching |
-| `sources[]` | Service-local copies: `service`, `id`, `url`, `canonical`, `blob_url`, `thumbnail_url` |
+| `sources[]` | Service-local copies: `service`, `id`, `url`, `canonical`, `copy` (issue #76), `blob_url`, `thumbnail_url` |
 
 Cross-service merge uses a **content hash** when a provider supplies one
 (`extra.content_hash`), otherwise **taken_at + dimensions**. Filename alone is
@@ -1079,7 +1138,7 @@ Neutral message fields (user-facing):
 | `entity_id` | Durable id when present (RFC 5322 Message-ID) |
 | `match` | Cross-service identity: `message_id` or `subject_from_time` |
 | `labels[]` | Service-local labels (`INBOX`, `SENT`, `UNREAD`, …) |
-| `sources[]` | Service-local copies: `service`, `id`, `thread_id`, `url`, `mailbox`, `canonical` |
+| `sources[]` | Service-local copies: `service`, `id`, `thread_id`, `url`, `mailbox`, `canonical`, `copy` (issue #76) |
 
 Cross-service merge prefers **RFC Message-ID** when a provider supplies it
 (`match=message_id`); otherwise **subject + from + sent_at**

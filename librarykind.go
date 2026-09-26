@@ -339,6 +339,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/photos":    s.HandleLibraryPhotos,
 		"/v1/library/events":    s.HandleLibraryEvents,
 		"/v1/library/messages":  s.HandleLibraryMessages,
+		"/v1/library/copies":    s.HandleLibraryCopies,
 		"/v1/library/review":    s.HandleMergeReview,
 		"/v1/library/links":     s.HandleEntityLinks,
 		"/v1/library/links/":    s.HandleEntityLinks,
@@ -389,6 +390,9 @@ type libraryKindSpec[T any] struct {
 	// markCanonical stamps Source.Canonical on items from a config-declared
 	// canonical_for service (issue #16). Nil skips config stamping.
 	markCanonical func(items []T, serviceID string)
+	// stampCopies attaches copy-ledger freshness to sources[] (issue #76).
+	// Method values from s are bound; signature is items-only.
+	stampCopies func(items []T)
 	// enrich optionally resolves durable IDs before merge (issue #4).
 	enrich func(ctx context.Context, s *Server, items []T)
 }
@@ -525,6 +529,10 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	merged := spec.merge(all)
 	if merged == nil {
 		merged = []T{}
+	}
+
+	if spec.stampCopies != nil {
+		spec.stampCopies(merged)
 	}
 
 	result, err := json.Marshal(spec.encode(merged, bySvc))
