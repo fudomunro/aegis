@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -108,6 +109,11 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	}
 	var req MirrorRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		var maxErr *http.MaxBytesError
+		if errors.As(err, &maxErr) {
+			writeBodyReadError(w, err)
+			return
+		}
 		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}

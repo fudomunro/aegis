@@ -458,6 +458,30 @@ Aegis can authenticate callers two ways:
 
 Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key. Full policy guidance lives in [SECURITY.md](SECURITY.md).
 
+API key comparison is constant-time (`crypto/subtle`). HTML and JSON responses
+carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
+CSP, and `Referrer-Policy: no-referrer` (issue #98).
+
+### HTTP server operations (issues #96–#97)
+
+Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
+
+| Setting | Value | Why |
+|---------|-------|-----|
+| `ReadHeaderTimeout` | 10s | Stops Slowloris |
+| `ReadTimeout` | 5m | Bounds slow uploads |
+| `WriteTimeout` | unlimited | Library fan-out / proxy streams may outlive a fixed write deadline |
+| `IdleTimeout` | 2m | Reaps idle keep-alives |
+
+- **SIGINT / SIGTERM** drain in-flight requests (30s) and exit 0.
+- **SIGHUP** reloads `aegis.json` and the permissions overlay (`Config.Reload`).
+  Reloadable: services, connections, permissions bootstrap. **Not** reloadable:
+  `-addr`, `-data-dir`, `-token-pass`, `-api-key`, `-auth-mode` (restart required).
+- **Inbound body caps** (issue #97): hook 8 MiB, service proxy 16 MiB, admin/mail
+  4 MiB / 1 MiB. Oversized bodies return **413 Payload Too Large** and are not
+  buffered. The pre-request hook still fail-opens (`allow`) on parse/read errors
+  that are not size overflows.
+
 ## Connecting Services
 
 1. Register an OAuth app with each service (see below for per-service guides)
@@ -1297,8 +1321,13 @@ Forwards to the configured upstream endpoint with OAuth tokens. Callers authenti
 
 ### Admin dashboard
 
+All `/v1/admin` routes — including the HTML shell — require the same auth as
+other protected APIs (issue #98). The shell is markup-only (no secrets or live
+data), but is not advertised to unauthenticated peers. OAuth callback pages
+under `/v1/auth/` remain public so browsers can finish the redirect.
+
 ```
-GET /v1/admin              — HTML dashboard (shell only; no secrets)
+GET /v1/admin              — HTML dashboard (shell only; no secrets; auth required)
 GET /v1/admin/summary      — redacted services, token status, cache stats
 GET /v1/admin/flow         — data-flow topology (nodes, edges, libraries)
 GET /v1/admin/hook-health  — Aperture hook health + expected config snippet

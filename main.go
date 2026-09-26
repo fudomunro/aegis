@@ -232,17 +232,21 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
-	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(srv.HandlePreRequest))
+	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
-	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(srv.HandleLibraryMirror))
-	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(srv.handleMailRoutes))
-	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(srv.HandleServiceProxy))
+	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
+	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(withBodyLimit(maxMailBodyBytes, srv.handleMailRoutes)))
+	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
-	mux.HandleFunc("/v1/admin", srv.HandleAdmin)
-	mux.HandleFunc("/v1/admin/", srv.handleAdminRoutes)
+	// Admin shell and JSON both require auth (issue #98): the SPA is markup
+	// only, but unauthenticated peers should not learn the API surface.
+	mux.HandleFunc("/v1/admin", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
+	mux.HandleFunc("/v1/admin/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
+
+	handler := securityHeadersMiddleware(mux)
 
 	slog.Info("starting server",
 		"addr", *addr,
@@ -252,7 +256,7 @@ func main() {
 		"allowed_logins", len(srv.allowedLogins),
 		"data_dir", paths.Dir,
 	)
-	if err := http.ListenAndServe(*addr, mux); err != nil {
+	if err := runHTTPServer(*addr, handler, cfg); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
@@ -281,8 +285,9 @@ func buildIdentityResolver(authMode, tsSocket string) IdentityResolver {
 	return MultiResolver{Resolvers: resolvers}
 }
 
-// handleAdminRoutes dispatches /v1/admin. The HTML shell is public (no
-// secrets in markup); JSON data endpoints require normal Aegis auth.
+// handleAdminRoutes dispatches /v1/admin. Registered under AuthMiddleware
+// (issue #98): the HTML shell is markup-only with no secrets, but unauthenticated
+// peers must not learn the API surface. JSON data endpoints keep normal Aegis auth.
 func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/")
 	path = strings.Trim(path, "/")
