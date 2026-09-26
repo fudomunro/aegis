@@ -508,6 +508,97 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 	}
 }
 
+// Issue #94: non-canonical request paths must not change the resolved data
+// type or the effective permission.
+func TestHandleServiceProxy_NonCanonicalPathCannotBypassPermissions(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID: "spotify", Name: "Spotify", Action: "inject",
+				Permissions: Permissions{"default": AccessRead, "player": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	handler := srv.AuthMiddleware(srv.HandleServiceProxy)
+
+	// %2f decodes to "/" inside URL.Path, producing "//me/player".
+	bypasses := []string{
+		"/v1/services/spotify/%2fme%2fplayer",
+		"/v1/services/spotify/%2fme%2fplayer%2f",
+		"/v1/services/spotify//me/player",
+		"/v1/services/spotify///me//player",
+	}
+	for _, target := range bypasses {
+		req := httptest.NewRequest("GET", target, nil)
+		req.Header.Set("Authorization", "Bearer test-key")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Fatalf("%s: status = %d, want 403 (player:none), body = %s", target, w.Code, w.Body.String())
+		}
+		if !strings.Contains(w.Body.String(), "permission denied") {
+			t.Fatalf("%s: body = %s", target, w.Body.String())
+		}
+	}
+
+	// Dot segments are rejected outright — they must not reach classification.
+	rejected := []string{
+		"/v1/services/spotify/me/./player",
+		"/v1/services/spotify/me/../player",
+		"/v1/services/spotify/./me/player",
+		"/v1/services/spotify/../me/player",
+		"/v1/services/spotify/me/player/..",
+	}
+	for _, target := range rejected {
+		req := httptest.NewRequest("GET", target, nil)
+		req.Header.Set("Authorization", "Bearer test-key")
+		w := httptest.NewRecorder()
+		handler(w, req)
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("%s: status = %d, want 400, body = %s", target, w.Code, w.Body.String())
+		}
+	}
+
+	// Canonical player path is still denied by the same policy.
+	req := httptest.NewRequest("GET", "/v1/services/spotify/me/player", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	handler(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("canonical player: status = %d, want 403, body = %s", w.Code, w.Body.String())
+	}
+}
+
+// Issue #94: unknown paths must not inherit a more permissive default when
+// the service has restrictive type-level permissions.
+func TestHandleServiceProxy_UnknownPathUsesStrictestPermission(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{
+			{
+				ID: "spotify", Name: "Spotify", Action: "inject",
+				Permissions: Permissions{"default": AccessRead, "player": AccessNone},
+			},
+		},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	handler := srv.AuthMiddleware(srv.HandleServiceProxy)
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/unknown/endpoint", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "permission denied") {
+		t.Fatalf("body = %s", w.Body.String())
+	}
+}
+
 func TestHandleServiceProxy_Capabilities_FilteredByPermission(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
