@@ -1002,9 +1002,12 @@ Ownership / provenance proofs for photos are intentionally deferred:
 
 #### Immich (local / foreign canonical)
 
-Immich is a self-hosted photo library. Aegis treats it as a **foreign/local
+Immich is a self-hosted photo library (open-source “Google Photos on your own
+hardware”; docs at `https://immich.app`). Aegis treats it as a **foreign/local
 canonical** source: metadata is listed through Aegis; **bytes stay on
-Immich**. Auth is an API key in service headers — no OAuth app.
+Immich**. Auth is an API key in service headers — no OAuth app. Use Immich when
+you want the photo archive on hardware you control; skip it if Google Photos is
+enough.
 
 ```json
 {

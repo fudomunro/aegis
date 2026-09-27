@@ -320,10 +320,56 @@
       <div class="help-box" id="immich-setup-panel">
         <h3>Immich — local canonical photos</h3>
         <p>
-          Connect a self-hosted <strong>Immich</strong> library as the home copy for photos.
-          Aegis lists metadata and proxies downloads; <strong>bytes stay on Immich</strong>.
-          You can finish setup here — no need to edit <code>aegis.json</code> or run curl.
-          Full checklist: <code>docs/immich-live-testing.md</code>.
+          <strong>Immich</strong> is a self-hosted photo and video library — an open-source
+          alternative to Google Photos that keeps originals on hardware you control
+          (home server, NAS, or a VM). It has mobile and web apps for backup and browsing,
+          plus a REST API on the usual <code>:2283</code> port.
+        </p>
+        <p>
+          <strong>Why connect it to Aegis?</strong> Agents can then answer “my photos…” from
+          the unified library without ever seeing Immich credentials. Aegis holds only
+          metadata and a proxy URL; <strong>image bytes stay on Immich</strong> (the
+          <em>local canonical</em> home for photos). You can use Immich alone, or next to
+          Google Photos — Aegis merges the same picture only when identity is real
+          (content hash or capture time + size), never by filename.
+        </p>
+        <details id="immich-newcomer" style="margin:0.55rem 0 0.35rem">
+          <summary style="cursor:pointer; font-weight:600">New to Immich? Start here</summary>
+          <ol style="margin:0.55rem 0 0.35rem 1.25rem; line-height:1.65; font-size:0.9rem">
+            <li>
+              <strong>Install Immich</strong> on a machine you keep running (Docker Compose is
+              the usual path). See the official guide:
+              <code>https://immich.app/docs/install/overview</code>. Default web/API URL is
+              <code>http://&lt;host&gt;:2283</code>.
+            </li>
+            <li>
+              <strong>Create an account</strong> in the Immich web UI and upload (or back up)
+              a few photos so there is something to list.
+            </li>
+            <li>
+              <strong>Create an API key:</strong> Immich → Account → API Keys → New key.
+              Read-only is enough for listing and downloads. Copy it once — Immich will not
+              show it again.
+            </li>
+            <li>
+              <strong>Confirm reachability</strong> from this Aegis host (same machine, LAN, or
+              tailnet name). The endpoint you paste below must end in <code>/api</code>, for
+              example <code>http://photos.home.ts.net:2283/api</code>.
+            </li>
+            <li>
+              <strong>Come back here:</strong> paste the endpoint + API key, test, save, run
+              checks. Optional: install Immich apps on phones for ongoing backup — Aegis does
+              not replace those apps.
+            </li>
+          </ol>
+          <p class="meta" style="margin:0.45rem 0 0">
+            Prefer a cloud photo service? Leave this panel alone and use Google Photos instead.
+            Immich is for people who want the library on their own hardware.
+          </p>
+        </details>
+        <p class="meta">
+          You can finish Aegis setup below — no need to edit <code>aegis.json</code> or run curl.
+          Full acceptance checklist: <code>docs/immich-live-testing.md</code>.
         </p>
 
         <div class="toolbar" style="margin:0.65rem 0 0.5rem">

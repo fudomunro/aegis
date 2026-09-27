@@ -6,11 +6,74 @@ record anything the connector still gets wrong.
 
 Use it when you are:
 
+- setting up Immich for the first time and connecting it to Aegis,
 - validating a fresh Aegis + Immich setup on your tailnet,
 - re-testing after an Immich upgrade or an Aegis connector change,
 - or writing up results to close #39.
 
-Product contract this path must keep (do not “fix” these away):
+---
+
+## What is Immich, and why use it?
+
+**Immich** is a self-hosted photo and video library. Think “Google Photos, but the
+originals live on hardware you control.” It is open source, actively developed, and
+typically runs via Docker Compose on a home server, NAS, or small VM. Phones and
+browsers back up to it; you browse and search in its web/mobile apps; a REST API
+(default port **2283**) serves metadata and files.
+
+People choose Immich when they want to:
+
+| Goal | What Immich gives you |
+|------|------------------------|
+| **Own the archive** | Full-resolution originals on your disk, not a cloud quota |
+| **Privacy / residency** | Photos need not leave your home network or country |
+| **Long-term control** | Exportable storage; you are not subject to a provider sunsetting a product |
+| **Offline / tailnet access** | Works on the LAN or over Tailscale without a public endpoint |
+| **Phone backup without a cloud plan** | Official mobile apps upload to your server |
+
+**Why wire Immich into Aegis?** Aegis is the agent-facing layer. Once Immich is the
+*local canonical* photo home:
+
+- Agents can use the unified library (`GET /v1/library/photos`) and ask about “my photos”
+  without an Immich login or API key.
+- Aegis stores **metadata only** — the image and video bytes stay on Immich and are
+  fetched through a short proxy path when needed.
+- Immich can sit beside Google Photos. The same picture merges only on real identity
+  (content hash, or capture time + dimensions) — never because filenames match.
+- Credentials stay in Aegis (admin setup / `service_connections.json`), not in the
+  model’s context.
+
+If you already keep everything in Google Photos and do not want self-hosting, you can
+skip Immich entirely and keep Google as `canonical_for: ["photos"]`.
+
+---
+
+## Get an Immich instance (if you do not have one)
+
+You need *some* Immich before Aegis can point at it. The official docs are the source
+of truth: **https://immich.app/docs/install/overview** (Docker Compose is the common path).
+
+Minimum useful setup:
+
+1. **Install** Immich on a machine that will stay on when you want photos (home server,
+   NAS, VM). Note the host and port — web UI and API share **2283** by default.
+2. **Open the web UI** (`http://<host>:2283`), create the first admin account.
+3. **Get some media in**: phone app backup, web upload, or a mounted library. A few
+   dozen photos are enough for a smoke test.
+4. **Create an API key** for Aegis:
+   Immich web UI → **Account** → **API Keys** → create.
+   **Read-only is enough** for listing and downloads. Copy the key immediately —
+   Immich shows it only once.
+5. **Confirm the API base** from the Aegis host:
+   `http://<host>:2283/api` (must end in `/api`). On a tailnet, use the tailnet name
+   (e.g. `http://photos.home.ts.net:2283/api`) so you do not expose Immich publicly.
+
+Optional but useful: install the Immich mobile apps for ongoing camera-roll backup.
+Aegis does **not** replace those apps and never ingests photo bytes into its own storage.
+
+---
+
+## Product contract this path must keep (do not “fix” these away)
 
 | Rule | What it means in testing |
 |------|--------------------------|
@@ -61,6 +124,7 @@ debugging outside the UI.
 
 ## 0. Prerequisites
 
+- Immich installed and reachable (see **Get an Immich instance** above).
 - Aegis built and able to start (`go build -o aegis .`).
 - Immich reachable from the Aegis host (same machine, LAN, or tailnet hostname).
   Default Immich API base is `http://<host>:2283/api`.
