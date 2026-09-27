@@ -400,6 +400,7 @@ on first run with mode `0700` (it holds secrets).
 <data-dir>/
   aegis.json              # bootstrap config (OAuth clients live here)
   permissions.json        # admin permissions overlay (non-secret)
+  service_connections.json # admin Immich/static-auth overlay (0600; may hold API keys)
   entity_links.json       # confirmed playlist/entity links
   tokens.json             # encrypted OAuth tokens (0600)
   copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)
@@ -415,6 +416,7 @@ An explicit flag always wins:
 |------|---------------------------|-------|
 | `-config` | `aegis.json` | Bootstrap config (services, connections, secrets) |
 | `-permissions-file` | `permissions.json` | Admin overlay; `aegis.json` is never rewritten |
+| (none) | `service_connections.json` | Admin Immich/static-auth overlay (sibling of `-config`); `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage |
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
@@ -1038,6 +1040,17 @@ This is the reference pattern for other local/foreign stores: configure
 `endpoint` + static `headers`, implement a library provider, mark
 `canonical_for`, and never cache content bytes in Aegis.
 
+**Admin UI setup (preferred for operators):** **Admin → Services → Immich —
+local canonical photos**. Enter the Immich endpoint + API key, optionally
+claim `canonical_for: ["photos"]`, then **Save to Aegis** / **Run checks**.
+Saves write `service_connections.json` under the data directory (never
+rewrites `aegis.json`); the API key is presence-only in admin APIs. Backing
+endpoints: `GET /v1/admin/immich/setup`, `POST /v1/admin/immich/test`,
+`POST /v1/admin/immich/config`, `POST /v1/admin/immich/check`.
+
+Live acceptance checklist (issue #39) is documented in
+[docs/immich-live-testing.md](docs/immich-live-testing.md).
+
 ### Calendar events as a data type
 
 `CalendarEvent` is Aegis's neutral representation of a calendar entry
@@ -1356,6 +1369,10 @@ POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
 GET /v1/admin/services/{id}/permissions  — current agent permission map + available/writable types
 PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not aegis.json)
+GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
+POST /v1/admin/immich/test   — probe Immich endpoint/API key (key not stored from this call)
+POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json)
+POST /v1/admin/immich/check  — re-run the live acceptance checklist
 ```
 
 Public brand assets (no auth; issue #87) are served from the process root:
@@ -1515,6 +1532,8 @@ aegis/
   config.go         Service/Config types, JSON loading, matching
   atomicfile.go     Atomic temp+rename writes for the permissions overlay
   permissions_overlay.go  Admin permissions.json overlay (issue #71)
+  service_connections.go  Admin service_connections.json overlay (Immich setup)
+  immich_setup.go     Admin Immich setup API + checks (issue #39)
   handler.go        Pre-request hook: parse payload, block/modify
   identity.go       Tailscale Serve headers + WhoIs identity resolvers
   models.go         Neutral data types (Playlist, Track, Contact, Photo, CalendarEvent, and their list wrappers)
@@ -1547,9 +1566,13 @@ aegis/
   google-photos.go  Google Photos Picker connector (user-selected photos; bytes stay upstream)
   google-contacts.go Google Contacts / People API connector (ContactProvider)
   google-calendar.go Google Calendar connector (CalendarEventProvider)
+  immich.go         Immich connector (local/foreign canonical photos)
+  immich_setup.go   Admin Immich setup API (issue #39)
+  service_connections.go  Admin-saved static-auth service overlay
   aegis.example.json   Example configuration
   docs/index.html   Code walkthrough (Go vs Python)
   docs/adding-data-types.md  Guide: defining a new library data type (issue #92)
+  docs/immich-live-testing.md  Live Immich acceptance guide (issue #39)
 ```
 
 ## License
