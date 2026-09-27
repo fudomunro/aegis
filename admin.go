@@ -33,6 +33,8 @@ type AdminService struct {
 	// saved write levels are clamped so permissions cannot exceed the connector.
 	WritableDataTypes []string `json:"writable_data_types,omitempty"`
 	HasOAuth          bool     `json:"has_oauth"`
+	// HasAPIKey is true when static API-key headers are present (presence only).
+	HasAPIKey bool `json:"has_api_key,omitempty"`
 	// ConnectionID is the shared provider connection this surface uses (issue #26).
 	ConnectionID  string       `json:"connection_id,omitempty"`
 	HasClientID   bool         `json:"has_client_id"`
@@ -155,6 +157,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Permissions:  svc.Permissions.Clone(),
 			CanonicalFor: svc.CanonicalFor,
 			HasOAuth:     svc.Connection != "",
+			HasAPIKey:    svc.HasStaticAPIKey(),
 			ConnectionID: s.config.connectionIDForService(svc.ID),
 			ProxyPath:    "/v1/services/" + svc.ID,
 			HasPlaylist:  false,

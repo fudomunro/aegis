@@ -45,9 +45,10 @@ them away.
   the floor when the suite grows; do **not** lower it to land untested write
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
-  `entity_links.json`, `permissions.json`, `.aegis-token-pass`, or live
-  binaries. Example config only via `aegis.example.json`. Prefer the OS
-  data directory (issue #74) over the git worktree for runtime state.
+  `entity_links.json`, `permissions.json`, `service_connections.json`,
+  `.aegis-token-pass`, or live binaries. Example config only via
+  `aegis.example.json`. Prefer the OS data directory (issue #74) over the git
+  worktree for runtime state.
 - **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
   service. See `SECURITY.md`.
 
