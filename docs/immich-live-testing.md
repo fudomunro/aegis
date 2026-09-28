@@ -117,6 +117,17 @@ Two paths matter:
 **Admin → Services → Immich — local canonical photos** runs this checklist for
 you: enter the endpoint + API key, **Test connection**, **Save to Aegis**
 (writes `service_connections.json`, not `aegis.json`), then **Run checks**.
+
+First-timers get extra hand-holding (issue #121):
+
+- A **next-step** card that names the single thing to do now (install → API key →
+  save → verify)
+- A four-step **guided ladder** that lights up as you progress
+- **Endpoint repair** for common mistakes (missing `http://`, bare `host:port`,
+  web UI URL without `/api`)
+- Actionable probe codes (`unreachable`, `unauthorized`, `wrong_path`, …) with
+  hints (Docker up, Account → API Keys, add `/api`, …)
+
 Use the curl walkthrough below when you need raw evidence for #39 or when
 debugging outside the UI.
 
