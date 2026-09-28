@@ -317,6 +317,109 @@
         <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
       </div>
 
+      <div class="help-box" id="immich-setup-panel">
+        <h3>Immich — local canonical photos</h3>
+        <p>
+          <strong>Immich</strong> is a self-hosted photo and video library — an open-source
+          alternative to Google Photos that keeps originals on hardware you control
+          (home server, NAS, or a VM). It has mobile and web apps for backup and browsing,
+          plus a REST API on the usual <code>:2283</code> port.
+        </p>
+        <p>
+          <strong>Why connect it to Aegis?</strong> Agents can then answer “my photos…” from
+          the unified library without ever seeing Immich credentials. Aegis holds only
+          metadata and a proxy URL; <strong>image bytes stay on Immich</strong> (the
+          <em>local canonical</em> home for photos). You can use Immich alone, or next to
+          Google Photos — Aegis merges the same picture only when identity is real
+          (content hash or capture time + size), never by filename.
+        </p>
+        <details id="immich-newcomer" style="margin:0.55rem 0 0.35rem">
+          <summary style="cursor:pointer; font-weight:600">New to Immich? Start here</summary>
+          <ol style="margin:0.55rem 0 0.35rem 1.25rem; line-height:1.65; font-size:0.9rem">
+            <li>
+              <strong>Install Immich</strong> on a machine you keep running (Docker Compose is
+              the usual path). See the official guide:
+              <code>https://immich.app/docs/install/overview</code>. Default web/API URL is
+              <code>http://&lt;host&gt;:2283</code>.
+            </li>
+            <li>
+              <strong>Create an account</strong> in the Immich web UI and upload (or back up)
+              a few photos so there is something to list.
+            </li>
+            <li>
+              <strong>Create an API key:</strong> Immich → Account → API Keys → New key.
+              Read-only is enough for listing and downloads. Copy it once — Immich will not
+              show it again.
+            </li>
+            <li>
+              <strong>Confirm reachability</strong> from this Aegis host (same machine, LAN, or
+              tailnet name). The endpoint you paste below must end in <code>/api</code>, for
+              example <code>http://photos.home.ts.net:2283/api</code>.
+            </li>
+            <li>
+              <strong>Come back here:</strong> paste the endpoint + API key, test, save, run
+              checks. Optional: install Immich apps on phones for ongoing backup — Aegis does
+              not replace those apps.
+            </li>
+          </ol>
+          <p class="meta" style="margin:0.45rem 0 0">
+            Prefer a cloud photo service? Leave this panel alone and use Google Photos instead.
+            Immich is for people who want the library on their own hardware.
+          </p>
+        </details>
+        <p class="meta">
+          You can finish Aegis setup below — no need to edit <code>aegis.json</code> or run curl.
+          Full acceptance checklist: <code>docs/immich-live-testing.md</code>.
+        </p>
+
+        <div class="toolbar" style="margin:0.65rem 0 0.5rem">
+          <span class="meta" id="immich-status-meta">Loading Immich setup…</span>
+          <div class="grow"></div>
+          <button class="btn" id="immich-test" type="button">Test connection</button>
+          <button class="btn" id="immich-save" type="button">Save to Aegis</button>
+          <button class="btn" id="immich-check" type="button">Run checks</button>
+        </div>
+
+        <div class="card" style="padding:0.85rem 1rem; margin-bottom:0.65rem">
+          <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
+            <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
+              Immich endpoint
+              <input id="immich-endpoint" type="url" placeholder="http://photos.home.ts.net:2283/api" spellcheck="false" autocomplete="off">
+            </label>
+            <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
+              Immich API key
+              <input id="immich-api-key" type="password" placeholder="Account → API Keys" autocomplete="off" spellcheck="false">
+            </label>
+            <label style="display:flex; align-items:flex-end; gap:0.4rem; font-size:0.85rem; padding-bottom:0.35rem">
+              <input id="immich-claim-canonical" type="checkbox" checked>
+              Claim canonical for photos
+            </label>
+          </div>
+          <p class="meta" style="margin:0.55rem 0 0">
+            Saved into <code>service_connections.json</code> under the data directory (not
+            <code>aegis.json</code>). The API key is stored there and never shown again after save.
+            Only one service may own <code>canonical_for: photos</code> — claiming it here moves the
+            claim off Google Photos if needed.
+          </p>
+        </div>
+
+        <div id="immich-checks" class="card" style="padding:0.65rem 0.85rem; margin-bottom:0.55rem">
+          <div class="empty">Run checks after saving to verify the issue #39 checklist.</div>
+        </div>
+
+        <details id="immich-snippet-wrap">
+          <summary class="meta" style="cursor:pointer">Prefer aegis.json? Show bootstrap snippet</summary>
+          <div class="card" style="padding:0.85rem 1rem; margin-top:0.45rem">
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">services[] entry</span>
+              <div class="grow"></div>
+              <button class="btn" id="copy-immich-snippet" type="button">Copy JSON</button>
+            </div>
+            <pre id="immich-snippet" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"></pre>
+          </div>
+        </details>
+      </div>
+
       <div class="toolbar">
         <div class="grow">
           <input type="search" id="service-filter" placeholder="Filter services…" aria-label="Filter services">
@@ -2743,7 +2846,7 @@
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -3121,7 +3224,144 @@ function selectTab(name) {
     savePermissions(serviceId, map);
   });
 
+  // --- Immich setup (issue #39) ---
+  function renderImmichChecks(checks) {
+    const box = $("immich-checks");
+    if (!checks || !checks.length) {
+      box.innerHTML = '<div class="empty">Run checks after saving to verify the issue #39 checklist.</div>';
+      return;
+    }
+    box.innerHTML = checks.map((c) => {
+      const icon = c.ok ? "✓" : "✗";
+      const color = c.ok ? "var(--accent)" : "#f85149";
+      return (
+        '<div style="display:flex; gap:0.55rem; align-items:flex-start; padding:0.28rem 0; font-size:0.88rem">' +
+        '<span style="color:' + color + '; font-weight:700; min-width:1rem">' + icon + "</span>" +
+        "<span><strong>" + escapeHtml(c.label) + "</strong>" +
+        (c.detail ? ' <span class="meta">— ' + escapeHtml(c.detail) + "</span>" : "") +
+        "</span></div>"
+      );
+    }).join("");
+  }
+
+  function renderImmichStatus(status) {
+    if (!status) return;
+    const meta = $("immich-status-meta");
+    const parts = [];
+    parts.push(status.configured ? "configured" : "not configured");
+    parts.push(status.has_api_key ? "API key set" : "no API key");
+    if (status.canonical_for && status.canonical_for.length) {
+      parts.push("canonical: " + status.canonical_for.join(", "));
+    } else if (status.canonical_conflict) {
+      parts.push("photos home: " + status.canonical_conflict);
+    }
+    if (status.library_status) {
+      parts.push("library: " + status.library_status +
+        (status.library_count != null ? " (" + status.library_count + ")" : ""));
+    }
+    meta.textContent = parts.join(" · ");
+    if (status.endpoint && !$("immich-endpoint").value) {
+      $("immich-endpoint").value = status.endpoint;
+    }
+    if (status.snippet) {
+      $("immich-snippet").textContent = status.snippet;
+    }
+    if (status.checks) renderImmichChecks(status.checks);
+    // Do not put stored API keys into the form.
+    if (status.has_api_key && $("immich-api-key").placeholder.indexOf("saved") < 0) {
+      $("immich-api-key").placeholder = "API key saved (leave blank to keep)";
+    }
+  }
+
+  async function loadImmichSetup() {
+    try {
+      const status = await api("/v1/admin/immich/setup");
+      renderImmichStatus(status);
+    } catch (e) {
+      $("immich-status-meta").textContent = "Immich setup unavailable";
+      $("immich-checks").innerHTML =
+        '<div class="empty">' + escapeHtml(e.message || String(e)) + "</div>";
+    }
+  }
+
+  $("immich-test").addEventListener("click", async () => {
+    const btn = $("immich-test");
+    btn.disabled = true;
+    btn.textContent = "Testing…";
+    try {
+      const body = {
+        endpoint: $("immich-endpoint").value.trim(),
+        api_key: $("immich-api-key").value.trim(),
+      };
+      const res = await api("/v1/admin/immich/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      $("immich-status-meta").textContent = res.message || (res.ok ? "Immich OK" : "Immich test failed");
+    } catch (e) {
+      $("immich-status-meta").textContent = "Test failed: " + (e.message || String(e));
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Test connection";
+    }
+  });
+
+  $("immich-save").addEventListener("click", async () => {
+    const btn = $("immich-save");
+    btn.disabled = true;
+    btn.textContent = "Saving…";
+    try {
+      const key = $("immich-api-key").value.trim();
+      const body = {
+        endpoint: $("immich-endpoint").value.trim(),
+        claim_canonical_for_photos: $("immich-claim-canonical").checked,
+      };
+      if (key) body.api_key = key;
+      const status = await api("/v1/admin/immich/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      $("immich-api-key").value = "";
+      renderImmichStatus(status);
+      loadSummary();
+    } catch (e) {
+      showGlobalError(e.message || "Failed to save Immich connection");
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Save to Aegis";
+    }
+  });
+
+  $("immich-check").addEventListener("click", async () => {
+    const btn = $("immich-check");
+    btn.disabled = true;
+    btn.textContent = "Checking…";
+    try {
+      const status = await api("/v1/admin/immich/check", { method: "POST" });
+      renderImmichStatus(status);
+    } catch (e) {
+      $("immich-checks").innerHTML =
+        '<div class="empty">' + escapeHtml(e.message || String(e)) + "</div>";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "Run checks";
+    }
+  });
+
+  $("copy-immich-snippet").addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText($("immich-snippet").textContent);
+      $("copy-immich-snippet").textContent = "Copied";
+      setTimeout(() => { $("copy-immich-snippet").textContent = "Copy JSON"; }, 1200);
+    } catch (_) {
+      $("copy-immich-snippet").textContent = "Copy failed";
+    }
+  });
+
   loadSummary();
+  loadImmichSetup();
 })();
 </script>
 </body>

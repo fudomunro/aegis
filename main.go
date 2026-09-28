@@ -315,6 +315,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
 		s.AuthMiddleware(s.HandleAdminServicePermissions)(w, r)
+	case path == "immich" || strings.HasPrefix(path, "immich/"):
+		s.AuthMiddleware(s.HandleAdminImmichSetup)(w, r)
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}

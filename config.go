@@ -22,6 +22,12 @@ type Config struct {
 	// permsOverlay is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared).
 	permsOverlay map[string]*Permissions
+	// svcConnPath is the admin service-connections overlay
+	// (service_connections.json). Immich/local-store setup writes here so
+	// aegis.json is never rewritten from the admin UI.
+	svcConnPath string
+	// svcConnOverlay is the loaded overlay map (service id → connection).
+	svcConnOverlay map[string]serviceConnectionEntry
 }
 
 // defaultPermissionsPath returns the overlay path beside a aegis.json path.
@@ -116,7 +122,11 @@ func LoadConfig(path string) (*Config, error) {
 	}
 	cfg.path = path
 	cfg.permsPath = defaultPermissionsPath(path)
+	cfg.svcConnPath = defaultServiceConnectionsPath(path)
 	if err := cfg.applyPermissionsOverlayLocked(); err != nil {
+		return nil, err
+	}
+	if err := cfg.applyServiceConnectionsOverlayLocked(); err != nil {
 		return nil, err
 	}
 	return &cfg, nil
@@ -140,6 +150,9 @@ func (c *Config) Reload() error {
 	c.Connections = fresh.Connections
 	c.Services = fresh.Services
 	if err := c.applyPermissionsOverlayLocked(); err != nil {
+		return err
+	}
+	if err := c.applyServiceConnectionsOverlayLocked(); err != nil {
 		return err
 	}
 	slog.Info("config reloaded", "path", c.path, "services", len(fresh.Services), "connections", len(fresh.Connections))
