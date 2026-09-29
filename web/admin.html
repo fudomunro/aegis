@@ -381,9 +381,10 @@
             </div>
             <pre id="immich-install-commands" class="mono" style="overflow-x:auto; margin:0 0 0.75rem; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45">mkdir -p immich-app &amp;&amp; cd immich-app
 curl -fsSL -o docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
-# save the .env below into this folder as  ./.env   (exact name matters)
+# save the .env below into this folder as  ./.env   BEFORE the first up
 docker compose up -d
-# then open http://&lt;this-host&gt;:2283 and register the first account</pre>
+docker compose ps   # wait until immich_server is healthy (30–90s)
+# then open http://localhost:2283 and register the first account</pre>
             <div class="toolbar" style="margin-bottom:0.45rem">
               <span class="meta">.env — save as <code>immich-app/.env</code></span>
               <div class="grow"></div>
@@ -414,6 +415,53 @@ DB_DATABASE_NAME=immich</pre>
               Later you can move <code>UPLOAD_LOCATION</code> to a big disk, set
               <code>TZ</code>, or change <code>DB_PASSWORD</code> — none of that is required
               to try Immich. Full notes: <code>docs/immich-starter.env</code>.
+            </p>
+            <p class="meta" style="margin:0.55rem 0 0">
+              <strong>Write <code>.env</code> before the first</strong> <code>docker compose up</code>.
+              Postgres only creates <code>DB_DATABASE_NAME</code> on first init — a later
+              rename from <code>example.env</code> is not enough.
+            </p>
+          </div>
+
+          <div class="card" style="padding:0.85rem 1rem; margin:0.65rem 0">
+            <h4 style="margin:0 0 0.45rem; font-size:0.95rem">
+              <code>http://localhost:2283</code> → <code>ERR_CONNECTION_REFUSED</code>
+              after <code>up -d</code>?
+            </h4>
+            <p class="meta" style="margin:0 0 0.5rem">
+              <code>up -d</code> returns before Immich is ready. Check
+              <code>docker compose ps</code> — you want <code>immich_server</code>
+              <em>healthy</em> and ports <code>0.0.0.0:2283-&gt;2283/tcp</code>. First boot
+              often takes 30–90 seconds.
+            </p>
+            <ul style="margin:0 0 0.45rem 1.15rem; font-size:0.88rem; line-height:1.55">
+              <li>
+                <strong>Restarting + log</strong>
+                <code>database "immich" does not exist</code> — Postgres initialized without
+                <code>DB_DATABASE_NAME</code>. On a throwaway install:
+                <code>docker exec immich_postgres psql -U postgres -c 'CREATE DATABASE immich;'</code>
+                then <code>docker compose restart immich-server</code>. Or clean slate:
+                <code>docker compose down &amp;&amp; rm -rf postgres &amp;&amp; docker compose up -d</code>
+                (photos live in <code>UPLOAD_LOCATION</code>, not <code>postgres/</code>).
+              </li>
+              <li>
+                <strong>No 2283 port mapping</strong> — wrong compose file or port clash;
+                use the official <code>docker-compose.yml</code>.
+              </li>
+              <li>
+                <strong>Healthy but only from the same machine</strong> —
+                <code>localhost</code> is wrong on another host; use the LAN IP or tailnet name.
+              </li>
+              <li>
+                <strong>variable is not set / empty section between colons</strong> —
+                <code>.env</code> missing or still named <code>example.env</code>; use the
+                starter file above.
+              </li>
+            </ul>
+            <p class="meta" style="margin:0">
+              Commands: <code>docker compose ps</code>,
+              <code>docker compose logs --tail=50 immich-server</code>,
+              <code>docker compose logs --tail=20 database</code>.
             </p>
           </div>
 

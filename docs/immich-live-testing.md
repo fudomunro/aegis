@@ -64,7 +64,9 @@ WARN[0000] The "UPLOAD_LOCATION" variable is not set. Defaulting to a blank stri
 invalid spec: :/var/lib/postgresql/data: empty section between colons
 ```
 
-Use this install instead — **no value editing** for a first single-machine test:
+Use this install instead — **no value editing** for a first single-machine test.
+**Write `.env` before the first `docker compose up`** so Postgres initializes
+with `DB_DATABASE_NAME=immich`:
 
 ```bash
 mkdir -p immich-app && cd immich-app
@@ -72,6 +74,9 @@ curl -fsSL -o docker-compose.yml \
   https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
 # Save docs/immich-starter.env (or the copy in Admin → Services) as  ./.env
 docker compose up -d
+# wait until immich_server is healthy (first boot can take a minute)
+docker compose ps
+# then open http://localhost:2283 and register the first account
 ```
 
 Starter `.env` (also in [`immich-starter.env`](immich-starter.env)):
@@ -104,12 +109,32 @@ DB_DATABASE_NAME=immich
 | `TZ` | Timestamps / job schedule | Leave commented if the host is already UTC |
 | `IMMICH_VERSION` | Which Immich release to run | Leave `v3` until you deliberately upgrade |
 | `DB_PASSWORD` | Immich ↔ its own Postgres | Default works for a private install; letters+digits only if you change it |
-| `DB_USERNAME` / `DB_DATABASE_NAME` | Created on first start | Leave defaults |
+| `DB_USERNAME` / `DB_DATABASE_NAME` | Created on first start | Leave defaults — set **before** the first `up` |
 
-Then:
+### If `http://localhost:2283` is refused after `up -d`
 
-1. **Open the web UI** (`http://<host>:2283`), create the first admin account
-   (first registration is admin).
+`docker compose up -d` returns as soon as containers are *created*. First boot
+pulls images and starts Postgres; the web UI is not ready immediately.
+`ERR_CONNECTION_REFUSED` usually means **`immich_server` is not listening yet
+(or is crash-looping)**.
+
+```bash
+docker compose ps          # want immich_server → healthy, ports 0.0.0.0:2283->2283
+docker compose logs --tail=50 immich-server
+docker compose logs --tail=20 database
+```
+
+| What you see | Cause | Fix |
+|--------------|-------|-----|
+| `immich_server` *Restarting* / *Created* | Still starting, or failing | Wait for healthy; read server logs |
+| Server log: `database "immich" does not exist` | Postgres data dir was initialized **without** `DB_DATABASE_NAME` (first `up` without `.env`) | Throwaway install: `docker exec immich_postgres psql -U postgres -c 'CREATE DATABASE immich;'` then `docker compose restart immich-server`. Clean slate: `docker compose down && rm -rf postgres && docker compose up -d` (library photos are in `UPLOAD_LOCATION`, not `postgres/`) |
+| No `2283->2283` in `docker compose ps` | Wrong compose file or port clash | Use the official `docker-compose.yml`; stop whatever else owns 2283 |
+| `Up (healthy)` but still refused from another machine | You used `localhost` on a different host | Open `http://<immich-host>:2283` (LAN IP or tailnet name) |
+| `variable is not set` / `empty section between colons` | `.env` missing or still `example.env` | Use the starter `.env` above (exact filename `.env`) |
+
+When the UI loads:
+
+1. **Register the first account as admin** (first registration wins).
 2. **Get some media in**: phone app backup, web upload, or a mounted library. A few
    dozen photos are enough for a smoke test.
 3. **Create an API key** for Aegis:
@@ -117,7 +142,8 @@ Then:
    **Read-only is enough** for listing and downloads. Copy the key immediately —
    Immich shows it only once.
 4. **Confirm the API base** from the Aegis host:
-   `http://<host>:2283/api` (must end in `/api`). On a tailnet, use the tailnet name
+   `http://<host>:2283/api` (must end in `/api`). Same machine is
+   `http://localhost:2283/api`. On a tailnet, use the tailnet name
    (e.g. `http://photos.home.ts.net:2283/api`) so you do not expose Immich publicly.
 
 Optional but useful: install the Immich mobile apps for ongoing camera-roll backup.
