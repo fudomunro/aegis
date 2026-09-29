@@ -383,9 +383,24 @@
                   <li>
                     Import into Immich with
                     <a href="https://github.com/simulot/immich-go" target="_blank" rel="noopener noreferrer">immich-go</a>
-                    (built for Takeout → Immich, no Node required):
-                    <pre class="mono" style="margin:0.4rem 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4"># download a release from https://github.com/simulot/immich-go/releases
-immich-go upload from-google-photos \
+                    (Go CLI built for Takeout → Immich; separate from Aegis — we do not bundle it
+                    because it is AGPL and a full app).
+                    <div class="toolbar" style="margin:0.45rem 0 0.35rem">
+                      <span class="meta">install immich-go</span>
+                      <div class="grow"></div>
+                      <button class="btn" id="copy-immich-go-install" type="button">Copy install</button>
+                    </div>
+                    <pre id="immich-go-install" class="mono" style="margin:0 0 0.55rem; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4"># macOS (Homebrew — easiest)
+brew install immich-go
+
+# or any OS: download a release binary
+# https://github.com/simulot/immich-go/releases
+# (pick the archive for your OS/arch, unpack, put immich-go on your PATH)
+
+# confirm
+immich-go --help</pre>
+                    Then import a Takeout zip:
+                    <pre class="mono" style="margin:0.4rem 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">immich-go upload from-google-photos \
   --server=http://localhost:2283 \
   --api-key=YOUR_IMMICH_API_KEY \
   /path/to/takeout-*.zip</pre>
@@ -3620,6 +3635,8 @@ function selectTab(name) {
     copyFromEl($("copy-immich-env"), "immich-starter-env", "Copy .env"));
   $("copy-immich-perms").addEventListener("click", () =>
     copyFromEl($("copy-immich-perms"), "immich-api-permissions", "Copy list"));
+  $("copy-immich-go-install").addEventListener("click", () =>
+    copyFromEl($("copy-immich-go-install"), "immich-go-install", "Copy install"));
 
   $("copy-immich-snippet").addEventListener("click", async () => {
     try {
