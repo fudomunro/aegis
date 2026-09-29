@@ -334,7 +334,7 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 		`id="immich-next-step"`,
 		`id="immich-steps"`,
 		`New to Immich?`,
-		`immich.app/docs/install`,
+		`docs.immich.app/overview/quick-start`,
 		`/v1/admin/immich/setup`,
 		`/v1/admin/immich/config`,
 		`/v1/admin/immich/check`,
