@@ -411,7 +411,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 	resp2, err := aegisHTTPClient.Do(req2)
 	if err != nil {
 		code := immichCodeUnreachable
-		hint := "Start Immich (Docker: docker compose up -d), confirm it listens on :2283, and use a hostname this Aegis host can reach (LAN IP or tailnet name — not a phone-only URL)."
+		hint := "Start Immich (download compose + save our starter file as .env — not example.env — then docker compose up -d). Confirm it listens on :2283 and use a hostname this Aegis host can reach (LAN IP or tailnet name)."
 		if ctx.Err() != nil || strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
 			code = immichCodeTimeout
 			hint = "The request timed out. Immich may be slow to start, firewalled, or on another network. Try the tailnet hostname if this Aegis runs on a different machine."

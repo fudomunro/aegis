@@ -337,11 +337,10 @@
           <summary style="cursor:pointer; font-weight:600">New to Immich? Start here</summary>
           <ol style="margin:0.55rem 0 0.35rem 1.25rem; line-height:1.65; font-size:0.9rem">
             <li>
-              <strong>Install Immich</strong> on a machine you keep running. Easiest path for most
-              people: install <strong>Docker</strong>, then follow the official compose guide
-              <code>https://docs.immich.app/overview/quick-start/</code> (they publish an
-              <code>docker-compose.yml</code> + <code>.env</code>). When it is up you get a web UI
-              on <code>http://&lt;host&gt;:2283</code>.
+              <strong>Install Immich</strong> with Docker on a machine you keep running.
+              Official guide: <code>https://docs.immich.app/overview/quick-start/</code>.
+              You only need two files in one folder — we give you a ready <code>.env</code>
+              below so you do not have to guess which values to edit.
             </li>
             <li>
               <strong>Open the web UI</strong>, create the first account, and upload (or phone-backup)
@@ -365,6 +364,59 @@
               backup — Aegis does not replace those apps.
             </li>
           </ol>
+
+          <div class="card" style="padding:0.85rem 1rem; margin:0.65rem 0">
+            <h4 style="margin:0 0 0.45rem; font-size:0.95rem">Starter install (no .env guessing)</h4>
+            <p class="meta" style="margin:0 0 0.55rem">
+              Immich’s compose file expects a file named <strong><code>.env</code></strong>.
+              If you leave their <code>example.env</code> as-is (or skip it), Docker logs
+              <code>The "UPLOAD_LOCATION" variable is not set</code> and fails with
+              <code>empty section between colons</code>. Use the commands + file below instead —
+              values work for a first install without edits.
+            </p>
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">terminal</span>
+              <div class="grow"></div>
+              <button class="btn" id="copy-immich-install" type="button">Copy commands</button>
+            </div>
+            <pre id="immich-install-commands" class="mono" style="overflow-x:auto; margin:0 0 0.75rem; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45">mkdir -p immich-app &amp;&amp; cd immich-app
+curl -fsSL -o docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+# save the .env below into this folder as  ./.env   (exact name matters)
+docker compose up -d
+# then open http://&lt;this-host&gt;:2283 and register the first account</pre>
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">.env — save as <code>immich-app/.env</code></span>
+              <div class="grow"></div>
+              <button class="btn" id="copy-immich-env" type="button">Copy .env</button>
+            </div>
+            <pre id="immich-starter-env" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"># Aegis starter Immich .env (issue #121) — first install, no edits required
+# File MUST be named .env (not example.env) next to docker-compose.yml
+
+# Photos/videos library directory (relative path is fine; needs free space)
+UPLOAD_LOCATION=./library
+
+# Postgres data directory (metadata only; local disk, not a network share)
+DB_DATA_LOCATION=./postgres
+
+# Optional timezone — uncomment if your server is not UTC
+# TZ=America/Los_Angeles
+
+# Immich release tag
+IMMICH_VERSION=v3
+
+# Local database password (letters/digits only). Not your Immich login.
+DB_PASSWORD=postgres
+
+# Postgres user / database (defaults are fine for a new install)
+DB_USERNAME=postgres
+DB_DATABASE_NAME=immich</pre>
+            <p class="meta" style="margin:0.55rem 0 0">
+              Later you can move <code>UPLOAD_LOCATION</code> to a big disk, set
+              <code>TZ</code>, or change <code>DB_PASSWORD</code> — none of that is required
+              to try Immich. Full notes: <code>docs/immich-starter.env</code>.
+            </p>
+          </div>
+
           <p class="meta" style="margin:0.45rem 0 0">
             Prefer a cloud photo service? Leave this panel alone and use Google Photos instead.
             Immich is for people who want the library on their own hardware.
@@ -3427,6 +3479,22 @@ function selectTab(name) {
       btn.textContent = "Run checks";
     }
   });
+
+  async function copyFromEl(btn, elId, resetLabel) {
+    try {
+      await navigator.clipboard.writeText($(elId).textContent);
+      btn.textContent = "Copied";
+      setTimeout(() => { btn.textContent = resetLabel; }, 1200);
+    } catch (_) {
+      btn.textContent = "Copy failed";
+      setTimeout(() => { btn.textContent = resetLabel; }, 1200);
+    }
+  }
+
+  $("copy-immich-install").addEventListener("click", () =>
+    copyFromEl($("copy-immich-install"), "immich-install-commands", "Copy commands"));
+  $("copy-immich-env").addEventListener("click", () =>
+    copyFromEl($("copy-immich-env"), "immich-starter-env", "Copy .env"));
 
   $("copy-immich-snippet").addEventListener("click", async () => {
     try {
