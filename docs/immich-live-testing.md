@@ -142,10 +142,23 @@ When the UI loads:
      (large first backups take hours).
    - **Google Photos library (typical):** [Google Takeout](https://takeout.google.com/)
      → export only **Google Photos** → wait for download links → import with
-     [`immich-go`](https://github.com/simulot/immich-go) (built for Takeout → Immich):
+     [`immich-go`](https://github.com/simulot/immich-go) (Go CLI built for Takeout → Immich).
+
+     **Install `immich-go` first** (Aegis does not bundle it — it is AGPL and a
+     standalone app):
 
      ```bash
-     # binary from https://github.com/simulot/immich-go/releases
+     # macOS (Homebrew — easiest)
+     brew install immich-go
+
+     # or any OS: grab a release binary and put it on PATH
+     # https://github.com/simulot/immich-go/releases
+     immich-go --help
+     ```
+
+     Then import:
+
+     ```bash
      immich-go upload from-google-photos \
        --server=http://localhost:2283 \
        --api-key=YOUR_IMMICH_API_KEY \
