@@ -12,6 +12,26 @@ import (
 	"time"
 )
 
+// immichAPIKeyPermissions is the single Immich v3 checkbox set for one key
+// used by both Aegis (list/thumbnail/download) and immich-go Takeout import.
+// Keep in sync with web/admin.html and docs/immich-live-testing.md.
+var immichAPIKeyPermissions = []string{
+	// Aegis photo library + proxy downloads
+	"asset.read", "asset.view", "asset.download",
+	"album.read", "user.read",
+	// immich-go upload from-google-photos (album/tag/stack + upload)
+	"asset.upload", "asset.update", "asset.copy", "asset.delete", "asset.statistics",
+	"album.create", "albumAsset.create",
+	"stack.create", "tag.create", "tag.asset",
+	"server.about",
+	// immich-go pauses jobs during import (admin-linked key)
+	"job.create", "job.read",
+}
+
+func immichAPIKeyPermissionsSummary() string {
+	return strings.Join(immichAPIKeyPermissions, ", ")
+}
+
 // Immich setup admin API (issues #39, #121). Guides operators through connecting a
 // self-hosted Immich as the local/foreign canonical photo store without
 // leaving the Aegis admin UI or hand-editing aegis.json. Issue #121 adds
@@ -401,7 +421,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 				return ImmichTestResponse{
 					OK: false, Status: resp.StatusCode, Code: immichCodeUnauthorized,
 					Message:          "Immich rejected the API key",
-					Hint:             "In Immich: Account → API Keys → New key. Tick only asset.read, asset.view, asset.download, album.read, user.read (v3 permissions list — do not Select all). Copy the secret once, paste it here.",
+					Hint:             "In Immich: Account → API Keys → New key. Tick the single-key set (Aegis + immich-go): " + immichAPIKeyPermissionsSummary() + ". Copy the secret once, paste it here.",
 					SuggestedEndpoint: suggested,
 				}
 			}
@@ -445,7 +465,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 			return ImmichTestResponse{
 				OK: true, Status: resp2.StatusCode, Code: immichCodeOKNoKey,
 				Message:          "Immich is reachable (no API key set yet)",
-				Hint:             "Create an Immich API key with permissions asset.read, asset.view, asset.download, album.read, user.read (Account → API Keys — v3 checkbox list) and paste it above so agents can list photos.",
+				Hint:             "Create one Immich API key for Aegis + immich-go (permissions: " + immichAPIKeyPermissionsSummary() + ") and paste it above so agents can list photos.",
 				SuggestedEndpoint: suggested,
 			}
 		}
@@ -521,7 +541,7 @@ func immichGuidedSteps(status *ImmichSetupStatus) []ImmichSetupStep {
 	if reachable {
 		installDetail = "Immich answered on " + firstNonEmpty(status.Endpoint, "the configured endpoint")
 	}
-	keyDetail := "Immich → Account → API Keys → New key. Tick asset.read, asset.view, asset.download, album.read, user.read only. Copy it once."
+	keyDetail := "Immich → Account → API Keys → New key. One key for Aegis + immich-go: " + immichAPIKeyPermissionsSummary() + ". Copy it once."
 	if status.HasAPIKey {
 		keyDetail = "API key is saved in Aegis (value not shown)."
 	}
@@ -576,7 +596,7 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse, empt
 			}
 			return "Install Immich with the starter .env (Admin → Services copy button), then Test connection."
 		case "api_key":
-			return "Create an Immich API key (permissions: asset.read, asset.view, asset.download, album.read, user.read) and paste it above."
+			return "Create one Immich API key (Aegis + immich-go: " + immichAPIKeyPermissionsSummary() + ") and paste it above."
 		case "connect":
 			return "Click Save to Aegis to store the connection."
 		case "verify":

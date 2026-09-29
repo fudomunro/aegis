@@ -343,6 +343,10 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 		`immich-go`,
 		`takeout.google.com`,
 		`asset.read`,
+		`asset.upload`,
+		`album.create`,
+		`job.create`,
+		`One API key for Aegis + immich-go`,
 		`asset.view`,
 		`asset.download`,
 		`album.read`,
@@ -489,5 +493,25 @@ func TestImmichStarterEnv_File(t *testing.T) {
 	}
 	if strings.Count(s, "DB_DATABASE_NAME=") != 1 {
 		t.Fatal("DB_DATABASE_NAME should appear once")
+	}
+}
+
+func TestImmichAPIKeyPermissions_SingleKeyUnion(t *testing.T) {
+	need := []string{
+		"asset.read", "asset.view", "asset.download",
+		"album.read", "user.read",
+		"asset.upload", "album.create", "job.create",
+	}
+	set := map[string]bool{}
+	for _, p := range immichAPIKeyPermissions {
+		set[p] = true
+	}
+	for _, n := range need {
+		if !set[n] {
+			t.Fatalf("missing permission %q in %v", n, immichAPIKeyPermissions)
+		}
+	}
+	if !strings.Contains(immichAPIKeyPermissionsSummary(), "asset.upload") {
+		t.Fatal("summary should include upload")
 	}
 }

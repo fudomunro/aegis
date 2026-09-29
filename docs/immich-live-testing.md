@@ -165,23 +165,30 @@ When the UI loads:
        /path/to/takeout-*.zip
      ```
 
-     Import needs upload rights (`asset.upload`) — a separate import key is fine.
-     Keep the Takeout zip as a backup; Aegis never stores photo bytes.
-3. **Create an API key** for Aegis:
+     Import with the **same** API key you give Aegis — the single-key permission
+     set below already includes upload/album/tag for `immich-go`. Keep the Takeout
+     zip as a backup; Aegis never stores photo bytes.
+3. **Create an API key** for Aegis **and** `immich-go` (one key):
    Immich web UI → **Account** → **API Keys** → create.
    Immich v3 shows a **permissions checkbox list** (not a single “read-only”
-   switch). Do **not** use Select all. Tick only:
+   switch). Do **not** use Select all. Tick this union:
 
-   | Permission | Why Aegis needs it |
-   |------------|--------------------|
-   | `asset.read` | List photos (`POST /search/metadata`) |
-   | `asset.view` | Thumbnails (`GET /assets/{id}/thumbnail`) |
-   | `asset.download` | Original bytes (`GET /assets/{id}/original`) |
-   | `album.read` | Album list (`GET /albums`) |
+   | Permission | Why |
+   |------------|-----|
+   | `asset.read` | Aegis list (`POST /search/metadata`) |
+   | `asset.view` | Aegis thumbnails |
+   | `asset.download` | Aegis original bytes via proxy |
+   | `album.read` | Aegis album list |
    | `user.read` | Connection test (`GET /users/me`) |
+   | `asset.upload` | `immich-go` import |
+   | `asset.update` / `asset.copy` / `asset.delete` / `asset.statistics` | `immich-go` Takeout import (dedupe / sidecar / metadata) |
+   | `album.create` / `albumAsset.create` | `immich-go` recreates Takeout albums |
+   | `stack.create` / `tag.create` / `tag.asset` | `immich-go` stacking + tags |
+   | `server.about` | `immich-go` server checks |
+   | `job.create` / `job.read` | `immich-go` pauses jobs during import (admin-linked key) |
 
-   Leave create/update/delete (and admin) unchecked. Copy the secret immediately —
-   Immich shows it only once.
+   Copy the secret immediately — Immich shows it only once. Paste that same
+   secret into Aegis and into `immich-go --api-key=…`.
 4. **Confirm the API base** from the Aegis host:
    `http://<host>:2283/api` (must end in `/api`). Same machine is
    `http://localhost:2283/api`. On a tailnet, use the tailnet name
@@ -259,8 +266,7 @@ debugging outside the UI.
 - Immich reachable from the Aegis host (same machine, LAN, or tailnet hostname).
   Default Immich API base is `http://<host>:2283/api`.
 - An Immich **API key**: Immich UI → Account → API Keys → create with the
-  permission checkboxes `asset.read`, `asset.view`, `asset.download`,
-  `album.read`, `user.read` only (see table above — Immich v3 is granular).
+  single-key checkbox set below (Aegis + `immich-go` union — Immich v3 is granular).
 - Optional but recommended for the mixed-library step: Google Photos already
   connected as another `PhotoProvider`.
 - Shell helpers used below:

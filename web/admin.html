@@ -404,8 +404,9 @@ immich-go --help</pre>
   --server=http://localhost:2283 \
   --api-key=YOUR_IMMICH_API_KEY \
   /path/to/takeout-*.zip</pre>
-                    Import needs upload rights (<code>asset.upload</code>) — use a separate
-                    import key if you prefer not to grant that to the Aegis key.
+                    Use the <strong>same API key</strong> you will paste into Aegis
+                    (the single-key permission list above already includes
+                    <code>asset.upload</code> and album/tag/stack create).
                     See also their Google Photos migration notes.
                   </li>
                 </ol>
@@ -419,24 +420,40 @@ immich-go --help</pre>
 
           <div class="card" style="padding:0.75rem 1rem; margin:0.45rem 0 0.55rem">
             <div class="toolbar" style="margin-bottom:0.4rem">
-              <span class="meta">API key permissions for Aegis</span>
+              <span class="meta">One API key for Aegis + immich-go</span>
               <div class="grow"></div>
               <button class="btn" id="copy-immich-perms" type="button">Copy list</button>
             </div>
-            <pre id="immich-api-permissions" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5">asset.read      — list photos (search/metadata)
-asset.view      — thumbnails
-asset.download  — original files via the Aegis proxy
-album.read      — album list
-user.read       — connection test (/users/me)
+            <pre id="immich-api-permissions" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5"># Single Immich key — Aegis library/proxy AND immich-go Takeout import
+# (do not use Select all; leave adminConfig / user / delete-everything off)
 
-Leave every other checkbox unchecked (no create/update/delete).
-Copy the secret once when Immich shows it.</pre>
+# Aegis
+asset.read
+asset.view
+asset.download
+album.read
+user.read
+
+# immich-go upload from-google-photos
+asset.upload
+asset.update
+asset.copy
+asset.delete
+asset.statistics
+album.create
+albumAsset.create
+stack.create
+tag.create
+tag.asset
+server.about
+
+# immich-go pauses jobs during import (admin-linked key)
+job.create
+job.read</pre>
             <p class="meta" style="margin:0.5rem 0 0">
-              Search the permission list for these exact names
-              (<code>asset.read</code>, <code>asset.view</code>, <code>asset.download</code>,
-              <code>album.read</code>, <code>user.read</code>). The UI groups them under
-              Asset / Album / User — find the <code>.read</code> / <code>.view</code> /
-              <code>.download</code> entries and tick those five only.
+              Search the checkbox list for these exact names and tick only these.
+              Same secret goes in the Aegis form below and in
+              <code>immich-go … --api-key=…</code>. Copy it once when Immich shows it.
             </p>
           </div>
 
