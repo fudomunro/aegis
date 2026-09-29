@@ -161,12 +161,12 @@ func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichS
 
 	if !withChecks {
 		status.Steps = immichGuidedSteps(&status)
-		status.NextStep = immichNextStepFrom(status.Steps, status.LastProbe)
+		status.NextStep = immichNextStepFrom(status.Steps, status.LastProbe, status.LibraryCount == 0)
 		return status
 	}
 	status.Checks = s.runImmichChecks(ctx, &status)
 	status.Steps = immichGuidedSteps(&status)
-	status.NextStep = immichNextStepFrom(status.Steps, status.LastProbe)
+	status.NextStep = immichNextStepFrom(status.Steps, status.LastProbe, status.LibraryCount == 0)
 	return status
 }
 
@@ -271,7 +271,14 @@ func (s *Server) runImmichChecks(ctx context.Context, status *ImmichSetupStatus)
 		status.LibraryStatus = "ok"
 		status.LibraryError = "truncated at page cap"
 	}
-	mark("library_listing", fmt.Sprintf("%d photos", len(photos)), len(photos) > 0)
+	if len(photos) == 0 {
+		mark("library_listing", "0 photos — Immich is empty. Add photos via web upload, phone backup, or Google Takeout + immich-go", false)
+		if status.LibraryError == "" {
+			status.LibraryError = "Immich has no photos yet"
+		}
+	} else {
+		mark("library_listing", fmt.Sprintf("%d photos", len(photos)), true)
+	}
 
 	stampOK, stampDetail := immichStampSummary(photos, s.baseURL)
 	mark("canonical_stamp", stampDetail, stampOK)
@@ -557,7 +564,7 @@ func immichGuidedSteps(status *ImmichSetupStatus) []ImmichSetupStep {
 	return steps
 }
 
-func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse) string {
+func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse, emptyLibrary bool) string {
 	for _, st := range steps {
 		if st.OK {
 			continue
@@ -573,6 +580,9 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse) stri
 		case "connect":
 			return "Click Save to Aegis to store the connection."
 		case "verify":
+			if emptyLibrary {
+				return "Immich has no photos yet — upload a few in the web UI, phone-backup an album, or import Google Takeout with immich-go (Services → New to Immich?), then Run checks again."
+			}
 			return "Click Run checks and fix anything still red."
 		}
 	}
