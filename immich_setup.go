@@ -394,7 +394,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 				return ImmichTestResponse{
 					OK: false, Status: resp.StatusCode, Code: immichCodeUnauthorized,
 					Message:          "Immich rejected the API key",
-					Hint:             "In Immich: Account → API Keys → create a new key (read-only is enough), copy it once, paste it here.",
+					Hint:             "In Immich: Account → API Keys → New key. Tick only asset.read, asset.view, asset.download, album.read, user.read (v3 permissions list — do not Select all). Copy the secret once, paste it here.",
 					SuggestedEndpoint: suggested,
 				}
 			}
@@ -438,7 +438,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 			return ImmichTestResponse{
 				OK: true, Status: resp2.StatusCode, Code: immichCodeOKNoKey,
 				Message:          "Immich is reachable (no API key set yet)",
-				Hint:             "Create an API key in Immich (Account → API Keys) and paste it above so agents can list photos.",
+				Hint:             "Create an Immich API key with permissions asset.read, asset.view, asset.download, album.read, user.read (Account → API Keys — v3 checkbox list) and paste it above so agents can list photos.",
 				SuggestedEndpoint: suggested,
 			}
 		}
@@ -514,7 +514,7 @@ func immichGuidedSteps(status *ImmichSetupStatus) []ImmichSetupStep {
 	if reachable {
 		installDetail = "Immich answered on " + firstNonEmpty(status.Endpoint, "the configured endpoint")
 	}
-	keyDetail := "Immich → Account → API Keys → New key (read-only). Copy it once."
+	keyDetail := "Immich → Account → API Keys → New key. Tick asset.read, asset.view, asset.download, album.read, user.read only. Copy it once."
 	if status.HasAPIKey {
 		keyDetail = "API key is saved in Aegis (value not shown)."
 	}
@@ -569,7 +569,7 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse) stri
 			}
 			return "Install Immich with the starter .env (Admin → Services copy button), then Test connection."
 		case "api_key":
-			return "Create an Immich API key (Account → API Keys) and paste it above."
+			return "Create an Immich API key (permissions: asset.read, asset.view, asset.download, album.read, user.read) and paste it above."
 		case "connect":
 			return "Click Save to Aegis to store the connection."
 		case "verify":
