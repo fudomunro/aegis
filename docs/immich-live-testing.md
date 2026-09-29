@@ -53,18 +53,70 @@ skip Immich entirely and keep Google as `canonical_for: ["photos"]`.
 You need *some* Immich before Aegis can point at it. The official docs are the source
 of truth: **https://docs.immich.app/overview/quick-start/** (Docker Compose is the common path).
 
-Minimum useful setup:
+### Ready-to-use starter config
 
-1. **Install** Immich on a machine that will stay on when you want photos (home server,
-   NAS, VM). Note the host and port — web UI and API share **2283** by default.
-2. **Open the web UI** (`http://<host>:2283`), create the first admin account.
-3. **Get some media in**: phone app backup, web upload, or a mounted library. A few
+Immich’s compose file **requires a file named `.env`**. Their download is
+`example.env`; if you forget to rename it (or leave the values blank), Docker
+complains:
+
+```text
+WARN[0000] The "UPLOAD_LOCATION" variable is not set. Defaulting to a blank string.
+invalid spec: :/var/lib/postgresql/data: empty section between colons
+```
+
+Use this install instead — **no value editing** for a first single-machine test:
+
+```bash
+mkdir -p immich-app && cd immich-app
+curl -fsSL -o docker-compose.yml \
+  https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+# Save docs/immich-starter.env (or the copy in Admin → Services) as  ./.env
+docker compose up -d
+```
+
+Starter `.env` (also in [`immich-starter.env`](immich-starter.env)):
+
+```dotenv
+# Photos/videos library directory (needs free space)
+UPLOAD_LOCATION=./library
+
+# Postgres data directory (metadata only; local disk, not a network share)
+DB_DATA_LOCATION=./postgres
+
+# Optional timezone — uncomment if your server is not UTC
+# TZ=America/Los_Angeles
+
+# Immich release tag
+IMMICH_VERSION=v3
+
+# Local database password (letters/digits only). Not your Immich login.
+DB_PASSWORD=postgres
+
+# Postgres user / database (defaults are fine for a new install)
+DB_USERNAME=postgres
+DB_DATABASE_NAME=immich
+```
+
+| Variable | Why it exists | First-install advice |
+|----------|---------------|----------------------|
+| `UPLOAD_LOCATION` | Where original photos/videos live | `./library` is fine to try; point at a big disk for real use |
+| `DB_DATA_LOCATION` | Postgres files (metadata only) | Keep on local disk — not SMB/NFS |
+| `TZ` | Timestamps / job schedule | Leave commented if the host is already UTC |
+| `IMMICH_VERSION` | Which Immich release to run | Leave `v3` until you deliberately upgrade |
+| `DB_PASSWORD` | Immich ↔ its own Postgres | Default works for a private install; letters+digits only if you change it |
+| `DB_USERNAME` / `DB_DATABASE_NAME` | Created on first start | Leave defaults |
+
+Then:
+
+1. **Open the web UI** (`http://<host>:2283`), create the first admin account
+   (first registration is admin).
+2. **Get some media in**: phone app backup, web upload, or a mounted library. A few
    dozen photos are enough for a smoke test.
-4. **Create an API key** for Aegis:
+3. **Create an API key** for Aegis:
    Immich web UI → **Account** → **API Keys** → create.
    **Read-only is enough** for listing and downloads. Copy the key immediately —
    Immich shows it only once.
-5. **Confirm the API base** from the Aegis host:
+4. **Confirm the API base** from the Aegis host:
    `http://<host>:2283/api` (must end in `/api`). On a tailnet, use the tailnet name
    (e.g. `http://photos.home.ts.net:2283/api`) so you do not expose Immich publicly.
 

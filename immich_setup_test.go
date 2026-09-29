@@ -333,6 +333,10 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 		`id="immich-newcomer"`,
 		`id="immich-next-step"`,
 		`id="immich-steps"`,
+		`id="immich-starter-env"`,
+		`id="copy-immich-env"`,
+		`UPLOAD_LOCATION=./library`,
+		`empty section between colons`,
 		`New to Immich?`,
 		`docs.immich.app/overview/quick-start`,
 		`/v1/admin/immich/setup`,
@@ -436,5 +440,29 @@ func TestProbeImmich_ActionableCodes(t *testing.T) {
 	}
 	if !strings.Contains(res.Hint, "Docker") && !strings.Contains(res.Hint, "Immich") {
 		t.Fatalf("hint = %q", res.Hint)
+	}
+}
+
+func TestImmichStarterEnv_File(t *testing.T) {
+	data, err := os.ReadFile("docs/immich-starter.env")
+	if err != nil {
+		t.Fatalf("read starter env: %v", err)
+	}
+	s := string(data)
+	for _, want := range []string{
+		"UPLOAD_LOCATION=./library",
+		"DB_DATA_LOCATION=./postgres",
+		"IMMICH_VERSION=v3",
+		"DB_PASSWORD=postgres",
+		"DB_USERNAME=postgres",
+		"DB_DATABASE_NAME=immich",
+		"named .env",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("starter env missing %q", want)
+		}
+	}
+	if strings.Count(s, "DB_DATABASE_NAME=") != 1 {
+		t.Fatal("DB_DATABASE_NAME should appear once")
 	}
 }
