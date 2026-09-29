@@ -336,6 +336,9 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 		`id="immich-starter-env"`,
 		`id="copy-immich-env"`,
 		`id="immich-api-permissions"`,
+		`Get photos into Immich`,
+		`immich-go`,
+		`takeout.google.com`,
 		`asset.read`,
 		`asset.view`,
 		`asset.download`,
@@ -395,7 +398,7 @@ func TestImmichGuidedSteps_NextStep(t *testing.T) {
 	}
 	next := immichNextStepFrom(steps, &ImmichTestResponse{
 		OK: false, Code: immichCodeUnreachable, Hint: "Start Immich with Docker.",
-	})
+	}, false)
 	if next != "Start Immich with Docker." {
 		t.Fatalf("next = %q", next)
 	}
@@ -414,9 +417,18 @@ func TestImmichGuidedSteps_NextStep(t *testing.T) {
 	if !steps[3].OK {
 		t.Fatalf("verify should be ok: %+v", steps[3])
 	}
-	next = immichNextStepFrom(steps, nil)
+	next = immichNextStepFrom(steps, nil, false)
 	if !strings.Contains(next, "complete") {
 		t.Fatalf("next = %q", next)
+	}
+	// Empty library gets seed guidance rather than a bare "run checks".
+	next = immichNextStepFrom(immichGuidedSteps(&ImmichSetupStatus{
+		Configured: true, HasAPIKey: true,
+		LastProbe: &ImmichTestResponse{OK: true},
+		LibraryStatus: "ok", LibraryCount: 0,
+	}), nil, true)
+	if !strings.Contains(next, "no photos") && !strings.Contains(next, "Takeout") {
+		t.Fatalf("empty-library next = %q", next)
 	}
 }
 

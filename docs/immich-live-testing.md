@@ -135,8 +135,25 @@ docker compose logs --tail=20 database
 When the UI loads:
 
 1. **Register the first account as admin** (first registration wins).
-2. **Get some media in**: phone app backup, web upload, or a mounted library. A few
-   dozen photos are enough for a smoke test.
+2. **Get some media in** before expecting Aegis checks to pass — an empty Immich
+   is a normal fresh install, not a connector failure. Paths:
+   - **Smoke test:** web UI → Upload a handful of JPEGs from this machine.
+   - **Phone:** Immich app → sign in to `http://<host>:2283` → backup one album
+     (large first backups take hours).
+   - **Google Photos library (typical):** [Google Takeout](https://takeout.google.com/)
+     → export only **Google Photos** → wait for download links → import with
+     [`immich-go`](https://github.com/simulot/immich-go) (built for Takeout → Immich):
+
+     ```bash
+     # binary from https://github.com/simulot/immich-go/releases
+     immich-go upload from-google-photos \
+       --server=http://localhost:2283 \
+       --api-key=YOUR_IMMICH_API_KEY \
+       /path/to/takeout-*.zip
+     ```
+
+     Import needs upload rights (`asset.upload`) — a separate import key is fine.
+     Keep the Takeout zip as a backup; Aegis never stores photo bytes.
 3. **Create an API key** for Aegis:
    Immich web UI → **Account** → **API Keys** → create.
    Immich v3 shows a **permissions checkbox list** (not a single “read-only”
@@ -536,6 +553,7 @@ ask agents for Immich keys.
 | 401/403 on proxy | Missing/wrong `X-API-Key` | Set `headers["X-API-Key"]` to the Immich API key (Account → API Keys) |
 | 502 “Immich request failed” | Endpoint unreachable from Aegis | Fix hostname/port; Immich is usually `…:2283/api` on the tailnet |
 | Library empty but Immich UI full | Wrong endpoint (missing `/api`), empty library user, or permissions | Verify `endpoint` ends with `/api`; check Immich account/library |
+| Library empty and Immich UI empty | Fresh install — nothing to list yet | Upload a few photos, phone-backup, or Google Takeout + `immich-go` (see “Get photos into Immich”). Then re-run checks |
 | JSON in `original` download | Path not treated as binary or Immich error body | Expect 200 + media type; 401/403 should be JSON errors from Aegis |
 | Photos never merge across services | No shared hash / taken_at+dimensions | Expected when metadata is incomplete; filename will not merge (by design) |
 | `truncated: true` on a small library | Page loop bug or Immich sending a looping `nextPage` | Note Immich version + `nextPage` sample in #39; connector treats `null`/`""`/non-positive as end |

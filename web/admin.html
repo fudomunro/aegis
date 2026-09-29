@@ -343,8 +343,9 @@
               below so you do not have to guess which values to edit.
             </li>
             <li>
-              <strong>Open the web UI</strong>, create the first account, and upload (or phone-backup)
-              a few photos so there is something to list. A handful is enough to verify.
+              <strong>Open the web UI</strong>, create the first account, then get some photos in
+              (see next card — web upload, phone backup, or Google Takeout). Aegis cannot list
+              what Immich does not have yet.
             </li>
             <li>
               <strong>Create an API key:</strong> Immich → Account (avatar) → API Keys → New key.
@@ -352,6 +353,54 @@
               “read-only” toggle) — do <em>not</em> hit Select all. Check only what Aegis needs:
             </li>
           </ol>
+
+          <div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0">
+            <h4 style="margin:0 0 0.45rem; font-size:0.95rem">Get photos into Immich first</h4>
+            <p class="meta" style="margin:0 0 0.55rem">
+              An empty Immich is a successful install — but Aegis’s photo checks will look
+              red until there is something to list. Pick one path:
+            </p>
+            <ol style="margin:0 0 0.45rem 1.15rem; font-size:0.88rem; line-height:1.55">
+              <li>
+                <strong>Quickest smoke test:</strong> Immich web UI → <em>Upload</em> (or drag-drop)
+                a handful of JPEGs from this machine. Enough to finish the Aegis checklist.
+              </li>
+              <li>
+                <strong>Phone camera roll:</strong> install the Immich iOS/Android app →
+                sign in to <code>http://&lt;host&gt;:2283</code> → enable backup for one album.
+                Good ongoing source; large first backup can take hours.
+              </li>
+              <li>
+                <strong>Google Photos archive (most common for existing libraries):</strong>
+                <ol style="margin:0.35rem 0 0.25rem 1.1rem">
+                  <li>
+                    Google <a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">Takeout</a>
+                    → deselect all → enable <strong>Google Photos</strong> → export (zip is fine).
+                  </li>
+                  <li>
+                    Wait for Google’s download links (can take hours for large libraries).
+                  </li>
+                  <li>
+                    Import into Immich with
+                    <a href="https://github.com/simulot/immich-go" target="_blank" rel="noopener noreferrer">immich-go</a>
+                    (built for Takeout → Immich, no Node required):
+                    <pre class="mono" style="margin:0.4rem 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4"># download a release from https://github.com/simulot/immich-go/releases
+immich-go upload from-google-photos \
+  --server=http://localhost:2283 \
+  --api-key=YOUR_IMMICH_API_KEY \
+  /path/to/takeout-*.zip</pre>
+                    Import needs upload rights (<code>asset.upload</code>) — use a separate
+                    import key if you prefer not to grant that to the Aegis key.
+                    See also their Google Photos migration notes.
+                  </li>
+                </ol>
+              </li>
+            </ol>
+            <p class="meta" style="margin:0.35rem 0 0">
+              Keep the Takeout zip as a backup. Aegis never ingests photo bytes — Immich
+              stays the only library home once import is done.
+            </p>
+          </div>
 
           <div class="card" style="padding:0.75rem 1rem; margin:0.45rem 0 0.55rem">
             <div class="toolbar" style="margin-bottom:0.4rem">
@@ -2186,7 +2235,7 @@ DB_DATABASE_NAME=immich</pre>
       key: "photos",
       label: "photos",
       filterPlaceholder: "Filter photos…",
-      emptyAll: "No photos found. On Google Photos, use “Pick photos…” on the service card (user selects once; Aegis lists that selection). Then reload.",
+      emptyAll: "No photos found. For Immich: add photos in the Immich web UI, phone backup, or Google Takeout → immich-go (see Services → New to Immich?). For Google Photos: use “Pick photos…” on the service card, then reload.",
       emptyFilter: "No photos match this filter.",
     },
     events: {
