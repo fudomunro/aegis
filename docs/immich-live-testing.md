@@ -51,7 +51,7 @@ skip Immich entirely and keep Google as `canonical_for: ["photos"]`.
 ## Get an Immich instance (if you do not have one)
 
 You need *some* Immich before Aegis can point at it. The official docs are the source
-of truth: **https://immich.app/docs/install/overview** (Docker Compose is the common path).
+of truth: **https://docs.immich.app/overview/quick-start/** (Docker Compose is the common path).
 
 Minimum useful setup:
 

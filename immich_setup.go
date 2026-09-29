@@ -352,7 +352,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 			OK:      false,
 			Code:    immichCodeEmptyEndpoint,
 			Message: "No Immich endpoint yet",
-			Hint:    "Install Immich (http://immich.app/docs/install/overview), then paste its URL — usually http://<host>:2283/api",
+			Hint:    "Install Immich (https://docs.immich.app/overview/quick-start/), then paste its URL — usually http://<host>:2283/api",
 		}
 	}
 	suggested := ""
@@ -507,7 +507,7 @@ func immichGuidedSteps(status *ImmichSetupStatus) []ImmichSetupStep {
 	case status.LibraryStatus == "ok":
 		reachable = true
 	}
-	installDetail := "Install from https://immich.app/docs/install/overview (Docker Compose is typical). Web UI: http://<host>:2283"
+	installDetail := "Install from https://docs.immich.app/overview/quick-start/ (Docker Compose is typical). Web UI: http://<host>:2283"
 	if status.Endpoint != "" {
 		installDetail = "API base: " + status.Endpoint
 	}
@@ -567,7 +567,7 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse) stri
 			if probe != nil && probe.Hint != "" {
 				return probe.Hint
 			}
-			return "Install Immich (https://immich.app/docs/install/overview), then Test connection."
+			return "Install Immich (https://docs.immich.app/overview/quick-start/), then Test connection."
 		case "api_key":
 			return "Create an Immich API key (Account → API Keys) and paste it above."
 		case "connect":
