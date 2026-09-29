@@ -337,6 +337,8 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 		`id="copy-immich-env"`,
 		`UPLOAD_LOCATION=./library`,
 		`empty section between colons`,
+		`ERR_CONNECTION_REFUSED`,
+		`CREATE DATABASE immich`,
 		`New to Immich?`,
 		`docs.immich.app/overview/quick-start`,
 		`/v1/admin/immich/setup`,
@@ -457,6 +459,8 @@ func TestImmichStarterEnv_File(t *testing.T) {
 		"DB_USERNAME=postgres",
 		"DB_DATABASE_NAME=immich",
 		"named .env",
+		"ERR_CONNECTION_REFUSED",
+		"CREATE DATABASE immich",
 	} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("starter env missing %q", want)

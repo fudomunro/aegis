@@ -411,7 +411,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 	resp2, err := aegisHTTPClient.Do(req2)
 	if err != nil {
 		code := immichCodeUnreachable
-		hint := "Start Immich (download compose + save our starter file as .env — not example.env — then docker compose up -d). Confirm it listens on :2283 and use a hostname this Aegis host can reach (LAN IP or tailnet name)."
+		hint := "Start Immich with Docker: save our starter as .env (before the first up), docker compose up -d, then wait for immich_server to be healthy in docker compose ps. If localhost:2283 is refused, check server logs for database \"immich\" does not exist. Use a hostname this Aegis host can reach (LAN IP or tailnet name)."
 		if ctx.Err() != nil || strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
 			code = immichCodeTimeout
 			hint = "The request timed out. Immich may be slow to start, firewalled, or on another network. Try the tailnet hostname if this Aegis runs on a different machine."
@@ -507,7 +507,7 @@ func immichGuidedSteps(status *ImmichSetupStatus) []ImmichSetupStep {
 	case status.LibraryStatus == "ok":
 		reachable = true
 	}
-	installDetail := "Install from https://docs.immich.app/overview/quick-start/ (Docker Compose is typical). Web UI: http://<host>:2283"
+	installDetail := "Install with the starter .env (docs/immich-starter.env) + docker compose up -d, wait for healthy. Web UI: http://localhost:2283"
 	if status.Endpoint != "" {
 		installDetail = "API base: " + status.Endpoint
 	}
@@ -567,7 +567,7 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse) stri
 			if probe != nil && probe.Hint != "" {
 				return probe.Hint
 			}
-			return "Install Immich (https://docs.immich.app/overview/quick-start/), then Test connection."
+			return "Install Immich with the starter .env (Admin → Services copy button), then Test connection."
 		case "api_key":
 			return "Create an Immich API key (Account → API Keys) and paste it above."
 		case "connect":
