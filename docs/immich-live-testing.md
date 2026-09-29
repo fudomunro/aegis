@@ -240,8 +240,7 @@ Two paths matter:
 
 ## Prefer the admin UI
 
-**Admin → Services → Immich — local canonical photos** runs this checklist for
-you: enter the endpoint + API key, **Test connection**, **Save to Aegis**
+**Admin → Services → Immich → Setup guide** (modal) walks install → photos → API key → connect → verify. The compact card on Services still runs this checklist for you: enter the endpoint + API key, **Test connection**, **Save to Aegis**
 (writes `service_connections.json`, not `aegis.json`), then **Run checks**.
 
 First-timers get extra hand-holding (issue #121):

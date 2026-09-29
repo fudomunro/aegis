@@ -327,10 +327,15 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 	body := w.Body.String()
 	for _, want := range []string{
 		`id="immich-setup-panel"`,
+		`id="immich-open-wizard"`,
+		`id="immich-wizard"`,
+		`data-wiz-page="2"`,
+		`data-wiz-page="5"`,
 		`id="immich-endpoint"`,
 		`id="immich-api-key"`,
 		`id="immich-claim-canonical"`,
-		`id="immich-newcomer"`,
+		`id="wiz-immich-endpoint"`,
+		`id="wiz-immich-save"`,
 		`id="immich-next-step"`,
 		`id="immich-steps"`,
 		`id="immich-starter-env"`,
