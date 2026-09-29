@@ -139,7 +139,18 @@ When the UI loads:
    dozen photos are enough for a smoke test.
 3. **Create an API key** for Aegis:
    Immich web UI → **Account** → **API Keys** → create.
-   **Read-only is enough** for listing and downloads. Copy the key immediately —
+   Immich v3 shows a **permissions checkbox list** (not a single “read-only”
+   switch). Do **not** use Select all. Tick only:
+
+   | Permission | Why Aegis needs it |
+   |------------|--------------------|
+   | `asset.read` | List photos (`POST /search/metadata`) |
+   | `asset.view` | Thumbnails (`GET /assets/{id}/thumbnail`) |
+   | `asset.download` | Original bytes (`GET /assets/{id}/original`) |
+   | `album.read` | Album list (`GET /albums`) |
+   | `user.read` | Connection test (`GET /users/me`) |
+
+   Leave create/update/delete (and admin) unchecked. Copy the secret immediately —
    Immich shows it only once.
 4. **Confirm the API base** from the Aegis host:
    `http://<host>:2283/api` (must end in `/api`). Same machine is
@@ -217,8 +228,9 @@ debugging outside the UI.
 - Aegis built and able to start (`go build -o aegis .`).
 - Immich reachable from the Aegis host (same machine, LAN, or tailnet hostname).
   Default Immich API base is `http://<host>:2283/api`.
-- An Immich **API key**: Immich UI → Account → API Keys → create (read is enough
-  for listing and download tests).
+- An Immich **API key**: Immich UI → Account → API Keys → create with the
+  permission checkboxes `asset.read`, `asset.view`, `asset.download`,
+  `album.read`, `user.read` only (see table above — Immich v3 is granular).
 - Optional but recommended for the mixed-library step: Google Photos already
   connected as another `PhotoProvider`.
 - Shell helpers used below:

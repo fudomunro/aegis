@@ -348,9 +348,35 @@
             </li>
             <li>
               <strong>Create an API key:</strong> Immich → Account (avatar) → API Keys → New key.
-              Choose <strong>read-only</strong> for viewing — enough for Aegis listing and downloads.
-              Copy it immediately; Immich shows the secret only once.
+              Immich v3 shows a long <strong>permissions checkbox list</strong> (not a simple
+              “read-only” toggle) — do <em>not</em> hit Select all. Check only what Aegis needs:
             </li>
+          </ol>
+
+          <div class="card" style="padding:0.75rem 1rem; margin:0.45rem 0 0.55rem">
+            <div class="toolbar" style="margin-bottom:0.4rem">
+              <span class="meta">API key permissions for Aegis</span>
+              <div class="grow"></div>
+              <button class="btn" id="copy-immich-perms" type="button">Copy list</button>
+            </div>
+            <pre id="immich-api-permissions" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5">asset.read      — list photos (search/metadata)
+asset.view      — thumbnails
+asset.download  — original files via the Aegis proxy
+album.read      — album list
+user.read       — connection test (/users/me)
+
+Leave every other checkbox unchecked (no create/update/delete).
+Copy the secret once when Immich shows it.</pre>
+            <p class="meta" style="margin:0.5rem 0 0">
+              Search the permission list for these exact names
+              (<code>asset.read</code>, <code>asset.view</code>, <code>asset.download</code>,
+              <code>album.read</code>, <code>user.read</code>). The UI groups them under
+              Asset / Album / User — find the <code>.read</code> / <code>.view</code> /
+              <code>.download</code> entries and tick those five only.
+            </p>
+          </div>
+
+          <ol start="4" style="margin:0 0 0.35rem 1.25rem; line-height:1.65; font-size:0.9rem">
             <li>
               <strong>Note the API base URL</strong> from the machine that runs Aegis. It must end in
               <code>/api</code> (we will try to fix this for you):
@@ -3543,6 +3569,8 @@ function selectTab(name) {
     copyFromEl($("copy-immich-install"), "immich-install-commands", "Copy commands"));
   $("copy-immich-env").addEventListener("click", () =>
     copyFromEl($("copy-immich-env"), "immich-starter-env", "Copy .env"));
+  $("copy-immich-perms").addEventListener("click", () =>
+    copyFromEl($("copy-immich-perms"), "immich-api-permissions", "Copy list"));
 
   $("copy-immich-snippet").addEventListener("click", async () => {
     try {
