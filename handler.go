@@ -327,12 +327,10 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 
-	// Users often ask about library data without naming a service. Surface
-	// every matching unified library endpoint from the kind registry.
-	var libraryInstructions []string
-	if len(matched) == 0 {
-		libraryInstructions = s.libraryHintsForMessage(payload.UserMessage)
-	}
+	// Surface matching unified library endpoints alongside service proxy hints.
+	// Issue #125: photo questions that named a service still need /v1/library/photos
+	// (and the no-bypass policy); do not gate library hints on zero service matches.
+	libraryInstructions := s.libraryHintsForMessage(payload.UserMessage)
 	// Local mail archive search is a separate surface from live provider listing.
 	libraryInstructions = append(libraryInstructions, s.mailArchiveHints(payload.UserMessage)...)
 
