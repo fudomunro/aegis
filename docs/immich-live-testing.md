@@ -51,21 +51,147 @@ skip Immich entirely and keep Google as `canonical_for: ["photos"]`.
 ## Get an Immich instance (if you do not have one)
 
 You need *some* Immich before Aegis can point at it. The official docs are the source
-of truth: **https://immich.app/docs/install/overview** (Docker Compose is the common path).
+of truth: **https://docs.immich.app/overview/quick-start/** (Docker Compose is the common path).
 
-Minimum useful setup:
+### Ready-to-use starter config
 
-1. **Install** Immich on a machine that will stay on when you want photos (home server,
-   NAS, VM). Note the host and port — web UI and API share **2283** by default.
-2. **Open the web UI** (`http://<host>:2283`), create the first admin account.
-3. **Get some media in**: phone app backup, web upload, or a mounted library. A few
-   dozen photos are enough for a smoke test.
-4. **Create an API key** for Aegis:
+Immich’s compose file **requires a file named `.env`**. Their download is
+`example.env`; if you forget to rename it (or leave the values blank), Docker
+complains:
+
+```text
+WARN[0000] The "UPLOAD_LOCATION" variable is not set. Defaulting to a blank string.
+invalid spec: :/var/lib/postgresql/data: empty section between colons
+```
+
+Use this install instead — **no value editing** for a first single-machine test.
+**Write `.env` before the first `docker compose up`** so Postgres initializes
+with `DB_DATABASE_NAME=immich`:
+
+```bash
+mkdir -p immich-app && cd immich-app
+curl -fsSL -o docker-compose.yml \
+  https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
+# Save docs/immich-starter.env (or the copy in Admin → Services) as  ./.env
+docker compose up -d
+# wait until immich_server is healthy (first boot can take a minute)
+docker compose ps
+# then open http://localhost:2283 and register the first account
+```
+
+Starter `.env` (also in [`immich-starter.env`](immich-starter.env)):
+
+```dotenv
+# Photos/videos library directory (needs free space)
+UPLOAD_LOCATION=./library
+
+# Postgres data directory (metadata only; local disk, not a network share)
+DB_DATA_LOCATION=./postgres
+
+# Optional timezone — uncomment if your server is not UTC
+# TZ=America/Los_Angeles
+
+# Immich release tag
+IMMICH_VERSION=v3
+
+# Local database password (letters/digits only). Not your Immich login.
+DB_PASSWORD=postgres
+
+# Postgres user / database (defaults are fine for a new install)
+DB_USERNAME=postgres
+DB_DATABASE_NAME=immich
+```
+
+| Variable | Why it exists | First-install advice |
+|----------|---------------|----------------------|
+| `UPLOAD_LOCATION` | Where original photos/videos live | `./library` is fine to try; point at a big disk for real use |
+| `DB_DATA_LOCATION` | Postgres files (metadata only) | Keep on local disk — not SMB/NFS |
+| `TZ` | Timestamps / job schedule | Leave commented if the host is already UTC |
+| `IMMICH_VERSION` | Which Immich release to run | Leave `v3` until you deliberately upgrade |
+| `DB_PASSWORD` | Immich ↔ its own Postgres | Default works for a private install; letters+digits only if you change it |
+| `DB_USERNAME` / `DB_DATABASE_NAME` | Created on first start | Leave defaults — set **before** the first `up` |
+
+### If `http://localhost:2283` is refused after `up -d`
+
+`docker compose up -d` returns as soon as containers are *created*. First boot
+pulls images and starts Postgres; the web UI is not ready immediately.
+`ERR_CONNECTION_REFUSED` usually means **`immich_server` is not listening yet
+(or is crash-looping)**.
+
+```bash
+docker compose ps          # want immich_server → healthy, ports 0.0.0.0:2283->2283
+docker compose logs --tail=50 immich-server
+docker compose logs --tail=20 database
+```
+
+| What you see | Cause | Fix |
+|--------------|-------|-----|
+| `immich_server` *Restarting* / *Created* | Still starting, or failing | Wait for healthy; read server logs |
+| Server log: `database "immich" does not exist` | Postgres data dir was initialized **without** `DB_DATABASE_NAME` (first `up` without `.env`) | Throwaway install: `docker exec immich_postgres psql -U postgres -c 'CREATE DATABASE immich;'` then `docker compose restart immich-server`. Clean slate: `docker compose down && rm -rf postgres && docker compose up -d` (library photos are in `UPLOAD_LOCATION`, not `postgres/`) |
+| No `2283->2283` in `docker compose ps` | Wrong compose file or port clash | Use the official `docker-compose.yml`; stop whatever else owns 2283 |
+| `Up (healthy)` but still refused from another machine | You used `localhost` on a different host | Open `http://<immich-host>:2283` (LAN IP or tailnet name) |
+| `variable is not set` / `empty section between colons` | `.env` missing or still `example.env` | Use the starter `.env` above (exact filename `.env`) |
+
+When the UI loads:
+
+1. **Register the first account as admin** (first registration wins).
+2. **Get some media in** before expecting Aegis checks to pass — an empty Immich
+   is a normal fresh install, not a connector failure. Paths:
+   - **Smoke test:** web UI → Upload a handful of JPEGs from this machine.
+   - **Phone:** Immich app → sign in to `http://<host>:2283` → backup one album
+     (large first backups take hours).
+   - **Google Photos library (typical):** [Google Takeout](https://takeout.google.com/)
+     → export only **Google Photos** → wait for download links → import with
+     [`immich-go`](https://github.com/simulot/immich-go) (Go CLI built for Takeout → Immich).
+
+     **Install `immich-go` first** (Aegis does not bundle it — it is AGPL and a
+     standalone app):
+
+     ```bash
+     # macOS (Homebrew — easiest)
+     brew install immich-go
+
+     # or any OS: grab a release binary and put it on PATH
+     # https://github.com/simulot/immich-go/releases
+     immich-go --help
+     ```
+
+     Then import:
+
+     ```bash
+     immich-go upload from-google-photos \
+       --server=http://localhost:2283 \
+       --api-key=YOUR_IMMICH_API_KEY \
+       /path/to/takeout-*.zip
+     ```
+
+     Import with the **same** API key you give Aegis — the single-key permission
+     set below already includes upload/album/tag for `immich-go`. Keep the Takeout
+     zip as a backup; Aegis never stores photo bytes.
+3. **Create an API key** for Aegis **and** `immich-go` (one key):
    Immich web UI → **Account** → **API Keys** → create.
-   **Read-only is enough** for listing and downloads. Copy the key immediately —
-   Immich shows it only once.
-5. **Confirm the API base** from the Aegis host:
-   `http://<host>:2283/api` (must end in `/api`). On a tailnet, use the tailnet name
+   Immich v3 shows a **permissions checkbox list** (not a single “read-only”
+   switch). Do **not** use Select all. Tick this union:
+
+   | Permission | Why |
+   |------------|-----|
+   | `asset.read` | Aegis list (`POST /search/metadata`) |
+   | `asset.view` | Aegis thumbnails |
+   | `asset.download` | Aegis original bytes via proxy |
+   | `album.read` | Aegis album list |
+   | `user.read` | Connection test (`GET /users/me`) |
+   | `asset.upload` | `immich-go` import |
+   | `asset.update` / `asset.copy` / `asset.delete` / `asset.statistics` | `immich-go` Takeout import (dedupe / sidecar / metadata) |
+   | `album.create` / `albumAsset.create` | `immich-go` recreates Takeout albums |
+   | `stack.create` / `tag.create` / `tag.asset` | `immich-go` stacking + tags |
+   | `server.about` | `immich-go` server checks |
+   | `job.create` / `job.read` | `immich-go` pauses jobs during import (admin-linked key) |
+
+   Copy the secret immediately — Immich shows it only once. Paste that same
+   secret into Aegis and into `immich-go --api-key=…`.
+4. **Confirm the API base** from the Aegis host:
+   `http://<host>:2283/api` (must end in `/api`). Same machine is
+   `http://localhost:2283/api`. On a tailnet, use the tailnet name
    (e.g. `http://photos.home.ts.net:2283/api`) so you do not expose Immich publicly.
 
 Optional but useful: install the Immich mobile apps for ongoing camera-roll backup.
@@ -114,9 +240,19 @@ Two paths matter:
 
 ## Prefer the admin UI
 
-**Admin → Services → Immich — local canonical photos** runs this checklist for
-you: enter the endpoint + API key, **Test connection**, **Save to Aegis**
+**Admin → Services → Immich → Setup guide** (modal) walks install → photos → API key → connect → verify. The compact card on Services still runs this checklist for you: enter the endpoint + API key, **Test connection**, **Save to Aegis**
 (writes `service_connections.json`, not `aegis.json`), then **Run checks**.
+
+First-timers get extra hand-holding (issue #121):
+
+- A **next-step** card that names the single thing to do now (install → API key →
+  save → verify)
+- A four-step **guided ladder** that lights up as you progress
+- **Endpoint repair** for common mistakes (missing `http://`, bare `host:port`,
+  web UI URL without `/api`)
+- Actionable probe codes (`unreachable`, `unauthorized`, `wrong_path`, …) with
+  hints (Docker up, Account → API Keys, add `/api`, …)
+
 Use the curl walkthrough below when you need raw evidence for #39 or when
 debugging outside the UI.
 
@@ -128,8 +264,8 @@ debugging outside the UI.
 - Aegis built and able to start (`go build -o aegis .`).
 - Immich reachable from the Aegis host (same machine, LAN, or tailnet hostname).
   Default Immich API base is `http://<host>:2283/api`.
-- An Immich **API key**: Immich UI → Account → API Keys → create (read is enough
-  for listing and download tests).
+- An Immich **API key**: Immich UI → Account → API Keys → create with the
+  single-key checkbox set below (Aegis + `immich-go` union — Immich v3 is granular).
 - Optional but recommended for the mixed-library step: Google Photos already
   connected as another `PhotoProvider`.
 - Shell helpers used below:
@@ -435,6 +571,7 @@ ask agents for Immich keys.
 | 401/403 on proxy | Missing/wrong `X-API-Key` | Set `headers["X-API-Key"]` to the Immich API key (Account → API Keys) |
 | 502 “Immich request failed” | Endpoint unreachable from Aegis | Fix hostname/port; Immich is usually `…:2283/api` on the tailnet |
 | Library empty but Immich UI full | Wrong endpoint (missing `/api`), empty library user, or permissions | Verify `endpoint` ends with `/api`; check Immich account/library |
+| Library empty and Immich UI empty | Fresh install — nothing to list yet | Upload a few photos, phone-backup, or Google Takeout + `immich-go` (see “Get photos into Immich”). Then re-run checks |
 | JSON in `original` download | Path not treated as binary or Immich error body | Expect 200 + media type; 401/403 should be JSON errors from Aegis |
 | Photos never merge across services | No shared hash / taken_at+dimensions | Expected when metadata is incomplete; filename will not merge (by design) |
 | `truncated: true` on a small library | Page loop bug or Immich sending a looping `nextPage` | Note Immich version + `nextPage` sample in #39; connector treats `null`/`""`/non-positive as end |
