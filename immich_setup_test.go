@@ -327,12 +327,41 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 	body := w.Body.String()
 	for _, want := range []string{
 		`id="immich-setup-panel"`,
+		`id="immich-open-wizard"`,
+		`id="immich-wizard"`,
+		`data-wiz-page="2"`,
+		`data-wiz-page="5"`,
 		`id="immich-endpoint"`,
 		`id="immich-api-key"`,
 		`id="immich-claim-canonical"`,
-		`id="immich-newcomer"`,
+		`id="wiz-immich-endpoint"`,
+		`id="wiz-immich-save"`,
+		`id="immich-next-step"`,
+		`id="immich-steps"`,
+		`id="immich-starter-env"`,
+		`id="copy-immich-env"`,
+		`id="immich-api-permissions"`,
+		`id="immich-go-install"`,
+		`id="copy-immich-go-install"`,
+		`brew install immich-go`,
+		`Get photos into Immich`,
+		`immich-go`,
+		`takeout.google.com`,
+		`asset.read`,
+		`asset.upload`,
+		`album.create`,
+		`job.create`,
+		`One API key for Aegis + immich-go`,
+		`asset.view`,
+		`asset.download`,
+		`album.read`,
+		`user.read`,
+		`UPLOAD_LOCATION=./library`,
+		`empty section between colons`,
+		`ERR_CONNECTION_REFUSED`,
+		`CREATE DATABASE immich`,
 		`New to Immich?`,
-		`immich.app/docs/install`,
+		`docs.immich.app/overview/quick-start`,
 		`/v1/admin/immich/setup`,
 		`/v1/admin/immich/config`,
 		`/v1/admin/immich/check`,
@@ -341,5 +370,153 @@ func TestAdminHTML_ImmichSetupPanel(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing %s", want)
 		}
+	}
+}
+
+func TestNormalizeImmichEndpoint(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		changed bool
+	}{
+		{"", "", false},
+		{"photos.home.ts.net:2283", "http://photos.home.ts.net:2283/api", true},
+		{"http://photos.home.ts.net:2283", "http://photos.home.ts.net:2283/api", true},
+		{"http://photos.home.ts.net:2283/", "http://photos.home.ts.net:2283/api", true},
+		{"http://photos.home.ts.net:2283/api", "http://photos.home.ts.net:2283/api", false},
+		{"http://localhost:2283", "http://localhost:2283/api", true},
+		{"localhost", "http://localhost:2283/api", true},
+		{"http://photos.home.ts.net:2283/photos/abc", "http://photos.home.ts.net:2283/api", true},
+	}
+	for _, tc := range cases {
+		got, changed := normalizeImmichEndpoint(tc.in)
+		if got != tc.want {
+			t.Fatalf("normalizeImmichEndpoint(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+		if changed != tc.changed {
+			t.Fatalf("normalizeImmichEndpoint(%q) changed=%v, want %v", tc.in, changed, tc.changed)
+		}
+	}
+}
+
+func TestImmichGuidedSteps_NextStep(t *testing.T) {
+	status := ImmichSetupStatus{}
+	steps := immichGuidedSteps(&status)
+	if len(steps) != 4 {
+		t.Fatalf("steps = %d", len(steps))
+	}
+	if steps[0].ID != "install" || !steps[0].Current {
+		t.Fatalf("first current step = %+v", steps[0])
+	}
+	next := immichNextStepFrom(steps, &ImmichTestResponse{
+		OK: false, Code: immichCodeUnreachable, Hint: "Start Immich with Docker.",
+	}, false)
+	if next != "Start Immich with Docker." {
+		t.Fatalf("next = %q", next)
+	}
+
+	status = ImmichSetupStatus{
+		Configured: true,
+		HasAPIKey:  true,
+		LastProbe:  &ImmichTestResponse{OK: true, Code: immichCodeOK},
+		Checks: []ImmichSetupCheck{
+			{ID: "service_configured", OK: true},
+			{ID: "api_key", OK: true},
+			{ID: "bytes_stay_upstream", OK: true},
+		},
+	}
+	steps = immichGuidedSteps(&status)
+	if !steps[3].OK {
+		t.Fatalf("verify should be ok: %+v", steps[3])
+	}
+	next = immichNextStepFrom(steps, nil, false)
+	if !strings.Contains(next, "complete") {
+		t.Fatalf("next = %q", next)
+	}
+	// Empty library gets seed guidance rather than a bare "run checks".
+	next = immichNextStepFrom(immichGuidedSteps(&ImmichSetupStatus{
+		Configured: true, HasAPIKey: true,
+		LastProbe: &ImmichTestResponse{OK: true},
+		LibraryStatus: "ok", LibraryCount: 0,
+	}), nil, true)
+	if !strings.Contains(next, "no photos") && !strings.Contains(next, "Takeout") {
+		t.Fatalf("empty-library next = %q", next)
+	}
+}
+
+func TestProbeImmich_ActionableCodes(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+
+	// HTML on /server/ping → wrong_path / not_immich with hint.
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte(`<!doctype html><html><body>Not found</body></html>`))
+	}))
+	defer mock.Close()
+	res := srv.probeImmich(context.Background(), mock.URL+"/photos/abc", "")
+	if res.OK {
+		t.Fatal("html page should fail")
+	}
+	if res.Code != immichCodeWrongPath && res.Code != immichCodeNotImmich {
+		t.Fatalf("code = %q", res.Code)
+	}
+	if res.Hint == "" {
+		t.Fatal("expected hint")
+	}
+
+	// Unreachable host → unreachable + install hint.
+	res = srv.probeImmich(context.Background(), "http://127.0.0.1:1/api", "")
+	if res.OK || res.Code != immichCodeUnreachable {
+		t.Fatalf("unreachable probe = %+v", res)
+	}
+	if !strings.Contains(res.Hint, "Docker") && !strings.Contains(res.Hint, "Immich") {
+		t.Fatalf("hint = %q", res.Hint)
+	}
+}
+
+func TestImmichStarterEnv_File(t *testing.T) {
+	data, err := os.ReadFile("docs/immich-starter.env")
+	if err != nil {
+		t.Fatalf("read starter env: %v", err)
+	}
+	s := string(data)
+	for _, want := range []string{
+		"UPLOAD_LOCATION=./library",
+		"DB_DATA_LOCATION=./postgres",
+		"IMMICH_VERSION=v3",
+		"DB_PASSWORD=postgres",
+		"DB_USERNAME=postgres",
+		"DB_DATABASE_NAME=immich",
+		"named .env",
+		"ERR_CONNECTION_REFUSED",
+		"CREATE DATABASE immich",
+	} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("starter env missing %q", want)
+		}
+	}
+	if strings.Count(s, "DB_DATABASE_NAME=") != 1 {
+		t.Fatal("DB_DATABASE_NAME should appear once")
+	}
+}
+
+func TestImmichAPIKeyPermissions_SingleKeyUnion(t *testing.T) {
+	need := []string{
+		"asset.read", "asset.view", "asset.download",
+		"album.read", "user.read",
+		"asset.upload", "album.create", "job.create",
+	}
+	set := map[string]bool{}
+	for _, p := range immichAPIKeyPermissions {
+		set[p] = true
+	}
+	for _, n := range need {
+		if !set[n] {
+			t.Fatalf("missing permission %q in %v", n, immichAPIKeyPermissions)
+		}
+	}
+	if !strings.Contains(immichAPIKeyPermissionsSummary(), "asset.upload") {
+		t.Fatal("summary should include upload")
 	}
 }

@@ -12,9 +12,31 @@ import (
 	"time"
 )
 
-// Immich setup admin API (issue #39). Guides operators through connecting a
+// immichAPIKeyPermissions is the single Immich v3 checkbox set for one key
+// used by both Aegis (list/thumbnail/download) and immich-go Takeout import.
+// Keep in sync with web/admin.html and docs/immich-live-testing.md.
+var immichAPIKeyPermissions = []string{
+	// Aegis photo library + proxy downloads
+	"asset.read", "asset.view", "asset.download",
+	"album.read", "user.read",
+	// immich-go upload from-google-photos (album/tag/stack + upload)
+	"asset.upload", "asset.update", "asset.copy", "asset.delete", "asset.statistics",
+	"album.create", "albumAsset.create",
+	"stack.create", "tag.create", "tag.asset",
+	"server.about",
+	// immich-go pauses jobs during import (admin-linked key)
+	"job.create", "job.read",
+}
+
+func immichAPIKeyPermissionsSummary() string {
+	return strings.Join(immichAPIKeyPermissions, ", ")
+}
+
+// Immich setup admin API (issues #39, #121). Guides operators through connecting a
 // self-hosted Immich as the local/foreign canonical photo store without
-// leaving the Aegis admin UI or hand-editing aegis.json.
+// leaving the Aegis admin UI or hand-editing aegis.json. Issue #121 adds
+// first-timer hand-holding: endpoint normalization, actionable diagnostics,
+// and a live next-step prompt.
 
 // ImmichSetupCheck is one row of the live acceptance checklist.
 type ImmichSetupCheck struct {
@@ -26,16 +48,31 @@ type ImmichSetupCheck struct {
 
 // ImmichSetupStatus is GET /v1/admin/immich/setup.
 type ImmichSetupStatus struct {
-	Configured         bool     `json:"configured"`
-	Endpoint           string   `json:"endpoint,omitempty"`
-	HasAPIKey          bool     `json:"has_api_key"`
-	CanonicalFor       []string `json:"canonical_for,omitempty"`
-	CanonicalConflict  string   `json:"canonical_conflict,omitempty"`
-	Snippet            string   `json:"snippet,omitempty"`
-	Checks             []ImmichSetupCheck `json:"checks,omitempty"`
-	LibraryStatus      string   `json:"library_status,omitempty"`
-	LibraryCount       int      `json:"library_count,omitempty"`
-	LibraryError       string   `json:"library_error,omitempty"`
+	Configured        bool                  `json:"configured"`
+	Endpoint          string                `json:"endpoint,omitempty"`
+	HasAPIKey         bool                  `json:"has_api_key"`
+	CanonicalFor      []string              `json:"canonical_for,omitempty"`
+	CanonicalConflict string                `json:"canonical_conflict,omitempty"`
+	Snippet           string                `json:"snippet,omitempty"`
+	Checks            []ImmichSetupCheck    `json:"checks,omitempty"`
+	LibraryStatus     string                `json:"library_status,omitempty"`
+	LibraryCount      int                   `json:"library_count,omitempty"`
+	LibraryError      string                `json:"library_error,omitempty"`
+	// Steps is the guided first-run ladder (issue #121).
+	Steps []ImmichSetupStep `json:"steps,omitempty"`
+	// NextStep is a short, imperative hint for what to do next.
+	NextStep string `json:"next_step,omitempty"`
+	// LastProbe is the most recent connection diagnosis (when available).
+	LastProbe *ImmichTestResponse `json:"last_probe,omitempty"`
+}
+
+// ImmichSetupStep is one row of the guided setup ladder.
+type ImmichSetupStep struct {
+	ID      string `json:"id"`
+	Label   string `json:"label"`
+	OK      bool   `json:"ok"`
+	Detail  string `json:"detail,omitempty"`
+	Current bool   `json:"current,omitempty"`
 }
 
 // ImmichTestRequest is POST /v1/admin/immich/test. Omitted fields use the
@@ -45,19 +82,38 @@ type ImmichTestRequest struct {
 	APIKey   string `json:"api_key,omitempty"`
 }
 
-// ImmichTestResponse is the result of probing Immich.
+// ImmichTestResponse is the result of probing Immich. Code classifies the
+// outcome for the UI; Hint is an actionable next step (never a secret).
 type ImmichTestResponse struct {
 	OK      bool   `json:"ok"`
 	Status  int    `json:"status,omitempty"`
+	Code    string `json:"code,omitempty"`
 	Message string `json:"message"`
+	Hint    string `json:"hint,omitempty"`
+	// SuggestedEndpoint is a normalized URL when the input was ambiguous.
+	SuggestedEndpoint string `json:"suggested_endpoint,omitempty"`
 }
+
+// Immich probe / diagnosis codes (issue #121).
+const (
+	immichCodeOK            = "ok"
+	immichCodeOKNoKey       = "ok_no_key"
+	immichCodeEmptyEndpoint = "empty_endpoint"
+	immichCodeBadURL        = "bad_url"
+	immichCodeUnreachable   = "unreachable"
+	immichCodeTimeout       = "timeout"
+	immichCodeUnauthorized  = "unauthorized"
+	immichCodeWrongPath     = "wrong_path"
+	immichCodeNotImmich     = "not_immich"
+	immichCodeHTTPError     = "http_error"
+)
 
 // ImmichConfigRequest is POST /v1/admin/immich/config — save connection from
 // the admin UI into service_connections.json (not aegis.json).
 type ImmichConfigRequest struct {
-	Endpoint                  string `json:"endpoint"`
-	APIKey                    string `json:"api_key,omitempty"`
-	ClaimCanonicalForPhotos   bool   `json:"claim_canonical_for_photos"`
+	Endpoint                string `json:"endpoint"`
+	APIKey                  string `json:"api_key,omitempty"`
+	ClaimCanonicalForPhotos bool   `json:"claim_canonical_for_photos"`
 }
 
 // HandleAdminImmichSetup serves GET /v1/admin/immich/setup and dispatches
@@ -124,9 +180,13 @@ func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichS
 	status.Snippet = immichConfigSnippet(status.Endpoint)
 
 	if !withChecks {
+		status.Steps = immichGuidedSteps(&status)
+		status.NextStep = immichNextStepFrom(status.Steps, status.LastProbe, status.LibraryCount == 0)
 		return status
 	}
 	status.Checks = s.runImmichChecks(ctx, &status)
+	status.Steps = immichGuidedSteps(&status)
+	status.NextStep = immichNextStepFrom(status.Steps, status.LastProbe, status.LibraryCount == 0)
 	return status
 }
 
@@ -202,6 +262,7 @@ func (s *Server) runImmichChecks(ctx context.Context, status *ImmichSetupStatus)
 
 	// Probe reachability + auth using the configured connector path.
 	probe := s.probeImmich(ctx, svc.Endpoint, headerValue(svc.Headers, "X-API-Key"))
+	status.LastProbe = &probe
 	if probe.OK {
 		mark("endpoint_reachable", probe.Message, true)
 	} else {
@@ -230,7 +291,14 @@ func (s *Server) runImmichChecks(ctx context.Context, status *ImmichSetupStatus)
 		status.LibraryStatus = "ok"
 		status.LibraryError = "truncated at page cap"
 	}
-	mark("library_listing", fmt.Sprintf("%d photos", len(photos)), len(photos) > 0)
+	if len(photos) == 0 {
+		mark("library_listing", "0 photos — Immich is empty. Add photos via web upload, phone backup, or Google Takeout + immich-go", false)
+		if status.LibraryError == "" {
+			status.LibraryError = "Immich has no photos yet"
+		}
+	} else {
+		mark("library_listing", fmt.Sprintf("%d photos", len(photos)), true)
+	}
 
 	stampOK, stampDetail := immichStampSummary(photos, s.baseURL)
 	mark("canonical_stamp", stampDetail, stampOK)
@@ -249,17 +317,82 @@ func headerValue(headers map[string]string, key string) string {
 	return ""
 }
 
-// probeImmich checks endpoint reachability and API key auth. Tries
-// GET /users/me (auth) then GET /server/ping (reachability).
-func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) ImmichTestResponse {
-	base := strings.TrimRight(strings.TrimSpace(endpoint), "/")
-	if base == "" {
-		return ImmichTestResponse{OK: false, Message: "endpoint is empty — use http://host:2283/api"}
+// normalizeImmichEndpoint repairs the mistakes first-timers make: missing
+// scheme, bare host:port, web-UI URL without /api. Returns the normalized
+// endpoint and whether it changed.
+func normalizeImmichEndpoint(raw string) (string, bool) {
+	s := strings.TrimSpace(raw)
+	if s == "" {
+		return "", false
 	}
-	if !strings.HasSuffix(base, "/api") {
-		// Tolerate a bare host:port and append /api.
-		if strings.Contains(base, "://") && !strings.Contains(strings.TrimPrefix(base, "://"), "/") {
-			base += "/api"
+	original := s
+	// Bare host:port or host → assume http and default Immich port when none.
+	if !strings.Contains(s, "://") {
+		s = "http://" + s
+	}
+	u, err := url.Parse(s)
+	if err != nil || u.Host == "" {
+		return strings.TrimRight(original, "/"), false
+	}
+	if u.Path == "" || u.Path == "/" {
+		if u.Port() == "" {
+			// Common Immich default when people paste just a hostname.
+			if strings.EqualFold(u.Hostname(), "localhost") || strings.EqualFold(u.Hostname(), "127.0.0.1") {
+				u.Host = u.Hostname() + ":2283"
+			}
+		}
+		u.Path = "/api"
+	} else {
+		trimmed := strings.TrimRight(u.Path, "/")
+		lower := strings.ToLower(trimmed)
+		switch {
+		case strings.HasSuffix(lower, "/api") || strings.Contains(lower, "/api/"):
+			u.Path = trimmed
+		case strings.HasSuffix(lower, "/photos"),
+			strings.Contains(lower, "/photos/"),
+			strings.HasSuffix(lower, "/album"),
+			strings.Contains(lower, "/album/"),
+			strings.Contains(lower, "/albums/"),
+			strings.Contains(lower, "/share/"):
+			// Pasted a web UI deep link — not the API base.
+			u.Path = "/api"
+		default:
+			// Leave explicit non-root paths alone (reverse-proxy prefixes).
+		}
+	}
+	out := strings.TrimRight(u.String(), "/")
+	// url.String() may re-encode; rebuild a clean base.
+	out = u.Scheme + "://" + u.Host + strings.TrimRight(u.Path, "/")
+	if out == "" {
+		return original, false
+	}
+	return out, out != strings.TrimRight(original, "/") && out != original
+}
+
+// probeImmich checks endpoint reachability and API key auth with actionable
+// diagnostics (issue #121). Tries GET /users/me (auth) then GET /server/ping.
+func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) ImmichTestResponse {
+	raw := strings.TrimSpace(endpoint)
+	base, changed := normalizeImmichEndpoint(raw)
+	if base == "" {
+		return ImmichTestResponse{
+			OK:      false,
+			Code:    immichCodeEmptyEndpoint,
+			Message: "No Immich endpoint yet",
+			Hint:    "Install Immich (https://docs.immich.app/overview/quick-start/), then paste its URL — usually http://<host>:2283/api",
+		}
+	}
+	suggested := ""
+	if changed {
+		suggested = base
+	}
+
+	if _, err := url.Parse(base); err != nil {
+		return ImmichTestResponse{
+			OK:      false,
+			Code:    immichCodeBadURL,
+			Message: "That does not look like a URL",
+			Hint:    "Use something like http://photos.home.ts.net:2283/api (include http:// or https://).",
 		}
 	}
 
@@ -274,38 +407,206 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 		}
 		resp, err := aegisHTTPClient.Do(req)
 		if err == nil {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 512))
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				return ImmichTestResponse{OK: true, Status: resp.StatusCode, Message: "Immich accepted the API key"}
+				return ImmichTestResponse{
+					OK: true, Status: resp.StatusCode, Code: immichCodeOK,
+					Message:          "Immich accepted the API key",
+					Hint:             "Save the connection, then run checks.",
+					SuggestedEndpoint: suggested,
+				}
 			}
 			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-				return ImmichTestResponse{OK: false, Status: resp.StatusCode, Message: "Immich rejected the API key (Account → API Keys)"}
+				return ImmichTestResponse{
+					OK: false, Status: resp.StatusCode, Code: immichCodeUnauthorized,
+					Message:          "Immich rejected the API key",
+					Hint:             "In Immich: Account → API Keys → New key. Tick the single-key set (Aegis + immich-go): " + immichAPIKeyPermissionsSummary() + ". Copy the secret once, paste it here.",
+					SuggestedEndpoint: suggested,
+				}
 			}
-			// Fall through to ping for non-auth failures (404 on older APIs).
-			_ = body
 		}
 	}
 
 	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/server/ping", nil)
 	if err != nil {
-		return ImmichTestResponse{OK: false, Message: err.Error()}
+		return ImmichTestResponse{OK: false, Code: immichCodeBadURL, Message: err.Error(), Hint: "Check the endpoint spelling."}
 	}
 	if apiKey != "" {
 		req2.Header.Set("X-API-Key", apiKey)
 	}
 	resp2, err := aegisHTTPClient.Do(req2)
 	if err != nil {
-		return ImmichTestResponse{OK: false, Message: "Immich unreachable: " + err.Error()}
+		code := immichCodeUnreachable
+		hint := "Start Immich with Docker: save our starter as .env (before the first up), docker compose up -d, then wait for immich_server to be healthy in docker compose ps. If localhost:2283 is refused, check server logs for database \"immich\" does not exist. Use a hostname this Aegis host can reach (LAN IP or tailnet name)."
+		if ctx.Err() != nil || strings.Contains(err.Error(), "timeout") || strings.Contains(err.Error(), "deadline") {
+			code = immichCodeTimeout
+			hint = "The request timed out. Immich may be slow to start, firewalled, or on another network. Try the tailnet hostname if this Aegis runs on a different machine."
+		}
+		if suggested == "" {
+			if norm, ch := normalizeImmichEndpoint(raw); ch {
+				suggested = norm
+			}
+		}
+		return ImmichTestResponse{
+			OK: false, Code: code,
+			Message:          "Could not reach Immich: " + err.Error(),
+			Hint:             hint,
+			SuggestedEndpoint: suggested,
+		}
 	}
 	defer resp2.Body.Close()
+	sniff := make([]byte, 64)
+	n, _ := io.ReadFull(resp2.Body, sniff)
+	bodyHint := strings.ToLower(string(sniff[:n]))
+
 	if resp2.StatusCode == http.StatusOK {
 		if apiKey == "" {
-			return ImmichTestResponse{OK: true, Status: resp2.StatusCode, Message: "Immich reachable (no API key set yet)"}
+			return ImmichTestResponse{
+				OK: true, Status: resp2.StatusCode, Code: immichCodeOKNoKey,
+				Message:          "Immich is reachable (no API key set yet)",
+				Hint:             "Create one Immich API key for Aegis + immich-go (permissions: " + immichAPIKeyPermissionsSummary() + ") and paste it above so agents can list photos.",
+				SuggestedEndpoint: suggested,
+			}
 		}
-		return ImmichTestResponse{OK: true, Status: resp2.StatusCode, Message: "Immich reachable"}
+		return ImmichTestResponse{
+			OK: true, Status: resp2.StatusCode, Code: immichCodeOK,
+			Message:          "Immich is reachable",
+			Hint:             "If you have not already, paste the API key and save.",
+			SuggestedEndpoint: suggested,
+		}
 	}
-	return ImmichTestResponse{OK: false, Status: resp2.StatusCode, Message: fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode)}
+
+	// Classify non-200 responses for first-timers.
+	switch {
+	case resp2.StatusCode == http.StatusUnauthorized || resp2.StatusCode == http.StatusForbidden:
+		return ImmichTestResponse{
+			OK: false, Status: resp2.StatusCode, Code: immichCodeUnauthorized,
+			Message:          fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
+			Hint:             "Check the API key (Account → API Keys). If you just created Immich, finish the web-UI signup first.",
+			SuggestedEndpoint: suggested,
+		}
+	case resp2.StatusCode == http.StatusNotFound && strings.Contains(bodyHint, "<html"):
+		return ImmichTestResponse{
+			OK: false, Status: resp2.StatusCode, Code: immichCodeWrongPath,
+			Message:          "Got a web page, not the Immich API",
+			Hint:             "The endpoint must be the API base and end in /api — e.g. http://host:2283/api (not the album /photos page).",
+			SuggestedEndpoint: firstNonEmpty(suggested, mustNormalize(base+"/api")),
+		}
+	case strings.Contains(bodyHint, "<html") || strings.Contains(bodyHint, "<!doctype"):
+		return ImmichTestResponse{
+			OK: false, Status: resp2.StatusCode, Code: immichCodeNotImmich,
+			Message:          "That host answered with a web page, not Immich",
+			Hint:             "Double-check the host/port. Immich’s API answers JSON from /server/ping on port 2283 by default.",
+			SuggestedEndpoint: suggested,
+		}
+	default:
+		return ImmichTestResponse{
+			OK: false, Status: resp2.StatusCode, Code: immichCodeHTTPError,
+			Message:          fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
+			Hint:             "Open the same URL in a browser or curl. If it is not Immich, fix the endpoint; if Immich is healthy, check reverse-proxy / TLS.",
+			SuggestedEndpoint: suggested,
+		}
+	}
+}
+
+func firstNonEmpty(vals ...string) string {
+	for _, v := range vals {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func mustNormalize(raw string) string {
+	out, _ := normalizeImmichEndpoint(raw)
+	return out
+}
+
+// immichGuidedSteps builds the first-run ladder and the single next step
+// (issue #121). Steps are ordered: install → key → connect → verify.
+func immichGuidedSteps(status *ImmichSetupStatus) []ImmichSetupStep {
+	reachable := false
+	switch {
+	case status.LastProbe != nil && status.LastProbe.OK:
+		reachable = true
+	case status.LibraryStatus == "ok":
+		reachable = true
+	}
+	installDetail := "Install with the starter .env (docs/immich-starter.env) + docker compose up -d, wait for healthy. Web UI: http://localhost:2283"
+	if status.Endpoint != "" {
+		installDetail = "API base: " + status.Endpoint
+	}
+	if reachable {
+		installDetail = "Immich answered on " + firstNonEmpty(status.Endpoint, "the configured endpoint")
+	}
+	keyDetail := "Immich → Account → API Keys → New key. One key for Aegis + immich-go: " + immichAPIKeyPermissionsSummary() + ". Copy it once."
+	if status.HasAPIKey {
+		keyDetail = "API key is saved in Aegis (value not shown)."
+	}
+	connectDetail := "Use Test connection + Save to Aegis below."
+	if status.Configured {
+		connectDetail = "Connected in Aegis (service_connections.json)."
+	}
+	verifyDetail := "Run checks after saving."
+	verifyOK := false
+	if status.Configured && status.HasAPIKey && len(status.Checks) > 0 {
+		failed := false
+		for _, c := range status.Checks {
+			if !c.OK && c.ID != "canonical_owner" {
+				failed = true
+				break
+			}
+		}
+		if !failed {
+			verifyOK = true
+			verifyDetail = "Checklist looks good — agents can use /v1/library/photos."
+		} else {
+			verifyDetail = "Some checks failed — see below."
+		}
+	} else if status.Configured && status.HasAPIKey {
+		verifyDetail = "Run checks to finish verification."
+	}
+
+	steps := []ImmichSetupStep{
+		{ID: "install", Label: "Immich installed and reachable", OK: reachable, Detail: installDetail},
+		{ID: "api_key", Label: "Immich API key created", OK: status.HasAPIKey, Detail: keyDetail},
+		{ID: "connect", Label: "Saved into Aegis", OK: status.Configured, Detail: connectDetail},
+		{ID: "verify", Label: "Verified end-to-end", OK: verifyOK, Detail: verifyDetail},
+	}
+	for i := range steps {
+		if !steps[i].OK {
+			steps[i].Current = true
+			break
+		}
+	}
+	return steps
+}
+
+func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse, emptyLibrary bool) string {
+	for _, st := range steps {
+		if st.OK {
+			continue
+		}
+		switch st.ID {
+		case "install":
+			if probe != nil && probe.Hint != "" {
+				return probe.Hint
+			}
+			return "Install Immich with the starter .env (Admin → Services copy button), then Test connection."
+		case "api_key":
+			return "Create one Immich API key (Aegis + immich-go: " + immichAPIKeyPermissionsSummary() + ") and paste it above."
+		case "connect":
+			return "Click Save to Aegis to store the connection."
+		case "verify":
+			if emptyLibrary {
+				return "Immich has no photos yet — upload a few in the web UI, phone-backup an album, or import Google Takeout with immich-go (Services → New to Immich?), then Run checks again."
+			}
+			return "Click Run checks and fix anything still red."
+		}
+	}
+	return "Immich setup is complete. Agents can list photos via /v1/library/photos."
 }
 
 func (s *Server) listImmichPhotos(ctx context.Context) ([]Photo, bool, error) {
@@ -384,28 +685,20 @@ func (s *Server) handleImmichConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint := strings.TrimSpace(req.Endpoint)
 	if endpoint == "" {
-		writeJSONError(w, http.StatusBadRequest, "endpoint is required")
+		writeJSONError(w, http.StatusBadRequest, "endpoint is required — e.g. http://photos.home.ts.net:2283/api")
 		return
 	}
-	// Normalize bare host:port to …/api so the connector base is correct.
-	if !strings.Contains(strings.TrimPrefix(endpoint, "http://"), "/") ||
-		strings.HasSuffix(strings.TrimRight(endpoint, "/"), ":2283") {
-		if u, err := url.Parse(endpoint); err == nil && u.Host != "" && (u.Path == "" || u.Path == "/") {
-			endpoint = strings.TrimRight(endpoint, "/") + "/api"
-		}
-	}
-	if !strings.HasSuffix(strings.TrimRight(endpoint, "/"), "/api") &&
-		!strings.Contains(endpoint, "/api/") {
-		// Allow endpoints that already include a path beyond /api.
-		if strings.Count(strings.TrimPrefix(endpoint, "http://"), "/") == 0 {
-			endpoint = strings.TrimRight(endpoint, "/") + "/api"
-		}
+	// Repair common first-timer URLs (scheme, /api, localhost port).
+	endpoint, _ = normalizeImmichEndpoint(endpoint)
+	if endpoint == "" {
+		writeJSONError(w, http.StatusBadRequest, "endpoint is required — e.g. http://photos.home.ts.net:2283/api")
+		return
 	}
 
 	entry := serviceConnectionEntry{
 		Name:        "Immich",
 		Action:      "inject",
-		Endpoint:    strings.TrimRight(endpoint, "/"),
+		Endpoint:    endpoint,
 		CacheTTL:    "5m",
 		Description: "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical).",
 		Aliases:     []string{"immich photos", "self-hosted photos"},
