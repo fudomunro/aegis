@@ -701,7 +701,10 @@ func (s *Server) handleImmichConfig(w http.ResponseWriter, r *http.Request) {
 		Endpoint:    endpoint,
 		CacheTTL:    "5m",
 		Description: "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical).",
-		Aliases:     []string{"immich photos", "self-hosted photos"},
+		Aliases: []string{
+			"immich photos", "self-hosted photos", "immich",
+			"photo", "photos", "picture", "pictures", "photo library",
+		},
 		Headers:     map[string]string{},
 	}
 	if key := strings.TrimSpace(req.APIKey); key != "" {

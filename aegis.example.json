@@ -93,7 +93,7 @@
     {
       "id": "google-photos",
       "name": "Google Photos",
-      "aliases": ["photos", "google photos library"],
+      "aliases": ["photos", "photo", "pictures", "picture", "google photos library"],
       "action": "inject",
       "endpoint": "https://photospicker.googleapis.com/v1",
       "cache_ttl": "15m",
@@ -111,7 +111,7 @@
     {
       "id": "immich",
       "name": "Immich",
-      "aliases": ["immich photos", "self-hosted photos"],
+      "aliases": ["immich photos", "self-hosted photos", "immich", "photo", "photos", "pictures", "picture", "photo library"],
       "action": "inject",
       "endpoint": "http://192.168.1.10:2283/api",
       "headers": {

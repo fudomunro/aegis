@@ -106,7 +106,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
 |-------|-------------|
 | `id` | Unique identifier, used in proxy URLs (`/v1/services/{id}`) |
 | `name` | Display name, also used for matching in user messages |
-| `aliases` | Additional names to match (case-insensitive substring) |
+| `aliases` | Additional names to match (case-insensitive substring). Photo services should include singular forms (`photo`, `picture`) as well as plurals so questions like “oldest photo in my collection” match (issue #125). |
 | `action` | `inject` (redirect to proxy) or `block` (reject requests) |
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
@@ -1048,6 +1048,13 @@ GET  /v1/services/immich/assets/{id}/thumbnail
 This is the reference pattern for other local/foreign stores: configure
 `endpoint` + static `headers`, implement a library provider, mark
 `canonical_for`, and never cache content bytes in Aegis.
+
+**Photo source discipline (issue #125):** pre-request injection for photo
+questions always includes `/v1/library/photos` and a hard rule to use only
+Aegis URLs — not Photos.app / `Photos Library.photoslibrary` / Photo Booth /
+`~/Pictures`, not Immich at `:2283`, and not Immich Docker/Postgres. Keep
+photo service `aliases` broad enough (`photo`, `picture`, `photos`) that
+singular prompts still match.
 
 **Admin UI setup (preferred for operators):** **Admin → Services → Immich —
 local canonical photos**. Enter the Immich endpoint + API key, optionally
