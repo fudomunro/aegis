@@ -67,6 +67,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
+- `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
 - `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
@@ -186,11 +187,18 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 | Level | Allowed methods |
 |-------|-----------------|
 | `none` | none — 403 for that data type |
+| `freebusy` | `GET`, `HEAD` on `events`, but responses reduced to availability only (issue #128) |
 | `read` | `GET`, `HEAD` |
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
 
 - The reserved key `default` applies to data types not listed.
+- **`freebusy` is events-only** (issue #128). Scheduling apps can see when you
+  are busy without reading titles, attendees, locations, or descriptions.
+  Responses keep only `start_at`, `end_at`, `all_day`, and `status`. Prefer
+  `GET /v1/library/freebusy` for availability; `/v1/library/events` and the
+  calendar proxy apply the same redaction when a service is set to `freebusy`.
+  The level is rejected on other data types and on `default`.
 - **Unknown proxy paths** (not a mapped data type) use the **strictest**
   configured level, not `default`, so a tight type cannot be bypassed by an
   unmapped endpoint (issue #94).
