@@ -274,6 +274,19 @@ func bareEventIDFromProxyPath(remainingPath string) (string, bool) {
 	return "", false
 }
 
+// eventsFreeBusyOnly reports whether this service's events permission is the
+// free/busy share (issue #128). Proxy responses must drop titles/attendees.
+func (c *GoogleCalendarConnector) eventsFreeBusyOnly() bool {
+	if c.server == nil || c.server.config == nil {
+		return false
+	}
+	svc := c.server.config.GetService(googleCalendarServiceID)
+	if svc == nil {
+		return false
+	}
+	return IsFreeBusyAccess(svc.Permissions.For("events"))
+}
+
 func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	events, truncated, err := c.listEventsWithWindow(r.Context(), r.URL.Query())
 	if err != nil {
@@ -288,6 +301,9 @@ func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *htt
 	}
 	if events == nil {
 		events = []CalendarEvent{}
+	}
+	if c.eventsFreeBusyOnly() {
+		events = redactCalendarEventsFreeBusy(events)
 	}
 	result := CalendarEventList{
 		Events:    events,
@@ -326,6 +342,9 @@ func (c *GoogleCalendarConnector) handleListCalendarEvents(w http.ResponseWriter
 	}
 	if events == nil {
 		events = []CalendarEvent{}
+	}
+	if c.eventsFreeBusyOnly() {
+		events = redactCalendarEventsFreeBusy(events)
 	}
 	result := CalendarEventList{
 		Events: events,
@@ -415,6 +434,9 @@ func (c *GoogleCalendarConnector) handleGetEvent(w http.ResponseWriter, r *http.
 		return
 	}
 	ev := mapGoogleCalendarEvent(raw, calendarID, googleCalendarServiceName)
+	if c.eventsFreeBusyOnly() {
+		ev = RedactCalendarEventFreeBusy(ev)
+	}
 	out, err := json.Marshal(ev)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to encode event")

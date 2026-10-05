@@ -270,6 +270,10 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 		return ""
 	}
 	text := k.Instructions(s.baseURL)
+	if kindID == "events" {
+		root := strings.TrimRight(s.baseURL, "/")
+		text += fmt.Sprintf(" For scheduling or availability-only questions use GET %s/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees (issue #128).", root)
+	}
 	if name := s.canonicalServiceName(kindID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", k.Label, name)
 	}
@@ -345,6 +349,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/contacts":  s.HandleLibraryContacts,
 		"/v1/library/photos":    s.HandleLibraryPhotos,
 		"/v1/library/events":    s.HandleLibraryEvents,
+		"/v1/library/freebusy":  s.HandleLibraryFreeBusy,
 		"/v1/library/messages":  s.HandleLibraryMessages,
 		"/v1/library/copies":    s.HandleLibraryCopies,
 		"/v1/library/review":    s.HandleMergeReview,
@@ -402,6 +407,9 @@ type libraryKindSpec[T any] struct {
 	stampCopies func(items []T)
 	// enrich optionally resolves durable IDs before merge (issue #4).
 	enrich func(ctx context.Context, s *Server, items []T)
+	// cacheKey overrides kind.CacheKey() when a second endpoint shares the
+	// same dataset but a different response shape (freebusy view of events).
+	cacheKey string
 }
 
 // handleLibraryAggregate is the shared GET /v1/library/{kind} pipeline:
@@ -417,6 +425,9 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	agent := agentForRequest(r)
 
 	cacheKey := kind.CacheKey()
+	if spec.cacheKey != "" {
+		cacheKey = spec.cacheKey
+	}
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		logger.Debug("cache hit")
 		w.Header().Set("Content-Type", "application/json")
