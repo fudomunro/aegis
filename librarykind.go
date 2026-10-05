@@ -165,6 +165,10 @@ var libraryKinds = []LibraryKind{
 			"photos from", "pictures from", "photos do i have",
 			"photos i have", "list my photos", "list my pictures",
 			"google photos", "camera roll",
+			// Singular / collection phrasing missed before issue #125
+			// ("oldest photo in my collection" matched nothing).
+			"photo", "picture",
+			"photo collection", "photos in my", "pictures in my",
 		},
 		EmptyMsg:     "no photo-capable services configured",
 		DenyMsg:      "permission denied: agent access to photos is not allowed",
@@ -268,6 +272,9 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 	text := k.Instructions(s.baseURL)
 	if name := s.canonicalServiceName(kindID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", k.Label, name)
+	}
+	if kindID == "photos" {
+		text += "\n" + photoSourceDiscipline()
 	}
 	text += "\n" + multiSourceMutationRule()
 	return text

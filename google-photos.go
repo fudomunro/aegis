@@ -124,7 +124,9 @@ Picker flow (call the full proxy URL; Aegis authenticates you):
 GET %s/v1/library/photos — last completed Google Photos pick plus other photo services
 
 Photos are metadata-only. Aegis never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour) — do not treat it as a permanent link.
-Always include the full proxy base URL in your requests.`, base, root)
+Always include the full proxy base URL in your requests.
+
+%s`, base, root, photoSourceDiscipline())
 }
 
 // HandleProxy processes a Google Photos Picker API request through the connector.

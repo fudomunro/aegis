@@ -130,7 +130,9 @@ GET /assets/{id}/thumbnail — thumbnail bytes
 GET /albums — list albums
 
 Photos are metadata-only in the library. Use sources[].blob_url (Aegis proxy URL) to fetch bytes; Immich holds the authoritative copy (foreign canonical).
-Always include the full proxy base URL in your requests.`, proxy, root)
+Always include the full proxy base URL in your requests.
+
+%s`, proxy, root, photoSourceDiscipline())
 }
 
 // HandleProxy forwards Immich API paths, attaching the configured API key.
