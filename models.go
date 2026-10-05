@@ -353,6 +353,33 @@ type CalendarEventList struct {
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
+// FreeBusyBlock is one busy interval on the user's calendar (issue #128).
+// It carries availability only — never titles, attendees, locations, or
+// descriptions — so scheduling apps can find open slots without reading
+// event content.
+type FreeBusyBlock struct {
+	// StartAt is the busy start in RFC3339 (date-only all-day events use
+	// midnight UTC of that date).
+	StartAt string `json:"start_at,omitempty"`
+	// EndAt is the busy end in RFC3339 when known.
+	EndAt string `json:"end_at,omitempty"`
+	// AllDay marks date-bounded blocks without a clock time.
+	AllDay bool `json:"all_day,omitempty"`
+}
+
+// FreeBusyList is the neutral free/busy response for scheduling-style
+// consumers (issue #128). Blocks are availability only.
+type FreeBusyList struct {
+	Busy []FreeBusyBlock `json:"busy"`
+	// Total is the number of busy blocks in this response.
+	Total int `json:"total"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream (or left the time window incomplete).
+	Truncated bool `json:"truncated,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
 // MessageChannel values for the neutral message type. Email is the first
 // named-service path (Gmail); SMS/WhatsApp remain reserved for connectors
 // that can authenticate a real user history (issue #60).

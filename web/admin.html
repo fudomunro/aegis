@@ -354,7 +354,7 @@
 
       <div id="agent-data-access-help" class="help-box">
         <h3>Agent data access</h3>
-        <p>Choose what agents can use on each service. Available = read · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
+        <p>Choose what agents can use on each service. Available = read · Free/busy only = calendar availability without titles/attendees · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
       </div>
 
       <div class="help-box" id="immich-setup-panel">
@@ -1650,18 +1650,22 @@ job.read</pre>
     events: "Calendar events",
     messages: "Messages",
   };
-  // User-facing access options. Backend still stores none/read/write/read-write.
+  // User-facing access options. Backend still stores none/freebusy/read/write/read-write.
   const ACCESS_CHOICES = [
     { value: "read", label: "Available" },
+    { value: "freebusy", label: "Free/busy only" },
     { value: "read-write", label: "Editable" },
     { value: "none", label: "Off" },
   ];
+  // freebusy redaction is events-only (issue #128).
+  const FREEBUSY_TYPES = new Set(["events"]);
   // Per-service Advanced disclosure under the permissions form (issue #69).
   const openAdvanced = new Set();
 
   function normalizeAccess(level) {
     const v = String(level || "").toLowerCase();
     if (v === "none" || v === "deny" || v === "off" || v === "false") return "none";
+    if (v === "freebusy" || v === "fb" || v === "busy" || v === "busy-only" || v === "free-busy") return "freebusy";
     if (v === "read" || v === "ro" || v === "readonly" || v === "read-only") return "read";
     if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only" || v === "mutate") return "write";
     if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite" || v === "read_write") return "read-write";
@@ -1677,7 +1681,11 @@ job.read</pre>
     // Display write as Available when the connector cannot write this type —
     // the form must not offer a way to increase available functionality.
     const display = (!allowWrite && (cur === "read-write" || cur === "write")) ? "read" : cur;
-    const options = ACCESS_CHOICES.filter((o) => allowWrite || o.value !== "read-write");
+    const options = ACCESS_CHOICES.filter((o) => {
+      if (o.value === "read-write" && !allowWrite) return false;
+      if (o.value === "freebusy" && !FREEBUSY_TYPES.has(name)) return false;
+      return true;
+    });
     if (options.every((o) => o.value !== display) && display) {
       options.push({ value: display, label: display });
     }
@@ -1771,11 +1779,13 @@ job.read</pre>
     if (!keys.length) return "unrestricted";
     const writable = new Set(writableTypes || []);
     const denied = [];
+    const freebusy = [];
     const editable = [];
     keys.sort().forEach((k) => {
       const level = normalizeAccess(perms[k]);
       if (k === "default") return;
       if (level === "none") denied.push(dataTypeLabel(k));
+      else if (level === "freebusy") freebusy.push(dataTypeLabel(k));
       // Only surface Editable for types the form can actually offer as writable.
       else if ((level === "read-write" || level === "write") && writable.has(k)) {
         editable.push(dataTypeLabel(k));
@@ -1783,6 +1793,7 @@ job.read</pre>
     });
     const parts = [];
     if (denied.length) parts.push("off: " + denied.join(", "));
+    if (freebusy.length) parts.push("free/busy: " + freebusy.join(", "));
     if (editable.length) parts.push("editable: " + editable.join(", "));
     if (!parts.length) parts.push("available");
     return parts.join(" · ");
