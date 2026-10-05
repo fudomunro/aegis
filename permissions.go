@@ -12,6 +12,10 @@ import (
 const (
 	// AccessNone denies all operations on the data type.
 	AccessNone = "none"
+	// AccessFreeBusy allows safe methods on events, but responses are
+	// reduced to availability only (start/end/all_day/status) — no titles,
+	// attendees, locations, or descriptions (issue #128). Events-only.
+	AccessFreeBusy = "freebusy"
 	// AccessRead allows safe methods (GET, HEAD).
 	AccessRead = "read"
 	// AccessWrite allows mutating methods (POST, PUT, PATCH, DELETE).
@@ -19,6 +23,13 @@ const (
 	// AccessFull allows both read and write methods.
 	AccessFull = "read-write"
 )
+
+// freeBusyOnlyTypes lists data types that honor AccessFreeBusy redaction.
+// freebusy is rejected on any other key so we never claim a redaction we
+// cannot enforce (issue #128).
+var freeBusyOnlyTypes = map[string]bool{
+	"events": true,
+}
 
 // DefaultAccessType is used when a service has no permissions block, or when
 // a data type is not listed and no "default" key is set. Preserves pre-permission
@@ -60,11 +71,13 @@ func (p Permissions) Strictest() string {
 	if len(p) == 0 {
 		return DefaultAccessType
 	}
-	hasNone, hasRead, hasWrite, hasFull := false, false, false, false
+	hasNone, hasFreeBusy, hasRead, hasWrite, hasFull := false, false, false, false, false
 	for _, v := range p {
 		switch normalizeAccess(v) {
 		case AccessNone:
 			hasNone = true
+		case AccessFreeBusy:
+			hasFreeBusy = true
 		case AccessRead:
 			hasRead = true
 		case AccessWrite:
@@ -76,6 +89,11 @@ func (p Permissions) Strictest() string {
 	if hasNone || (hasRead && hasWrite) {
 		return AccessNone
 	}
+	// freebusy redaction is events-only. When it is the tightest level,
+	// unknown paths cannot be redacted — deny them rather than leak detail.
+	if hasFreeBusy && !hasRead && !hasWrite && !hasFull {
+		return AccessNone
+	}
 	if hasRead {
 		return AccessRead
 	}
@@ -84,6 +102,9 @@ func (p Permissions) Strictest() string {
 	}
 	if hasFull {
 		return AccessFull
+	}
+	if hasFreeBusy {
+		return AccessFreeBusy
 	}
 	return DefaultAccessType
 }
@@ -131,6 +152,26 @@ func (p Permissions) DeniedDataTypes() []string {
 	return denied
 }
 
+// FreeBusyDataTypes returns sorted data-type names limited to free/busy
+// (issue #128). Used in pre-request injection so agents know they only get
+// availability, not event content.
+func (p Permissions) FreeBusyDataTypes() []string {
+	if p == nil {
+		return nil
+	}
+	var limited []string
+	for k, v := range p {
+		if k == PermissionDefaultKey {
+			continue
+		}
+		if normalizeAccess(v) == AccessFreeBusy {
+			limited = append(limited, k)
+		}
+	}
+	sort.Strings(limited)
+	return limited
+}
+
 // Clone returns a shallow copy suitable for admin/API responses.
 func (p Permissions) Clone() map[string]string {
 	if p == nil {
@@ -144,15 +185,22 @@ func (p Permissions) Clone() map[string]string {
 }
 
 // ValidatePermissions checks that every level is a known access type.
+// freebusy is events-only: other types cannot honor availability redaction.
 func ValidatePermissions(p Permissions) error {
 	for k, v := range p {
 		if k == "" {
 			return fmt.Errorf("permissions: empty data type key")
 		}
 		switch normalizeAccess(v) {
-		case AccessNone, AccessRead, AccessWrite, AccessFull:
+		case AccessNone, AccessFreeBusy, AccessRead, AccessWrite, AccessFull:
 		default:
-			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, read, write, or read-write)", k, v)
+			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, read, write, or read-write)", k, v)
+		}
+		if normalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !freeBusyOnlyTypes[k] {
+			return fmt.Errorf("permissions[%s]: freebusy is only supported for events", k)
+		}
+		if normalizeAccess(v) == AccessFreeBusy && k == PermissionDefaultKey {
+			return fmt.Errorf("permissions[default]: freebusy is only supported for events")
 		}
 	}
 	return nil
@@ -162,6 +210,8 @@ func normalizeAccess(level string) string {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case AccessNone, "deny", "off", "false":
 		return AccessNone
+	case AccessFreeBusy, "fb", "busy", "busy-only", "free-busy":
+		return AccessFreeBusy
 	case AccessRead, "ro", "readonly", "read-only":
 		return AccessRead
 	case AccessWrite, "wo", "writeonly", "write-only", "mutate":
@@ -176,13 +226,18 @@ func normalizeAccess(level string) string {
 func allowsMethod(level, method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
-		return level == AccessRead || level == AccessFull
+		return level == AccessFreeBusy || level == AccessRead || level == AccessFull
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 		return level == AccessWrite || level == AccessFull
 	default:
 		// Unknown methods are treated as mutations.
 		return level == AccessWrite || level == AccessFull
 	}
+}
+
+// IsFreeBusyAccess reports whether the level is the events free/busy view.
+func IsFreeBusyAccess(level string) bool {
+	return normalizeAccess(level) == AccessFreeBusy
 }
 
 // errNonCanonicalPath is returned for proxy paths that are not in canonical
@@ -535,14 +590,22 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 }
 
 // permissionNotice returns a short system-instruction suffix listing denied
-// data types so agents do not waste turns on blocked endpoints.
+// data types so agents do not waste turns on blocked endpoints. Also warns
+// when a type is free/busy only (issue #128).
 func permissionNotice(p Permissions) string {
-	denied := p.DeniedDataTypes()
-	if len(denied) == 0 {
+	var parts []string
+	if denied := p.DeniedDataTypes(); len(denied) > 0 {
+		parts = append(parts, "the following data types are not available and must not be requested: "+
+			strings.Join(denied, ", "))
+	}
+	if limited := p.FreeBusyDataTypes(); len(limited) > 0 {
+		parts = append(parts, strings.Join(limited, ", ")+
+			" is free/busy only — responses include start_at, end_at, all_day, and status; never request titles, attendees, locations, or descriptions. Prefer GET /v1/library/freebusy for scheduling.")
+	}
+	if len(parts) == 0 {
 		return ""
 	}
-	return "Access policy: the following data types are not available and must not be requested: " +
-		strings.Join(denied, ", ") + "."
+	return "Access policy: " + strings.Join(parts, ". ") + "."
 }
 
 // allDataDenied reports whether every listed data type (and the default)

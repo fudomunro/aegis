@@ -241,17 +241,99 @@ func newCalendarEvent(service, serviceName, id, title, startAt, endAt string, al
 	}
 }
 
+// calendarEventIsBusy reports whether the event should block time on a
+// free/busy share. Cancelled events do not occupy the calendar.
+func calendarEventIsBusy(e CalendarEvent) bool {
+	return !strings.EqualFold(strings.TrimSpace(e.Status), "cancelled")
+}
+
+// freeBusyBlockFromEvent converts a neutral event to an availability block.
+func freeBusyBlockFromEvent(e CalendarEvent) FreeBusyBlock {
+	return FreeBusyBlock{
+		StartAt: e.StartAt,
+		EndAt:   e.EndAt,
+		AllDay:  e.AllDay,
+	}
+}
+
+// RedactCalendarEventFreeBusy strips event content, leaving only the fields
+// a scheduling consumer may see (issue #128). Used when the events permission
+// is freebusy.
+func RedactCalendarEventFreeBusy(e CalendarEvent) CalendarEvent {
+	return CalendarEvent{
+		StartAt: e.StartAt,
+		EndAt:   e.EndAt,
+		AllDay:  e.AllDay,
+		Status:  e.Status,
+	}
+}
+
+func redactCalendarEventsFreeBusy(events []CalendarEvent) []CalendarEvent {
+	if len(events) == 0 {
+		return events
+	}
+	out := make([]CalendarEvent, len(events))
+	for i, e := range events {
+		out[i] = RedactCalendarEventFreeBusy(e)
+	}
+	return out
+}
+
+// freeBusyListFromEvents builds the share-friendly busy list (issue #128).
+// Cancelled events are omitted; overlapping blocks are left as-is so callers
+// can see every busy interval the provider reported.
+func freeBusyListFromEvents(events []CalendarEvent, bySvc map[string]LibraryServiceStatus) FreeBusyList {
+	busy := make([]FreeBusyBlock, 0, len(events))
+	for _, e := range events {
+		if !calendarEventIsBusy(e) {
+			continue
+		}
+		busy = append(busy, freeBusyBlockFromEvent(e))
+	}
+	return FreeBusyList{
+		Busy:      busy,
+		Total:     len(busy),
+		Truncated: anyServiceTruncated(bySvc),
+		ByService: bySvc,
+	}
+}
+
+// eventsProviderTargets collects calendar providers, applying free/busy
+// redaction per service so a freebusy-only surface never contributes titles
+// or attendees to the aggregate (issue #128).
+func eventsProviderTargets(s *Server, permType string) ([]namedLister[CalendarEvent], []string) {
+	return collectProviders[CalendarEvent, CalendarEventProvider](s, permType,
+		func(p CalendarEventProvider) func(context.Context) ([]CalendarEvent, bool, error) {
+			return p.ListCalendarEvents
+		})
+}
+
 // HandleLibraryEvents returns the user's calendar events from every connected
 // calendar-capable service: GET /v1/library/events
+// When a service's events permission is freebusy, that service's events are
+// redacted to availability only (issue #128).
 func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[CalendarEvent]{
 		kind: kind,
 		targets: func(s *Server) ([]namedLister[CalendarEvent], []string) {
-			return collectProviders[CalendarEvent, CalendarEventProvider](s, kind.PermType,
-				func(p CalendarEventProvider) func(context.Context) ([]CalendarEvent, bool, error) {
-					return p.ListCalendarEvents
-				})
+			targets, denied := eventsProviderTargets(s, kind.PermType)
+			for i := range targets {
+				id := targets[i].id
+				inner := targets[i].list
+				level := ""
+				if svc := s.config.GetService(id); svc != nil {
+					level = svc.Permissions.For(kind.PermType)
+				}
+				if !IsFreeBusyAccess(level) {
+					continue
+				}
+				targets[i].list = func(ctx context.Context) ([]CalendarEvent, bool, error) {
+					events, truncated, err := inner(ctx)
+					return redactCalendarEventsFreeBusy(events), truncated, err
+				}
+			}
+			return targets, denied
 		},
 		serviceOf: calendarEventServiceName,
 		sortKey:   calendarEventIdentityKey,
@@ -261,5 +343,26 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 		},
 		markCanonical: s.stampCalendarEventCanonical,
 		stampCopies:   s.stampEventCopies,
+	})
+}
+
+// HandleLibraryFreeBusy returns only busy intervals for scheduling apps:
+// GET /v1/library/freebusy (issue #128).
+func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
+	kind := *LibraryKindByID("events")
+	handleLibraryAggregate(s, w, r, libraryKindSpec[CalendarEvent]{
+		kind: kind,
+		targets: func(s *Server) ([]namedLister[CalendarEvent], []string) {
+			return eventsProviderTargets(s, kind.PermType)
+		},
+		serviceOf: calendarEventServiceName,
+		sortKey:   calendarEventIdentityKey,
+		merge:     MergeCalendarEvents,
+		encode: func(merged []CalendarEvent, bySvc map[string]LibraryServiceStatus) any {
+			return freeBusyListFromEvents(merged, bySvc)
+		},
+		markCanonical: s.stampCalendarEventCanonical,
+		stampCopies:   s.stampEventCopies,
+		cacheKey:      "library:freebusy",
 	})
 }

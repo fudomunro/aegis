@@ -121,6 +121,71 @@ func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
 	}
 }
 
+func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer test-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/users/me/calendarList":
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{
+					{"id": "primary", "summary": "Work", "primary": true, "accessRole": "owner"},
+				},
+			})
+		case strings.HasSuffix(r.URL.Path, "/events"):
+			json.NewEncoder(w).Encode(map[string]any{
+				"items": []map[string]any{
+					{
+						"id":      "ev1",
+						"summary": "Therapy",
+						"location": "Office",
+						"start":   map[string]any{"dateTime": "2024-06-01T09:00:00Z"},
+						"end":     map[string]any{"dateTime": "2024-06-01T09:30:00Z"},
+						"attendees": []map[string]any{
+							{"email": "doc@example.com", "displayName": "Doc"},
+						},
+					},
+				},
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer upstream.Close()
+
+	cfg := &Config{Services: []Service{{
+		ID:          googleCalendarServiceID,
+		Name:        googleCalendarServiceName,
+		Action:      "inject",
+		Endpoint:    upstream.URL,
+		Permissions: Permissions{"events": AccessFreeBusy},
+	}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	conn := NewGoogleCalendarConnector(srv)
+	if !conn.eventsFreeBusyOnly() {
+		t.Fatal("expected freebusy-only")
+	}
+	req := httptest.NewRequest("GET", "/v1/services/google-calendar/me/events", nil)
+	w := httptest.NewRecorder()
+	conn.handleListEvents(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	for _, leak := range []string{"Therapy", "Office", "Doc", "doc@example.com"} {
+		if strings.Contains(body, leak) {
+			t.Fatalf("leaked %q: %s", leak, body)
+		}
+	}
+	if !strings.Contains(body, "2024-06-01T09:00:00Z") {
+		t.Fatalf("missing busy start: %s", body)
+	}
+}
+
 func TestGoogleCalendarConnector_ListCalendarEvents_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: googleCalendarServiceID, Name: googleCalendarServiceName, Action: "inject",
