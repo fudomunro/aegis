@@ -138,6 +138,22 @@ on the proxy and library endpoints with 403, and capabilities are filtered so
 agents only discover allowed operations. Omitting `permissions` preserves
 unrestricted access for authorized callers.
 
+### Third-party app tokens (issue #131)
+
+Non-agent clients use a **separate app token** (`aeg_app_…`) registered in the
+admin API. App tokens:
+
+- Are scope-limited to library **read** endpoints (not admin, proxy, OAuth, or mail).
+- Use the same access levels as service permissions, including `freebusy` for events.
+- Never grant more than service permissions allow (AND of both layers).
+- Are stored as SHA-256 hashes in `apps.json` (0600); plaintext is shown once.
+
+An app token is still only useful if the third party can **reach** Aegis. Keep
+Aegis on the tailnet (or a path you control). Do not use Funnel to publish the
+API for third-party apps. Prefer `freebusy` over full `events` for scheduling
+clients.
+
+
 ## Deployment checklist
 
 - [ ] Aegis host tagged (`tag:aegis`) and ACL/grant limited to intended users

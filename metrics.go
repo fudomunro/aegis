@@ -287,10 +287,13 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 	return snap
 }
 
-// agentForRequest returns a redacted agent id: tailnet login or "api-key".
-// Never returns the API key itself.
+// agentForRequest returns a redacted agent id: tailnet login, app id, or
+// "api-key". Never returns token material.
 func agentForRequest(r *http.Request) string {
 	if r != nil {
+		if app := AppIdentityFrom(r); app != nil && app.ID != "" {
+			return "app:" + app.ID
+		}
 		if id := PeerIdentityFrom(r); id != nil && id.LoginName != "" {
 			return id.LoginName
 		}

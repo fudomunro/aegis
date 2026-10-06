@@ -392,7 +392,7 @@ func collectProviders[T any, P any](
 // libraryKindSpec wires one typed dataset into the shared aggregate pipeline.
 type libraryKindSpec[T any] struct {
 	kind    LibraryKind
-	targets func(s *Server) (targets []namedLister[T], denied []string)
+	targets func(s *Server, r *http.Request) (targets []namedLister[T], denied []string)
 	// serviceOf returns the first source service name for stable pre-sort.
 	serviceOf func(T) string
 	// sortKey is the identity key used after service-name grouping.
@@ -424,10 +424,29 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	logger := withPeerLog(slog.With("handler", "library_"+kind.ID), r)
 	agent := agentForRequest(r)
 
+	// Third-party apps are scope-limited even when service permissions would
+	// allow more (issue #131).
+	app := AppIdentityFrom(r)
+	if app != nil && !appAllowsLibrary(app, kind.PermType, r.Method) {
+		logger.Info("library "+kind.ID+" denied by app scope",
+			"app_id", app.ID, "scope", app.Scopes.For(kind.PermType))
+		s.recordAccessFrom(r, AccessEvent{
+			Agent:    agent,
+			Surface:  MetricSurfaceLibrary,
+			Target:   kind.ID,
+			DataType: kind.ID,
+			Cache:    MetricCacheMiss,
+		})
+		writeJSONError(w, http.StatusForbidden,
+			fmt.Sprintf("permission denied: app access to %s is %q", kind.ID, app.Scopes.For(kind.PermType)))
+		return
+	}
+
 	cacheKey := kind.CacheKey()
 	if spec.cacheKey != "" {
 		cacheKey = spec.cacheKey
 	}
+	cacheKey += appLibraryCacheSuffix(app, kind.PermType)
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		logger.Debug("cache hit")
 		w.Header().Set("Content-Type", "application/json")
@@ -443,7 +462,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	targets, denied := spec.targets(s)
+	targets, denied := spec.targets(s, r)
 	for _, id := range denied {
 		svc := s.config.GetService(id)
 		perm := ""

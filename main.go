@@ -168,6 +168,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	apps, err := NewAppStore(paths.Apps)
+	if err != nil {
+		slog.Error("failed to load app registry", "path", paths.Apps, "error", err)
+		os.Exit(1)
+	}
+
 	copies, err := OpenCopyLedger(paths.CopyLedger)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", paths.CopyLedger, "error", err)
@@ -206,6 +212,7 @@ func main() {
 		connectors:    make(map[string]ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
+		apps:          apps,
 		copies:        copies,
 		mail:          mailArchive,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
@@ -315,6 +322,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
 		s.AuthMiddleware(s.HandleAdminServicePermissions)(w, r)
+	case path == "apps" || strings.HasPrefix(path, "apps/"):
+		s.AuthMiddleware(s.HandleAdminApps)(w, r)
 	case path == "immich" || strings.HasPrefix(path, "immich/"):
 		s.AuthMiddleware(s.HandleAdminImmichSetup)(w, r)
 	default:
