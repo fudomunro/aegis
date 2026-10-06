@@ -213,6 +213,7 @@ func main() {
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
 		apps:          apps,
+		grants:        NewGrantStore(),
 		copies:        copies,
 		mail:          mailArchive,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
@@ -240,6 +241,13 @@ func main() {
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
+	// Third-party grant demo (issue #131). Consent GET + demo page are public
+	// like OAuth authorize; grant POST and token exchange have their own rules.
+	mux.HandleFunc("GET /demo/third-party", srv.HandleThirdPartyDemo)
+	mux.HandleFunc("HEAD /demo/third-party", srv.HandleThirdPartyDemo)
+	mux.HandleFunc("GET /v1/apps/authorize", srv.HandleAppAuthorize)
+	mux.HandleFunc("POST /v1/apps/authorize", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
+	mux.HandleFunc("POST /v1/apps/token", withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}

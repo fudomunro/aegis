@@ -526,6 +526,32 @@ backend pull needs an always-on host.
 **Storage.** `apps.json` (mode 0600) holds SHA-256 token hashes and hints only.
 Rotate or delete an app at any time; tokens are not recoverable.
 
+### Third-party connect button (demo)
+
+Issue #131 also explores the “Aegis icon on a third-party site” grant UX.
+This build ships a working demo of that handoff:
+
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `GET /demo/third-party` | public | Fake scheduling app with **Continue with Aegis** |
+| `GET /v1/apps/authorize` | public | Consent page (shows app name + scopes) |
+| `POST /v1/apps/authorize` | API key / tailnet | Owner allows; returns one-time `aeg_grant_…` code (10 min) |
+| `POST /v1/apps/token` | code is the credential | Redeem code → `aeg_app_…` token |
+
+Demo flow:
+
+1. Open `http://<aegis>/demo/third-party` and press **Continue with Aegis**.
+2. Consent page lists what the app may read (this demo asks for
+   `events:freebusy` only). Allow the grant.
+3. The browser returns with `?code=` and exchanges it for an app token.
+4. The page calls `GET /v1/library/freebusy` and shows busy intervals.
+
+`redirect_uri` must be a path on the same host (no open redirects). Reuse of a
+code fails; grant creates or updates the app under `/v1/admin/apps` so you can
+revoke it later. For local testing without Tailscale identity, the consent page
+will prompt for an API key once and keep it in `sessionStorage` for the tab.
+
+
 
 ### HTTP server operations (issues #96–#97)
 

@@ -99,6 +99,8 @@ type Server struct {
 	// apps is the third-party application registry (issue #131). May be nil
 	// in tests that never exercise app tokens.
 	apps *AppStore
+	// grants holds short-lived consent codes from the authorize page.
+	grants *GrantStore
 }
 
 // appAllowedPrefixes are path prefixes a third-party app token may call.
