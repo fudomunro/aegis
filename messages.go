@@ -292,7 +292,7 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("messages")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Message]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[Message], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[Message], []string) {
 			return collectProviders[Message, MessageProvider](s, kind.PermType,
 				func(p MessageProvider) func(context.Context) ([]Message, bool, error) {
 					return p.ListMessages

@@ -15,6 +15,7 @@ const (
 	defaultConfigName      = "aegis.json"
 	defaultPermissionsName = "permissions.json"
 	defaultTokensName      = "tokens.json"
+	defaultAppsName        = "apps.json"
 	defaultLinksName       = "entity_links.json"
 	defaultCopyLedgerName  = "copy_ledger.db"
 	defaultMailArchiveName = "mail-archive.db"
@@ -34,6 +35,8 @@ type DataPaths struct {
 	Permissions string
 	// Tokens is the encrypted OAuth token store.
 	Tokens string
+	// Apps is the third-party application registry (issue #131).
+	Apps string
 	// Links is the entity-link store (playlists).
 	Links string
 	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
@@ -147,6 +150,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		Config:      resolveUnderDataDir(ov.Config, dir, defaultConfigName),
 		Permissions: resolveUnderDataDir(ov.Permissions, dir, defaultPermissionsName),
 		Tokens:      resolveUnderDataDir(ov.Tokens, dir, defaultTokensName),
+		Apps:        filepath.Join(dir, defaultAppsName),
 		Links:       resolveUnderDataDir(ov.Links, dir, defaultLinksName),
 		LogsDir:     filepath.Join(dir, dataDirLogsSubdir),
 		CacheDir:    filepath.Join(dir, dataDirCacheSubdir),

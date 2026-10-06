@@ -340,7 +340,7 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("contacts")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Contact]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[Contact], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[Contact], []string) {
 			return collectProviders[Contact, ContactProvider](s, kind.PermType,
 				func(p ContactProvider) func(context.Context) ([]Contact, bool, error) {
 					return p.ListUserContacts
