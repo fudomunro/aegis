@@ -237,6 +237,15 @@ func main() {
 	srv.connectors[googleCalendarServiceID] = gCalendarConn
 	gGmailConn := NewGoogleGmailConnector(srv)
 	srv.connectors[googleGmailServiceID] = gGmailConn
+	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
+	// A service with endpoint sample://calendar gets this connector instead of
+	// a live provider so free/busy demos work without OAuth.
+	for _, svc := range cfg.ServiceSnapshots() {
+		if isSampleCalendarService(&svc) {
+			srv.connectors[svc.ID] = NewSampleCalendarConnector()
+		}
+	}
+	srv.connectors[sampleCalendarServiceID] = NewSampleCalendarConnector()
 
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
