@@ -48,22 +48,56 @@ type ImmichSetupCheck struct {
 
 // ImmichSetupStatus is GET /v1/admin/immich/setup.
 type ImmichSetupStatus struct {
-	Configured        bool                  `json:"configured"`
-	Endpoint          string                `json:"endpoint,omitempty"`
-	HasAPIKey         bool                  `json:"has_api_key"`
-	CanonicalFor      []string              `json:"canonical_for,omitempty"`
-	CanonicalConflict string                `json:"canonical_conflict,omitempty"`
-	Snippet           string                `json:"snippet,omitempty"`
-	Checks            []ImmichSetupCheck    `json:"checks,omitempty"`
-	LibraryStatus     string                `json:"library_status,omitempty"`
-	LibraryCount      int                   `json:"library_count,omitempty"`
-	LibraryError      string                `json:"library_error,omitempty"`
+	Configured        bool               `json:"configured"`
+	Endpoint          string             `json:"endpoint,omitempty"`
+	HasAPIKey         bool               `json:"has_api_key"`
+	CanonicalFor      []string           `json:"canonical_for,omitempty"`
+	CanonicalConflict string             `json:"canonical_conflict,omitempty"`
+	Snippet           string             `json:"snippet,omitempty"`
+	Checks            []ImmichSetupCheck `json:"checks,omitempty"`
+	LibraryStatus     string             `json:"library_status,omitempty"`
+	LibraryCount      int                `json:"library_count,omitempty"`
+	LibraryError      string             `json:"library_error,omitempty"`
 	// Steps is the guided first-run ladder (issue #121).
 	Steps []ImmichSetupStep `json:"steps,omitempty"`
 	// NextStep is a short, imperative hint for what to do next.
 	NextStep string `json:"next_step,omitempty"`
 	// LastProbe is the most recent connection diagnosis (when available).
 	LastProbe *ImmichTestResponse `json:"last_probe,omitempty"`
+	// Tailnet guides operators to a friendly ts.net URL via Tailscale
+	// VIP Services (issue #124). Optional automation is a later phase.
+	Tailnet *ImmichTailnetGuide `json:"tailnet,omitempty"`
+}
+
+// ImmichTailnetGuide is the issue #124 operator path: give Immich a stable
+// VIP Service name (svc:immich) instead of a raw host:port. Aegis only
+// emits copyable steps — it does not mutate tailnet topology.
+type ImmichTailnetGuide struct {
+	// ServiceName is the recommended VIP service name.
+	ServiceName string `json:"service_name"`
+	// DisplayName is the admin-console label for the service.
+	DisplayName string `json:"display_name"`
+	// TailnetDNS is the MagicDNS suffix when derivable from -base-url
+	// (e.g. heron-census.ts.net).
+	TailnetDNS string `json:"tailnet_dns,omitempty"`
+	// SuggestedEndpoint is the Immich API base once the service is hosted.
+	SuggestedEndpoint string `json:"suggested_endpoint,omitempty"`
+	// Why is a one-line rationale for the wizard.
+	Why string `json:"why"`
+	// Requirements are hard preconditions (tags, scopes, co-location).
+	Requirements []string `json:"requirements,omitempty"`
+	// Steps are ordered operator actions; Command is copyable when set.
+	Steps []ImmichTailnetStep `json:"steps"`
+	// Commands is one pasteable script covering the whole path.
+	Commands string `json:"commands,omitempty"`
+}
+
+// ImmichTailnetStep is one copyable VIP Service action (issue #124).
+type ImmichTailnetStep struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Detail  string `json:"detail"`
+	Command string `json:"command,omitempty"`
 }
 
 // ImmichSetupStep is one row of the guided setup ladder.
@@ -177,7 +211,8 @@ func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichS
 			}
 		}
 	}
-	status.Snippet = immichConfigSnippet(status.Endpoint)
+	status.Snippet = immichConfigSnippet(status.Endpoint, s.baseURL)
+	status.Tailnet = immichTailnetGuide(s.baseURL, status.Endpoint)
 
 	if !withChecks {
 		status.Steps = immichGuidedSteps(&status)
@@ -190,9 +225,9 @@ func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichS
 	return status
 }
 
-func immichConfigSnippet(endpoint string) string {
+func immichConfigSnippet(endpoint, baseURL string) string {
 	if strings.TrimSpace(endpoint) == "" {
-		endpoint = "http://photos.home.ts.net:2283/api"
+		endpoint = immichSuggestedEndpoint(tailnetDNSFromBaseURL(baseURL))
 	}
 	// Display-only bootstrap snippet for operators who prefer aegis.json.
 	return fmt.Sprintf(`{
@@ -205,6 +240,138 @@ func immichConfigSnippet(endpoint string) string {
   "canonical_for": ["photos"],
   "permissions": { "default": "read", "photos": "read" }
 }`, endpoint)
+}
+
+// tailnetDNSFromBaseURL extracts the MagicDNS suffix from Aegis's public URL
+// (https://aegis.heron-census.ts.net → heron-census.ts.net). Empty when the
+// base URL is not a ts.net name.
+func tailnetDNSFromBaseURL(baseURL string) string {
+	u, err := url.Parse(strings.TrimSpace(baseURL))
+	if err != nil || u.Hostname() == "" {
+		return ""
+	}
+	host := strings.ToLower(u.Hostname())
+	// node.tailnet.ts.net → tailnet.ts.net
+	if i := strings.Index(host, "."); i > 0 {
+		suffix := host[i+1:]
+		if strings.HasSuffix(suffix, ".ts.net") {
+			return suffix
+		}
+	}
+	return ""
+}
+
+// immichSuggestedEndpoint is the Immich API base operators should paste.
+// Prefer the VIP Service HTTPS name when the tailnet suffix is known;
+// otherwise the portable host:port form from the live-testing guide.
+func immichSuggestedEndpoint(tailnetDNS string) string {
+	if tailnetDNS != "" {
+		return "https://immich." + tailnetDNS + "/api"
+	}
+	return "http://photos.home.ts.net:2283/api"
+}
+
+// immichTailnetGuide builds the issue #124 VIP Services walkthrough.
+// Aegis never calls the Tailscale API here — this is copyable operator
+// guidance so we do not mutate tailnet topology from a request handler.
+func immichTailnetGuide(baseURL, configuredEndpoint string) *ImmichTailnetGuide {
+	suffix := tailnetDNSFromBaseURL(baseURL)
+	suggested := immichSuggestedEndpoint(suffix)
+	if ep := strings.TrimSpace(configuredEndpoint); ep != "" {
+		// Keep a live endpoint as the connect target once configured.
+		if mustNormalize(ep) != "" {
+			suggested = mustNormalize(ep)
+		}
+	}
+
+	g := &ImmichTailnetGuide{
+		ServiceName:       "svc:immich",
+		DisplayName:       "Immich",
+		TailnetDNS:        suffix,
+		SuggestedEndpoint: suggested,
+		Why:               "A Tailscale VIP Service gives Immich a stable https://…ts.net name (no :2283, real certs) that survives host moves. Serve stays tailnet-only — never Funnel.",
+		Requirements: []string{
+			"Immich host runs Tailscale and can bind Serve (same machine as Immich, or a reverse proxy to it).",
+			"Service hosts must be tagged nodes (tag:immich-host or similar) — user-owned nodes cannot host svc:*.",
+			"Tailscale OAuth client scopes: services, devices:core (or an owner API token).",
+			"ACL must declare the tag before the device can be tagged.",
+		},
+	}
+
+	tag := "tag:immich-host"
+	api := "https://api.tailscale.com/api/v2"
+	tailnetPath := "your-tailnet" // or "-" for the default tailnet in newer API versions
+
+	g.Steps = []ImmichTailnetStep{
+		{
+			ID:     "acl_tag",
+			Title:  "Declare a host tag in the tailnet policy file",
+			Detail: "Admin console → Access Controls. Add a tag owner so the Immich machine can be tagged.",
+			Command: fmt.Sprintf(`"tagOwners": {
+  %q: ["autogroup:admin"]
+}`, tag),
+		},
+		{
+			ID:     "create_service",
+			Title:  "Create the VIP Service",
+			Detail: "Creates a dedicated virtual IP + DNS name for Immich. Ports: tcp:443 (HTTPS). Name must be unique in the tailnet (names already used by a machine cannot be reused).",
+			Command: fmt.Sprintf(`curl -sS -u "$TS_API_KEY:" -X PUT \
+  -H "Content-Type: application/json" \
+  %s/tailnet/%s/services/svc:immich \
+  -d '{
+    "name": "svc:immich",
+    "displayName": "Immich",
+    "ports": ["tcp:443"],
+    "tags": [%q]
+  }'`, api, tailnetPath, tag),
+		},
+		{
+			ID:     "tag_host",
+			Title:  "Tag the Immich host",
+			Detail: "POST the tag list to the device that runs Immich (device id from GET /tailnet/{tailnet}/devices). Tagging transfers ownership to the tag — expected for service hosts. Keep any existing tags you still need.",
+			Command: fmt.Sprintf(`curl -sS -u "$TS_API_KEY:" -X POST \
+  -H "Content-Type: application/json" \
+  %s/device/$DEVICE_ID/tags \
+  -d '{"tags": [%q]}'`, api, tag),
+		},
+		{
+			ID:     "serve",
+			Title:  "Host the service on the Immich machine",
+			Detail: "On the Immich host (after tagging): map the VIP service to local Immich. Use --bg so it persists. Confirm with tailscale serve status.",
+			Command: `tailscale serve --service svc:immich --bg --https=443 http://127.0.0.1:2283
+tailscale serve status
+# Optional declarative form:
+#   tailscale serve get-config --service=svc:immich immich-service.json
+#   tailscale serve set-config --service=svc:immich immich-service.json`,
+		},
+		{
+			ID:     "approve",
+			Title:  "Approve the host for the service",
+			Detail: "If the host is not auto-approved, approve it from the admin API or the Services page.",
+			Command: fmt.Sprintf(`curl -sS -u "$TS_API_KEY:" -X POST \
+  -H "Content-Type: application/json" \
+  %s/tailnet/%s/services/svc:immich/device/$DEVICE_ID/approved \
+  -d '{"approved": true}'`, api, tailnetPath),
+		},
+		{
+			ID:     "connect",
+			Title:  "Point Aegis at the VIP name",
+			Detail: "Use the HTTPS name Tailscale printed in serve status (typically https://immich.<tailnet>.ts.net). Endpoint must end in /api.",
+			Command: fmt.Sprintf(`# Aegis endpoint (Admin → Services → Immich):
+%s`, suggested),
+		},
+	}
+
+	// Build commands from steps so UI copy button and API stay in sync.
+	var cmds []string
+	for _, st := range g.Steps {
+		if st.Command == "" {
+			continue
+		}
+		cmds = append(cmds, "# "+st.Title+"\n"+st.Command)
+	}
+	g.Commands = strings.Join(cmds, "\n\n") + "\n"
+	return g
 }
 
 // runImmichChecks executes the issue #39 acceptance checklist against the
@@ -392,7 +559,7 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 			OK:      false,
 			Code:    immichCodeBadURL,
 			Message: "That does not look like a URL",
-			Hint:    "Use something like http://photos.home.ts.net:2283/api (include http:// or https://).",
+			Hint:    "Use something like https://immich.your-tailnet.ts.net/api or http://photos.home.ts.net:2283/api (include http:// or https://). See the VIP Service guide for a friendly ts.net name (issue #124).",
 		}
 	}
 
@@ -412,16 +579,16 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 			if resp.StatusCode == http.StatusOK {
 				return ImmichTestResponse{
 					OK: true, Status: resp.StatusCode, Code: immichCodeOK,
-					Message:          "Immich accepted the API key",
-					Hint:             "Save the connection, then run checks.",
+					Message:           "Immich accepted the API key",
+					Hint:              "Save the connection, then run checks.",
 					SuggestedEndpoint: suggested,
 				}
 			}
 			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
 				return ImmichTestResponse{
 					OK: false, Status: resp.StatusCode, Code: immichCodeUnauthorized,
-					Message:          "Immich rejected the API key",
-					Hint:             "In Immich: Account → API Keys → New key. Tick the single-key set (Aegis + immich-go): " + immichAPIKeyPermissionsSummary() + ". Copy the secret once, paste it here.",
+					Message:           "Immich rejected the API key",
+					Hint:              "In Immich: Account → API Keys → New key. Tick the single-key set (Aegis + immich-go): " + immichAPIKeyPermissionsSummary() + ". Copy the secret once, paste it here.",
 					SuggestedEndpoint: suggested,
 				}
 			}
@@ -450,8 +617,8 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 		}
 		return ImmichTestResponse{
 			OK: false, Code: code,
-			Message:          "Could not reach Immich: " + err.Error(),
-			Hint:             hint,
+			Message:           "Could not reach Immich: " + err.Error(),
+			Hint:              hint,
 			SuggestedEndpoint: suggested,
 		}
 	}
@@ -464,15 +631,15 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 		if apiKey == "" {
 			return ImmichTestResponse{
 				OK: true, Status: resp2.StatusCode, Code: immichCodeOKNoKey,
-				Message:          "Immich is reachable (no API key set yet)",
-				Hint:             "Create one Immich API key for Aegis + immich-go (permissions: " + immichAPIKeyPermissionsSummary() + ") and paste it above so agents can list photos.",
+				Message:           "Immich is reachable (no API key set yet)",
+				Hint:              "Create one Immich API key for Aegis + immich-go (permissions: " + immichAPIKeyPermissionsSummary() + ") and paste it above so agents can list photos.",
 				SuggestedEndpoint: suggested,
 			}
 		}
 		return ImmichTestResponse{
 			OK: true, Status: resp2.StatusCode, Code: immichCodeOK,
-			Message:          "Immich is reachable",
-			Hint:             "If you have not already, paste the API key and save.",
+			Message:           "Immich is reachable",
+			Hint:              "If you have not already, paste the API key and save.",
 			SuggestedEndpoint: suggested,
 		}
 	}
@@ -482,29 +649,29 @@ func (s *Server) probeImmich(ctx context.Context, endpoint, apiKey string) Immic
 	case resp2.StatusCode == http.StatusUnauthorized || resp2.StatusCode == http.StatusForbidden:
 		return ImmichTestResponse{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeUnauthorized,
-			Message:          fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
-			Hint:             "Check the API key (Account → API Keys). If you just created Immich, finish the web-UI signup first.",
+			Message:           fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
+			Hint:              "Check the API key (Account → API Keys). If you just created Immich, finish the web-UI signup first.",
 			SuggestedEndpoint: suggested,
 		}
 	case resp2.StatusCode == http.StatusNotFound && strings.Contains(bodyHint, "<html"):
 		return ImmichTestResponse{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeWrongPath,
-			Message:          "Got a web page, not the Immich API",
-			Hint:             "The endpoint must be the API base and end in /api — e.g. http://host:2283/api (not the album /photos page).",
+			Message:           "Got a web page, not the Immich API",
+			Hint:              "The endpoint must be the API base and end in /api — e.g. http://host:2283/api (not the album /photos page).",
 			SuggestedEndpoint: firstNonEmpty(suggested, mustNormalize(base+"/api")),
 		}
 	case strings.Contains(bodyHint, "<html") || strings.Contains(bodyHint, "<!doctype"):
 		return ImmichTestResponse{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeNotImmich,
-			Message:          "That host answered with a web page, not Immich",
-			Hint:             "Double-check the host/port. Immich’s API answers JSON from /server/ping on port 2283 by default.",
+			Message:           "That host answered with a web page, not Immich",
+			Hint:              "Double-check the host/port. Immich’s API answers JSON from /server/ping on port 2283 by default.",
 			SuggestedEndpoint: suggested,
 		}
 	default:
 		return ImmichTestResponse{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeHTTPError,
-			Message:          fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
-			Hint:             "Open the same URL in a browser or curl. If it is not Immich, fix the endpoint; if Immich is healthy, check reverse-proxy / TLS.",
+			Message:           fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
+			Hint:              "Open the same URL in a browser or curl. If it is not Immich, fix the endpoint; if Immich is healthy, check reverse-proxy / TLS.",
 			SuggestedEndpoint: suggested,
 		}
 	}
@@ -685,13 +852,13 @@ func (s *Server) handleImmichConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	endpoint := strings.TrimSpace(req.Endpoint)
 	if endpoint == "" {
-		writeJSONError(w, http.StatusBadRequest, "endpoint is required — e.g. http://photos.home.ts.net:2283/api")
+		writeJSONError(w, http.StatusBadRequest, "endpoint is required — e.g. https://immich.your-tailnet.ts.net/api")
 		return
 	}
 	// Repair common first-timer URLs (scheme, /api, localhost port).
 	endpoint, _ = normalizeImmichEndpoint(endpoint)
 	if endpoint == "" {
-		writeJSONError(w, http.StatusBadRequest, "endpoint is required — e.g. http://photos.home.ts.net:2283/api")
+		writeJSONError(w, http.StatusBadRequest, "endpoint is required — e.g. https://immich.your-tailnet.ts.net/api")
 		return
 	}
 
@@ -705,7 +872,7 @@ func (s *Server) handleImmichConfig(w http.ResponseWriter, r *http.Request) {
 			"immich photos", "self-hosted photos", "immich",
 			"photo", "photos", "picture", "pictures", "photo library",
 		},
-		Headers:     map[string]string{},
+		Headers: map[string]string{},
 	}
 	if key := strings.TrimSpace(req.APIKey); key != "" {
 		entry.Headers["X-API-Key"] = key
