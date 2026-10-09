@@ -1,0 +1,382 @@
+<!doctype html>
+<html lang="en" class="no-js">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aegis: a jellyfish between your agents and your life</title>
+<meta name="description" content="Aegis is a private, translucent guardian between your AI agents and the services that hold your music, photos, mail, and calendar.">
+<meta name="theme-color" content="#02060f">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- Jellyfish mark, from web/logo.svg (issue #87), with a bioluminescent bell. -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="bellGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f4fbff"/>
+      <stop offset=".7" stop-color="#c9f6ff"/>
+      <stop offset="1" stop-color="#b28cff"/>
+    </linearGradient>
+    <symbol id="mark" viewBox="0 0 64 64">
+      <path fill="url(#bellGrad)" d="M10 34c0-13.25 9.85-24 22-24s22 10.75 22 24c0 1.2-.4 2.3-1.1 3.2H11.1A4.1 4.1 0 0 1 10 34Z"/>
+      <rect x="11" y="33" width="42" height="6" rx="3" fill="#c9f6ff"/>
+      <circle cx="26" cy="24" r="5.2" fill="#0d1117"/>
+      <circle cx="42" cy="24" r="5.2" fill="#0d1117"/>
+      <circle cx="26.5" cy="24" r="2.2" fill="#e6edf3"/>
+      <circle cx="40.5" cy="24" r="2.2" fill="#e6edf3"/>
+      <path fill="none" stroke="#c9f6ff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"
+            d="M20 40 l3 5 -3 5 3 5 M28 40 l-3 5 3 5 -3 5 M36 40 l3 5 -3 5 3 5 M44 40 l-3 5 3 5 -3 5"/>
+    </symbol>
+  </defs>
+</svg>
+
+<div id="snow" aria-hidden="true"></div>
+
+<nav>
+  <a class="brand" href="#top"><svg aria-hidden="true"><use href="#mark"/></svg> AEGIS</a>
+  <ul>
+    <li><a href="#anatomy">Why a jellyfish</a></li>
+    <li><a href="#dive">The dive</a></li>
+    <li><a href="#currents">How it works</a></li>
+    <li><a href="https://github.com/fudomunro/aegis">GitHub →</a></li>
+  </ul>
+</nav>
+
+<header class="hero" id="top">
+  <div>
+    <span class="eyebrow">A private guardian for the agent age</span>
+    <h1>Let agents near your life.<br><em>Not into it.</em></h1>
+    <p class="lede">
+      Aegis is a translucent little guardian between your AI agents and the services
+      that hold your music, photos, mail, and calendar. It holds the keys in its tentacles,
+      lets you see everything it touches, and stings anything that reaches too far.
+    </p>
+    <div class="cta">
+      <a class="btn primary" href="#dive">Take the dive ↓</a>
+      <a class="btn ghost" href="#surface">Run it on your tailnet</a>
+    </div>
+  </div>
+
+  <div class="jelly-wrap">
+    <svg class="jelly" id="hero-jelly" viewBox="0 0 64 64" role="img" aria-label="The Aegis jellyfish, watching">
+      <g class="bell">
+        <path fill="url(#bellGrad)" d="M10 34c0-13.25 9.85-24 22-24s22 10.75 22 24c0 1.2-.4 2.3-1.1 3.2H11.1A4.1 4.1 0 0 1 10 34Z"/>
+        <rect x="11" y="33" width="42" height="6" rx="3" fill="#c9f6ff"/>
+        <circle cx="26" cy="24" r="5.2" fill="#0d1117"/>
+        <circle cx="42" cy="24" r="5.2" fill="#0d1117"/>
+        <circle class="pupil" cx="26.5" cy="24" r="2.2" fill="#e6edf3"/>
+        <circle class="pupil" cx="40.5" cy="24" r="2.2" fill="#e6edf3"/>
+        <rect class="lid" x="20.6" y="18.6" width="10.8" height="10.8" rx="5.4" fill="#e3fbff"/>
+        <rect class="lid" x="36.6" y="18.6" width="10.8" height="10.8" rx="5.4" fill="#e3fbff"/>
+      </g>
+      <g fill="none" stroke="#c9f6ff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round">
+        <path class="tentacle" d="M20 40 l3 5 -3 5 3 5 -3 5"/>
+        <path class="tentacle" d="M28 40 l-3 5 3 5 -3 5 3 5"/>
+        <path class="tentacle" d="M36 40 l3 5 -3 5 3 5 -3 5"/>
+        <path class="tentacle" d="M44 40 l-3 5 3 5 -3 5 3 5"/>
+      </g>
+    </svg>
+    <div class="caption" id="jelly-caption">it's watching your cursor. it watches agents too. (go on, poke it)</div>
+  </div>
+</header>
+
+<main>
+
+  <section id="anatomy" class="reveal">
+    <span class="kicker">Anatomy of a guardian</span>
+    <h2>Why a jellyfish?</h2>
+    <p class="lede">
+      Jellyfish have drifted through the oceans for half a billion years without a brain,
+      a stomach, or a single opinion about your playlists. Aegis is built the same way.
+    </p>
+    <div class="anatomy">
+      <div class="trait">
+        <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="20" cy="20" r="14" opacity=".5"/><circle cx="20" cy="20" r="7"/><circle cx="20" cy="20" r="2" fill="currentColor"/></svg>
+        <h3>Translucent</h3>
+        <p>You can see right through it. The admin <b>Map</b> shows which agent touched which
+          kind of data, and when. Nothing happens in the murk.</p>
+      </div>
+      <div class="trait">
+        <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M10 4c-4 6 4 10 0 16s4 10 0 16M20 4c-4 6 4 10 0 16s4 10 0 16M30 4c-4 6 4 10 0 16"/><circle cx="31" cy="30" r="4"/><path d="M31 34v3"/></svg>
+        <h3>Tentacles hold the keys</h3>
+        <p>Aegis owns every OAuth connection. Tokens stay encrypted on your disk.
+          <b>Agents never see a token</b> and never get asked to log in.</p>
+      </div>
+      <div class="trait">
+        <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M23 3 9 23h10l-3 14 15-21H21z"/></svg>
+        <h3>A precise sting</h3>
+        <p>Per-type permissions (<code>none</code>, <code>freebusy</code>, <code>read</code>,
+          <code>write</code>) are enforced on every request. Reach too far and the answer is
+          a polite <b>403</b>.</p>
+      </div>
+      <div class="trait">
+        <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 4" aria-hidden="true"><circle cx="20" cy="20" r="14"/></svg>
+        <h3>No stomach</h3>
+        <p>Aegis <b>doesn't store your media</b>. Photos stay in Immich or Google, songs stay
+          on Spotify. It passes things along and keeps nothing for itself.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="dive">
+    <div class="dive-intro reveal">
+      <span class="kicker">The dive</span>
+      <h2>Four things you can do<br>with a jellyfish on your side</h2>
+      <p class="lede">
+        Each one goes a little deeper, from a sunny mixtape down to the dark records
+        nobody else should touch.
+      </p>
+    </div>
+
+    <!-- 01 · Sunlight zone: anniversary wrapped -->
+    <article class="zone reveal" id="wrapped">
+      <div class="depth">SUNLIGHT ZONE<strong>0–200 m</strong><div class="gauge"><i style="height:18%"></i></div></div>
+      <div class="story">
+        <span class="kicker">Use case 01</span><span class="badge live">Works today</span>
+        <h3>Our Year, in Songs &amp; Light</h3>
+        <p class="pitch">An anniversary mixtape that remembers what you were listening to,
+          and what you were looking at.</p>
+        <p>
+          Ask an agent for your own “Wrapped”, but for <em>the two of you</em>. Aegis pulls
+          liked tracks from Spotify, YouTube Music, and Amazon Music into one list, merged by
+          ISRC so the same song isn't counted three times. Then it lines them up with photo
+          metadata from the same weeks. The agent puts it together. The photos never leave
+          Immich or Google Photos.
+        </p>
+        <ul class="chips">
+          <li>GET /v1/library/tracks</li>
+          <li>GET /v1/library/photos</li>
+          <li>people[] on photos</li>
+          <li>ISRC-first merge</li>
+        </ul>
+        <p class="sting">The player is set to <code>none</code>. The agent can read what you
+          loved, but it can't start blasting music in your kitchen.</p>
+      </div>
+      <div class="panel" aria-label="Example conversation: anniversary mixtape">
+        <header><i></i><i></i><i></i><span>agent · via Aperture</span></header>
+        <div class="body">
+          <p class="msg you"><small>you</small>It's our 5th anniversary on Saturday. Make us a
+            “wrapped” of this year, with photos from the moments the songs belong to.</p>
+          <div class="calls"><span class="dim"># what the jellyfish saw</span>
+GET /v1/library/tracks   <span class="ok">200 · 3 sources</span>
+GET /v1/library/photos   <span class="ok">200 · immich</span>
+PUT …/spotify/me/player  <span class="no">403 · none</span></div>
+          <div class="wrapped">
+            <div class="sub">Year five · Mira &amp; Jun</div>
+            <h4>The Tide Came In Twice</h4>
+            <ol>
+              <li>Harbour Lights <span>· the June coast trip</span></li>
+              <li>Slow Bloom <span>· the new flat, boxes everywhere</span></li>
+              <li>Paper Lanterns <span>· your sister's wedding</span></li>
+            </ol>
+            <div class="polaroids">
+              <div class="polaroid p1"><div></div>jun 14</div>
+              <div class="polaroid p2"><div></div>aug 02</div>
+              <div class="polaroid p3"><div></div>oct 19</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- 02 · Twilight zone: free/busy calendar for a scheduling app -->
+    <article class="zone reveal" id="glass-calendar">
+      <div class="depth">TWILIGHT ZONE<strong>200–1000 m</strong><div class="gauge"><i style="height:42%"></i></div></div>
+      <div class="story">
+        <span class="kicker">Use case 02</span><span class="badge live">Works today</span>
+        <h3>The Glass Calendar</h3>
+        <p class="pitch">A scheduling app can find you an hour. It can't read about
+          your life.</p>
+        <p>
+          Connect a scheduling app with one click on the Aegis icon. It gets a scoped app
+          token that only sees <strong>free/busy</strong>: start, end, all-day, status.
+          No titles, attendees, locations, or descriptions. The app knows when you're busy,
+          never why. Flip the toggle off and the token is destroyed.
+        </p>
+        <ul class="chips">
+          <li>permissions: events → freebusy</li>
+          <li>GET /v1/library/freebusy</li>
+          <li>Bearer aeg_app_…</li>
+          <li>POST /v1/apps/revoke</li>
+        </ul>
+        <p class="sting">Aegis does the redaction itself. Nobody is relying on a prompt asking
+          nicely. Even <code>/v1/library/events</code> comes back with the details blanked.</p>
+      </div>
+      <div class="panel" aria-label="Example: free/busy calendar shared with a scheduling app">
+        <header><i></i><i></i><i></i><span>scheduling app · app token</span></header>
+        <div class="body">
+          <div class="calls">GET /v1/library/freebusy?timeMin=…&amp;timeMax=…
+<span class="dim">Authorization: Bearer aeg_app_••••••••</span>
+<span class="ok">200</span> [{"start_at":"…T09:00",
+      "end_at":"…T10:30"}, …]</div>
+          <div class="week" role="img" aria-label="A week of busy blocks with one proposed free slot on Thursday at 11">
+            <div></div><div class="h">Mon</div><div class="h">Tue</div><div class="h">Wed</div><div class="h">Thu</div><div class="h">Fri</div>
+            <div class="t">9</div><div class="c busy"></div><div class="c"></div><div class="c busy"></div><div class="c"></div><div class="c busy"></div>
+            <div class="t">10</div><div class="c busy"></div><div class="c busy"></div><div class="c"></div><div class="c busy"></div><div class="c busy"></div>
+            <div class="t">11</div><div class="c busy"></div><div class="c busy"></div><div class="c busy"></div><div class="c free"></div><div class="c busy"></div>
+            <div class="t">12</div><div class="c"></div><div class="c"></div><div class="c busy"></div><div class="c"></div><div class="c"></div>
+            <div class="t">1</div><div class="c busy"></div><div class="c"></div><div class="c busy"></div><div class="c busy"></div><div class="c"></div>
+            <div class="t">2</div><div class="c busy"></div><div class="c busy"></div><div class="c"></div><div class="c busy"></div><div class="c busy"></div>
+          </div>
+          <div class="redacted">
+            <span class="ok">✓ proposed: Thu 11:00–12:00</span><br>
+            never sent: title <s>Physio, knee</s> · attendees <s>dr.okafor@…</s> · location <s>St. Brigid's</s>
+          </div>
+        </div>
+      </div>
+    </article>
+
+    <!-- 03 · Midnight zone: multi-source timeline -->
+    <article class="zone reveal" id="undertow">
+      <div class="depth">MIDNIGHT ZONE<strong>1000–4000 m</strong><div class="gauge"><i style="height:70%"></i></div></div>
+      <div class="story">
+        <span class="kicker">Use case 03</span><span class="badge live">Works today</span>
+        <h3>The Undertow</h3>
+        <p class="pitch">When you need to know what actually happened, and when,
+          across every inbox you've ever had.</p>
+        <p>
+          A landlord dispute, an insurance claim, “when did we actually leave?” Aegis keeps a
+          compressed, searchable archive of your mail on <em>your</em> machine and pairs it
+          with your calendar. An agent can rebuild a timeline from receipts, bookings, and
+          cancellations without hammering live Gmail. It can also tell you what the evidence
+          <em>doesn't</em> prove.
+        </p>
+        <ul class="chips">
+          <li>GET /v1/mail/search</li>
+          <li>GET /v1/library/events</li>
+          <li>local SQLite FTS</li>
+          <li>Takeout import</li>
+        </ul>
+        <p class="sting">Search runs against the archive on your own disk. The agent gets a
+          timeline. It never gets your inbox.</p>
+      </div>
+      <div class="panel" aria-label="Example: timeline reconstructed from mail and calendar">
+        <header><i></i><i></i><i></i><span>agent · timeline brief</span></header>
+        <div class="body">
+          <p class="msg you"><small>you</small>The insurer wants proof we were away when the
+            pipe burst. Build me a timeline for Feb–Mar.</p>
+          <div class="calls">GET /v1/mail/search?q=itinerary&amp;after=…
+GET /v1/mail/search?q=cancelled&amp;after=…
+GET /v1/library/events  <span class="ok">200 · 2 inboxes</span></div>
+          <ol class="timeline">
+            <li><time>Feb 21</time>Flight confirmation, outbound 07:40 <em>· mail / personal</em></li>
+            <li class="cal"><time>Feb 21 – Mar 02</time>Calendar block: “Lisbon” <em>· calendar</em></li>
+            <li class="x"><time>Feb 26</time>Day-trip booking <strong>cancelled</strong>, so it's left out <em>· mail / work</em></li>
+            <li><time>Mar 01</time>Neighbour's email: “water in the hallway” <em>· mail / personal</em></li>
+            <li><time>Mar 02</time>Return boarding pass, 18:15 <em>· mail / personal</em></li>
+          </ol>
+          <p class="caveat">Limits: bookings show intent, not presence. No card or location data
+            was used. The Mar 01 report is second-hand.</p>
+        </div>
+      </div>
+    </article>
+
+    <!-- 04 · Abyss: personal spreadsheet / database (issue #15, exploratory) -->
+    <article class="zone reveal" id="reef-ledger">
+      <div class="depth">THE ABYSS<strong>4000 m +</strong><div class="gauge"><i style="height:100%"></i></div></div>
+      <div class="story">
+        <span class="kicker">Use case 04</span><span class="badge">Exploring · #15</span>
+        <h3>The Reef Ledger</h3>
+        <p class="pitch">Your personal spreadsheet or database, opened to an agent one
+          column at a time.</p>
+        <p>
+          The budget sheet. The medication log. The SQLite file where you track every
+          houseplant. With user-defined types you'd describe your own data to Aegis and decide
+          what agents get to see: some columns readable, some veiled, nothing writable unless
+          you say so. Same permissions, same Map, same sting.
+        </p>
+        <ul class="chips">
+          <li>user-defined types</li>
+          <li>column-level veils</li>
+          <li>read ≠ write</li>
+        </ul>
+        <p class="sting">This one hasn't shipped yet. It's an open design question in
+          <a href="https://github.com/fudomunro/aegis/issues/15">issue #15</a>, and you can help
+          shape it.</p>
+      </div>
+      <div class="panel" aria-label="Concept: a spreadsheet exposed with some columns veiled">
+        <header><i></i><i></i><i></i><span>concept · budget.sqlite as a library kind</span></header>
+        <div class="body">
+          <p class="msg you"><small>you</small>Did we go over on groceries this quarter?</p>
+          <table class="ledger">
+            <thead><tr><th>month</th><th>category</th><th>spent</th><th class="veil">merchant</th><th class="veil">card</th></tr></thead>
+            <tbody>
+              <tr><td>Jan</td><td>groceries</td><td>£412</td><td class="veil">Fenwick &amp; Co</td><td class="veil">•••• 4421</td></tr>
+              <tr><td>Feb</td><td>groceries</td><td>£388</td><td class="veil">Corner Market</td><td class="veil">•••• 4421</td></tr>
+              <tr><td>Mar</td><td>groceries</td><td>£471</td><td class="veil">Fenwick &amp; Co</td><td class="veil">•••• 9910</td></tr>
+            </tbody>
+          </table>
+          <p class="msg agent" style="margin-top:14px"><small>agent</small>£1,271 against a
+            £1,200 budget, so you're £71 over. Most of that was March.</p>
+          <div class="calls"><span class="dim"># sketch only, not shipped</span>
+"budget": { "default": "read",
+            "merchant": "none", "card": "none" }</div>
+        </div>
+      </div>
+    </article>
+  </section>
+
+  <section id="currents" class="reveal">
+    <span class="kicker">How it works</span>
+    <h2>Two currents, one jellyfish</h2>
+    <p class="lede">Aegis sits beside <a href="https://tailscale.com/docs/aperture">Tailscale Aperture</a>,
+      the gateway your agents already talk through. It's a single Go binary on your tailnet.</p>
+    <div class="currents">
+      <div class="current">
+        <h3>The hook current</h3>
+        <div class="flow"><span>Agent</span><b>→</b><span>Aperture</span><b>→</b><span class="a">Aegis hook</span><b>→</b><span>LLM</span></div>
+        <p>Before a prompt reaches the model, Aegis spots the services you mentioned
+          (“my Spotify”, “photos from June”, “my calendar”) and tells the agent where
+          the safe door is: Aegis's own endpoints, with the permissions you set.</p>
+      </div>
+      <div class="current">
+        <h3>The proxy current</h3>
+        <div class="flow"><span>Agent</span><b>→</b><span class="a">Aegis library</span><b>→</b><span>Spotify · Immich · Gmail · …</span></div>
+        <p>The agent calls <code>/v1/library/*</code> and gets back plain playlists, tracks,
+          photos, events, and messages, merged across every connected service. Aegis attaches
+          the tokens, caches only successful answers, and enforces every sting.</p>
+      </div>
+    </div>
+    <div class="vows">
+      <div class="vow"><b>Fail-open</b><span>If Aegis hits a snag, your request goes through unchanged. Your agent doesn't stall.</span></div>
+      <div class="vow"><b>Aegis owns OAuth</b><span>One encrypted token per connection, refreshed automatically. Agents never see it.</span></div>
+      <div class="vow"><b>Media stays home</b><span>The original stays with the source service. Aegis only handles metadata.</span></div>
+      <div class="vow"><b>Tailnet only</b><span>No public Funnel. Only your own devices and people can reach it.</span></div>
+    </div>
+  </section>
+
+  <section id="surface" class="surface reveal">
+    <div class="school" aria-hidden="true">
+      <svg viewBox="0 0 64 64"><use href="#mark"/></svg>
+      <svg viewBox="0 0 64 64"><use href="#mark"/></svg>
+      <svg viewBox="0 0 64 64"><use href="#mark"/></svg>
+    </div>
+    <span class="kicker">Surface</span>
+    <h2>Release your own jellyfish</h2>
+    <p class="lede">Aegis is open source. Build it, point it at your services, and keep it
+      on your tailnet.</p>
+    <pre><span class="c"># build</span>
+git clone https://github.com/fudomunro/aegis.git && cd aegis
+go build -o aegis .
+
+<span class="c"># run it on your tailnet</span>
+./aegis -base-url https://aegis.your-tailnet.ts.net \
+        -auth-mode tailnet -allowed-logins you@example.com \
+        -token-pass "$AEGIS_TOKEN_PASS"</pre>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/fudomunro/aegis">Get Aegis on GitHub</a>
+      <a class="btn ghost" href="https://github.com/fudomunro/aegis/blob/main/SECURITY.md">Read the trust model</a>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  Aegis: a jellyfish between your agents and your life. Names and data on this page are made up.
+</footer>
+
+<script src="site.js"></script>
+</body>
+</html>
