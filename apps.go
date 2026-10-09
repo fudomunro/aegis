@@ -372,6 +372,48 @@ func (s *AppStore) Delete(id string) error {
 	return s.persistLocked()
 }
 
+// RevokeByToken disables the app that owns token and clears the token so the
+// credential cannot be reused. Used by POST /v1/apps/revoke (issue #131
+// disconnect toggle). Returns the app id that was revoked.
+func (s *AppStore) RevokeByToken(token string) (string, error) {
+	if token == "" {
+		return "", fmt.Errorf("token is required")
+	}
+	hash := strings.ToLower(hashAppToken(token))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	app, ok := s.byHash[hash]
+	if !ok {
+		// Unknown or already revoked — idempotent success for the client.
+		return "", nil
+	}
+	id := app.ID
+	if app.TokenHash != "" {
+		delete(s.byHash, strings.ToLower(app.TokenHash))
+	}
+	app.TokenHash = ""
+	app.TokenHint = ""
+	app.Disabled = true
+	app.UpdatedAt = time.Now().UTC()
+	if err := s.persistLocked(); err != nil {
+		return "", err
+	}
+	return id, nil
+}
+
+// Enable re-activates a disabled app (authorize after disconnect).
+func (s *AppStore) Enable(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	app, ok := s.byID[id]
+	if !ok {
+		return fmt.Errorf("app %q not found", id)
+	}
+	app.Disabled = false
+	app.UpdatedAt = time.Now().UTC()
+	return s.persistLocked()
+}
+
 // FindByToken resolves a plaintext app token to its app. Returns nil when
 // the token does not match any enabled app. Comparison is constant-time on
 // the hash.

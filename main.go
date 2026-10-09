@@ -257,6 +257,7 @@ func main() {
 	mux.HandleFunc("GET /v1/apps/authorize", srv.HandleAppAuthorize)
 	mux.HandleFunc("POST /v1/apps/authorize", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
 	mux.HandleFunc("POST /v1/apps/token", withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken))
+	mux.HandleFunc("POST /v1/apps/revoke", withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}

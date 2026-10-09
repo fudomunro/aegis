@@ -544,14 +544,16 @@ This build ships a working demo of that handoff:
 | `GET /v1/apps/authorize` | public | Consent page (shows app name + scopes) |
 | `POST /v1/apps/authorize` | API key / tailnet | Owner allows; returns one-time `aeg_grant_…` code (10 min) |
 | `POST /v1/apps/token` | code is the credential | Redeem code → `aeg_app_…` token |
+| `POST /v1/apps/revoke` | app token | Disconnect: destroys the token and disables the app until the next grant |
 
 Demo flow:
 
-1. Open `http://<aegis>/demo/third-party` and press **Continue with Aegis**.
+1. Open `http://<aegis>/demo/third-party` and toggle **Aegis** on.
 2. Consent page lists what the app may read (this demo asks for
    `events:freebusy` only). Allow the grant.
 3. The browser returns with `?code=` and exchanges it for an app token.
 4. The page calls `GET /v1/library/freebusy` and shows busy intervals.
+5. Toggle Aegis **off** to clear the page token and `POST /v1/apps/revoke`.
 
 `redirect_uri` must be a path on the same host (no open redirects). Reuse of a
 code fails; grant creates or updates the app under `/v1/admin/apps` so you can

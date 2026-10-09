@@ -136,9 +136,39 @@
       background: #cffafe;
     }
     .btn-aegis img { width: 22px; height: 22px; }
-    .btn-aegis[disabled] {
-      opacity: 0.55;
-      cursor: default;
+    .btn-aegis.is-on {
+      color: #fff;
+      background: var(--aegis);
+      border-color: var(--aegis);
+    }
+    .btn-aegis.is-on:hover {
+      background: #0e7490;
+      filter: brightness(1.05);
+    }
+    .btn-aegis .toggle-track {
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(8, 51, 68, 0.15);
+      position: relative;
+      flex-shrink: 0;
+    }
+    .btn-aegis.is-on .toggle-track {
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .btn-aegis .toggle-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .btn-aegis.is-on .toggle-knob {
+      transform: translateX(16px);
     }
     .status {
       margin-top: 14px;
@@ -274,11 +304,12 @@
           <span class="chip">Duration: 90 minutes</span>
           <span class="chip">Organizer: Alec</span>
         </div>
-        <button class="btn-aegis" id="connect" type="button">
+        <button class="btn-aegis" id="connect" type="button" aria-pressed="false">
           <img src="/logo.svg" alt="" />
-          Continue with Aegis
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+          <span id="connect-label">Continue with Aegis</span>
         </button>
-        <div class="status" id="status">Not connected — press the button to authorize free/busy.</div>
+        <div class="status" id="status">Not connected — turn on Aegis to share free/busy.</div>
       </section>
 
       <aside class="panel">
@@ -358,10 +389,22 @@ Authorization: Bearer aeg_app_…</div>
       var availEl = document.getElementById("avail");
       var noteEl = document.getElementById("avail-note");
       var btn = document.getElementById("connect");
+      var labelEl = document.getElementById("connect-label");
 
       function setStatus(msg, cls) {
         statusEl.textContent = msg;
         statusEl.className = "status" + (cls ? " " + cls : "");
+      }
+
+      function setConnected(on) {
+        btn.classList.toggle("is-on", !!on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        labelEl.textContent = on ? "Connected to Aegis" : "Continue with Aegis";
+      }
+
+      function clearDataView(message, note) {
+        availEl.innerHTML = '<div class="empty">' + message + "</div>";
+        noteEl.textContent = note || "Connect Aegis to load free/busy blocks.";
       }
 
       function api(path, opts) {
@@ -397,8 +440,7 @@ Authorization: Bearer aeg_app_…</div>
               '</div>';
             noteEl.textContent = "Calendar source needs re-authorization.";
           } else {
-            availEl.innerHTML = '<div class="empty">Connected — no busy blocks in the current window.</div>';
-            noteEl.textContent = "Zero busy intervals returned.";
+            clearDataView("Connected — no busy blocks in the current window.", "Zero busy intervals returned.");
           }
           return;
         }
@@ -416,8 +458,12 @@ Authorization: Bearer aeg_app_…</div>
       }
 
       function loadFreebusy() {
+        setConnected(true);
         setStatus("Connected — loading free/busy…", "ok");
         return api("/v1/library/freebusy").then(function (res) {
+          if (res.status === 401 || res.status === 403) {
+            throw new Error("grant no longer valid — toggle Aegis off, then on again");
+          }
           if (!res.ok) {
             throw new Error("freebusy failed (" + res.status + ")");
           }
@@ -427,9 +473,39 @@ Authorization: Bearer aeg_app_…</div>
           setStatus("Connected to Aegis as eco-demo (free/busy only).", "ok");
         }).catch(function (err) {
           setStatus(String(err.message || err), "err");
-          availEl.innerHTML =
-            '<div class="empty">Could not load free/busy. Check that Aegis is running and the grant is still valid.</div>';
+          clearDataView(
+            "Could not load free/busy. Check that Aegis is running and the grant is still valid."
+          );
         });
+      }
+
+      function disconnect() {
+        var token = sessionStorage.getItem("aegis_app_token");
+        sessionStorage.removeItem("aegis_app_token");
+        setConnected(false);
+        clearDataView(
+          "Disconnected — free/busy data and the app token were cleared from this browser."
+        );
+        setStatus("Disconnected — Aegis access revoked for this demo app.");
+        if (!token) return Promise.resolve();
+        return fetch("/v1/apps/revoke", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + token },
+          credentials: "same-origin"
+        }).catch(function () {
+          /* client state is already cleared */
+        });
+      }
+
+      function connect() {
+        var params = new URLSearchParams({
+          client_id: CLIENT_ID,
+          name: "Event Coordinator",
+          scopes: "events:freebusy",
+          redirect_uri: location.pathname,
+          state: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
+        });
+        location.href = "/v1/apps/authorize?" + params.toString();
       }
 
       // Returning from consent with ?code=…
@@ -438,6 +514,7 @@ Authorization: Bearer aeg_app_…</div>
       var err = q.get("error");
       if (err) {
         setStatus("Authorization was declined.", "err");
+        setConnected(false);
         history.replaceState({}, "", location.pathname);
       } else if (code) {
         history.replaceState({}, "", location.pathname);
@@ -453,26 +530,27 @@ Authorization: Bearer aeg_app_…</div>
               throw new Error(data.error || data.message || ("token failed (" + res.status + ")"));
             }
             sessionStorage.setItem("aegis_app_token", data.access_token);
-            btn.disabled = true;
             return loadFreebusy();
           });
         }).catch(function (e) {
           setStatus(String(e.message || e), "err");
+          setConnected(false);
         });
       } else if (sessionStorage.getItem("aegis_app_token")) {
-        btn.disabled = true;
         loadFreebusy();
+      } else {
+        setConnected(false);
+        clearDataView(
+          "No calendar linked yet. Turn on Aegis to authorize free/busy — start and end times only."
+        );
       }
 
       btn.addEventListener("click", function () {
-        var params = new URLSearchParams({
-          client_id: CLIENT_ID,
-          name: "Event Coordinator",
-          scopes: "events:freebusy",
-          redirect_uri: location.pathname,
-          state: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
-        });
-        location.href = "/v1/apps/authorize?" + params.toString();
+        if (sessionStorage.getItem("aegis_app_token") || btn.classList.contains("is-on")) {
+          disconnect();
+        } else {
+          connect();
+        }
       });
     })();
   </script>

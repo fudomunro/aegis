@@ -302,6 +302,10 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 	ensure := AppCreateRequest{ID: req.ClientID, Name: req.Name, Scopes: scopes}
 	if _, ok := s.apps.Get(req.ClientID); ok {
 		name := req.Name
+		if err := s.apps.Enable(req.ClientID); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if _, err := s.apps.Update(req.ClientID, AppUpdateRequest{Name: &name, Scopes: &scopes}); err != nil {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
@@ -391,6 +395,43 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 		"app":          view,
 		"scopes":       view.Scopes,
 	})
+}
+
+// HandleAppRevoke lets a third party disconnect itself (issue #131).
+// The app token identifies the app; on success the token is destroyed and the
+// app is disabled until the owner grants again.
+//
+// POST /v1/apps/revoke   Authorization: Bearer aeg_app_…
+func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if s.apps == nil {
+		writeJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
+		return
+	}
+	authz := r.Header.Get("Authorization")
+	token := ""
+	if strings.HasPrefix(authz, "Bearer ") {
+		token = strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
+	}
+	if token == "" {
+		token = strings.TrimSpace(r.Header.Get("X-Api-Key"))
+	}
+	if token == "" || !strings.HasPrefix(token, appTokenPrefix) {
+		writeJSONError(w, http.StatusUnauthorized, "app token required")
+		return
+	}
+	id, err := s.apps.RevokeByToken(token)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.cache.Clear()
+	withPeerLog(slog.With("handler", "app_revoke"), r).
+		Info("third-party app disconnected", "app_id", id)
+	writeJSON(w, map[string]any{"status": "revoked", "app_id": id})
 }
 
 // HandleThirdPartyDemo serves the hosted-SaaS demo page (issue #131).
