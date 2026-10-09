@@ -408,6 +408,7 @@ on first run with mode `0700` (it holds secrets).
 <data-dir>/
   aegis.json              # bootstrap config (OAuth clients live here)
   permissions.json        # admin permissions overlay (non-secret)
+  apps.json               # third-party app registry (0600; token hashes only)
   service_connections.json # admin Immich/static-auth overlay (0600; may hold API keys)
   entity_links.json       # confirmed playlist/entity links
   tokens.json             # encrypted OAuth tokens (0600)
@@ -467,16 +468,99 @@ directory or keep passing the explicit path flags.
 
 ### Authentication
 
-Aegis can authenticate callers two ways:
+Aegis can authenticate callers three ways:
 
-1. **Tailscale identity** (recommended) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
+1. **Tailscale identity** (recommended for agents) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
 2. **API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools.
+3. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients (issue #131). See [Third-party app tokens](#third-party-app-tokens-issue-131).
 
 Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key. Full policy guidance lives in [SECURITY.md](SECURITY.md).
 
 API key comparison is constant-time (`crypto/subtle`). HTML and JSON responses
 carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
 CSP, and `Referrer-Policy: no-referrer` (issue #98).
+
+### Third-party app tokens (issue #131)
+
+Non-agent clients (for example a hosted scheduling service) can read library
+data with a **scoped app token** instead of the shared API key. Apps are
+registered in the admin API; the plaintext token is shown once.
+
+```
+POST /v1/admin/apps
+{"id":"eco","name":"Event Coordinator","scopes":{"events":"freebusy","default":"none"}}
+→ {"app":{...},"token":"aeg_app_…"}
+
+GET /v1/library/freebusy
+Authorization: Bearer aeg_app_…
+```
+
+| Endpoint | Auth | Notes |
+|----------|------|-------|
+| `GET /v1/admin/apps` | API key / tailnet | List apps (token hints only) |
+| `POST /v1/admin/apps` | API key / tailnet | Create; returns token once |
+| `GET/PATCH/DELETE /v1/admin/apps/{id}` | API key / tailnet | Inspect, update scopes/name/disable, revoke |
+| `POST /v1/admin/apps/{id}/rotate` | API key / tailnet | New token; old one dies |
+
+**Scopes** use the same access levels as [Data permissions](#data-permissions)
+(`none`, `freebusy`, `read`, `write`, `read-write`). Unlisted types fall back to
+`default`, which is forced to `none` when omitted (fail closed). `freebusy` is
+events-only.
+
+**What an app token can call:**
+
+- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages}` only
+- Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
+
+When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
+availability fields even if service permissions would allow full events (issue
+#128 + #131). Cache entries are isolated per app scope level so a freebusy app
+never reads a full-events cache.
+
+**Reachability.** App tokens are an authorization layer, not a public ingress.
+The third party must be able to reach Aegis (tailnet, VPN, or a tunnel you
+operate). Do not use Tailscale Funnel. For interactive browser use, the user’s
+machine can call Aegis on localhost/MagicDNS while it is awake; background
+backend pull needs an always-on host.
+
+**Storage.** `apps.json` (mode 0600) holds SHA-256 token hashes and hints only.
+Rotate or delete an app at any time; tokens are not recoverable.
+
+### Sample calendar (demo / query testing)
+
+A service with `endpoint: "sample://calendar"` uses the built-in
+`sample-calendar` connector (issue #77): synthetic near-term events, no OAuth.
+The third-party demo uses this so free/busy has busy blocks without a live
+Google connection. Cancelled rows are included and omitted from free/busy.
+
+### Third-party connect button (demo)
+
+Issue #131 also explores the “Aegis icon on a third-party site” grant UX.
+This build ships a working demo of that handoff:
+
+| Route | Auth | Purpose |
+|-------|------|---------|
+| `GET /demo/third-party` | public | Fake scheduling app with **Continue with Aegis** |
+| `GET /v1/apps/authorize` | public | Consent page (shows app name + scopes) |
+| `POST /v1/apps/authorize` | API key / tailnet | Owner allows; returns one-time `aeg_grant_…` code (10 min) |
+| `POST /v1/apps/token` | code is the credential | Redeem code → `aeg_app_…` token |
+| `POST /v1/apps/revoke` | app token | Disconnect: destroys the token and disables the app until the next grant |
+
+Demo flow:
+
+1. Open `http://<aegis>/demo/third-party` and toggle **Aegis** on.
+2. Consent page lists what the app may read (this demo asks for
+   `events:freebusy` only). Allow the grant.
+3. The browser returns with `?code=` and exchanges it for an app token.
+4. The page calls `GET /v1/library/freebusy` and shows busy intervals.
+5. Toggle Aegis **off** to clear the page token and `POST /v1/apps/revoke`.
+
+`redirect_uri` must be a path on the same host (no open redirects). Reuse of a
+code fails; grant creates or updates the app under `/v1/admin/apps` so you can
+revoke it later. For local testing without Tailscale identity, the consent page
+will prompt for an API key once and keep it in `sessionStorage` for the tab.
+
+
 
 ### HTTP server operations (issues #96–#97)
 

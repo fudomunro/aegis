@@ -311,13 +311,18 @@ func eventsProviderTargets(s *Server, permType string) ([]namedLister[CalendarEv
 // HandleLibraryEvents returns the user's calendar events from every connected
 // calendar-capable service: GET /v1/library/events
 // When a service's events permission is freebusy, that service's events are
-// redacted to availability only (issue #128).
+// redacted to availability only (issue #128). Third-party apps whose events
+// scope is freebusy get the same redaction across all services (issue #131).
 func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[CalendarEvent]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[CalendarEvent], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[CalendarEvent], []string) {
 			targets, denied := eventsProviderTargets(s, kind.PermType)
+			appFreeBusy := false
+			if app := AppIdentityFrom(r); app != nil {
+				appFreeBusy = IsFreeBusyAccess(app.Scopes.For(kind.PermType))
+			}
 			for i := range targets {
 				id := targets[i].id
 				inner := targets[i].list
@@ -325,7 +330,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 				if svc := s.config.GetService(id); svc != nil {
 					level = svc.Permissions.For(kind.PermType)
 				}
-				if !IsFreeBusyAccess(level) {
+				if !appFreeBusy && !IsFreeBusyAccess(level) {
 					continue
 				}
 				targets[i].list = func(ctx context.Context) ([]CalendarEvent, bool, error) {
@@ -352,7 +357,7 @@ func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[CalendarEvent]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[CalendarEvent], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[CalendarEvent], []string) {
 			return eventsProviderTargets(s, kind.PermType)
 		},
 		serviceOf: calendarEventServiceName,

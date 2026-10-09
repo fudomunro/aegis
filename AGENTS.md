@@ -111,7 +111,7 @@ All mutable local state defaults under one data directory (override with
 | Linux | `$XDG_DATA_HOME/aegis` or `~/.local/share/aegis` |
 
 ```
-<data-dir>/aegis.json, permissions.json, entity_links.json, tokens.json,
+<data-dir>/aegis.json, permissions.json, apps.json, entity_links.json, tokens.json,
 copy_ledger.db, mail-archive.db, logs/aegis.log, cache/
 ```
 

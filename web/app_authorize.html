@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Authorize data access · Aegis</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --bg: #0d1117;
+      --panel: #161b22;
+      --ink: #e6edf3;
+      --muted: #8b949e;
+      --line: #30363d;
+      --accent: #7dd3fc;
+      --accent-ink: #0c4a6e;
+      --danger: #f87171;
+      --ok: #4ade80;
+      --radius: 12px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: var(--font);
+      background:
+        radial-gradient(1200px 600px at 50% -10%, #1a2332 0%, transparent 55%),
+        var(--bg);
+      color: var(--ink);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .card {
+      width: min(440px, 100%);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 28px 28px 24px;
+      box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 22px;
+    }
+    .brand img { width: 36px; height: 36px; }
+    .brand strong { font-size: 15px; letter-spacing: 0.02em; }
+    .brand span {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+      font-weight: 600;
+      line-height: 1.25;
+    }
+    .lede {
+      margin: 0 0 20px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+    .scopes {
+      margin: 0 0 22px;
+      padding: 14px 16px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(125, 211, 252, 0.04);
+    }
+    .scopes h2 {
+      margin: 0 0 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+    }
+    .scopes ul { margin: 0; padding-left: 18px; }
+    .scopes li {
+      margin: 6px 0;
+      font-size: 14px;
+      line-height: 1.45;
+    }
+    .scopes li em {
+      font-style: normal;
+      color: var(--accent);
+    }
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    button {
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 10px;
+      padding: 12px 16px;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    button.allow {
+      background: var(--accent);
+      color: var(--accent-ink);
+    }
+    button.allow:hover { filter: brightness(1.05); }
+    button.deny {
+      background: transparent;
+      color: var(--muted);
+      border-color: var(--line);
+    }
+    button.deny:hover { color: var(--ink); border-color: var(--muted); }
+    .fine {
+      margin: 18px 0 0;
+      font-size: 12px;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .error {
+      display: none;
+      margin: 0 0 16px;
+      padding: 10px 12px;
+      border-radius: 8px;
+      border: 1px solid rgba(248, 113, 113, 0.35);
+      background: rgba(248, 113, 113, 0.1);
+      color: var(--danger);
+      font-size: 13px;
+    }
+    .meta {
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px solid var(--line);
+      font-size: 12px;
+      color: var(--muted);
+      display: grid;
+      gap: 6px;
+    }
+    .meta code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 11px;
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <div class="brand">
+      <img src="/logo.svg" alt="" />
+      <strong>Aegis</strong>
+      <span>Data grant</span>
+    </div>
+    <h1 id="title">A third-party app is requesting access</h1>
+    <p class="lede">
+      Review what this app will be able to read from your connected services.
+      You can revoke access later in Aegis admin.
+    </p>
+    <div class="error" id="error"></div>
+    <section class="scopes">
+      <h2>Requested access</h2>
+      <ul id="scope-list">
+        <li>Calendar — availability only (free/busy)</li>
+      </ul>
+    </section>
+    <div class="actions">
+      <button class="allow" id="allow" type="button">Allow access</button>
+      <button class="deny" id="deny" type="button">Not now</button>
+    </div>
+    <p class="fine">
+      Granting creates (or updates) a scoped app credential. The third party
+      only receives the data types listed above — never your provider OAuth
+      tokens. Prefer free/busy for scheduling apps.
+    </p>
+    <div class="meta">
+      <div>App id: <code id="client-id">—</code></div>
+      <div>Return to: <code id="redirect">—</code></div>
+    </div>
+  </main>
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var clientId = (q.get("client_id") || "").trim();
+      var name = (q.get("name") || clientId || "Third-party app").trim();
+      var scopes = (q.get("scopes") || "").trim();
+      var redirectUri = (q.get("redirect_uri") || "/demo/third-party").trim();
+      var state = (q.get("state") || "").trim();
+
+      document.getElementById("client-id").textContent = clientId || "—";
+      document.getElementById("redirect").textContent = redirectUri;
+      document.getElementById("title").textContent =
+        name + " is requesting access to your data";
+
+      // Render scopes client-side from the query string (values already
+      // validated server-side on GET).
+      var ul = document.getElementById("scope-list");
+      ul.innerHTML = "";
+      var parts = scopes.split(/[,;\s]+/).filter(Boolean);
+      if (!parts.length) {
+        parts = ["events:freebusy"];
+      }
+      parts.forEach(function (part) {
+        var bits = part.split(":");
+        var type = (bits[0] || part).trim();
+        var level = (bits[1] || "read").trim().toLowerCase();
+        var label = type + " — ";
+        if (level === "freebusy" || level === "fb" || level === "free-busy") {
+          label += "availability only (free/busy)";
+        } else if (level === "none") {
+          label += "no access";
+        } else if (level === "write") {
+          label += "write";
+        } else if (level === "read-write" || level === "full" || level === "rw") {
+          label += "read & write";
+        } else {
+          label += "read";
+        }
+        var li = document.createElement("li");
+        li.innerHTML = "<em></em>";
+        li.querySelector("em").textContent = label;
+        ul.appendChild(li);
+      });
+
+      var errEl = document.getElementById("error");
+      function showError(msg) {
+        errEl.style.display = "block";
+        errEl.textContent = msg;
+      }
+
+      document.getElementById("deny").addEventListener("click", function () {
+        var target = redirectUri + (redirectUri.indexOf("?") >= 0 ? "&" : "?") +
+          "error=access_denied" + (state ? "&state=" + encodeURIComponent(state) : "");
+        location.href = target;
+      });
+
+      document.getElementById("allow").addEventListener("click", function () {
+        errEl.style.display = "none";
+        var body = {
+          client_id: clientId,
+          name: name,
+          scopes: scopes || "events:freebusy",
+          redirect_uri: redirectUri,
+          state: state
+        };
+        fetch("/v1/apps/authorize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": sessionStorage.getItem("aegis_demo_key")
+              ? "Bearer " + sessionStorage.getItem("aegis_demo_key")
+              : undefined
+          },
+          body: JSON.stringify(body),
+          credentials: "same-origin"
+        }).then(function (res) {
+          if (res.status === 401 || res.status === 403) {
+            var key = window.prompt(
+              "Aegis needs proof you own this instance.\n\n" +
+              "Paste your Aegis API key (dev/demo), or cancel and open this page over Tailscale Serve for identity auth."
+            );
+            if (!key) {
+              showError("Grant was not confirmed — no API key provided.");
+              return null;
+            }
+            sessionStorage.setItem("aegis_demo_key", key.trim());
+            return fetch("/v1/apps/authorize", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "Authorization": "Bearer " + key.trim()
+              },
+              body: JSON.stringify(body),
+              credentials: "same-origin"
+            });
+          }
+          return res;
+        }).then(function (res) {
+          if (!res) return;
+          if (res.ok) {
+            return res.json().then(function (data) {
+              var target = redirectUri + (redirectUri.indexOf("?") >= 0 ? "&" : "?") +
+                "code=" + encodeURIComponent(data.code) +
+                (state ? "&state=" + encodeURIComponent(state) : "");
+              location.href = target;
+            });
+          }
+          return res.json().catch(function () { return {}; }).then(function (e) {
+            showError(e.error || e.message || ("Grant failed (" + res.status + ")"));
+          });
+        }).catch(function (err) {
+          showError(String(err));
+        });
+      });
+    })();
+  </script>
+</body>
+</html>
