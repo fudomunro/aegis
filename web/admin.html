@@ -661,8 +661,9 @@
         <span class="wizard-chip" data-wiz-step="2">2 · Install</span>
         <span class="wizard-chip" data-wiz-step="3">3 · Photos</span>
         <span class="wizard-chip" data-wiz-step="4">4 · API key</span>
-        <span class="wizard-chip" data-wiz-step="5">5 · Connect</span>
-        <span class="wizard-chip" data-wiz-step="6">6 · Verify</span>
+        <span class="wizard-chip" data-wiz-step="5">5 · Tailnet URL</span>
+        <span class="wizard-chip" data-wiz-step="6">6 · Connect</span>
+        <span class="wizard-chip" data-wiz-step="7">7 · Verify</span>
       </div>
       <div class="wizard-body">
         <section class="wizard-page" data-wiz-page="1">
@@ -796,8 +797,36 @@ job.read</pre>
         </section>
 
         <section class="wizard-page" data-wiz-page="5" hidden>
+          <h3>Friendly tailnet URL (VIP Service)</h3>
+          <p id="immich-tailnet-why">Give Immich a stable <code>https://…ts.net</code> name with a Tailscale <strong>VIP Service</strong> — no <code>:2283</code>, real certs, host-move safe. Tailnet-only Serve; never Funnel. Issue <a href="https://github.com/fudomunro/aegis/issues/124" target="_blank" rel="noopener noreferrer">#124</a>.</p>
+          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
+            <div class="meta" id="immich-tailnet-meta">Loading VIP Service guide…</div>
+            <ul id="immich-tailnet-reqs" class="meta" style="margin:0.55rem 0 0; padding-left:1.1rem"></ul>
+          </div>
+          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">VIP Service walkthrough (copyable)</span>
+              <div class="grow"></div>
+              <button class="btn" id="copy-immich-tailnet" type="button">Copy all commands</button>
+            </div>
+            <ol id="immich-tailnet-steps" style="margin:0; padding-left:1.15rem; font-size:0.88rem"></ol>
+            <pre id="immich-tailnet-commands" class="mono" hidden></pre>
+          </div>
+          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">Suggested Aegis endpoint after hosting</span>
+              <div class="grow"></div>
+              <button class="btn" id="copy-immich-vip-endpoint" type="button">Copy endpoint</button>
+            </div>
+            <pre id="immich-vip-endpoint" class="mono" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px">https://immich.your-tailnet.ts.net/api</pre>
+            <p class="meta" style="margin:0.55rem 0 0">Confirm the exact host from <code>tailscale serve status</code> on the Immich machine. Endpoint must end in <code>/api</code>.</p>
+          </div>
+          <p class="meta">Skip this step if you already have a reachable endpoint (localhost, LAN, or MagicDNS + <code>:2283</code>). Optional upgrade later.</p>
+        </section>
+
+        <section class="wizard-page" data-wiz-page="6" hidden>
           <h3>Connect Aegis to Immich</h3>
-          <p class="meta">Endpoint must end in <code>/api</code> (we repair common pastes). Same machine: <code>http://localhost:2283/api</code>.</p>
+          <p class="meta">Endpoint must end in <code>/api</code> (we repair common pastes). Same machine: <code>http://localhost:2283/api</code>. VIP Service: <code>https://immich.&lt;tailnet&gt;.ts.net/api</code>.</p>
           <div class="card" style="padding:0.85rem 1rem; margin:0.65rem 0">
             <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
               <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
@@ -822,7 +851,7 @@ job.read</pre>
           <p class="meta">Saves to <code>service_connections.json</code> — never rewrites <code>aegis.json</code>. Optional: <a href="https://docs.immich.app/overview/quick-start/" target="_blank" rel="noopener noreferrer">Immich</a> phone apps for ongoing backup.</p>
         </section>
 
-        <section class="wizard-page" data-wiz-page="6" hidden>
+        <section class="wizard-page" data-wiz-page="7" hidden>
           <h3>Verify</h3>
           <p>Run the live checklist. Empty library means add photos (step 3), not a connector failure.</p>
           <div class="toolbar" style="margin:0.55rem 0">
@@ -3548,7 +3577,7 @@ function selectTab(name) {
   }
 
   let wizStep = 1;
-  const WIZ_MAX = 6;
+  const WIZ_MAX = 7;
   function setWizStep(n) {
     wizStep = Math.max(1, Math.min(WIZ_MAX, n));
     document.querySelectorAll(".wizard-page").forEach((el) => {
@@ -3601,6 +3630,54 @@ function selectTab(name) {
     if (el) el.addEventListener("change", () => syncImmichForms(id));
   });
 
+  function renderImmichTailnet(guide) {
+    if (!guide) return;
+    const meta = $("immich-tailnet-meta");
+    const why = $("immich-tailnet-why");
+    if (why && guide.why) {
+      why.innerHTML =
+        escapeHtml(guide.why) +
+        ' Issue <a href="https://github.com/fudomunro/aegis/issues/124" target="_blank" rel="noopener noreferrer">#124</a>.';
+    }
+    if (meta) {
+      const bits = ["service " + (guide.service_name || "svc:immich")];
+      if (guide.tailnet_dns) bits.push("DNS " + guide.tailnet_dns);
+      if (guide.display_name) bits.push(guide.display_name);
+      meta.textContent = bits.join(" · ");
+    }
+    const reqs = $("immich-tailnet-reqs");
+    if (reqs) {
+      reqs.innerHTML = (guide.requirements || [])
+        .map((r) => "<li>" + escapeHtml(r) + "</li>")
+        .join("");
+    }
+    const list = $("immich-tailnet-steps");
+    if (list) {
+      list.innerHTML = (guide.steps || [])
+        .map((st) => {
+          const cmd = st.command
+            ? '<pre class="mono" style="margin:0.35rem 0 0.55rem; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
+              escapeHtml(st.command) +
+              "</pre>"
+            : "";
+          return (
+            "<li style='margin-bottom:0.55rem'><strong>" +
+            escapeHtml(st.title) +
+            "</strong><div class='meta'>" +
+            escapeHtml(st.detail || "") +
+            "</div>" +
+            cmd +
+            "</li>"
+          );
+        })
+        .join("");
+    }
+    const cmds = $("immich-tailnet-commands");
+    if (cmds) cmds.textContent = guide.commands || "";
+    const ep = $("immich-vip-endpoint");
+    if (ep && guide.suggested_endpoint) ep.textContent = guide.suggested_endpoint;
+  }
+
   function renderImmichStatus(status) {
     if (!status) return;
     const meta = $("immich-status-meta");
@@ -3625,6 +3702,7 @@ function selectTab(name) {
     }
     if (status.checks) renderImmichChecks(status.checks);
     if (status.steps) renderImmichSteps(status.steps);
+    if (status.tailnet) renderImmichTailnet(status.tailnet);
     renderImmichNext(status);
     // Do not put stored API keys into the form.
     if (status.has_api_key && $("immich-api-key").placeholder.indexOf("saved") < 0) {
@@ -3755,6 +3833,14 @@ function selectTab(name) {
     copyFromEl($("copy-immich-perms"), "immich-api-permissions", "Copy list"));
   $("copy-immich-go-install").addEventListener("click", () =>
     copyFromEl($("copy-immich-go-install"), "immich-go-install", "Copy install"));
+  if ($("copy-immich-tailnet")) {
+    $("copy-immich-tailnet").addEventListener("click", () =>
+      copyFromEl($("copy-immich-tailnet"), "immich-tailnet-commands", "Copy all commands"));
+  }
+  if ($("copy-immich-vip-endpoint")) {
+    $("copy-immich-vip-endpoint").addEventListener("click", () =>
+      copyFromEl($("copy-immich-vip-endpoint"), "immich-vip-endpoint", "Copy endpoint"));
+  }
 
   $("copy-immich-snippet").addEventListener("click", async () => {
     try {

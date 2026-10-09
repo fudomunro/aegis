@@ -194,6 +194,35 @@ When the UI loads:
    `http://localhost:2283/api`. On a tailnet, use the tailnet name
    (e.g. `http://photos.home.ts.net:2283/api`) so you do not expose Immich publicly.
 
+### Friendly ts.net name (Tailscale VIP Service, issue #124)
+
+For a stable `https://immich.<tailnet>.ts.net` URL (no `:2283`, real TLS
+certs, independent of which machine runs Immich), host Immich as a
+**Tailscale VIP Service**. Aegis’s setup guide
+(**Admin → Services → Immich → Setup guide → Tailnet URL**) emits the same
+walkthrough with copy buttons:
+
+1. **Policy file** — declare a host tag, e.g. `"tagOwners": { "tag:immich-host": ["autogroup:admin"] }`.
+2. **Create the service** — Admin API
+   `PUT /api/v2/tailnet/{tailnet}/services/svc:immich` with
+   `ports: ["tcp:443"]` and that tag. OAuth scopes: `services`, `devices:core`.
+3. **Tag the Immich host** — `POST /api/v2/device/{id}/tags`.
+   Service hosts must be **tagged** nodes (user-owned nodes cannot host `svc:*`).
+4. **Serve on the Immich machine** —
+   `tailscale serve --service svc:immich --bg --https=443 http://127.0.0.1:2283`
+   then `tailscale serve status` for the exact HTTPS name.
+5. **Approve the host** if required —
+   `POST .../services/svc:immich/device/{id}/approved`.
+6. **Point Aegis** at `https://immich.<tailnet>.ts.net/api` (confirm host from serve status).
+
+Notes:
+
+- This is **Serve**, not Funnel — traffic stays on the tailnet (product rule).
+- Aegis only *documents* these steps today; it does not call the Tailscale
+  Admin API or LocalAPI for you (automation is a later phase of #124).
+- Skipping VIP Services is fine for first runs: `http://localhost:2283/api`
+  or MagicDNS + `:2283` work immediately.
+
 Optional but useful: install the Immich mobile apps for ongoing camera-roll backup.
 Aegis does **not** replace those apps and never ingests photo bytes into its own storage.
 
