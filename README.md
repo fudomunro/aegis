@@ -526,6 +526,13 @@ backend pull needs an always-on host.
 **Storage.** `apps.json` (mode 0600) holds SHA-256 token hashes and hints only.
 Rotate or delete an app at any time; tokens are not recoverable.
 
+### Sample calendar (demo / query testing)
+
+A service with `endpoint: "sample://calendar"` uses the built-in
+`sample-calendar` connector (issue #77): synthetic near-term events, no OAuth.
+The third-party demo uses this so free/busy has busy blocks without a live
+Google connection. Cancelled rows are included and omitted from free/busy.
+
 ### Third-party connect button (demo)
 
 Issue #131 also explores the “Aegis icon on a third-party site” grant UX.

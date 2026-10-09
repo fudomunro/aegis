@@ -379,9 +379,27 @@ Authorization: Bearer aeg_app_…</div>
 
       function renderFreebusy(payload) {
         var busy = (payload && payload.busy) || [];
+        var bySvc = (payload && payload.by_service) || {};
+        var problems = [];
+        Object.keys(bySvc).forEach(function (k) {
+          var st = bySvc[k] || {};
+          if (st.status && st.status !== "ok") {
+            problems.push(k + ": " + (st.error || st.status));
+          }
+        });
         if (!busy.length) {
-          availEl.innerHTML = '<div class="empty">Connected — no busy blocks in the current window.</div>';
-          noteEl.textContent = "Zero busy intervals returned.";
+          if (problems.length) {
+            availEl.innerHTML =
+              '<div class="empty">Aegis is connected to this app, but the calendar source is not ready.<br><br>' +
+              '<strong>Live free/busy unavailable</strong><br>' +
+              problems.map(function (p) { return "<code>" + p + "</code>"; }).join("<br>") +
+              '<br><br><a href="/v1/auth/google-calendar/login">Reconnect Google Calendar</a> then reload this page.' +
+              '</div>';
+            noteEl.textContent = "Calendar source needs re-authorization.";
+          } else {
+            availEl.innerHTML = '<div class="empty">Connected — no busy blocks in the current window.</div>';
+            noteEl.textContent = "Zero busy intervals returned.";
+          }
           return;
         }
         var rows = busy.map(function (b) {
@@ -394,7 +412,7 @@ Authorization: Bearer aeg_app_…</div>
         availEl.innerHTML =
           '<table class="grid"><thead><tr><th>Start</th><th>End</th><th>Mark</th></tr></thead>' +
           "<tbody>" + rows + "</tbody></table>";
-        noteEl.textContent = busy.length + " busy block(s) — titles and attendees were never sent.";
+        noteEl.textContent = busy.length + " busy block(s) from your live Aegis calendar — titles and attendees were never sent.";
       }
 
       function loadFreebusy() {
