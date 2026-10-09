@@ -1112,13 +1112,21 @@ enough.
   "id": "immich",
   "name": "Immich",
   "action": "inject",
-  "endpoint": "http://photos.home.ts.net:2283/api",
+  "endpoint": "https://immich.your-tailnet.ts.net/api",
   "headers": { "X-API-Key": "YOUR_IMMICH_API_KEY" },
   "cache_ttl": "5m",
   "canonical_for": ["photos"],
   "permissions": { "default": "read", "photos": "read" }
 }
 ```
+
+`endpoint` must end in `/api`. Portable forms also work: same machine
+`http://localhost:2283/api`, or MagicDNS + port
+`http://photos.home.ts.net:2283/api`. For a **friendly tailnet HTTPS name**
+(no `:2283`, real certs), host Immich as a Tailscale **VIP Service**
+(`svc:immich`) — Admin → Services → Immich → Setup guide → **Tailnet URL**
+emits the copyable walk-through (issue [#124](https://github.com/fudomunro/aegis/issues/124)).
+Serve is tailnet-only; never Funnel.
 
 Only **one** non-blocked service may claim `canonical_for: ["photos"]`. If
 Immich is the home copy, remove that key from `google-photos` (or omit it).
@@ -1151,10 +1159,12 @@ singular prompts still match.
 **Admin UI setup (preferred for operators):** **Admin → Services → Immich —
 local canonical photos**. Enter the Immich endpoint + API key, optionally
 claim `canonical_for: ["photos"]`, then **Save to Aegis** / **Run checks**.
-Saves write `service_connections.json` under the data directory (never
-rewrites `aegis.json`); the API key is presence-only in admin APIs. Backing
-endpoints: `GET /v1/admin/immich/setup`, `POST /v1/admin/immich/test`,
-`POST /v1/admin/immich/config`, `POST /v1/admin/immich/check`.
+The setup guide includes a **Tailnet URL** step (VIP Service commands for a
+stable `https://…ts.net` Immich name). Saves write `service_connections.json`
+under the data directory (never rewrites `aegis.json`); the API key is
+presence-only in admin APIs. Backing endpoints: `GET /v1/admin/immich/setup`,
+`POST /v1/admin/immich/test`, `POST /v1/admin/immich/config`,
+`POST /v1/admin/immich/check`.
 
 Live acceptance checklist (issue #39) is documented in
 [docs/immich-live-testing.md](docs/immich-live-testing.md).
