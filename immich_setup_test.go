@@ -39,12 +39,12 @@ func TestServiceConnectionsOverlay_PersistAndReload(t *testing.T) {
 	}
 
 	err = cfg.SetServiceConnection("immich", serviceConnectionEntry{
-		Name:        "Immich",
-		Action:      "inject",
-		Endpoint:    "http://photos.test:2283/api",
-		Headers:     map[string]string{"X-API-Key": "secret-key"},
+		Name:         "Immich",
+		Action:       "inject",
+		Endpoint:     "http://photos.test:2283/api",
+		Headers:      map[string]string{"X-API-Key": "secret-key"},
 		CanonicalFor: []string{"photos"},
-		CacheTTL:    "5m",
+		CacheTTL:     "5m",
 	})
 	if err != nil {
 		t.Fatalf("SetServiceConnection: %v", err)
@@ -235,12 +235,12 @@ func TestHandleAdminImmichSetup_StatusAndConfig(t *testing.T) {
 		t.Fatalf("library = %+v", status)
 	}
 	wantOK := map[string]bool{
-		"service_configured": true,
-		"api_key":            true,
-		"canonical_owner":    true,
-		"endpoint_reachable": true,
-		"library_listing":    true,
-		"canonical_stamp":    true,
+		"service_configured":  true,
+		"api_key":             true,
+		"canonical_owner":     true,
+		"endpoint_reachable":  true,
+		"library_listing":     true,
+		"canonical_stamp":     true,
 		"bytes_stay_upstream": true,
 	}
 	for _, c := range status.Checks {
@@ -436,7 +436,7 @@ func TestImmichGuidedSteps_NextStep(t *testing.T) {
 	// Empty library gets seed guidance rather than a bare "run checks".
 	next = immichNextStepFrom(immichGuidedSteps(&ImmichSetupStatus{
 		Configured: true, HasAPIKey: true,
-		LastProbe: &ImmichTestResponse{OK: true},
+		LastProbe:     &ImmichTestResponse{OK: true},
 		LibraryStatus: "ok", LibraryCount: 0,
 	}), nil, true)
 	if !strings.Contains(next, "no photos") && !strings.Contains(next, "Takeout") {
@@ -518,5 +518,98 @@ func TestImmichAPIKeyPermissions_SingleKeyUnion(t *testing.T) {
 	}
 	if !strings.Contains(immichAPIKeyPermissionsSummary(), "asset.upload") {
 		t.Fatal("summary should include upload")
+	}
+}
+
+func TestTailnetDNSFromBaseURL(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"https://aegis.heron-census.ts.net", "heron-census.ts.net"},
+		{"https://aegis.heron-census.ts.net/", "heron-census.ts.net"},
+		{"http://localhost:8080", ""},
+		{"https://aegis.example.com", ""},
+		{"", ""},
+	}
+	for _, c := range cases {
+		if got := tailnetDNSFromBaseURL(c.in); got != c.want {
+			t.Fatalf("tailnetDNSFromBaseURL(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestImmichTailnetGuide_VIPService(t *testing.T) {
+	g := immichTailnetGuide("https://aegis.heron-census.ts.net", "")
+	if g == nil {
+		t.Fatal("guide is nil")
+	}
+	if g.ServiceName != "svc:immich" {
+		t.Fatalf("service name = %q", g.ServiceName)
+	}
+	if g.TailnetDNS != "heron-census.ts.net" {
+		t.Fatalf("tailnet dns = %q", g.TailnetDNS)
+	}
+	if g.SuggestedEndpoint != "https://immich.heron-census.ts.net/api" {
+		t.Fatalf("suggested endpoint = %q", g.SuggestedEndpoint)
+	}
+	if !strings.Contains(g.Why, "VIP") || strings.Contains(strings.ToLower(g.Why), "funnel") && !strings.Contains(g.Why, "never Funnel") {
+		// Why must mention VIP and the no-Funnel rule.
+		if !strings.Contains(g.Why, "never Funnel") {
+			t.Fatalf("why = %q", g.Why)
+		}
+	}
+	if len(g.Requirements) < 3 {
+		t.Fatalf("requirements = %v", g.Requirements)
+	}
+	joined := ""
+	for _, st := range g.Steps {
+		if st.ID == "" || st.Title == "" {
+			t.Fatalf("bad step %+v", st)
+		}
+		joined += st.Title + "\n" + st.Command + "\n"
+	}
+	for _, want := range []string{
+		"tagOwners",
+		"svc:immich",
+		"/services/svc:immich",
+		"tailscale serve --service svc:immich",
+		"/device/$DEVICE_ID/tags",
+		"/approved",
+		"https://immich.heron-census.ts.net/api",
+	} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("steps missing %q in:\n%s", want, joined)
+		}
+	}
+	if g.Commands == "" || !strings.Contains(g.Commands, "Create the VIP Service") {
+		t.Fatalf("commands block incomplete: %q", g.Commands)
+	}
+	// Configured endpoint wins as the connect target once set.
+	g2 := immichTailnetGuide("https://aegis.heron-census.ts.net", "http://photos.home.ts.net:2283/api")
+	if g2.SuggestedEndpoint != "http://photos.home.ts.net:2283/api" {
+		t.Fatalf("configured endpoint ignored: %q", g2.SuggestedEndpoint)
+	}
+}
+
+func TestImmichSuggestedEndpoint(t *testing.T) {
+	if got := immichSuggestedEndpoint("heron-census.ts.net"); got != "https://immich.heron-census.ts.net/api" {
+		t.Fatalf("got %q", got)
+	}
+	if got := immichSuggestedEndpoint(""); got != "http://photos.home.ts.net:2283/api" {
+		t.Fatalf("fallback got %q", got)
+	}
+}
+
+func TestImmichSetupStatus_IncludesTailnetGuide(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.heron-census.ts.net")
+	status := srv.immichSetupStatus(context.Background(), false)
+	if status.Tailnet == nil {
+		t.Fatal("expected tailnet guide")
+	}
+	if status.Tailnet.ServiceName != "svc:immich" {
+		t.Fatalf("service = %q", status.Tailnet.ServiceName)
+	}
+	if status.Snippet == "" || !strings.Contains(status.Snippet, "immich.heron-census.ts.net") {
+		t.Fatalf("snippet should use VIP endpoint: %q", status.Snippet)
 	}
 }
