@@ -273,3 +273,88 @@ func TestGrantStore_Expires(t *testing.T) {
 		t.Fatal("expired code must not consume")
 	}
 }
+
+func TestAppRevoke_DisconnectToggle(t *testing.T) {
+	store := testAppStore(t)
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.apps = store
+	srv.grants = NewGrantStore()
+
+	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"events:freebusy","redirect_uri":"/demo/third-party"}`
+	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("grant: %d %s", w.Code, w.Body.String())
+	}
+	var grant struct {
+		Code string `json:"code"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &grant); err != nil {
+		t.Fatalf("decode grant: %v", err)
+	}
+
+	req = httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{"code":"`+grant.Code+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.HandleAppToken(w, req)
+	var tok struct {
+		AccessToken string `json:"access_token"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &tok); err != nil || tok.AccessToken == "" {
+		t.Fatalf("token: %s", w.Body.String())
+	}
+
+	// Revoke with the app token (disconnect).
+	req = httptest.NewRequest("POST", "/v1/apps/revoke", nil)
+	req.Header.Set("Authorization", "Bearer "+tok.AccessToken)
+	w = httptest.NewRecorder()
+	srv.HandleAppRevoke(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("revoke: %d %s", w.Code, w.Body.String())
+	}
+	if store.FindByToken(tok.AccessToken) != nil {
+		t.Fatal("token must be dead after revoke")
+	}
+	view, _ := store.Get("eco-demo")
+	if !view.Disabled {
+		t.Fatalf("app should be disabled: %+v", view)
+	}
+
+	// Re-grant re-enables and mints a new code/token.
+	req = httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("re-grant: %d %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &grant); err != nil {
+		t.Fatalf("decode re-grant: %v", err)
+	}
+	req = httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{"code":"`+grant.Code+`"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.HandleAppToken(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("new token: %d %s", w.Code, w.Body.String())
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &tok); err != nil || tok.AccessToken == "" {
+		t.Fatalf("new token body: %s", w.Body.String())
+	}
+	if store.FindByToken(tok.AccessToken) == nil {
+		t.Fatal("re-grant token should work")
+	}
+
+	// Revoke requires an app token.
+	req = httptest.NewRequest("POST", "/v1/apps/revoke", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.HandleAppRevoke(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("api-key revoke: %d", w.Code)
+	}
+}
