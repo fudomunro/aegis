@@ -68,7 +68,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 	kind := *LibraryKindByID("playlists")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Playlist]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[Playlist], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[Playlist], []string) {
 			return collectProviders[Playlist, PlaylistProvider](s, kind.PermType,
 				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
 					return p.ListUserPlaylists
@@ -92,7 +92,7 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("tracks")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Track]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[Track], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[Track], []string) {
 			return collectProviders[Track, LikedTrackProvider](s, kind.PermType,
 				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
 					return p.ListUserLikedTracks
@@ -117,7 +117,7 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("albums")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Album]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[Album], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[Album], []string) {
 			return collectProviders[Album, AlbumProvider](s, kind.PermType,
 				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
 					return p.ListUserSavedAlbums
@@ -140,7 +140,7 @@ func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("artists")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Artist]{
 		kind: kind,
-		targets: func(s *Server) ([]namedLister[Artist], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[Artist], []string) {
 			return collectProviders[Artist, ArtistProvider](s, kind.PermType,
 				func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
 					return p.ListUserFollowedArtists

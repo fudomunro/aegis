@@ -168,6 +168,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	apps, err := NewAppStore(paths.Apps)
+	if err != nil {
+		slog.Error("failed to load app registry", "path", paths.Apps, "error", err)
+		os.Exit(1)
+	}
+
 	copies, err := OpenCopyLedger(paths.CopyLedger)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", paths.CopyLedger, "error", err)
@@ -206,6 +212,8 @@ func main() {
 		connectors:    make(map[string]ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
+		apps:          apps,
+		grants:        NewGrantStore(),
 		copies:        copies,
 		mail:          mailArchive,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
@@ -229,10 +237,27 @@ func main() {
 	srv.connectors[googleCalendarServiceID] = gCalendarConn
 	gGmailConn := NewGoogleGmailConnector(srv)
 	srv.connectors[googleGmailServiceID] = gGmailConn
+	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
+	// A service with endpoint sample://calendar gets this connector instead of
+	// a live provider so free/busy demos work without OAuth.
+	for _, svc := range cfg.ServiceSnapshots() {
+		if isSampleCalendarService(&svc) {
+			srv.connectors[svc.ID] = NewSampleCalendarConnector()
+		}
+	}
+	srv.connectors[sampleCalendarServiceID] = NewSampleCalendarConnector()
 
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
+	// Third-party grant demo (issue #131). Consent GET + demo page are public
+	// like OAuth authorize; grant POST and token exchange have their own rules.
+	mux.HandleFunc("GET /demo/third-party", srv.HandleThirdPartyDemo)
+	mux.HandleFunc("HEAD /demo/third-party", srv.HandleThirdPartyDemo)
+	mux.HandleFunc("GET /v1/apps/authorize", srv.HandleAppAuthorize)
+	mux.HandleFunc("POST /v1/apps/authorize", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
+	mux.HandleFunc("POST /v1/apps/token", withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken))
+	mux.HandleFunc("POST /v1/apps/revoke", withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
@@ -315,6 +340,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
 		s.AuthMiddleware(s.HandleAdminServicePermissions)(w, r)
+	case path == "apps" || strings.HasPrefix(path, "apps/"):
+		s.AuthMiddleware(s.HandleAdminApps)(w, r)
 	case path == "immich" || strings.HasPrefix(path, "immich/"):
 		s.AuthMiddleware(s.HandleAdminImmichSetup)(w, r)
 	default:

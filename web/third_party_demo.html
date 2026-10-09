@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Event Coordinator · Connect Aegis demo</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <style>
+    :root {
+      --paper: #f6f1ea;
+      --card: #fffdf9;
+      --ink: #1c1917;
+      --muted: #78716c;
+      --line: #e7e0d6;
+      --accent: #4f46e5;
+      --accent-soft: #eef2ff;
+      --aegis: #0e7490;
+      --aegis-soft: #ecfeff;
+      --ok: #15803d;
+      --busy: #c4b5fd;
+      --free: #dcfce7;
+      --radius: 14px;
+      --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+        "Microsoft YaHei", sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--font);
+      background:
+        linear-gradient(180deg, #efe6da 0%, var(--paper) 280px);
+      color: var(--ink);
+      line-height: 1.5;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 253, 249, 0.8);
+      backdrop-filter: blur(8px);
+      position: sticky;
+      top: 0;
+    }
+    .logo-mark {
+      width: 34px;
+      height: 34px;
+      border-radius: 10px;
+      background: var(--accent);
+      color: white;
+      display: grid;
+      place-items: center;
+      font-weight: 700;
+      font-size: 14px;
+    }
+    header strong { font-size: 15px; }
+    header .tag {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--muted);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 10px;
+      background: var(--card);
+    }
+    main {
+      width: min(920px, calc(100% - 40px));
+      margin: 28px auto 64px;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 22px;
+      margin-bottom: 22px;
+    }
+    @media (max-width: 800px) {
+      .hero { grid-template-columns: 1fr; }
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 22px;
+      box-shadow: 0 10px 30px rgba(28, 25, 23, 0.04);
+    }
+    .eyebrow {
+      margin: 0 0 8px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent);
+    }
+    h1 {
+      margin: 0 0 10px;
+      font-size: 28px;
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+    }
+    .sub {
+      margin: 0 0 18px;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .invite-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+    .chip {
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 5px 10px;
+    }
+    .btn-aegis {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      font: inherit;
+      font-size: 15px;
+      font-weight: 600;
+      color: #083344;
+      background: var(--aegis-soft);
+      border: 1px solid #a5f3fc;
+      border-radius: 12px;
+      padding: 12px 16px;
+      cursor: pointer;
+    }
+    .btn-aegis:hover {
+      border-color: var(--aegis);
+      background: #cffafe;
+    }
+    .btn-aegis img { width: 22px; height: 22px; }
+    .btn-aegis.is-on {
+      color: #fff;
+      background: var(--aegis);
+      border-color: var(--aegis);
+    }
+    .btn-aegis.is-on:hover {
+      background: #0e7490;
+      filter: brightness(1.05);
+    }
+    .btn-aegis .toggle-track {
+      width: 36px;
+      height: 20px;
+      border-radius: 999px;
+      background: rgba(8, 51, 68, 0.15);
+      position: relative;
+      flex-shrink: 0;
+    }
+    .btn-aegis.is-on .toggle-track {
+      background: rgba(255, 255, 255, 0.25);
+    }
+    .btn-aegis .toggle-knob {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      background: #fff;
+      transition: transform 0.15s ease;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    }
+    .btn-aegis.is-on .toggle-knob {
+      transform: translateX(16px);
+    }
+    .status {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+      min-height: 1.4em;
+    }
+    .status.ok { color: var(--ok); font-weight: 600; }
+    .status.err { color: #b91c1c; }
+    .steps {
+      display: grid;
+      gap: 12px;
+    }
+    .step {
+      display: grid;
+      grid-template-columns: 28px 1fr;
+      gap: 10px;
+      align-items: start;
+    }
+    .step .n {
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: var(--accent-soft);
+      color: var(--accent);
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .step strong { display: block; font-size: 13px; }
+    .step span { font-size: 12px; color: var(--muted); }
+    .section-head {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      margin: 28px 0 12px;
+    }
+    .section-head h2 {
+      margin: 0;
+      font-size: 18px;
+    }
+    .section-head p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    table.grid {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--card);
+      font-size: 13px;
+    }
+    table.grid th, table.grid td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: left;
+    }
+    table.grid th {
+      background: var(--paper);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+    table.grid tr:last-child td { border-bottom: 0; }
+    .pill {
+      display: inline-block;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+    .pill.busy { background: var(--busy); color: #4c1d95; }
+    .pill.free { background: var(--free); color: #166534; }
+    .empty {
+      padding: 22px;
+      border: 1px dashed var(--line);
+      border-radius: var(--radius);
+      color: var(--muted);
+      font-size: 14px;
+      background: rgba(255, 253, 249, 0.6);
+    }
+    footer {
+      margin-top: 36px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      background: var(--paper);
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+    .code-block {
+      margin-top: 12px;
+      padding: 12px 14px;
+      border-radius: 10px;
+      background: #1c1917;
+      color: #f5f5f4;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 12px;
+      overflow: auto;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo-mark">EC</div>
+    <strong>Event Coordinator</strong>
+    <span class="tag">Aegis third-party demo (issue #131)</span>
+  </header>
+
+  <main>
+    <div class="hero">
+      <section class="panel">
+        <p class="eyebrow">You’re invited</p>
+        <h1>Team offsite planning</h1>
+        <p class="sub">
+          We need your availability before we lock a time. Connect Aegis and we
+          can read free/busy — never your meeting titles or attendees.
+        </p>
+        <div class="invite-meta">
+          <span class="chip">Proposed window: next 2 weeks</span>
+          <span class="chip">Duration: 90 minutes</span>
+          <span class="chip">Organizer: Alec</span>
+        </div>
+        <button class="btn-aegis" id="connect" type="button" aria-pressed="false">
+          <img src="/logo.svg" alt="" />
+          <span class="toggle-track" aria-hidden="true"><span class="toggle-knob"></span></span>
+          <span id="connect-label">Continue with Aegis</span>
+        </button>
+        <div class="status" id="status">Not connected — turn on Aegis to share free/busy.</div>
+      </section>
+
+      <aside class="panel">
+        <p class="eyebrow">How the handoff works</p>
+        <div class="steps">
+          <div class="step">
+            <div class="n">1</div>
+            <div>
+              <strong>User presses the Aegis button</strong>
+              <span>Third party opens Aegis consent with client id + scopes.</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="n">2</div>
+            <div>
+              <strong>User grants in Aegis</strong>
+              <span>Owner approves a scoped app — free/busy only in this demo.</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="n">3</div>
+            <div>
+              <strong>One-time code → app token</strong>
+              <span>Third party redeems the code and calls library APIs.</span>
+            </div>
+          </div>
+          <div class="step">
+            <div class="n">4</div>
+            <div>
+              <strong>Manage in Aegis later</strong>
+              <span>Revoke or tighten scopes via admin apps API.</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    <div class="section-head">
+      <h2>Availability</h2>
+      <p id="avail-note">Connect Aegis to load free/busy blocks.</p>
+    </div>
+    <div id="avail">
+      <div class="empty">
+        No calendar linked yet. After you allow access, this table fills with
+        busy intervals from <code>GET /v1/library/freebusy</code> — start and
+        end times only.
+      </div>
+    </div>
+
+    <div class="section-head">
+      <h2>What the third party sends</h2>
+      <p>Minimal consent request — the same shape a hosted SaaS would use.</p>
+    </div>
+    <div class="code-block">GET /v1/apps/authorize
+  ?client_id=eco-demo
+  &amp;name=Event%20Coordinator
+  &amp;scopes=events:freebusy
+  &amp;redirect_uri=/demo/third-party
+  &amp;state=&lt;csrf&gt;
+
+POST /v1/apps/token  {"code":"aeg_grant_…"}
+
+GET /v1/library/freebusy
+Authorization: Bearer aeg_app_…</div>
+
+    <footer>
+      Demo page for Aegis issue #131. Served by Aegis at
+      <code>/demo/third-party</code>. Background sync / durable public URLs are
+      out of scope here — this shows the browser grant + first data pull.
+    </footer>
+  </main>
+
+  <script>
+    (function () {
+      var CLIENT_ID = "eco-demo";
+      var statusEl = document.getElementById("status");
+      var availEl = document.getElementById("avail");
+      var noteEl = document.getElementById("avail-note");
+      var btn = document.getElementById("connect");
+      var labelEl = document.getElementById("connect-label");
+
+      function setStatus(msg, cls) {
+        statusEl.textContent = msg;
+        statusEl.className = "status" + (cls ? " " + cls : "");
+      }
+
+      function setConnected(on) {
+        btn.classList.toggle("is-on", !!on);
+        btn.setAttribute("aria-pressed", on ? "true" : "false");
+        labelEl.textContent = on ? "Connected to Aegis" : "Continue with Aegis";
+      }
+
+      function clearDataView(message, note) {
+        availEl.innerHTML = '<div class="empty">' + message + "</div>";
+        noteEl.textContent = note || "Connect Aegis to load free/busy blocks.";
+      }
+
+      function api(path, opts) {
+        opts = opts || {};
+        var headers = opts.headers || {};
+        var token = sessionStorage.getItem("aegis_app_token");
+        if (token) headers["Authorization"] = "Bearer " + token;
+        return fetch(path, {
+          method: opts.method || "GET",
+          headers: headers,
+          body: opts.body,
+          credentials: "same-origin"
+        });
+      }
+
+      function renderFreebusy(payload) {
+        var busy = (payload && payload.busy) || [];
+        var bySvc = (payload && payload.by_service) || {};
+        var problems = [];
+        Object.keys(bySvc).forEach(function (k) {
+          var st = bySvc[k] || {};
+          if (st.status && st.status !== "ok") {
+            problems.push(k + ": " + (st.error || st.status));
+          }
+        });
+        if (!busy.length) {
+          if (problems.length) {
+            availEl.innerHTML =
+              '<div class="empty">Aegis is connected to this app, but the calendar source is not ready.<br><br>' +
+              '<strong>Live free/busy unavailable</strong><br>' +
+              problems.map(function (p) { return "<code>" + p + "</code>"; }).join("<br>") +
+              '<br><br><a href="/v1/auth/google-calendar/login">Reconnect Google Calendar</a> then reload this page.' +
+              '</div>';
+            noteEl.textContent = "Calendar source needs re-authorization.";
+          } else {
+            clearDataView("Connected — no busy blocks in the current window.", "Zero busy intervals returned.");
+          }
+          return;
+        }
+        var rows = busy.map(function (b) {
+          return "<tr><td>" + (b.start_at || "—") + "</td><td>" +
+            (b.end_at || "—") + "</td><td>" +
+            (b.all_day ? '<span class="pill busy">all day</span>' :
+              '<span class="pill busy">busy</span>') +
+            "</td></tr>";
+        }).join("");
+        availEl.innerHTML =
+          '<table class="grid"><thead><tr><th>Start</th><th>End</th><th>Mark</th></tr></thead>' +
+          "<tbody>" + rows + "</tbody></table>";
+        noteEl.textContent = busy.length + " busy block(s) from your live Aegis calendar — titles and attendees were never sent.";
+      }
+
+      function loadFreebusy() {
+        setConnected(true);
+        setStatus("Connected — loading free/busy…", "ok");
+        return api("/v1/library/freebusy").then(function (res) {
+          if (res.status === 401 || res.status === 403) {
+            throw new Error("grant no longer valid — toggle Aegis off, then on again");
+          }
+          if (!res.ok) {
+            throw new Error("freebusy failed (" + res.status + ")");
+          }
+          return res.json();
+        }).then(function (data) {
+          renderFreebusy(data);
+          setStatus("Connected to Aegis as eco-demo (free/busy only).", "ok");
+        }).catch(function (err) {
+          setStatus(String(err.message || err), "err");
+          clearDataView(
+            "Could not load free/busy. Check that Aegis is running and the grant is still valid."
+          );
+        });
+      }
+
+      function disconnect() {
+        var token = sessionStorage.getItem("aegis_app_token");
+        sessionStorage.removeItem("aegis_app_token");
+        setConnected(false);
+        clearDataView(
+          "Disconnected — free/busy data and the app token were cleared from this browser."
+        );
+        setStatus("Disconnected — Aegis access revoked for this demo app.");
+        if (!token) return Promise.resolve();
+        return fetch("/v1/apps/revoke", {
+          method: "POST",
+          headers: { "Authorization": "Bearer " + token },
+          credentials: "same-origin"
+        }).catch(function () {
+          /* client state is already cleared */
+        });
+      }
+
+      function connect() {
+        var params = new URLSearchParams({
+          client_id: CLIENT_ID,
+          name: "Event Coordinator",
+          scopes: "events:freebusy",
+          redirect_uri: location.pathname,
+          state: (crypto.randomUUID ? crypto.randomUUID() : String(Date.now()))
+        });
+        location.href = "/v1/apps/authorize?" + params.toString();
+      }
+
+      // Returning from consent with ?code=…
+      var q = new URLSearchParams(location.search);
+      var code = q.get("code");
+      var err = q.get("error");
+      if (err) {
+        setStatus("Authorization was declined.", "err");
+        setConnected(false);
+        history.replaceState({}, "", location.pathname);
+      } else if (code) {
+        history.replaceState({}, "", location.pathname);
+        setStatus("Redeeming grant code…");
+        fetch("/v1/apps/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code: code }),
+          credentials: "same-origin"
+        }).then(function (res) {
+          return res.json().then(function (data) {
+            if (!res.ok) {
+              throw new Error(data.error || data.message || ("token failed (" + res.status + ")"));
+            }
+            sessionStorage.setItem("aegis_app_token", data.access_token);
+            return loadFreebusy();
+          });
+        }).catch(function (e) {
+          setStatus(String(e.message || e), "err");
+          setConnected(false);
+        });
+      } else if (sessionStorage.getItem("aegis_app_token")) {
+        loadFreebusy();
+      } else {
+        setConnected(false);
+        clearDataView(
+          "No calendar linked yet. Turn on Aegis to authorize free/busy — start and end times only."
+        );
+      }
+
+      btn.addEventListener("click", function () {
+        if (sessionStorage.getItem("aegis_app_token") || btn.classList.contains("is-on")) {
+          disconnect();
+        } else {
+          connect();
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

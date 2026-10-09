@@ -96,12 +96,60 @@ type Server struct {
 	// apertureURL is the optional public base URL of the Aperture gateway.
 	// Used only for admin live links / setup guide — never required for proxying.
 	apertureURL string
+	// apps is the third-party application registry (issue #131). May be nil
+	// in tests that never exercise app tokens.
+	apps *AppStore
+	// grants holds short-lived consent codes from the authorize page.
+	grants *GrantStore
+}
+
+// appAllowedPrefixes are path prefixes a third-party app token may call.
+// Apps are data readers only — never admin, OAuth, proxy, or mail.
+var appAllowedPrefixes = []string{
+	"/v1/library/playlists",
+	"/v1/library/tracks",
+	"/v1/library/albums",
+	"/v1/library/artists",
+	"/v1/library/contacts",
+	"/v1/library/photos",
+	"/v1/library/events",
+	"/v1/library/freebusy",
+	"/v1/library/messages",
+}
+
+// appPathAllowed reports whether a third-party app token may access path.
+// Exact match or trailing slash only — no subpaths (links/, review, mirror).
+func appPathAllowed(path string) bool {
+	p := strings.TrimSuffix(path, "/")
+	if p == "" {
+		return false
+	}
+	for _, prefix := range appAllowedPrefixes {
+		if p == prefix {
+			return true
+		}
+	}
+	return false
 }
 
 // AuthMiddleware authenticates requests according to the configured auth mode.
-// Successful tailnet identity is attached to the request context for logging.
+// A valid third-party app token is accepted in every mode and yields a scoped
+// identity (issue #131) limited to library data reads. Successful tailnet
+// identity is attached to the request context for logging.
 func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		// App tokens are intentional third-party credentials. When present
+		// and valid, they win so scopes cannot be bypassed by a concurrent
+		// tailnet identity.
+		if app := s.authenticateApp(r); app != nil {
+			if !appPathAllowed(r.URL.Path) {
+				s.deny(w, r, nil, "app token not permitted on this endpoint")
+				return
+			}
+			next(w, withAppIdentity(r, app))
+			return
+		}
+
 		id, idErr := s.resolveIdentity(r)
 
 		switch s.authMode {
@@ -143,6 +191,27 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			return
 		}
 	}
+}
+
+// authenticateApp resolves Authorization/X-Api-Key to a registered app token.
+// Returns nil when the credential is missing, unknown, or disabled — callers
+// fall through to normal auth (the same header may be the shared API key).
+func (s *Server) authenticateApp(r *http.Request) *App {
+	if s == nil || s.apps == nil {
+		return nil
+	}
+	authz := r.Header.Get("Authorization")
+	token := ""
+	if strings.HasPrefix(authz, "Bearer ") {
+		token = strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
+	}
+	if token == "" {
+		token = strings.TrimSpace(r.Header.Get("X-Api-Key"))
+	}
+	if token == "" || !strings.HasPrefix(token, appTokenPrefix) {
+		return nil
+	}
+	return s.apps.FindByToken(token)
 }
 
 func (s *Server) resolveIdentity(r *http.Request) (*PeerIdentity, error) {
