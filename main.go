@@ -31,6 +31,7 @@ func main() {
 	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
 	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
+	tokenNewPass := flag.String("token-new-pass", "", "if set, re-encrypt the token file under this passphrase (with current KDF parameters) and exit")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
 	logFormat := flag.String("log-format", "json", "log format: json or text")
 	logFile := flag.String("log-file", "", "optional process log file (default: <data-dir>/logs/aegis.log; empty disables file logging)")
@@ -86,14 +87,21 @@ func main() {
 		"log_file", paths.LogFile,
 	)
 
-	// One-shot sample seeding and Takeout ingest do not need OAuth, base URL,
-	// or a listening server.
+	// One-shot sample seeding, Takeout ingest, and token rekey do not need
+	// OAuth, base URL, or a listening server.
 	if *seedSample {
 		code := runSeedSampleCLI(paths.Dir, paths.MailArchive, *seedSampleCount, *seedSampleStress)
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*importTakeout) != "" {
 		code := runImportTakeoutCLI(paths.MailArchive, paths.CopyLedger, *importTakeout, *importTakeoutBatch)
+		os.Exit(code)
+	}
+	if strings.TrimSpace(*tokenNewPass) != "" {
+		if *tokenPass == "" {
+			*tokenPass = os.Getenv("AEGIS_TOKEN_PASS")
+		}
+		code := runTokenRekeyCLI(paths.Tokens, *tokenPass, *tokenNewPass)
 		os.Exit(code)
 	}
 
@@ -457,6 +465,40 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		"stored", stored,
 		"skipped", skipped,
 		"failed", failed,
+	)
+	return 0
+}
+
+// runTokenRekeyCLI re-encrypts the token store under a new passphrase with
+// current KDF parameters, then exits (issue #101). Passing the same passphrase
+// still rotates the master salt and raises PBKDF2 cost on legacy files.
+func runTokenRekeyCLI(path, currentPass, newPass string) int {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		slog.Error("token file path is required for -token-new-pass")
+		return 1
+	}
+	if currentPass == "" {
+		slog.Error("token-pass (current) is required for -token-new-pass")
+		return 1
+	}
+	if strings.TrimSpace(newPass) == "" {
+		slog.Error("token-new-pass must not be empty")
+		return 1
+	}
+	ts, err := NewTokenStore(path, currentPass)
+	if err != nil {
+		slog.Error("failed to load token store for rekey", "path", path, "error", err)
+		return 1
+	}
+	if err := ts.ChangePassphrase(newPass); err != nil {
+		slog.Error("failed to rekey token store", "path", path, "error", err)
+		return 1
+	}
+	slog.Info("token store rekeyed",
+		"path", path,
+		"services", len(ts.Tokens),
+		"iterations", ts.kdfIterations,
 	)
 	return 0
 }
