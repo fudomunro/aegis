@@ -117,8 +117,12 @@ from other LAN interfaces.
    [data directory](README.md#data-directory-issue-74), mode 0700/0600).
    PBKDF2 parameters are recorded in the file; rotate the passphrase with
    `-token-new-pass` (see [Token encryption](README.md#token-encryption-issue-101)).
-9. **OAuth login/callback stay public** on purpose (browser redirects from
-   Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
+9. **Keep OAuth client secrets out of `aegis.json`** with
+   `"$ENV:NAME"` / `"${NAME}"` indirection (issue #102) so bootstrap config can
+   be shared without leaking mintable credentials. Literal secrets still work
+   when needed.
+10. **OAuth login/callback stay public** on purpose (browser redirects from
+    Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
 
 ## What “authorized” means for data
 
