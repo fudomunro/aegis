@@ -436,6 +436,10 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Target:   kind.ID,
 			DataType: kind.ID,
 			Cache:    MetricCacheMiss,
+			Decision: DecisionDeny,
+			Reason:   "app_scope",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
 		})
 		writeJSONError(w, http.StatusForbidden,
 			fmt.Sprintf("permission denied: app access to %s is %q", kind.ID, app.Scopes.For(kind.PermType)))
@@ -470,10 +474,32 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			perm = svc.Permissions.For(kind.PermType)
 		}
 		logger.Info("library "+kind.ID+" denied by permission", "service", id, "permission", perm)
+		// Per-service denial for the audit trail (issue #105). Even when
+		// other providers still answer the aggregate request.
+		s.recordAccessFrom(r, AccessEvent{
+			Agent:    agent,
+			Surface:  MetricSurfaceService,
+			Target:   id,
+			DataType: kind.ID,
+			Decision: DecisionDeny,
+			Reason:   "permission",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
+		})
 	}
 
 	if len(targets) == 0 {
 		if len(denied) > 0 {
+			s.recordAccessFrom(r, AccessEvent{
+				Agent:    agent,
+				Surface:  MetricSurfaceLibrary,
+				Target:   kind.ID,
+				DataType: kind.ID,
+				Decision: DecisionDeny,
+				Reason:   "permission",
+				Method:   r.Method,
+				Status:   http.StatusForbidden,
+			})
 			writeJSONError(w, http.StatusForbidden, kind.DenyMsg)
 			return
 		}
