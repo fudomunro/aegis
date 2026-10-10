@@ -115,6 +115,8 @@ from other LAN interfaces.
 8. **Encrypt tokens at rest** (`-token-pass` / `AEGIS_TOKEN_PASS`) as today —
    tailnet auth does not replace disk encryption of `tokens.json` (under the
    [data directory](README.md#data-directory-issue-74), mode 0700/0600).
+   PBKDF2 parameters are recorded in the file; rotate the passphrase with
+   `-token-new-pass` (see [Token encryption](README.md#token-encryption-issue-101)).
 9. **OAuth login/callback stay public** on purpose (browser redirects from
    Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
 
