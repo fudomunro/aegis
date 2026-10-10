@@ -3,7 +3,7 @@
     "google": {
       "name": "Google",
       "client_id": "YOUR_GOOGLE_CLIENT_ID",
-      "client_secret": "YOUR_GOOGLE_CLIENT_SECRET",
+      "client_secret": "$ENV:GOOGLE_CLIENT_SECRET",
       "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
       "token_url": "https://oauth2.googleapis.com/token",
       "scopes": [
@@ -17,7 +17,7 @@
     "spotify": {
       "name": "Spotify",
       "client_id": "YOUR_SPOTIFY_CLIENT_ID",
-      "client_secret": "YOUR_SPOTIFY_CLIENT_SECRET",
+      "client_secret": "$ENV:SPOTIFY_CLIENT_SECRET",
       "auth_url": "https://accounts.spotify.com/authorize",
       "token_url": "https://accounts.spotify.com/api/token",
       "scopes": [
@@ -31,7 +31,7 @@
     "amazon": {
       "name": "Amazon",
       "client_id": "YOUR_LWA_CLIENT_ID",
-      "client_secret": "YOUR_LWA_CLIENT_SECRET",
+      "client_secret": "$ENV:AMAZON_CLIENT_SECRET",
       "auth_url": "https://www.amazon.com/ap/oa",
       "token_url": "https://api.amazon.com/auth/o2/token",
       "scopes": [
@@ -115,7 +115,7 @@
       "action": "inject",
       "endpoint": "http://192.168.1.10:2283/api",
       "headers": {
-        "X-API-Key": "YOUR_IMMICH_API_KEY"
+        "X-API-Key": "$ENV:IMMICH_API_KEY"
       },
       "cache_ttl": "5m",
       "description": "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical). Set canonical_for: [\"photos\"] here if Immich is your home copy (and remove it from google-photos).",

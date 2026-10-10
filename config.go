@@ -117,6 +117,7 @@ func LoadConfig(path string) (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	resolveConfigSecrets(&cfg)
 	if err := validateConfig(&cfg); err != nil {
 		return nil, err
 	}
@@ -144,6 +145,7 @@ func (c *Config) Reload() error {
 	if err := json.Unmarshal(data, &fresh); err != nil {
 		return err
 	}
+	resolveConfigSecrets(&fresh)
 	if err := validateConfig(&fresh); err != nil {
 		return err
 	}
