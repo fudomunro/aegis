@@ -68,7 +68,12 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 		}
 	}
 
+	upstreamStart := time.Now()
 	data, status, err := doUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
+	upstreamElapsed := time.Since(upstreamStart)
+	if s.prom != nil {
+		s.prom.observeUpstream(opts.serviceID, upstreamElapsed, statusOrZero(status, err))
+	}
 	if err != nil {
 		logger.Error(opts.serviceID+" request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, opts.displayName+" API request failed")

@@ -62,6 +62,10 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
 			DataType: dataType,
+			Decision: DecisionDeny,
+			Reason:   "service_blocked",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
 		})
 		writeJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))
 		return
@@ -78,6 +82,10 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
 			DataType: dataType,
+			Decision: DecisionDeny,
+			Reason:   "permission",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
 		})
 		return
 	}
@@ -140,7 +148,11 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		upstreamReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 
+	upstreamStart := time.Now()
 	resp, err := aegisHTTPClient.Do(upstreamReq)
+	if s.prom != nil {
+		s.prom.observeUpstream(serviceID, time.Since(upstreamStart), statusCodeOrZero(resp, err))
+	}
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("upstream request to %s failed", svc.Name))
@@ -193,7 +205,17 @@ func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache s
 		Target:   serviceID,
 		DataType: dataType,
 		Cache:    cache,
+		Method:   r.Method,
 	})
+}
+
+// statusCodeOrZero returns the upstream status, or 0 when the request failed
+// before a response arrived (issue #105 latency metrics).
+func statusCodeOrZero(resp *http.Response, err error) int {
+	if err != nil || resp == nil {
+		return 0
+	}
+	return resp.StatusCode
 }
 
 func writeJSONError(w http.ResponseWriter, status int, message string) {

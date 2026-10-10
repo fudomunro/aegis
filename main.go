@@ -25,6 +25,8 @@ func main() {
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
 	permissionsPath := flag.String("permissions-file", "", "path to admin permissions overlay (default: <data-dir>/permissions.json; admin saves write here instead of aegis.json)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
+	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
+	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
 	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit (issue #77)")
@@ -49,6 +51,8 @@ func main() {
 		CopyLedgerSet:  setFlags["copy-ledger"],
 		MailArchive:    *mailArchivePath,
 		MailArchiveSet: setFlags["mail-archive"],
+		AuditLog:       *auditLogPath,
+		AuditLogSet:    setFlags["audit-log"],
 		LogFile:        *logFile,
 		LogFileSet:     setFlags["log-file"],
 	})
@@ -84,6 +88,7 @@ func main() {
 		"links", paths.Links,
 		"copy_ledger", paths.CopyLedger,
 		"mail_archive", paths.MailArchive,
+		"audit_log", paths.AuditLog,
 		"log_file", paths.LogFile,
 	)
 
@@ -204,6 +209,17 @@ func main() {
 		slog.Info("mail archive disabled")
 	}
 
+	auditLog, err := OpenAuditLog(paths.AuditLog, *auditRetentionDays)
+	if err != nil {
+		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
+		os.Exit(1)
+	}
+	if auditLog != nil {
+		defer auditLog.Close()
+		slog.Info("audit log ready", "path", auditLog.Path(), "enabled", auditLog.Enabled(),
+			"retention_days", *auditRetentionDays)
+	}
+
 	identity := buildIdentityResolver(*authMode, *tsSocket)
 
 	srv := &Server{
@@ -225,6 +241,8 @@ func main() {
 		copies:        copies,
 		mail:          mailArchive,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
+		audit:         auditLog,
+		prom:          NewPromMetrics(),
 		apertureURL:   *apertureURL,
 	}
 
@@ -257,6 +275,15 @@ func main() {
 
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
+	// Observability (issue #105). Health probes are unauthenticated so
+	// supervisors can poll cheaply; /metrics is auth-scoped like admin
+	// because series include service ids and denial reasons.
+	mux.HandleFunc("GET /healthz", srv.HandleHealthz)
+	mux.HandleFunc("HEAD /healthz", srv.HandleHealthz)
+	mux.HandleFunc("GET /readyz", srv.HandleReadyz)
+	mux.HandleFunc("HEAD /readyz", srv.HandleReadyz)
+	mux.HandleFunc("GET /metrics", srv.AuthMiddleware(srv.HandleMetrics))
+	mux.HandleFunc("HEAD /metrics", srv.AuthMiddleware(srv.HandleMetrics))
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
 	// Third-party grant demo (issue #131). Consent GET + demo page are public
 	// like OAuth authorize; grant POST and token exchange have their own rules.
