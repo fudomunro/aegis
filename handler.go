@@ -93,6 +93,10 @@ type Server struct {
 	mailSyncMu sync.Mutex
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *HookHealth
+	// audit is the durable access audit log (issue #105). May be disabled.
+	audit *AuditLog
+	// prom holds process-lifetime counters for GET /metrics (issue #105).
+	prom *PromMetrics
 	// apertureURL is the optional public base URL of the Aperture gateway.
 	// Used only for admin live links / setup guide — never required for proxying.
 	apertureURL string
@@ -234,14 +238,79 @@ func (s *Server) checkAPIKey(r *http.Request) bool {
 
 func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, reason string) {
 	attrs := []any{"remote", r.RemoteAddr, "path", r.URL.Path, "reason", reason}
+	agent := "api-key"
 	if id != nil {
 		attrs = append(attrs, "login", id.LoginName, "identity_source", id.Source)
+		if id.LoginName != "" {
+			agent = id.LoginName
+		}
 	}
 	slog.Warn("unauthorized request", attrs...)
 	if r.URL != nil && r.URL.Path == hookPath {
-		s.hookHealth.Record(HookObservation{Action: "auth_fail", Host: requestHost(r)})
+		s.recordHook(HookObservation{Action: "auth_fail", Host: requestHost(r)})
 	}
+	// Durable auth denials (issue #105). Route family only — never the full path.
+	s.recordAccess(AccessEvent{
+		Agent:    agent,
+		Surface:  MetricSurfaceAuth,
+		Target:   auditRouteFamily(r),
+		Decision: DecisionDeny,
+		Reason:   "auth",
+		Method:   requestMethod(r),
+		Status:   http.StatusUnauthorized,
+	})
 	writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+}
+
+// recordHook records a pre-request hook outcome in both the admin ring and
+// the Prometheus counters (issue #105).
+func (s *Server) recordHook(obs HookObservation) {
+	if s == nil {
+		return
+	}
+	if s.hookHealth != nil {
+		s.hookHealth.Record(obs)
+	}
+	if s.prom != nil {
+		s.prom.observeHook(obs.Action)
+	}
+}
+
+// requestMethod returns the HTTP method or empty.
+func requestMethod(r *http.Request) string {
+	if r == nil {
+		return ""
+	}
+	return r.Method
+}
+
+// auditRouteFamily maps a request path to a coarse redacted family for the
+// audit log. Never stores full paths (issue #32).
+func auditRouteFamily(r *http.Request) string {
+	if r == nil || r.URL == nil {
+		return "other"
+	}
+	p := r.URL.Path
+	switch {
+	case p == hookPath || strings.HasPrefix(p, "/v1/pre-request"):
+		return "hook"
+	case strings.HasPrefix(p, "/v1/admin"):
+		return "admin"
+	case strings.HasPrefix(p, "/v1/library"):
+		return "library"
+	case strings.HasPrefix(p, "/v1/services"):
+		return "service"
+	case strings.HasPrefix(p, "/v1/mail"):
+		return "mail"
+	case strings.HasPrefix(p, "/v1/auth"):
+		return "auth"
+	case strings.HasPrefix(p, "/v1/apps"):
+		return "apps"
+	case p == "/healthz" || p == "/readyz" || p == "/metrics":
+		return "observability"
+	default:
+		return "other"
+	}
 }
 
 // requestHost returns Host or X-Forwarded-Host for hook diagnostics.
@@ -351,13 +420,13 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
 			slog.Error("pre-request body too large", "limit", maxErr.Limit)
-			s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
+			s.recordHook(HookObservation{Action: "parse_fail", Host: requestHost(r)})
 			writeJSONError(w, http.StatusRequestEntityTooLarge,
 				fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
 			return
 		}
 		slog.Error("failed to read request body", "error", err)
-		s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
+		s.recordHook(HookObservation{Action: "parse_fail", Host: requestHost(r)})
 		writeGuardrailResponse(w, GuardrailResponse{
 			Action:  ActionAllow,
 			Message: "failed to read request body",
@@ -368,7 +437,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	var payload PreRequestPayload
 	if err := json.Unmarshal(body, &payload); err != nil {
 		slog.Error("failed to parse payload", "error", err)
-		s.hookHealth.Record(HookObservation{Action: "parse_fail", Host: requestHost(r)})
+		s.recordHook(HookObservation{Action: "parse_fail", Host: requestHost(r)})
 		writeGuardrailResponse(w, GuardrailResponse{
 			Action:  ActionAllow,
 			Message: "failed to parse payload",
@@ -384,7 +453,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		Provider:       payload.Metadata.Provider,
 		Login:          payload.Metadata.LoginName,
 	}
-	defer func() { s.hookHealth.Record(obs) }()
+	defer func() { s.recordHook(obs) }()
 
 	logger := slog.With(
 		"request_id", payload.Metadata.RequestID,

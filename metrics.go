@@ -12,6 +12,8 @@ import (
 const (
 	MetricSurfaceService = "service"
 	MetricSurfaceLibrary = "library"
+	// MetricSurfaceAuth is used for authentication denials (issue #105).
+	MetricSurfaceAuth = "auth"
 )
 
 // Cache outcome recorded with an access event.
@@ -25,7 +27,8 @@ const (
 const defaultMetricsCapacity = 4096
 
 // AccessEvent is one redacted agent access record. Never stores request
-// bodies, tokens, raw query strings, or full paths (issue #32).
+// bodies, tokens, raw query strings, or full paths (issue #32). Decision and
+// Reason feed the durable audit sink (issue #105).
 type AccessEvent struct {
 	At       time.Time
 	Agent    string
@@ -33,6 +36,16 @@ type AccessEvent struct {
 	Target   string // service id or library kind id
 	DataType string
 	Cache    string // hit, miss, or empty
+	// Decision is DecisionAllow or DecisionDeny. Empty is treated as allow
+	// for compatibility with older in-memory events.
+	Decision string
+	// Reason is a short redacted denial reason (permission, app_scope,
+	// service_blocked, auth). Never free-form user text.
+	Reason string
+	// Method is the HTTP method when known (audit only).
+	Method string
+	// Status is the HTTP response status when known (audit only).
+	Status int
 }
 
 // AccessMetrics is a lock-protected ring buffer of recent access events.
@@ -301,9 +314,11 @@ func agentForRequest(r *http.Request) string {
 	return "api-key"
 }
 
-// recordAccess appends a redacted access event when metrics are enabled.
+// recordAccess appends a redacted access event to the in-memory ring, the
+// durable audit log, and the Prometheus counters (issue #105). Fail-open:
+// a disabled metrics/audit sink never blocks the request path.
 func (s *Server) recordAccess(ev AccessEvent) {
-	if s == nil || s.metrics == nil {
+	if s == nil {
 		return
 	}
 	if ev.Agent == "" {
@@ -312,7 +327,29 @@ func (s *Server) recordAccess(ev AccessEvent) {
 	if ev.At.IsZero() {
 		ev.At = time.Now()
 	}
-	s.metrics.Record(ev)
+	if ev.Decision == "" {
+		ev.Decision = DecisionAllow
+	}
+	if s.metrics != nil {
+		s.metrics.Record(ev)
+	}
+	if s.audit != nil {
+		s.audit.Write(AuditEvent{
+			At:       ev.At,
+			Agent:    ev.Agent,
+			Surface:  ev.Surface,
+			Target:   ev.Target,
+			DataType: ev.DataType,
+			Decision: ev.Decision,
+			Reason:   ev.Reason,
+			Cache:    ev.Cache,
+			Method:   ev.Method,
+			Status:   ev.Status,
+		})
+	}
+	if s.prom != nil {
+		s.prom.observeAccess(ev)
+	}
 }
 
 type skipAccessMetricsKey struct{}

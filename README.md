@@ -57,7 +57,7 @@ cp aegis.example.json ~/Library/Application\ Support/Aegis/aegis.json
 ```
 
 Path flags (`-config`, `-token-file`, `-permissions-file`, `-link-file`,
-`-mail-archive`, `-log-file`) still accept absolute or relative paths and
+`-mail-archive`, `-audit-log`, `-log-file`) still accept absolute or relative paths and
 override the data-dir defaults — useful for existing ops that keep files
 beside the binary.
 
@@ -80,12 +80,84 @@ Aegis starts with these endpoints:
 - `POST /v1/mail/sync` — ingest a bounded batch of mail into the archive (resumable)
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
 - `GET/POST /v1/services/{id}/...` — service proxy
+- `GET /healthz` — liveness probe (unauthenticated; no secrets)
+- `GET /readyz` — readiness probe (config + token store loaded; unauthenticated)
+- `GET /metrics` — Prometheus text metrics (auth required; hook outcomes, cache hit/miss, upstream latency, permission denials)
 - `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
 - `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32). Includes per-agent nodes and access arrows to library data types so the Map can draw which agents touched which data (issue #114)
 - `GET /v1/admin/hook-health` — Aperture pre-request hook wiring diagnostics (stale Guardian names/URLs, auth failures, missing `send` fields)
 - `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
+
+## Observability (issue #105)
+
+Aegis exposes cheap probes, Prometheus metrics, and a durable access audit
+trail so you can see who reached which data — including denials — after a
+restart.
+
+### Health probes
+
+| Endpoint | Auth | Meaning |
+|----------|------|---------|
+| `GET /healthz` | none | Liveness: process and HTTP stack are up |
+| `GET /readyz` | none | Readiness: config and token store are loaded (503 otherwise) |
+
+Both return a tiny JSON body (`{"status":"ok"}` / `{"status":"ready"}`) and
+never include config, tokens, or service inventory. Use them from a process
+supervisor or local health check.
+
+### Metrics (`GET /metrics`)
+
+Prometheus text exposition format. **Auth required** (same credentials as
+other protected APIs) because series include service ids and denial reasons.
+
+| Series | Type | Labels |
+|--------|------|--------|
+| `aegis_process_start_time_seconds` / `aegis_process_uptime_seconds` | gauge | — |
+| `aegis_hook_outcomes_total` | counter | `action` (`allow`, `modify`, `block`, `auth_fail`, `parse_fail`) |
+| `aegis_access_total` | counter | `surface`, `target`, `decision` |
+| `aegis_cache_events_total` | counter | `result` (`hit`/`miss`) |
+| `aegis_permission_denials_total` | counter | `surface`, `target` |
+| `aegis_audit_events_total` | counter | `decision` |
+| `aegis_upstream_duration_seconds` | histogram | `service` |
+
+Counters are process-lifetime and **reset on restart**. That is reset-safe for
+Prometheus: `rate()` / `increase()` treat a drop as a counter reset. Agent
+identities are deliberately **not** used as label values (cardinality and
+privacy); per-agent detail stays in the admin Map and the audit log.
+
+Scrape example:
+
+```bash
+curl -H "Authorization: Bearer $KEY" "$AEGIS/metrics"
+```
+
+### Access audit log
+
+Durable, append-only record of allowed and denied data access. Stored in
+SQLite at `<data-dir>/audit_log.db` (issue #105).
+
+Each row is redacted like the in-memory access ring (issue #32): agent login
+or `app:<id>`, surface (`library` / `service` / `auth` / …), target (service
+id or library kind), data type, decision, and a short reason
+(`permission`, `app_scope`, `service_blocked`, `auth`). **No tokens, request
+bodies, query strings, or full paths.**
+
+- **Retention:** 30 days by default (`-audit-retention-days`). Older rows are
+  pruned on startup and periodically on write. A hard row cap (500k) drops the
+  oldest rows first so a noisy agent cannot fill the disk.
+- **Fail-open:** audit write errors never block agent requests.
+- **Disable:** pass an empty `-audit-log` (explicitly set) to turn persistence off.
+
+```bash
+# Example: 90-day retention
+./aegis ... -audit-retention-days 90
+```
+
+Admin Library previews (`/v1/admin/library/{kind}`) are **not** audited as
+agent access, matching Map counting rules (issue #62).
+
 ## Configuration
 
 Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.json) for the full format.
@@ -432,6 +504,7 @@ on first run with mode `0700` (it holds secrets).
   tokens.json             # encrypted OAuth tokens (0600)
   copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)
   mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
+  audit_log.db            # durable access audit trail (issue #105; empty -audit-log disables)
   logs/aegis.log          # process log (also mirrored to stderr)
   cache/                  # reserved for future cache spill
 ```
@@ -448,6 +521,7 @@ An explicit flag always wins:
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
+| `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
 Startup logs the resolved data directory (`data directory ready` / `data_dir`
@@ -475,6 +549,8 @@ directory or keep passing the explicit path flags.
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
 | `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables (issue #76) |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
+| `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables (issue #105) |
+| `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |

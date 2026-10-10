@@ -644,6 +644,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		connectors:  make(map[string]ServiceConnector),
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
+		prom:        NewPromMetrics(),
 	}
 }
 
