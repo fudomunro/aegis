@@ -69,6 +69,7 @@ func loadServiceConnections(path string) (*serviceConnectionsFile, error) {
 	if ov.Services == nil {
 		ov.Services = map[string]serviceConnectionEntry{}
 	}
+	resolveServiceConnectionSecrets(ov.Services)
 	return ov, nil
 }
 
