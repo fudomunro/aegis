@@ -131,7 +131,7 @@ multiple surfaces can share one provider registration and one token:
     "google": {
       "name": "Google",
       "client_id": "…",
-      "client_secret": "…",
+      "client_secret": "$ENV:GOOGLE_CLIENT_SECRET",
       "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
       "token_url": "https://oauth2.googleapis.com/token",
       "scopes": [
@@ -155,6 +155,21 @@ multiple surfaces can share one provider registration and one token:
   ]
 }
 ```
+
+**Secret indirection (issue #102).** `client_secret` and service `headers`
+values may reference the environment instead of embedding credentials, so
+`aegis.json` can live in docs, backups, or dotfiles without leaking secrets:
+
+| Form | Example | Resolves to |
+|------|---------|-------------|
+| `$ENV:NAME` | `"$ENV:SPOTIFY_CLIENT_SECRET"` | `$SPOTIFY_CLIENT_SECRET` |
+| `${NAME}` | `"${SPOTIFY_CLIENT_SECRET}"` | same |
+| literal | `"inline-secret"` | unchanged |
+
+Resolution runs at config load and on SIGHUP reload. A missing or empty
+environment variable logs a warning and leaves the secret empty — set the
+variable and reload (or restart) before connecting. Command substitution
+(`!cmd`) is not supported.
 
 - Aegis stores **one** encrypted token (access + refresh) per connection ID.
 - Login at `/v1/auth/{service_id}/login` resolves to the surface’s connection
@@ -625,7 +640,7 @@ Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 ## Connecting Services
 
 1. Register an OAuth app with each service (see below for per-service guides)
-2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference)
+2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference). Prefer `"$ENV:…"` for `client_secret` so the file stays shareable — see [Provider connections](#provider-connections).
 3. Start Aegis and visit `https://your-aegis/v1/admin`
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
 5. Tokens are stored encrypted on disk and auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101) to rotate the passphrase.
@@ -1153,7 +1168,7 @@ enough.
   "name": "Immich",
   "action": "inject",
   "endpoint": "https://immich.your-tailnet.ts.net/api",
-  "headers": { "X-API-Key": "YOUR_IMMICH_API_KEY" },
+  "headers": { "X-API-Key": "$ENV:IMMICH_API_KEY" },
   "cache_ttl": "5m",
   "canonical_for": ["photos"],
   "permissions": { "default": "read", "photos": "read" }
