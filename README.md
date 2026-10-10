@@ -2,6 +2,9 @@
 
 A service proxy for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), mediates access through local proxy endpoints, and enforces rules with OAuth-based authentication and caching.
 
+> Looking for the pitch rather than the manual? The marketing site lives in
+> [`site/`](site/) (issue #129).
+
 ## How It Works
 
 Aegis runs as two components:
