@@ -527,9 +527,8 @@ func normalizeImmichEndpoint(raw string) (string, bool) {
 			// Leave explicit non-root paths alone (reverse-proxy prefixes).
 		}
 	}
-	out := strings.TrimRight(u.String(), "/")
 	// url.String() may re-encode; rebuild a clean base.
-	out = u.Scheme + "://" + u.Host + strings.TrimRight(u.Path, "/")
+	out := u.Scheme + "://" + u.Host + strings.TrimRight(u.Path, "/")
 	if out == "" {
 		return original, false
 	}

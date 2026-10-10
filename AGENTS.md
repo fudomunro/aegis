@@ -161,9 +161,23 @@ go test ./... -count=1 -race -covermode=atomic -coverprofile=coverage.out
 go tool cover -func=coverage.out | tail -n 1
 go tool cover -func=coverage.out | sort -t$'\t' -k3 -n | head -n 20
 
+# Lint (blocking in CI; pin matches .github/workflows/ci.yml)
+go install honnef.co/go/tools/cmd/staticcheck@2026.2.1
+"$(go env GOPATH)/bin/staticcheck" ./...
+
 # Fast iteration
 go test -count=1 ./...
 go test -v -count=1 -run TestName ./...
+
+# Fuzz hostile-input parsers (issue #107). Seeds always run as unit tests;
+# -fuzz mutates them. Use a longer -fuzztime locally when hunting bugs.
+go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s .
+go test -run='^$' -fuzz='^FuzzRecordFromTakeoutMessage$' -fuzztime=30s .
+go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s .
+go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s .
+# Other targets: FuzzDetectBodyShape, FuzzInjectSystemMessage, FuzzIsMboxFromLine,
+# FuzzTakeoutMessageID, FuzzNormalizeIdentityKey, FuzzCleanYouTubeTitle,
+# FuzzTrackIdentityKey, FuzzMergePlaylistsSync, FuzzPlaylistLinkKey, FuzzMergeAlbumsSync
 
 # Build
 go build -o aegis .
@@ -179,7 +193,8 @@ go build -o aegis .
 ```
 
 CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
-**80% floor**, and `go build -o aegis .`.
+**80% floor**, **staticcheck** (findings are blocking), a **30s fuzz pass**
+over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
