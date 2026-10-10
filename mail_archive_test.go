@@ -237,7 +237,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 
 func mustTokens(t *testing.T) *TokenStore {
 	t.Helper()
-	ts, err := NewTokenStore("", "pass")
+	ts, err := newTestTokenStore("", "pass")
 	if err != nil {
 		t.Fatalf("token store: %v", err)
 	}
