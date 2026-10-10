@@ -466,8 +466,45 @@ directory or keep passing the explicit path flags.
 | `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required). Wrong passphrase refuses to start and never overwrites `tokens.json` (issue #100) |
+| `-token-new-pass` | | One-shot: re-encrypt `tokens.json` under this passphrase and exit (issue #101) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
+
+### Token encryption (issue #101)
+
+`tokens.json` is sealed with AES-256-GCM under a PBKDF2-HMAC-SHA256 master
+key. The file records its own KDF parameters so costs can be raised later
+without breaking existing stores.
+
+| Field | Meaning |
+|-------|---------|
+| `version` | `2` is current; `1` (legacy) still loads |
+| `kdf` | `pbkdf2-sha256` |
+| `iterations` | PBKDF2 cost for the master key (new files: 600 000, OWASP guidance) |
+| `salt` | Master salt (base64) |
+| `key_check` | Wrong-passphrase detector sealed under the master key |
+| `tokens.<id>.salt` | Per-entry salt (base64); entry key = HKDF(master, salt) |
+| `tokens.<id>.data` | AES-GCM ciphertext of the token JSON |
+
+**Legacy files (version 1)** — string ciphertexts, implicit 100 000 iterations,
+no per-entry salts — still load. The next write migrates them to the version 2
+layout (same master cost until you rekey).
+
+**Rotating the passphrase / raising KDF cost:**
+
+```bash
+# Stop Aegis first, then re-encrypt under the new passphrase.
+# -token-pass is the current secret; -token-new-pass is the new one.
+# Rekey always writes version 2 with a fresh master salt and the current
+# default iteration count (never lowers a harder existing cost).
+AEGIS_TOKEN_PASS='old-secret' \
+  ./aegis -token-new-pass 'new-secret' \
+  -data-dir /path/to/aegis-data
+```
+
+Passing the same value for both secrets still rotates the master salt and
+raises iterations on older files. Update `AEGIS_TOKEN_PASS` (or `-token-pass`)
+to the new secret before restarting the service.
 
 ### Authentication
 
@@ -591,7 +628,7 @@ Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference)
 3. Start Aegis and visit `https://your-aegis/v1/admin`
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
-5. Tokens are stored encrypted on disk and auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed.
+5. Tokens are stored encrypted on disk and auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101) to rotate the passphrase.
 
 If no services are connected yet, the Services tab shows extra help describing the OAuth flow.
 
@@ -1675,7 +1712,7 @@ aegis/
   permissions.go    Agent data-type access levels, path classification, enforcement
   cache.go          In-memory TTL cache with RWMutex
   oauth.go          OAuth2 login/callback/refresh flows
-  tokens.go         AES-256-GCM encrypted token storage
+  tokens.go         AES-256-GCM encrypted token storage (versioned PBKDF2 KDF)
   statestore.go     CSRF state validation with TTL
   admin.go          Admin dashboard HTML + summary/cache APIs
   brand.go          Public favicon/logo embed + routes (issue #87)

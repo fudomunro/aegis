@@ -172,7 +172,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 }
 
 func TestTokenStoreEncryptDecryptRoundtrip(t *testing.T) {
-	ts, err := NewTokenStore(t.TempDir()+"/tokens.json", "passphrase")
+	ts, err := newTestTokenStore(t.TempDir()+"/tokens.json", "passphrase")
 	if err != nil {
 		t.Fatal(err)
 	}
