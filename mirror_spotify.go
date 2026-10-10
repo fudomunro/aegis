@@ -126,10 +126,7 @@ func (m *spotifyMirror) loadLikedTracks(ctx context.Context) ([]mirrorTrack, boo
 			return out, false, nil
 		}
 		if u, err := url.Parse(next); err == nil {
-			nextPath = u.Path
-			if strings.HasPrefix(nextPath, "/v1") {
-				nextPath = strings.TrimPrefix(nextPath, "/v1")
-			}
+			nextPath = strings.TrimPrefix(u.Path, "/v1")
 			q = u.Query()
 		}
 	}

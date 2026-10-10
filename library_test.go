@@ -561,8 +561,7 @@ func TestPreRequest_LikedSongsWithoutServiceName(t *testing.T) {
 }
 
 func TestSpotifyConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
-	var mock *httptest.Server
-	mock = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/me/tracks" {
 			w.Write([]byte(`{
@@ -615,8 +614,7 @@ func TestSpotifyConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 }
 
 func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
-	var mock *httptest.Server
-	mock = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/channels":
@@ -673,8 +671,7 @@ func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 }
 
 func TestYouTubeConnector_ListUserLikedTracks_FiltersNonMusic(t *testing.T) {
-	var mock *httptest.Server
-	mock = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mock := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/channels":
