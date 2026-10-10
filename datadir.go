@@ -19,6 +19,7 @@ const (
 	defaultLinksName       = "entity_links.json"
 	defaultCopyLedgerName  = "copy_ledger.db"
 	defaultMailArchiveName = "mail-archive.db"
+	defaultAuditLogName    = "audit_log.db"
 	defaultLogFileName     = "aegis.log"
 	dataDirLogsSubdir      = "logs"
 	dataDirCacheSubdir     = "cache"
@@ -43,6 +44,8 @@ type DataPaths struct {
 	CopyLedger string
 	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
+	// AuditLog is the SQLite access-audit path (issue #105). Empty disables it.
+	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
 	LogFile string
 	// LogsDir / CacheDir are reserved layout slots under Dir.
@@ -64,6 +67,8 @@ type StatePathOverrides struct {
 	CopyLedgerSet  bool
 	MailArchive    string
 	MailArchiveSet bool
+	AuditLog       string
+	AuditLogSet    bool
 	LogFile        string
 	LogFileSet     bool
 }
@@ -172,6 +177,15 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.MailArchive = ""
 	default:
 		paths.MailArchive = expandUserPath(ov.MailArchive)
+	}
+	// Audit log: omitted → default under data dir; explicitly empty → disabled.
+	switch {
+	case !ov.AuditLogSet:
+		paths.AuditLog = filepath.Join(dir, defaultAuditLogName)
+	case strings.TrimSpace(ov.AuditLog) == "":
+		paths.AuditLog = ""
+	default:
+		paths.AuditLog = expandUserPath(ov.AuditLog)
 	}
 	// Log file: omitted → logs/aegis.log under data dir; explicitly empty → stderr only.
 	switch {

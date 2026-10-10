@@ -123,6 +123,17 @@ from other LAN interfaces.
    when needed.
 10. **OAuth login/callback stay public** on purpose (browser redirects from
     Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
+11. **Keep `/metrics` authenticated.** `/healthz` and `/readyz` are
+    unauthenticated liveness/readiness probes with no inventory. `/metrics`
+    is auth-scoped like admin because series include service ids and denial
+    reasons (issue #105). Point Prometheus at it with an API key or from a
+    tailnet identity — do not expose it through Funnel.
+12. **Audit log is local state.** `<data-dir>/audit_log.db` records who
+    accessed which data type and whether the call was allowed or denied
+    (redacted — no tokens or bodies). Treat the file like `tokens.json`:
+    mode 0700 directory, not world-readable, included in the same backup
+    you use for other Aegis state. Default retention is 30 days
+    (`-audit-retention-days`).
 
 ## What “authorized” means for data
 
@@ -169,6 +180,8 @@ clients.
 - [ ] `allowed-logins` set if the tailnet is shared
 - [ ] `AEGIS_TOKEN_PASS` set and `tokens.json` (under the data directory) not world-readable
 - [ ] API key removed or stored outside agent-accessible paths
+- [ ] `/metrics` scrape credentials stored like any other API key; `/healthz` stays unauthenticated
+- [ ] `audit_log.db` retained/backed up with the data directory (default 30 days)
 
 ## References
 
