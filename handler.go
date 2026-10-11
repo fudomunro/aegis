@@ -88,6 +88,8 @@ type Server struct {
 	copies *CopyLedger
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
+	// quicken is the optional local Quicken import store (issue #141).
+	quicken *QuickenStore
 	// mailSyncMu serializes archive ingest so admin UI and agents cannot
 	// interleave two Gmail page cursors into the same store.
 	mailSyncMu sync.Mutex
@@ -119,6 +121,7 @@ var appAllowedPrefixes = []string{
 	"/v1/library/events",
 	"/v1/library/freebusy",
 	"/v1/library/messages",
+	"/v1/library/transactions",
 }
 
 // appPathAllowed reports whether a third-party app token may access path.

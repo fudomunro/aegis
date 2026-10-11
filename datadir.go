@@ -19,6 +19,7 @@ const (
 	defaultLinksName       = "entity_links.json"
 	defaultCopyLedgerName  = "copy_ledger.db"
 	defaultMailArchiveName = "mail-archive.db"
+	defaultQuickenName     = "quicken.db"
 	defaultAuditLogName    = "audit_log.db"
 	defaultLogFileName     = "aegis.log"
 	dataDirLogsSubdir      = "logs"
@@ -44,6 +45,9 @@ type DataPaths struct {
 	CopyLedger string
 	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
+	// Quicken is the SQLite Quicken import store path (issue #141).
+	// Empty disables the local Quicken source.
+	Quicken string
 	// AuditLog is the SQLite access-audit path (issue #105). Empty disables it.
 	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
@@ -67,6 +71,8 @@ type StatePathOverrides struct {
 	CopyLedgerSet  bool
 	MailArchive    string
 	MailArchiveSet bool
+	Quicken        string
+	QuickenSet     bool
 	AuditLog       string
 	AuditLogSet    bool
 	LogFile        string
@@ -177,6 +183,15 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.MailArchive = ""
 	default:
 		paths.MailArchive = expandUserPath(ov.MailArchive)
+	}
+	// Quicken import store: omitted → default under data dir; explicitly empty → disabled.
+	switch {
+	case !ov.QuickenSet:
+		paths.Quicken = filepath.Join(dir, defaultQuickenName)
+	case strings.TrimSpace(ov.Quicken) == "":
+		paths.Quicken = ""
+	default:
+		paths.Quicken = expandUserPath(ov.Quicken)
 	}
 	// Audit log: omitted → default under data dir; explicitly empty → disabled.
 	switch {

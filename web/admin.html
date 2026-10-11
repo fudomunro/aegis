@@ -1678,16 +1678,20 @@ job.read</pre>
     photos: "Photos",
     events: "Calendar events",
     messages: "Messages",
+    transactions: "Transactions",
   };
-  // User-facing access options. Backend still stores none/freebusy/read/write/read-write.
+  // User-facing access options. Backend still stores none/freebusy/summary/read/write/read-write.
   const ACCESS_CHOICES = [
     { value: "read", label: "Available" },
+    { value: "summary", label: "Totals only" },
     { value: "freebusy", label: "Free/busy only" },
     { value: "read-write", label: "Editable" },
     { value: "none", label: "Off" },
   ];
   // freebusy redaction is events-only (issue #128).
   const FREEBUSY_TYPES = new Set(["events"]);
+  // summary redaction is transactions-only (issue #141).
+  const SUMMARY_TYPES = new Set(["transactions"]);
   // Per-service Advanced disclosure under the permissions form (issue #69).
   const openAdvanced = new Set();
 
@@ -1695,6 +1699,7 @@ job.read</pre>
     const v = String(level || "").toLowerCase();
     if (v === "none" || v === "deny" || v === "off" || v === "false") return "none";
     if (v === "freebusy" || v === "fb" || v === "busy" || v === "busy-only" || v === "free-busy") return "freebusy";
+    if (v === "summary" || v === "totals" || v === "totals-only" || v === "sum") return "summary";
     if (v === "read" || v === "ro" || v === "readonly" || v === "read-only") return "read";
     if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only" || v === "mutate") return "write";
     if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite" || v === "read_write") return "read-write";
@@ -1713,6 +1718,7 @@ job.read</pre>
     const options = ACCESS_CHOICES.filter((o) => {
       if (o.value === "read-write" && !allowWrite) return false;
       if (o.value === "freebusy" && !FREEBUSY_TYPES.has(name)) return false;
+      if (o.value === "summary" && !SUMMARY_TYPES.has(name)) return false;
       return true;
     });
     if (options.every((o) => o.value !== display) && display) {

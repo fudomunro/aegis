@@ -16,6 +16,10 @@ const (
 	// reduced to availability only (start/end/all_day/status) — no titles,
 	// attendees, locations, or descriptions (issue #128). Events-only.
 	AccessFreeBusy = "freebusy"
+	// AccessSummary allows safe methods on transactions, but responses are
+	// reduced to totals by category/month only — no line items and no
+	// account identifiers (issue #141). Transactions-only.
+	AccessSummary = "summary"
 	// AccessRead allows safe methods (GET, HEAD).
 	AccessRead = "read"
 	// AccessWrite allows mutating methods (POST, PUT, PATCH, DELETE).
@@ -29,6 +33,13 @@ const (
 // cannot enforce (issue #128).
 var freeBusyOnlyTypes = map[string]bool{
 	"events": true,
+}
+
+// summaryOnlyTypes lists data types that honor AccessSummary redaction.
+// summary is rejected on any other key so we never claim a totals-only
+// redaction we cannot enforce (issue #141).
+var summaryOnlyTypes = map[string]bool{
+	"transactions": true,
 }
 
 // DefaultAccessType is used when a service has no permissions block, or when
@@ -71,13 +82,15 @@ func (p Permissions) Strictest() string {
 	if len(p) == 0 {
 		return DefaultAccessType
 	}
-	hasNone, hasFreeBusy, hasRead, hasWrite, hasFull := false, false, false, false, false
+	hasNone, hasFreeBusy, hasSummary, hasRead, hasWrite, hasFull := false, false, false, false, false, false
 	for _, v := range p {
 		switch normalizeAccess(v) {
 		case AccessNone:
 			hasNone = true
 		case AccessFreeBusy:
 			hasFreeBusy = true
+		case AccessSummary:
+			hasSummary = true
 		case AccessRead:
 			hasRead = true
 		case AccessWrite:
@@ -89,9 +102,13 @@ func (p Permissions) Strictest() string {
 	if hasNone || (hasRead && hasWrite) {
 		return AccessNone
 	}
-	// freebusy redaction is events-only. When it is the tightest level,
-	// unknown paths cannot be redacted — deny them rather than leak detail.
+	// freebusy/summary redactions are type-specific. When either is the
+	// tightest level, unknown paths cannot be redacted — deny them rather
+	// than leak detail (issue #94, #128, #141).
 	if hasFreeBusy && !hasRead && !hasWrite && !hasFull {
+		return AccessNone
+	}
+	if hasSummary && !hasRead && !hasWrite && !hasFull {
 		return AccessNone
 	}
 	if hasRead {
@@ -105,6 +122,9 @@ func (p Permissions) Strictest() string {
 	}
 	if hasFreeBusy {
 		return AccessFreeBusy
+	}
+	if hasSummary {
+		return AccessSummary
 	}
 	return DefaultAccessType
 }
@@ -172,6 +192,26 @@ func (p Permissions) FreeBusyDataTypes() []string {
 	return limited
 }
 
+// SummaryDataTypes returns sorted data-type names limited to totals-only
+// summary (issue #141). Used in pre-request injection so agents know they
+// only get category/month totals, not line items.
+func (p Permissions) SummaryDataTypes() []string {
+	if p == nil {
+		return nil
+	}
+	var limited []string
+	for k, v := range p {
+		if k == PermissionDefaultKey {
+			continue
+		}
+		if normalizeAccess(v) == AccessSummary {
+			limited = append(limited, k)
+		}
+	}
+	sort.Strings(limited)
+	return limited
+}
+
 // Clone returns a shallow copy suitable for admin/API responses.
 func (p Permissions) Clone() map[string]string {
 	if p == nil {
@@ -192,15 +232,21 @@ func ValidatePermissions(p Permissions) error {
 			return fmt.Errorf("permissions: empty data type key")
 		}
 		switch normalizeAccess(v) {
-		case AccessNone, AccessFreeBusy, AccessRead, AccessWrite, AccessFull:
+		case AccessNone, AccessFreeBusy, AccessSummary, AccessRead, AccessWrite, AccessFull:
 		default:
-			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, read, write, or read-write)", k, v)
+			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, read, write, or read-write)", k, v)
 		}
 		if normalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !freeBusyOnlyTypes[k] {
 			return fmt.Errorf("permissions[%s]: freebusy is only supported for events", k)
 		}
 		if normalizeAccess(v) == AccessFreeBusy && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: freebusy is only supported for events")
+		}
+		if normalizeAccess(v) == AccessSummary && k != PermissionDefaultKey && !summaryOnlyTypes[k] {
+			return fmt.Errorf("permissions[%s]: summary is only supported for transactions", k)
+		}
+		if normalizeAccess(v) == AccessSummary && k == PermissionDefaultKey {
+			return fmt.Errorf("permissions[default]: summary is only supported for transactions")
 		}
 	}
 	return nil
@@ -212,6 +258,8 @@ func normalizeAccess(level string) string {
 		return AccessNone
 	case AccessFreeBusy, "fb", "busy", "busy-only", "free-busy":
 		return AccessFreeBusy
+	case AccessSummary, "totals", "totals-only", "sum":
+		return AccessSummary
 	case AccessRead, "ro", "readonly", "read-only":
 		return AccessRead
 	case AccessWrite, "wo", "writeonly", "write-only", "mutate":
@@ -226,7 +274,7 @@ func normalizeAccess(level string) string {
 func allowsMethod(level, method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
-		return level == AccessFreeBusy || level == AccessRead || level == AccessFull
+		return level == AccessFreeBusy || level == AccessSummary || level == AccessRead || level == AccessFull
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 		return level == AccessWrite || level == AccessFull
 	default:
@@ -238,6 +286,12 @@ func allowsMethod(level, method string) bool {
 // IsFreeBusyAccess reports whether the level is the events free/busy view.
 func IsFreeBusyAccess(level string) bool {
 	return normalizeAccess(level) == AccessFreeBusy
+}
+
+// IsSummaryAccess reports whether the level is the transactions totals-only
+// view (issue #141).
+func IsSummaryAccess(level string) bool {
+	return normalizeAccess(level) == AccessSummary
 }
 
 // errNonCanonicalPath is returned for proxy paths that are not in canonical
@@ -339,6 +393,15 @@ func DataTypeForPath(path string) string {
 	// the unified photos library.
 	case strings.HasPrefix(p, "/assets") || p == "/search/metadata":
 		return "photos"
+	// Financial transactions (issue #141): YNAB budgets/accounts/transactions
+	// and Quicken/OFX bank statement paths share the transactions permission.
+	case p == "/me/transactions" || strings.HasPrefix(p, "/transactions") ||
+		strings.HasPrefix(p, "/budgets") || strings.HasPrefix(p, "/accounts") ||
+		strings.HasPrefix(p, "/categories") || strings.HasPrefix(p, "/payees") ||
+		strings.HasPrefix(p, "/bank") || strings.HasPrefix(p, "/cc") ||
+		strings.HasPrefix(p, "/invstmt") || strings.HasPrefix(p, "/ofx") ||
+		strings.HasPrefix(p, "/quicken"):
+		return "transactions"
 	case p == "/search":
 		return "search"
 	case p == "/me/subscriptions":

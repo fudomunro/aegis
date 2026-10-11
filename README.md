@@ -72,6 +72,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
 - `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
+- `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
@@ -278,6 +279,7 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 |-------|-----------------|
 | `none` | none — 403 for that data type |
 | `freebusy` | `GET`, `HEAD` on `events`, but responses reduced to availability only (issue #128) |
+| `summary` | `GET`, `HEAD` on `transactions`, but responses reduced to totals by category/month only — no line items (issue #141) |
 | `read` | `GET`, `HEAD` |
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
@@ -289,6 +291,13 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
   `GET /v1/library/freebusy` for availability; `/v1/library/events` and the
   calendar proxy apply the same redaction when a service is set to `freebusy`.
   The level is rejected on other data types and on `default`.
+- **`summary` is transactions-only** (issue #141). Apps can see how much was
+  spent by category or month without reading line items or account names.
+  Responses keep only `summary` totals (`count`, `total_amount`, `by_category`,
+  `by_month`). Prefer `GET /v1/library/transactions` with `summary` access for
+  budget dashboards; `read` adds line items with merchant but still strips
+  account identifiers. The level is rejected on other data types and on
+  `default`.
 - **Unknown proxy paths** (not a mapped data type) use the **strictest**
   configured level, not `default`, so a tight type cannot be bypassed by an
   unmapped endpoint (issue #94).
@@ -316,7 +325,7 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
-`events`, `messages`. Paths that do not map to a known type fall through to the
+`events`, `messages`, `transactions`. Paths that do not map to a known type fall through to the
 `default` level.
 
 ### Canonical sources (non-Aegis, issue #16)
@@ -504,6 +513,7 @@ on first run with mode `0700` (it holds secrets).
   tokens.json             # encrypted OAuth tokens (0600)
   copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)
   mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
+  quicken.db              # Quicken QIF/QFX import store (issue #141; empty -quicken-store disables)
   audit_log.db            # durable access audit trail (issue #105; empty -audit-log disables)
   logs/aegis.log          # process log (also mirrored to stderr)
   cache/                  # reserved for future cache spill
@@ -521,6 +531,7 @@ An explicit flag always wins:
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
+| `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
@@ -549,6 +560,8 @@ directory or keep passing the explicit path flags.
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
 | `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables (issue #76) |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
+| `-quicken-store` | `<data-dir>/quicken.db` | Quicken import store; empty disables (issue #141) |
+| `-import-quicken` | | Import a QIF/QFX file or directory, then exit (issue #141) |
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables (issue #105) |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
@@ -640,7 +653,7 @@ events-only.
 
 **What an app token can call:**
 
-- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages}` only
+- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions}` only
 - Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
 
 When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
@@ -1578,6 +1591,123 @@ but no connector is registered for them yet. Personal SMS history has no
 simple OAuth surface; WhatsApp consumer history is not available through a
 Aegis-compatible named API. Follow-ups can plug in connectors that
 implement `MessageProvider` without changing the library contract.
+
+### Transactions as a data type
+
+```
+GET /v1/library/transactions
+Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
+```
+
+Returns the user's financial transactions from every connected source.
+Connectors opt in by implementing `TransactionProvider` (`ListUserTransactions`).
+Permission key: `transactions` (paths `/budgets*`, `/accounts*`, `/transactions*`,
+`/categories*`, `/payees*`, `/quicken*`, `/me/transactions` on the service proxy).
+
+Query filters: `after`, `before`, `account`, `q`, `currency`.
+
+Amounts are **signed decimal strings** (negative = outflow) so agents never do
+float money math on JSON numbers. Account fields are coarse references only
+(name, type, last 4) — never full account or card numbers.
+
+Cross-service merge:
+
+1. Durable provider IDs first (YNAB `import_id`, Quicken FITID) → `match: "provider_id"`
+2. Otherwise amount + posted day + normalized merchant → `match: "amount_date_merchant"`
+3. An adjacent-day (±1) pass catches the same card charge visible through two
+   providers under different local IDs
+
+`summary` always includes `summary` rollups (`total_amount`, `by_category`,
+`by_month`). When the permission is `summary` (issue #141), `transactions[]`
+is omitted entirely.
+
+Example:
+
+```json
+{
+  "transactions": [
+    {
+      "posted_at": "2024-03-05",
+      "amount": "-45.67",
+      "currency": "USD",
+      "description": "AMAZON.COM",
+      "merchant": "Amazon",
+      "category": "Shopping",
+      "status": "posted",
+      "account": {"name": "Everyday Checking", "type": "checking", "last4": "4421"},
+      "entity_id": "AQB-20240305-0001",
+      "sources": [{"service": "ynab", "service_name": "YNAB", "id": "ynab-tx-1"}]
+    }
+  ],
+  "total": 1,
+  "summary": {
+    "count": 1,
+    "currency": "USD",
+    "total_amount": "-45.67",
+    "by_category": {"Shopping": "-45.67"},
+    "by_month": {"2024-03": "-45.67"}
+  }
+}
+```
+
+#### YNAB
+
+Live budget data from the [YNAB API](https://api.ynab.com). Auth is a Personal
+Access Token on the service (or a stored OAuth token):
+
+```json
+{
+  "id": "ynab",
+  "name": "YNAB",
+  "endpoint": "https://api.ynab.com/v1",
+  "headers": {"Authorization": "Bearer <your-ynab-personal-access-token>"},
+  "permissions": {"transactions": "read"}
+}
+```
+
+The connector lists budgets → accounts → transactions and maps YNAB milliunits
+to signed decimal strings (`-45670` → `"-45.67"`). Payee becomes `merchant`,
+category name becomes `category`, `import_id` becomes `entity_id` when present.
+Read-only — no budget mutations are advertised.
+
+Agent-facing proxy paths:
+
+```
+GET /v1/services/ynab/budgets
+GET /v1/services/ynab/budgets/{budget_id}/accounts
+GET /v1/services/ynab/budgets/{budget_id}/transactions
+```
+
+#### Quicken files (QIF / QFX / OFX)
+
+Historical Quicken exports are a **read-only import location** — parse once into
+the local store, then agents query them like any other transaction source.
+Statements and PDFs are never stored (issue #141 / product rule: Aegis does not
+store media).
+
+```bash
+./aegis -import-quicken /path/to/export.qif     # or a directory of .qif/.qfx/.ofx
+# or keep the store next to other local state:
+./aegis ... -quicken-store "$DATA_DIR/quicken.db"
+```
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /v1/services/quicken/transactions` | Neutral transactions from the import store |
+| `GET /v1/services/quicken/import/status` | Row count |
+| `POST /v1/services/quicken/import` | `{"path": "/path/to/file-or-dir"}` |
+
+Re-import skips rows already stored (by FITID / stable hash). CLI:
+
+```bash
+./aegis -quicken-store quicken.db -import-quicken ~/Downloads/Quicken
+```
+
+FITIDs become `entity_id` so the same bank import shows up once when YNAB also
+has it (or when the same export is imported twice under different filenames).
+
+**Plaid / SimpleFIN / Actual Budget:** not registered yet. The
+`TransactionProvider` interface is the plug-in point (issue #141).
 
 ### Service proxy
 
