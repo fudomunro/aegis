@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -70,13 +71,14 @@ func (r MailArchiveRecord) Message() Message {
 			from = &c
 		}
 	}
+	// Takeout is a read-only sync location, never the mailbox home (issue #16/#139).
 	src := MessageSource{
 		Service:     r.Service,
 		ServiceName: r.ServiceName,
 		ID:          r.ID,
 		ThreadID:    r.ThreadID,
 		Mailbox:     r.Mailbox,
-		Canonical:   true,
+		Canonical:   r.Service != takeoutServiceID,
 	}
 	if r.MessageID != "" {
 		src.Extra = map[string]any{"message_id": r.MessageID}
@@ -260,6 +262,9 @@ func (a *MailArchive) Upsert(rec MailArchiveRecord) error {
 	if rec.Service == "" || rec.ID == "" {
 		return fmt.Errorf("mail archive upsert requires service and id")
 	}
+	// Store Message-ID in the same normalized form identity matching uses so
+	// Gmail and Takeout copies of one message join (issue #139).
+	rec.MessageID = normalizeMessageID(rec.MessageID)
 	if rec.Labels == nil {
 		rec.Labels = []string{}
 	}
@@ -358,7 +363,14 @@ FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
 	return rec, nil
 }
 
+// mailSearchMergeCap bounds how many matching source rows are loaded before
+// multi-source identity merge, so pagination applies to user-facing messages
+// rather than raw (service, id) copies (issue #139).
+const mailSearchMergeCap = 5000
+
 // Search runs FTS + structured filters. Limit defaults to 25 (cap 200).
+// Source rows that share an identity (RFC Message-ID, else subject+from+sent_at)
+// are merged into one Message with multi-source sources[] before pagination.
 func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	if a == nil || a.db == nil {
 		return MailSearchResponse{}, fmt.Errorf("mail archive disabled")
@@ -412,70 +424,164 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 		args = append(args, `%"`+label+`"%`)
 	}
 
-	var querySQL string
 	fts := strings.TrimSpace(q.Q)
+	querySQL := `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
+       m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
+       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text `
+	queryArgs := args
 	if fts != "" {
 		match, _ := mailFTSMatch(fts)
 		if match == "" {
 			match = `""`
 		}
-		base := `FROM mail_fts f JOIN mail_messages m ON m.id = f.rowid WHERE mail_fts MATCH ? AND ` + strings.Join(where, " AND ")
-		querySQL = `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
-       m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
-       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text ` + base +
-			` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
-		countSQL := `SELECT COUNT(*) ` + base
-		var total int
-		countArgs := append([]any{match}, args...)
-		if err := a.db.QueryRow(countSQL, countArgs...).Scan(&total); err != nil {
-			return MailSearchResponse{}, err
-		}
-		rows, err := a.db.Query(querySQL, append(countArgs, limit, offset)...)
-		if err != nil {
-			return MailSearchResponse{}, err
-		}
-		defer rows.Close()
-		msgs := make([]Message, 0, limit)
-		for rows.Next() {
-			rec, err := scanMailRows(rows, q.WithBody)
-			if err != nil {
-				return MailSearchResponse{}, err
-			}
-			msgs = append(msgs, rec.Message())
-		}
-		if err := rows.Err(); err != nil {
-			return MailSearchResponse{}, err
-		}
-		return MailSearchResponse{Messages: msgs, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+		querySQL += `FROM mail_fts f JOIN mail_messages m ON m.id = f.rowid WHERE mail_fts MATCH ? AND ` +
+			strings.Join(where, " AND ")
+		queryArgs = append([]any{match}, args...)
+	} else {
+		querySQL += `FROM mail_messages m WHERE ` + strings.Join(where, " AND ")
 	}
+	querySQL += ` ORDER BY ` + orderBy + ` LIMIT ?`
+	queryArgs = append(queryArgs, mailSearchMergeCap)
 
-	base := `FROM mail_messages m WHERE ` + strings.Join(where, " AND ")
-	querySQL = `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
-       m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
-       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text ` + base +
-		` ORDER BY ` + orderBy + ` LIMIT ? OFFSET ?`
-	countSQL := `SELECT COUNT(*) ` + base
-	var total int
-	if err := a.db.QueryRow(countSQL, args...).Scan(&total); err != nil {
-		return MailSearchResponse{}, err
-	}
-	rows, err := a.db.Query(querySQL, append(args, limit, offset)...)
+	rows, err := a.db.Query(querySQL, queryArgs...)
 	if err != nil {
 		return MailSearchResponse{}, err
 	}
-	defer rows.Close()
 	msgs := make([]Message, 0, limit)
 	for rows.Next() {
 		rec, err := scanMailRows(rows, q.WithBody)
 		if err != nil {
+			rows.Close()
 			return MailSearchResponse{}, err
 		}
 		msgs = append(msgs, rec.Message())
 	}
 	if err := rows.Err(); err != nil {
+		rows.Close()
 		return MailSearchResponse{}, err
 	}
-	return MailSearchResponse{Messages: msgs, Total: total, Limit: limit, Offset: offset}, nil
+	rows.Close()
+
+	// Collapse gmail + takeout (and other) source rows into one collection entry.
+	// FTS/filters may hit only one source; pull Message-ID siblings so the
+	// user still sees every source of that message (issue #139).
+	merged := MergeMessages(a.hydrateMessageSiblings(msgs))
+	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
+	total := len(merged)
+	if offset >= total {
+		return MailSearchResponse{Messages: []Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+	}
+	end := offset + limit
+	if end > total {
+		end = total
+	}
+	return MailSearchResponse{Messages: merged[offset:end], Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+}
+
+// sortMailMessages orders merged messages like the SQL sent_at sort, with
+// empty timestamps last and a stable identity tiebreak (issue #139).
+func sortMailMessages(msgs []Message, asc bool) {
+	sort.SliceStable(msgs, func(i, j int) bool {
+		si, sj := msgs[i].SentAt, msgs[j].SentAt
+		ei, ej := si == "", sj == ""
+		if ei != ej {
+			return ej // empty sent_at sorts last
+		}
+		if si != sj {
+			if asc {
+				return si < sj
+			}
+			return si > sj
+		}
+		ki, kj := messageIdentityKey(msgs[i]), messageIdentityKey(msgs[j])
+		if asc {
+			return ki < kj
+		}
+		return ki > kj
+	})
+}
+
+// hydrateMessageSiblings loads other source rows that share an RFC Message-ID
+// with any message already selected, so multi-source identity survives
+// filter/FTS that only matched one copy (issue #139).
+func (a *MailArchive) hydrateMessageSiblings(msgs []Message) []Message {
+	if len(msgs) == 0 {
+		return msgs
+	}
+	want := map[string]bool{}
+	have := map[string]bool{}
+	for _, m := range msgs {
+		for _, src := range m.Sources {
+			if src.Service != "" && src.ID != "" {
+				have[src.Service+"\x00"+src.ID] = true
+			}
+		}
+		if id := normalizeMessageID(m.EntityID); id != "" {
+			want[id] = true
+			continue
+		}
+		for _, src := range m.Sources {
+			if id := normalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
+				want[id] = true
+			}
+		}
+	}
+	if len(want) == 0 {
+		return msgs
+	}
+	ids := make([]string, 0, len(want))
+	placeholders := make([]string, 0, len(want))
+	args := make([]any, 0, len(want))
+	for id := range want {
+		ids = append(ids, id)
+		placeholders = append(placeholders, "?")
+		args = append(args, id)
+	}
+	querySQL := `SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
+       subject, snippet, from_name, from_email, to_json, cc_json,
+       sent_at, received_at, direction, is_read, body_text
+       FROM mail_messages WHERE message_id IN (` + strings.Join(placeholders, ",") + `)`
+	rows, err := a.db.Query(querySQL, args...)
+	if err != nil {
+		return msgs
+	}
+	defer rows.Close()
+	out := msgs
+	for rows.Next() {
+		rec, err := scanMailRows(rows, false)
+		if err != nil {
+			return msgs
+		}
+		key := rec.Service + "\x00" + rec.ID
+		if have[key] {
+			continue
+		}
+		have[key] = true
+		out = append(out, rec.Message())
+	}
+	return out
+}
+
+// ListMessagesForLibrary returns merged archive messages for /v1/library/messages
+// so Takeout and Gmail archive rows join live providers as one user collection
+// (issue #139). limit bounds the page; truncated reports that more archive
+// rows exist (full history remains /v1/mail/search).
+func (a *MailArchive) ListMessagesForLibrary(limit int) (msgs []Message, truncated bool, err error) {
+	if a == nil || a.db == nil {
+		return nil, false, fmt.Errorf("mail archive disabled")
+	}
+	if limit <= 0 {
+		limit = 200
+	}
+	// Load one extra merged identity to detect truncation after merge.
+	resp, err := a.Search(MailSearchQuery{Limit: limit, WithBody: true})
+	if err != nil {
+		return nil, false, err
+	}
+	if resp.Total > len(resp.Messages) {
+		truncated = true
+	}
+	return resp.Messages, truncated, nil
 }
 
 // Status summarizes the archive for /v1/mail/status.
@@ -747,6 +853,8 @@ func mailServiceName(service string) string {
 	switch service {
 	case googleGmailServiceID:
 		return googleGmailServiceName
+	case takeoutServiceID:
+		return takeoutServiceName
 	default:
 		return service
 	}
