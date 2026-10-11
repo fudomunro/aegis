@@ -25,6 +25,8 @@ func main() {
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
 	permissionsPath := flag.String("permissions-file", "", "path to admin permissions overlay (default: <data-dir>/permissions.json; admin saves write here instead of aegis.json)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
+	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
+	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
@@ -51,6 +53,8 @@ func main() {
 		CopyLedgerSet:  setFlags["copy-ledger"],
 		MailArchive:    *mailArchivePath,
 		MailArchiveSet: setFlags["mail-archive"],
+		Quicken:        *quickenPath,
+		QuickenSet:     setFlags["quicken-store"],
 		AuditLog:       *auditLogPath,
 		AuditLogSet:    setFlags["audit-log"],
 		LogFile:        *logFile,
@@ -88,6 +92,7 @@ func main() {
 		"links", paths.Links,
 		"copy_ledger", paths.CopyLedger,
 		"mail_archive", paths.MailArchive,
+		"quicken_store", paths.Quicken,
 		"audit_log", paths.AuditLog,
 		"log_file", paths.LogFile,
 	)
@@ -100,6 +105,10 @@ func main() {
 	}
 	if strings.TrimSpace(*importTakeout) != "" {
 		code := runImportTakeoutCLI(paths.MailArchive, paths.CopyLedger, *importTakeout, *importTakeoutBatch)
+		os.Exit(code)
+	}
+	if strings.TrimSpace(*importQuicken) != "" {
+		code := runImportQuickenCLI(paths.Quicken, *importQuicken)
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*tokenNewPass) != "" {
@@ -209,6 +218,18 @@ func main() {
 		slog.Info("mail archive disabled")
 	}
 
+	quickenStore, err := OpenQuickenStore(paths.Quicken)
+	if err != nil {
+		slog.Error("failed to open quicken store", "path", paths.Quicken, "error", err)
+		os.Exit(1)
+	}
+	if quickenStore != nil {
+		defer quickenStore.Close()
+		slog.Info("quicken store ready", "path", quickenStore.Path())
+	} else {
+		slog.Info("quicken store disabled")
+	}
+
 	auditLog, err := OpenAuditLog(paths.AuditLog, *auditRetentionDays)
 	if err != nil {
 		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
@@ -240,6 +261,7 @@ func main() {
 		grants:        NewGrantStore(),
 		copies:        copies,
 		mail:          mailArchive,
+		quicken:       quickenStore,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
 		audit:         auditLog,
 		prom:          NewPromMetrics(),
@@ -263,6 +285,9 @@ func main() {
 	srv.connectors[googleCalendarServiceID] = gCalendarConn
 	gGmailConn := NewGoogleGmailConnector(srv)
 	srv.connectors[googleGmailServiceID] = gGmailConn
+	// Financial transactions (issue #141): YNAB live API + local Quicken import.
+	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
+	srv.connectors[quickenServiceID] = NewQuickenConnector(srv)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
@@ -493,6 +518,43 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		"skipped", skipped,
 		"failed", failed,
 	)
+	return 0
+}
+
+// runImportQuickenCLI imports a QIF/QFX file or directory into the local
+// Quicken store, then exits (issue #141).
+func runImportQuickenCLI(storePath, importPath string) int {
+	storePath = strings.TrimSpace(storePath)
+	if storePath == "" {
+		slog.Error("quicken store path is required for -import-quicken")
+		return 1
+	}
+	store, err := OpenQuickenStore(storePath)
+	if err != nil {
+		slog.Error("failed to open quicken store", "path", storePath, "error", err)
+		return 1
+	}
+	if store == nil {
+		slog.Error("quicken store disabled — set -quicken-store")
+		return 1
+	}
+	defer store.Close()
+	res, err := ImportQuickenPath(store, importPath)
+	if err != nil {
+		slog.Error("quicken import failed", "path", importPath, "error", err)
+		return 1
+	}
+	slog.Info("quicken import finished",
+		"path", importPath,
+		"scanned", res.Scanned,
+		"stored", res.Stored,
+		"skipped", res.Skipped,
+		"errors", res.Errors,
+		"done", res.Done,
+	)
+	if res.Errors > 0 && res.Stored == 0 {
+		return 1
+	}
 	return 0
 }
 

@@ -184,6 +184,8 @@ func describeScopes(p Permissions) []string {
 		switch level {
 		case AccessFreeBusy:
 			out = append(out, fmt.Sprintf("%s — availability only (free/busy)", k))
+		case AccessSummary:
+			out = append(out, fmt.Sprintf("%s — totals only (summary)", k))
 		case AccessRead:
 			out = append(out, fmt.Sprintf("%s — read", k))
 		case AccessWrite:
