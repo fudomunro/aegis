@@ -71,7 +71,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
-- `GET /v1/library/messages` — unified messages/email metadata across all message-capable services (bodies stay on the source service)
+- `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service)
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
@@ -1457,12 +1457,20 @@ Cross-service merge prefers **RFC Message-ID** when a provider supplies it
 (`match=subject_from_time`). Replies that share a subject but different
 Message-IDs or send times stay distinct.
 
+**Gmail and Google Takeout are sources of one mail collection**
+([issue #139](https://github.com/fudomunro/aegis/issues/139)). Live Gmail,
+Gmail archive sync, and Takeout import all feed the same identity space:
+either ingest order is safe, a Message-ID match attaches another `sources[]`
+entry instead of creating a second message, and `/v1/library/messages` plus
+`/v1/mail/search` present the merged collection.
+
 ```
 GET /v1/library/messages
 Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
-Returns the user's messages from every connected message-capable service.
+Returns the user's mail collection from every message-capable service and,
+when the local mail archive is enabled, archive rows (including Takeout).
 Connectors opt in by implementing `MessageProvider` (`ListMessages`).
 Permission key: `messages` (paths `/messages/*`, `/me/messages`, `/threads/*`,
 `/me/threads`, `/users/me/messages`, and `/gmail*` on the service proxy).
@@ -1508,8 +1516,11 @@ Message bodies stay on Gmail as the **canonical** home copy.
 
 For full-history agent queries, Aegis can keep a **local compressed
 archive** (SQLite FTS5 + gzip provider payloads). This is a query mirror, not
-a new home copy — Gmail remains canonical for the mailbox (issue #16). Optimize
-for Aegis/agents: search and fetch by id without paging Gmail every turn.
+a new home copy — Gmail remains canonical for the mailbox (issue #16). The
+archive is another **source of the user mail collection**: Gmail archive sync
+and Google Takeout import both land here, merge on RFC Message-ID into
+multi-source `sources[]`, and feed `/v1/library/messages` (issue #139).
+Optimize for Aegis/agents: search and fetch by id without paging Gmail every turn.
 
 ```bash
 ./aegis ... -mail-archive mail-archive.db   # default under <data-dir>; empty disables
@@ -1552,8 +1563,11 @@ curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1
 A historical [Google Takeout](https://takeout.google.com) mail export is a
 **read-only sync location** alongside live Gmail — not a write target and not
 the canonical home. Point Aegis at an `.mbox` file, a directory of mbox
-files, or a Takeout `.zip`. Re-sync skips messages already stored (by RFC
-Message-ID) so you can run it as often as you like.
+files, or a Takeout `.zip`. Takeout and Gmail are **two sources of one
+collection** (issue #139): re-import skips only copies this source already
+stored; a Message-ID that Gmail already has **attaches** a `google-takeout`
+source instead of skipping. Re-sync of the same export is cheap (by RFC
+Message-ID per source) so you can run it as often as you like.
 
 ```
 POST /v1/admin/mail/import
@@ -1561,7 +1575,7 @@ POST /v1/admin/mail/import
 ```
 
 - `max_messages: 0` + `path` only saves the location
-- Repeat with `max_messages > 0` until `"done": true` (already-present IDs count as `skipped`)
+- Repeat with `max_messages > 0` until `"done": true` (already-present IDs from **this** source count as `skipped`)
 - A durable byte cursor resumes mid-export so each batch continues instead of
   re-reading the whole mbox (issue #75). `"reset_cursor": true` restarts.
 - Admin **Advanced → Google Takeout** exposes the same controls
