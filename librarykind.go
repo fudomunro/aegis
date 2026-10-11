@@ -204,8 +204,8 @@ var libraryKinds = []LibraryKind{
 		PermType:        "messages",
 		Label:           "messages",
 		Usage:           "emails, messages, inbox, mail, or recent correspondence",
-		Summary:         "all messages from every connected messaging/mail service in one neutral list (channel, subject, snippet, from/to/cc as Contact identities, sent_at, direction, read, entity_id, sources[])",
-		SyncRule:        "Messages merge on durable Message-ID when present (match=message_id); otherwise same subject + from + sent_at (match=subject_from_time). Message bodies stay on the source service. SMS/WhatsApp connectors are not implemented yet.",
+		Summary:         "the user's mail collection from every message source in one neutral list (channel, subject, snippet, from/to/cc as Contact identities, sent_at, direction, read, entity_id, sources[]). Sources include live Gmail and the local archive (Gmail sync + Google Takeout).",
+		SyncRule:        "Gmail and Google Takeout are sources of one mail collection, synchronized on RFC Message-ID (match=message_id); otherwise same subject + from + sent_at (match=subject_from_time). Message bodies stay on the source service. SMS/WhatsApp connectors are not implemented yet.",
 		ExampleQuestion: "what emails have I received recently?",
 		Keywords: []string{
 			"my email", "my emails", "my mail", "my inbox",
@@ -218,8 +218,15 @@ var libraryKinds = []LibraryKind{
 		EmptyMsg:     "no message-capable services configured",
 		DenyMsg:      "permission denied: agent access to messages is not allowed",
 		FailMsg:      "failed to fetch messages",
-		HasProviders: func(s *Server) bool { return s.hasProvider[MessageProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("messages") },
+		HasProviders: func(s *Server) bool {
+			if s.hasProvider[MessageProvider]() {
+				return true
+			}
+			// Local mail archive (Gmail sync + Takeout) is a collection source
+			// even without a live connector (issue #139).
+			return s.mail != nil && s.mailReadable()
+		},
+		Readable: func(s *Server) bool { return s.libraryReadableFor("messages") },
 	},
 }
 
