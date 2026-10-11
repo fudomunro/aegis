@@ -37,6 +37,7 @@ Present in both Gmail sync and Takeout.
 
 func syncGmailShared(t *testing.T, srv *Server, a *MailArchive) {
 	t.Helper()
+	disableGmailArchivePace(t)
 	var mux = http.NewServeMux()
 	mux.HandleFunc("/users/me/messages", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{

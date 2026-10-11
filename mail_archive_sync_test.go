@@ -34,7 +34,15 @@ func gmailPayloadJSON(id string) string {
 	}`, id, id, subject, id, body)
 }
 
+func disableGmailArchivePace(t *testing.T) {
+	t.Helper()
+	prev := gmailArchiveGetInterval
+	gmailArchiveGetInterval = 0
+	t.Cleanup(func() { gmailArchiveGetInterval = prev })
+}
+
 func TestGmailSyncMailArchive(t *testing.T) {
+	disableGmailArchivePace(t)
 	var listCalls, getCalls int
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/me/messages", func(w http.ResponseWriter, r *http.Request) {
@@ -156,6 +164,7 @@ func TestGmailSyncListErrorIsFailOpen(t *testing.T) {
 }
 
 func TestGmailSyncSkipsBadMessage(t *testing.T) {
+	disableGmailArchivePace(t)
 	mux := http.NewServeMux()
 	mux.HandleFunc("/users/me/messages", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
@@ -192,6 +201,7 @@ func TestGmailSyncSkipsBadMessage(t *testing.T) {
 }
 
 func TestMailHTTPSyncRunsIngest(t *testing.T) {
+	disableGmailArchivePace(t)
 	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if strings.Contains(r.URL.Path, "/users/me/messages/") {
 			w.Write([]byte(gmailPayloadJSON("m1")))
@@ -224,5 +234,78 @@ func TestMailHTTPSyncRunsIngest(t *testing.T) {
 	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{`)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bad json code = %d", w.Code)
+	}
+}
+
+// Quota 403s must pause the batch and leave the page token on the unsaved
+// page so hydrates are retried after the window resets (not skipped forever).
+func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
+	disableGmailArchivePace(t)
+	quotaMode := true
+	var getCalls int
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users/me/messages", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"messages": []map[string]string{
+				{"id": "m1"},
+				{"id": "m2"},
+				{"id": "m3"},
+			},
+			"nextPageToken": "page-2",
+		})
+	})
+	mux.HandleFunc("/users/me/messages/", func(w http.ResponseWriter, r *http.Request) {
+		getCalls++
+		id := strings.TrimPrefix(r.URL.Path, "/users/me/messages/")
+		if quotaMode && getCalls >= 2 {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":{"code":403,"message":"Quota exceeded for quota metric 'Total Query Cost'"}}`))
+			return
+		}
+		w.Write([]byte(gmailPayloadJSON(id)))
+	})
+	up := httptest.NewServer(mux)
+	t.Cleanup(up.Close)
+
+	a := openTestMailArchive(t)
+	srv := mailTestServer(t, a)
+	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+
+	conn := NewGoogleGmailConnector(srv)
+	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
+	if err == nil {
+		t.Fatal("expected quota error")
+	}
+	if !isGmailQuotaError(err) {
+		t.Fatalf("err = %v", err)
+	}
+	if res.Stored != 1 || res.Failed != 0 || !res.Truncated {
+		t.Fatalf("result = %+v", res)
+	}
+	cur, err := a.LoadSyncCursor(googleGmailServiceID)
+	if err != nil {
+		t.Fatalf("cursor: %v", err)
+	}
+	if cur.PageToken != "" || cur.Done {
+		t.Fatalf("cursor must stay on first page for retry: %+v", cur)
+	}
+
+	// Next call resumes the same page and stores the rest once quota clears.
+	quotaMode = false
+	getCalls = 0
+	res2, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
+	if err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	if res2.Stored < 2 {
+		t.Fatalf("resume result = %+v", res2)
+	}
+	st, err := a.Status()
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.ByService[googleGmailServiceID] != 3 {
+		t.Fatalf("by_service = %+v", st.ByService)
 	}
 }
