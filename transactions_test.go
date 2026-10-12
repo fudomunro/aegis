@@ -111,9 +111,9 @@ func TestMergeTransactions_NearMissDoesNotMerge(t *testing.T) {
 
 func TestBuildTransactionSummary(t *testing.T) {
 	items := []Transaction{
-		{PostedAt: "2024-03-05", Amount: "-45.67", Category: "Shopping", Currency: "USD"},
-		{PostedAt: "2024-03-06", Amount: "-12.00", Category: "Coffee", Currency: "USD"},
-		{PostedAt: "2024-03-01", Amount: "3200.00", Category: "Income", Currency: "USD"},
+		{PostedAt: "2024-03-05", Amount: "-45.67", Category: []string{"Shopping"}, Currency: "USD"},
+		{PostedAt: "2024-03-06", Amount: "-12.00", Category: []string{"Coffee"}, Currency: "USD"},
+		{PostedAt: "2024-03-01", Amount: "3200.00", Category: []string{"Income"}, Currency: "USD"},
 	}
 	sum := buildTransactionSummary(items)
 	if sum == nil {
@@ -133,6 +133,54 @@ func TestBuildTransactionSummary(t *testing.T) {
 	}
 	if sum.Currency != "USD" {
 		t.Fatalf("currency = %q", sum.Currency)
+	}
+}
+
+func TestBuildTransactionSummary_MultiCategorySplit(t *testing.T) {
+	// YNAB split: categories without amounts. Full total credits each category
+	// so the line item "shows up" in grocery/household views.
+	items := []Transaction{
+		{PostedAt: "2024-03-12", Amount: "-200.00", Category: []string{"Groceries", "Household Goods"}, Currency: "USD"},
+	}
+	sum := buildTransactionSummary(items)
+	if sum.ByCategory["Groceries"] != "-200.00" {
+		t.Fatalf("groceries = %q", sum.ByCategory["Groceries"])
+	}
+	if sum.ByCategory["Household Goods"] != "-200.00" {
+		t.Fatalf("household = %q", sum.ByCategory["Household Goods"])
+	}
+	if sum.TotalAmount != "-200.00" {
+		t.Fatalf("total = %q (line-item total must stay intact)", sum.TotalAmount)
+	}
+}
+
+func TestUnionTransactionCategories(t *testing.T) {
+	got := unionTransactionCategories([]string{"Coffee"}, []string{"Dining", "coffee", "Travel"})
+	if len(got) != 3 || got[0] != "Coffee" || got[1] != "Dining" || got[2] != "Travel" {
+		t.Fatalf("got %v", got)
+	}
+}
+
+func TestYNABCategories_FromSplits(t *testing.T) {
+	split := "Split"
+	groceries := "Groceries"
+	household := "Household Goods"
+	shopping := "Shopping"
+	cats := ynabCategories(ynabTransaction{
+		CategoryName: &split,
+		Subtransactions: []ynabSubtransaction{
+			{CategoryName: &groceries},
+			{CategoryName: &household},
+			{CategoryName: &groceries}, // duplicate
+		},
+	})
+	if len(cats) != 2 || cats[0] != "Groceries" || cats[1] != "Household Goods" {
+		t.Fatalf("cats = %v", cats)
+	}
+	// Parent-only category (no splits).
+	cats2 := ynabCategories(ynabTransaction{CategoryName: &shopping})
+	if len(cats2) != 1 || cats2[0] != "Shopping" {
+		t.Fatalf("cats2 = %v", cats2)
 	}
 }
 
@@ -336,8 +384,8 @@ LCoffee
 
 func TestTransactionFilters(t *testing.T) {
 	items := []Transaction{
-		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: "Shopping", Account: &TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
-		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: "Coffee", Account: &TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
+		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: []string{"Shopping"}, Account: &TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
+		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: []string{"Coffee"}, Account: &TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
 	}
 	if got := filterTransactions(items, TransactionFilters{After: "2024-03-06"}); len(got) != 1 {
 		t.Fatalf("after filter = %d", len(got))
@@ -510,17 +558,34 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 	mux.HandleFunc("/v1/budgets/b1/transactions", func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{
-				"transactions": []map[string]any{{
-					"id":          "t1",
-					"date":        "2024-03-05",
-					"amount":      -12345,
-					"payee_name":  "Coffee Shop",
-					"account_id":  "a1",
-					"account_name": "Checking",
-					"cleared":     "cleared",
-					"import_id":   "IMP-9",
-					"deleted":     false,
-				}},
+				"transactions": []map[string]any{
+					{
+						"id":          "t1",
+						"date":        "2024-03-05",
+						"amount":      -12345,
+						"payee_name":  "Coffee Shop",
+						"account_id":  "a1",
+						"account_name": "Checking",
+						"cleared":     "cleared",
+						"import_id":   "IMP-9",
+						"deleted":     false,
+					},
+					{
+						"id":           "t2",
+						"date":         "2024-03-12",
+						"amount":       -200000,
+						"payee_name":   "Costco",
+						"account_id":   "a1",
+						"account_name": "Checking",
+						"cleared":      "cleared",
+						"category_name": "Split",
+						"deleted":      false,
+						"subtransactions": []map[string]any{
+							{"id": "s1", "amount": -50000, "category_name": "Groceries"},
+							{"id": "s2", "amount": -150000, "category_name": "Household Goods"},
+						},
+					},
+				},
 			},
 		})
 	})
@@ -544,18 +609,21 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 	if truncated {
 		t.Fatal("unexpected truncated")
 	}
-	if len(txs) != 1 {
-		t.Fatalf("len = %d", len(txs))
+	if len(txs) != 2 {
+		t.Fatalf("want coffee + split parent, got %d", len(txs))
 	}
-	if txs[0].Amount != "-12.35" && txs[0].Amount != "-12.34" {
-		// -12345 milliunits → -12.35 after half-up at mills (12.345 → 12.35)
-		// Accept either rounding of 12345 mills.
-		if txs[0].Amount != "-12.35" {
-			t.Fatalf("amount = %q", txs[0].Amount)
-		}
+	if txs[0].Amount != "-12.35" {
+		t.Fatalf("amount = %q", txs[0].Amount)
 	}
 	if txs[0].Merchant != "Coffee Shop" {
 		t.Fatalf("merchant = %q", txs[0].Merchant)
+	}
+	split := txs[1]
+	if split.Amount != "-200.00" {
+		t.Fatalf("split amount = %q (parent total must stay intact)", split.Amount)
+	}
+	if len(split.Category) != 2 || split.Category[0] != "Groceries" || split.Category[1] != "Household Goods" {
+		t.Fatalf("split categories = %v", split.Category)
 	}
 }
 
@@ -566,9 +634,10 @@ func TestGenerateSampleLibrary_TransactionsMerge(t *testing.T) {
 	}
 	merged := MergeTransactions(set.Transactions)
 	// Amazon durable-ID pair must merge; coffee adjacent-day pair must merge;
-	// coffee-2 near-miss stays distinct. Expect 5 from 7 inputs.
-	if len(merged) != 5 {
-		t.Fatalf("merged = %d, want 5", len(merged))
+	// coffee-2 near-miss stays distinct. Split Costco stays one row.
+	// Inputs: 8 → outputs: 6.
+	if len(merged) != 6 {
+		t.Fatalf("merged = %d, want 6", len(merged))
 	}
 	var multi, nearMiss int
 	for _, tx := range merged {

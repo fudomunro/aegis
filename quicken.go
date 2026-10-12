@@ -137,6 +137,7 @@ func (s *QuickenStore) Upsert(filePath string, tx Transaction) error {
 	if tx.Account != nil {
 		accName, accType, accLast4 = tx.Account.Name, tx.Account.Type, tx.Account.Last4
 	}
+	category := strings.Join(tx.Category, " | ")
 	fitid := ""
 	if len(tx.Sources) > 0 {
 		fitid = messageExtraString(tx.Sources[0].Extra, "fitid")
@@ -170,7 +171,7 @@ ON CONFLICT(source_id) DO UPDATE SET
   raw_json=excluded.raw_json
 `,
 		id, filePath, tx.PostedAt, tx.AuthorizedAt, tx.Amount, tx.Currency,
-		tx.Description, tx.Merchant, tx.Category, tx.Memo,
+		tx.Description, tx.Merchant, category, tx.Memo,
 		accName, accType, accLast4, tx.Status, fitid, string(raw),
 	)
 	return err
@@ -352,10 +353,9 @@ func qifRecordToTransaction(name string, rec map[string]string) (Transaction, bo
 	}
 	payee := strings.TrimSpace(rec["P"])
 	category := strings.TrimSpace(rec["L"])
-	// Drop class suffix "Cat:Class".
-	if i := strings.Index(category, ":"); i > 0 {
-		// Keep full path — useful for grocery subcats. Truncate class noise.
-		category = strings.TrimSpace(category)
+	var categories []string
+	if category != "" {
+		categories = []string{category}
 	}
 	memo := strings.TrimSpace(rec["M"])
 	status := TransactionStatusPosted
@@ -377,7 +377,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (Transaction, bo
 		Currency:    "USD",
 		Description: payee,
 		Merchant:    payee,
-		Category:    category,
+		Category:    categories,
 		Memo:        memo,
 		Account:     &TransactionAccount{Name: accountName, Type: "bank"},
 		Status:      status,
@@ -579,13 +579,9 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (Transaction,
 	}
 	accountName := filepath.Base(name)
 	accountName = strings.TrimSuffix(accountName, filepath.Ext(accountName))
-	category := ""
-	if memo != "" && strings.Contains(memo, "/") {
-		// Some Quicken OFX exports stash category in memo as "Cat/Sub".
-		// Leave category empty unless a real CATEGORY tag appears.
-	}
+	var categories []string
 	if cat := strings.TrimSpace(fields["CATEGORY"]); cat != "" {
-		category = cat
+		categories = []string{cat}
 	}
 	tx := Transaction{
 		PostedAt:    posted,
@@ -593,7 +589,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (Transaction,
 		Currency:    "USD",
 		Description: payee,
 		Merchant:    payee,
-		Category:    category,
+		Category:    categories,
 		Memo:        memo,
 		Account:     &TransactionAccount{Name: accountName, Type: "bank"},
 		Status:      status,

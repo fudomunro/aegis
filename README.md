@@ -1632,7 +1632,7 @@ Example:
       "currency": "USD",
       "description": "AMAZON.COM",
       "merchant": "Amazon",
-      "category": "Shopping",
+      "category": ["Shopping"],
       "status": "posted",
       "account": {"name": "Everyday Checking", "type": "checking", "last4": "4421"},
       "entity_id": "AQB-20240305-0001",
@@ -1650,6 +1650,14 @@ Example:
 }
 ```
 
+`category` is a **list** so a YNAB split can name every category on the line
+item without splitting the amount. A Costco run tagged Groceries + Household
+Goods becomes one transaction, `amount: "-200.00"`, `category: ["Groceries",
+"Household Goods"]`. Summary `by_category` credits the full amount to each
+listed category (so the transaction shows up in grocery and household views);
+`total_amount` stays the true net. For exact per-category dollars, dig into
+YNAB — Aegis does not invent split amounts.
+
 #### YNAB
 
 Live budget data from the [YNAB API](https://api.ynab.com). Auth is a Personal
@@ -1666,8 +1674,10 @@ Access Token on the service (or a stored OAuth token):
 ```
 
 The connector lists budgets → accounts → transactions and maps YNAB milliunits
-to signed decimal strings (`-45670` → `"-45.67"`). Payee becomes `merchant`,
-category name becomes `category`, `import_id` becomes `entity_id` when present.
+to signed decimal strings (`-45670` → `"-45.67"`). Payee becomes `merchant`;
+parent + split category names become `category[]` (YNAB's placeholder
+`"Split"` is dropped). Splits contribute **categories only** — the parent
+amount is not redistributed. `import_id` becomes `entity_id` when present.
 Read-only — no budget mutations are advertised.
 
 Agent-facing proxy paths:

@@ -273,6 +273,47 @@ type ynabTransaction struct {
 	TransferAccountID     *string `json:"transfer_account_id"`
 	TransferTransactionID *string `json:"transfer_transaction_id"`
 	MatchedTransactionID  *string `json:"matched_transaction_id"`
+	// Subtransactions are YNAB splits. We take their categories but not their
+	// amounts — the parent total stays intact and agents dig into YNAB for
+	// exact per-category splits.
+	Subtransactions []ynabSubtransaction `json:"subtransactions"`
+}
+
+// ynabSubtransaction is one YNAB split line (categories only in Aegis).
+type ynabSubtransaction struct {
+	ID           string  `json:"id"`
+	Amount       int64   `json:"amount"`
+	CategoryID   *string `json:"category_id"`
+	CategoryName *string `json:"category_name"`
+	PayeeName    *string `json:"payee_name"`
+	Memo         *string `json:"memo"`
+}
+
+// ynabCategories collects parent + split categories, skipping YNAB's
+// placeholder "Split" label. Order follows parent then splits.
+func ynabCategories(t ynabTransaction) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(raw *string) {
+		if raw == nil {
+			return
+		}
+		s := strings.TrimSpace(*raw)
+		if s == "" || strings.EqualFold(s, "Split") {
+			return
+		}
+		k := strings.ToLower(s)
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, s)
+	}
+	add(t.CategoryName)
+	for _, sub := range t.Subtransactions {
+		add(sub.CategoryName)
+	}
+	return out
 }
 
 type ynabBudgetsResponse struct {
@@ -328,10 +369,8 @@ func (c *YNABConnector) neutralTransactionCurrency(budgetID string, accounts []y
 	if t.PayeeName != nil {
 		merchant = strings.TrimSpace(*t.PayeeName)
 	}
-	category := ""
-	if t.CategoryName != nil {
-		category = strings.TrimSpace(*t.CategoryName)
-	}
+	// Splits contribute categories only — parent amount stays intact.
+	categories := ynabCategories(t)
 	memo := ""
 	if t.Memo != nil {
 		memo = strings.TrimSpace(*t.Memo)
@@ -372,7 +411,7 @@ func (c *YNABConnector) neutralTransactionCurrency(budgetID string, accounts []y
 		Currency:    currency,
 		Description: description,
 		Merchant:    merchant,
-		Category:    category,
+		Category:    categories,
 		Memo:        memo,
 		Account:     ynabAccountRef(accounts, t.AccountID, t.AccountName),
 		Status:      status,
