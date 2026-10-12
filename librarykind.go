@@ -227,7 +227,7 @@ var libraryKinds = []LibraryKind{
 		PermType:        "transactions",
 		Label:           "transactions",
 		Usage:           "transactions, charges, spending, bank activity, budget line items, or money history",
-		Summary:         "all financial transactions from every connected source in one neutral list (posted_at, authorized_at, amount as a signed decimal string, currency, description, merchant, category, status, sources[]). Account fields never include full account numbers.",
+		Summary:         "all financial transactions from every connected source in one neutral list (posted_at, authorized_at, amount as a signed decimal string, currency, description, merchant, category[] (multi-valued for YNAB splits), status, sources[]). Account fields never include full account numbers.",
 		SyncRule:        "Transactions merge on durable provider_id (YNAB import_id, Quicken FITID) when present; otherwise same amount + posted day + normalized merchant (match=amount_date_merchant), with an adjacent-day (±1) pass for cross-provider duplicates. No Aegis category taxonomy — provider category only.",
 		ExampleQuestion: "did we go over on groceries this month?",
 		Keywords: []string{

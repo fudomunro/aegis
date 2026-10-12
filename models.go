@@ -575,9 +575,11 @@ type Transaction struct {
 	Description string `json:"description,omitempty"`
 	// Merchant is a normalized merchant name when the provider supplies one.
 	Merchant string `json:"merchant,omitempty"`
-	// Category is the provider category (YNAB category, Quicken L field).
-	// No Aegis taxonomy in this phase.
-	Category string `json:"category,omitempty"`
+	// Category lists provider categories (YNAB category, Quicken L field).
+	// Multi-valued so a YNAB split can name every category without splitting
+	// the amount — the full line-item total stays on the transaction and
+	// agents dig into YNAB for per-category amounts. No Aegis taxonomy.
+	Category []string `json:"category,omitempty"`
 	// Memo is a free-form note attached to the line item.
 	Memo string `json:"memo,omitempty"`
 	// Account is a coarse account reference (name/type/last4 only).

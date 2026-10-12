@@ -161,6 +161,30 @@ func transactionMerchantOrDescription(t Transaction) string {
 	return strings.TrimSpace(t.Description)
 }
 
+// unionTransactionCategories unions category labels, preserving order.
+func unionTransactionCategories(dst, src []string) []string {
+	if len(src) == 0 {
+		return dst
+	}
+	seen := make(map[string]bool, len(dst)+len(src))
+	out := make([]string, 0, len(dst)+len(src))
+	for _, list := range [][]string{dst, src} {
+		for _, c := range list {
+			c = strings.TrimSpace(c)
+			if c == "" {
+				continue
+			}
+			k := strings.ToLower(c)
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // transactionIdentityKey is the sort/merge key. Prefer durable provider IDs
 // when present; otherwise amount + posted day + normalized merchant.
 // Transactions without any identity fall back to service:id so they stay
@@ -226,8 +250,10 @@ func mergeTransactionInto(dst *Transaction, src Transaction) {
 	if dst.Merchant == "" {
 		dst.Merchant = src.Merchant
 	}
-	if dst.Category == "" {
-		dst.Category = src.Category
+	if len(dst.Category) == 0 {
+		dst.Category = append([]string(nil), src.Category...)
+	} else {
+		dst.Category = unionTransactionCategories(dst.Category, src.Category)
 	}
 	if dst.Memo == "" {
 		dst.Memo = src.Memo
@@ -254,6 +280,9 @@ func cloneTransaction(t Transaction) Transaction {
 	if t.Account != nil {
 		acc := *t.Account
 		cp.Account = &acc
+	}
+	if len(t.Category) > 0 {
+		cp.Category = append([]string(nil), t.Category...)
 	}
 	if len(t.Extra) > 0 {
 		cp.Extra = make(map[string]any, len(t.Extra))
@@ -514,8 +543,8 @@ func (f TransactionFilters) matches(t Transaction) bool {
 	if f.Q != "" {
 		need := strings.ToLower(f.Q)
 		hay := strings.ToLower(strings.Join([]string{
-			t.Description, t.Merchant, t.Category, t.Memo,
-		}, " "))
+			t.Description, t.Merchant, t.Memo,
+		}, " ") + " " + strings.Join(t.Category, " "))
 		if !strings.Contains(hay, need) {
 			return false
 		}
@@ -576,6 +605,9 @@ func redactTransactionsForLevel(items []Transaction, level string) []Transaction
 }
 
 // buildTransactionSummary totals filtered line items by category and month.
+// Multi-category line items (YNAB splits) credit their full amount to each
+// listed category so the transaction "shows up" where the user categorized it;
+// dig into YNAB for exact per-category amounts.
 func buildTransactionSummary(items []Transaction) *TransactionSummary {
 	if len(items) == 0 {
 		return nil
@@ -596,11 +628,17 @@ func buildTransactionSummary(items []Transaction) *TransactionSummary {
 			continue
 		}
 		totalCents += cents
-		cat := strings.TrimSpace(t.Category)
-		if cat == "" {
-			cat = "uncategorized"
+		cats := t.Category
+		if len(cats) == 0 {
+			cats = []string{"uncategorized"}
 		}
-		byCat[cat] += cents
+		for _, cat := range cats {
+			cat = strings.TrimSpace(cat)
+			if cat == "" {
+				cat = "uncategorized"
+			}
+			byCat[cat] += cents
+		}
 		month := ""
 		if day := transactionDay(t.PostedAt); day != "" {
 			month = day[:7]
