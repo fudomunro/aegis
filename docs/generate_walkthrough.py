@@ -2,11 +2,13 @@
 """Regenerate docs/index.html from walkthrough.template.html + live tree facts.
 
 Usage (from repo root or docs/):
-    python3 docs/generate_walkthrough.py
+    python3 docs/generate_walkthrough.py          # rewrite docs/index.html
+    python3 docs/generate_walkthrough.py --check  # exit 1 if stale (CI)
 """
 
 from __future__ import annotations
 
+import argparse
 import re
 import subprocess
 import sys
@@ -107,6 +109,13 @@ def run_git(*args: str) -> str:
     return out.strip()
 
 
+def go_module() -> str:
+    for line in (REPO / "go.mod").read_text(encoding="utf-8").splitlines():
+        if line.startswith("module "):
+            return line.split("module ", 1)[1].strip()
+    return "(unknown)"
+
+
 def go_sources() -> list[Path]:
     files = sorted(REPO.glob("*.go"))
     return [p for p in files if not p.name.endswith("_test.go")]
@@ -175,11 +184,8 @@ def file_map_rows() -> str:
     return "\n".join(rows)
 
 
-def main() -> int:
-    if not TEMPLATE.exists():
-        print(f"missing template: {TEMPLATE}", file=sys.stderr)
-        return 1
-
+def render() -> tuple[str, dict[str, str]]:
+    """Build the stamped HTML and the replacement map used to produce it."""
     commit = run_git("rev-parse", "--short", "HEAD")
     commit_full = run_git("rev-parse", "HEAD")
     try:
@@ -214,7 +220,7 @@ def main() -> int:
         "KIND_LIST": ", ".join(kinds),
         "KIND_LIST_HTML": ", ".join(f"<code>{k}</code>" for k in kinds),
         "FILE_MAP_ROWS": file_map_rows(),
-        "GO_MODULE": "github.com/fudomunro/aperture-aegis",
+        "GO_MODULE": go_module(),
     }
 
     html = TEMPLATE.read_text(encoding="utf-8")
@@ -223,17 +229,139 @@ def main() -> int:
 
     leftover = re.findall(r"\{\{[A-Z0-9_]+\}\}", html)
     if leftover:
-        print(f"unreplaced placeholders: {sorted(set(leftover))}", file=sys.stderr)
+        raise RuntimeError(f"unreplaced placeholders: {sorted(set(leftover))}")
+    return html, replacements
+
+
+def normalize_for_compare(html: str) -> str:
+    """Blank version metadata so tree-fact drift is what --check reports."""
+    html = re.sub(
+        r'<title>Aegis — Code Walkthrough @ [^<]+</title>',
+        "<title>Aegis — Code Walkthrough @ STAMP</title>",
+        html,
+    )
+    html = re.sub(
+        r'<span class="version-badge"[^>]*><span class="dot"></span>[^<]*</span>',
+        '<span class="version-badge">STAMP</span>',
+        html,
+        count=1,
+    )
+    html = re.sub(
+        r'<span class="version-meta">[^<]*</span>',
+        '<span class="version-meta">META</span>',
+        html,
+        count=1,
+    )
+    html = re.sub(r"File map @ [0-9a-f]+", "File map @ STAMP", html)
+    html = re.sub(r"<code>[0-9a-f]{7,40}</code>", "<code>STAMP</code>", html)
+    html = re.sub(r"<strong>[0-9a-f]{7,40}</strong>", "<strong>STAMP</strong>", html)
+    # Snapshot caption after the stamp: (branch · date · subject).
+    html = re.sub(
+        r'(<code>STAMP</code></strong>\s*\n\s*)\([^\n]+\)\.',
+        r"\1(META).",
+        html,
+        count=1,
+    )
+    html = re.sub(r"· \d{4}-\d{2}-\d{2} \d{2}:\d{2} UTC", "· STAMP_TIME", html)
+    return html
+
+
+def extract_stamp(html: str) -> str:
+    m = re.search(
+        r'class="version-badge"[^>]*>.*?([0-9a-f]{7,40})',
+        html,
+    )
+    if not m:
+        return ""
+    return m.group(1)
+
+
+def is_ancestor_or_equal(stamp: str, head: str) -> bool:
+    if not stamp:
+        return False
+    try:
+        run_git("rev-parse", "--verify", f"{stamp}^{{commit}}")
+        run_git("merge-base", "--is-ancestor", stamp, head)
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
+def check() -> int:
+    """Fail when docs/index.html does not match the current tree / HEAD history."""
+    if not OUTPUT.exists():
+        print(f"missing {OUTPUT.relative_to(REPO)}; run generate first", file=sys.stderr)
+        return 1
+
+    try:
+        expected, _ = render()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+
+    actual = OUTPUT.read_text(encoding="utf-8")
+    if normalize_for_compare(expected) != normalize_for_compare(actual):
+        print(
+            "docs/index.html is stale relative to the current tree.\n"
+            "Run: python3 docs/generate_walkthrough.py",
+            file=sys.stderr,
+        )
+        return 1
+
+    stamp = extract_stamp(actual)
+    head = run_git("rev-parse", "HEAD")
+    head_short = run_git("rev-parse", "--short", "HEAD")
+    if stamp == head_short or stamp == head:
+        print(f"docs/index.html is current (stamped {stamp})")
+        return 0
+    if is_ancestor_or_equal(stamp, "HEAD"):
+        # Merge commits move HEAD without changing tree facts; the stamp may
+        # name a parent that still describes this exact source tree.
+        print(
+            f"docs/index.html tree facts match HEAD; "
+            f"stamped {stamp} is an ancestor of {head_short}"
+        )
+        return 0
+
+    print(
+        f"docs/index.html is stamped {stamp!r}, which is not HEAD ({head_short}) "
+        f"or an ancestor of HEAD.\n"
+        "Run: python3 docs/generate_walkthrough.py",
+        file=sys.stderr,
+    )
+    return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="verify docs/index.html is current; do not write",
+    )
+    args = parser.parse_args(argv)
+
+    if not TEMPLATE.exists():
+        print(f"missing template: {TEMPLATE}", file=sys.stderr)
+        return 1
+
+    if args.check:
+        return check()
+
+    try:
+        html, replacements = render()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 1
 
     OUTPUT.write_text(html, encoding="utf-8")
     print(f"wrote {OUTPUT.relative_to(REPO)}")
-    print(f"  version  {commit} ({branch}) — {commit_date}")
-    print(f"  subject  {subject}")
-    print(f"  sources  {source_files} files · {source_loc:,} LOC")
-    print(f"  connectors ({len(connectors)}): {', '.join(connectors)}")
-    print(f"  library kinds ({len(kinds)}): {', '.join(kinds)}")
-    print(f"  generated {generated_at}")
+    print(f"  version  {replacements['COMMIT']} ({replacements['BRANCH']}) — {replacements['COMMIT_DATE']}")
+    print(f"  subject  {replacements['COMMIT_SUBJECT']}")
+    print(f"  sources  {replacements['SOURCE_FILES']} files · {replacements['SOURCE_LOC']} LOC")
+    print(f"  connectors ({replacements['CONNECTOR_COUNT']}): {replacements['CONNECTOR_LIST']}")
+    print(f"  library kinds ({replacements['KIND_COUNT']}): {replacements['KIND_LIST']}")
+    print(f"  generated {replacements['GENERATED_AT']}")
     return 0
 
 

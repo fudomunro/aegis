@@ -116,3 +116,16 @@ jobs:
 
       - name: Build
         run: go build -o aegis .
+
+  docs:
+    name: Docs freshness
+    runs-on: ubuntu-latest
+    steps:
+      # Prefer the PR head SHA so the walkthrough stamp can name a real commit
+      # from the branch (the default merge ref is a synthetic SHA).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Check docs/index.html is current
+        run: python3 docs/generate_walkthrough.py --check
