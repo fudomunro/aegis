@@ -20,7 +20,7 @@ Agent → Aegis (proxy) → Spotify API / YouTube Music API / ...
 
 ## Prerequisites
 
-- **Go 1.21+** (tested with 1.27)
+- **Go 1.27.1** (matches `go.mod`)
 - **Tailscale** with an [Aperture gateway](https://tailscale.com/docs/aperture/get-started) configured
 - **OAuth app credentials** for each service you want to connect (see [Setup](#setup))
 
@@ -501,6 +501,7 @@ filters.
 | `AEGIS_AUTH_MODE` | `-auth-mode` | `auto` (default), `tailnet`, or `api-key` |
 | `AEGIS_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
 | `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
+| `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
 | `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](#data-directory-issue-74)) |
 
@@ -557,7 +558,6 @@ on `starting server`). The admin **Runtime** panel shows the same path.
 **Migrating from cwd defaults:** if you previously kept `aegis.json`,
 `tokens.json`, and friends next to the binary, either move them into the data
 directory or keep passing the explicit path flags.
-| `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 
 ### All flags
 
@@ -583,10 +583,7 @@ directory or keep passing the explicit path flags.
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables (issue #105) |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
-| `-config` | `aegis.json` | Bootstrap config path (services, connections, secrets) |
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
-| `-permissions-file` | `permissions.json` beside `-config` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
-| `-token-file` | `tokens.json` | Encrypted token storage path |
 | `-token-pass` | | Token encryption passphrase (required). Wrong passphrase refuses to start and never overwrites `tokens.json` (issue #100) |
 | `-token-new-pass` | | One-shot: re-encrypt `tokens.json` under this passphrase and exit (issue #101) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ c374627</title>
+<title>Aegis — Code Walkthrough @ 4093ba3</title>
 <meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>c374627</span>
-    <span class="version-meta">main · 2026-09-24 · Merge pull request #81 from fudomunro/chore/issue-80-rename-aegis · generated 2026-09-24 16:52 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>4093ba3</span>
+    <span class="version-meta">docs/issue-106-docs-hygiene · 2026-10-13 · docs: fix README tables/Go version and gate docs/index.html freshness (#106) · generated 2026-10-13 17:58 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,10 +306,10 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">16,585</div><div class="l">source LOC (no tests)</div></div>
-    <div class="stat"><div class="v">46</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">28,773</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">71</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">6</div><div class="l">service connectors</div></div>
-    <div class="stat"><div class="v">8</div><div class="l">library kinds</div></div>
+    <div class="stat"><div class="v">10</div><div class="l">library kinds</div></div>
   </div>
 </header>
 
@@ -402,7 +402,7 @@
       <text x="515" y="208" fill="#e6edf3" text-anchor="middle" font-size="11">permissions.go · canonical.go</text>
       <text x="515" y="228" fill="#e6edf3" text-anchor="middle" font-size="11">oauth.go · tokens.go · connections</text>
       <text x="515" y="258" fill="#8b949e" text-anchor="middle" font-size="11">connectors map[string]ServiceConnector</text>
-      <text x="515" y="280" fill="#8b949e" text-anchor="middle" font-size="11">playlists, tracks, albums, artists, contacts, photos, events, messages</text>
+      <text x="515" y="280" fill="#8b949e" text-anchor="middle" font-size="11">playlists, tracks, albums, artists, contacts, photos, events, messages, transactions, places</text>
       <text x="515" y="308" fill="#8b949e" text-anchor="middle" font-size="11">entity links · metrics · cache</text>
       <text x="515" y="336" fill="#8b949e" text-anchor="middle" font-size="11">registered: spotify, youtube-music, amazon-music, google-photos, google, immich</text>
 
@@ -896,7 +896,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   </p>
   <p>
     Registered kinds at this version:
-    <code>playlists</code>, <code>tracks</code>, <code>albums</code>, <code>artists</code>, <code>contacts</code>, <code>photos</code>, <code>events</code>, <code>messages</code>.
+    <code>playlists</code>, <code>tracks</code>, <code>albums</code>, <code>artists</code>, <code>contacts</code>, <code>photos</code>, <code>events</code>, <code>messages</code>, <code>transactions</code>, <code>places</code>.
     Extra library routes: <code>/v1/library/review</code>,
     <code>/v1/library/links</code>, <code>POST /v1/library/mirror</code>.
   </p>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ c374627</h2>
+  <h2><span class="n">13</span>File map @ 4093ba3</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1254,53 +1254,78 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><th>File</th><th>LOC</th><th>Role</th></tr>
     </thead>
     <tbody>
-      <tr><td><code>main.go</code></td><td class="mono">312</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
-      <tr><td><code>handler.go</code></td><td class="mono">362</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
-      <tr><td><code>config.go</code></td><td class="mono">234</td><td>Services + shared OAuth connections, matching, reload</td></tr>
+      <tr><td><code>main.go</code></td><td class="mono">710</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
+      <tr><td><code>handler.go</code></td><td class="mono">915</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
+      <tr><td><code>config.go</code></td><td class="mono">330</td><td>Services + shared OAuth connections, matching, reload</td></tr>
       <tr><td><code>identity.go</code></td><td class="mono">243</td><td>Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
-      <tr><td><code>permissions.go</code></td><td class="mono">443</td><td>Access levels, path classification, enforcement</td></tr>
-      <tr><td><code>proxy.go</code></td><td class="mono">210</td><td>Generic service proxy + connector delegation + cache</td></tr>
-      <tr><td><code>connector_proxy.go</code></td><td class="mono">111</td><td>Shared OAuth connector pipeline (token→cache→upstream→transform)</td></tr>
-      <tr><td><code>library.go</code></td><td class="mono">192</td><td>Provider interfaces + thin per-kind library handlers</td></tr>
-      <tr><td><code>librarykind.go</code></td><td class="mono">519</td><td>LibraryKind registry + generic parallel aggregate pipeline</td></tr>
-      <tr><td><code>models.go</code></td><td class="mono">475</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
-      <tr><td><code>match.go</code></td><td class="mono">669</td><td>Cross-service identity keys and merge algorithms</td></tr>
+      <tr><td><code>permissions.go</code></td><td class="mono">787</td><td>Access levels, path classification, enforcement</td></tr>
+      <tr><td><code>proxy.go</code></td><td class="mono">240</td><td>Generic service proxy + connector delegation + cache</td></tr>
+      <tr><td><code>connector_proxy.go</code></td><td class="mono">116</td><td>Shared OAuth connector pipeline (token→cache→upstream→transform)</td></tr>
+      <tr><td><code>library.go</code></td><td class="mono">145</td><td>Provider interfaces + thin per-kind library handlers</td></tr>
+      <tr><td><code>librarykind.go</code></td><td class="mono">674</td><td>LibraryKind registry + generic parallel aggregate pipeline</td></tr>
+      <tr><td><code>models.go</code></td><td class="mono">691</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
+      <tr><td><code>match.go</code></td><td class="mono">680</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>musicbrainz.go</code></td><td class="mono">278</td><td>Optional durable IDs (MBID) for artists/tracks/albums</td></tr>
       <tr><td><code>entity_links.go</code></td><td class="mono">193</td><td>User-confirmed cross-service entity links</td></tr>
       <tr><td><code>entity_links_handlers.go</code></td><td class="mono">261</td><td>Admin/API handlers for links and merge review</td></tr>
-      <tr><td><code>canonical.go</code></td><td class="mono">377</td><td>Canonical-source stamping and write-policy notices</td></tr>
-      <tr><td><code>mirror.go</code></td><td class="mono">387</td><td>Playlist / liked-tracks backup copy orchestration</td></tr>
-      <tr><td><code>mirror_spotify.go</code></td><td class="mono">253</td><td>Spotify side of mirror reads/writes</td></tr>
+      <tr><td><code>canonical.go</code></td><td class="mono">422</td><td>Canonical-source stamping and write-policy notices</td></tr>
+      <tr><td><code>mirror.go</code></td><td class="mono">395</td><td>Playlist / liked-tracks backup copy orchestration</td></tr>
+      <tr><td><code>mirror_spotify.go</code></td><td class="mono">250</td><td>Spotify side of mirror reads/writes</td></tr>
       <tr><td><code>mirror_youtube.go</code></td><td class="mono">218</td><td>YouTube Music side of mirror reads/writes</td></tr>
-      <tr><td><code>contacts.go</code></td><td class="mono">358</td><td>Contact identity, union-find merge, ContactProvider</td></tr>
-      <tr><td><code>photos.go</code></td><td class="mono">236</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
-      <tr><td><code>oauth.go</code></td><td class="mono">267</td><td>Login, callback, code exchange, token refresh, revoke</td></tr>
-      <tr><td><code>tokens.go</code></td><td class="mono">248</td><td>AES-256-GCM token store (PBKDF2), keyed by connection ID</td></tr>
+      <tr><td><code>contacts.go</code></td><td class="mono">342</td><td>Contact identity, union-find merge, ContactProvider</td></tr>
+      <tr><td><code>photos.go</code></td><td class="mono">221</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
+      <tr><td><code>oauth.go</code></td><td class="mono">276</td><td>Login, callback, code exchange, token refresh, revoke</td></tr>
+      <tr><td><code>tokens.go</code></td><td class="mono">518</td><td>AES-256-GCM token store (PBKDF2), keyed by connection ID</td></tr>
       <tr><td><code>connections.go</code></td><td class="mono">133</td><td>Connection ↔ service surface resolution helpers</td></tr>
       <tr><td><code>statestore.go</code></td><td class="mono">48</td><td>CSRF OAuth state TTL map</td></tr>
       <tr><td><code>flight.go</code></td><td class="mono">34</td><td>Singleflight for concurrent token refresh</td></tr>
       <tr><td><code>cache.go</code></td><td class="mono">148</td><td>In-memory TTL cache (GET 200 only)</td></tr>
       <tr><td><code>httpclient.go</code></td><td class="mono">49</td><td>Shared outbound HTTP client + configured upstream base</td></tr>
-      <tr><td><code>metrics.go</code></td><td class="mono">268</td><td>In-memory access ring buffer for the admin map</td></tr>
-      <tr><td><code>flow.go</code></td><td class="mono">544</td><td>Admin data-flow topology + recent access stats</td></tr>
-      <tr><td><code>admin.go</code></td><td class="mono">346</td><td>Admin dashboard shell + JSON summary endpoints</td></tr>
-      <tr><td><code>spotify.go</code></td><td class="mono">1025</td><td>Spotify connector (proxy, providers, transforms)</td></tr>
-      <tr><td><code>youtube.go</code></td><td class="mono">1063</td><td>YouTube Music connector</td></tr>
-      <tr><td><code>amazonmusic.go</code></td><td class="mono">560</td><td>Amazon Music connector</td></tr>
-      <tr><td><code>google-photos.go</code></td><td class="mono">524</td><td>Google Photos connector (metadata only)</td></tr>
-      <tr><td><code>google-contacts.go</code></td><td class="mono">363</td><td>Google Contacts connector (service id: google)</td></tr>
-      <tr><td><code>immich.go</code></td><td class="mono">393</td><td>Immich local/foreign canonical photo connector</td></tr>
+      <tr><td><code>metrics.go</code></td><td class="mono">366</td><td>In-memory access ring buffer for the admin map</td></tr>
+      <tr><td><code>flow.go</code></td><td class="mono">659</td><td>Admin data-flow topology + recent access stats</td></tr>
+      <tr><td><code>admin.go</code></td><td class="mono">414</td><td>Admin dashboard shell + JSON summary endpoints</td></tr>
+      <tr><td><code>spotify.go</code></td><td class="mono">1011</td><td>Spotify connector (proxy, providers, transforms)</td></tr>
+      <tr><td><code>youtube.go</code></td><td class="mono">1041</td><td>YouTube Music connector</td></tr>
+      <tr><td><code>amazonmusic.go</code></td><td class="mono">555</td><td>Amazon Music connector</td></tr>
+      <tr><td><code>google-photos.go</code></td><td class="mono">521</td><td>Google Photos connector (metadata only)</td></tr>
+      <tr><td><code>google-contacts.go</code></td><td class="mono">359</td><td>Google Contacts connector (service id: google)</td></tr>
+      <tr><td><code>immich.go</code></td><td class="mono">390</td><td>Immich local/foreign canonical photo connector</td></tr>
+      <tr><td><code>apps.go</code></td><td class="mono">472</td><td>Supporting code</td></tr>
+      <tr><td><code>apps_admin.go</code></td><td class="mono">129</td><td>Supporting code</td></tr>
+      <tr><td><code>apps_grant.go</code></td><td class="mono">396</td><td>Supporting code</td></tr>
       <tr><td><code>atomicfile.go</code></td><td class="mono">43</td><td>Supporting code</td></tr>
-      <tr><td><code>events.go</code></td><td class="mono">264</td><td>Supporting code</td></tr>
-      <tr><td><code>google-calendar.go</code></td><td class="mono">717</td><td>Supporting code</td></tr>
-      <tr><td><code>google-gmail.go</code></td><td class="mono">851</td><td>Supporting code</td></tr>
-      <tr><td><code>mail_archive.go</code></td><td class="mono">759</td><td>Supporting code</td></tr>
-      <tr><td><code>mail_archive_http.go</code></td><td class="mono">408</td><td>Supporting code</td></tr>
-      <tr><td><code>mail_archive_sync.go</code></td><td class="mono">177</td><td>Supporting code</td></tr>
-      <tr><td><code>mail_takeout.go</code></td><td class="mono">590</td><td>Supporting code</td></tr>
-      <tr><td><code>messages.go</code></td><td class="mono">306</td><td>Supporting code</td></tr>
+      <tr><td><code>audit.go</code></td><td class="mono">299</td><td>Supporting code</td></tr>
+      <tr><td><code>brand.go</code></td><td class="mono">58</td><td>Supporting code</td></tr>
+      <tr><td><code>copy_ledger.go</code></td><td class="mono">533</td><td>Supporting code</td></tr>
+      <tr><td><code>copy_ledger_http.go</code></td><td class="mono">52</td><td>Supporting code</td></tr>
+      <tr><td><code>copy_ledger_stamp.go</code></td><td class="mono">52</td><td>Supporting code</td></tr>
+      <tr><td><code>datadir.go</code></td><td class="mono">242</td><td>Supporting code</td></tr>
+      <tr><td><code>events.go</code></td><td class="mono">350</td><td>Supporting code</td></tr>
+      <tr><td><code>google-calendar.go</code></td><td class="mono">734</td><td>Supporting code</td></tr>
+      <tr><td><code>google-gmail.go</code></td><td class="mono">864</td><td>Supporting code</td></tr>
+      <tr><td><code>health.go</code></td><td class="mono">42</td><td>Supporting code</td></tr>
+      <tr><td><code>hookhealth.go</code></td><td class="mono">502</td><td>Supporting code</td></tr>
+      <tr><td><code>httphardening.go</code></td><td class="mono">154</td><td>Supporting code</td></tr>
+      <tr><td><code>immich_setup.go</code></td><td class="mono">844</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_archive.go</code></td><td class="mono">862</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_archive_http.go</code></td><td class="mono">422</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_archive_sync.go</code></td><td class="mono">222</td><td>Supporting code</td></tr>
+      <tr><td><code>mail_takeout.go</code></td><td class="mono">595</td><td>Supporting code</td></tr>
+      <tr><td><code>messages.go</code></td><td class="mono">309</td><td>Supporting code</td></tr>
+      <tr><td><code>metrics_export.go</code></td><td class="mono">265</td><td>Supporting code</td></tr>
+      <tr><td><code>owntracks.go</code></td><td class="mono">427</td><td>Supporting code</td></tr>
       <tr><td><code>permissions_overlay.go</code></td><td class="mono">126</td><td>Supporting code</td></tr>
-      <tr><td><code>web/admin.html</code></td><td class="mono">2377</td><td>Admin SPA markup (//go:embed)</td></tr>
+      <tr><td><code>places.go</code></td><td class="mono">663</td><td>Supporting code</td></tr>
+      <tr><td><code>quicken.go</code></td><td class="mono">761</td><td>Supporting code</td></tr>
+      <tr><td><code>sample_calendar.go</code></td><td class="mono">102</td><td>Supporting code</td></tr>
+      <tr><td><code>sampledata.go</code></td><td class="mono">958</td><td>Supporting code</td></tr>
+      <tr><td><code>secrets.go</code></td><td class="mono">96</td><td>Supporting code</td></tr>
+      <tr><td><code>service_connections.go</code></td><td class="mono">320</td><td>Supporting code</td></tr>
+      <tr><td><code>timeline.go</code></td><td class="mono">693</td><td>Supporting code</td></tr>
+      <tr><td><code>transactions.go</code></td><td class="mono">766</td><td>Supporting code</td></tr>
+      <tr><td><code>web/admin.html</code></td><td class="mono">3895</td><td>Admin SPA markup (//go:embed)</td></tr>
+      <tr><td><code>ynab.go</code></td><td class="mono">477</td><td>Supporting code</td></tr>
+      <tr><td><code>ynab_setup.go</code></td><td class="mono">310</td><td>Supporting code</td></tr>
     </tbody>
   </table>
 
@@ -1323,8 +1348,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>c374627</code></strong>
-    (main · 2026-09-24 · Merge pull request #81 from fudomunro/chore/issue-80-rename-aegis).
+    <code>4093ba3</code></strong>
+    (docs/issue-106-docs-hygiene · 2026-10-13 · docs: fix README tables/Go version and gate docs/index.html freshness (#106)).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1333,15 +1358,14 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 <pre><code><span class="cm"># from repo root</span>
 python3 docs/generate_walkthrough.py
 
-<span class="cm"># verify the stamp matches HEAD</span>
-git rev-parse --short HEAD
-<span class="cm"># → should equal the badge at the top of docs/index.html</span></code></pre>
+<span class="cm"># verify tree facts + stamp (CI runs this)</span>
+python3 docs/generate_walkthrough.py --check</code></pre>
   </div>
   <table>
     <thead><tr><th>File</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr><td><code>docs/walkthrough.template.html</code></td><td>Editable walkthrough content; tokens are double-brace names (COMMIT, SOURCE_LOC, FILE_MAP_ROWS, …)</td></tr>
-      <tr><td><code>docs/generate_walkthrough.py</code></td><td>Harvests git + tree facts, writes stamped <code>docs/index.html</code></td></tr>
+      <tr><td><code>docs/generate_walkthrough.py</code></td><td>Harvests git + tree facts, writes stamped <code>docs/index.html</code>; <code>--check</code> verifies it is current</td></tr>
       <tr><td><code>docs/index.html</code></td><td>Generated snapshot — do not hand-edit the version badge</td></tr>
     </tbody>
   </table>
@@ -1356,12 +1380,12 @@ git rev-parse --short HEAD
 
 <hr>
 <footer>
-  Generated for <strong>c374627</strong>
-  · aperture-aegis code walkthrough
-  · module <code>github.com/fudomunro/aperture-aegis</code>
+  Generated for <strong>4093ba3</strong>
+  · Aegis code walkthrough
+  · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 46 files · 16,585 LOC · 6 connectors · 8 library kinds
-  · 2026-09-24 16:52 UTC
+  · 71 files · 28,773 LOC · 6 connectors · 10 library kinds
+  · 2026-10-13 17:58 UTC
 </footer>
 
 </div>
