@@ -718,7 +718,7 @@ func (c *SpotifyConnector) transformSavedAlbums(raw map[string]any) map[string]a
 }
 
 func (c *SpotifyConnector) transformPlayer(raw map[string]any) map[string]any {
-	if raw == nil || len(raw) == 0 {
+	if len(raw) == 0 {
 		return map[string]any{"is_playing": false, "message": "No active playback"}
 	}
 	item, _ := raw["item"].(map[string]any)

@@ -168,7 +168,7 @@ func (a *MailArchive) ImportTakeout(path string, maxMessages int) (TakeoutSyncRe
 			res.Failed++
 			return nil
 		}
-		exists, err := a.hasMailIdentity(rec)
+		exists, err := a.hasSourceRecord(rec)
 		if err != nil {
 			storeErr = err
 			return err
@@ -215,10 +215,15 @@ func (a *MailArchive) ImportTakeout(path string, maxMessages int) (TakeoutSyncRe
 
 var errTakeoutCap = fmt.Errorf("takeout import batch cap reached")
 
-func (a *MailArchive) hasMailIdentity(rec MailArchiveRecord) (bool, error) {
-	if rec.MessageID != "" {
+// hasSourceRecord reports whether *this* source already stores the message.
+// Cross-service Message-ID matches are source attachment, not duplicates:
+// Gmail and Takeout may both hold the same RFC Message-ID as separate sources
+// of one user collection (issue #139). Only the same service re-import is skipped.
+func (a *MailArchive) hasSourceRecord(rec MailArchiveRecord) (bool, error) {
+	if id := normalizeMessageID(rec.MessageID); id != "" {
 		var n int
-		err := a.db.QueryRow(`SELECT COUNT(*) FROM mail_messages WHERE message_id=?`, rec.MessageID).Scan(&n)
+		err := a.db.QueryRow(`SELECT COUNT(*) FROM mail_messages WHERE message_id=? AND service=?`,
+			id, rec.Service).Scan(&n)
 		return n > 0, err
 	}
 	var n int

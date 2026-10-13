@@ -286,17 +286,36 @@ func newMessage(service, serviceName, id, channel, subject, snippet, sentAt stri
 	}
 }
 
+// libraryArchiveMessageCap bounds archive rows feeding /v1/library/messages.
+// Full history stays on /v1/mail/search; the library page is the merged
+// collection overview (issue #139).
+const libraryArchiveMessageCap = 200
+
 // HandleLibraryMessages returns the user's messages from every connected
-// message-capable service: GET /v1/library/messages
+// message-capable service and the local mail archive (Gmail sync + Takeout),
+// merged into one collection: GET /v1/library/messages
 func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("messages")
 	handleLibraryAggregate(s, w, r, libraryKindSpec[Message]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[Message], []string) {
-			return collectProviders[Message, MessageProvider](s, kind.PermType,
+			targets, denied := collectProviders[Message, MessageProvider](s, kind.PermType,
 				func(p MessageProvider) func(context.Context) ([]Message, bool, error) {
 					return p.ListMessages
 				})
+			// Local archive is another source of the same collection (Gmail
+			// archive rows + Google Takeout). Fail-open with live providers if
+			// the archive is disabled (issue #139).
+			if s.mail != nil && s.mailReadable() {
+				archive := s.mail
+				targets = append(targets, namedLister[Message]{
+					id: "mail-archive",
+					list: func(context.Context) ([]Message, bool, error) {
+						return archive.ListMessagesForLibrary(libraryArchiveMessageCap)
+					},
+				})
+			}
+			return targets, denied
 		},
 		serviceOf: messageServiceName,
 		sortKey:   messageIdentityKey,

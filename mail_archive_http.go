@@ -426,7 +426,7 @@ GET ` + root + `/v1/mail/messages/{service}/{id}/raw — provider payload JSON
 GET ` + root + `/v1/mail/status — archive size and sync cursor
 POST ` + root + `/v1/mail/sync — ingest more mail (body: {"max_messages":200})
 Default sort is newest-first (desc). For "oldest", "earliest", or "first" message questions use sort=asc (and limit=1 when only one answer is needed).
-This searches the local compressed archive; live Gmail listing is only needed for brand-new mail that is not yet synced.`}
+Gmail and Google Takeout are sources of one mail collection: search results merge on RFC Message-ID into multi-source entries. The same collection overview is at ` + root + `/v1/library/messages; use /v1/mail/search for full-history queries. Live Gmail listing is only needed for brand-new mail that is not yet synced.`}
 }
 
 // mentionsMailArchive detects archive/history-oriented phrasing.

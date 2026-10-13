@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -164,39 +163,6 @@ func scopesFromEntries(entries []PermissionEntry) Permissions {
 		p[e.Type] = normalizeAccess(e.Level)
 	}
 	return p
-}
-
-func describeScopes(p Permissions) []string {
-	var out []string
-	keys := make([]string, 0, len(p))
-	for k := range p {
-		if k == PermissionDefaultKey {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	for _, k := range keys {
-		level := normalizeAccess(p[k])
-		if level == AccessNone {
-			continue
-		}
-		switch level {
-		case AccessFreeBusy:
-			out = append(out, fmt.Sprintf("%s — availability only (free/busy)", k))
-		case AccessSummary:
-			out = append(out, fmt.Sprintf("%s — totals only (summary)", k))
-		case AccessRead:
-			out = append(out, fmt.Sprintf("%s — read", k))
-		case AccessWrite:
-			out = append(out, fmt.Sprintf("%s — write", k))
-		case AccessFull:
-			out = append(out, fmt.Sprintf("%s — read & write", k))
-		default:
-			out = append(out, fmt.Sprintf("%s — %s", k, level))
-		}
-	}
-	return out
 }
 
 // isSafeRedirectURI keeps the demo/grant redirect on this Aegis origin or an

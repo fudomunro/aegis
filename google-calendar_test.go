@@ -214,7 +214,7 @@ func TestGoogleCalendarConnector_ListCalendarEvents_PaginatesAndTruncates(t *tes
 					"id":      fmt.Sprintf("e%d", eventPages),
 					"iCalUID": fmt.Sprintf("uid%d@google.com", eventPages),
 					"summary": "Meeting",
-					"start":   map[string]any{"dateTime": fmt.Sprintf("2024-06-01T09:00:00Z")},
+					"start":   map[string]any{"dateTime": "2024-06-01T09:00:00Z"},
 					"end":     map[string]any{"dateTime": "2024-06-01T09:30:00Z"},
 				},
 			},
