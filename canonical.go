@@ -10,6 +10,7 @@ import (
 // Keep in sync with libraryKinds IDs.
 var canonicalKindIDs = []string{
 	"playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages",
+	"transactions", "places",
 }
 
 func isCanonicalKindID(id string) bool {
@@ -436,5 +437,24 @@ func (s *Server) stampTransactionCanonical(items []Transaction, serviceID string
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("transactions") {
 		markTransactionSourcesCanonical(items, serviceID)
+	}
+}
+
+func markPlaceVisitSourcesCanonical(items []PlaceVisit, serviceID string) {
+	for i := range items {
+		for j := range items[i].Sources {
+			if items[i].Sources[j].Service == serviceID {
+				items[i].Sources[j].Canonical = true
+			}
+		}
+	}
+}
+
+// stampPlaceVisitCanonical marks sources when serviceID is config-declared
+// canonical for places (issue #142).
+func (s *Server) stampPlaceVisitCanonical(items []PlaceVisit, serviceID string) {
+	svc := s.config.GetService(serviceID)
+	if svc != nil && svc.IsCanonicalFor("places") {
+		markPlaceVisitSourcesCanonical(items, serviceID)
 	}
 }
