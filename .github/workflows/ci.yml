@@ -53,6 +53,56 @@ jobs:
           path: coverage.out
           retention-days: 7
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # staticcheck is the blocking linter (issue #107). Keep the pin in sync
+      # with AGENTS.md "Commands". Fail the job on any finding.
+      - name: Install staticcheck
+        run: go install honnef.co/go/tools/cmd/staticcheck@2026.2.1
+
+      - name: Staticcheck
+        run: "$(go env GOPATH)/bin/staticcheck" ./...
+
+  fuzz:
+    name: Fuzz
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # Short CI fuzz runs over the hostile-input parsers (issue #107).
+      # Seeds in f.Add / testdata/fuzz always run as ordinary tests in the
+      # Test job; this job spends a bounded budget mutating them.
+      - name: Fuzz parsers
+        run: |
+          set -euo pipefail
+          targets=(
+            FuzzRecordFromTakeoutMessage
+            FuzzWalkMboxFrom
+            FuzzInjectRequestInstructions
+            FuzzDetectBodyShape
+            FuzzMergeTracksSync
+            FuzzMergePlaylistsSync
+            FuzzNormalizeIdentityKey
+          )
+          for t in "${targets[@]}"; do
+            echo "==> ${t}"
+            go test -run='^$' -fuzz="^${t}$" -fuzztime=30s .
+          done
+
   build:
     name: Build
     runs-on: ubuntu-latest

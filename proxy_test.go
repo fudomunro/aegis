@@ -648,11 +648,6 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 	}
 }
 
-// testTokenStore creates an in-memory-only token store for tests.
-func testTokenStore() *TokenStore {
-	return &TokenStore{Tokens: make(map[string]*OAuthToken)}
-}
-
 func stringSliceContains(ss []string, v string) bool {
 	for _, s := range ss {
 		if s == v {

@@ -512,14 +512,7 @@ func (s *Server) buildFlowStats(window time.Duration, windowLabel string) FlowSt
 	}
 	recent := make([]FlowRecentAccess, 0, len(snap.Recent))
 	for _, ev := range snap.Recent {
-		recent = append(recent, FlowRecentAccess{
-			At:       ev.At,
-			Agent:    ev.Agent,
-			Surface:  ev.Surface,
-			Target:   ev.Target,
-			DataType: ev.DataType,
-			Cache:    ev.Cache,
-		})
+		recent = append(recent, FlowRecentAccess(ev))
 	}
 	return FlowStats{
 		GeneratedAt: time.Now().UTC(),
@@ -542,26 +535,13 @@ func flowAgentDetailsFromMetrics(detail []MetricsAgentDetail) []FlowAgentDetail 
 	}
 	out := make([]FlowAgentDetail, 0, len(detail))
 	for _, d := range detail {
-		out = append(out, FlowAgentDetail{
-			ID:        d.ID,
-			Hits:      d.Hits,
-			Services:  d.Services,
-			Libraries: d.Libraries,
-			DataTypes: d.DataTypes,
-			LastAt:    d.LastAt,
-		})
+		out = append(out, FlowAgentDetail(d))
 	}
 	return out
 }
 
 func flowEndpointFromMetrics(st MetricsEndpointStats) FlowEndpointStats {
-	return FlowEndpointStats{
-		Hits:      st.Hits,
-		Agents:    st.Agents,
-		CacheHits: st.CacheHits,
-		CacheMiss: st.CacheMiss,
-		DataTypes: st.DataTypes,
-	}
+	return FlowEndpointStats(st)
 }
 
 // TotalHits sums service + library hits for the agents node badge.

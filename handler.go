@@ -600,6 +600,21 @@ type injectResult struct {
 	AlreadyPresent bool
 }
 
+// jsonSafeText matches encoding/json's UTF-8 handling: invalid bytes become
+// U+FFFD. Injection must dedupe against the text that will actually be
+// written, or a second pass fails to see its own instructions (issue #107).
+func jsonSafeText(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return s
+	}
+	var out string
+	if err := json.Unmarshal(b, &out); err != nil {
+		return s
+	}
+	return out
+}
+
 // injectRequestInstructions inserts system-level instructions into an LLM request
 // body, choosing the correct carrier for the detected wire shape. Repeated calls
 // with the same content are idempotent. provider/model come from Aperture
@@ -608,6 +623,9 @@ func injectRequestInstructions(original []byte, content, provider, model string)
 	if len(original) == 0 {
 		return injectResult{Shape: bodyShapeUnknown}, errUnrecognizedBodyShape
 	}
+	// Normalize to the form encoding/json will persist so containsContent
+	// sees the same bytes a prior inject wrote.
+	content = jsonSafeText(content)
 	var full map[string]json.RawMessage
 	if err := json.Unmarshal(original, &full); err != nil {
 		// Non-object JSON (or corrupt bytes) is not a wire shape we can augment.
