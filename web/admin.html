@@ -1717,7 +1717,7 @@ job.read</pre>
   // Core data types — same synced library kinds the Map shows (flow.go).
   // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
   // any explicit keys from aegis.json that are not rendered.
-  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages"];
+  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages", "transactions"];
   const DATA_TYPE_LABELS = {
     playlists: "Playlists",
     tracks: "Liked tracks",
@@ -1820,17 +1820,19 @@ job.read</pre>
   }
 
   function corePermTypes(svc, perms) {
-    // Match the Map: library kinds only. Prefer connector-advertised types;
-    // also keep any core kind that already has an explicit permission.
-    const known = (svc.available_data_types && svc.available_data_types.length)
-      ? svc.available_data_types.filter((k) => k && k !== "default")
-      : null;
-    return LIBRARY_DATA_TYPES.filter((t) => {
-      if (known) {
-        return known.indexOf(t) !== -1 || Object.prototype.hasOwnProperty.call(perms || {}, t);
-      }
-      return true;
-    });
+    // Match the Map: library kinds only. Prefer connector-advertised types —
+    // when the connector lists a narrow set (e.g. YNAB → transactions only),
+    // show that set and nothing else. Fall back to explicit permission keys
+    // already saved so we never hide a configured type. When the connector
+    // advertises nothing, do not dump every library type onto the card.
+    const advertised = (svc.available_data_types || []).filter((k) => k && k !== "default");
+    const explicit = Object.keys(perms || {}).filter((k) => k && k !== "default");
+    const allow = new Set(advertised.concat(explicit));
+    if (advertised.length) {
+      return LIBRARY_DATA_TYPES.filter((t) => allow.has(t));
+    }
+    // No connector capabilities: only types the operator already named.
+    return LIBRARY_DATA_TYPES.filter((t) => explicit.indexOf(t) !== -1);
   }
 
   function renderPermEditor(svc) {
@@ -1996,6 +1998,7 @@ job.read</pre>
     if (svc.has_photo_provider) kinds.push("photos");
     if (svc.has_event_provider) kinds.push("calendar events");
     if (svc.has_message_provider) kinds.push("messages");
+    if (svc.has_transaction_provider) kinds.push("transactions");
     return kinds;
   }
 

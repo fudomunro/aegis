@@ -279,6 +279,22 @@ func (c *Config) ServiceCount() int {
 	return len(c.Services)
 }
 
+// EnsureService injects an in-memory service entry when the id is missing.
+// Used for file-based sources (Quicken import) that are not operator-facing
+// services but still need to pass library fan-out checks. Not persisted.
+func (c *Config) EnsureService(svc Service) {
+	id := strings.TrimSpace(svc.ID)
+	if id == "" {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.serviceByID(id) != nil {
+		return
+	}
+	c.Services = append(c.Services, svc)
+}
+
 // updateService applies mut to a service under the write lock. Intended for
 // tests that install mock endpoints; production mutates via LoadConfig,
 // Reload, and SetServicePermissions.

@@ -122,3 +122,57 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 		t.Fatalf("empty path status %d", w3.Code)
 	}
 }
+
+func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
+	cfg := &Config{
+		Services: []Service{{ID: "ynab", Name: "YNAB", Action: "inject"}},
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
+	srv.connectors[quickenServiceID] = NewQuickenConnector(srv)
+	// Quicken is file-based: even if present in config, keep it off the list.
+	cfg.Services = append(cfg.Services, Service{ID: quickenServiceID, Name: "Quicken", Action: "inject"})
+
+	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("summary status %d body=%s", w.Code, w.Body.String())
+	}
+	var resp struct {
+		Services []AdminService `json:"services"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	var ynab *AdminService
+	for i := range resp.Services {
+		if resp.Services[i].ID == quickenServiceID {
+			t.Fatal("quicken must not appear in admin services list")
+		}
+		if resp.Services[i].ID == ynabServiceID {
+			ynab = &resp.Services[i]
+		}
+	}
+	if ynab == nil {
+		t.Fatal("ynab missing from summary")
+	}
+	if len(ynab.AvailableDataTypes) != 1 || ynab.AvailableDataTypes[0] != "transactions" {
+		t.Fatalf("available_data_types = %v, want [transactions]", ynab.AvailableDataTypes)
+	}
+	if !ynab.HasTransaction {
+		t.Fatal("has_transaction_provider not set")
+	}
+}
+
+func TestYNABCapabilities_OnlyTransactions(t *testing.T) {
+	caps := NewYNABConnector(&Server{}).Capabilities()
+	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
+		t.Fatalf("caps = %+v", caps)
+	}
+	qcaps := NewQuickenConnector(&Server{}).Capabilities()
+	if len(qcaps.DataTypes) != 1 || qcaps.DataTypes[0].Name != "transactions" {
+		t.Fatalf("quicken caps = %+v", qcaps)
+	}
+}

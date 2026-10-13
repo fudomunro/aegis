@@ -226,6 +226,15 @@ func main() {
 	if quickenStore != nil {
 		defer quickenStore.Close()
 		slog.Info("quicken store ready", "path", quickenStore.Path())
+		// File-based import source: not an operator-facing service card.
+		// Inject an in-memory entry so /v1/library/transactions can fan in.
+		cfg.EnsureService(Service{
+			ID:          quickenServiceID,
+			Name:        quickenServiceName,
+			Action:      "inject",
+			Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
+			Permissions: Permissions{"transactions": AccessRead},
+		})
 	} else {
 		slog.Info("quicken store disabled")
 	}
