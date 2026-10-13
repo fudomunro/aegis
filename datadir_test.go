@@ -114,7 +114,6 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 		"MailArchive": filepath.Join(dir, "mail-archive.db"),
 		"LogFile":     filepath.Join(dir, "logs", "aegis.log"),
 		"LogsDir":     filepath.Join(dir, "logs"),
-		"CacheDir":    filepath.Join(dir, "cache"),
 	}
 	// Reflect without getters: compare via struct fields explicitly.
 	if paths.Config != checks["Config"] {
@@ -140,9 +139,6 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	}
 	if paths.LogsDir != checks["LogsDir"] {
 		t.Fatalf("LogsDir = %q, want %q", paths.LogsDir, checks["LogsDir"])
-	}
-	if paths.CacheDir != checks["CacheDir"] {
-		t.Fatalf("CacheDir = %q, want %q", paths.CacheDir, checks["CacheDir"])
 	}
 }
 
@@ -240,7 +236,7 @@ func TestEnsureDataDir_CreatesPrivateTree(t *testing.T) {
 	if err := EnsureDataDir(dir); err != nil {
 		t.Fatal(err)
 	}
-	for _, p := range []string{dir, filepath.Join(dir, "logs"), filepath.Join(dir, "cache")} {
+	for _, p := range []string{dir, filepath.Join(dir, "logs")} {
 		info, err := os.Stat(p)
 		if err != nil {
 			t.Fatalf("stat %s: %v", p, err)
@@ -251,6 +247,10 @@ func TestEnsureDataDir_CreatesPrivateTree(t *testing.T) {
 		if info.Mode().Perm() != 0o700 {
 			t.Fatalf("%s mode = %o, want 0700", p, info.Mode().Perm())
 		}
+	}
+	// Response cache is in-memory only; no spill directory (issue #104).
+	if _, err := os.Stat(filepath.Join(dir, "cache")); !os.IsNotExist(err) {
+		t.Fatalf("cache/ should not be created, err = %v", err)
 	}
 }
 

@@ -11,6 +11,11 @@ func TestNormalizeIdentityKey(t *testing.T) {
 		{"Britney Spears", "britney spears"},
 		{"  britney   SPEARS  ", "britney spears"},
 		{"Miles Davis - Topic", "miles davis"},
+		{"0\n- TopiC", "0"},
+		{"Name\n- Topic", "name"},
+		{" - Topic bar", "bar"},
+		{"- topic - topic", ""},
+		{"foo - topicbar", "foo - topicbar"},
 		{"", ""},
 	}
 	for _, c := range cases {
