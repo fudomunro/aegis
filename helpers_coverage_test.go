@@ -132,7 +132,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	logger := slog.Default()
 
-	if srv.getValidToken("spotify", logger) != "" {
+	if srv.GetValidToken("spotify", logger) != "" {
 		t.Fatal("no token should be empty")
 	}
 
@@ -142,7 +142,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 		Expiry:      time.Now().Add(time.Hour),
 		Scopes:      []string{"user-library-read"},
 	})
-	if srv.getValidToken("spotify", logger) != "" {
+	if srv.GetValidToken("spotify", logger) != "" {
 		t.Fatal("missing scope should be empty")
 	}
 
@@ -152,7 +152,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 		Expiry:      time.Now().Add(time.Hour),
 		Scopes:      []string{"user-library-read", "playlist-modify"},
 	})
-	if got := srv.getValidToken("spotify", logger); got != "good" {
+	if got := srv.GetValidToken("spotify", logger); got != "good" {
 		t.Fatalf("token = %q", got)
 	}
 
@@ -162,13 +162,13 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 		Expiry:      time.Now().Add(-time.Hour),
 		Scopes:      []string{"user-library-read", "playlist-modify"},
 	})
-	if srv.getValidToken("spotify", logger) != "" {
+	if srv.GetValidToken("spotify", logger) != "" {
 		t.Fatal("expired without refresh should be empty")
 	}
 
 	// Nil token store.
 	srv.tokens = nil
-	if srv.getValidToken("spotify", logger) != "" {
+	if srv.GetValidToken("spotify", logger) != "" {
 		t.Fatal("nil store should be empty")
 	}
 }

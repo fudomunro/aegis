@@ -16,12 +16,12 @@ import (
 // share the same identity matching (email → phone → handle → name).
 // https://github.com/fudomunro/aegis/issues/22
 type GoogleContactsConnector struct {
-	server *Server
+	host Host
 }
 
-// NewGoogleContactsConnector creates a connector wired to the given server.
-func NewGoogleContactsConnector(srv *Server) *GoogleContactsConnector {
-	return &GoogleContactsConnector{server: srv}
+// NewGoogleContactsConnector creates a connector wired to the given Host (issue #15 seam).
+func NewGoogleContactsConnector(host Host) *GoogleContactsConnector {
+	return &GoogleContactsConnector{host: host}
 }
 
 // googleContactsServiceID is the connector/service ID used in config, tokens,
@@ -35,7 +35,7 @@ const googleContactsPersonFields = "names,emailAddresses,phoneNumbers,organizati
 
 // googleContactsUpstreamBase returns the configured People API base.
 func (c *GoogleContactsConnector) googleContactsUpstreamBase() string {
-	return c.server.upstreamBaseFor(googleContactsServiceID, "https://people.googleapis.com/v1")
+	return c.host.UpstreamBaseFor(googleContactsServiceID, "https://people.googleapis.com/v1")
 }
 
 // Capabilities returns what Google Contacts data types and operations are supported.
@@ -100,7 +100,7 @@ Always include the full proxy base URL in your requests.`, base, root)
 func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", googleContactsServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.server.getValidToken(googleContactsServiceID, logger)
+	token := c.host.GetValidToken(googleContactsServiceID, logger)
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Google Contacts token — authorize at /v1/auth/"+googleContactsServiceID+"/login")
@@ -269,7 +269,7 @@ func normalizeGooglePeopleResourceName(id string) string {
 // and maps them into neutral Contact values for the unified library and for
 // photo.people[] cross-type matching.
 func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]Contact, bool, error) {
-	token := c.server.getValidToken(googleContactsServiceID, slog.Default())
+	token := c.host.GetValidToken(googleContactsServiceID, slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}

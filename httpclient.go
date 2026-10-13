@@ -41,8 +41,8 @@ func doUpstreamRequest(ctx context.Context, method, url string, body io.Reader, 
 	return data, resp.StatusCode, nil
 }
 
-// upstreamBaseFor returns the configured endpoint for a service, or fallback.
-func (s *Server) upstreamBaseFor(serviceID, fallback string) string {
+// UpstreamBaseFor returns the configured endpoint for a service, or fallback.
+func (s *Server) UpstreamBaseFor(serviceID, fallback string) string {
 	if svc := s.config.GetService(serviceID); svc != nil && svc.Endpoint != "" {
 		return trimRightSlash(svc.Endpoint)
 	}

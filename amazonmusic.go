@@ -17,15 +17,15 @@ import (
 // generic response transformations. It is ready to wire up to
 // any Amazon Music API (official or unofficial) when available.
 type AmazonMusicConnector struct {
-	server *Server
+	host Host
 }
 
-// NewAmazonMusicConnector creates a connector wired to the given server.
+// NewAmazonMusicConnector creates a connector wired to the given Host (issue #15 seam).
 // amazonMusicAPIBase is the default Amazon Music API root; config endpoint overrides it.
 const amazonMusicAPIBase = "https://api.amazonmusic.com/v1"
 
-func NewAmazonMusicConnector(srv *Server) *AmazonMusicConnector {
-	return &AmazonMusicConnector{server: srv}
+func NewAmazonMusicConnector(host Host) *AmazonMusicConnector {
+	return &AmazonMusicConnector{host: host}
 }
 
 // Capabilities returns what Amazon Music data types are recognized.
@@ -76,7 +76,7 @@ Always include the full proxy base URL in your requests.`, base, root)
 
 // HandleProxy processes an Amazon Music API request through the connector.
 func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
+	runConnectorProxy(c.host, w, r, remainingPath, connectorProxyOpts{
 		serviceID:   "amazon-music",
 		displayName: "Amazon Music",
 		defaultBase: amazonMusicAPIBase,
@@ -165,12 +165,12 @@ func asInt(v any) (int, bool) {
 // ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
 // and returns them in Aegis's neutral format.
 func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
-	token := c.server.getValidToken("amazon-music", slog.Default())
+	token := c.host.GetValidToken("amazon-music", slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := c.server.upstreamBaseFor("amazon-music", amazonMusicAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor("amazon-music", amazonMusicAPIBase)
 
 	nextURL := upstreamBase + "/me/playlists"
 	var all []Playlist

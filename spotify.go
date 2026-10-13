@@ -16,15 +16,15 @@ import (
 // It transforms verbose Spotify responses into LLM-friendly formats
 // and generates rich system instructions for agents.
 type SpotifyConnector struct {
-	server *Server
+	host Host
 }
 
-// NewSpotifyConnector creates a connector wired to the given server.
+// NewSpotifyConnector creates a connector wired to the given Host (issue #15 seam).
 // spotifyAPIBase is the default Spotify Web API root; config endpoint overrides it.
 const spotifyAPIBase = "https://api.spotify.com/v1"
 
-func NewSpotifyConnector(srv *Server) *SpotifyConnector {
-	return &SpotifyConnector{server: srv}
+func NewSpotifyConnector(host Host) *SpotifyConnector {
+	return &SpotifyConnector{host: host}
 }
 
 // Capabilities returns what Spotify data types and operations are supported.
@@ -205,7 +205,7 @@ Always include the full proxy base URL in your requests.`, base, root, root, roo
 
 // HandleProxy processes a Spotify API request through the connector.
 func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	runConnectorProxy(c.server, w, r, remainingPath, connectorProxyOpts{
+	runConnectorProxy(c.host, w, r, remainingPath, connectorProxyOpts{
 		serviceID:   "spotify",
 		displayName: "Spotify",
 		defaultBase: spotifyAPIBase,
@@ -284,12 +284,12 @@ func (c *SpotifyConnector) transformUser(raw map[string]any) map[string]any {
 // ListUserSavedAlbums implements AlbumProvider. Fetches Spotify saved albums
 // and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bool, error) {
-	token := c.server.getValidToken("spotify", slog.Default())
+	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Album
 	nextURL := upstreamBase + "/me/albums?limit=50"
@@ -335,12 +335,12 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bo
 // ListUserFollowedArtists implements ArtistProvider. Fetches Spotify followed
 // artists and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, bool, error) {
-	token := c.server.getValidToken("spotify", slog.Default())
+	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Artist
 	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
@@ -466,12 +466,12 @@ func spotifyNeutralArtist(artist map[string]any) Artist {
 // ListUserLikedTracks implements LikedTrackProvider. Fetches Spotify saved
 // tracks and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
-	token := c.server.getValidToken("spotify", slog.Default())
+	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Track
 	nextURL := upstreamBase + "/me/tracks?limit=50"
@@ -517,12 +517,12 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bo
 // ListUserPlaylists implements PlaylistProvider. Fetches Spotify playlists
 // and returns them in Aegis's neutral format.
 func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
-	token := c.server.getValidToken("spotify", slog.Default())
+	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}
 
-	upstreamBase := c.server.upstreamBaseFor("spotify", spotifyAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
 	var all []Playlist
 	nextURL := upstreamBase + "/me/playlists?limit=50"

@@ -20,12 +20,12 @@ import (
 // advertised so permissions stay constrained (issue #61).
 // https://github.com/fudomunro/aegis/issues/65
 type GoogleCalendarConnector struct {
-	server *Server
+	host Host
 }
 
-// NewGoogleCalendarConnector creates a connector wired to the given server.
-func NewGoogleCalendarConnector(srv *Server) *GoogleCalendarConnector {
-	return &GoogleCalendarConnector{server: srv}
+// NewGoogleCalendarConnector creates a connector wired to the given Host (issue #15 seam).
+func NewGoogleCalendarConnector(host Host) *GoogleCalendarConnector {
+	return &GoogleCalendarConnector{host: host}
 }
 
 // googleCalendarServiceID is the connector/service ID used in config, tokens,
@@ -44,7 +44,7 @@ const (
 
 // googleCalendarUpstreamBase returns the configured Calendar API base.
 func (c *GoogleCalendarConnector) googleCalendarUpstreamBase() string {
-	return c.server.upstreamBaseFor(googleCalendarServiceID, "https://www.googleapis.com/calendar/v3")
+	return c.host.UpstreamBaseFor(googleCalendarServiceID, "https://www.googleapis.com/calendar/v3")
 }
 
 // Capabilities returns what Google Calendar data types and operations are supported.
@@ -145,7 +145,7 @@ Always include the full proxy base URL in your requests.`, base, root)
 func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", googleCalendarServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.server.getValidToken(googleCalendarServiceID, logger)
+	token := c.host.GetValidToken(googleCalendarServiceID, logger)
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
@@ -277,10 +277,10 @@ func bareEventIDFromProxyPath(remainingPath string) (string, bool) {
 // eventsFreeBusyOnly reports whether this service's events permission is the
 // free/busy share (issue #128). Proxy responses must drop titles/attendees.
 func (c *GoogleCalendarConnector) eventsFreeBusyOnly() bool {
-	if c.server == nil || c.server.config == nil {
+	if c.host == nil {
 		return false
 	}
-	svc := c.server.config.GetService(googleCalendarServiceID)
+	svc := c.host.ServiceConfig(googleCalendarServiceID)
 	if svc == nil {
 		return false
 	}
@@ -328,7 +328,7 @@ func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *htt
 }
 
 func (c *GoogleCalendarConnector) handleListCalendarEvents(w http.ResponseWriter, r *http.Request, calendarID string) {
-	token := c.server.getValidToken(googleCalendarServiceID, slog.Default())
+	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
@@ -369,7 +369,7 @@ func (c *GoogleCalendarConnector) handleListCalendarEvents(w http.ResponseWriter
 }
 
 func (c *GoogleCalendarConnector) handleListCalendars(w http.ResponseWriter, r *http.Request) {
-	token := c.server.getValidToken(googleCalendarServiceID, slog.Default())
+	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
@@ -453,7 +453,7 @@ func (c *GoogleCalendarConnector) ListCalendarEvents(ctx context.Context) ([]Cal
 }
 
 func (c *GoogleCalendarConnector) listEventsWithWindow(ctx context.Context, q url.Values) ([]CalendarEvent, bool, error) {
-	token := c.server.getValidToken(googleCalendarServiceID, slog.Default())
+	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}
