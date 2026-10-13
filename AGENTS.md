@@ -72,6 +72,7 @@ Agent → Aegis proxy / library / admin → provider APIs
 | Neutral models + library | `models.go`, `library.go`, `librarykind.go` | LibraryKind registry + parallel provider fan-out |
 | Merge / entity IDs | `match.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `spotify.go`, `youtube.go`, `amazonmusic.go`, `google-*.go`, `immich.go` | Register in `main.go` `srv.connectors` |
+| Location history (places) | `places.go`, `timeline.go`, `owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
 | Docs walkthrough | `docs/index.html` | Regenerated artifact; stamp with current commit |
 

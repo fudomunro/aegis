@@ -20,6 +20,15 @@ const (
 	// reduced to totals by category/month only — no line items and no
 	// account identifiers (issue #141). Transactions-only.
 	AccessSummary = "summary"
+	// AccessCity allows safe methods on places, but responses are reduced to
+	// locality, country, and the visit/trip time window only — enough to ask
+	// "was I out of town?" without names, addresses, or coordinates
+	// (issue #142). Places-only.
+	AccessCity = "city"
+	// AccessPrecise allows safe methods on places with full place names,
+	// addresses, and coordinates (issue #142). Places-only. The maximum
+	// places read level; there is no agent write surface for places.
+	AccessPrecise = "precise"
 	// AccessRead allows safe methods (GET, HEAD).
 	AccessRead = "read"
 	// AccessWrite allows mutating methods (POST, PUT, PATCH, DELETE).
@@ -42,6 +51,26 @@ var summaryOnlyTypes = map[string]bool{
 	"transactions": true,
 }
 
+// cityOnlyTypes lists data types that honor AccessCity redaction.
+// city is rejected on any other key (issue #142).
+var cityOnlyTypes = map[string]bool{
+	"places": true,
+}
+
+// preciseOnlyTypes lists data types that honor AccessPrecise.
+// precise is rejected on any other key (issue #142).
+var preciseOnlyTypes = map[string]bool{
+	"places": true,
+}
+
+// optInDefaultNone lists data types that stay hidden unless the permissions
+// map names them explicitly. The reserved "default" key does not enable them.
+// places is the most sensitive data type we ship (issue #142): default to
+// none and never advertise it in pre-request injection until enabled.
+var optInDefaultNone = map[string]bool{
+	"places": true,
+}
+
 // DefaultAccessType is used when a service has no permissions block, or when
 // a data type is not listed and no "default" key is set. Preserves pre-permission
 // behavior: authenticated agents may call any operation.
@@ -56,10 +85,20 @@ const PermissionDefaultKey = "default"
 type Permissions map[string]string
 
 // For returns the access level for a data type.
-// Unknown/empty data types fall through to "default" (or DefaultAccessType).
+// Unknown/empty data types fall through to "default" (or DefaultAccessType),
+// except opt-in types (places) which stay "none" unless named explicitly —
+// the "default" key never enables them (issue #142).
 // Proxy callers with an unclassified path must use Strictest instead so
 // unknown surface cannot outrank a tighter type (issue #94).
 func (p Permissions) For(dataType string) string {
+	if optInDefaultNone[dataType] {
+		if p != nil {
+			if level, ok := p[dataType]; ok {
+				return normalizeAccess(level)
+			}
+		}
+		return AccessNone
+	}
 	if p == nil {
 		return DefaultAccessType
 	}
@@ -82,7 +121,7 @@ func (p Permissions) Strictest() string {
 	if len(p) == 0 {
 		return DefaultAccessType
 	}
-	hasNone, hasFreeBusy, hasSummary, hasRead, hasWrite, hasFull := false, false, false, false, false, false
+	hasNone, hasFreeBusy, hasSummary, hasCity, hasPrecise, hasRead, hasWrite, hasFull := false, false, false, false, false, false, false, false
 	for _, v := range p {
 		switch normalizeAccess(v) {
 		case AccessNone:
@@ -91,6 +130,10 @@ func (p Permissions) Strictest() string {
 			hasFreeBusy = true
 		case AccessSummary:
 			hasSummary = true
+		case AccessCity:
+			hasCity = true
+		case AccessPrecise:
+			hasPrecise = true
 		case AccessRead:
 			hasRead = true
 		case AccessWrite:
@@ -102,13 +145,19 @@ func (p Permissions) Strictest() string {
 	if hasNone || (hasRead && hasWrite) {
 		return AccessNone
 	}
-	// freebusy/summary redactions are type-specific. When either is the
-	// tightest level, unknown paths cannot be redacted — deny them rather
-	// than leak detail (issue #94, #128, #141).
+	// freebusy/summary/city/precise redactions are type-specific. When one is
+	// the tightest level, unknown paths cannot be redacted — deny them rather
+	// than leak detail (issue #94, #128, #141, #142).
 	if hasFreeBusy && !hasRead && !hasWrite && !hasFull {
 		return AccessNone
 	}
 	if hasSummary && !hasRead && !hasWrite && !hasFull {
+		return AccessNone
+	}
+	if hasCity && !hasRead && !hasWrite && !hasFull {
+		return AccessNone
+	}
+	if hasPrecise && !hasRead && !hasWrite && !hasFull {
 		return AccessNone
 	}
 	if hasRead {
@@ -125,6 +174,12 @@ func (p Permissions) Strictest() string {
 	}
 	if hasSummary {
 		return AccessSummary
+	}
+	if hasCity {
+		return AccessCity
+	}
+	if hasPrecise {
+		return AccessPrecise
 	}
 	return DefaultAccessType
 }
@@ -212,6 +267,31 @@ func (p Permissions) SummaryDataTypes() []string {
 	return limited
 }
 
+// PlacesAccessLevels returns the effective places access level per service key
+// that explicitly enables places (issue #142). Opt-in: keys not listed are
+// omitted (they mean none).
+func (p Permissions) PlacesAccessLevels() map[string]string {
+	if p == nil {
+		return nil
+	}
+	out := map[string]string{}
+	for k, v := range p {
+		if k == PermissionDefaultKey {
+			continue
+		}
+		if normalizeAccess(v) == AccessNone {
+			continue
+		}
+		if cityOnlyTypes[k] || preciseOnlyTypes[k] {
+			out[k] = normalizeAccess(v)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
 // Clone returns a shallow copy suitable for admin/API responses.
 func (p Permissions) Clone() map[string]string {
 	if p == nil {
@@ -225,16 +305,17 @@ func (p Permissions) Clone() map[string]string {
 }
 
 // ValidatePermissions checks that every level is a known access type.
-// freebusy is events-only: other types cannot honor availability redaction.
+// freebusy is events-only, summary is transactions-only, and city/precise are
+// places-only: other types cannot honor those redactions.
 func ValidatePermissions(p Permissions) error {
 	for k, v := range p {
 		if k == "" {
 			return fmt.Errorf("permissions: empty data type key")
 		}
 		switch normalizeAccess(v) {
-		case AccessNone, AccessFreeBusy, AccessSummary, AccessRead, AccessWrite, AccessFull:
+		case AccessNone, AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessRead, AccessWrite, AccessFull:
 		default:
-			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, read, write, or read-write)", k, v)
+			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, read, write, or read-write)", k, v)
 		}
 		if normalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !freeBusyOnlyTypes[k] {
 			return fmt.Errorf("permissions[%s]: freebusy is only supported for events", k)
@@ -248,6 +329,18 @@ func ValidatePermissions(p Permissions) error {
 		if normalizeAccess(v) == AccessSummary && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: summary is only supported for transactions")
 		}
+		if normalizeAccess(v) == AccessCity && k != PermissionDefaultKey && !cityOnlyTypes[k] {
+			return fmt.Errorf("permissions[%s]: city is only supported for places", k)
+		}
+		if normalizeAccess(v) == AccessCity && k == PermissionDefaultKey {
+			return fmt.Errorf("permissions[default]: city is only supported for places")
+		}
+		if normalizeAccess(v) == AccessPrecise && k != PermissionDefaultKey && !preciseOnlyTypes[k] {
+			return fmt.Errorf("permissions[%s]: precise is only supported for places", k)
+		}
+		if normalizeAccess(v) == AccessPrecise && k == PermissionDefaultKey {
+			return fmt.Errorf("permissions[default]: precise is only supported for places")
+		}
 	}
 	return nil
 }
@@ -260,6 +353,10 @@ func normalizeAccess(level string) string {
 		return AccessFreeBusy
 	case AccessSummary, "totals", "totals-only", "sum":
 		return AccessSummary
+	case AccessCity, "locality", "city-only", "metro":
+		return AccessCity
+	case AccessPrecise, "coordinates", "coords", "gps", "exact", "full-places":
+		return AccessPrecise
 	case AccessRead, "ro", "readonly", "read-only":
 		return AccessRead
 	case AccessWrite, "wo", "writeonly", "write-only", "mutate":
@@ -274,7 +371,11 @@ func normalizeAccess(level string) string {
 func allowsMethod(level, method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
-		return level == AccessFreeBusy || level == AccessSummary || level == AccessRead || level == AccessFull
+		switch level {
+		case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessRead, AccessFull:
+			return true
+		}
+		return false
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
 		return level == AccessWrite || level == AccessFull
 	default:
@@ -292,6 +393,37 @@ func IsFreeBusyAccess(level string) bool {
 // view (issue #141).
 func IsSummaryAccess(level string) bool {
 	return normalizeAccess(level) == AccessSummary
+}
+
+// IsCityAccess reports whether the level is the places city-only view
+// (issue #142).
+func IsCityAccess(level string) bool {
+	return normalizeAccess(level) == AccessCity
+}
+
+// IsPreciseAccess reports whether the level is the places precise view
+// (coordinates included, issue #142).
+func IsPreciseAccess(level string) bool {
+	return normalizeAccess(level) == AccessPrecise
+}
+
+// PlacesLevelForResponse picks the redaction to apply for a places response.
+// City strips to locality/country/window; read keeps names without
+// coordinates; precise (and unrestricted write/full) keeps coordinates.
+// Opt-in types never inherit "default" (issue #142).
+func PlacesLevelForResponse(level string) string {
+	switch normalizeAccess(level) {
+	case AccessNone:
+		return AccessNone
+	case AccessCity:
+		return AccessCity
+	case AccessRead:
+		return AccessRead
+	case AccessPrecise, AccessWrite, AccessFull:
+		return AccessPrecise
+	default:
+		return AccessNone
+	}
 }
 
 // errNonCanonicalPath is returned for proxy paths that are not in canonical
@@ -402,6 +534,15 @@ func DataTypeForPath(path string) string {
 		strings.HasPrefix(p, "/invstmt") || strings.HasPrefix(p, "/ofx") ||
 		strings.HasPrefix(p, "/quicken"):
 		return "transactions"
+	// Location history (issue #142): OwnTracks Recorder, Dawarich, and
+	// Google Timeline proxy paths share the places permission key.
+	case p == "/me/places" || strings.HasPrefix(p, "/places") ||
+		strings.HasPrefix(p, "/visits") || strings.HasPrefix(p, "/trips") ||
+		strings.HasPrefix(p, "/locations") || strings.HasPrefix(p, "/api/v0/locations") ||
+		strings.HasPrefix(p, "/api/v0/visit") || strings.HasPrefix(p, "/api/v0/places") ||
+		strings.HasPrefix(p, "/api/v1/points") || strings.HasPrefix(p, "/api/v1/visits") ||
+		strings.HasPrefix(p, "/timeline") || strings.HasPrefix(p, "/semantic"):
+		return "places"
 	case p == "/search":
 		return "search"
 	case p == "/me/subscriptions":
