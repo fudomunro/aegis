@@ -30,7 +30,24 @@
   .brand-name {
     font-size: 1.15rem; font-weight: 650; letter-spacing: -0.02em; color: var(--text);
   }
-  .section-heading { font-size: 1.05rem; margin: 1.25rem 0 0.65rem; }
+  .section-heading { font-size: 1.05rem; margin: 1.25rem 0 0.65rem; scroll-margin-top: 0.85rem; }
+  /* Advanced table of contents (issue #150 follow-up) */
+  .toc {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.65rem 0.85rem; margin: 0 0 0.25rem;
+  }
+  .toc-label {
+    color: var(--dim); font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-right: 0.35rem; white-space: nowrap;
+  }
+  .toc a {
+    color: var(--text); text-decoration: none; font-size: 0.82rem; line-height: 1.3;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.22rem 0.7rem;
+  }
+  .toc a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .help-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
     padding: 1.1rem 1.2rem; margin-bottom: 1rem; line-height: 1.55; color: var(--dim);
@@ -498,8 +515,20 @@
     </section>
 
     <section id="panel-advanced" class="panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
-      <h2 class="section-heading" id="aperture-heading">Aperture</h2>
-      <div id="panel-aperture" role="region" aria-labelledby="aperture-heading">
+      <div class="toc" role="navigation" aria-label="Advanced sections">
+        <span class="toc-label">On this page</span>
+        <a href="#section-aperture">Aperture</a>
+        <a href="#section-library-datasets">Library datasets</a>
+        <a href="#section-mail-archive">Mail archive</a>
+        <a href="#section-takeout">Google Takeout</a>
+        <a href="#section-quicken">Quicken import</a>
+        <a href="#section-copies">Copy ledger</a>
+        <a href="#section-cache">Cache</a>
+        <a href="#section-runtime">Runtime</a>
+      </div>
+
+      <h2 class="section-heading" id="section-aperture">Aperture</h2>
+      <div id="panel-aperture" role="region" aria-labelledby="section-aperture">
       <div class="toolbar">
         <span class="meta" id="aperture-link-meta">Aperture gateway link</span>
         <div class="grow"></div>
@@ -567,12 +596,12 @@
       </div>
       </div>
 
-      <h2 class="section-heading">Library datasets</h2>
+      <h2 class="section-heading" id="section-library-datasets">Library datasets</h2>
       <div id="map-libraries" class="map-libraries"><div class="empty">Open Home to load topology details.</div></div>
 
       <div id="map-recent" class="map-recent" hidden></div>
 
-      <h2 class="section-heading">Mail archive</h2>
+      <h2 class="section-heading" id="section-mail-archive">Mail archive</h2>
       <div class="help-box">
         <h3>Local compressed mailbox</h3>
         <p>Optional SQLite + FTS mirror of your mail for agent history search. Live providers and Google Takeout stay canonical/read-only sources — Aegis only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
@@ -602,7 +631,7 @@
         </div>
       </div>
 
-      <h2 class="section-heading">Google Takeout (read-only sync)</h2>
+      <h2 class="section-heading" id="section-takeout">Google Takeout (read-only sync)</h2>
       <div class="help-box">
         <h3>Historical mail export</h3>
         <p>Point Aegis at a Google Takeout export on this machine — an <code>.mbox</code> file, a folder of mbox files, or a Takeout <code>.zip</code>. Treated as a <strong>read-only sync location</strong>: re-running skips messages already in the archive (by Message-ID) and never writes back to the export.</p>
@@ -616,7 +645,7 @@
       </div>
       <div id="takeout-result" class="meta"></div>
 
-      <h2 class="section-heading">Quicken import (read-only)</h2>
+      <h2 class="section-heading" id="section-quicken">Quicken import (read-only)</h2>
       <div class="help-box">
         <h3>Historical bank exports</h3>
         <p>Import QIF / QFX / OFX exports into the local transaction store so agents can answer money questions that span live YNAB data and older Quicken history. Line-item metadata only — statements and PDFs are never stored. Re-import skips rows already stored (by FITID).</p>
@@ -631,7 +660,7 @@
       <div id="quicken-result" class="meta"></div>
       <div id="quicken-hints" class="meta" style="margin-top:0.35rem"></div>
 
-      <h2 class="section-heading">Copy ledger</h2>
+      <h2 class="section-heading" id="section-copies">Copy ledger</h2>
       <div class="help-box">
         <h3>Where copies exist</h3>
         <p>Durable memory of known copies and freshness (issue #76). Library cards also show per-item copy badges; this panel is the full ledger. Missing rows never hide library content (fail-open).</p>
@@ -669,7 +698,7 @@
       </div>
       <div id="copies-pager" class="pager" hidden></div>
 
-      <h2 class="section-heading">Cache</h2>
+      <h2 class="section-heading" id="section-cache">Cache</h2>
       <div class="toolbar">
         <span class="meta" id="cache-summary"></span>
         <div class="grow"></div>
@@ -693,7 +722,7 @@
       </div>
       <div id="cache-pager" class="pager" hidden></div>
 
-      <h2 class="section-heading">Runtime</h2>
+      <h2 class="section-heading" id="section-runtime">Runtime</h2>
       <div id="runtime-body"><div class="empty">Loading…</div></div>
     </section>
   </div>
@@ -3363,6 +3392,11 @@ function selectTab(name, opts) {
       loadMailArchive();
       loadCopies();
       loadApertureSetup();
+    }
+    // Honor /advanced#section-… deep links after the panel is visible.
+    if (location.hash) {
+      const target = document.getElementById(location.hash.slice(1));
+      if (target) target.scrollIntoView();
     }
   }
 
