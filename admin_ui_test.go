@@ -27,8 +27,16 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="tab-advanced"`,
 		`id="panel-advanced"`,
 		// Aperture setup lives under Advanced (issue #150), not a top-level tab
-		`id="aperture-heading"`,
+		`id="section-aperture"`,
 		`id="panel-aperture"`,
+		// TOC jumps across Advanced's mixed sections
+		`class="toc"`,
+		"On this page",
+		`href="#section-library-datasets"`,
+		`href="#section-mail-archive"`,
+		`href="#section-copies"`,
+		`id="section-cache"`,
+		`id="section-runtime"`,
 		`id="aperture-open"`,
 		`id="aperture-config-snippet"`,
 		`id="aperture-health-summary"`,
