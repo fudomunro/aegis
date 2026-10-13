@@ -30,7 +30,24 @@
   .brand-name {
     font-size: 1.15rem; font-weight: 650; letter-spacing: -0.02em; color: var(--text);
   }
-  .section-heading { font-size: 1.05rem; margin: 1.25rem 0 0.65rem; }
+  .section-heading { font-size: 1.05rem; margin: 1.25rem 0 0.65rem; scroll-margin-top: 0.85rem; }
+  /* Advanced table of contents (issue #150 follow-up) */
+  .toc {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.5rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.65rem 0.85rem; margin: 0 0 0.25rem;
+  }
+  .toc-label {
+    color: var(--dim); font-size: 0.72rem; text-transform: uppercase;
+    letter-spacing: 0.05em; margin-right: 0.35rem; white-space: nowrap;
+  }
+  .toc a {
+    color: var(--text); text-decoration: none; font-size: 0.82rem; line-height: 1.3;
+    background: var(--surface2); border: 1px solid var(--border); border-radius: 999px;
+    padding: 0.22rem 0.7rem;
+  }
+  .toc a:hover { border-color: var(--accent); color: var(--accent); text-decoration: none; }
+  .toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   .help-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
     padding: 1.1rem 1.2rem; margin-bottom: 1rem; line-height: 1.55; color: var(--dim);
@@ -318,14 +335,13 @@
       <span class="brand-name">Aegis</span>
     </header>
     <nav role="tablist" aria-label="Admin sections">
-      <button class="tab" role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
+      <button class="tab" role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true">Home</button>
       <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="false">Services</button>
       <button class="tab" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false">Library</button>
       <button class="tab" role="tab" id="tab-advanced" aria-controls="panel-advanced" aria-selected="false">Advanced</button>
-      <button class="tab" role="tab" id="tab-aperture" aria-controls="panel-aperture" aria-selected="false">Aperture</button>
     </nav>
 
-    <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
+    <section id="panel-home" class="panel" role="tabpanel" aria-labelledby="tab-home">
       <div class="toolbar">
         <span class="meta" id="map-meta">How agents, Aegis, and your services connect</span>
         <div class="grow"></div>
@@ -499,137 +515,20 @@
     </section>
 
     <section id="panel-advanced" class="panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
-      <h2 class="section-heading">Library datasets</h2>
-      <div id="map-libraries" class="map-libraries"><div class="empty">Open Map to load topology details.</div></div>
-
-      <div id="map-recent" class="map-recent" hidden></div>
-
-      <h2 class="section-heading">Mail archive</h2>
-      <div class="help-box">
-        <h3>Local compressed mailbox</h3>
-        <p>Optional SQLite + FTS mirror of your mail for agent history search. Live providers and Google Takeout stay canonical/read-only sources — Aegis only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
-      </div>
-      <div class="toolbar">
-        <span class="meta" id="mail-archive-summary">Loading…</span>
-        <div class="grow"></div>
-        <button class="btn" id="reload-mail-archive" type="button">Refresh</button>
-        <button class="btn btn-primary" id="sync-mail-archive" type="button">Sync mail</button>
-        <button class="btn" id="sync-mail-archive-restart" type="button">Restart sync</button>
-      </div>
-      <div id="mail-archive-status" class="meta" style="margin-bottom:0.75rem"></div>
-      <div id="mail-archive-result"></div>
-      <div class="card" style="padding:0; overflow:hidden">
-        <div style="overflow-x:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Service</th>
-                <th>Messages</th>
-                <th>Page cursor</th>
-                <th>Done</th>
-              </tr>
-            </thead>
-            <tbody id="mail-archive-body"><tr><td colspan="4" class="muted-num">Loading…</td></tr></tbody>
-          </table>
-        </div>
+      <div class="toc" role="navigation" aria-label="Advanced sections">
+        <span class="toc-label">On this page</span>
+        <a href="#section-aperture">Aperture</a>
+        <a href="#section-library-datasets">Library datasets</a>
+        <a href="#section-mail-archive">Mail archive</a>
+        <a href="#section-takeout">Google Takeout</a>
+        <a href="#section-quicken">Quicken import</a>
+        <a href="#section-copies">Copy ledger</a>
+        <a href="#section-cache">Cache</a>
+        <a href="#section-runtime">Runtime</a>
       </div>
 
-      <h2 class="section-heading">Google Takeout (read-only sync)</h2>
-      <div class="help-box">
-        <h3>Historical mail export</h3>
-        <p>Point Aegis at a Google Takeout export on this machine — an <code>.mbox</code> file, a folder of mbox files, or a Takeout <code>.zip</code>. Treated as a <strong>read-only sync location</strong>: re-running skips messages already in the archive (by Message-ID) and never writes back to the export.</p>
-      </div>
-      <div class="toolbar">
-        <div class="grow">
-          <input type="text" id="takeout-path" placeholder="/path/to/Takeout or mail export (.mbox / .zip / directory)" aria-label="Takeout export path" style="width:100%">
-        </div>
-        <button class="btn" id="save-takeout-path" type="button">Save path</button>
-        <button class="btn btn-primary" id="sync-takeout" type="button">Sync Takeout</button>
-      </div>
-      <div id="takeout-result" class="meta"></div>
-
-      <h2 class="section-heading">Quicken import (read-only)</h2>
-      <div class="help-box">
-        <h3>Historical bank exports</h3>
-        <p>Import QIF / QFX / OFX exports into the local transaction store so agents can answer money questions that span live YNAB data and older Quicken history. Line-item metadata only — statements and PDFs are never stored. Re-import skips rows already stored (by FITID).</p>
-      </div>
-      <div class="toolbar">
-        <div class="grow">
-          <input type="text" id="quicken-path" placeholder="/path/to/export.qif or a folder of .qif/.qfx/.ofx" aria-label="Quicken export path" style="width:100%">
-        </div>
-        <button class="btn btn-primary" id="quicken-import" type="button">Import</button>
-        <button class="btn" id="quicken-refresh" type="button">Refresh</button>
-      </div>
-      <div id="quicken-result" class="meta"></div>
-      <div id="quicken-hints" class="meta" style="margin-top:0.35rem"></div>
-
-      <h2 class="section-heading">Copy ledger</h2>
-      <div class="help-box">
-        <h3>Where copies exist</h3>
-        <p>Durable memory of known copies and freshness (issue #76). Library cards also show per-item copy badges; this panel is the full ledger. Missing rows never hide library content (fail-open).</p>
-      </div>
-      <div class="toolbar">
-        <div class="copy-filter kind-switch" role="group" aria-label="Copy ledger status filter" id="copies-panel-filter">
-          <button type="button" class="kind-btn" data-copies-status="" aria-pressed="true">All</button>
-          <button type="button" class="kind-btn" data-copies-status="in_sync" aria-pressed="false">In sync</button>
-          <button type="button" class="kind-btn" data-copies-status="stale" aria-pressed="false">Stale</button>
-          <button type="button" class="kind-btn" data-copies-status="missing" aria-pressed="false">Missing</button>
-          <button type="button" class="kind-btn" data-copies-status="unknown" aria-pressed="false">Unchecked</button>
-        </div>
-        <div class="grow"></div>
-        <button class="btn" id="reload-copies" type="button">Refresh</button>
-      </div>
-      <div id="copies-summary" class="meta" style="margin-bottom:0.75rem"></div>
-      <div class="card" style="padding:0; overflow:hidden">
-        <div style="overflow-x:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Kind</th>
-                <th>Entity</th>
-                <th>Service</th>
-                <th>Role</th>
-                <th>Sync</th>
-                <th>Status</th>
-                <th>As of</th>
-                <th>Checked</th>
-              </tr>
-            </thead>
-            <tbody id="copies-body"><tr><td colspan="8" class="muted-num">Loading…</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <div id="copies-pager" class="pager" hidden></div>
-
-      <h2 class="section-heading">Cache</h2>
-      <div class="toolbar">
-        <span class="meta" id="cache-summary"></span>
-        <div class="grow"></div>
-        <button class="btn" id="reload-cache" type="button">Refresh</button>
-        <button class="btn btn-danger" id="clear-cache" type="button">Clear cache</button>
-      </div>
-      <div class="card" style="padding:0; overflow:hidden">
-        <div style="overflow-x:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>Key</th>
-                <th>Size</th>
-                <th>Expires</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="cache-body"><tr><td colspan="4" class="muted-num">Loading…</td></tr></tbody>
-          </table>
-        </div>
-      </div>
-      <div id="cache-pager" class="pager" hidden></div>
-
-      <h2 class="section-heading">Runtime</h2>
-      <div id="runtime-body"><div class="empty">Loading…</div></div>
-    </section>
-
-    <section id="panel-aperture" class="panel" role="tabpanel" aria-labelledby="tab-aperture" hidden>
+      <h2 class="section-heading" id="section-aperture">Aperture</h2>
+      <div id="panel-aperture" role="region" aria-labelledby="section-aperture">
       <div class="toolbar">
         <span class="meta" id="aperture-link-meta">Aperture gateway link</span>
         <div class="grow"></div>
@@ -695,6 +594,136 @@
           </table>
         </div>
       </div>
+      </div>
+
+      <h2 class="section-heading" id="section-library-datasets">Library datasets</h2>
+      <div id="map-libraries" class="map-libraries"><div class="empty">Open Home to load topology details.</div></div>
+
+      <div id="map-recent" class="map-recent" hidden></div>
+
+      <h2 class="section-heading" id="section-mail-archive">Mail archive</h2>
+      <div class="help-box">
+        <h3>Local compressed mailbox</h3>
+        <p>Optional SQLite + FTS mirror of your mail for agent history search. Live providers and Google Takeout stay canonical/read-only sources — Aegis only stores a compressed local copy. Sync pulls a bounded batch and resumes where it left off; keep clicking until complete.</p>
+      </div>
+      <div class="toolbar">
+        <span class="meta" id="mail-archive-summary">Loading…</span>
+        <div class="grow"></div>
+        <button class="btn" id="reload-mail-archive" type="button">Refresh</button>
+        <button class="btn btn-primary" id="sync-mail-archive" type="button">Sync mail</button>
+        <button class="btn" id="sync-mail-archive-restart" type="button">Restart sync</button>
+      </div>
+      <div id="mail-archive-status" class="meta" style="margin-bottom:0.75rem"></div>
+      <div id="mail-archive-result"></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Messages</th>
+                <th>Page cursor</th>
+                <th>Done</th>
+              </tr>
+            </thead>
+            <tbody id="mail-archive-body"><tr><td colspan="4" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <h2 class="section-heading" id="section-takeout">Google Takeout (read-only sync)</h2>
+      <div class="help-box">
+        <h3>Historical mail export</h3>
+        <p>Point Aegis at a Google Takeout export on this machine — an <code>.mbox</code> file, a folder of mbox files, or a Takeout <code>.zip</code>. Treated as a <strong>read-only sync location</strong>: re-running skips messages already in the archive (by Message-ID) and never writes back to the export.</p>
+      </div>
+      <div class="toolbar">
+        <div class="grow">
+          <input type="text" id="takeout-path" placeholder="/path/to/Takeout or mail export (.mbox / .zip / directory)" aria-label="Takeout export path" style="width:100%">
+        </div>
+        <button class="btn" id="save-takeout-path" type="button">Save path</button>
+        <button class="btn btn-primary" id="sync-takeout" type="button">Sync Takeout</button>
+      </div>
+      <div id="takeout-result" class="meta"></div>
+
+      <h2 class="section-heading" id="section-quicken">Quicken import (read-only)</h2>
+      <div class="help-box">
+        <h3>Historical bank exports</h3>
+        <p>Import QIF / QFX / OFX exports into the local transaction store so agents can answer money questions that span live YNAB data and older Quicken history. Line-item metadata only — statements and PDFs are never stored. Re-import skips rows already stored (by FITID).</p>
+      </div>
+      <div class="toolbar">
+        <div class="grow">
+          <input type="text" id="quicken-path" placeholder="/path/to/export.qif or a folder of .qif/.qfx/.ofx" aria-label="Quicken export path" style="width:100%">
+        </div>
+        <button class="btn btn-primary" id="quicken-import" type="button">Import</button>
+        <button class="btn" id="quicken-refresh" type="button">Refresh</button>
+      </div>
+      <div id="quicken-result" class="meta"></div>
+      <div id="quicken-hints" class="meta" style="margin-top:0.35rem"></div>
+
+      <h2 class="section-heading" id="section-copies">Copy ledger</h2>
+      <div class="help-box">
+        <h3>Where copies exist</h3>
+        <p>Durable memory of known copies and freshness (issue #76). Library cards also show per-item copy badges; this panel is the full ledger. Missing rows never hide library content (fail-open).</p>
+      </div>
+      <div class="toolbar">
+        <div class="copy-filter kind-switch" role="group" aria-label="Copy ledger status filter" id="copies-panel-filter">
+          <button type="button" class="kind-btn" data-copies-status="" aria-pressed="true">All</button>
+          <button type="button" class="kind-btn" data-copies-status="in_sync" aria-pressed="false">In sync</button>
+          <button type="button" class="kind-btn" data-copies-status="stale" aria-pressed="false">Stale</button>
+          <button type="button" class="kind-btn" data-copies-status="missing" aria-pressed="false">Missing</button>
+          <button type="button" class="kind-btn" data-copies-status="unknown" aria-pressed="false">Unchecked</button>
+        </div>
+        <div class="grow"></div>
+        <button class="btn" id="reload-copies" type="button">Refresh</button>
+      </div>
+      <div id="copies-summary" class="meta" style="margin-bottom:0.75rem"></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Entity</th>
+                <th>Service</th>
+                <th>Role</th>
+                <th>Sync</th>
+                <th>Status</th>
+                <th>As of</th>
+                <th>Checked</th>
+              </tr>
+            </thead>
+            <tbody id="copies-body"><tr><td colspan="8" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="copies-pager" class="pager" hidden></div>
+
+      <h2 class="section-heading" id="section-cache">Cache</h2>
+      <div class="toolbar">
+        <span class="meta" id="cache-summary"></span>
+        <div class="grow"></div>
+        <button class="btn" id="reload-cache" type="button">Refresh</button>
+        <button class="btn btn-danger" id="clear-cache" type="button">Clear cache</button>
+      </div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Key</th>
+                <th>Size</th>
+                <th>Expires</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="cache-body"><tr><td colspan="4" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <div id="cache-pager" class="pager" hidden></div>
+
+      <h2 class="section-heading" id="section-runtime">Runtime</h2>
+      <div id="runtime-body"><div class="empty">Loading…</div></div>
     </section>
   </div>
 
@@ -1022,6 +1051,8 @@ job.read</pre>
     photos: "M2.5 3.5h11v9h-11zM2.5 10l3-3 2.5 2.5L10 7l3.5 3.5M5.5 6.2a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z",
     events: "M3.5 3h9v10.5h-9zM3.5 6h9M6.5 2v2M9.5 2v2M6.5 9.5h3",
     messages: "M2.5 3.5h11v9h-11zM2.5 4 8 8.5 13.5 4",
+    transactions: "M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14V2Zm2 3.5h4M6 8h4M6 10.5h2.5",
+    places: "M8 13.8c2.9-3.4 4.3-5.5 4.3-7.3a4.3 4.3 0 1 0-8.6 0c0 1.8 1.4 3.9 4.3 7.3ZM8 7.8a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z",
     proxy: "M3 5h7.5M8.5 2.5 11 5 8.5 7.5M13 11H5.5M7.5 8.5 5 11l2.5 2.5",
   };
 
@@ -3157,7 +3188,7 @@ job.read</pre>
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -3171,7 +3202,13 @@ job.read</pre>
       renderRuntime(summary);
       renderApertureLinks();
       renderApertureSnippet();
-      loadFlow();
+      // Friendly durable paths (issue #150): open the section encoded in the
+      // URL so refresh stays put, and canonicalize legacy /v1/admin.
+      const tab = tabFromPath(location.pathname);
+      const path = pathForTab(tab);
+      const current = location.pathname.replace(/\/+$/, "") || "/";
+      if (current !== path) history.replaceState({ tab: tab }, "", path);
+      selectTab(tab, { push: false });
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -3181,7 +3218,28 @@ job.read</pre>
     }
   }
 
-  const FLOW_TABS = ["map", "services", "library", "advanced", "aperture"];
+  const FLOW_TABS = ["home", "services", "library", "advanced"];
+  // Issue #150: simple, durable SPA paths. Server serves the admin shell for
+  // these routes so a refresh keeps the same section.
+  const TAB_ROUTES = {
+    home: "/",
+    library: "/library",
+    services: "/services",
+    advanced: "/advanced"
+  };
+
+  function tabFromPath(pathname) {
+    const p = (pathname || "/").replace(/\/+$/, "") || "/";
+    if (p === "/library") return "library";
+    if (p === "/services") return "services";
+    if (p === "/advanced") return "advanced";
+    // "/", "/home", and legacy "/v1/admin" all land on Home.
+    return "home";
+  }
+
+  function pathForTab(name) {
+    return TAB_ROUTES[name] || "/";
+  }
 
   function apertureBase() {
     const fromSummary = summary && summary.runtime && summary.runtime.aperture_url;
@@ -3314,7 +3372,9 @@ job.read</pre>
 
   $("reload-aperture").addEventListener("click", () => loadApertureSetup());
 
-function selectTab(name) {
+function selectTab(name, opts) {
+    if (!TAB_ROUTES[name]) name = "home";
+    const push = !opts || opts.push !== false;
     FLOW_TABS.forEach((id) => {
       const tab = $("tab-" + id);
       const panel = $("panel-" + id);
@@ -3322,17 +3382,29 @@ function selectTab(name) {
       tab.setAttribute("aria-selected", on ? "true" : "false");
       panel.hidden = !on;
     });
-    if (name === "map") loadFlow();
+    if (push) {
+      const path = pathForTab(name);
+      const current = location.pathname.replace(/\/+$/, "") || "/";
+      if (current !== path) history.pushState({ tab: name }, "", path);
+    }
+    if (name === "home") loadFlow();
     if (name === "library") loadAllLibraryKinds();
     if (name === "advanced") {
       loadCache();
       loadMailArchive();
       loadCopies();
-    }
-    if (name === "aperture") {
       loadApertureSetup();
     }
+    // Honor /advanced#section-… deep links after the panel is visible.
+    if (location.hash) {
+      const target = document.getElementById(location.hash.slice(1));
+      if (target) target.scrollIntoView();
+    }
   }
+
+  window.addEventListener("popstate", () => {
+    selectTab(tabFromPath(location.pathname), { push: false });
+  });
 
   FLOW_TABS.forEach((id) => {
     $("tab-" + id).addEventListener("click", () => selectTab(id));
