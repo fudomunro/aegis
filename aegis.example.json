@@ -177,6 +177,33 @@
         "default": "read",
         "messages": "read"
       }
+    },
+    {
+      "id": "ynab",
+      "name": "YNAB",
+      "aliases": ["ynab", "you need a budget", "budget"],
+      "action": "inject",
+      "endpoint": "https://api.ynab.com/v1",
+      "headers": {
+        "Authorization": "Bearer $ENV:YNAB_PERSONAL_ACCESS_TOKEN"
+      },
+      "cache_ttl": "5m",
+      "description": "Live YNAB budget transactions for /v1/library/transactions. Prefer a Personal Access Token in headers (Aegis owns the secret). Amounts map from milliunits to signed decimal strings.",
+      "permissions": {
+        "default": "read",
+        "transactions": "read"
+      }
+    },
+    {
+      "id": "quicken",
+      "name": "Quicken",
+      "aliases": ["quicken", "qif", "qfx", "ofx", "bank export"],
+      "action": "inject",
+      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only — statements/PDFs are never stored.",
+      "permissions": {
+        "default": "read",
+        "transactions": "read"
+      }
     }
   ]
 }

@@ -49,6 +49,7 @@ type AdminService struct {
 	HasPhoto      bool         `json:"has_photo_provider"`
 	HasEvent      bool         `json:"has_event_provider"`
 	HasMessage    bool         `json:"has_message_provider"`
+	HasTransaction bool        `json:"has_transaction_provider"`
 	// SupportsPhotoPicker is true when the connector exposes a picker session
 	// create operation (e.g. Google Photos Picker API).
 	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`
@@ -146,6 +147,11 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 	snapshots := s.config.ServiceSnapshots()
 	services := make([]AdminService, 0, len(snapshots))
 	for _, svc := range snapshots {
+		// Quicken is a file-based import (Advanced tab), not a configured
+		// OAuth/static service — keep it off the services list (issue #141).
+		if svc.ID == quickenServiceID {
+			continue
+		}
 		item := AdminService{
 			ID:           svc.ID,
 			Name:         svc.Name,
@@ -196,6 +202,9 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			}
 			if _, isProvider := connector.(MessageProvider); isProvider {
 				item.HasMessage = true
+			}
+			if _, isProvider := connector.(TransactionProvider); isProvider {
+				item.HasTransaction = true
 			}
 			caps := connector.Capabilities()
 			types := make([]string, 0, len(caps.DataTypes))
