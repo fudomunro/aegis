@@ -546,3 +546,109 @@ const (
 	LibraryStatusError        = "error"
 	LibraryStatusSkipped      = "skipped"
 )
+
+// TransactionAccount is a neutral account reference. Never include full
+// account or card numbers — only display name, coarse type, and last 4
+// digits when a provider supplies them (issue #141).
+type TransactionAccount struct {
+	Name  string `json:"name,omitempty"`
+	Type  string `json:"type,omitempty"`
+	Last4 string `json:"last4,omitempty"`
+}
+
+// Transaction is a user-facing financial transaction (issue #141).
+// Amount is a signed decimal string (negative = outflow) so agents never do
+// float money math on JSON numbers. Service identity lives in Sources.
+// Aegis does not store statements or payment instruments — only line-item
+// metadata needed for agent reasoning.
+type Transaction struct {
+	// PostedAt is the settled date/time in RFC3339 (or date-only when the
+	// provider only knows a calendar day).
+	PostedAt string `json:"posted_at,omitempty"`
+	// AuthorizedAt is the authorization date when known (pending charges).
+	AuthorizedAt string `json:"authorized_at,omitempty"`
+	// Amount is a signed decimal string, e.g. "-45.67". Negative is outflow.
+	Amount string `json:"amount"`
+	// Currency is the ISO 4217 code when known (USD, EUR, …).
+	Currency string `json:"currency,omitempty"`
+	// Description is the raw payee/description line from the provider.
+	Description string `json:"description,omitempty"`
+	// Merchant is a normalized merchant name when the provider supplies one.
+	Merchant string `json:"merchant,omitempty"`
+	// Category lists provider categories (YNAB category, Quicken L field).
+	// Multi-valued so a YNAB split can name every category without splitting
+	// the amount — the full line-item total stays on the transaction and
+	// agents dig into YNAB for per-category amounts. No Aegis taxonomy.
+	Category []string `json:"category,omitempty"`
+	// Memo is a free-form note attached to the line item.
+	Memo string `json:"memo,omitempty"`
+	// Account is a coarse account reference (name/type/last4 only).
+	Account *TransactionAccount `json:"account,omitempty"`
+	// Status is "pending" or "posted".
+	Status string `json:"status,omitempty"`
+	// EntityID is a durable cross-service id when a provider supplies one
+	// (YNAB import_id, Quicken FITID). Preferred over amount/date matching.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records cross-service identity: "provider_id" or "amount_date_merchant".
+	// Empty on single-source items.
+	Match string `json:"match,omitempty"`
+	// Sources lists service-local copies of this transaction.
+	Sources []TransactionSource `json:"sources,omitempty"`
+	// Extra holds other service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// TransactionSource is a service-specific location of a transaction.
+type TransactionSource struct {
+	// Service is the connector ID: "ynab", "quicken", …
+	Service string `json:"service"`
+	// ServiceName is the human-readable label: "YNAB", "Quicken".
+	ServiceName string `json:"service_name,omitempty"`
+	// ID is the service-local transaction ID.
+	ID string `json:"id,omitempty"`
+	// URL is a deep link when available.
+	URL string `json:"url,omitempty"`
+	// AccountID is the service-local account id (not a card/account number).
+	AccountID string `json:"account_id,omitempty"`
+	// Canonical is true when this service is the authoritative location
+	// (issue #16). Set by connectors or config canonical_for.
+	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when tracked (issue #76).
+	Copy *CopyInfo `json:"copy,omitempty"`
+	// Extra holds additional service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// TransactionSummary is the reduced money view for AccessSummary consumers
+// (issue #141): totals only, no line items, no account identifiers.
+type TransactionSummary struct {
+	// Count is the number of underlying line items rolled into the totals.
+	Count int `json:"count,omitempty"`
+	// Currency is the ISO code used for the money totals when uniform.
+	Currency string `json:"currency,omitempty"`
+	// TotalAmount is the signed net amount across filtered items.
+	TotalAmount string `json:"total_amount,omitempty"`
+	// ByCategory maps provider category → signed total amount.
+	ByCategory map[string]string `json:"by_category,omitempty"`
+	// ByMonth maps YYYY-MM → signed total amount.
+	ByMonth map[string]string `json:"by_month,omitempty"`
+}
+
+// TransactionList is the neutral response for listing transactions — either
+// for a single service or aggregated across transaction-capable services.
+type TransactionList struct {
+	Transactions []Transaction `json:"transactions"`
+	// Total is the number of transactions in this response (line items).
+	Total int `json:"total"`
+	// Summary is set when the request is summary-only (issue #141) or when
+	// callers ask for rollups alongside line items.
+	Summary *TransactionSummary `json:"summary,omitempty"`
+	// Synced is true when the library merged transactions that shared an
+	// identity key into multi-source entries.
+	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream.
+	Truncated bool `json:"truncated,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}

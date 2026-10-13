@@ -28,14 +28,15 @@ type SampleMailSet struct {
 // SampleLibrarySet holds neutral library fixtures covering every kind plus
 // deliberate merge pairs (ISRC tracks, contact identity chains, Message-IDs).
 type SampleLibrarySet struct {
-	Playlists []Playlist      `json:"playlists"`
-	Tracks    []Track         `json:"tracks"`
-	Albums    []Album         `json:"albums"`
-	Artists   []Artist        `json:"artists"`
-	Contacts  []Contact       `json:"contacts"`
-	Photos    []Photo         `json:"photos"`
-	Events    []CalendarEvent `json:"events"`
-	Messages  []Message       `json:"messages"`
+	Playlists    []Playlist      `json:"playlists"`
+	Tracks       []Track         `json:"tracks"`
+	Albums       []Album         `json:"albums"`
+	Artists      []Artist        `json:"artists"`
+	Contacts     []Contact       `json:"contacts"`
+	Photos       []Photo         `json:"photos"`
+	Events       []CalendarEvent `json:"events"`
+	Messages     []Message       `json:"messages"`
+	Transactions []Transaction   `json:"transactions"`
 }
 
 // SampleMailCount is the default small-set size used by CI-shaped runs and the
@@ -594,15 +595,141 @@ func GenerateSampleLibrary() SampleLibrarySet {
 		},
 	}
 
+	// --- Transactions: cross-provider duplicates (issue #141) ---
+	// 1) Shared durable import_id via YNAB + Quicken FITID.
+	// 2) Name/amount/date pair within ±1 day (merchant variants).
+	// 3) Near-miss that must NOT merge (same merchant, different amount).
+	transactions := []Transaction{
+		{
+			PostedAt:    "2024-03-05",
+			Amount:      "-45.67",
+			Currency:    "USD",
+			Description: "AMAZON.COM",
+			Merchant:    "Amazon",
+			Category:    []string{"Shopping"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "AQB-20240305-0001",
+			Account:     &TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
+			Sources: []TransactionSource{
+				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-1", AccountID: "acct-1", Canonical: true,
+					Extra: map[string]any{"import_id": "AQB-20240305-0001"}},
+			},
+		},
+		{
+			PostedAt:    "2024-03-05",
+			Amount:      "-45.67",
+			Currency:    "USD",
+			Description: "Amazon.com",
+			Merchant:    "Amazon.com",
+			Category:    []string{"Shopping:Online"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "AQB-20240305-0001",
+			Account:     &TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
+			Sources: []TransactionSource{
+				{Service: quickenServiceID, ServiceName: quickenServiceName, ID: "AQB-20240305-0001",
+					Extra: map[string]any{"fitid": "AQB-20240305-0001"}},
+			},
+		},
+		{
+			PostedAt:    "2024-03-06",
+			Amount:      "-12.00",
+			Currency:    "USD",
+			Description: "BLUE BOTTLE",
+			Merchant:    "Blue Bottle Coffee",
+			Category:    []string{"Coffee"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "ynab-tx-coffee",
+			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []TransactionSource{
+				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-coffee", AccountID: "acct-2", Canonical: true},
+			},
+		},
+		{
+			// Same coffee charge, posted day after (bank lag), merchant spelling differs.
+			PostedAt:    "2024-03-07",
+			Amount:      "-12.00",
+			Currency:    "USD",
+			Description: "BLUE BOTTLE COFFEE",
+			Merchant:    "Blue Bottle Coffee",
+			Category:    []string{"Dining"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "qif-coffee",
+			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []TransactionSource{
+				{Service: quickenServiceID, ServiceName: quickenServiceName, ID: "qif-coffee",
+					Extra: map[string]any{"fitid": "qif-coffee"}},
+			},
+		},
+		{
+			// Near-miss: same merchant, different amount — must stay distinct.
+			PostedAt:    "2024-03-06",
+			Amount:      "-24.00",
+			Currency:    "USD",
+			Description: "BLUE BOTTLE",
+			Merchant:    "Blue Bottle Coffee",
+			Category:    []string{"Coffee"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "ynab-tx-coffee-2",
+			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []TransactionSource{
+				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-coffee-2", AccountID: "acct-2", Canonical: true},
+			},
+		},
+		{
+			PostedAt:    "2024-03-01",
+			Amount:      "3200.00",
+			Currency:    "USD",
+			Description: "ACME PAYROLL",
+			Merchant:    "Acme Corp",
+			Category:    []string{"Income"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "ynab-tx-payroll",
+			Account:     &TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
+			Sources: []TransactionSource{
+				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-payroll", AccountID: "acct-1", Canonical: true},
+			},
+		},
+		{
+			PostedAt:    "2024-03-10",
+			Amount:      "-89.99",
+			Currency:    "USD",
+			Description: "STREAMING SERVICE",
+			Merchant:    "StreamCo",
+			Category:    []string{"Subscriptions"},
+			Status:      TransactionStatusPending,
+			EntityID:    "ynab-tx-stream",
+			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []TransactionSource{
+				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-stream", AccountID: "acct-2", Canonical: true},
+			},
+		},
+		// YNAB-style split: categories without amounts (issue #141 follow-up).
+		{
+			PostedAt:    "2024-03-12",
+			Amount:      "-200.00",
+			Currency:    "USD",
+			Description: "COSTCO",
+			Merchant:    "Costco",
+			Category:    []string{"Groceries", "Household Goods"},
+			Status:      TransactionStatusPosted,
+			EntityID:    "ynab-tx-split",
+			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []TransactionSource{
+				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-split", AccountID: "acct-2", Canonical: true},
+			},
+		},
+	}
+
 	return SampleLibrarySet{
-		Playlists: playlists,
-		Tracks:    tracks,
-		Albums:    albums,
-		Artists:   artists,
-		Contacts:  contacts,
-		Photos:    photos,
-		Events:    events,
-		Messages:  messages,
+		Playlists:    playlists,
+		Tracks:       tracks,
+		Albums:       albums,
+		Artists:      artists,
+		Contacts:     contacts,
+		Photos:       photos,
+		Events:       events,
+		Messages:     messages,
+		Transactions: transactions,
 	}
 }
 

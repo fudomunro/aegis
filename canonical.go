@@ -419,3 +419,22 @@ func (s *Server) writePolicyNotices(matched []Service) []string {
 	}
 	return out
 }
+
+func markTransactionSourcesCanonical(items []Transaction, serviceID string) {
+	for i := range items {
+		for j := range items[i].Sources {
+			if items[i].Sources[j].Service == serviceID {
+				items[i].Sources[j].Canonical = true
+			}
+		}
+	}
+}
+
+// stampTransactionCanonical marks sources when serviceID is config-declared
+// canonical for transactions (issue #141).
+func (s *Server) stampTransactionCanonical(items []Transaction, serviceID string) {
+	svc := s.config.GetService(serviceID)
+	if svc != nil && svc.IsCanonicalFor("transactions") {
+		markTransactionSourcesCanonical(items, serviceID)
+	}
+}
