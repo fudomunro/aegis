@@ -122,10 +122,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Prefer the PR head SHA so the walkthrough stamp can name a real commit
-      # from the branch (the default merge ref is a synthetic SHA).
+      # from the branch (the default merge ref is a synthetic SHA). Full history
+      # is required so the stamp can be tested as an ancestor of HEAD.
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
 
       - name: Check docs/index.html is current
         run: python3 docs/generate_walkthrough.py --check
