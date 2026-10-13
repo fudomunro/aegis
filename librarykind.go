@@ -255,6 +255,42 @@ var libraryKinds = []LibraryKind{
 		HasProviders: func(s *Server) bool { return s.hasProvider[TransactionProvider]() },
 		Readable:     func(s *Server) bool { return s.libraryReadableFor("transactions") },
 	},
+	{
+		ID:              "places",
+		Path:            "/v1/library/places",
+		PermType:        "places",
+		Label:           "places",
+		Usage:           "where I was, location history, visits, trips, places I've been, travel chronology, time at a place, or residence/absence timelines",
+		Summary:         "visits and trips from every connected source in one neutral list (start_at, end_at, place{name,address,locality,country,lat,lng}, kind=visit|trip, mode for trips, confidence, sources[]). Models visit windows — not raw GPS streams. Coordinates require the precise permission.",
+		SyncRule:        "Visits merge on durable provider_id when present; otherwise same start/end window + normalized place (match=window_place). Photos can be joined to visits by taken_at inside the window.",
+		ExampleQuestion: "where was I last summer?",
+		Keywords: []string{
+			"where was i", "where was i?", "where have i been",
+			"where did i go", "where did we go", "where were we",
+			"location history", "my locations", "places i've been",
+			"places i have been", "visit", "visits", "trip", "trips",
+			"travel history", "travel chronology", "my travel",
+			"was i out of town", "out of town", "was i away",
+			"when was i in", "when did i visit", "when did we visit",
+			"how long was i in", "how long did we stay",
+			"timeline", "google timeline", "maps timeline",
+			"owntracks", "dawarich", "significant locations",
+			"residence", "absence timeline", "when was i home",
+			"which beach was that", "where was that photo taken",
+		},
+		EmptyMsg: "no places-capable services configured (enable places permissions and connect OwnTracks or import a Google Timeline export)",
+		DenyMsg:  "permission denied: agent access to places is not allowed (places defaults to none — enable city, read, or precise in service permissions)",
+		FailMsg:  "failed to fetch places",
+		HasProviders: func(s *Server) bool {
+			if s.hasProvider[PlaceVisitProvider]() {
+				return true
+			}
+			// Local Timeline import is a collection source even without a
+			// live connector (issue #142).
+			return s.timeline != nil && s.timeline.Enabled()
+		},
+		Readable: func(s *Server) bool { return s.libraryReadableFor("places") },
+	},
 }
 
 // LibraryKindByID returns the registered kind, or nil.
@@ -386,6 +422,7 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/freebusy":  s.HandleLibraryFreeBusy,
 		"/v1/library/messages":  s.HandleLibraryMessages,
 		"/v1/library/transactions": s.HandleLibraryTransactions,
+		"/v1/library/places":    s.HandleLibraryPlaceVisits,
 		"/v1/library/copies":    s.HandleLibraryCopies,
 		"/v1/library/review":    s.HandleMergeReview,
 		"/v1/library/links":     s.HandleEntityLinks,

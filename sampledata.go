@@ -37,6 +37,7 @@ type SampleLibrarySet struct {
 	Events       []CalendarEvent `json:"events"`
 	Messages     []Message       `json:"messages"`
 	Transactions []Transaction   `json:"transactions"`
+	Places       []PlaceVisit    `json:"places"`
 }
 
 // SampleMailCount is the default small-set size used by CI-shaped runs and the
@@ -563,6 +564,30 @@ func GenerateSampleLibrary() SampleLibrarySet {
 				{Service: "immich", ServiceName: "Immich", ID: "im-1", Canonical: true, BlobURL: "https://immich.example.invalid/api/assets/im-1"},
 			},
 		},
+		{
+			// Captured during the Lunenburg weekend visit (places join demo).
+			TakenAt:  "2023-07-05T15:10:00Z",
+			Width:    4032,
+			Height:   3024,
+			MimeType: "image/jpeg",
+			Filename: "IMG_0002.jpg",
+			Caption:  "Beach at low tide",
+			Sources: []PhotoSource{
+				{Service: "google-photos", ServiceName: "Google Photos", ID: "gp-2", Canonical: true, BlobURL: "https://photos.example.invalid/b/gp-2"},
+			},
+		},
+		{
+			// Outside any visit window — must not join to a place.
+			TakenAt:  "2024-03-11T12:00:00Z",
+			Width:    1920,
+			Height:   1080,
+			MimeType: "image/jpeg",
+			Filename: "IMG_0003.jpg",
+			Caption:  "Office whiteboard",
+			Sources: []PhotoSource{
+				{Service: "google-photos", ServiceName: "Google Photos", ID: "gp-3", Canonical: true, BlobURL: "https://photos.example.invalid/b/gp-3"},
+			},
+		},
 	}
 
 	events := []CalendarEvent{
@@ -720,6 +745,96 @@ func GenerateSampleLibrary() SampleLibrarySet {
 		},
 	}
 
+	// --- Places: visits + trips with a photos join demo (issue #142) ---
+	// Two providers report the same Lunenburg weekend (merge on window+place).
+	// A harbor evening visit overlaps the fireworks photo; the office is a
+	// near-miss (different window) that must not merge.
+	places := []PlaceVisit{
+		{
+			StartAt:    "2023-07-04T16:00:00Z",
+			EndAt:      "2023-07-04T21:00:00Z",
+			Kind:       PlaceKindVisit,
+			Confidence: "high",
+			EntityID:   "tl-harbor-20230704",
+			Place: Place{
+				Name:     "Halifax Harbour",
+				Address:  "123 Harbour Way, Halifax, Nova Scotia, Canada",
+				Locality: "Halifax",
+				Country:  "Canada",
+				Lat:      44.6488,
+				Lng:      -63.5752,
+			},
+			Sources: []PlaceVisitSource{
+				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-harbor-20230704", Canonical: true, PointIDs: []string{"tl-harbor-20230704"}},
+			},
+		},
+		{
+			// Same harbour evening from OwnTracks — merge pair (window+place).
+			StartAt:  "2023-07-04T16:05:00Z",
+			EndAt:    "2023-07-04T20:55:00Z",
+			Kind:     PlaceKindVisit,
+			Place: Place{
+				Name:     "Halifax Harbour",
+				Locality: "Halifax",
+				Country:  "Canada",
+				Lat:      44.6490,
+				Lng:      -63.5750,
+			},
+			Sources: []PlaceVisitSource{
+				{Service: ownTracksServiceID, ServiceName: ownTracksServiceName, ID: "otc-20230704-1605"},
+			},
+		},
+		{
+			StartAt:    "2023-07-05T14:00:00Z",
+			EndAt:      "2023-07-05T17:00:00Z",
+			Kind:       PlaceKindVisit,
+			Confidence: "medium",
+			EntityID:   "tl-lunenburg-20230705",
+			Place: Place{
+				Name:     "Lunenburg Beach",
+				Address:  "Beach Rd, Lunenburg, Nova Scotia, Canada",
+				Locality: "Lunenburg",
+				Country:  "Canada",
+				Lat:      44.3764,
+				Lng:      -64.3188,
+			},
+			Sources: []PlaceVisitSource{
+				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-lunenburg-20230705", Canonical: true},
+			},
+		},
+		{
+			StartAt: "2023-07-04T21:00:00Z",
+			EndAt:   "2023-07-05T14:00:00Z",
+			Kind:    PlaceKindTrip,
+			Mode:    TripModeDrive,
+			Place: Place{
+				Name:     "Lunenburg Beach",
+				Locality: "Lunenburg",
+				Country:  "Canada",
+			},
+			EntityID: "tl-drive-halifax-lunenburg",
+			Sources: []PlaceVisitSource{
+				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-drive-halifax-lunenburg"},
+			},
+		},
+		{
+			// Name-only near-miss: different window — must not merge with the
+			// harbour evening visit.
+			StartAt: "2024-03-11T09:00:00Z",
+			EndAt:   "2024-03-11T17:00:00Z",
+			Kind:    PlaceKindVisit,
+			Place: Place{
+				Name:     "Halifax Harbour",
+				Locality: "Halifax",
+				Country:  "Canada",
+			},
+			EntityID: "tl-harbor-20240311",
+			Sources: []PlaceVisitSource{
+				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-harbor-20240311"},
+			},
+		},
+	}
+
 	return SampleLibrarySet{
 		Playlists:    playlists,
 		Tracks:       tracks,
@@ -730,6 +845,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 		Events:       events,
 		Messages:     messages,
 		Transactions: transactions,
+		Places:       places,
 	}
 }
 

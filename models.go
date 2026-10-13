@@ -652,3 +652,81 @@ type TransactionList struct {
 	// ByService is set on aggregate responses only.
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
+
+// Place is the location a visit or trip refers to (issue #142). Name and
+// address are provider-supplied; Locality/Country are the city/country level
+// used by the city permission redaction. Lat/Lng are optional and omitted
+// entirely at city and read access levels.
+type Place struct {
+	Name     string `json:"name,omitempty"`
+	Address  string `json:"address,omitempty"`
+	Locality string `json:"locality,omitempty"`
+	Country  string `json:"country,omitempty"`
+	Lat      float64 `json:"lat,omitempty"`
+	Lng      float64 `json:"lng,omitempty"`
+}
+
+// PlaceVisit is a user-facing visit or trip window (issue #142). Aegis models
+// visits and trips, not raw GPS streams — the import archive may hold points
+// but the library surface exposes windows with a place.
+type PlaceVisit struct {
+	// StartAt / EndAt bound the visit or trip window (RFC3339).
+	StartAt string `json:"start_at"`
+	EndAt   string `json:"end_at,omitempty"`
+	// Place is where the visit/trip occurred (or the trip's primary place).
+	Place Place `json:"place"`
+	// Kind is "visit" (dwell at a place) or "trip" (travel between places).
+	Kind string `json:"kind"`
+	// Mode is the travel mode for trips: flight, drive, walk, bicycle, train, bus.
+	Mode string `json:"mode,omitempty"`
+	// Confidence is the provider confidence when available (high/medium/low).
+	Confidence string `json:"confidence,omitempty"`
+	// EntityID is a durable catalog ID when a provider supplies one.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records how multi-source identity was established.
+	Match   string             `json:"match,omitempty"`
+	Sources []PlaceVisitSource `json:"sources,omitempty"`
+	Extra   map[string]any     `json:"extra,omitempty"`
+}
+
+// PlaceVisitSource is a service-specific record of a visit or trip. Point
+// IDs are raw provider identifiers (Timeline placeId, OwnTracks tst+tid, …)
+// and are redacted at city access level.
+type PlaceVisitSource struct {
+	Service     string `json:"service"`
+	ServiceName string `json:"service_name,omitempty"`
+	ID          string `json:"id,omitempty"`
+	URL         string `json:"url,omitempty"`
+	// Canonical is true when this service is the configured home for places.
+	Canonical bool      `json:"canonical,omitempty"`
+	Copy      *CopyInfo `json:"copy,omitempty"`
+	// PointIDs are raw provider point identifiers for the visit (issue #142).
+	PointIDs []string       `json:"point_ids,omitempty"`
+	Extra    map[string]any `json:"extra,omitempty"`
+}
+
+// PlaceVisitList is the neutral response for listing visits and trips.
+type PlaceVisitList struct {
+	Visits    []PlaceVisit                    `json:"visits"`
+	Total     int                             `json:"total"`
+	Synced    bool                            `json:"synced,omitempty"`
+	Truncated bool                            `json:"truncated,omitempty"`
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
+// Place kind values.
+const (
+	PlaceKindVisit = "visit"
+	PlaceKindTrip  = "trip"
+)
+
+// Trip mode values (normalized lowercase).
+const (
+	TripModeFlight   = "flight"
+	TripModeDrive    = "drive"
+	TripModeWalk     = "walk"
+	TripModeBicycle  = "bicycle"
+	TripModeTrain    = "train"
+	TripModeBus      = "bus"
+	TripModeUnknown  = "unknown"
+)

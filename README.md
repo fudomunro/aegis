@@ -73,6 +73,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service)
 - `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
+- `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
@@ -280,11 +281,14 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 | `none` | none — 403 for that data type |
 | `freebusy` | `GET`, `HEAD` on `events`, but responses reduced to availability only (issue #128) |
 | `summary` | `GET`, `HEAD` on `transactions`, but responses reduced to totals by category/month only — no line items (issue #141) |
+| `city` | `GET`, `HEAD` on `places`, reduced to locality, country, and the visit/trip time window (issue #142) |
+| `precise` | `GET`, `HEAD` on `places` with coordinates (issue #142) |
 | `read` | `GET`, `HEAD` |
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
 
-- The reserved key `default` applies to data types not listed.
+- The reserved key `default` applies to data types not listed — **except
+  `places`**, which is opt-in (see below).
 - **`freebusy` is events-only** (issue #128). Scheduling apps can see when you
   are busy without reading titles, attendees, locations, or descriptions.
   Responses keep only `start_at`, `end_at`, `all_day`, and `status`. Prefer
@@ -298,6 +302,17 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
   budget dashboards; `read` adds line items with merchant but still strips
   account identifiers. The level is rejected on other data types and on
   `default`.
+- **`places` is opt-in and uses a city / read / precise ladder** (issue #142).
+  Location history is the most sensitive data type we ship: **default is
+  `none`**, and the `default` key never enables it. Pre-request injection never
+  advertises `places` until a service permission names it. Granularity:
+  - `city` — locality, country, and the visit/trip window only (enough for
+    "was I out of town?"). No names, addresses, coordinates, or raw point IDs.
+  - `read` — full place names and addresses, still no coordinates.
+  - `precise` — names, addresses, and coordinates (also what `write` /
+    `read-write` map to for reads; there is no agent write surface).
+  `city` and `precise` are places-only and rejected on other keys. Import
+  (Google Timeline) and live (OwnTracks) sources both honor the same ladder.
 - **Unknown proxy paths** (not a mapped data type) use the **strictest**
   configured level, not `default`, so a tight type cannot be bypassed by an
   unmapped endpoint (issue #94).
@@ -325,7 +340,7 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
-`events`, `messages`, `transactions`. Paths that do not map to a known type fall through to the
+`events`, `messages`, `transactions`, `places`. Paths that do not map to a known type fall through to the
 `default` level.
 
 ### Canonical sources (non-Aegis, issue #16)
@@ -514,6 +529,7 @@ on first run with mode `0700` (it holds secrets).
   copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)
   mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
   quicken.db              # Quicken QIF/QFX import store (issue #141; empty -quicken-store disables)
+  timeline.db             # Google Timeline import store (issue #142; empty -timeline-store disables)
   audit_log.db            # durable access audit trail (issue #105; empty -audit-log disables)
   logs/aegis.log          # process log (also mirrored to stderr)
   cache/                  # reserved for future cache spill
@@ -532,6 +548,7 @@ An explicit flag always wins:
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
+| `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
 | `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
@@ -562,6 +579,8 @@ directory or keep passing the explicit path flags.
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
 | `-quicken-store` | `<data-dir>/quicken.db` | Quicken import store; empty disables (issue #141) |
 | `-import-quicken` | | Import a QIF/QFX file or directory, then exit (issue #141) |
+| `-timeline-store` | `<data-dir>/timeline.db` | Google Timeline import store; empty disables (issue #142) |
+| `-import-timeline` | | Import a Timeline JSON file/dir or Takeout zip, then exit (issue #142) |
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables (issue #105) |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
@@ -653,7 +672,7 @@ events-only.
 
 **What an app token can call:**
 
-- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions}` only
+- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions,places}` only
 - Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
 
 When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
@@ -1732,6 +1751,71 @@ has it (or when the same export is imported twice under different filenames).
 
 **Plaid / SimpleFIN / Actual Budget:** not registered yet. The
 `TransactionProvider` interface is the plug-in point (issue #141).
+
+### Location history (places, issue #142)
+
+`GET /v1/library/places` returns **visits and trips** (time windows + place),
+not a firehose of GPS points. Query filters: `after`, `before`, `locality`,
+`kind` (`visit` | `trip`).
+
+```json
+{
+  "visits": [{
+    "start_at": "2023-07-04T16:00:00Z",
+    "end_at": "2023-07-04T21:00:00Z",
+    "place": {"name": "Halifax Harbour", "locality": "Halifax", "country": "Canada"},
+    "kind": "visit",
+    "confidence": "high",
+    "sources": [{"service": "google-timeline", "service_name": "Google Timeline", "id": "tl-1"}]
+  }],
+  "total": 1
+}
+```
+
+**Permission ladder (default `none` — opt-in).** See [Data permissions](#data-permissions).
+Pre-request injection never advertises `places` until a service permission
+names `city`, `read`, or `precise`. Coordinates require `precise`.
+
+#### Google Maps Timeline import
+
+Timeline moved on-device in 2024, so this is a **local import** (like mail
+Takeout), not a live API. Export Location History from Google Takeout, then:
+
+```bash
+./aegis -import-timeline ~/Downloads/Takeout/Location\ History
+# or a monthly Semantic Location History JSON / Takeout zip
+```
+
+Or use **Advanced → Timeline import** (`/v1/admin/timeline/import`). Semantic
+`placeVisit` rows become visits; `activitySegment` rows become trips with a
+normalized `mode` (flight/drive/walk/…). Re-import skips stored rows.
+
+#### OwnTracks
+
+Live, local-first location history that fits the Immich/self-hosted audience.
+Configure a service named `owntracks` with `endpoint` pointing at an OwnTracks
+Recorder:
+
+```json
+{
+  "id": "owntracks",
+  "name": "OwnTracks",
+  "endpoint": "https://recorder.example:8083",
+  "headers": {"X-API-Key": "…"},
+  "permissions": {"places": "read"}
+}
+```
+
+The connector prefers Recorder `/api/v0/visit` rows and otherwise clusters
+`/api/v0/locations` samples into dwell visits (and short trips between them).
+
+#### Photos ↔ places join
+
+Photos join to visits by `taken_at` inside the visit window
+(`PhotosTakenDuring` in `places.go`). Sample fixtures include a harbour
+evening visit with a fireworks photo taken during it — see
+`TestPhotosPlacesJoinDemo`. Aegis does not store photo bytes; the join is
+metadata only.
 
 ### Service proxy
 

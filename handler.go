@@ -90,6 +90,8 @@ type Server struct {
 	mail *MailArchive
 	// quicken is the optional local Quicken import store (issue #141).
 	quicken *QuickenStore
+	// timeline is the optional local Google Timeline import store (issue #142).
+	timeline *TimelineStore
 	// mailSyncMu serializes archive ingest so admin UI and agents cannot
 	// interleave two Gmail page cursors into the same store.
 	mailSyncMu sync.Mutex
@@ -122,6 +124,7 @@ var appAllowedPrefixes = []string{
 	"/v1/library/freebusy",
 	"/v1/library/messages",
 	"/v1/library/transactions",
+	"/v1/library/places",
 }
 
 // appPathAllowed reports whether a third-party app token may access path.
