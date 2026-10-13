@@ -532,7 +532,6 @@ on first run with mode `0700` (it holds secrets).
   timeline.db             # Google Timeline import store (issue #142; empty -timeline-store disables)
   audit_log.db            # durable access audit trail (issue #105; empty -audit-log disables)
   logs/aegis.log          # process log (also mirrored to stderr)
-  cache/                  # reserved for future cache spill
 ```
 
 Every path above is the default **when the corresponding flag is omitted**.

@@ -368,6 +368,17 @@ func anyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
 // CacheKey is the in-memory cache key for the aggregate response.
 func (k LibraryKind) CacheKey() string { return "library:" + k.ID }
 
+// libraryAggregateDegraded reports whether any provider failed or was
+// unauthorized. Degraded aggregates must not be cached.
+func libraryAggregateDegraded(bySvc map[string]LibraryServiceStatus) bool {
+	for _, st := range bySvc {
+		if st.Status != LibraryStatusOK {
+			return true
+		}
+	}
+	return false
+}
+
 // hasProvider reports whether any registered connector implements P.
 func (s *Server) hasProvider[P any]() bool {
 	for _, connector := range s.connectors {
@@ -677,7 +688,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	s.cache.Set(cacheKey, string(result), 60*time.Second)
+	// Cache only healthy aggregates. Freezing by_service error/unauthorized
+	// rows would keep a just-connected service looking disconnected (issue #104).
+	if !libraryAggregateDegraded(bySvc) {
+		s.cache.Set(cacheKey, string(result), 60*time.Second)
+	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Aegis-Cache", "miss")
 	w.Write(result)

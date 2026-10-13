@@ -205,6 +205,8 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 
 	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
 	srv.oauthStates.Set("spotify:good-state", true, time.Minute)
+	// A pre-auth snapshot must not outlive a successful connect (issue #104).
+	srv.cache.Set("library:tracks", `{"tracks":[{"name":"stale"}]}`, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/callback?code=auth-code&state=good-state", nil)
 	w := httptest.NewRecorder()
@@ -212,6 +214,9 @@ func TestHandleAuthCallback_Success(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	}
+	if _, ok := srv.cache.Get("library:tracks"); ok {
+		t.Fatal("OAuth connect should clear the response cache")
 	}
 	body := w.Body.String()
 	if !strings.Contains(body, "Spotify Authorized") {
@@ -257,6 +262,8 @@ func TestHandleAuthStatus_AndRevoke(t *testing.T) {
 		RefreshToken: "rt",
 		Expiry:       time.Now().Add(time.Hour),
 	}
+	// Responses fetched with the token must not survive revoke (issue #104).
+	srv.cache.Set("library:tracks", `{"tracks":[{"name":"stale"}]}`, time.Minute)
 
 	req := httptest.NewRequest("GET", "/v1/auth/status", nil)
 	w := httptest.NewRecorder()
@@ -282,6 +289,9 @@ func TestHandleAuthStatus_AndRevoke(t *testing.T) {
 	}
 	if srv.tokens.Get("spotify") != nil {
 		t.Fatal("expected token removed")
+	}
+	if _, ok := srv.cache.Get("library:tracks"); ok {
+		t.Fatal("OAuth revoke should clear the response cache")
 	}
 }
 
