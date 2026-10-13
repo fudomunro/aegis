@@ -109,6 +109,14 @@ def run_git(*args: str) -> str:
     return out.strip()
 
 
+def run_git_quiet(*args: str) -> bool:
+    try:
+        subprocess.check_output(["git", *args], cwd=REPO, text=True, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        return False
+    return True
+
+
 def go_module() -> str:
     for line in (REPO / "go.mod").read_text(encoding="utf-8").splitlines():
         if line.startswith("module "):
@@ -279,12 +287,9 @@ def extract_stamp(html: str) -> str:
 def is_ancestor_or_equal(stamp: str, head: str) -> bool:
     if not stamp:
         return False
-    try:
-        run_git("rev-parse", "--verify", f"{stamp}^{{commit}}")
-        run_git("merge-base", "--is-ancestor", stamp, head)
-    except subprocess.CalledProcessError:
+    if not run_git_quiet("rev-parse", "--verify", f"{stamp}^{{commit}}"):
         return False
-    return True
+    return run_git_quiet("merge-base", "--is-ancestor", stamp, head)
 
 
 def check() -> int:
