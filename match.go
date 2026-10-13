@@ -24,10 +24,21 @@ const (
 // good enough for v1, not a durable music-graph ID. Tracked in
 // https://github.com/fudomunro/aegis/issues/4
 func NormalizeIdentityKey(name string) string {
-	s := strings.ToLower(strings.TrimSpace(name))
-	s = strings.ReplaceAll(s, " - topic", "")
-	s = strings.Join(strings.Fields(s), " ")
-	return s
+	// Compare on whitespace-collapsed tokens and drop the YouTube "- topic"
+	// unit wherever it appears ("Name - Topic" / "Name\n- Topic"). Token
+	// pairing keeps this idempotent; a raw " - topic" replace does not once
+	// Fields has already eaten the leading space (issue #107 fuzz).
+	words := strings.Fields(strings.ToLower(strings.TrimSpace(name)))
+	out := make([]string, 0, len(words))
+	for i := 0; i < len(words); {
+		if i+1 < len(words) && words[i] == "-" && words[i+1] == "topic" {
+			i += 2
+			continue
+		}
+		out = append(out, words[i])
+		i++
+	}
+	return strings.Join(out, " ")
 }
 
 // newArtist builds a unified artist from one service spelling.
