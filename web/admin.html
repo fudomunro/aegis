@@ -318,14 +318,13 @@
       <span class="brand-name">Aegis</span>
     </header>
     <nav role="tablist" aria-label="Admin sections">
-      <button class="tab" role="tab" id="tab-map" aria-controls="panel-map" aria-selected="true">Map</button>
+      <button class="tab" role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true">Home</button>
       <button class="tab" role="tab" id="tab-services" aria-controls="panel-services" aria-selected="false">Services</button>
       <button class="tab" role="tab" id="tab-library" aria-controls="panel-library" aria-selected="false">Library</button>
       <button class="tab" role="tab" id="tab-advanced" aria-controls="panel-advanced" aria-selected="false">Advanced</button>
-      <button class="tab" role="tab" id="tab-aperture" aria-controls="panel-aperture" aria-selected="false">Aperture</button>
     </nav>
 
-    <section id="panel-map" class="panel" role="tabpanel" aria-labelledby="tab-map">
+    <section id="panel-home" class="panel" role="tabpanel" aria-labelledby="tab-home">
       <div class="toolbar">
         <span class="meta" id="map-meta">How agents, Aegis, and your services connect</span>
         <div class="grow"></div>
@@ -499,8 +498,77 @@
     </section>
 
     <section id="panel-advanced" class="panel" role="tabpanel" aria-labelledby="tab-advanced" hidden>
+      <h2 class="section-heading" id="aperture-heading">Aperture</h2>
+      <div id="panel-aperture" role="region" aria-labelledby="aperture-heading">
+      <div class="toolbar">
+        <span class="meta" id="aperture-link-meta">Aperture gateway link</span>
+        <div class="grow"></div>
+        <a class="btn" id="aperture-open" href="#" target="_blank" rel="noopener noreferrer">Open Aperture</a>
+        <a class="btn" id="aperture-open-config" href="#" target="_blank" rel="noopener noreferrer">Open Aperture Configuration</a>
+        <button class="btn" id="reload-aperture" type="button">Refresh health</button>
+      </div>
+
+      <div class="help-box">
+        <h3>Point Aperture at Aegis</h3>
+        <p>
+          Aegis is a synchronous <code>pre_request</code> hook. In Aperture, add a hook named
+          <strong>aegis</strong> whose URL is this instance’s <code>/v1/pre-request</code>,
+          and a grant with <code>send_hooks</code> that sends
+          <code>user_message</code> and <code>request_body</code>. Use fail-open so chat
+          keeps working if Aegis is down. Full operator notes live in
+          <code>docs/configuring-aperture.md</code>.
+        </p>
+      </div>
+
+      <h2 class="section-heading">Expected Aperture config</h2>
+      <p class="meta" style="margin-bottom:0.6rem">
+        Merge into your existing Aperture configuration (do not overwrite providers or other grants).
+        Copy the <code>hooks</code> and <code>grants</code> fragments below.
+      </p>
+      <div class="card" style="padding:0.85rem 1rem">
+        <div class="toolbar" style="margin-bottom:0.5rem">
+          <span class="meta">hooks + grants for this Aegis</span>
+          <div class="grow"></div>
+          <button class="btn" id="copy-aperture-config" type="button">Copy JSON</button>
+        </div>
+        <pre id="aperture-config-snippet" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"></pre>
+      </div>
+
+      <h2 class="section-heading">Setup checklist</h2>
+      <ol class="meta" style="line-height:1.7; padding-left:1.25rem; margin:0 0 1rem">
+        <li>Open <strong>Aperture Configuration</strong> (link above) or Administration → Configuration.</li>
+        <li>Add the <code>hooks.aegis</code> object — URL must match Aegis base URL + <code>/v1/pre-request</code>.</li>
+        <li>Add a grant with <code>send_hooks</code> named <code>aegis</code>, events <code>["pre_request"]</code>, send <code>["user_message","request_body"]</code>.</li>
+        <li>Set hook <code>apikey</code> if Aegis auth-mode is <code>auto</code> or <code>api-key</code> (same value as <code>AEGIS_API_KEY</code>).</li>
+        <li>Send any chat through Aperture, then <strong>Refresh health</strong>.</li>
+        <li>Fix any <code>legacy_*</code> / <code>stale_hook_host</code> / auth issues listed below.</li>
+      </ol>
+
+      <h2 class="section-heading">Hook health</h2>
+      <div class="toolbar">
+        <span class="meta" id="aperture-health-summary">Loading…</span>
+      </div>
+      <div id="aperture-health-issues" class="help-box"><div class="empty">No hook-health data yet.</div></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Host</th>
+                <th>Action</th>
+                <th>user_message</th>
+                <th>request_body</th>
+              </tr>
+            </thead>
+            <tbody id="aperture-health-recent"><tr><td colspan="5" class="muted-num">No recent hook calls</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      </div>
+
       <h2 class="section-heading">Library datasets</h2>
-      <div id="map-libraries" class="map-libraries"><div class="empty">Open Map to load topology details.</div></div>
+      <div id="map-libraries" class="map-libraries"><div class="empty">Open Home to load topology details.</div></div>
 
       <div id="map-recent" class="map-recent" hidden></div>
 
@@ -627,74 +695,6 @@
 
       <h2 class="section-heading">Runtime</h2>
       <div id="runtime-body"><div class="empty">Loading…</div></div>
-    </section>
-
-    <section id="panel-aperture" class="panel" role="tabpanel" aria-labelledby="tab-aperture" hidden>
-      <div class="toolbar">
-        <span class="meta" id="aperture-link-meta">Aperture gateway link</span>
-        <div class="grow"></div>
-        <a class="btn" id="aperture-open" href="#" target="_blank" rel="noopener noreferrer">Open Aperture</a>
-        <a class="btn" id="aperture-open-config" href="#" target="_blank" rel="noopener noreferrer">Open Aperture Configuration</a>
-        <button class="btn" id="reload-aperture" type="button">Refresh health</button>
-      </div>
-
-      <div class="help-box">
-        <h3>Point Aperture at Aegis</h3>
-        <p>
-          Aegis is a synchronous <code>pre_request</code> hook. In Aperture, add a hook named
-          <strong>aegis</strong> whose URL is this instance’s <code>/v1/pre-request</code>,
-          and a grant with <code>send_hooks</code> that sends
-          <code>user_message</code> and <code>request_body</code>. Use fail-open so chat
-          keeps working if Aegis is down. Full operator notes live in
-          <code>docs/configuring-aperture.md</code>.
-        </p>
-      </div>
-
-      <h2 class="section-heading">Expected Aperture config</h2>
-      <p class="meta" style="margin-bottom:0.6rem">
-        Merge into your existing Aperture configuration (do not overwrite providers or other grants).
-        Copy the <code>hooks</code> and <code>grants</code> fragments below.
-      </p>
-      <div class="card" style="padding:0.85rem 1rem">
-        <div class="toolbar" style="margin-bottom:0.5rem">
-          <span class="meta">hooks + grants for this Aegis</span>
-          <div class="grow"></div>
-          <button class="btn" id="copy-aperture-config" type="button">Copy JSON</button>
-        </div>
-        <pre id="aperture-config-snippet" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"></pre>
-      </div>
-
-      <h2 class="section-heading">Setup checklist</h2>
-      <ol class="meta" style="line-height:1.7; padding-left:1.25rem; margin:0 0 1rem">
-        <li>Open <strong>Aperture Configuration</strong> (link above) or Administration → Configuration.</li>
-        <li>Add the <code>hooks.aegis</code> object — URL must match Aegis base URL + <code>/v1/pre-request</code>.</li>
-        <li>Add a grant with <code>send_hooks</code> named <code>aegis</code>, events <code>["pre_request"]</code>, send <code>["user_message","request_body"]</code>.</li>
-        <li>Set hook <code>apikey</code> if Aegis auth-mode is <code>auto</code> or <code>api-key</code> (same value as <code>AEGIS_API_KEY</code>).</li>
-        <li>Send any chat through Aperture, then <strong>Refresh health</strong>.</li>
-        <li>Fix any <code>legacy_*</code> / <code>stale_hook_host</code> / auth issues listed below.</li>
-      </ol>
-
-      <h2 class="section-heading">Hook health</h2>
-      <div class="toolbar">
-        <span class="meta" id="aperture-health-summary">Loading…</span>
-      </div>
-      <div id="aperture-health-issues" class="help-box"><div class="empty">No hook-health data yet.</div></div>
-      <div class="card" style="padding:0; overflow:hidden">
-        <div style="overflow-x:auto">
-          <table>
-            <thead>
-              <tr>
-                <th>When</th>
-                <th>Host</th>
-                <th>Action</th>
-                <th>user_message</th>
-                <th>request_body</th>
-              </tr>
-            </thead>
-            <tbody id="aperture-health-recent"><tr><td colspan="5" class="muted-num">No recent hook calls</td></tr></tbody>
-          </table>
-        </div>
-      </div>
     </section>
   </div>
 
@@ -3157,7 +3157,7 @@ job.read</pre>
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Map access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -3171,7 +3171,13 @@ job.read</pre>
       renderRuntime(summary);
       renderApertureLinks();
       renderApertureSnippet();
-      loadFlow();
+      // Friendly durable paths (issue #150): open the section encoded in the
+      // URL so refresh stays put, and canonicalize legacy /v1/admin.
+      const tab = tabFromPath(location.pathname);
+      const path = pathForTab(tab);
+      const current = location.pathname.replace(/\/+$/, "") || "/";
+      if (current !== path) history.replaceState({ tab: tab }, "", path);
+      selectTab(tab, { push: false });
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
@@ -3181,7 +3187,28 @@ job.read</pre>
     }
   }
 
-  const FLOW_TABS = ["map", "services", "library", "advanced", "aperture"];
+  const FLOW_TABS = ["home", "services", "library", "advanced"];
+  // Issue #150: simple, durable SPA paths. Server serves the admin shell for
+  // these routes so a refresh keeps the same section.
+  const TAB_ROUTES = {
+    home: "/",
+    library: "/library",
+    services: "/services",
+    advanced: "/advanced"
+  };
+
+  function tabFromPath(pathname) {
+    const p = (pathname || "/").replace(/\/+$/, "") || "/";
+    if (p === "/library") return "library";
+    if (p === "/services") return "services";
+    if (p === "/advanced") return "advanced";
+    // "/", "/home", and legacy "/v1/admin" all land on Home.
+    return "home";
+  }
+
+  function pathForTab(name) {
+    return TAB_ROUTES[name] || "/";
+  }
 
   function apertureBase() {
     const fromSummary = summary && summary.runtime && summary.runtime.aperture_url;
@@ -3314,7 +3341,9 @@ job.read</pre>
 
   $("reload-aperture").addEventListener("click", () => loadApertureSetup());
 
-function selectTab(name) {
+function selectTab(name, opts) {
+    if (!TAB_ROUTES[name]) name = "home";
+    const push = !opts || opts.push !== false;
     FLOW_TABS.forEach((id) => {
       const tab = $("tab-" + id);
       const panel = $("panel-" + id);
@@ -3322,17 +3351,24 @@ function selectTab(name) {
       tab.setAttribute("aria-selected", on ? "true" : "false");
       panel.hidden = !on;
     });
-    if (name === "map") loadFlow();
+    if (push) {
+      const path = pathForTab(name);
+      const current = location.pathname.replace(/\/+$/, "") || "/";
+      if (current !== path) history.pushState({ tab: name }, "", path);
+    }
+    if (name === "home") loadFlow();
     if (name === "library") loadAllLibraryKinds();
     if (name === "advanced") {
       loadCache();
       loadMailArchive();
       loadCopies();
-    }
-    if (name === "aperture") {
       loadApertureSetup();
     }
   }
+
+  window.addEventListener("popstate", () => {
+    selectTab(tabFromPath(location.pathname), { push: false });
+  });
 
   FLOW_TABS.forEach((id) => {
     $("tab-" + id).addEventListener("click", () => selectTab(id));

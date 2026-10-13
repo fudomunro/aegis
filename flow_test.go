@@ -485,8 +485,8 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `id="tab-map"`) {
-		t.Fatal("expected Map tab")
+	if !strings.Contains(body, `id="tab-home"`) {
+		t.Fatal("expected Home tab")
 	}
 	if !strings.Contains(body, "/v1/admin/flow") {
 		t.Fatal("expected flow API reference")

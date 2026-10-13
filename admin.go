@@ -36,20 +36,20 @@ type AdminService struct {
 	// HasAPIKey is true when static API-key headers are present (presence only).
 	HasAPIKey bool `json:"has_api_key,omitempty"`
 	// ConnectionID is the shared provider connection this surface uses (issue #26).
-	ConnectionID  string       `json:"connection_id,omitempty"`
-	HasClientID   bool         `json:"has_client_id"`
-	HasSecret     bool         `json:"has_client_secret"`
-	OAuthScopes   []string     `json:"oauth_scopes,omitempty"`
-	Token         *TokenStatus `json:"token,omitempty"`
-	HasPlaylist   bool         `json:"has_playlist_provider"`
-	HasLikedTrack bool         `json:"has_liked_track_provider"`
-	HasAlbum      bool         `json:"has_album_provider"`
-	HasArtist     bool         `json:"has_artist_provider"`
-	HasContact    bool         `json:"has_contact_provider"`
-	HasPhoto      bool         `json:"has_photo_provider"`
-	HasEvent      bool         `json:"has_event_provider"`
-	HasMessage    bool         `json:"has_message_provider"`
-	HasTransaction bool        `json:"has_transaction_provider"`
+	ConnectionID   string       `json:"connection_id,omitempty"`
+	HasClientID    bool         `json:"has_client_id"`
+	HasSecret      bool         `json:"has_client_secret"`
+	OAuthScopes    []string     `json:"oauth_scopes,omitempty"`
+	Token          *TokenStatus `json:"token,omitempty"`
+	HasPlaylist    bool         `json:"has_playlist_provider"`
+	HasLikedTrack  bool         `json:"has_liked_track_provider"`
+	HasAlbum       bool         `json:"has_album_provider"`
+	HasArtist      bool         `json:"has_artist_provider"`
+	HasContact     bool         `json:"has_contact_provider"`
+	HasPhoto       bool         `json:"has_photo_provider"`
+	HasEvent       bool         `json:"has_event_provider"`
+	HasMessage     bool         `json:"has_message_provider"`
+	HasTransaction bool         `json:"has_transaction_provider"`
 	// SupportsPhotoPicker is true when the connector exposes a picker session
 	// create operation (e.g. Google Photos Picker API).
 	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`
@@ -89,7 +89,7 @@ type AdminSummary struct {
 // GET /v1/admin/library/{kind}
 //
 // Same aggregate pipeline and JSON shape as the agent /v1/library/{kind}
-// endpoints, but access is not recorded on the Map access-count stats
+// endpoints, but access is not recorded on the Home access-count stats
 // (issue #62). Admin browsing must not look like agent traffic.
 func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -116,22 +116,44 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 	handler(w, withSkipAccessMetrics(r))
 }
 
+// adminShellPaths are friendly SPA routes (issue #150) plus the legacy
+// /v1/admin alias. Trailing-slash variants are included so bookmarks and
+// hand-typed URLs keep working.
+var adminShellPaths = map[string]bool{
+	"/":          true,
+	"/home":      true,
+	"/home/":     true,
+	"/library":   true,
+	"/library/":  true,
+	"/services":  true,
+	"/services/": true,
+	"/advanced":  true,
+	"/advanced/": true,
+	"/v1/admin":  true,
+	"/v1/admin/": true,
+}
+
 // HandleAdmin serves the HTML admin dashboard (shell only; data loads via API).
-// GET /v1/admin
+// GET /  /home  /library  /services  /advanced  (and legacy /v1/admin)
 //
-// The shell contains no secrets or live data — only markup and client JS.
-// It is still wrapped in AuthMiddleware so the API surface is not advertised
-// to unauthenticated peers (issue #98). OAuth callback pages remain public.
+// Friendly paths (issue #150) are the durable URLs the SPA pushes with
+// history.pushState; refresh must land back on the same section. The shell
+// contains no secrets or live data — only markup and client JS. It is still
+// wrapped in AuthMiddleware so the API surface is not advertised to
+// unauthenticated peers (issue #98). OAuth callback pages remain public.
 func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/v1/admin" && r.URL.Path != "/v1/admin/" {
+	if !adminShellPaths[r.URL.Path] {
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
-	if r.Method != http.MethodGet {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if r.Method == http.MethodHead {
+		return
+	}
 	fmt.Fprint(w, adminHTML)
 }
 

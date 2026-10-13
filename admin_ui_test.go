@@ -20,13 +20,14 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 	body := w.Body.String()
 
 	for _, want := range []string{
-		`id="tab-map"`,
+		`id="tab-home"`,
+		`id="panel-home"`,
 		`id="tab-services"`,
 		`id="tab-library"`,
 		`id="tab-advanced"`,
 		`id="panel-advanced"`,
-		// Aperture setup guide + live gateway link
-		`id="tab-aperture"`,
+		// Aperture setup lives under Advanced (issue #150), not a top-level tab
+		`id="aperture-heading"`,
 		`id="panel-aperture"`,
 		`id="aperture-open"`,
 		`id="aperture-config-snippet"`,
@@ -35,6 +36,16 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"loadApertureSetup",
 		"expectedApertureConfig",
 		"/v1/admin/hook-health",
+		// Friendly durable URLs (issue #150)
+		"TAB_ROUTES",
+		"tabFromPath",
+		"pathForTab",
+		"history.pushState",
+		"history.replaceState",
+		`"home"`,
+		`"library"`,
+		`"services"`,
+		`"advanced"`,
 		`id="services-help"`,
 		`id="map-libraries"`,
 		`id="map-recent"`,
@@ -43,7 +54,6 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"Connect your services",
 		"renderServicesHelp",
 		"FLOW_TABS",
-		`"advanced"`,
 		"map-svg-wrap",
 		// Services card hierarchy (polish): name + data flow + connection first
 		"svc-card",
@@ -138,6 +148,10 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="tab-runtime"`,
 		`id="panel-cache"`,
 		`id="panel-runtime"`,
+		`id="tab-map"`,
+		`id="panel-map"`,
+		// Aperture is under Advanced, not a top-level tab (issue #150)
+		`id="tab-aperture"`,
 		"Setup wizard",
 		"/v1/setup",
 		"Aegis Admin",
