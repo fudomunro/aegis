@@ -85,10 +85,10 @@ Aegis starts with these endpoints:
 - `GET /healthz` — liveness probe (unauthenticated; no secrets)
 - `GET /readyz` — readiness probe (config + token store loaded; unauthenticated)
 - `GET /metrics` — Prometheus text metrics (auth required; hook outcomes, cache hit/miss, upstream latency, permission denials)
-- `GET /v1/admin` — admin dashboard for data-flow map, services, library, and advanced ops (cache, runtime, datasets)
-- `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Map tab (issue #32). Includes per-agent nodes and access arrows to library data types so the Map can draw which agents touched which data (issue #114)
+- `GET /` `/home` `/library` `/services` `/advanced` — admin dashboard shell (friendly durable SPA routes, issue #150; refresh keeps the same section). Legacy `GET /v1/admin` still serves the shell and the SPA canonicalizes the URL to `/`.
+- `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Home tab (issue #32). Includes per-agent nodes and access arrows to library data types so the Home map can draw which agents touched which data (issue #114)
 - `GET /v1/admin/hook-health` — Aperture pre-request hook wiring diagnostics (stale Guardian names/URLs, auth failures, missing `send` fields)
-- `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Map access)
+- `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Home access)
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 
@@ -749,7 +749,7 @@ Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 
 1. Register an OAuth app with each service (see below for per-service guides)
 2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference). Prefer `"$ENV:…"` for `client_secret` so the file stays shareable — see [Provider connections](#provider-connections).
-3. Start Aegis and visit `https://your-aegis/v1/admin`
+3. Start Aegis and visit `https://your-aegis/` (or `/services`)
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
 5. Tokens are stored encrypted on disk and auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101) to rotate the passphrase.
 
@@ -1853,7 +1853,7 @@ GET /v1/admin/hook-health  — Aperture hook health + expected config snippet
 POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
-GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Map access)
+GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Home access)
 GET /v1/admin/services/{id}/permissions  — current agent permission map + available/writable types
 PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not aegis.json)
 GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
@@ -1870,20 +1870,24 @@ GET /apple-touch-icon.png
 GET /logo.svg
 ```
 
-`/v1/admin` loads in the browser and fetches the JSON APIs. On a tailnet with
+`/` loads in the browser and fetches the JSON APIs. On a tailnet with
 Serve identity the page works with no extra setup. In API-key mode, enter the
-key when prompted (kept only in that tab’s `sessionStorage`).
+key when prompted (kept only in that tab’s `sessionStorage`). Friendly SPA
+paths (issue #150) are durable: `https://your-aegis/`, `/library`, `/services`,
+and `/advanced` each open that section and survive a refresh. Legacy
+`/v1/admin` still serves the same shell.
 
-Tabs: **Map** (default), **Services**, **Library**, and **Advanced**.
+Tabs: **Home** (default, `/`), **Services** (`/services`), **Library**
+(`/library`), and **Advanced** (`/advanced`).
 Connection management lives on **Services** — Connect/Reconnect, permissions,
 and empty-state help when nothing is authorized yet. There is no separate
-setup wizard.
+setup wizard. Aperture setup and hook health live under **Advanced**.
 
 The **Library** tab loads datasets via `/v1/admin/library/{kind}` so browsing
-the admin UI does not inflate Map access counts. Agents still use
-`/v1/library/{kind}`; those requests are the ones the Map counts.
+the admin UI does not inflate Home access counts. Agents still use
+`/v1/library/{kind}`; those requests are the ones the Home map counts.
 
-The **Map** tab (default) is a live SVG overview of how data moves. Aperture
+The **Home** tab (default) is a live SVG overview of how data moves. Aperture
 is drawn as a container around Aegis; Aegis nests the token vault and
 response cache and lists every data type available on this instance (unified
 library kinds plus proxy-only types). Agents connect via the hook and
@@ -1893,8 +1897,8 @@ blocked). Photo services note that bytes stay upstream. Use it as a quick
 “what is this thing doing?” picture; the Services tab remains the place to
 edit permissions.
 
-The **Advanced** tab consolidates operational detail that used to sit below
-the map or on separate tabs: unified library dataset cards, recent access
+The **Advanced** tab consolidates operational detail: Aperture setup and
+hook health, unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
@@ -1905,7 +1909,7 @@ Each service card keeps its own live permissions form under the title; every
 change saves immediately to `permissions.json` (the admin overlay). Bootstrap
 defaults remain in `aegis.json`; the overlay wins for any service the admin
 UI has saved. Keys not shown in the form are preserved on save. Data-type rows
-use the Map icons.
+use the Home map icons.
 
 Each service card leads with **name** on the title line and **connection
 status** on the same line to the right — badge, time left,

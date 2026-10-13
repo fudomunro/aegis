@@ -79,6 +79,48 @@ func TestHandleAdmin_HTMLShell(t *testing.T) {
 	}
 }
 
+// Issue #150: friendly, durable SPA URLs. Refresh on any section path must
+// still serve the admin shell so the client can restore that section.
+func TestHandleAdmin_FriendlyShellPaths(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	for _, path := range []string{
+		"/",
+		"/home",
+		"/library",
+		"/services",
+		"/advanced",
+		"/library/",
+		"/v1/admin",
+		"/v1/admin/",
+	} {
+		req := httptest.NewRequest("GET", path, nil)
+		w := httptest.NewRecorder()
+		srv.HandleAdmin(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("GET %s status = %d, want 200", path, w.Code)
+		}
+		if !strings.Contains(w.Body.String(), `id="tab-home"`) {
+			t.Fatalf("GET %s missing Home tab shell", path)
+		}
+	}
+
+	for _, path := range []string{"/nope", "/v1/admin/nope", "/v1/library"} {
+		req := httptest.NewRequest("GET", path, nil)
+		w := httptest.NewRecorder()
+		srv.HandleAdmin(w, req)
+		if w.Code != http.StatusNotFound {
+			t.Fatalf("GET %s status = %d, want 404", path, w.Code)
+		}
+	}
+
+	req := httptest.NewRequest("POST", "/library", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAdmin(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST /library status = %d, want 405", w.Code)
+	}
+}
+
 func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	cfg := &Config{
 		Connections: map[string]Connection{
