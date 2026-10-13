@@ -668,6 +668,9 @@ func flowProvidesKind(connector ServiceConnector, kindID string) bool {
 	case "messages":
 		_, ok := connector.(MessageProvider)
 		return ok
+	case "transactions":
+		_, ok := connector.(TransactionProvider)
+		return ok
 	default:
 		return false
 	}
