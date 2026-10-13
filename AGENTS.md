@@ -27,9 +27,14 @@ Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modern
 These come from explicit user decisions across sessions. Do not “improve”
 them away.
 
-- **Named services first.** Optimize for Spotify, YouTube Music, Amazon Music,
-  Google Photos/Contacts, Immich — not generic auto-detected data types.
-  Generic type expansion is a later goal (see open issues), not the default.
+- **Type-centric surface; named-service connectors.** The product API is
+  organized around data types (`/v1/library/{kind}`, neutral models,
+  `LibraryKind`) — including user-defined types (#15) — not provider-shaped
+  endpoints. Named services (Spotify, YouTube Music, Amazon Music,
+  Google Photos/Contacts, Immich, …) remain the first-class **connectors** and
+  match targets; do not prioritize generic scrapers or ad-hoc type detection
+  over them. When provider-shaped APIs and type-level semantics conflict,
+  prefer the type-level design.
 - **Fail-open.** Fetch failures, missing endpoints, bad payloads, and
   non-actionable match results must **pass through unchanged**. The hook
   returns `allow` on parse/log errors. Do not invent fail-closed behavior.

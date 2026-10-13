@@ -47,9 +47,11 @@ Agent question
 
 These are non-negotiable (see `AGENTS.md`). New types inherit them.
 
-1. **Named services first.** Optimize for real providers (Spotify, Gmail, …),
-   not generic auto-detected blobs. A type without a named connector is a
-   stub, not a feature.
+1. **Type-centric surface; named-service connectors.** Design the type first
+   (`/v1/library/{kind}`, neutral model, `LibraryKind`). Real providers
+   (Spotify, Gmail, …) are the connectors that populate it — not generic
+   auto-detected blobs. A type without a named connector (or a user-defined
+   source under #15) is a stub, not a feature.
 2. **Fail-open.** Fetch, parse, and match failures must not block the agent.
    Partial `by_service[]` status is fine; a hard 500 for one bad connector is not.
 3. **Aegis does not store media.** Bytes and message bodies stay on the source
