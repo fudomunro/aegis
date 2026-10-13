@@ -55,6 +55,15 @@ func flowTestServer() *Server {
 				Action:     "inject",
 				Connection: "google",
 			},
+			// Static PAT in headers (service_connections overlay) — not OAuth.
+			{
+				ID:     "ynab",
+				Name:   "YNAB",
+				Action: "inject",
+				Headers: map[string]string{
+					"Authorization": "Bearer ynab-pat-secret",
+				},
+			},
 			{ID: "tidal", Name: "Tidal", Action: "block"},
 		},
 	}
@@ -98,6 +107,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		"yt-access-secret",
 		"yt-refresh-secret",
 		"gp-secret",
+		"ynab-pat-secret",
 	} {
 		if strings.Contains(raw, secret) {
 			t.Fatalf("flow response leaked secret %q", secret)
@@ -174,6 +184,16 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	}
 	if byID["tok:spotify"].Label == "" {
 		t.Fatal("expected token child label")
+	}
+	// YNAB holds a PAT in headers, not tokens.json — still belongs in the vault.
+	if _, ok := byID["tok:ynab"]; !ok {
+		t.Fatalf("token children = %v, want tok:ynab", tokenChildren)
+	}
+	if byID["tok:ynab"].Detail == "" || !strings.Contains(byID["tok:ynab"].Detail, "API token") {
+		t.Fatalf("ynab vault detail = %q, want API token label", byID["tok:ynab"].Detail)
+	}
+	if byID["svc:ynab"].Status != FlowStatusConnected {
+		t.Fatalf("ynab status = %q, want connected", byID["svc:ynab"].Status)
 	}
 	if byID["svc:spotify"].ConnectionID == "" {
 		t.Fatal("expected service connection_id for token-origin auth edges")
@@ -485,8 +505,8 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 	body := w.Body.String()
-	if !strings.Contains(body, `id="tab-map"`) {
-		t.Fatal("expected Map tab")
+	if !strings.Contains(body, `id="tab-home"`) {
+		t.Fatal("expected Home tab")
 	}
 	if !strings.Contains(body, "/v1/admin/flow") {
 		t.Fatal("expected flow API reference")

@@ -371,6 +371,22 @@ func main() {
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
 	// Admin shell and JSON both require auth (issue #98): the SPA is markup
 	// only, but unauthenticated peers should not learn the API surface.
+	// Friendly SPA routes (issue #150) are the durable URLs the client uses
+	// with history.pushState so refresh keeps the same section.
+	for _, path := range []string{
+		"/{$}",
+		"/home",
+		"/home/{$}",
+		"/library",
+		"/library/{$}",
+		"/services",
+		"/services/{$}",
+		"/advanced",
+		"/advanced/{$}",
+	} {
+		mux.HandleFunc("GET "+path, srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
+		mux.HandleFunc("HEAD "+path, srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
+	}
 	mux.HandleFunc("/v1/admin", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
 	mux.HandleFunc("/v1/admin/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
 

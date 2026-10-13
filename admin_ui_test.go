@@ -20,14 +20,23 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 	body := w.Body.String()
 
 	for _, want := range []string{
-		`id="tab-map"`,
+		`id="tab-home"`,
+		`id="panel-home"`,
 		`id="tab-services"`,
 		`id="tab-library"`,
 		`id="tab-advanced"`,
 		`id="panel-advanced"`,
-		// Aperture setup guide + live gateway link
-		`id="tab-aperture"`,
+		// Aperture setup lives under Advanced (issue #150), not a top-level tab
+		`id="section-aperture"`,
 		`id="panel-aperture"`,
+		// TOC jumps across Advanced's mixed sections
+		`class="toc"`,
+		"On this page",
+		`href="#section-library-datasets"`,
+		`href="#section-mail-archive"`,
+		`href="#section-copies"`,
+		`id="section-cache"`,
+		`id="section-runtime"`,
 		`id="aperture-open"`,
 		`id="aperture-config-snippet"`,
 		`id="aperture-health-summary"`,
@@ -35,6 +44,16 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"loadApertureSetup",
 		"expectedApertureConfig",
 		"/v1/admin/hook-health",
+		// Friendly durable URLs (issue #150)
+		"TAB_ROUTES",
+		"tabFromPath",
+		"pathForTab",
+		"history.pushState",
+		"history.replaceState",
+		`"home"`,
+		`"library"`,
+		`"services"`,
+		`"advanced"`,
 		`id="services-help"`,
 		`id="map-libraries"`,
 		`id="map-recent"`,
@@ -43,8 +62,10 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"Connect your services",
 		"renderServicesHelp",
 		"FLOW_TABS",
-		`"advanced"`,
 		"map-svg-wrap",
+		// Map icons cover every library kind including newer ones (issue #150 follow-up)
+		`transactions: "M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14V2Zm2 3.5h4M6 8h4M6 10.5h2.5"`,
+		`places: "M8 13.8c2.9-3.4 4.3-5.5 4.3-7.3a4.3 4.3 0 1 0-8.6 0c0 1.8 1.4 3.9 4.3 7.3ZM8 7.8a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z"`,
 		// Services card hierarchy (polish): name + data flow + connection first
 		"svc-card",
 		"svc-title-row",
@@ -138,6 +159,10 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="tab-runtime"`,
 		`id="panel-cache"`,
 		`id="panel-runtime"`,
+		`id="tab-map"`,
+		`id="panel-map"`,
+		// Aperture is under Advanced, not a top-level tab (issue #150)
+		`id="tab-aperture"`,
 		"Setup wizard",
 		"/v1/setup",
 		"Aegis Admin",
