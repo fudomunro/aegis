@@ -20,6 +20,7 @@ const (
 	defaultCopyLedgerName  = "copy_ledger.db"
 	defaultMailArchiveName = "mail-archive.db"
 	defaultQuickenName     = "quicken.db"
+	defaultTimelineName    = "timeline.db"
 	defaultAuditLogName    = "audit_log.db"
 	defaultLogFileName     = "aegis.log"
 	dataDirLogsSubdir      = "logs"
@@ -48,6 +49,9 @@ type DataPaths struct {
 	// Quicken is the SQLite Quicken import store path (issue #141).
 	// Empty disables the local Quicken source.
 	Quicken string
+	// Timeline is the SQLite Google Timeline import store path (issue #142).
+	// Empty disables the local Timeline source.
+	Timeline string
 	// AuditLog is the SQLite access-audit path (issue #105). Empty disables it.
 	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
@@ -73,6 +77,8 @@ type StatePathOverrides struct {
 	MailArchiveSet bool
 	Quicken        string
 	QuickenSet     bool
+	Timeline       string
+	TimelineSet    bool
 	AuditLog       string
 	AuditLogSet    bool
 	LogFile        string
@@ -192,6 +198,15 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.Quicken = ""
 	default:
 		paths.Quicken = expandUserPath(ov.Quicken)
+	}
+	// Timeline import store: omitted → default under data dir; explicitly empty → disabled.
+	switch {
+	case !ov.TimelineSet:
+		paths.Timeline = filepath.Join(dir, defaultTimelineName)
+	case strings.TrimSpace(ov.Timeline) == "":
+		paths.Timeline = ""
+	default:
+		paths.Timeline = expandUserPath(ov.Timeline)
 	}
 	// Audit log: omitted → default under data dir; explicitly empty → disabled.
 	switch {

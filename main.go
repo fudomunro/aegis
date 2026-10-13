@@ -27,6 +27,8 @@ func main() {
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
+	timelinePath := flag.String("timeline-store", "", "path to local Google Timeline import store (default: <data-dir>/timeline.db; empty disables)")
+	importTimeline := flag.String("import-timeline", "", "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit (issue #142)")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
@@ -55,6 +57,8 @@ func main() {
 		MailArchiveSet: setFlags["mail-archive"],
 		Quicken:        *quickenPath,
 		QuickenSet:     setFlags["quicken-store"],
+		Timeline:       *timelinePath,
+		TimelineSet:    setFlags["timeline-store"],
 		AuditLog:       *auditLogPath,
 		AuditLogSet:    setFlags["audit-log"],
 		LogFile:        *logFile,
@@ -93,6 +97,7 @@ func main() {
 		"copy_ledger", paths.CopyLedger,
 		"mail_archive", paths.MailArchive,
 		"quicken_store", paths.Quicken,
+		"timeline_store", paths.Timeline,
 		"audit_log", paths.AuditLog,
 		"log_file", paths.LogFile,
 	)
@@ -109,6 +114,10 @@ func main() {
 	}
 	if strings.TrimSpace(*importQuicken) != "" {
 		code := runImportQuickenCLI(paths.Quicken, *importQuicken)
+		os.Exit(code)
+	}
+	if strings.TrimSpace(*importTimeline) != "" {
+		code := runImportTimelineCLI(paths.Timeline, *importTimeline)
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*tokenNewPass) != "" {
@@ -239,6 +248,27 @@ func main() {
 		slog.Info("quicken store disabled")
 	}
 
+	timelineStore, err := OpenTimelineStore(paths.Timeline)
+	if err != nil {
+		slog.Error("failed to open timeline store", "path", paths.Timeline, "error", err)
+		os.Exit(1)
+	}
+	if timelineStore != nil {
+		defer timelineStore.Close()
+		slog.Info("timeline store ready", "path", timelineStore.Path())
+		// File-based import source. Places is opt-in (default none) — enable
+		// city/read/precise on this service or another places provider.
+		cfg.EnsureService(Service{
+			ID:          timelineServiceID,
+			Name:        timelineServiceName,
+			Action:      "inject",
+			Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
+			Permissions: Permissions{"places": AccessRead},
+		})
+	} else {
+		slog.Info("timeline store disabled")
+	}
+
 	auditLog, err := OpenAuditLog(paths.AuditLog, *auditRetentionDays)
 	if err != nil {
 		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
@@ -271,6 +301,7 @@ func main() {
 		copies:        copies,
 		mail:          mailArchive,
 		quicken:       quickenStore,
+		timeline:      timelineStore,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
 		audit:         auditLog,
 		prom:          NewPromMetrics(),
@@ -297,6 +328,9 @@ func main() {
 	// Financial transactions (issue #141): YNAB live API + local Quicken import.
 	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
 	srv.connectors[quickenServiceID] = NewQuickenConnector(srv)
+	// Location history (issue #142): OwnTracks live + local Google Timeline import.
+	srv.connectors[ownTracksServiceID] = NewOwnTracksConnector(srv)
+	srv.connectors[timelineServiceID] = NewTimelineConnector(srv, timelineStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
@@ -417,6 +451,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminYNABSetup)(w, r)
 	case path == "quicken" || strings.HasPrefix(path, "quicken/"):
 		s.AuthMiddleware(s.HandleAdminQuicken)(w, r)
+	case path == "timeline" || strings.HasPrefix(path, "timeline/"):
+		s.AuthMiddleware(s.HandleAdminTimeline)(w, r)
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
@@ -558,6 +594,43 @@ func runImportQuickenCLI(storePath, importPath string) int {
 		return 1
 	}
 	slog.Info("quicken import finished",
+		"path", importPath,
+		"scanned", res.Scanned,
+		"stored", res.Stored,
+		"skipped", res.Skipped,
+		"errors", res.Errors,
+		"done", res.Done,
+	)
+	if res.Errors > 0 && res.Stored == 0 {
+		return 1
+	}
+	return 0
+}
+
+// runImportTimelineCLI imports a Google Timeline JSON file/directory/zip into
+// the local store, then exits (issue #142).
+func runImportTimelineCLI(storePath, importPath string) int {
+	storePath = strings.TrimSpace(storePath)
+	if storePath == "" {
+		slog.Error("timeline store path is required for -import-timeline")
+		return 1
+	}
+	store, err := OpenTimelineStore(storePath)
+	if err != nil {
+		slog.Error("failed to open timeline store", "path", storePath, "error", err)
+		return 1
+	}
+	if store == nil {
+		slog.Error("timeline store disabled — set -timeline-store")
+		return 1
+	}
+	defer store.Close()
+	res, err := ImportTimelinePath(store, importPath)
+	if err != nil {
+		slog.Error("timeline import failed", "path", importPath, "error", err)
+		return 1
+	}
+	slog.Info("timeline import finished",
 		"path", importPath,
 		"scanned", res.Scanned,
 		"stored", res.Stored,
