@@ -1287,15 +1287,14 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 <pre><code><span class="cm"># from repo root</span>
 python3 docs/generate_walkthrough.py
 
-<span class="cm"># verify the stamp matches HEAD</span>
-git rev-parse --short HEAD
-<span class="cm"># → should equal the badge at the top of docs/index.html</span></code></pre>
+<span class="cm"># verify tree facts + stamp (CI runs this)</span>
+python3 docs/generate_walkthrough.py --check</code></pre>
   </div>
   <table>
     <thead><tr><th>File</th><th>Purpose</th></tr></thead>
     <tbody>
       <tr><td><code>docs/walkthrough.template.html</code></td><td>Editable walkthrough content; tokens are double-brace names (COMMIT, SOURCE_LOC, FILE_MAP_ROWS, …)</td></tr>
-      <tr><td><code>docs/generate_walkthrough.py</code></td><td>Harvests git + tree facts, writes stamped <code>docs/index.html</code></td></tr>
+      <tr><td><code>docs/generate_walkthrough.py</code></td><td>Harvests git + tree facts, writes stamped <code>docs/index.html</code>; <code>--check</code> verifies it is current</td></tr>
       <tr><td><code>docs/index.html</code></td><td>Generated snapshot — do not hand-edit the version badge</td></tr>
     </tbody>
   </table>
@@ -1311,7 +1310,7 @@ git rev-parse --short HEAD
 <hr>
 <footer>
   Generated for <strong>{{COMMIT}}</strong>
-  · aperture-aegis code walkthrough
+  · Aegis code walkthrough
   · module <code>{{GO_MODULE}}</code>
   · Go source of truth, Python for comparison
   · {{SOURCE_FILES}} files · {{SOURCE_LOC}} LOC · {{CONNECTOR_COUNT}} connectors · {{KIND_COUNT}} library kinds
