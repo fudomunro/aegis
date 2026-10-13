@@ -8,7 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
-	"strconv"
+	"sort"
 	"strings"
 	"time"
 )
@@ -32,8 +32,10 @@ const (
 	ynabServiceName = "YNAB"
 	// ynabBudgetLimit bounds how many budgets contribute transactions.
 	ynabBudgetLimit = 5
-	// ynabTransactionLimit is the per-budget fetch page size.
-	ynabTransactionLimit = 200
+	// ynabLibraryCap is the safety bound on mapped line items. YNAB's
+	// transactions endpoint returns the full history in one response (no
+	// page size), so we map everything then keep the newest when over cap.
+	ynabLibraryCap = 5000
 )
 
 // ynabUpstreamBase returns the configured YNAB API base.
@@ -450,12 +452,11 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 		budgets = budgets[:ynabBudgetLimit]
 	}
 
-	// Rough library cap across budgets.
+	// Collect every mapped row from every budget first. The YNAB
+	// transactions endpoint is unpaginated — filtering to "first N" in API
+	// order dropped recent charges whenever the payload was oldest-first.
+	var all []Transaction
 	for _, b := range budgets {
-		if len(transactions) >= libraryPageCap {
-			truncated = true
-			break
-		}
 		currency := "USD"
 		if b.CurrencyFormat != nil && strings.TrimSpace(b.CurrencyFormat.ISOCode) != "" {
 			currency = strings.TrimSpace(b.CurrencyFormat.ISOCode)
@@ -471,9 +472,7 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 		}
 
 		var txResp ynabTransactionsResponse
-		q := url.Values{}
-		q.Set("per_page", strconv.Itoa(ynabTransactionLimit))
-		if err := c.ynabAPIGet(ctx, logger, "/budgets/"+url.PathEscape(b.ID)+"/transactions", q, &txResp); err != nil {
+		if err := c.ynabAPIGet(ctx, logger, "/budgets/"+url.PathEscape(b.ID)+"/transactions", nil, &txResp); err != nil {
 			if err == ErrUnauthorized {
 				return nil, false, err
 			}
@@ -484,14 +483,19 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 			if t.Deleted {
 				continue
 			}
-			if len(transactions) >= libraryPageCap {
-				truncated = true
-				break
-			}
-			transactions = append(transactions, c.neutralTransactionCurrency(b.ID, accounts, t, currency))
+			all = append(all, c.neutralTransactionCurrency(b.ID, accounts, t, currency))
 		}
 	}
-	return transactions, truncated, nil
+
+	// Newest first, then keep the most recent window.
+	sort.SliceStable(all, func(i, j int) bool {
+		return all[i].PostedAt > all[j].PostedAt
+	})
+	if len(all) > ynabLibraryCap {
+		truncated = true
+		all = all[:ynabLibraryCap]
+	}
+	return all, truncated, nil
 }
 
 // Ensure the connector implements the required interfaces at compile time.

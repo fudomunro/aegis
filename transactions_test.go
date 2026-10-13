@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -612,18 +613,20 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 	if len(txs) != 2 {
 		t.Fatalf("want coffee + split parent, got %d", len(txs))
 	}
-	if txs[0].Amount != "-12.35" {
-		t.Fatalf("amount = %q", txs[0].Amount)
-	}
-	if txs[0].Merchant != "Coffee Shop" {
-		t.Fatalf("merchant = %q", txs[0].Merchant)
-	}
-	split := txs[1]
+	// Newest first: split is 2024-03-12, coffee is 2024-03-05.
+	split := txs[0]
 	if split.Amount != "-200.00" {
 		t.Fatalf("split amount = %q (parent total must stay intact)", split.Amount)
 	}
 	if len(split.Category) != 2 || split.Category[0] != "Groceries" || split.Category[1] != "Household Goods" {
 		t.Fatalf("split categories = %v", split.Category)
+	}
+	coffee := txs[1]
+	if coffee.Amount != "-12.35" {
+		t.Fatalf("amount = %q", coffee.Amount)
+	}
+	if coffee.Merchant != "Coffee Shop" {
+		t.Fatalf("merchant = %q", coffee.Merchant)
 	}
 }
 
@@ -921,5 +924,70 @@ func TestTransactionFilters_CacheKey(t *testing.T) {
 	f2 := TransactionFilters{After: "2024-01-01", Q: "Coffee"}
 	if !strings.Contains(f2.cacheKeySuffix(), "after=2024-01-01") {
 		t.Fatalf("suffix = %q", f2.cacheKeySuffix())
+	}
+}
+
+func TestYNABListUserTransactions_PrefersNewest(t *testing.T) {
+	// YNAB's transactions endpoint is unpaginated and may return oldest-first.
+	// The library must keep the most recent window, not the first N in API order.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v1/budgets", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"budgets": []map[string]any{{"id": "b1", "name": "B", "currency_format": map[string]any{"iso_code": "USD"}}},
+			},
+		})
+	})
+	mux.HandleFunc("/v1/budgets/b1/accounts", func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"accounts": []any{}}})
+	})
+	mux.HandleFunc("/v1/budgets/b1/transactions", func(w http.ResponseWriter, r *http.Request) {
+		txs := []map[string]any{}
+		// 50 old rows first (2025), then 5 recent (2026-10).
+		for i := 0; i < 50; i++ {
+			txs = append(txs, map[string]any{
+				"id": "old-" + string(rune('a'+i%26)) + strconv.Itoa(i),
+				"date": "2025-11-01", "amount": -1000, "payee_name": "Old", "cleared": "cleared",
+			})
+		}
+		for i := 0; i < 5; i++ {
+			txs = append(txs, map[string]any{
+				"id": "new-" + strconv.Itoa(i),
+				"date": "2026-10-12", "amount": -2000, "payee_name": "Recent", "cleared": "cleared",
+			})
+		}
+		json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{"transactions": txs}})
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	cfg := &Config{Services: []Service{{
+		ID: "ynab", Name: "YNAB", Endpoint: ts.URL + "/v1",
+		Headers: map[string]string{"Authorization": "Bearer t"},
+	}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	txs, truncated, err := NewYNABConnector(srv).ListUserTransactions(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if truncated {
+		t.Fatal("55 rows must fit without truncation")
+	}
+	if len(txs) != 55 {
+		t.Fatalf("len = %d", len(txs))
+	}
+	// Newest first.
+	if txs[0].Merchant != "Recent" || txs[0].PostedAt != "2026-10-12" {
+		t.Fatalf("first = %+v want recent 2026-10-12", txs[0])
+	}
+	// All five recent rows are present.
+	var recent int
+	for _, tx := range txs {
+		if tx.PostedAt == "2026-10-12" {
+			recent++
+		}
+	}
+	if recent != 5 {
+		t.Fatalf("recent count = %d", recent)
 	}
 }
