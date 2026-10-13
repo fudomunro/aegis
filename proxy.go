@@ -144,7 +144,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 
 	// If we have a stored OAuth token for this service, use it.
 	// This overrides any static Authorization header from config.
-	if tok := s.getValidToken(serviceID, logger); tok != "" {
+	if tok := s.GetValidToken(serviceID, logger); tok != "" {
 		upstreamReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 
@@ -224,10 +224,10 @@ func writeJSONError(w http.ResponseWriter, status int, message string) {
 	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
-// getValidToken returns a valid access token for the service's provider
+// GetValidToken returns a valid access token for the service's provider
 // connection, refreshing if needed. Returns "" when there is no token or the
 // connection lacks scopes required by this surface (issue #26).
-func (s *Server) getValidToken(serviceID string, logger *slog.Logger) string {
+func (s *Server) GetValidToken(serviceID string, logger *slog.Logger) string {
 	if s.tokens == nil {
 		return ""
 	}

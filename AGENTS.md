@@ -19,7 +19,11 @@ It does two jobs:
    neutral models.
 
 Module: `github.com/fudomunro/aegis`  
-Layout: **single package `main`** (flat `*.go` files at the repo root)  
+Layout: **single package `main`** (flat `*.go` files at the repo root) — **ending**.
+Issue #15 is splitting this into `internal/types` (data-type layer),
+`internal/core` (runtime), and `internal/connectors` (named services).
+Until those packages land, keep the flat layout; do not invent a second
+structure. See `docs/restructure-core-types-connectors.md`.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
 ## Non-negotiable product rules
@@ -105,6 +109,12 @@ type ServiceConnector interface {
   upstream base URLs (breaks mock tests and custom endpoints).
 - Prefer `runConnectorProxy` / `doUpstreamRequest` / `aegisHTTPClient`
   over new `http.DefaultClient` call sites.
+- **Connectors depend on `Host`** (`host.go`) — not `*Server`. That seam is
+  how named services leave package main under #15. Extend `Host` only for
+  cross-connector runtime needs; provider-specific stores are constructor
+  args (see `NewQuickenConnector`).
+- Proxy path → data-type classification is the ordered table in
+  `pathclass.go`. Do not reintroduce a `switch` or a second classifier.
 
 ### Local state layout (issue #74)
 
@@ -204,8 +214,9 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Single package.** No internal packages unless there is a strong, reviewed
-  reason; keep the flat layout.
+- **Single package (until #15 split lands).** No *ad hoc* internal packages.
+  The reviewed reason to introduce packages is the core / types / connectors
+  split in `docs/restructure-core-types-connectors.md` — not convenience.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -273,7 +284,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Admin permission writes | `permissions_overlay.go`, `config.go` `SetServicePermissions`, README “Data permissions” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
 | Unified library + merge | `librarykind.go`, `match.go`, `models.go` |
-| Permissions / agent visibility | `permissions.go` |
+| Permissions / agent visibility | `permissions.go`, `pathclass.go`, `policy.go` | Type policy shape (#148); path rules are the type-layer classifier (#15) |
 | Admin map / flow | `flow.go`, `admin.go`, `web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `identity.go` |
 | Product/API docs | `README.md` |

@@ -377,7 +377,7 @@ func (s *Server) mirrorUpstream(ctx context.Context, serviceID, method, path str
 	if svc.Endpoint == "" {
 		return nil, 0, fmt.Errorf("service %q has no upstream endpoint", serviceID)
 	}
-	token := s.getValidToken(serviceID, slog.Default())
+	token := s.GetValidToken(serviceID, slog.Default())
 	if token == "" {
 		return nil, 0, ErrUnauthorized
 	}

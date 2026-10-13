@@ -41,13 +41,13 @@ type TimelineStore struct {
 
 // TimelineImportResult reports one import run.
 type TimelineImportResult struct {
-	Path      string `json:"path"`
-	Scanned   int    `json:"scanned"`
-	Stored    int    `json:"stored"`
-	Skipped   int    `json:"skipped"`
-	Errors    int    `json:"errors"`
-	Done      bool   `json:"done"`
-	Error     string `json:"error,omitempty"`
+	Path    string `json:"path"`
+	Scanned int    `json:"scanned"`
+	Stored  int    `json:"stored"`
+	Skipped int    `json:"skipped"`
+	Errors  int    `json:"errors"`
+	Done    bool   `json:"done"`
+	Error   string `json:"error,omitempty"`
 }
 
 // OpenTimelineStore opens (or creates) the local Timeline SQLite store.
@@ -252,11 +252,11 @@ type timelineObject struct {
 }
 
 type timelinePlaceVisit struct {
-	Location       timelineLocation `json:"location"`
-	Duration       timelineDuration `json:"duration"`
-	PlaceConfidence string          `json:"placeConfidence"`
-	VisitConfidence *int            `json:"visitConfidence"`
-	PlaceID        string          `json:"placeId"`
+	Location        timelineLocation `json:"location"`
+	Duration        timelineDuration `json:"duration"`
+	PlaceConfidence string           `json:"placeConfidence"`
+	VisitConfidence *int             `json:"visitConfidence"`
+	PlaceID         string           `json:"placeId"`
 }
 
 type timelineActivitySegment struct {
@@ -268,11 +268,11 @@ type timelineActivitySegment struct {
 }
 
 type timelineLocation struct {
-	LatitudeE7  *int64  `json:"latitudeE7"`
-	LongitudeE7 *int64  `json:"longitudeE7"`
-	PlaceID     string  `json:"placeId"`
-	Address     string  `json:"address"`
-	Name        string  `json:"name"`
+	LatitudeE7   *int64 `json:"latitudeE7"`
+	LongitudeE7  *int64 `json:"longitudeE7"`
+	PlaceID      string `json:"placeId"`
+	Address      string `json:"address"`
+	Name         string `json:"name"`
 	SemanticType string `json:"semanticType"`
 }
 
@@ -566,13 +566,12 @@ func importTimelineZip(store *TimelineStore, zipPath string) (TimelineImportResu
 
 // TimelineConnector lists imported Google Timeline visits from the local store.
 type TimelineConnector struct {
-	srv   *Server
 	store *TimelineStore
 }
 
 // NewTimelineConnector wraps the local Timeline import store.
-func NewTimelineConnector(srv *Server, store *TimelineStore) *TimelineConnector {
-	return &TimelineConnector{srv: srv, store: store}
+func NewTimelineConnector(store *TimelineStore) *TimelineConnector {
+	return &TimelineConnector{store: store}
 }
 
 func (c *TimelineConnector) Capabilities() ServiceCapabilities {

@@ -40,6 +40,11 @@ type LibraryKind struct {
 	DenyMsg  string
 	FailMsg  string
 
+	// Runtime predicates below are core-owned wiring, not type metadata.
+	// They still take *Server while everything shares package main; when
+	// types/ moves out (issue #15) these attach at registration instead of
+	// living on the data struct.
+
 	// HasProviders reports whether any connector can feed this kind.
 	HasProviders func(s *Server) bool
 	// Readable reports whether any non-blocked service allows reads.
@@ -215,9 +220,9 @@ var libraryKinds = []LibraryKind{
 			"messages in my inbox", "unread email", "unread emails",
 			"google mail", "gmail inbox", "correspondence",
 		},
-		EmptyMsg:     "no message-capable services configured",
-		DenyMsg:      "permission denied: agent access to messages is not allowed",
-		FailMsg:      "failed to fetch messages",
+		EmptyMsg: "no message-capable services configured",
+		DenyMsg:  "permission denied: agent access to messages is not allowed",
+		FailMsg:  "failed to fetch messages",
 		HasProviders: func(s *Server) bool {
 			if s.hasProvider[MessageProvider]() {
 				return true
@@ -423,21 +428,21 @@ func (s *Server) libraryHintsForMessage(msg string) []string {
 // register every dataset from the registry.
 func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 	return map[string]http.HandlerFunc{
-		"/v1/library/playlists": s.HandleLibraryPlaylists,
-		"/v1/library/tracks":    s.HandleLibraryTracks,
-		"/v1/library/albums":    s.HandleLibraryAlbums,
-		"/v1/library/artists":   s.HandleLibraryArtists,
-		"/v1/library/contacts":  s.HandleLibraryContacts,
-		"/v1/library/photos":    s.HandleLibraryPhotos,
-		"/v1/library/events":    s.HandleLibraryEvents,
-		"/v1/library/freebusy":  s.HandleLibraryFreeBusy,
-		"/v1/library/messages":  s.HandleLibraryMessages,
+		"/v1/library/playlists":    s.HandleLibraryPlaylists,
+		"/v1/library/tracks":       s.HandleLibraryTracks,
+		"/v1/library/albums":       s.HandleLibraryAlbums,
+		"/v1/library/artists":      s.HandleLibraryArtists,
+		"/v1/library/contacts":     s.HandleLibraryContacts,
+		"/v1/library/photos":       s.HandleLibraryPhotos,
+		"/v1/library/events":       s.HandleLibraryEvents,
+		"/v1/library/freebusy":     s.HandleLibraryFreeBusy,
+		"/v1/library/messages":     s.HandleLibraryMessages,
 		"/v1/library/transactions": s.HandleLibraryTransactions,
-		"/v1/library/places":    s.HandleLibraryPlaceVisits,
-		"/v1/library/copies":    s.HandleLibraryCopies,
-		"/v1/library/review":    s.HandleMergeReview,
-		"/v1/library/links":     s.HandleEntityLinks,
-		"/v1/library/links/":    s.HandleEntityLinks,
+		"/v1/library/places":       s.HandleLibraryPlaceVisits,
+		"/v1/library/copies":       s.HandleLibraryCopies,
+		"/v1/library/review":       s.HandleMergeReview,
+		"/v1/library/links":        s.HandleEntityLinks,
+		"/v1/library/links/":       s.HandleEntityLinks,
 	}
 }
 

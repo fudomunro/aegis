@@ -39,13 +39,13 @@ type QuickenStore struct {
 
 // QuickenImportResult reports one import run.
 type QuickenImportResult struct {
-	Path      string `json:"path"`
-	Scanned   int    `json:"scanned"`
-	Stored    int    `json:"stored"`
-	Skipped   int    `json:"skipped"`
-	Errors    int    `json:"errors"`
-	Done      bool   `json:"done"`
-	Error     string `json:"error,omitempty"`
+	Path    string `json:"path"`
+	Scanned int    `json:"scanned"`
+	Stored  int    `json:"stored"`
+	Skipped int    `json:"skipped"`
+	Errors  int    `json:"errors"`
+	Done    bool   `json:"done"`
+	Error   string `json:"error,omitempty"`
 }
 
 // OpenQuickenStore opens (or creates) the local Quicken SQLite store.
@@ -668,12 +668,13 @@ func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, e
 
 // QuickenConnector lists imported Quicken transactions from the local store.
 type QuickenConnector struct {
-	server *Server
+	host  Host
+	store *QuickenStore
 }
 
-// NewQuickenConnector creates a connector wired to the given server.
-func NewQuickenConnector(srv *Server) *QuickenConnector {
-	return &QuickenConnector{server: srv}
+// NewQuickenConnector creates a connector wired to the given Host and local Quicken store.
+func NewQuickenConnector(host Host, store *QuickenStore) *QuickenConnector {
+	return &QuickenConnector{host: host, store: store}
 }
 
 // Capabilities returns Quicken import/list operations.
@@ -724,7 +725,7 @@ func (c *QuickenConnector) SystemInstructions(baseURL string) string {
 
 // HandleProxy serves local Quicken store reads.
 func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	store := c.server.quicken
+	store := c.store
 	if store == nil || !store.Enabled() {
 		writeJSONError(w, http.StatusNotFound, "quicken store disabled")
 		return
@@ -773,7 +774,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 
 // ListUserTransactions returns imported Quicken line items.
 func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactions []Transaction, truncated bool, err error) {
-	store := c.server.quicken
+	store := c.store
 	if store == nil || !store.Enabled() {
 		return nil, false, nil
 	}

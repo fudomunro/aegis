@@ -23,12 +23,12 @@ import (
 // are out of scope until a named OAuth-capable connector exists (issue #60).
 // https://github.com/fudomunro/aegis/issues/60
 type GoogleGmailConnector struct {
-	server *Server
+	host Host
 }
 
-// NewGoogleGmailConnector creates a connector wired to the given server.
-func NewGoogleGmailConnector(srv *Server) *GoogleGmailConnector {
-	return &GoogleGmailConnector{server: srv}
+// NewGoogleGmailConnector creates a connector wired to the given Host (issue #15 seam).
+func NewGoogleGmailConnector(host Host) *GoogleGmailConnector {
+	return &GoogleGmailConnector{host: host}
 }
 
 // googleGmailServiceID is the connector/service ID used in config, tokens,
@@ -49,7 +49,7 @@ const (
 
 // googleGmailUpstreamBase returns the configured Gmail API base.
 func (c *GoogleGmailConnector) googleGmailUpstreamBase() string {
-	return c.server.upstreamBaseFor(googleGmailServiceID, "https://gmail.googleapis.com/gmail/v1")
+	return c.host.UpstreamBaseFor(googleGmailServiceID, "https://gmail.googleapis.com/gmail/v1")
 }
 
 // Capabilities returns what Gmail data types and operations are supported.
@@ -148,7 +148,7 @@ Always include the full proxy base URL in your requests.`, base, root)
 func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", googleGmailServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.server.getValidToken(googleGmailServiceID, logger)
+	token := c.host.GetValidToken(googleGmailServiceID, logger)
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Gmail token — authorize at /v1/auth/"+googleGmailServiceID+"/login")
@@ -271,7 +271,7 @@ func (c *GoogleGmailConnector) handleListMessages(w http.ResponseWriter, r *http
 }
 
 func (c *GoogleGmailConnector) handleListThreads(w http.ResponseWriter, r *http.Request) {
-	token := c.server.getValidToken(googleGmailServiceID, slog.Default())
+	token := c.host.GetValidToken(googleGmailServiceID, slog.Default())
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Gmail token — authorize at /v1/auth/"+googleGmailServiceID+"/login")
@@ -464,7 +464,7 @@ func (c *GoogleGmailConnector) ListMessages(ctx context.Context) ([]Message, boo
 }
 
 func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.Values) ([]Message, bool, error) {
-	token := c.server.getValidToken(googleGmailServiceID, slog.Default())
+	token := c.host.GetValidToken(googleGmailServiceID, slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}

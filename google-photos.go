@@ -21,7 +21,7 @@ import (
 // (non-Aegis canonical, issue #16).
 // https://github.com/fudomunro/aegis/issues/21
 type GooglePhotosConnector struct {
-	server *Server
+	host Host
 
 	mu sync.Mutex
 	// lastSessionID is the most recent picker session Aegis created or
@@ -30,9 +30,9 @@ type GooglePhotosConnector struct {
 	lastSessionID string
 }
 
-// NewGooglePhotosConnector creates a connector wired to the given server.
-func NewGooglePhotosConnector(srv *Server) *GooglePhotosConnector {
-	return &GooglePhotosConnector{server: srv}
+// NewGooglePhotosConnector creates a connector wired to the given Host (issue #15 seam).
+func NewGooglePhotosConnector(host Host) *GooglePhotosConnector {
+	return &GooglePhotosConnector{host: host}
 }
 
 const googlePhotosServiceID = "google-photos"
@@ -41,7 +41,7 @@ const googlePhotosServiceName = "Google Photos"
 
 // googlePhotosUpstreamBase returns the configured Photos Picker API base.
 func (c *GooglePhotosConnector) googlePhotosUpstreamBase() string {
-	return c.server.upstreamBaseFor(googlePhotosServiceID, "https://photospicker.googleapis.com/v1")
+	return c.host.UpstreamBaseFor(googlePhotosServiceID, "https://photospicker.googleapis.com/v1")
 }
 
 func (c *GooglePhotosConnector) setLastSession(id string) {
@@ -133,7 +133,7 @@ Always include the full proxy base URL in your requests.
 func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", googlePhotosServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.server.getValidToken(googlePhotosServiceID, logger)
+	token := c.host.GetValidToken(googlePhotosServiceID, logger)
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized,
 			"no valid Google Photos token — authorize at /v1/auth/"+googlePhotosServiceID+"/login")
@@ -378,7 +378,7 @@ func writeGooglePhotosUpstreamError(w http.ResponseWriter, body []byte, status i
 // picker session's selection (empty when the user has not picked yet), so the
 // unified library works without requiring full Library API verification.
 func (c *GooglePhotosConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, error) {
-	token := c.server.getValidToken(googlePhotosServiceID, slog.Default())
+	token := c.host.GetValidToken(googlePhotosServiceID, slog.Default())
 	if token == "" {
 		return nil, false, ErrUnauthorized
 	}

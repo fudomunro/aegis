@@ -81,7 +81,7 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 	res.Query = query
 
 	logger := slog.With("service", googleGmailServiceID, "handler", "mail_archive_sync")
-	token := c.server.getValidToken(googleGmailServiceID, logger)
+	token := c.host.GetValidToken(googleGmailServiceID, logger)
 	if token == "" {
 		res.Error = "no valid Gmail token"
 		_ = archive.SaveSyncCursor(googleGmailServiceID, MailSyncCursor{Error: res.Error})

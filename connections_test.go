@@ -209,13 +209,13 @@ func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 		Scopes:       []string{"https://www.googleapis.com/auth/youtube.readonly"},
 	})
 
-	if tok := srv.getValidToken("youtube-music", slog.Default()); tok != "yt-only" {
+	if tok := srv.GetValidToken("youtube-music", slog.Default()); tok != "yt-only" {
 		t.Fatalf("youtube token = %q, want yt-only", tok)
 	}
-	if tok := srv.getValidToken("google-photos", slog.Default()); tok != "" {
+	if tok := srv.GetValidToken("google-photos", slog.Default()); tok != "" {
 		t.Fatalf("photos token = %q, want empty (missing scope)", tok)
 	}
-	if tok := srv.getValidToken("google", slog.Default()); tok != "" {
+	if tok := srv.GetValidToken("google", slog.Default()); tok != "" {
 		t.Fatalf("contacts token = %q, want empty (missing scope)", tok)
 	}
 
@@ -231,7 +231,7 @@ func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 		},
 	})
 	for _, id := range []string{"youtube-music", "google-photos", "google"} {
-		if tok := srv.getValidToken(id, slog.Default()); tok != "full" {
+		if tok := srv.GetValidToken(id, slog.Default()); tok != "full" {
 			t.Fatalf("%s token = %q, want full", id, tok)
 		}
 	}

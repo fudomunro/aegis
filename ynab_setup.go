@@ -90,7 +90,7 @@ func (s *Server) ynabHasToken() (bool, string) {
 			}
 		}
 	}
-	if s.getValidToken(ynabServiceID, slog.Default()) != "" {
+	if s.GetValidToken(ynabServiceID, slog.Default()) != "" {
 		return true, "oauth"
 	}
 	return false, ""
@@ -226,13 +226,13 @@ func (s *Server) handleYNABTest(w http.ResponseWriter, r *http.Request) {
 // Quicken admin import status / run (issue #141).
 // QuickenImportStatus is GET /v1/admin/quicken/status.
 type QuickenImportStatus struct {
-	Enabled     bool   `json:"enabled"`
-	Path        string `json:"path,omitempty"`
-	Count       int    `json:"count"`
-	StoreEmpty  bool   `json:"store_empty"`
-	LibraryURL  string `json:"library_url,omitempty"`
-	SamplePath  string `json:"sample_hint,omitempty"`
-	Hints       []string `json:"hints,omitempty"`
+	Enabled    bool     `json:"enabled"`
+	Path       string   `json:"path,omitempty"`
+	Count      int      `json:"count"`
+	StoreEmpty bool     `json:"store_empty"`
+	LibraryURL string   `json:"library_url,omitempty"`
+	SamplePath string   `json:"sample_hint,omitempty"`
+	Hints      []string `json:"hints,omitempty"`
 }
 
 // QuickenImportRequest is POST /v1/admin/quicken/import.
