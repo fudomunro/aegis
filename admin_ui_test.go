@@ -63,6 +63,9 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"renderServicesHelp",
 		"FLOW_TABS",
 		"map-svg-wrap",
+		// Map icons cover every library kind including newer ones (issue #150 follow-up)
+		`transactions: "M4 2h8v12l-2-1.2L8 14l-2-1.2L4 14V2Zm2 3.5h4M6 8h4M6 10.5h2.5"`,
+		`places: "M8 13.8c2.9-3.4 4.3-5.5 4.3-7.3a4.3 4.3 0 1 0-8.6 0c0 1.8 1.4 3.9 4.3 7.3ZM8 7.8a1.6 1.6 0 1 0 0-3.2 1.6 1.6 0 0 0 0 3.2Z"`,
 		// Services card hierarchy (polish): name + data flow + connection first
 		"svc-card",
 		"svc-title-row",
