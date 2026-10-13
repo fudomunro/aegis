@@ -77,6 +77,9 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 	if resp.Tracks == nil || len(resp.Tracks) != 0 {
 		t.Fatalf("tracks = %+v", resp.Tracks)
 	}
+	if _, ok := srv.cache.Get("library:tracks"); ok {
+		t.Fatal("degraded library aggregate should not be cached")
+	}
 }
 
 func TestLibraryTracks_NoProviders(t *testing.T) {
@@ -120,6 +123,9 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 	}
 	if resp.ByService["youtube-music"].Status != LibraryStatusError {
 		t.Fatalf("youtube = %+v", resp.ByService["youtube-music"])
+	}
+	if _, ok := srv.cache.Get("library:albums"); ok {
+		t.Fatal("degraded library aggregate should not be cached")
 	}
 }
 
@@ -186,12 +192,27 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 		t.Fatalf("status = %+v", resp.ByService["spotify"])
 	}
 
-	// Second call hits cache.
+	// Degraded aggregates must not be cached (issue #104). After the provider
+	// recovers, the next request re-fetches instead of replaying unauthorized.
 	srv.connectors["spotify"] = &fakeArtistProvider{artists: []Artist{newArtist("spotify", "Spotify", "1", "X")}}
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryArtists)(w2, req)
-	if w2.Header().Get("X-Aegis-Cache") != "hit" {
-		t.Fatalf("expected cache hit, got %q", w2.Header().Get("X-Aegis-Cache"))
+	if w2.Header().Get("X-Aegis-Cache") != "miss" {
+		t.Fatalf("expected cache miss after recovery, got %q", w2.Header().Get("X-Aegis-Cache"))
+	}
+	var recovered ArtistList
+	if err := json.Unmarshal(w2.Body.Bytes(), &recovered); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if recovered.ByService["spotify"].Status != LibraryStatusOK {
+		t.Fatalf("status = %+v", recovered.ByService["spotify"])
+	}
+
+	// Healthy aggregate is cached.
+	w3 := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryArtists)(w3, req)
+	if w3.Header().Get("X-Aegis-Cache") != "hit" {
+		t.Fatalf("expected cache hit on healthy aggregate, got %q", w3.Header().Get("X-Aegis-Cache"))
 	}
 }
 
@@ -213,6 +234,10 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 	}
 	if resp.ByService["spotify"].Status != LibraryStatusError {
 		t.Fatalf("status = %+v", resp.ByService["spotify"])
+	}
+	// Error bodies must not stick in the cache (issue #104).
+	if _, ok := srv.cache.Get("library:artists"); ok {
+		t.Fatal("degraded library aggregate should not be cached")
 	}
 }
 

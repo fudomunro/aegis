@@ -529,11 +529,9 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []Message) []Message {
 	if len(want) == 0 {
 		return msgs
 	}
-	ids := make([]string, 0, len(want))
 	placeholders := make([]string, 0, len(want))
 	args := make([]any, 0, len(want))
 	for id := range want {
-		ids = append(ids, id)
 		placeholders = append(placeholders, "?")
 		args = append(args, id)
 	}

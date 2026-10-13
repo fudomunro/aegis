@@ -24,7 +24,6 @@ const (
 	defaultAuditLogName    = "audit_log.db"
 	defaultLogFileName     = "aegis.log"
 	dataDirLogsSubdir      = "logs"
-	dataDirCacheSubdir     = "cache"
 )
 
 // DataPaths is the resolved local state layout for one Aegis process.
@@ -56,9 +55,8 @@ type DataPaths struct {
 	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
 	LogFile string
-	// LogsDir / CacheDir are reserved layout slots under Dir.
-	LogsDir  string
-	CacheDir string
+	// LogsDir is the process log directory under Dir.
+	LogsDir string
 }
 
 // StatePathOverrides holds CLI/env values before defaults are applied.
@@ -170,7 +168,6 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		Apps:        filepath.Join(dir, defaultAppsName),
 		Links:       resolveUnderDataDir(ov.Links, dir, defaultLinksName),
 		LogsDir:     filepath.Join(dir, dataDirLogsSubdir),
-		CacheDir:    filepath.Join(dir, dataDirCacheSubdir),
 	}
 	// Copy ledger: omitted → default under data dir; explicitly empty → disabled.
 	switch {
@@ -242,13 +239,11 @@ func EnsureDataDir(dir string) error {
 	if err := os.Chmod(dir, 0o700); err != nil {
 		fmt.Fprintf(os.Stderr, "aegis: could not set data dir mode 0700 on %s: %v\n", dir, err)
 	}
-	for _, sub := range []string{dataDirLogsSubdir, dataDirCacheSubdir} {
-		p := filepath.Join(dir, sub)
-		if err := os.MkdirAll(p, 0o700); err != nil {
-			return fmt.Errorf("creating data subdir %s: %w", p, err)
-		}
-		_ = os.Chmod(p, 0o700)
+	logsDir := filepath.Join(dir, dataDirLogsSubdir)
+	if err := os.MkdirAll(logsDir, 0o700); err != nil {
+		return fmt.Errorf("creating data subdir %s: %w", logsDir, err)
 	}
+	_ = os.Chmod(logsDir, 0o700)
 	return nil
 }
 

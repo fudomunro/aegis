@@ -136,6 +136,8 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to store token")
 		return
 	}
+	// A new token changes which services answer library/proxy calls (issue #104).
+	s.cache.Clear()
 
 	slog.Info("OAuth authorization complete",
 		"service", serviceID,
@@ -184,6 +186,8 @@ func (s *Server) HandleAuthRevoke(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "failed to revoke token")
 		return
 	}
+	// Drop cached responses that were fetched with the revoked token (issue #104).
+	s.cache.Clear()
 
 	slog.Info("token revoked", "service", serviceID, "connection", connectionID)
 	w.Header().Set("Content-Type", "application/json")
