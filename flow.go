@@ -253,12 +253,14 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		tokenIDs = append(tokenIDs, id)
 	}
 	sort.Strings(tokenIDs)
+	seenVault := make(map[string]bool, len(tokenIDs))
 	for _, connID := range tokenIDs {
 		st := tokens[connID]
 		status := FlowStatusConnected
 		if st.Expired {
 			status = FlowStatusExpired
 		}
+		seenVault[connID] = true
 		nodes = append(nodes, FlowNode{
 			ID:     "tok:" + connID,
 			Kind:   FlowKindToken,
@@ -266,6 +268,32 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Detail: "OAuth token held for this connection",
 			Parent: "tokens",
 			Status: status,
+		})
+	}
+
+	// Static header credentials (YNAB PAT, Immich API key) live in
+	// service_connections.json, not the OAuth token store. Surface them in
+	// the vault too so the map matches what Aegis can actually inject.
+	for _, svc := range s.config.ServiceSnapshots() {
+		if strings.EqualFold(svc.Action, "block") {
+			continue
+		}
+		connID := s.config.connectionIDForService(svc.ID)
+		if seenVault[connID] {
+			continue
+		}
+		cred := staticCredentialLabel(svc)
+		if cred == "" {
+			continue
+		}
+		seenVault[connID] = true
+		nodes = append(nodes, FlowNode{
+			ID:     "tok:" + connID,
+			Kind:   FlowKindToken,
+			Label:  s.tokenDisplayName(connID),
+			Detail: cred + " held for this connection",
+			Parent: "tokens",
+			Status: FlowStatusConnected,
 		})
 	}
 
@@ -610,16 +638,38 @@ func (s *Server) tokenDisplayName(connID string) string {
 }
 
 func flowServiceStatus(svc Service, st TokenStatus) string {
+	if st.HasToken {
+		if st.Expired {
+			return FlowStatusExpired
+		}
+		return FlowStatusConnected
+	}
+	if staticCredentialLabel(svc) != "" {
+		return FlowStatusConnected
+	}
 	if svc.Connection == "" {
 		return FlowStatusConfigured
 	}
-	if !st.HasToken {
-		return FlowStatusNeedsAuth
+	return FlowStatusNeedsAuth
+}
+
+// staticCredentialLabel returns a short human label when the service holds a
+// static auth header (API token / key). Secrets never appear in the label.
+func staticCredentialLabel(svc Service) string {
+	for k, v := range svc.Headers {
+		if strings.TrimSpace(v) == "" {
+			continue
+		}
+		switch {
+		case strings.EqualFold(k, "Authorization"):
+			return "API token"
+		case strings.EqualFold(k, "X-YNAB-Token"):
+			return "API token"
+		case strings.EqualFold(k, "X-API-Key"), strings.EqualFold(k, "X-Immich-Api-Key"):
+			return "API key"
+		}
 	}
-	if st.Expired {
-		return FlowStatusExpired
-	}
-	return FlowStatusConnected
+	return ""
 }
 
 func flowProvidesKind(connector ServiceConnector, kindID string) bool {
