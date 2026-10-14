@@ -17,7 +17,6 @@
   "empty_msg": "no reading-list sources configured (add a schema source under user-types/reading-list/)",
   "deny_msg": "permission denied: agent access to the reading list is not allowed",
   "fail_msg": "failed to fetch reading list",
-  "default_access": "read",
   "fields": {
     "id": {
       "type": "string",

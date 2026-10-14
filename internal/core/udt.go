@@ -26,6 +26,10 @@ type userDefinedRegistry struct {
 	baseDir   string            // user-types root (discovery only)
 	// overlayPath is the admin-edited user_types.json (local file selection).
 	overlayPath string
+	// overlay is the cached overlay so library GETs do not re-read disk on
+	// every request (issue #15 review). Invalidated on admin save.
+	overlay   *UserTypesOverlay
+	overlayMu sync.Mutex // serializes admin read-modify-write of user_types.json
 }
 
 func newUserDefinedRegistry() *userDefinedRegistry {
@@ -43,18 +47,44 @@ func (reg *userDefinedRegistry) OverlayPath() string {
 	return reg.overlayPath
 }
 
-// SchemaWithOverlay returns the kind schema with admin-selected local files
-// applied (issue #15). Falls back to the bare schema when the overlay is
-// missing or unreadable.
-func (reg *userDefinedRegistry) SchemaWithOverlay(id string) types.UserDefinedTypeSchema {
-	schema, _ := reg.Get(id)
+// SetOverlay caches a just-saved overlay (and clears it when nil).
+func (reg *userDefinedRegistry) SetOverlay(ov *UserTypesOverlay) {
 	if reg == nil {
-		return schema
+		return
+	}
+	reg.mu.Lock()
+	defer reg.mu.Unlock()
+	reg.overlay = ov
+}
+
+// Overlay returns the cached overlay, loading from disk on first use.
+func (reg *userDefinedRegistry) Overlay() *UserTypesOverlay {
+	if reg == nil {
+		return &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
+	}
+	reg.mu.RLock()
+	cached := reg.overlay
+	reg.mu.RUnlock()
+	if cached != nil {
+		return cached
 	}
 	ov, err := loadUserTypesOverlay(reg.OverlayPath())
 	if err != nil {
-		return schema
+		return &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
 	}
+	reg.SetOverlay(ov)
+	return ov
+}
+
+// SchemaWithOverlay returns the kind schema with admin-selected local files
+// applied (issue #15). Falls back to the bare schema when the overlay is
+// missing or unreadable. Safe on a nil registry.
+func (reg *userDefinedRegistry) SchemaWithOverlay(id string) types.UserDefinedTypeSchema {
+	if reg == nil {
+		return types.UserDefinedTypeSchema{}
+	}
+	schema, _ := reg.Get(id)
+	ov := reg.Overlay()
 	return applyUserTypesOverlay(schema, ov.Kinds[id])
 }
 
@@ -281,6 +311,9 @@ func mapUserDefinedDocument(schema types.UserDefinedTypeSchema, src types.UserDe
 // pin memory (same spirit as libraryPageCap on named providers).
 const maxUserDefinedItems = 500
 
+// maxUserDefinedBytes caps file_json and http_json payloads before decode.
+const maxUserDefinedBytes = 4 << 20
+
 // fetchUserDefinedSource loads and maps one schema source. file_json paths
 // are resolved relative to the schema directory when not absolute.
 func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSchema, src types.UserDefinedSourceSpec, baseDir string, client *http.Client) ([]types.UserDefinedItem, bool, error) {
@@ -292,9 +325,17 @@ func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSch
 		if !filepath.IsAbs(path) && baseDir != "" {
 			path = filepath.Join(baseDir, path)
 		}
-		body, err = os.ReadFile(path)
+		f, oerr := os.Open(path)
+		if oerr != nil {
+			return nil, false, oerr
+		}
+		defer f.Close()
+		body, err = io.ReadAll(io.LimitReader(f, maxUserDefinedBytes+1))
 		if err != nil {
 			return nil, false, err
+		}
+		if len(body) > maxUserDefinedBytes {
+			return nil, false, fmt.Errorf("file_json %s: payload exceeds %d bytes", src.ID, maxUserDefinedBytes)
 		}
 	case "http_json":
 		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, src.Endpoint, nil)
@@ -315,9 +356,12 @@ func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSch
 		if resp.StatusCode < 200 || resp.StatusCode > 299 {
 			return nil, false, fmt.Errorf("http_json %s: status %d", src.ID, resp.StatusCode)
 		}
-		body, err = io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+		body, err = io.ReadAll(io.LimitReader(resp.Body, maxUserDefinedBytes+1))
 		if err != nil {
 			return nil, false, err
+		}
+		if len(body) > maxUserDefinedBytes {
+			return nil, false, fmt.Errorf("http_json %s: payload exceeds %d bytes", src.ID, maxUserDefinedBytes)
 		}
 	default:
 		return nil, false, fmt.Errorf("unsupported source kind %q", src.Kind)

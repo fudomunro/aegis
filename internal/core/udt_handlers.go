@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -74,18 +75,18 @@ func (s *Server) userDefinedReadable(permType string) bool {
 	return types.AllowsMethod(s.config.EffectiveAccess("", permType), http.MethodGet)
 }
 
-// registerUserDefinedKinds seeds type policy from schema.default_access.
-// Kind metadata stays in the UDT registry (allLibraryKinds merges it); this
-// does not mutate the built-in libraryKinds slice.
+// registerUserDefinedKinds prepares loaded UDT kinds for serving.
+//
+// Visibility is never taken from the pack: every UDT stays opt-in
+// (types.MarkOptInDataType at load) until an admin type policy names the
+// kind (issue #15 review — packs must not self-enable, including
+// default_access). Schema default_access is informational only.
 func (s *Server) registerUserDefinedKinds() {
-	if s == nil || s.udts == nil || s.config == nil {
+	if s == nil || s.udts == nil {
 		return
 	}
-	for _, schema := range s.udts.All() {
-		if schema.DefaultAccess != "" && schema.DefaultAccess != types.AccessNone {
-			s.config.SeedTypePolicy(schema.PermType, types.TypePolicy{Default: schema.DefaultAccess})
-		}
-	}
+	// Intentionally no SeedTypePolicy: default_access cannot grant access.
+	// Re-applying after Config.Reload is unnecessary because nothing is seeded.
 }
 
 // udtRouteHandlers maps user-defined kind paths to their HTTP handlers.
@@ -110,7 +111,14 @@ func (s *Server) userDefinedHint(schema types.UserDefinedTypeSchema) string {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", kind.Label, name)
 	}
 	text += "\nSchema-declared fields for this user-defined type:"
-	for name, f := range schema.Fields {
+	// Sorted for prompt-cache stability (issue #15 review).
+	fieldNames := make([]string, 0, len(schema.Fields))
+	for name := range schema.Fields {
+		fieldNames = append(fieldNames, name)
+	}
+	sort.Strings(fieldNames)
+	for _, name := range fieldNames {
+		f := schema.Fields[name]
 		desc := f.Description
 		if desc == "" {
 			desc = f.Type

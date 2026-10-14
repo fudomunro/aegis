@@ -116,7 +116,6 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(kindDir, "schema.json"), []byte(`{
 		"id": "reading-list",
 		"label": "reading list",
-		"default_access": "read",
 		"fields": {"title": {"type": "string"}},
 		"identity": {"fields": ["title"]},
 		"sources": [{
@@ -201,6 +200,7 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 
 	// Library aggregate uses the selected file (empty items list still 200)
 	types.MarkOptInDataType("reading-list")
+	srv.config.SeedTypePolicy("reading-list", types.TypePolicy{Default: types.AccessRead})
 	handler := srv.HandleLibraryUserDefined(schema)
 	req = httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")

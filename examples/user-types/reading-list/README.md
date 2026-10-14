@@ -9,10 +9,19 @@ at a tree that contains it) and restart:
 <data-dir>/user-types/reading-list/sample/books.json
 ```
 
+Then enable the kind (packs cannot self-enable):
+
+```bash
+# type policy must name reading-list before agents can read it
+curl -s -X PUT https://aegis.example.ts.net/v1/admin/type-policies \
+  -H 'Content-Type: application/json' \
+  -d '{"types":{"reading-list":{"default":"read"}}}'
+```
+
 Then:
 
 ```bash
-curl -s http://localhost:8080/v1/library/reading-list | jq .
+curl -s https://aegis.example.ts.net/v1/library/reading-list | jq .
 ```
 
 ## What this proves

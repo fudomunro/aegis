@@ -54,7 +54,7 @@ them away.
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
   `entity_links.json`, `permissions.json`, `service_connections.json`,
-  `.aegis-token-pass`, or live binaries. Example config only via
+  `user_types.json`, `.aegis-token-pass`, or live binaries. Example config only via
   `aegis.example.json`. Prefer the OS data directory (issue #74) over the git
   worktree for runtime state.
 - **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
@@ -89,6 +89,11 @@ Agent → Aegis proxy / library / admin → provider APIs
 **New library data types** follow `docs/adding-data-types.md`: neutral model +
 provider interface + `LibraryKind` registry entry + thin
 `handleLibraryAggregate` handler. Do not clone an aggregate pipeline.
+
+**User-defined types** (`docs/user-defined-types.md`, issue #15) are schema
+packs under `user-types/` loaded into the same pipeline. A pack can never
+self-enable, shadow a built-in `id`/`perm_type`/`path`, or store secrets in
+`http_json` headers. Local file selection is the `user_types.json` overlay.
 
 **New or changed service behavior** goes through `ServiceConnector`:
 
@@ -128,7 +133,7 @@ All mutable local state defaults under one data directory (override with
 
 ```
 <data-dir>/aegis.json, permissions.json, apps.json, entity_links.json, tokens.json,
-copy_ledger.db, mail-archive.db, logs/aegis.log
+user_types.json, user-types/, copy_ledger.db, mail-archive.db, logs/aegis.log
 ```
 
 Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
@@ -301,7 +306,8 @@ decided:
 - Live Immich canonical photos testing (#39)
 - Obtaining data from other sources / photo storage (#34, #21)
 - Photo ownership / provenance proofs (#20)
-- User-defined types (#15)
+- User-defined types full product surface (admin authoring, hot-reload packs;
+  PoC + file selection land under #15)
 - First-run onboarding for tailnet + OAuth (#8)
 
 ## Definition of done

@@ -222,3 +222,68 @@ func TestEncodeUserDefinedList(t *testing.T) {
 		t.Errorf("Fields not copied: %+v", list.Fields)
 	}
 }
+
+func TestUserDefinedTypeSchema_RejectsHijacking(t *testing.T) {
+	cases := []struct {
+		name   string
+		schema UserDefinedTypeSchema
+	}{
+		{"built-in perm_type", UserDefinedTypeSchema{
+			ID:       "my-list",
+			PermType: "playlists",
+			Fields:   map[string]UserDefinedField{"title": {}},
+		}},
+		{"built-in data type id", UserDefinedTypeSchema{
+			ID:     "tracks",
+			Fields: map[string]UserDefinedField{"title": {}},
+		}},
+		{"reserved path id", UserDefinedTypeSchema{
+			ID:     "links",
+			Fields: map[string]UserDefinedField{"title": {}},
+		}},
+		{"path collision", UserDefinedTypeSchema{
+			ID:     "my-list",
+			Path:   "/v1/library/links",
+			Fields: map[string]UserDefinedField{"title": {}},
+		}},
+		{"non-library path", UserDefinedTypeSchema{
+			ID:     "my-list",
+			Path:   "/v1/mail/",
+			Fields: map[string]UserDefinedField{"title": {}},
+		}},
+		{"bad id charset", UserDefinedTypeSchema{
+			ID:     "My_List",
+			Fields: map[string]UserDefinedField{"title": {}},
+		}},
+		{"forbidden header", UserDefinedTypeSchema{
+			ID:     "my-list",
+			Fields: map[string]UserDefinedField{"title": {}},
+			Sources: []UserDefinedSourceSpec{{
+				ID:       "s",
+				Kind:     "http_json",
+				Endpoint: "https://example.com",
+				Headers:  map[string]string{"Authorization": "Bearer x"},
+				FieldMap: map[string]string{"title": "t"},
+			}},
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			s := tc.schema
+			if err := s.Normalize(); err == nil {
+				t.Fatalf("Normalize(%+v) succeeded, want error", s)
+			}
+		})
+	}
+}
+
+func TestUserDefinedTypeSchema_RejectsPathOverride(t *testing.T) {
+	s := UserDefinedTypeSchema{
+		ID:     "reading-list",
+		Path:   "/v1/library/tracks",
+		Fields: map[string]UserDefinedField{"title": {}},
+	}
+	if err := s.Normalize(); err == nil {
+		t.Fatal("path override to built-in route must fail")
+	}
+}

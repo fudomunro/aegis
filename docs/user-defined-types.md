@@ -49,7 +49,6 @@ One JSON file per kind. Example: `examples/user-types/reading-list/schema.json`.
   "summary": "…",
   "example_question": "what's on my reading list?",
   "keywords": ["reading list", "want to read"],
-  "default_access": "read",
   "fields": {
     "id":     { "type": "string" },
     "title":  { "type": "string", "required": true },
@@ -87,7 +86,7 @@ One JSON file per kind. Example: `examples/user-types/reading-list/schema.json`.
 | `sources[].kind` | `file_json` (path relative to the schema file) or `http_json`. |
 | `sources[].items_path` | Dotted path to the item array ("" = document root). |
 | `sources[].field_map` | Schema field → dotted path on each source row. |
-| `default_access` | TypePolicy seed. Empty ⇒ opt-in `none` (places pattern). |
+| `default_access` | Informational only (admin display). Packs cannot self-enable. |
 
 ### Neutral response envelope
 
@@ -156,7 +155,11 @@ do not invent a second proxy path.
 
 - Every UDT id is marked **opt-in** (`types.MarkOptInDataType`) so a new pack
   is never agent-visible by accident.
-- `default_access` seeds `TypePolicy.Default` at load (admin overlay wins).
+- **Packs cannot self-enable.** `default_access` is informational only; type
+  policy must name the kind (admin UI / `PUT /v1/admin/type-policies`).
+- `id` must match `^[a-z][a-z0-9-]*$` and must not collide with built-in data
+  types or `/v1/library` reserved segments (`links`, `review`, `copies`, …).
+  `perm_type` is always the id; `path` is always `/v1/library/{id}`.
 - Empty / `none` keeps the kind hidden until the admin enables it — same as
   places (#142).
 - Provider overrides do not apply: UDT sources are not OAuth services.
