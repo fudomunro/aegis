@@ -7,21 +7,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-// PlaceVisitProvider is implemented by connectors that can return the user's
-// location history as visits and trips in Aegis's neutral format (issue #142).
-// The aggregate library endpoint uses this so agents can answer "where was I?"
-// with evidence rather than booking intent. Each returned PlaceVisit should
-// carry one PlaceVisitSource for that service. Aegis models visits and trips —
-// never raw GPS firehoses — and defaults the places permission to none.
-type PlaceVisitProvider interface {
-	// ListUserPlaceVisits returns neutral visits/trips (one
-	// PlaceVisitSource each). Return ErrUnauthorized when no valid token
-	// is available. truncated is true when the page cap was hit with more
-	// items still upstream.
-	ListUserPlaceVisits(ctx context.Context) (visits []PlaceVisit, truncated bool, err error)
-}
+	"github.com/fudomunro/aegis/internal/types"
+)
 
 // Match methods for PlaceVisit.
 const (
@@ -30,7 +18,7 @@ const (
 )
 
 // placeVisitServiceName returns the first source service name for stable sort.
-func placeVisitServiceName(v PlaceVisit) string {
+func placeVisitServiceName(v types.PlaceVisit) string {
 	if len(v.Sources) > 0 {
 		return v.Sources[0].ServiceName
 	}
@@ -41,14 +29,14 @@ func placeVisitServiceName(v PlaceVisit) string {
 func normalizePlaceVisitKind(raw string) string {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	switch s {
-	case PlaceKindVisit, "placevisit", "place_visit", "stay", "dwell", "stop":
-		return PlaceKindVisit
-	case PlaceKindTrip, "activitysegment", "activity_segment", "travel", "journey":
-		return PlaceKindTrip
+	case types.PlaceKindVisit, "placevisit", "place_visit", "stay", "dwell", "stop":
+		return types.PlaceKindVisit
+	case types.PlaceKindTrip, "activitysegment", "activity_segment", "travel", "journey":
+		return types.PlaceKindTrip
 	case "":
-		return PlaceKindVisit
+		return types.PlaceKindVisit
 	default:
-		return PlaceKindVisit
+		return types.PlaceKindVisit
 	}
 }
 
@@ -61,19 +49,19 @@ func normalizeTripMode(raw string) string {
 	case "":
 		return ""
 	case "flight", "flying", "in_airplane", "airplane", "air", "plane":
-		return TripModeFlight
+		return types.TripModeFlight
 	case "drive", "driving", "in_passenger_vehicle", "in_vehicle", "car", "vehicle", "motorcycle":
-		return TripModeDrive
+		return types.TripModeDrive
 	case "walk", "walking", "on_foot", "foot":
-		return TripModeWalk
+		return types.TripModeWalk
 	case "bicycle", "biking", "cycling", "on_bicycle":
-		return TripModeBicycle
+		return types.TripModeBicycle
 	case "train", "rail", "in_train":
-		return TripModeTrain
+		return types.TripModeTrain
 	case "bus", "in_bus":
-		return TripModeBus
+		return types.TripModeBus
 	default:
-		return TripModeUnknown
+		return types.TripModeUnknown
 	}
 }
 
@@ -106,7 +94,7 @@ func normalizePlaceVisitTime(raw string) string {
 // placeIdentityKey is the sort/merge key. Prefer durable provider IDs when
 // present; otherwise start day + end day + normalized place key. Visits
 // without any identity fall back to service:id so they stay distinct.
-func placeIdentityKey(v PlaceVisit) string {
+func placeIdentityKey(v types.PlaceVisit) string {
 	if id := strings.ToLower(strings.TrimSpace(v.EntityID)); id != "" {
 		return "pid:" + id
 	}
@@ -135,13 +123,13 @@ func placeIdentityKey(v PlaceVisit) string {
 
 // placeMergeKey is the durable-ish place identity: locality+name when named,
 // otherwise coordinates rounded to ~100m.
-func placeMergeKey(p Place) string {
-	name := NormalizeIdentityKey(p.Name)
+func placeMergeKey(p types.Place) string {
+	name := types.NormalizeIdentityKey(p.Name)
 	if name == "" {
-		name = NormalizeIdentityKey(p.Address)
+		name = types.NormalizeIdentityKey(p.Address)
 	}
-	loc := NormalizeIdentityKey(p.Locality)
-	country := NormalizeIdentityKey(p.Country)
+	loc := types.NormalizeIdentityKey(p.Locality)
+	country := types.NormalizeIdentityKey(p.Country)
 	if name != "" || loc != "" {
 		return "n:" + name + "|l:" + loc + "|c:" + country
 	}
@@ -177,7 +165,7 @@ func placeVisitMatchKind(key string) string {
 	}
 }
 
-func mergePlaceInto(dst *Place, src Place) {
+func mergePlaceInto(dst *types.Place, src types.Place) {
 	if dst.Name == "" {
 		dst.Name = src.Name
 	}
@@ -195,7 +183,7 @@ func mergePlaceInto(dst *Place, src Place) {
 	}
 }
 
-func mergePlaceVisitInto(dst *PlaceVisit, src PlaceVisit) {
+func mergePlaceVisitInto(dst *types.PlaceVisit, src types.PlaceVisit) {
 	if dst.EndAt == "" {
 		dst.EndAt = src.EndAt
 	}
@@ -226,9 +214,9 @@ func mergePlaceVisitInto(dst *PlaceVisit, src PlaceVisit) {
 	}
 }
 
-func clonePlaceVisit(v PlaceVisit) PlaceVisit {
+func clonePlaceVisit(v types.PlaceVisit) types.PlaceVisit {
 	cp := v
-	cp.Sources = append([]PlaceVisitSource(nil), v.Sources...)
+	cp.Sources = append([]types.PlaceVisitSource(nil), v.Sources...)
 	if len(v.Extra) > 0 {
 		cp.Extra = make(map[string]any, len(v.Extra))
 		for k, val := range v.Extra {
@@ -244,12 +232,12 @@ func clonePlaceVisit(v PlaceVisit) PlaceVisit {
 // within 15 minutes — the cross-provider near-duplicate rule (issue #142).
 // Name-only place keys still merge when the window agrees; a visit at a
 // different time is never merged.
-func MergePlaceVisits(in []PlaceVisit) []PlaceVisit {
+func MergePlaceVisits(in []types.PlaceVisit) []types.PlaceVisit {
 	if len(in) == 0 {
 		return nil
 	}
 	type slot struct {
-		v   PlaceVisit
+		v   types.PlaceVisit
 		key string
 	}
 	var order []string
@@ -298,7 +286,7 @@ func MergePlaceVisits(in []PlaceVisit) []PlaceVisit {
 		}
 	}
 
-	out := make([]PlaceVisit, 0, len(keys))
+	out := make([]types.PlaceVisit, 0, len(keys))
 	for _, key := range keys {
 		item, ok := byKey[key]
 		if !ok {
@@ -340,7 +328,7 @@ func MergePlaceVisits(in []PlaceVisit) []PlaceVisit {
 
 // placeVisitsMatchNearbyWindow reports whether two visits describe the same
 // place within a small time slack (overlapping or gap ≤ slack seconds).
-func placeVisitsMatchNearbyWindow(a, b PlaceVisit, slackSec int64) bool {
+func placeVisitsMatchNearbyWindow(a, b types.PlaceVisit, slackSec int64) bool {
 	// Only merge like with like — a trip into a town is not the visit there.
 	if normalizePlaceVisitKind(a.Kind) != normalizePlaceVisitKind(b.Kind) {
 		return false
@@ -373,7 +361,7 @@ func placeVisitsMatchNearbyWindow(a, b PlaceVisit, slackSec int64) bool {
 	return true
 }
 
-func placeWindowSecs(v PlaceVisit) (start, end int64) {
+func placeWindowSecs(v types.PlaceVisit) (start, end int64) {
 	parse := func(raw string) int64 {
 		t := normalizePlaceVisitTime(raw)
 		if t == "" {
@@ -395,7 +383,7 @@ func placeWindowSecs(v PlaceVisit) (start, end int64) {
 
 // placeDurableIDsAgree reports whether every source's provider ID is the same
 // (or only one side carries one).
-func placeDurableIDsAgree(v PlaceVisit) bool {
+func placeDurableIDsAgree(v types.PlaceVisit) bool {
 	seen := map[string]bool{}
 	for _, src := range v.Sources {
 		id := ""
@@ -443,13 +431,13 @@ func (f PlaceVisitFilters) Empty() bool {
 	return f.After == "" && f.Before == "" && f.Locality == "" && f.Kind == ""
 }
 
-func (f PlaceVisitFilters) matches(v PlaceVisit) bool {
+func (f PlaceVisitFilters) matches(v types.PlaceVisit) bool {
 	if f.Kind != "" && normalizePlaceVisitKind(v.Kind) != f.Kind {
 		return false
 	}
 	if f.Locality != "" {
-		loc := NormalizeIdentityKey(v.Place.Locality)
-		want := NormalizeIdentityKey(f.Locality)
+		loc := types.NormalizeIdentityKey(v.Place.Locality)
+		want := types.NormalizeIdentityKey(f.Locality)
 		if loc == "" || !strings.Contains(loc, want) {
 			return false
 		}
@@ -497,11 +485,11 @@ func (f PlaceVisitFilters) cacheKeySuffix() string {
 	return b.String()
 }
 
-func filterPlaceVisits(in []PlaceVisit, f PlaceVisitFilters) []PlaceVisit {
+func filterPlaceVisits(in []types.PlaceVisit, f PlaceVisitFilters) []types.PlaceVisit {
 	if f.Empty() {
 		return in
 	}
-	out := make([]PlaceVisit, 0, len(in))
+	out := make([]types.PlaceVisit, 0, len(in))
 	for _, v := range in {
 		if f.matches(v) {
 			out = append(out, v)
@@ -513,8 +501,8 @@ func filterPlaceVisits(in []PlaceVisit, f PlaceVisitFilters) []PlaceVisit {
 // RedactPlaceVisitCity keeps only locality, country, and the time window —
 // enough for "was I out of town?" without names, addresses, coordinates, or
 // raw point IDs (issue #142).
-func RedactPlaceVisitCity(v PlaceVisit) PlaceVisit {
-	v.Place = Place{
+func RedactPlaceVisitCity(v types.PlaceVisit) types.PlaceVisit {
+	v.Place = types.Place{
 		Locality: v.Place.Locality,
 		Country:  v.Place.Country,
 	}
@@ -534,7 +522,7 @@ func RedactPlaceVisitCity(v PlaceVisit) PlaceVisit {
 
 // RedactPlaceVisitRead keeps full place names and addresses but drops
 // coordinates and raw point IDs (issue #142).
-func RedactPlaceVisitRead(v PlaceVisit) PlaceVisit {
+func RedactPlaceVisitRead(v types.PlaceVisit) types.PlaceVisit {
 	v.Place.Lat = 0
 	v.Place.Lng = 0
 	for i := range v.Sources {
@@ -543,18 +531,18 @@ func RedactPlaceVisitRead(v PlaceVisit) PlaceVisit {
 	return v
 }
 
-func redactPlaceVisitsForLevel(items []PlaceVisit, level string) []PlaceVisit {
-	switch PlacesLevelForResponse(level) {
-	case AccessNone:
+func redactPlaceVisitsForLevel(items []types.PlaceVisit, level string) []types.PlaceVisit {
+	switch types.PlacesLevelForResponse(level) {
+	case types.AccessNone:
 		return nil
-	case AccessCity:
-		out := make([]PlaceVisit, len(items))
+	case types.AccessCity:
+		out := make([]types.PlaceVisit, len(items))
 		for i, v := range items {
 			out[i] = RedactPlaceVisitCity(v)
 		}
 		return out
-	case AccessRead:
-		out := make([]PlaceVisit, len(items))
+	case types.AccessRead:
+		out := make([]types.PlaceVisit, len(items))
 		for i, v := range items {
 			out[i] = RedactPlaceVisitRead(v)
 		}
@@ -566,13 +554,13 @@ func redactPlaceVisitsForLevel(items []PlaceVisit, level string) []PlaceVisit {
 }
 
 // newPlaceVisit builds a single-source neutral visit.
-func newPlaceVisit(service, serviceName, id string, v PlaceVisit) PlaceVisit {
+func newPlaceVisit(service, serviceName, id string, v types.PlaceVisit) types.PlaceVisit {
 	out := clonePlaceVisit(v)
 	out.Kind = normalizePlaceVisitKind(out.Kind)
 	out.Mode = normalizeTripMode(out.Mode)
 	out.StartAt = normalizePlaceVisitTime(out.StartAt)
 	out.EndAt = normalizePlaceVisitTime(out.EndAt)
-	out.Sources = []PlaceVisitSource{{
+	out.Sources = []types.PlaceVisitSource{{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,
@@ -584,12 +572,12 @@ func newPlaceVisit(service, serviceName, id string, v PlaceVisit) PlaceVisit {
 // placesProviderTargets collects providers, applying per-service and
 // app-level city/read/precise redaction so a city-only surface never
 // contributes place names or coordinates (issue #142).
-func placesProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[PlaceVisit], []string) {
-	targets, denied := collectProviders[PlaceVisit, PlaceVisitProvider](s, permType,
-		func(p PlaceVisitProvider) func(context.Context) ([]PlaceVisit, bool, error) {
+func placesProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[types.PlaceVisit], []string) {
+	targets, denied := collectProviders[types.PlaceVisit, types.PlaceVisitProvider](s, permType,
+		func(p types.PlaceVisitProvider) func(context.Context) ([]types.PlaceVisit, bool, error) {
 			return p.ListUserPlaceVisits
 		})
-	appPlaces := PlacesLevelForResponse(appLevel)
+	appPlaces := types.PlacesLevelForResponse(appLevel)
 	for i := range targets {
 		id := targets[i].id
 		inner := targets[i].list
@@ -597,15 +585,15 @@ func placesProviderTargets(s *Server, permType string, appLevel string) ([]named
 		if svc := s.config.GetService(id); svc != nil {
 			level = svc.Permissions.For(permType)
 		}
-		effective := PlacesLevelForResponse(level)
-		if appPlaces != "" && appPlaces != AccessNone {
+		effective := types.PlacesLevelForResponse(level)
+		if appPlaces != "" && appPlaces != types.AccessNone {
 			// App scope is an additional clamp: take the tighter of the two.
 			effective = tighterPlacesLevel(appPlaces, effective)
 		}
-		if effective == PlacesLevelForResponse(level) && effective != AccessCity && effective != AccessRead {
+		if effective == types.PlacesLevelForResponse(level) && effective != types.AccessCity && effective != types.AccessRead {
 			continue
 		}
-		targets[i].list = func(ctx context.Context) ([]PlaceVisit, bool, error) {
+		targets[i].list = func(ctx context.Context) ([]types.PlaceVisit, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactPlaceVisitsForLevel(items, effective), truncated, err
 		}
@@ -616,13 +604,13 @@ func placesProviderTargets(s *Server, permType string, appLevel string) ([]named
 // tighterPlacesLevel returns the more restrictive of two places levels.
 func tighterPlacesLevel(a, b string) string {
 	rank := map[string]int{
-		AccessNone:   0,
-		AccessCity:   1,
-		AccessRead:   2,
-		AccessPrecise: 3,
+		types.AccessNone:    0,
+		types.AccessCity:    1,
+		types.AccessRead:    2,
+		types.AccessPrecise: 3,
 	}
-	ra, okA := rank[PlacesLevelForResponse(a)]
-	rb, okB := rank[PlacesLevelForResponse(b)]
+	ra, okA := rank[types.PlacesLevelForResponse(a)]
+	rb, okB := rank[types.PlacesLevelForResponse(b)]
 	if !okA {
 		ra = 0
 	}
@@ -630,15 +618,15 @@ func tighterPlacesLevel(a, b string) string {
 		rb = 0
 	}
 	if ra <= rb {
-		return PlacesLevelForResponse(a)
+		return types.PlacesLevelForResponse(a)
 	}
-	return PlacesLevelForResponse(b)
+	return types.PlacesLevelForResponse(b)
 }
 
 // PhotosTakenDuring returns photos whose taken_at falls inside the visit or
 // trip window (issue #142). This is the photos/places join demo: sample
 // fixtures pair visits with photos captured during them.
-func PhotosTakenDuring(photos []Photo, v PlaceVisit) []Photo {
+func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
 	start := normalizePlaceVisitTime(v.StartAt)
 	end := normalizePlaceVisitTime(v.EndAt)
 	if end == "" {
@@ -647,7 +635,7 @@ func PhotosTakenDuring(photos []Photo, v PlaceVisit) []Photo {
 	if start == "" {
 		return nil
 	}
-	out := make([]Photo, 0, 8)
+	out := make([]types.Photo, 0, 8)
 	for _, p := range photos {
 		taken := normalizePlaceVisitTime(p.TakenAt)
 		if taken == "" {
@@ -676,17 +664,17 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
 	}
-	handleLibraryAggregate(s, w, r, libraryKindSpec[PlaceVisit]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.PlaceVisit]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[PlaceVisit], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.PlaceVisit], []string) {
 			return placesProviderTargets(s, kind.PermType, appLevel)
 		},
 		serviceOf: placeVisitServiceName,
 		sortKey:   placeIdentityKey,
 		merge:     MergePlaceVisits,
-		encode: func(merged []PlaceVisit, bySvc map[string]LibraryServiceStatus) any {
+		encode: func(merged []types.PlaceVisit, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterPlaceVisits(merged, filters)
-			return PlaceVisitList{
+			return types.PlaceVisitList{
 				Visits:    filtered,
 				Total:     len(filtered),
 				Synced:    true,

@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 //go:embed web/app_authorize.html
@@ -32,7 +34,7 @@ type GrantCode struct {
 	Code       string
 	AppID      string
 	AppName    string
-	Scopes     Permissions
+	Scopes     types.Permissions
 	RedirectTo string
 	State      string
 	Expires    time.Time
@@ -40,7 +42,7 @@ type GrantCode struct {
 
 // GrantStore holds pending consent codes in memory only.
 type GrantStore struct {
-	mu    sync.Mutex
+	mu     sync.Mutex
 	byCode map[string]GrantCode
 }
 
@@ -134,7 +136,7 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 			continue
 		}
 		// Accept "events:freebusy" or bare "events" → read.
-		typ, level := f, AccessRead
+		typ, level := f, types.AccessRead
 		if i := strings.IndexByte(f, ':'); i >= 0 {
 			typ = strings.TrimSpace(f[:i])
 			level = strings.TrimSpace(f[i+1:])
@@ -147,20 +149,20 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 	if len(out) == 0 {
 		return nil, fmt.Errorf("scopes is required (e.g. events:freebusy)")
 	}
-	perms := Permissions{}
+	perms := types.Permissions{}
 	for _, e := range out {
 		perms[e.Type] = e.Level
 	}
-	if err := ValidatePermissions(perms); err != nil {
+	if err := types.ValidatePermissions(perms); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func scopesFromEntries(entries []PermissionEntry) Permissions {
-	p := Permissions{PermissionDefaultKey: AccessNone}
+func scopesFromEntries(entries []PermissionEntry) types.Permissions {
+	p := types.Permissions{types.PermissionDefaultKey: types.AccessNone}
 	for _, e := range entries {
-		p[e.Type] = normalizeAccess(e.Level)
+		p[e.Type] = types.NormalizeAccess(e.Level)
 	}
 	return p
 }

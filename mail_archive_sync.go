@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // MailSyncOptions bounds one ingest run so a huge mailbox cannot stall a request.
@@ -85,7 +87,7 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 	if token == "" {
 		res.Error = "no valid Gmail token"
 		_ = archive.SaveSyncCursor(googleGmailServiceID, MailSyncCursor{Error: res.Error})
-		return res, ErrUnauthorized
+		return res, types.ErrUnauthorized
 	}
 
 	cursor, err := archive.LoadSyncCursor(googleGmailServiceID)

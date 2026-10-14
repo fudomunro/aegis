@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 const sampleTimelineJSON = `{
@@ -74,7 +76,7 @@ func TestParseTimelineJSON(t *testing.T) {
 	if len(visits) != 3 {
 		t.Fatalf("got %d objects, want 3", len(visits))
 	}
-	if visits[0].Kind != PlaceKindVisit || visits[0].Place.Name != "Googleplex" {
+	if visits[0].Kind != types.PlaceKindVisit || visits[0].Place.Name != "Googleplex" {
 		t.Fatalf("visit[0] = %+v", visits[0])
 	}
 	if visits[0].Place.Lat == 0 {
@@ -83,7 +85,7 @@ func TestParseTimelineJSON(t *testing.T) {
 	if visits[0].Place.Locality == "" {
 		t.Fatalf("expected locality from address: %+v", visits[0].Place)
 	}
-	if visits[1].Kind != PlaceKindTrip || visits[1].Mode != TripModeDrive {
+	if visits[1].Kind != types.PlaceKindTrip || visits[1].Mode != types.TripModeDrive {
 		t.Fatalf("trip[1] = %+v", visits[1])
 	}
 	if visits[2].Place.Name != "San Francisco" {
@@ -205,7 +207,7 @@ func TestOwnTracksClusterVisits(t *testing.T) {
 	if len(visits) < 2 {
 		t.Fatalf("clusters = %d, want >= 2: %+v", len(visits), visits)
 	}
-	if visits[0].Kind != PlaceKindVisit {
+	if visits[0].Kind != types.PlaceKindVisit {
 		t.Fatalf("first = %+v", visits[0])
 	}
 	if visits[0].Place.Name != "Harbour" {

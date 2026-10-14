@@ -1,4 +1,4 @@
-package main
+package types
 
 import (
 	"testing"
@@ -26,9 +26,9 @@ func TestNormalizeIdentityKey(t *testing.T) {
 }
 
 func TestMergeArtists_SamePersonAcrossServices(t *testing.T) {
-	a := newArtist("spotify", "Spotify", "sp-art-1", "Britney Spears")
-	b := newArtist("tidal", "Tidal", "td-art-9", "britney  spears")
-	merged := mergeArtists(a, b)
+	a := NewArtist("spotify", "Spotify", "sp-art-1", "Britney Spears")
+	b := NewArtist("tidal", "Tidal", "td-art-9", "britney  spears")
+	merged := MergeArtists(a, b)
 	if len(merged) != 1 {
 		t.Fatalf("got %d artists, want 1: %+v", len(merged), merged)
 	}
@@ -86,7 +86,7 @@ func TestMergePlaylistsSync_SameNameMultiService(t *testing.T) {
 }
 
 func TestNewArtist_EmptyName(t *testing.T) {
-	if got := newArtist("spotify", "Spotify", "", "  "); got.Name != "" {
+	if got := NewArtist("spotify", "Spotify", "", "  "); got.Name != "" {
 		t.Fatalf("expected empty artist, got %+v", got)
 	}
 }
@@ -103,8 +103,8 @@ func TestCleanYouTubeTitle(t *testing.T) {
 		{"", ""},
 	}
 	for _, c := range cases {
-		if got := cleanYouTubeTitle(c.in); got != c.want {
-			t.Errorf("cleanYouTubeTitle(%q) = %q, want %q", c.in, got, c.want)
+		if got := CleanYouTubeTitle(c.in); got != c.want {
+			t.Errorf("CleanYouTubeTitle(%q) = %q, want %q", c.in, got, c.want)
 		}
 	}
 }
@@ -114,13 +114,13 @@ func TestMergeTracksSync_ISRCPreferredOverName(t *testing.T) {
 	merged := MergeTracksSync([]Track{
 		{
 			Name:     "Song",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Artists:  []Artist{NewArtist("spotify", "Spotify", "", "A")},
 			EntityID: "USRC12345678",
 			Sources:  []TrackSource{{Service: "spotify", ID: "sp1"}},
 		},
 		{
 			Name:     "Song",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Artists:  []Artist{NewArtist("spotify", "Spotify", "", "A")},
 			EntityID: "USRC87654321",
 			Sources:  []TrackSource{{Service: "spotify", ID: "sp2"}},
 		},
@@ -133,13 +133,13 @@ func TestMergeTracksSync_ISRCPreferredOverName(t *testing.T) {
 	merged = MergeTracksSync([]Track{
 		{
 			Name:     "So What",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Miles Davis")},
+			Artists:  []Artist{NewArtist("spotify", "Spotify", "", "Miles Davis")},
 			EntityID: "usrc17000001",
 			Sources:  []TrackSource{{Service: "spotify", ID: "sp1"}},
 		},
 		{
 			Name:     "So What (Remastered)",
-			Artists:  []Artist{newArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
+			Artists:  []Artist{NewArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
 			EntityID: "USRC17000001",
 			Sources:  []TrackSource{{Service: "amazon-music", ID: "am1"}},
 		},
@@ -163,13 +163,13 @@ func TestMergeTracksSync_NameFallbackAbsorbsIntoISRCGroup(t *testing.T) {
 	merged := MergeTracksSync([]Track{
 		{
 			Name:     "So What",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Miles Davis")},
+			Artists:  []Artist{NewArtist("spotify", "Spotify", "", "Miles Davis")},
 			EntityID: "USRC17000001",
 			Sources:  []TrackSource{{Service: "spotify", ID: "sp1"}},
 		},
 		{
 			Name:    "So What",
-			Artists: []Artist{newArtist("youtube-music", "YouTube Music", "", "Miles Davis - Topic")},
+			Artists: []Artist{NewArtist("youtube-music", "YouTube Music", "", "Miles Davis - Topic")},
 			Sources: []TrackSource{{Service: "youtube-music", ID: "vid1"}},
 		},
 	})
@@ -191,12 +191,12 @@ func TestMergeTracksSync_NameOnlyMultiSource(t *testing.T) {
 	merged := MergeTracksSync([]Track{
 		{
 			Name:    "Song",
-			Artists: []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Artists: []Artist{NewArtist("spotify", "Spotify", "", "A")},
 			Sources: []TrackSource{{Service: "spotify", ID: "1"}},
 		},
 		{
 			Name:    "song",
-			Artists: []Artist{newArtist("tidal", "Tidal", "", "A")},
+			Artists: []Artist{NewArtist("tidal", "Tidal", "", "A")},
 			Sources: []TrackSource{{Service: "tidal", ID: "2"}},
 		},
 	})
@@ -208,30 +208,18 @@ func TestMergeTracksSync_NameOnlyMultiSource(t *testing.T) {
 	}
 }
 
-func TestIso8601DurationMs(t *testing.T) {
-	if got := iso8601DurationMs("PT3M42S"); got != 222000 {
-		t.Fatalf("PT3M42S = %d", got)
-	}
-	if got := iso8601DurationMs("PT1H2M3S"); got != 3723000 {
-		t.Fatalf("PT1H2M3S = %d", got)
-	}
-	if got := iso8601DurationMs("bogus"); got != 0 {
-		t.Fatalf("bogus = %d", got)
-	}
-}
-
 func TestMergeTracksSync_DurationGuard(t *testing.T) {
 	// Same title/artist, lengths far apart → do not merge (different recordings).
 	merged := MergeTracksSync([]Track{
 		{
 			Name:       "Song",
-			Artists:    []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Artists:    []Artist{NewArtist("spotify", "Spotify", "", "A")},
 			DurationMs: 200000,
 			Sources:    []TrackSource{{Service: "spotify", ID: "1"}},
 		},
 		{
 			Name:       "Song",
-			Artists:    []Artist{newArtist("youtube-music", "YouTube Music", "", "A")},
+			Artists:    []Artist{NewArtist("youtube-music", "YouTube Music", "", "A")},
 			DurationMs: 350000,
 			Sources:    []TrackSource{{Service: "youtube-music", ID: "2"}},
 		},
@@ -244,13 +232,13 @@ func TestMergeTracksSync_DurationGuard(t *testing.T) {
 	merged = MergeTracksSync([]Track{
 		{
 			Name:       "Song",
-			Artists:    []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Artists:    []Artist{NewArtist("spotify", "Spotify", "", "A")},
 			DurationMs: 200000,
 			Sources:    []TrackSource{{Service: "spotify", ID: "1"}},
 		},
 		{
 			Name:       "Song",
-			Artists:    []Artist{newArtist("youtube-music", "YouTube Music", "", "A")},
+			Artists:    []Artist{NewArtist("youtube-music", "YouTube Music", "", "A")},
 			DurationMs: 202000,
 			Sources:    []TrackSource{{Service: "youtube-music", ID: "2"}},
 		},
@@ -264,14 +252,14 @@ func TestMergeTracksSync_DurationGuard(t *testing.T) {
 	merged = MergeTracksSync([]Track{
 		{
 			Name:       "Song",
-			Artists:    []Artist{newArtist("spotify", "Spotify", "", "A")},
+			Artists:    []Artist{NewArtist("spotify", "Spotify", "", "A")},
 			EntityID:   "USRC1",
 			DurationMs: 200000,
 			Sources:    []TrackSource{{Service: "spotify", ID: "1"}},
 		},
 		{
 			Name:       "Song",
-			Artists:    []Artist{newArtist("amazon-music", "Amazon Music", "", "A")},
+			Artists:    []Artist{NewArtist("amazon-music", "Amazon Music", "", "A")},
 			EntityID:   "USRC1",
 			DurationMs: 350000,
 			Sources:    []TrackSource{{Service: "amazon-music", ID: "2"}},
@@ -283,13 +271,13 @@ func TestMergeTracksSync_DurationGuard(t *testing.T) {
 }
 
 func TestDurationCompatible(t *testing.T) {
-	if !durationCompatible(Track{}, Track{DurationMs: 1000}) {
+	if !DurationCompatible(Track{}, Track{DurationMs: 1000}) {
 		t.Fatal("unknown duration should be compatible")
 	}
-	if !durationCompatible(Track{DurationMs: 100000}, Track{DurationMs: 104000}) {
+	if !DurationCompatible(Track{DurationMs: 100000}, Track{DurationMs: 104000}) {
 		t.Fatal("within tolerance should be compatible")
 	}
-	if durationCompatible(Track{DurationMs: 100000}, Track{DurationMs: 120000}) {
+	if DurationCompatible(Track{DurationMs: 100000}, Track{DurationMs: 120000}) {
 		t.Fatal("beyond tolerance should not be compatible")
 	}
 }
@@ -299,13 +287,13 @@ func TestMergeAlbumsSync_UPCPreferred(t *testing.T) {
 	merged := MergeAlbumsSync([]Album{
 		{
 			Name:     "Kind of Blue",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "art1", "Miles Davis")},
+			Artists:  []Artist{NewArtist("spotify", "Spotify", "art1", "Miles Davis")},
 			EntityID: "00602537638569",
 			Sources:  []AlbumSource{{Service: "spotify", ID: "sp-al"}},
 		},
 		{
 			Name:     "Kind of Blue (Remastered)",
-			Artists:  []Artist{newArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
+			Artists:  []Artist{NewArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
 			EntityID: "00602537638569",
 			Sources:  []AlbumSource{{Service: "amazon-music", ID: "am-al"}},
 		},
@@ -336,25 +324,5 @@ func TestMergeAlbumsSync_UPCPreferred(t *testing.T) {
 	})
 	if len(merged) != 1 || merged[0].Match != AlbumMatchUPC {
 		t.Fatalf("name fallback should join UPC group: %+v", merged)
-	}
-}
-
-func TestSpotifyNeutralAlbum_UPC(t *testing.T) {
-	al := spotifyNeutralAlbum(map[string]any{
-		"id":   "ab1",
-		"name": "Kind of Blue",
-		"uri":  "spotify:album:ab1",
-		"external_ids": map[string]any{
-			"upc": "00602537638569",
-		},
-		"artists": []any{
-			map[string]any{"id": "art1", "name": "Miles Davis"},
-		},
-	})
-	if al.EntityID != "00602537638569" {
-		t.Fatalf("entity_id = %q", al.EntityID)
-	}
-	if len(al.Artists) != 1 || al.Artists[0].Sources[0].ID != "art1" {
-		t.Fatalf("artists = %+v", al.Artists)
 	}
 }

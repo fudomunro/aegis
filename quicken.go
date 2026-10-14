@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -121,7 +122,7 @@ func (s *QuickenStore) Path() string {
 func (s *QuickenStore) Enabled() bool { return s != nil && s.db != nil }
 
 // Upsert stores or replaces one imported transaction keyed by source_id.
-func (s *QuickenStore) Upsert(filePath string, tx Transaction) error {
+func (s *QuickenStore) Upsert(filePath string, tx types.Transaction) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("quicken store disabled")
 	}
@@ -190,7 +191,7 @@ func (s *QuickenStore) Has(sourceID string) bool {
 }
 
 // List returns stored transactions (newest first), optional filters.
-func (s *QuickenStore) List(f TransactionFilters, limit int) ([]Transaction, error) {
+func (s *QuickenStore) List(f TransactionFilters, limit int) ([]types.Transaction, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("quicken store disabled")
 	}
@@ -207,13 +208,13 @@ LIMIT ?`, limit*4) // over-fetch then filter
 		return nil, err
 	}
 	defer rows.Close()
-	var out []Transaction
+	var out []types.Transaction
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var tx Transaction
+		var tx types.Transaction
 		if err := json.Unmarshal([]byte(raw), &tx); err != nil {
 			continue
 		}
@@ -240,7 +241,7 @@ func (s *QuickenStore) Count() (int, error) {
 	return n, err
 }
 
-func transactionSourceID(tx Transaction) string {
+func transactionSourceID(tx types.Transaction) string {
 	if id := strings.TrimSpace(tx.EntityID); id != "" {
 		return id
 	}
@@ -256,7 +257,7 @@ func transactionSourceID(tx Transaction) string {
 // --- File parsers (QIF + QFX/OFX) ---
 
 // ParseQuickenFile detects QIF vs OFX/QFX and returns neutral transactions.
-func ParseQuickenFile(path string) ([]Transaction, error) {
+func ParseQuickenFile(path string) ([]types.Transaction, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -265,7 +266,7 @@ func ParseQuickenFile(path string) ([]Transaction, error) {
 }
 
 // ParseQuickenBytes parses QIF or OFX/QFX content.
-func ParseQuickenBytes(name string, data []byte) ([]Transaction, error) {
+func ParseQuickenBytes(name string, data []byte) ([]types.Transaction, error) {
 	head := strings.ToUpper(string(data[:min(512, len(data))]))
 	switch {
 	case strings.Contains(head, "OFXHEADER") || strings.Contains(head, "<OFX") || strings.Contains(head, "OFXSGML"):
@@ -289,10 +290,10 @@ func min(a, b int) int {
 }
 
 // ParseQIF parses Quicken Interchange Format bank/CCard transactions.
-func ParseQIF(name string, data []byte) ([]Transaction, error) {
+func ParseQIF(name string, data []byte) ([]types.Transaction, error) {
 	sc := bufio.NewScanner(strings.NewReader(string(data)))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	var out []Transaction
+	var out []types.Transaction
 	var cur map[string]string
 	flush := func() {
 		if cur == nil {
@@ -342,14 +343,14 @@ func ParseQIF(name string, data []byte) ([]Transaction, error) {
 	return out, nil
 }
 
-func qifRecordToTransaction(name string, rec map[string]string) (Transaction, bool) {
+func qifRecordToTransaction(name string, rec map[string]string) (types.Transaction, bool) {
 	date := strings.TrimSpace(rec["D"])
 	amountRaw := strings.TrimSpace(rec["T"])
 	if amountRaw == "" {
 		amountRaw = strings.TrimSpace(rec["$"])
 	}
 	if date == "" || amountRaw == "" {
-		return Transaction{}, false
+		return types.Transaction{}, false
 	}
 	payee := strings.TrimSpace(rec["P"])
 	category := strings.TrimSpace(rec["L"])
@@ -371,7 +372,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (Transaction, bo
 	posted := normalizeTransactionDate(qifDate(date))
 	accountName := filepath.Base(name)
 	accountName = strings.TrimSuffix(accountName, filepath.Ext(accountName))
-	tx := Transaction{
+	tx := types.Transaction{
 		PostedAt:    posted,
 		Amount:      amount,
 		Currency:    "USD",
@@ -379,7 +380,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (Transaction, bo
 		Merchant:    payee,
 		Category:    categories,
 		Memo:        memo,
-		Account:     &TransactionAccount{Name: accountName, Type: "bank"},
+		Account:     &types.TransactionAccount{Name: accountName, Type: "bank"},
 		Status:      status,
 		EntityID:    fitid,
 	}
@@ -413,10 +414,10 @@ func qifDate(raw string) string {
 }
 
 // ParseOFX parses OFX/QFX SGML or XML bank/CC statements.
-func ParseOFX(name string, data []byte) ([]Transaction, error) {
+func ParseOFX(name string, data []byte) ([]types.Transaction, error) {
 	text := string(data)
 	// Prefer XML-shaped STMTTRN blocks; fall back to SGML tag scan.
-	var out []Transaction
+	var out []types.Transaction
 	out = append(out, parseOFXStmtTrn(name, text)...)
 	if len(out) == 0 {
 		out = append(out, parseOFXSGML(name, text)...)
@@ -425,8 +426,8 @@ func ParseOFX(name string, data []byte) ([]Transaction, error) {
 }
 
 // parseOFXStmtTrn extracts <STMTTRN>…</STMTTRN> blocks (XML-ish).
-func parseOFXStmtTrn(name, text string) []Transaction {
-	var out []Transaction
+func parseOFXStmtTrn(name, text string) []types.Transaction {
+	var out []types.Transaction
 	upper := strings.ToUpper(text)
 	const open = "<STMTTRN>"
 	const closeTag = "</STMTTRN>"
@@ -452,7 +453,7 @@ func parseOFXStmtTrn(name, text string) []Transaction {
 }
 
 // parseOFXSGML walks SGML tags without requiring closing STMTTRN.
-func parseOFXSGML(name, text string) []Transaction {
+func parseOFXSGML(name, text string) []types.Transaction {
 	return parseOFXRecords(name, text)
 }
 
@@ -503,9 +504,9 @@ func splitOFXTags(text string) []ofxTag {
 }
 
 // parseOFXRecords walks tags and emits one transaction per FITID record.
-func parseOFXRecords(name, text string) []Transaction {
+func parseOFXRecords(name, text string) []types.Transaction {
 	tags := splitOFXTags(text)
-	var out []Transaction
+	var out []types.Transaction
 	cur := map[string]string{}
 	inTrn := false
 	flush := func() {
@@ -549,7 +550,7 @@ func ofxParseTags(block string) map[string]string {
 	return out
 }
 
-func ofxFieldsToTransaction(name string, fields map[string]string) (Transaction, bool) {
+func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transaction, bool) {
 	amountRaw := strings.TrimSpace(fields["TRNAMT"])
 	fitid := strings.TrimSpace(fields["FITID"])
 	dateRaw := strings.TrimSpace(fields["DTPOSTED"])
@@ -557,7 +558,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (Transaction,
 		dateRaw = strings.TrimSpace(fields["DTUSER"])
 	}
 	if amountRaw == "" || dateRaw == "" {
-		return Transaction{}, false
+		return types.Transaction{}, false
 	}
 	payee := strings.TrimSpace(fields["NAME"])
 	if payee == "" {
@@ -583,7 +584,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (Transaction,
 	if cat := strings.TrimSpace(fields["CATEGORY"]); cat != "" {
 		categories = []string{cat}
 	}
-	tx := Transaction{
+	tx := types.Transaction{
 		PostedAt:    posted,
 		Amount:      normalizeTransactionAmount(amountRaw),
 		Currency:    "USD",
@@ -591,7 +592,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (Transaction,
 		Merchant:    payee,
 		Category:    categories,
 		Memo:        memo,
-		Account:     &TransactionAccount{Name: accountName, Type: "bank"},
+		Account:     &types.TransactionAccount{Name: accountName, Type: "bank"},
 		Status:      status,
 		EntityID:    fitid,
 	}
@@ -678,24 +679,24 @@ func NewQuickenConnector(host Host, store *QuickenStore) *QuickenConnector {
 }
 
 // Capabilities returns Quicken import/list operations.
-func (c *QuickenConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *QuickenConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "transactions",
 				Description: "Locally imported Quicken QIF/QFX transactions (line items only; statements/PDFs are never stored)",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "list_transactions",
 						Description: "List imported Quicken transactions (permission key: transactions)",
 						Method:      "GET",
 						Path:        "/transactions",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "On/after posted date (YYYY-MM-DD)"},
 							{Name: "before", In: "query", Type: "string", Description: "Before posted date (YYYY-MM-DD)"},
 							{Name: "q", In: "query", Type: "string", Description: "Free-text on payee/category/memo"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral transactions with sources[]",
 							Fields:      []string{"transactions", "total"},
 						},
@@ -705,7 +706,7 @@ func (c *QuickenConnector) Capabilities() ServiceCapabilities {
 						Description: "Count of imported Quicken line items",
 						Method:      "GET",
 						Path:        "/import/status",
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Imported row count",
 							Fields:      []string{"count"},
 						},
@@ -751,7 +752,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 			writeJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		writeJSON(w, TransactionList{Transactions: list, Total: len(list), Synced: true})
+		writeJSON(w, types.TransactionList{Transactions: list, Total: len(list), Synced: true})
 	case r.Method == http.MethodPost && (remainingPath == "/import" || remainingPath == "import"):
 		var req struct {
 			Path string `json:"path"`
@@ -773,7 +774,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 }
 
 // ListUserTransactions returns imported Quicken line items.
-func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactions []Transaction, truncated bool, err error) {
+func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactions []types.Transaction, truncated bool, err error) {
 	store := c.store
 	if store == nil || !store.Enabled() {
 		return nil, false, nil
@@ -797,6 +798,6 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 }
 
 var (
-	_ ServiceConnector    = (*QuickenConnector)(nil)
-	_ TransactionProvider = (*QuickenConnector)(nil)
+	_ ServiceConnector          = (*QuickenConnector)(nil)
+	_ types.TransactionProvider = (*QuickenConnector)(nil)
 )

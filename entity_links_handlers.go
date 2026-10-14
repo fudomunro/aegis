@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // HandleEntityLinks manages explicit cross-service identity links:
@@ -107,19 +109,19 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		itemsMu.Unlock()
 	}
 
-	if LibraryKindByID("tracks").Readable(s) {
+	if kindReadable("tracks", s) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			trackProviders, _ := collectProviders[Track, LikedTrackProvider](s, "tracks",
-				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
+			trackProviders, _ := collectProviders[types.Track, types.LikedTrackProvider](s, "tracks",
+				func(p types.LikedTrackProvider) func(context.Context) ([]types.Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
-			all := listProvidersParallel[Track](ctx, trackProviders)
+			all := listProvidersParallel[types.Track](ctx, trackProviders)
 			s.resolveTrackEntities(ctx, all)
 			var batch []MergeReviewItem
-			for _, tr := range MergeTracksSync(all) {
-				if tr.Match != TrackMatchName || len(tr.Sources) < 2 {
+			for _, tr := range types.MergeTracksSync(all) {
+				if tr.Match != types.TrackMatchName || len(tr.Sources) < 2 {
 					continue
 				}
 				batch = append(batch, MergeReviewItem{
@@ -134,19 +136,19 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if LibraryKindByID("albums").Readable(s) {
+	if kindReadable("albums", s) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			albumProviders, _ := collectProviders[Album, AlbumProvider](s, "albums",
-				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
+			albumProviders, _ := collectProviders[types.Album, types.AlbumProvider](s, "albums",
+				func(p types.AlbumProvider) func(context.Context) ([]types.Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
-			all := listProvidersParallel[Album](ctx, albumProviders)
+			all := listProvidersParallel[types.Album](ctx, albumProviders)
 			s.resolveAlbumEntities(ctx, all)
 			var batch []MergeReviewItem
-			for _, al := range MergeAlbumsSync(all) {
-				if al.Match != TrackMatchName || len(al.Sources) < 2 {
+			for _, al := range types.MergeAlbumsSync(all) {
+				if al.Match != types.TrackMatchName || len(al.Sources) < 2 {
 					continue
 				}
 				batch = append(batch, MergeReviewItem{
@@ -161,19 +163,19 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if LibraryKindByID("artists").Readable(s) {
+	if kindReadable("artists", s) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			artistProviders, _ := collectProviders[Artist, ArtistProvider](s, "artists",
-				func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
+			artistProviders, _ := collectProviders[types.Artist, types.ArtistProvider](s, "artists",
+				func(p types.ArtistProvider) func(context.Context) ([]types.Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})
-			all := listProvidersParallel[Artist](ctx, artistProviders)
+			all := listProvidersParallel[types.Artist](ctx, artistProviders)
 			s.resolveArtistEntities(ctx, all)
 			var batch []MergeReviewItem
-			for _, ar := range mergeArtistLibrary(all) {
-				if ar.Match != TrackMatchName || len(ar.Sources) < 2 {
+			for _, ar := range types.MergeArtistLibrary(all) {
+				if ar.Match != types.TrackMatchName || len(ar.Sources) < 2 {
 					continue
 				}
 				batch = append(batch, MergeReviewItem{
@@ -188,18 +190,18 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		}()
 	}
 
-	if LibraryKindByID("playlists").Readable(s) {
+	if kindReadable("playlists", s) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			plProviders, _ := collectProviders[Playlist, PlaylistProvider](s, "playlists",
-				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
+			plProviders, _ := collectProviders[types.Playlist, types.PlaylistProvider](s, "playlists",
+				func(p types.PlaylistProvider) func(context.Context) ([]types.Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
-			all := listProvidersParallel[Playlist](ctx, plProviders)
+			all := listProvidersParallel[types.Playlist](ctx, plProviders)
 			var batch []MergeReviewItem
-			for _, pl := range MergePlaylistsSyncLinked(all, s.links.PlaylistLinkKey) {
-				if pl.Match != PlaylistMatchName || len(pl.Sources) < 2 {
+			for _, pl := range types.MergePlaylistsSyncLinked(all, s.links.PlaylistLinkKey) {
+				if pl.Match != types.PlaylistMatchName || len(pl.Sources) < 2 {
 					continue
 				}
 				batch = append(batch, MergeReviewItem{
@@ -246,7 +248,7 @@ func listProvidersParallel[T any](ctx context.Context, providers []namedLister[T
 	return all
 }
 
-func trackSourceRefs(t Track) []string {
+func trackSourceRefs(t types.Track) []string {
 	out := make([]string, 0, len(t.Sources))
 	for _, s := range t.Sources {
 		out = append(out, s.Service+":"+s.ID)
@@ -254,7 +256,7 @@ func trackSourceRefs(t Track) []string {
 	return out
 }
 
-func albumSourceRefs(a Album) []string {
+func albumSourceRefs(a types.Album) []string {
 	out := make([]string, 0, len(a.Sources))
 	for _, s := range a.Sources {
 		out = append(out, s.Service+":"+s.ID)
@@ -262,7 +264,7 @@ func albumSourceRefs(a Album) []string {
 	return out
 }
 
-func artistSourceRefs(a Artist) []string {
+func artistSourceRefs(a types.Artist) []string {
 	out := make([]string, 0, len(a.Sources))
 	for _, s := range a.Sources {
 		out = append(out, s.Service+":"+s.ID)
@@ -270,7 +272,7 @@ func artistSourceRefs(a Artist) []string {
 	return out
 }
 
-func playlistSourceRefs(p Playlist) []string {
+func playlistSourceRefs(p types.Playlist) []string {
 	out := make([]string, 0, len(p.Sources))
 	for _, s := range p.Sources {
 		out = append(out, s.Service+":"+s.ID)

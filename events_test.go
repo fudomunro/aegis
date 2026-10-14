@@ -9,20 +9,24 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeCalendarEventProvider struct {
-	events    []CalendarEvent
+	events    []types.CalendarEvent
 	err       error
 	truncated bool
 }
 
-func (f *fakeCalendarEventProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeCalendarEventProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakeCalendarEventProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeCalendarEventProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeCalendarEventProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeCalendarEventProvider) ListCalendarEvents(context.Context) ([]CalendarEvent, bool, error) {
+func (f *fakeCalendarEventProvider) ListCalendarEvents(context.Context) ([]types.CalendarEvent, bool, error) {
 	return f.events, f.truncated, f.err
 }
 
@@ -49,7 +53,7 @@ func TestMergeCalendarEvents_ByICalUIDAndTitleStart(t *testing.T) {
 	c := newCalendarEvent("google-calendar", "Google Calendar", "c1", "Planning", "2024-06-02T14:00:00Z", "2024-06-02T15:00:00Z", false)
 	d := newCalendarEvent("outlook-calendar", "Outlook Calendar", "d1", "Planning", "2024-06-02T14:00:00+00:00", "2024-06-02T15:00:00Z", false)
 
-	merged := MergeCalendarEvents([]CalendarEvent{a, b, c, d})
+	merged := MergeCalendarEvents([]types.CalendarEvent{a, b, c, d})
 	if len(merged) != 2 {
 		t.Fatalf("merged = %d events: %+v", len(merged), merged)
 	}
@@ -65,7 +69,7 @@ func TestMergeCalendarEvents_ByICalUIDAndTitleStart(t *testing.T) {
 func TestMergeCalendarEvents_DistinctWhenDifferentStart(t *testing.T) {
 	a := newCalendarEvent("google-calendar", "Google Calendar", "a", "Meeting", "2024-06-01T09:00:00Z", "", false)
 	b := newCalendarEvent("google-calendar", "Google Calendar", "b", "Meeting", "2024-06-01T10:00:00Z", "", false)
-	merged := MergeCalendarEvents([]CalendarEvent{a, b})
+	merged := MergeCalendarEvents([]types.CalendarEvent{a, b})
 	if len(merged) != 2 {
 		t.Fatalf("merged = %d, want 2", len(merged))
 	}
@@ -74,14 +78,14 @@ func TestMergeCalendarEvents_DistinctWhenDifferentStart(t *testing.T) {
 func TestMergeCalendarEvents_MergesAttendeesAsContacts(t *testing.T) {
 	a := newCalendarEvent("google-calendar", "Google Calendar", "a", "Allhands", "2024-06-01T09:00:00Z", "", false)
 	a.EntityID = "allhands@ical"
-	a.Attendees = []Contact{{Name: "Ada", Emails: []string{"Ada@Example.com"}}}
+	a.Attendees = []types.Contact{{Name: "Ada", Emails: []string{"Ada@Example.com"}}}
 	b := newCalendarEvent("outlook-calendar", "Outlook Calendar", "b", "Allhands", "2024-06-01T09:00:00Z", "", false)
 	b.EntityID = "allhands@ical"
-	b.Attendees = []Contact{{Name: "Ada L", Emails: []string{"ada@example.com"}, Phones: []string{"+1 555 0100"}}}
-	org := Contact{Name: "Grace", Emails: []string{"grace@example.com"}}
+	b.Attendees = []types.Contact{{Name: "Ada L", Emails: []string{"ada@example.com"}, Phones: []string{"+1 555 0100"}}}
+	org := types.Contact{Name: "Grace", Emails: []string{"grace@example.com"}}
 	b.Organizer = &org
 
-	merged := MergeCalendarEvents([]CalendarEvent{a, b})
+	merged := MergeCalendarEvents([]types.CalendarEvent{a, b})
 	if len(merged) != 1 {
 		t.Fatalf("merged = %+v", merged)
 	}
@@ -103,11 +107,11 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
+		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
 			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
 			newCalendarEvent("google-calendar", "Google Calendar", "g2", "Offsite", "2024-06-10T00:00:00Z", "2024-06-11T00:00:00Z", true),
 		}},
-		"outlook-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
+		"outlook-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
 			newCalendarEvent("outlook-calendar", "Outlook Calendar", "o1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
 		}},
 	}
@@ -119,7 +123,7 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp CalendarEventList
+	var resp types.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -130,7 +134,7 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 	// Standup should merge across services.
-	var standup *CalendarEvent
+	var standup *types.CalendarEvent
 	for i := range resp.Events {
 		if resp.Events[i].Title == "Standup" {
 			standup = &resp.Events[i]
@@ -152,7 +156,7 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
+		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
 			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
 		}},
 	}
@@ -164,7 +168,7 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp CalendarEventList
+	var resp types.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -189,11 +193,11 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: Permissions{"events": AccessNone},
+		Permissions: types.Permissions{"events": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{events: []CalendarEvent{
+		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
 			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
 		}},
 	}
@@ -210,7 +214,7 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{err: ErrUnauthorized},
+		"google-calendar": &fakeCalendarEventProvider{err: types.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -219,12 +223,12 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp CalendarEventList
+	var resp types.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	st := resp.ByService["google-calendar"]
-	if st.Status != LibraryStatusUnauthorized {
+	if st.Status != types.LibraryStatusUnauthorized {
 		t.Fatalf("status = %+v", st)
 	}
 }
@@ -242,11 +246,11 @@ func TestHandleLibraryEvents_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp CalendarEventList
+	var resp types.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google-calendar"].Status != LibraryStatusError {
+	if resp.ByService["google-calendar"].Status != types.LibraryStatusError {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 }
@@ -299,9 +303,9 @@ func TestStampCalendarEventCanonical_OnlyWhenConfigured(t *testing.T) {
 		{ID: "other-cal", Name: "Other", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	items := []CalendarEvent{
-		{Sources: []CalendarEventSource{{Service: "google-calendar"}}},
-		{Sources: []CalendarEventSource{{Service: "other-cal"}}},
+	items := []types.CalendarEvent{
+		{Sources: []types.CalendarEventSource{{Service: "google-calendar"}}},
+		{Sources: []types.CalendarEventSource{{Service: "other-cal"}}},
 	}
 	srv.stampCalendarEventCanonical(items, "google-calendar")
 	srv.stampCalendarEventCanonical(items, "other-cal")

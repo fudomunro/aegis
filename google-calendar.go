@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GoogleCalendarConnector proxies the Google Calendar API and implements
@@ -48,25 +50,25 @@ func (c *GoogleCalendarConnector) googleCalendarUpstreamBase() string {
 }
 
 // Capabilities returns what Google Calendar data types and operations are supported.
-func (c *GoogleCalendarConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "events",
 				Description: "Calendar events — list calendars and events (metadata only; event content stays on Google Calendar)",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "read_list",
 						Description: "List the user's calendar events as neutral CalendarEvent values (paginated). Permission key: events.",
 						Method:      "GET",
 						Path:        "/me/events",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "timeMin", In: "query", Type: "string", Description: "RFC3339 lower bound (default: 30 days ago)"},
 							{Name: "timeMax", In: "query", Type: "string", Description: "RFC3339 upper bound (default: 90 days ahead)"},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page (1-2500)", Default: 250},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral events: title, description, start_at, end_at, all_day, location, status, organizer, attendees, sources[]",
 							Fields:      []string{"events", "total"},
 						},
@@ -76,11 +78,11 @@ func (c *GoogleCalendarConnector) Capabilities() ServiceCapabilities {
 						Description: "List the user's calendars (id, summary, access role, primary)",
 						Method:      "GET",
 						Path:        "/me/calendars",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max calendars per page (1-250)", Default: 250},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Calendars: id, summary, primary, access_role",
 							Fields:      []string{"calendars", "total"},
 						},
@@ -90,14 +92,14 @@ func (c *GoogleCalendarConnector) Capabilities() ServiceCapabilities {
 						Description: "List events for one calendar as neutral CalendarEvent values",
 						Method:      "GET",
 						Path:        "/calendars/{calendarId}/events",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "calendarId", In: "path", Type: "string", Description: "Calendar ID or 'primary'", Required: true},
 							{Name: "timeMin", In: "query", Type: "string", Description: "RFC3339 lower bound"},
 							{Name: "timeMax", In: "query", Type: "string", Description: "RFC3339 upper bound"},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page", Default: 250},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral events for the calendar",
 							Fields:      []string{"events", "total"},
 						},
@@ -107,10 +109,10 @@ func (c *GoogleCalendarConnector) Capabilities() ServiceCapabilities {
 						Description: "Get a single calendar event by service-local ID",
 						Method:      "GET",
 						Path:        "/events/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local event ID", Required: true},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral calendar event with service-local id and sources[]",
 							Fields:      []string{"title", "start_at", "end_at", "location", "sources"},
 						},
@@ -284,13 +286,13 @@ func (c *GoogleCalendarConnector) eventsFreeBusyOnly() bool {
 	if svc == nil {
 		return false
 	}
-	return IsFreeBusyAccess(svc.Permissions.For("events"))
+	return types.IsFreeBusyAccess(svc.Permissions.For("events"))
 }
 
 func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *http.Request) {
 	events, truncated, err := c.listEventsWithWindow(r.Context(), r.URL.Query())
 	if err != nil {
-		if err == ErrUnauthorized {
+		if err == types.ErrUnauthorized {
 			writeJSONError(w, http.StatusUnauthorized,
 				"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
 			return
@@ -300,19 +302,19 @@ func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *htt
 		return
 	}
 	if events == nil {
-		events = []CalendarEvent{}
+		events = []types.CalendarEvent{}
 	}
 	if c.eventsFreeBusyOnly() {
 		events = redactCalendarEventsFreeBusy(events)
 	}
-	result := CalendarEventList{
+	result := types.CalendarEventList{
 		Events:    events,
 		Total:     len(events),
 		Synced:    true,
 		Truncated: truncated,
-		ByService: map[string]LibraryServiceStatus{
+		ByService: map[string]types.LibraryServiceStatus{
 			googleCalendarServiceID: {
-				Status:    LibraryStatusOK,
+				Status:    types.LibraryStatusOK,
 				Count:     len(events),
 				Truncated: truncated,
 			},
@@ -341,18 +343,18 @@ func (c *GoogleCalendarConnector) handleListCalendarEvents(w http.ResponseWriter
 		return
 	}
 	if events == nil {
-		events = []CalendarEvent{}
+		events = []types.CalendarEvent{}
 	}
 	if c.eventsFreeBusyOnly() {
 		events = redactCalendarEventsFreeBusy(events)
 	}
-	result := CalendarEventList{
+	result := types.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 		Synced: true,
-		ByService: map[string]LibraryServiceStatus{
+		ByService: map[string]types.LibraryServiceStatus{
 			googleCalendarServiceID: {
-				Status:    LibraryStatusOK,
+				Status:    types.LibraryStatusOK,
 				Count:     len(events),
 				Truncated: truncated,
 			},
@@ -385,9 +387,9 @@ func (c *GoogleCalendarConnector) handleListCalendars(w http.ResponseWriter, r *
 		"calendars": calendars,
 		"total":     len(calendars),
 		"truncated": truncated,
-		"by_service": map[string]LibraryServiceStatus{
+		"by_service": map[string]types.LibraryServiceStatus{
 			googleCalendarServiceID: {
-				Status:    LibraryStatusOK,
+				Status:    types.LibraryStatusOK,
 				Count:     len(calendars),
 				Truncated: truncated,
 			},
@@ -448,20 +450,20 @@ func (c *GoogleCalendarConnector) handleGetEvent(w http.ResponseWriter, r *http.
 
 // ListCalendarEvents implements CalendarEventProvider. Fetches calendarList,
 // then events from each readable calendar within the default time window.
-func (c *GoogleCalendarConnector) ListCalendarEvents(ctx context.Context) ([]CalendarEvent, bool, error) {
+func (c *GoogleCalendarConnector) ListCalendarEvents(ctx context.Context) ([]types.CalendarEvent, bool, error) {
 	return c.listEventsWithWindow(ctx, nil)
 }
 
-func (c *GoogleCalendarConnector) listEventsWithWindow(ctx context.Context, q url.Values) ([]CalendarEvent, bool, error) {
+func (c *GoogleCalendarConnector) listEventsWithWindow(ctx context.Context, q url.Values) ([]types.CalendarEvent, bool, error) {
 	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 	calendars, calTruncated, err := c.listCalendars(ctx, token, nil)
 	if err != nil {
 		return nil, false, err
 	}
-	var all []CalendarEvent
+	var all []types.CalendarEvent
 	truncated := calTruncated
 	for _, cal := range calendars {
 		events, tr, err := c.listEventsForCalendar(ctx, token, cal.ID, q)
@@ -591,7 +593,7 @@ type googleCalendarEventsList struct {
 	NextPageToken string                `json:"nextPageToken"`
 }
 
-func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]CalendarEvent, bool, error) {
+func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]types.CalendarEvent, bool, error) {
 	base := c.googleCalendarUpstreamBase() + "/calendars/" + url.PathEscape(calendarID) + "/events"
 	timeMin, timeMax := googleCalendarDefaultWindow()
 	if q != nil {
@@ -614,7 +616,7 @@ func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, tok
 	}
 
 	calName := calendarID
-	var all []CalendarEvent
+	var all []types.CalendarEvent
 	truncated := false
 	for page := 0; page < libraryPageCap; page++ {
 		values := url.Values{}
@@ -678,11 +680,11 @@ func googleCalendarDefaultWindow() (timeMin, timeMax string) {
 }
 
 // mapGoogleCalendarEvent converts a Google Calendar event into the neutral shape.
-func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName string) CalendarEvent {
+func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName string) types.CalendarEvent {
 	startAt, allDay := googleCalendarTimeToRFC3339(raw.Start)
 	endAt, _ := googleCalendarTimeToRFC3339(raw.End)
 
-	src := CalendarEventSource{
+	src := types.CalendarEventSource{
 		Service:     googleCalendarServiceID,
 		ServiceName: googleCalendarServiceName,
 		ID:          raw.ID,
@@ -705,7 +707,7 @@ func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 		src.Extra = extra
 	}
 
-	ev := CalendarEvent{
+	ev := types.CalendarEvent{
 		Title:        strings.TrimSpace(raw.Summary),
 		Description:  raw.Description,
 		StartAt:      startAt,
@@ -716,7 +718,7 @@ func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 		CalendarID:   calendarID,
 		CalendarName: calendarName,
 		EntityID:     raw.ICalUID,
-		Sources:      []CalendarEventSource{src},
+		Sources:      []types.CalendarEventSource{src},
 	}
 
 	if raw.Organizer != nil {

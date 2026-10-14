@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // AmazonMusicConnector provides proxying for Amazon Music.
@@ -30,17 +32,17 @@ func NewAmazonMusicConnector(host Host) *AmazonMusicConnector {
 
 // Capabilities returns what Amazon Music data types are recognized.
 // Amazon Music has no public API, so no operations are currently supported.
-func (c *AmazonMusicConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
-			{Name: "user", Description: "Current user profile", Operations: []Operation{}},
-			{Name: "tracks", Description: "Individual songs", Operations: []Operation{}},
-			{Name: "albums", Description: "Albums", Operations: []Operation{}},
-			{Name: "artists", Description: "Artists", Operations: []Operation{}},
-			{Name: "playlists", Description: "User playlists", Operations: []Operation{}},
-			{Name: "search", Description: "Catalog search", Operations: []Operation{}},
-			{Name: "library", Description: "User's saved music", Operations: []Operation{}},
-			{Name: "recommendations", Description: "Personalized suggestions", Operations: []Operation{}},
+func (c *AmazonMusicConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
+			{Name: "user", Description: "Current user profile", Operations: []types.Operation{}},
+			{Name: "tracks", Description: "Individual songs", Operations: []types.Operation{}},
+			{Name: "albums", Description: "Albums", Operations: []types.Operation{}},
+			{Name: "artists", Description: "Artists", Operations: []types.Operation{}},
+			{Name: "playlists", Description: "User playlists", Operations: []types.Operation{}},
+			{Name: "search", Description: "Catalog search", Operations: []types.Operation{}},
+			{Name: "library", Description: "User's saved music", Operations: []types.Operation{}},
+			{Name: "recommendations", Description: "Personalized suggestions", Operations: []types.Operation{}},
 		},
 	}
 }
@@ -164,16 +166,16 @@ func asInt(v any) (int, bool) {
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
 // and returns them in Aegis's neutral format.
-func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
+func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
 	token := c.host.GetValidToken("amazon-music", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("amazon-music", amazonMusicAPIBase)
 
 	nextURL := upstreamBase + "/me/playlists"
-	var all []Playlist
+	var all []types.Playlist
 	truncated := false
 	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -224,7 +226,7 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlis
 
 // neutralPlaylist maps a raw Amazon Music playlist object into the neutral type.
 // Service identity lives in Sources.
-func (c *AmazonMusicConnector) neutralPlaylist(p map[string]any) Playlist {
+func (c *AmazonMusicConnector) neutralPlaylist(p map[string]any) types.Playlist {
 	id, _ := p["id"].(string)
 	name, _ := c.firstNonNil(p, "name", "title").(string)
 	description, _ := p["description"].(string)
@@ -249,19 +251,19 @@ func (c *AmazonMusicConnector) neutralPlaylist(p map[string]any) Playlist {
 		}
 	}
 
-	return Playlist{
+	return types.Playlist{
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		Sources: []PlaylistSource{
-			primaryPlaylistSource("amazon-music", "Amazon Music", id, "", extra),
+		Sources: []types.PlaylistSource{
+			types.PrimaryPlaylistSource("amazon-music", "Amazon Music", id, "", extra),
 		},
 	}
 }
 
 // neutralAmazonTrack maps a raw Amazon Music track object into the neutral type.
-func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) Track {
+func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) types.Track {
 	id, _ := t["id"].(string)
 	name, _ := c.firstNonNil(t, "name", "title").(string)
 	artist := c.extractArtistName(t)
@@ -283,19 +285,19 @@ func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) Track {
 		}
 	}
 
-	var artists []Artist
+	var artists []types.Artist
 	if artist != "" {
-		artists = []Artist{newArtist("amazon-music", "Amazon Music", "", artist)}
+		artists = []types.Artist{types.NewArtist("amazon-music", "Amazon Music", "", artist)}
 	}
 
-	return Track{
+	return types.Track{
 		Name:       name,
 		Artists:    artists,
-		Album:      newAlbum("amazon-music", "Amazon Music", "", album),
+		Album:      types.NewAlbum("amazon-music", "Amazon Music", "", album),
 		DurationMs: durationMs,
 		Duration:   duration,
 		EntityID:   isrc,
-		Sources: []TrackSource{{
+		Sources: []types.TrackSource{{
 			Service:     "amazon-music",
 			ServiceName: "Amazon Music",
 			ID:          id,
@@ -304,9 +306,9 @@ func (c *AmazonMusicConnector) neutralAmazonTrack(t map[string]any) Track {
 	}
 }
 
-func (c *AmazonMusicConnector) transformPlaylistList(raw map[string]any) PlaylistList {
+func (c *AmazonMusicConnector) transformPlaylistList(raw map[string]any) types.PlaylistList {
 	items := c.extractItems(raw)
-	playlists := make([]Playlist, 0, len(items))
+	playlists := make([]types.Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -318,7 +320,7 @@ func (c *AmazonMusicConnector) transformPlaylistList(raw map[string]any) Playlis
 	if n, ok := asInt(c.totalCount(raw)); ok {
 		total = n
 	}
-	return PlaylistList{Playlists: playlists, Total: total}
+	return types.PlaylistList{Playlists: playlists, Total: total}
 }
 
 func (c *AmazonMusicConnector) transformLibrary(raw map[string]any) map[string]any {
@@ -418,13 +420,13 @@ func (c *AmazonMusicConnector) transformSearch(raw map[string]any) map[string]an
 	return result
 }
 
-func (c *AmazonMusicConnector) transformPlaylistDetail(raw map[string]any) PlaylistDetail {
+func (c *AmazonMusicConnector) transformPlaylistDetail(raw map[string]any) types.PlaylistDetail {
 	base := c.neutralPlaylist(raw)
 
-	var tracks []Track
+	var tracks []types.Track
 	if tracksObj, ok := raw["tracks"].(map[string]any); ok {
 		items := c.extractItemsFromMap(tracksObj)
-		tracks = make([]Track, 0, len(items))
+		tracks = make([]types.Track, 0, len(items))
 		for _, item := range items {
 			t, ok := item.(map[string]any)
 			if !ok {
@@ -433,7 +435,7 @@ func (c *AmazonMusicConnector) transformPlaylistDetail(raw map[string]any) Playl
 			tracks = append(tracks, c.neutralAmazonTrack(t))
 		}
 	} else if items, ok := raw["items"].([]any); ok {
-		tracks = make([]Track, 0, len(items))
+		tracks = make([]types.Track, 0, len(items))
 		for _, item := range items {
 			t, ok := item.(map[string]any)
 			if !ok {
@@ -443,7 +445,7 @@ func (c *AmazonMusicConnector) transformPlaylistDetail(raw map[string]any) Playl
 		}
 	}
 
-	return PlaylistDetail{
+	return types.PlaylistDetail{
 		Playlist:    base,
 		Tracks:      tracks,
 		TotalTracks: base.TrackCount,

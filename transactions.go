@@ -8,21 +8,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
-)
 
-// TransactionProvider is implemented by connectors that can return the user's
-// financial transactions in Aegis's neutral format (issue #141). The aggregate
-// library endpoint uses this so agents can ask "did we go over on groceries?"
-// once and receive every connected source. Each returned Transaction should
-// carry one TransactionSource for that service. Amounts are signed decimal
-// strings — never float JSON numbers.
-type TransactionProvider interface {
-	// ListUserTransactions returns neutral transactions (one
-	// TransactionSource each). Return ErrUnauthorized when no valid token
-	// is available. truncated is true when the page cap was hit with more
-	// items still upstream.
-	ListUserTransactions(ctx context.Context) (transactions []Transaction, truncated bool, err error)
-}
+	"github.com/fudomunro/aegis/internal/types"
+)
 
 // Transaction status values.
 const (
@@ -32,12 +20,12 @@ const (
 
 // Match methods for Transaction.
 const (
-	TransactionMatchProviderID     = "provider_id"
+	TransactionMatchProviderID         = "provider_id"
 	TransactionMatchAmountDateMerchant = "amount_date_merchant"
 )
 
 // transactionServiceName returns the first source service name for stable sort.
-func transactionServiceName(t Transaction) string {
+func transactionServiceName(t types.Transaction) string {
 	if len(t.Sources) > 0 {
 		return t.Sources[0].ServiceName
 	}
@@ -154,7 +142,7 @@ func transactionDay(raw string) string {
 }
 
 // transactionMerchantOrDescription returns the best merchant-ish string.
-func transactionMerchantOrDescription(t Transaction) string {
+func transactionMerchantOrDescription(t types.Transaction) string {
 	if m := strings.TrimSpace(t.Merchant); m != "" {
 		return m
 	}
@@ -189,7 +177,7 @@ func unionTransactionCategories(dst, src []string) []string {
 // when present; otherwise amount + posted day + normalized merchant.
 // Transactions without any identity fall back to service:id so they stay
 // distinct.
-func transactionIdentityKey(t Transaction) string {
+func transactionIdentityKey(t types.Transaction) string {
 	if id := strings.ToLower(strings.TrimSpace(t.EntityID)); id != "" {
 		return "pid:" + id
 	}
@@ -205,7 +193,7 @@ func transactionIdentityKey(t Transaction) string {
 		}
 	}
 	amt := normalizeTransactionAmount(t.Amount)
-	merchant := NormalizeIdentityKey(transactionMerchantOrDescription(t))
+	merchant := types.NormalizeIdentityKey(transactionMerchantOrDescription(t))
 	day := transactionDay(t.PostedAt)
 	if day == "" {
 		day = transactionDay(t.AuthorizedAt)
@@ -231,7 +219,7 @@ func transactionMatchKind(key string) string {
 	}
 }
 
-func mergeTransactionInto(dst *Transaction, src Transaction) {
+func mergeTransactionInto(dst *types.Transaction, src types.Transaction) {
 	if dst.PostedAt == "" {
 		dst.PostedAt = src.PostedAt
 	}
@@ -274,9 +262,9 @@ func mergeTransactionInto(dst *Transaction, src Transaction) {
 	}
 }
 
-func cloneTransaction(t Transaction) Transaction {
+func cloneTransaction(t types.Transaction) types.Transaction {
 	cp := t
-	cp.Sources = append([]TransactionSource(nil), t.Sources...)
+	cp.Sources = append([]types.TransactionSource(nil), t.Sources...)
 	if t.Account != nil {
 		acc := *t.Account
 		cp.Account = &acc
@@ -301,13 +289,13 @@ func cloneTransaction(t Transaction) Transaction {
 // differ across sources still merge when the amount/merchant/day key agrees,
 // because the same card charge is often visible through two providers under
 // different local IDs.
-func MergeTransactions(in []Transaction) []Transaction {
+func MergeTransactions(in []types.Transaction) []types.Transaction {
 	if len(in) == 0 {
 		return nil
 	}
 
 	type slot struct {
-		t   Transaction
+		t   types.Transaction
 		key string
 	}
 	var order []string
@@ -358,7 +346,7 @@ func MergeTransactions(in []Transaction) []Transaction {
 		}
 	}
 
-	out := make([]Transaction, 0, len(keys))
+	out := make([]types.Transaction, 0, len(keys))
 	for _, key := range keys {
 		item := byKey[key]
 		if len(item.t.Sources) > 1 {
@@ -401,7 +389,7 @@ func MergeTransactions(in []Transaction) []Transaction {
 
 // durableIDsAgree reports whether every source's provider ID is the same
 // (or only one side carries one).
-func durableIDsAgree(t Transaction) bool {
+func durableIDsAgree(t types.Transaction) bool {
 	seen := map[string]bool{}
 	for _, src := range t.Sources {
 		id := ""
@@ -424,13 +412,13 @@ func durableIDsAgree(t Transaction) bool {
 
 // transactionsMatchAdjacentDay reports whether two amount+merchant transactions
 // fall on the same or consecutive calendar days.
-func transactionsMatchAdjacentDay(a, b Transaction) bool {
+func transactionsMatchAdjacentDay(a, b types.Transaction) bool {
 	if normalizeTransactionAmount(a.Amount) == "" ||
 		normalizeTransactionAmount(a.Amount) != normalizeTransactionAmount(b.Amount) {
 		return false
 	}
-	ma := NormalizeIdentityKey(transactionMerchantOrDescription(a))
-	mb := NormalizeIdentityKey(transactionMerchantOrDescription(b))
+	ma := types.NormalizeIdentityKey(transactionMerchantOrDescription(a))
+	mb := types.NormalizeIdentityKey(transactionMerchantOrDescription(b))
 	if ma == "" || ma != mb {
 		return false
 	}
@@ -510,7 +498,7 @@ func (f TransactionFilters) cacheKeySuffix() string {
 }
 
 // matches reports whether a transaction passes every active filter.
-func (f TransactionFilters) matches(t Transaction) bool {
+func (f TransactionFilters) matches(t types.Transaction) bool {
 	if f.Empty() {
 		return true
 	}
@@ -568,11 +556,11 @@ func dateBefore(day, bound string) bool {
 	return day < b
 }
 
-func filterTransactions(in []Transaction, f TransactionFilters) []Transaction {
+func filterTransactions(in []types.Transaction, f TransactionFilters) []types.Transaction {
 	if f.Empty() {
 		return in
 	}
-	out := make([]Transaction, 0, len(in))
+	out := make([]types.Transaction, 0, len(in))
 	for _, t := range in {
 		if f.matches(t) {
 			out = append(out, t)
@@ -583,18 +571,18 @@ func filterTransactions(in []Transaction, f TransactionFilters) []Transaction {
 
 // RedactTransactionRead strips account identifiers from a line item while
 // keeping merchant/description for agent reasoning (issue #141).
-func RedactTransactionRead(t Transaction) Transaction {
+func RedactTransactionRead(t types.Transaction) types.Transaction {
 	t.Account = nil
 	return t
 }
 
-func redactTransactionsForLevel(items []Transaction, level string) []Transaction {
-	switch normalizeAccess(level) {
-	case AccessSummary:
+func redactTransactionsForLevel(items []types.Transaction, level string) []types.Transaction {
+	switch types.NormalizeAccess(level) {
+	case types.AccessSummary:
 		// No line items at all.
 		return nil
-	case AccessRead:
-		out := make([]Transaction, len(items))
+	case types.AccessRead:
+		out := make([]types.Transaction, len(items))
 		for i, t := range items {
 			out[i] = RedactTransactionRead(t)
 		}
@@ -608,11 +596,11 @@ func redactTransactionsForLevel(items []Transaction, level string) []Transaction
 // Multi-category line items (YNAB splits) credit their full amount to each
 // listed category so the transaction "shows up" where the user categorized it;
 // dig into YNAB for exact per-category amounts.
-func buildTransactionSummary(items []Transaction) *TransactionSummary {
+func buildTransactionSummary(items []types.Transaction) *types.TransactionSummary {
 	if len(items) == 0 {
 		return nil
 	}
-	sum := &TransactionSummary{
+	sum := &types.TransactionSummary{
 		Count:      len(items),
 		ByCategory: map[string]string{},
 		ByMonth:    map[string]string{},
@@ -716,9 +704,9 @@ func centsToAmount(cents int64) string {
 }
 
 // newTransaction builds a single-source neutral transaction.
-func newTransaction(service, serviceName, id string, tx Transaction) Transaction {
+func newTransaction(service, serviceName, id string, tx types.Transaction) types.Transaction {
 	out := cloneTransaction(tx)
-	out.Sources = []TransactionSource{{
+	out.Sources = []types.TransactionSource{{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,
@@ -730,13 +718,13 @@ func newTransaction(service, serviceName, id string, tx Transaction) Transaction
 // transactionsProviderTargets collects providers, applying per-service and
 // app-level summary/read redaction so a summary-only surface never contributes
 // line items or account identifiers (issue #141).
-func transactionsProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[Transaction], []string) {
-	targets, denied := collectProviders[Transaction, TransactionProvider](s, permType,
-		func(p TransactionProvider) func(context.Context) ([]Transaction, bool, error) {
+func transactionsProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[types.Transaction], []string) {
+	targets, denied := collectProviders[types.Transaction, types.TransactionProvider](s, permType,
+		func(p types.TransactionProvider) func(context.Context) ([]types.Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
-	appSummary := IsSummaryAccess(appLevel)
-	appRead := appLevel != "" && normalizeAccess(appLevel) == AccessRead
+	appSummary := types.IsSummaryAccess(appLevel)
+	appRead := appLevel != "" && types.NormalizeAccess(appLevel) == types.AccessRead
 	for i := range targets {
 		id := targets[i].id
 		inner := targets[i].list
@@ -746,14 +734,14 @@ func transactionsProviderTargets(s *Server, permType string, appLevel string) ([
 		}
 		effective := level
 		if appSummary {
-			effective = AccessSummary
+			effective = types.AccessSummary
 		} else if appRead {
-			effective = AccessRead
+			effective = types.AccessRead
 		}
-		if effective == level && !IsSummaryAccess(level) && normalizeAccess(level) != AccessRead {
+		if effective == level && !types.IsSummaryAccess(level) && types.NormalizeAccess(level) != types.AccessRead {
 			continue
 		}
-		targets[i].list = func(ctx context.Context) ([]Transaction, bool, error) {
+		targets[i].list = func(ctx context.Context) ([]types.Transaction, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactTransactionsForLevel(items, effective), truncated, err
 		}
@@ -772,21 +760,21 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
 	}
-	summaryOnly := IsSummaryAccess(appLevel)
+	summaryOnly := types.IsSummaryAccess(appLevel)
 	// If the agent surface is unrestricted but every service is summary-only
 	// after redaction, encode() still has line items only when services
 	// returned them. Force summary-only encode when the app is summary.
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Transaction]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Transaction]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Transaction], []string) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Transaction], []string) {
 			return transactionsProviderTargets(s, kind.PermType, appLevel)
 		},
 		serviceOf: transactionServiceName,
 		sortKey:   transactionIdentityKey,
 		merge:     MergeTransactions,
-		encode: func(merged []Transaction, bySvc map[string]LibraryServiceStatus) any {
+		encode: func(merged []types.Transaction, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterTransactions(merged, filters)
-			list := TransactionList{
+			list := types.TransactionList{
 				Transactions: filtered,
 				Total:        len(filtered),
 				Synced:       true,

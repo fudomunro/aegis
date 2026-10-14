@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGenerateSampleMail_Deterministic(t *testing.T) {
@@ -96,7 +98,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 
 	// Contact chain: email + phone + handle on Ada must union-find to one entity.
 	merged := MergeContacts(lib.Contacts)
-	var ada *Contact
+	var ada *types.Contact
 	for i := range merged {
 		if strings.Contains(strings.ToLower(merged[i].Name), "ada") {
 			ada = &merged[i]
@@ -112,7 +114,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 
 	// Message-ID pair merges; subject+from+time pair merges without Message-ID.
 	mergedMsgs := MergeMessages(lib.Messages)
-	var ship, invoice *Message
+	var ship, invoice *types.Message
 	for i := range mergedMsgs {
 		switch mergedMsgs[i].Subject {
 		case "Ship the release":

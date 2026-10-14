@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestYouTubeSimplifyAndIsPaginated(t *testing.T) {
@@ -128,7 +130,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 func TestYouTubeListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewYouTubeMusicConnector(srv)
-	if _, _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaylists(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }

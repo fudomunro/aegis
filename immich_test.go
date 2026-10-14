@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Server) {
@@ -22,7 +24,7 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 				Endpoint:     ts.URL,
 				Headers:      map[string]string{"X-API-Key": "test-immich-key"},
 				CanonicalFor: []string{"photos"},
-				Permissions:  Permissions{"default": AccessRead, "photos": AccessRead},
+				Permissions:  types.Permissions{"default": types.AccessRead, "photos": types.AccessRead},
 			},
 		},
 	}
@@ -153,8 +155,8 @@ func TestImmichConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 		w.Write([]byte(`{"message":"Invalid API key"}`))
 	}))
 	_, _, err := NewImmichConnector(srv).ListUserPhotos(context.Background())
-	if err != ErrUnauthorized {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if err != types.ErrUnauthorized {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -241,7 +243,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list PhotoList
+	var list types.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -251,7 +253,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 	if !list.Photos[0].Sources[0].Canonical {
 		t.Fatal("immich source should be canonical")
 	}
-	if list.ByService[immichServiceID].Status != LibraryStatusOK {
+	if list.ByService[immichServiceID].Status != types.LibraryStatusOK {
 		t.Fatalf("by_service = %+v", list.ByService)
 	}
 }
@@ -264,8 +266,8 @@ func TestDataTypeForPath_ImmichAssets(t *testing.T) {
 		"/albums":               "albums", // music albums win; Immich albums via connector proxy still work under default
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := types.DataTypeForPath(path); got != want {
+			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }

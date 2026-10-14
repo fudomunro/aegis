@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 type Config struct {
@@ -21,7 +23,7 @@ type Config struct {
 	permsPath string
 	// permsOverlay is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared).
-	permsOverlay map[string]*Permissions
+	permsOverlay map[string]*types.Permissions
 	// svcConnPath is the admin service-connections overlay
 	// (service_connections.json). Immich/local-store setup writes here so
 	// aegis.json is never rewritten from the admin UI.
@@ -65,7 +67,7 @@ type Service struct {
 	Description string            `json:"description,omitempty"`
 	// Permissions restricts agent access by data type (playlists, tracks, …).
 	// Nil means unrestricted. See permissions.go for levels and the "default" key.
-	Permissions Permissions `json:"permissions,omitempty"`
+	Permissions types.Permissions `json:"permissions,omitempty"`
 	// CanonicalFor lists library kinds where this service is the authoritative
 	// non-Aegis location (issue #16). At most one non-blocked service may
 	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
@@ -170,7 +172,7 @@ func validateConfig(cfg *Config) error {
 		return err
 	}
 	for _, svc := range services {
-		if err := ValidatePermissions(svc.Permissions); err != nil {
+		if err := types.ValidatePermissions(svc.Permissions); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)
 		}
 		if svc.Connection == "" {
@@ -198,7 +200,7 @@ func (s Service) clone() Service {
 		}
 	}
 	if s.Permissions != nil {
-		cp.Permissions = Permissions(s.Permissions.Clone())
+		cp.Permissions = types.Permissions(s.Permissions.Clone())
 	}
 	if s.CanonicalFor != nil {
 		cp.CanonicalFor = append([]string(nil), s.CanonicalFor...)
@@ -330,8 +332,8 @@ func (c *Config) GetConnection(id string) *Connection {
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
 // Always writes the permissions overlay (permissions.json) — never aegis.json.
-func (c *Config) SetServicePermissions(id string, p Permissions) error {
-	if err := ValidatePermissions(p); err != nil {
+func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
+	if err := types.ValidatePermissions(p); err != nil {
 		return err
 	}
 
@@ -352,7 +354,7 @@ func (c *Config) SetServicePermissions(id string, p Permissions) error {
 	if len(p) == 0 {
 		c.Services[idx].Permissions = nil
 	} else {
-		c.Services[idx].Permissions = Permissions(p.Clone())
+		c.Services[idx].Permissions = types.Permissions(p.Clone())
 	}
 	return c.setPermissionsOverlayEntryLocked(id, p)
 }

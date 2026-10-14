@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // SpotifyConnector provides intelligent proxying for the Spotify API.
@@ -28,134 +30,134 @@ func NewSpotifyConnector(host Host) *SpotifyConnector {
 }
 
 // Capabilities returns what Spotify data types and operations are supported.
-func (c *SpotifyConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *SpotifyConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "user",
 				Description: "Current user profile",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read", Description: "Get current user's profile", Method: "GET", Path: "/me",
-						Response: ResponseSpec{Description: "User profile with id, display_name, uri", Fields: []string{"id", "display_name", "uri"}}},
+						Response: types.ResponseSpec{Description: "User profile with id, display_name, uri", Fields: []string{"id", "display_name", "uri"}}},
 				},
 			},
 			{
 				Name:        "tracks",
 				Description: "Individual songs — saved tracks, top tracks, search results",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_saved", Description: "List user's saved/liked tracks (paginated, auto-fetches all pages)", Method: "GET", Path: "/me/tracks",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max tracks per page (1-50)", Default: 20},
 							{Name: "offset", In: "query", Type: "integer", Description: "Index of first track to return", Default: 0},
 						},
-						Response: ResponseSpec{Description: "Saved tracks with name, artists, album, id, uri", Fields: []string{"tracks", "total"}}},
+						Response: types.ResponseSpec{Description: "Saved tracks with name, artists, album, id, uri", Fields: []string{"tracks", "total"}}},
 					{Name: "read_top", Description: "List user's top tracks by time range", Method: "GET", Path: "/me/top/tracks",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "time_range", In: "query", Type: "string", Description: "short_term (4 weeks), medium_term (6 months), or long_term (years)", Default: "medium_term"},
 							{Name: "limit", In: "query", Type: "integer", Description: "Max tracks (1-50)", Default: 20},
 						},
-						Response: ResponseSpec{Description: "Top tracks with name, artists, album, id", Fields: []string{"tracks"}}},
+						Response: types.ResponseSpec{Description: "Top tracks with name, artists, album, id", Fields: []string{"tracks"}}},
 					{Name: "get_by_id", Description: "Get a track by its Spotify ID", Method: "GET", Path: "/tracks/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify track ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Track details with name, artists, album, duration, popularity", Fields: []string{"name", "artists", "album", "duration_ms", "popularity", "id", "uri"}}},
+						Response: types.ResponseSpec{Description: "Track details with name, artists, album, duration, popularity", Fields: []string{"name", "artists", "album", "duration_ms", "popularity", "id", "uri"}}},
 				},
 			},
 			{
 				Name:        "albums",
 				Description: "Albums — saved albums, album details",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_saved", Description: "List user's saved albums (paginated)", Method: "GET", Path: "/me/albums",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max albums per page (1-50)", Default: 20},
 						},
-						Response: ResponseSpec{Description: "Saved albums with name, artists, id", Fields: []string{"albums", "total"}}},
+						Response: types.ResponseSpec{Description: "Saved albums with name, artists, id", Fields: []string{"albums", "total"}}},
 					{Name: "get_by_id", Description: "Get an album by its Spotify ID", Method: "GET", Path: "/albums/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify album ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Album with tracks, artists, release date", Fields: []string{"name", "artists", "tracks", "release_date", "total_tracks"}}},
+						Response: types.ResponseSpec{Description: "Album with tracks, artists, release date", Fields: []string{"name", "artists", "tracks", "release_date", "total_tracks"}}},
 				},
 			},
 			{
 				Name:        "artists",
 				Description: "Artists — followed artists, top tracks, related artists",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_top", Description: "List user's top artists by time range", Method: "GET", Path: "/me/top/artists",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "time_range", In: "query", Type: "string", Description: "short_term, medium_term, or long_term", Default: "medium_term"},
 						},
-						Response: ResponseSpec{Description: "Top artists with name, id, genres", Fields: []string{"artists"}}},
+						Response: types.ResponseSpec{Description: "Top artists with name, id, genres", Fields: []string{"artists"}}},
 					{Name: "get_by_id", Description: "Get an artist by its Spotify ID", Method: "GET", Path: "/artists/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify artist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Artist with name, genres, followers, popularity", Fields: []string{"name", "genres", "followers", "popularity"}}},
+						Response: types.ResponseSpec{Description: "Artist with name, genres, followers, popularity", Fields: []string{"name", "genres", "followers", "popularity"}}},
 					{Name: "get_top_tracks", Description: "Get an artist's top tracks", Method: "GET", Path: "/artists/{id}/top-tracks",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify artist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Artist's top tracks", Fields: []string{"tracks"}}},
+						Response: types.ResponseSpec{Description: "Artist's top tracks", Fields: []string{"tracks"}}},
 				},
 			},
 			{
 				Name:        "playlists",
 				Description: "User playlists — list, detail with tracks",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_list", Description: "List user's playlists (paginated)", Method: "GET", Path: "/me/playlists",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max playlists per page (1-50)", Default: 20},
 						},
-						Response: ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
+						Response: types.ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID with its tracks", Method: "GET", Path: "/playlists/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify playlist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[], tracks", Fields: []string{"name", "description", "owner", "track_count", "sources", "tracks", "extra"}}},
+						Response: types.ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[], tracks", Fields: []string{"name", "description", "owner", "track_count", "sources", "tracks", "extra"}}},
 				},
 			},
 			{
 				Name:        "search",
 				Description: "Search the Spotify catalog",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "search", Description: "Search for tracks, albums, artists, or playlists", Method: "GET", Path: "/search",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Search query", Required: true},
 							{Name: "type", In: "query", Type: "string", Description: "Comma-separated types: track, album, artist, playlist", Default: "track"},
 							{Name: "limit", In: "query", Type: "integer", Description: "Max results per type (1-50)", Default: 10},
 						},
-						Response: ResponseSpec{Description: "Search results grouped by type", Fields: []string{"tracks", "albums", "artists", "playlists"}}},
+						Response: types.ResponseSpec{Description: "Search results grouped by type", Fields: []string{"tracks", "albums", "artists", "playlists"}}},
 				},
 			},
 			{
 				Name:        "player",
 				Description: "Playback state, currently playing, recently played",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_state", Description: "Get current playback state", Method: "GET", Path: "/me/player",
-						Response: ResponseSpec{Description: "Playback state with track, device, is_playing", Fields: []string{"is_playing", "track", "device"}}},
+						Response: types.ResponseSpec{Description: "Playback state with track, device, is_playing", Fields: []string{"is_playing", "track", "device"}}},
 					{Name: "read_recent", Description: "Get recently played tracks", Method: "GET", Path: "/me/player/recently-played",
-						Response: ResponseSpec{Description: "Recently played tracks with played_at timestamps", Fields: []string{"tracks"}}},
+						Response: types.ResponseSpec{Description: "Recently played tracks with played_at timestamps", Fields: []string{"tracks"}}},
 				},
 			},
 			{
 				Name:        "library",
 				Description: "User's saved tracks, albums, and artists",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_tracks", Description: "List saved tracks (alias for tracks.read_saved)", Method: "GET", Path: "/me/tracks",
-						Response: ResponseSpec{Description: "Saved tracks", Fields: []string{"tracks", "total"}}},
+						Response: types.ResponseSpec{Description: "Saved tracks", Fields: []string{"tracks", "total"}}},
 					{Name: "read_albums", Description: "List saved albums (alias for albums.read_saved)", Method: "GET", Path: "/me/albums",
-						Response: ResponseSpec{Description: "Saved albums", Fields: []string{"albums", "total"}}},
+						Response: types.ResponseSpec{Description: "Saved albums", Fields: []string{"albums", "total"}}},
 				},
 			},
 			{
 				Name:        "recommendations",
 				Description: "Personalized recommendations based on listening history",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_top_tracks", Description: "Top tracks (alias for tracks.read_top)", Method: "GET", Path: "/me/top/tracks",
-						Response: ResponseSpec{Description: "Top tracks", Fields: []string{"tracks"}}},
+						Response: types.ResponseSpec{Description: "Top tracks", Fields: []string{"tracks"}}},
 					{Name: "read_top_artists", Description: "Top artists (alias for artists.read_top)", Method: "GET", Path: "/me/top/artists",
-						Response: ResponseSpec{Description: "Top artists", Fields: []string{"artists"}}},
+						Response: types.ResponseSpec{Description: "Top artists", Fields: []string{"artists"}}},
 				},
 			},
 		},
@@ -283,15 +285,15 @@ func (c *SpotifyConnector) transformUser(raw map[string]any) map[string]any {
 
 // ListUserSavedAlbums implements AlbumProvider. Fetches Spotify saved albums
 // and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bool, error) {
+func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]types.Album, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []Album
+	var all []types.Album
 	nextURL := upstreamBase + "/me/albums?limit=50"
 	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -334,15 +336,15 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]Album, bo
 
 // ListUserFollowedArtists implements ArtistProvider. Fetches Spotify followed
 // artists and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, bool, error) {
+func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]types.Artist, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []Artist
+	var all []types.Artist
 	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
 	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -391,13 +393,13 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]Artis
 }
 
 // spotifyNeutralAlbum maps a raw Spotify album into the neutral Album type.
-func spotifyNeutralAlbum(album map[string]any) Album {
+func spotifyNeutralAlbum(album map[string]any) types.Album {
 	id, _ := album["id"].(string)
 	name, _ := album["name"].(string)
 	uri, _ := album["uri"].(string)
 	upc, _ := extractNested(album, "external_ids", "upc").(string)
 
-	var artists []Artist
+	var artists []types.Artist
 	if rawArtists, ok := album["artists"].([]any); ok {
 		for _, item := range rawArtists {
 			obj, ok := item.(map[string]any)
@@ -406,7 +408,7 @@ func spotifyNeutralAlbum(album map[string]any) Album {
 			}
 			aName, _ := obj["name"].(string)
 			artistID, _ := obj["id"].(string)
-			a := newArtist("spotify", "Spotify", artistID, aName)
+			a := types.NewArtist("spotify", "Spotify", artistID, aName)
 			if artistID != "" && len(a.Sources) > 0 {
 				a.Sources[0].URL = "https://open.spotify.com/artist/" + artistID
 			}
@@ -417,7 +419,7 @@ func spotifyNeutralAlbum(album map[string]any) Album {
 	}
 	if len(artists) == 0 {
 		for _, n := range extractNames(album, "artists") {
-			artists = append(artists, newArtist("spotify", "Spotify", "", n))
+			artists = append(artists, types.NewArtist("spotify", "Spotify", "", n))
 		}
 	}
 
@@ -433,11 +435,11 @@ func spotifyNeutralAlbum(album map[string]any) Album {
 		extra["upc"] = upc
 	}
 
-	return Album{
+	return types.Album{
 		Name:     name,
 		Artists:  artists,
 		EntityID: strings.ToUpper(strings.TrimSpace(upc)),
-		Sources: []AlbumSource{{
+		Sources: []types.AlbumSource{{
 			Service:     "spotify",
 			ServiceName: "Spotify",
 			ID:          id,
@@ -449,14 +451,14 @@ func spotifyNeutralAlbum(album map[string]any) Album {
 }
 
 // spotifyNeutralArtist maps a raw Spotify artist into the neutral Artist type.
-func spotifyNeutralArtist(artist map[string]any) Artist {
+func spotifyNeutralArtist(artist map[string]any) types.Artist {
 	id, _ := artist["id"].(string)
 	name, _ := artist["name"].(string)
 	url := ""
 	if id != "" {
 		url = "https://open.spotify.com/artist/" + id
 	}
-	a := newArtist("spotify", "Spotify", id, name)
+	a := types.NewArtist("spotify", "Spotify", id, name)
 	if len(a.Sources) > 0 {
 		a.Sources[0].URL = url
 	}
@@ -465,15 +467,15 @@ func spotifyNeutralArtist(artist map[string]any) Artist {
 
 // ListUserLikedTracks implements LikedTrackProvider. Fetches Spotify saved
 // tracks and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
+func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []Track
+	var all []types.Track
 	nextURL := upstreamBase + "/me/tracks?limit=50"
 	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -516,15 +518,15 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bo
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Spotify playlists
 // and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
+func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []Playlist
+	var all []types.Playlist
 	nextURL := upstreamBase + "/me/playlists?limit=50"
 	for page := 0; page < libraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -614,7 +616,7 @@ func playlistEntryTrack(entry map[string]any) map[string]any {
 
 // neutralPlaylist maps a raw Spotify playlist object into the neutral type.
 // Service identity (id, url, uri) lives in Sources / Extra, not top-level.
-func (c *SpotifyConnector) neutralPlaylist(p map[string]any) Playlist {
+func (c *SpotifyConnector) neutralPlaylist(p map[string]any) types.Playlist {
 	id, _ := p["id"].(string)
 	name, _ := p["name"].(string)
 	description, _ := p["description"].(string)
@@ -635,20 +637,20 @@ func (c *SpotifyConnector) neutralPlaylist(p map[string]any) Playlist {
 		extra["snapshot_id"] = snapshot
 	}
 
-	return Playlist{
+	return types.Playlist{
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		Sources: []PlaylistSource{
-			primaryPlaylistSource("spotify", "Spotify", id, spotifyPlaylistURL(id), extra),
+		Sources: []types.PlaylistSource{
+			types.PrimaryPlaylistSource("spotify", "Spotify", id, spotifyPlaylistURL(id), extra),
 		},
 	}
 }
 
-func (c *SpotifyConnector) transformPlaylistList(raw map[string]any) PlaylistList {
+func (c *SpotifyConnector) transformPlaylistList(raw map[string]any) types.PlaylistList {
 	items, _ := raw["items"].([]any)
-	playlists := make([]Playlist, 0, len(items))
+	playlists := make([]types.Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -663,7 +665,7 @@ func (c *SpotifyConnector) transformPlaylistList(raw map[string]any) PlaylistLis
 	if n, ok := asInt(raw["total_fetched"]); ok {
 		total = n
 	}
-	return PlaylistList{Playlists: playlists, Total: total}
+	return types.PlaylistList{Playlists: playlists, Total: total}
 }
 
 func (c *SpotifyConnector) transformSavedTracks(raw map[string]any) map[string]any {
@@ -835,7 +837,7 @@ func (c *SpotifyConnector) transformSearch(raw map[string]any) map[string]any {
 
 // spotifyNeutralTrack maps a raw Spotify track object into the neutral Track.
 // Artist/album names become unified identities; Spotify IDs live in Sources.
-func spotifyNeutralTrack(track map[string]any) Track {
+func spotifyNeutralTrack(track map[string]any) types.Track {
 	id, _ := track["id"].(string)
 	name, _ := track["name"].(string)
 	uri, _ := track["uri"].(string)
@@ -852,7 +854,7 @@ func spotifyNeutralTrack(track map[string]any) Track {
 		extra["isrc"] = isrc
 	}
 
-	var artists []Artist
+	var artists []types.Artist
 	if rawArtists, ok := track["artists"].([]any); ok {
 		for _, a := range rawArtists {
 			obj, ok := a.(map[string]any)
@@ -861,7 +863,7 @@ func spotifyNeutralTrack(track map[string]any) Track {
 			}
 			name, _ := obj["name"].(string)
 			artistID, _ := obj["id"].(string)
-			artist := newArtist("spotify", "Spotify", artistID, name)
+			artist := types.NewArtist("spotify", "Spotify", artistID, name)
 			if artistID != "" && len(artist.Sources) > 0 {
 				artist.Sources[0].URL = "https://open.spotify.com/artist/" + artistID
 			}
@@ -872,23 +874,23 @@ func spotifyNeutralTrack(track map[string]any) Track {
 	}
 	if len(artists) == 0 {
 		for _, n := range extractNames(track, "artists") {
-			artists = append(artists, newArtist("spotify", "Spotify", "", n))
+			artists = append(artists, types.NewArtist("spotify", "Spotify", "", n))
 		}
 	}
-	artists = mergeArtists(artists...)
+	artists = types.MergeArtists(artists...)
 
 	url := ""
 	if id != "" {
 		url = "https://open.spotify.com/track/" + id
 	}
 
-	return Track{
+	return types.Track{
 		Name:       name,
 		Artists:    artists,
-		Album:      newAlbum("spotify", "Spotify", albumID, albumName),
+		Album:      types.NewAlbum("spotify", "Spotify", albumID, albumName),
 		DurationMs: durationMs,
 		EntityID:   strings.ToUpper(strings.TrimSpace(isrc)),
-		Sources: []TrackSource{{
+		Sources: []types.TrackSource{{
 			Service:     "spotify",
 			ServiceName: "Spotify",
 			ID:          id,
@@ -905,10 +907,10 @@ func extraOrNil(m map[string]any) map[string]any {
 	return m
 }
 
-func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) PlaylistDetail {
+func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) types.PlaylistDetail {
 	base := c.neutralPlaylist(raw)
 
-	var tracks []Track
+	var tracks []types.Track
 	for _, entry := range playlistTrackEntries(raw) {
 		e, ok := entry.(map[string]any)
 		if !ok {
@@ -920,7 +922,7 @@ func (c *SpotifyConnector) transformPlaylistDetail(raw map[string]any) PlaylistD
 		}
 		tracks = append(tracks, spotifyNeutralTrack(track))
 	}
-	return PlaylistDetail{
+	return types.PlaylistDetail{
 		Playlist:    base,
 		Tracks:      tracks,
 		TotalTracks: base.TrackCount,

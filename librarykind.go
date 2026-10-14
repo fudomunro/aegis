@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/types"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,47 +15,94 @@ import (
 	"time"
 )
 
-// LibraryKind describes one unified library dataset. Adding a data type for
-// scale means registering a kind here and a thin typed handler — not cloning
-// another aggregate pipeline.
-type LibraryKind struct {
-	// ID is the short name ("tracks") used in cache keys and logs.
-	ID string
-	// Path is the agent-facing endpoint ("/v1/library/tracks").
-	Path string
-	// PermType is the permissions map key and path classifier type.
-	PermType string
-	// Label is the human name used in messages ("liked tracks").
-	Label string
-	// Usage is how agents should think about the dataset (instructions).
-	Usage string
-	// Summary describes the neutral list shape.
-	Summary string
-	// SyncRule explains cross-service merge behavior.
-	SyncRule string
-	// ExampleQuestion is a canonical user prompt.
-	ExampleQuestion string
-	// Keywords detect service-less questions that should inject this endpoint.
-	Keywords []string
-	// EmptyMsg / DenyMsg / FailMsg are API error strings.
-	EmptyMsg string
-	DenyMsg  string
-	FailMsg  string
+// LibraryKind is the type-layer kind metadata (issue #15). Core attaches
+// runtime visibility predicates in kindRuntime, not on this data struct.
 
-	// Runtime predicates below are core-owned wiring, not type metadata.
-	// They still take *Server while everything shares package main; when
-	// types/ moves out (issue #15) these attach at registration instead of
-	// living on the data struct.
-
-	// HasProviders reports whether any connector can feed this kind.
+// kindRuntime holds core-owned visibility predicates per kind ID. When the
+// types package split completes these stay here — not on the data struct.
+type kindRuntimeEntry struct {
 	HasProviders func(s *Server) bool
-	// Readable reports whether any non-blocked service allows reads.
-	Readable func(s *Server) bool
+	Readable     func(s *Server) bool
+}
+
+var kindRuntime = map[string]kindRuntimeEntry{
+	"playlists": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.PlaylistProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("playlists") },
+	},
+	"tracks": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.LikedTrackProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("tracks") },
+	},
+	"albums": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.AlbumProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("albums") },
+	},
+	"artists": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.ArtistProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("artists") },
+	},
+	"contacts": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.ContactProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("contacts") },
+	},
+	"photos": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.PhotoProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("photos") },
+	},
+	"events": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.CalendarEventProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("events") },
+	},
+	"messages": {
+		HasProviders: func(s *Server) bool {
+			if s.hasProvider[types.MessageProvider]() {
+				return true
+			}
+			// Local mail archive (Gmail sync + Takeout) is a collection source
+			// even without a live connector (issue #139).
+			return s.mail != nil && s.mailReadable()
+		},
+		Readable: func(s *Server) bool { return s.libraryReadableFor("messages") },
+	},
+	"transactions": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.TransactionProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("transactions") },
+	},
+	"places": {
+		HasProviders: func(s *Server) bool {
+			if s.hasProvider[types.PlaceVisitProvider]() {
+				return true
+			}
+			// Local Timeline import is a collection source even without a
+			// live connector (issue #142).
+			return s.timeline != nil && s.timeline.Enabled()
+		},
+		Readable: func(s *Server) bool { return s.libraryReadableFor("places") },
+	},
+}
+
+// kindHasProviders reports whether any connector can feed the kind.
+func kindHasProviders(id string, s *Server) bool {
+	rt := kindRuntime[id]
+	if rt.HasProviders == nil {
+		return false
+	}
+	return rt.HasProviders(s)
+}
+
+// kindReadable reports whether at least one non-blocked service allows reads.
+func kindReadable(id string, s *Server) bool {
+	rt := kindRuntime[id]
+	if rt.Readable == nil {
+		return false
+	}
+	return rt.Readable(s)
 }
 
 // libraryKinds is the registry for every unified library dataset. Order is
 // stable and used for route registration and pre-request injection priority.
-var libraryKinds = []LibraryKind{
+var libraryKinds = []types.LibraryKind{
 	{
 		ID:              "playlists",
 		Path:            "/v1/library/playlists",
@@ -66,11 +115,9 @@ var libraryKinds = []LibraryKind{
 		Keywords: []string{
 			"playlist", "play list", "music library", "my library", "saved playlists",
 		},
-		EmptyMsg:     "no playlist-capable services configured",
-		DenyMsg:      "permission denied: agent access to playlists is not allowed",
-		FailMsg:      "failed to fetch playlists",
-		HasProviders: func(s *Server) bool { return s.hasProvider[PlaylistProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("playlists") },
+		EmptyMsg: "no playlist-capable services configured",
+		DenyMsg:  "permission denied: agent access to playlists is not allowed",
+		FailMsg:  "failed to fetch playlists",
 	},
 	{
 		ID:              "tracks",
@@ -90,11 +137,9 @@ var libraryKinds = []LibraryKind{
 			"songs have i liked", "tracks have i liked",
 			"my likes", "my favorites", "my favourites",
 		},
-		EmptyMsg:     "no liked-track-capable services configured",
-		DenyMsg:      "permission denied: agent access to tracks is not allowed",
-		FailMsg:      "failed to fetch liked tracks",
-		HasProviders: func(s *Server) bool { return s.hasProvider[LikedTrackProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("tracks") },
+		EmptyMsg: "no liked-track-capable services configured",
+		DenyMsg:  "permission denied: agent access to tracks is not allowed",
+		FailMsg:  "failed to fetch liked tracks",
 	},
 	{
 		ID:              "albums",
@@ -110,11 +155,9 @@ var libraryKinds = []LibraryKind{
 			"albums i've saved", "albums have i saved", "albums i saved",
 			"my albums", "album library",
 		},
-		EmptyMsg:     "no album-capable services configured",
-		DenyMsg:      "permission denied: agent access to albums is not allowed",
-		FailMsg:      "failed to fetch albums",
-		HasProviders: func(s *Server) bool { return s.hasProvider[AlbumProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("albums") },
+		EmptyMsg: "no album-capable services configured",
+		DenyMsg:  "permission denied: agent access to albums is not allowed",
+		FailMsg:  "failed to fetch albums",
 	},
 	{
 		ID:              "artists",
@@ -131,11 +174,9 @@ var libraryKinds = []LibraryKind{
 			"favorite artist", "favourite artist", "my artists",
 			"top artists", "artists i like",
 		},
-		EmptyMsg:     "no artist-capable services configured",
-		DenyMsg:      "permission denied: agent access to artists is not allowed",
-		FailMsg:      "failed to fetch artists",
-		HasProviders: func(s *Server) bool { return s.hasProvider[ArtistProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("artists") },
+		EmptyMsg: "no artist-capable services configured",
+		DenyMsg:  "permission denied: agent access to artists is not allowed",
+		FailMsg:  "failed to fetch artists",
 	},
 	{
 		ID:              "contacts",
@@ -150,11 +191,9 @@ var libraryKinds = []LibraryKind{
 			"my contacts", "address book", "contact list", "contacts list",
 			"who is in my contacts", "people i know",
 		},
-		EmptyMsg:     "no contact-capable services configured",
-		DenyMsg:      "permission denied: agent access to contacts is not allowed",
-		FailMsg:      "failed to fetch contacts",
-		HasProviders: func(s *Server) bool { return s.hasProvider[ContactProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("contacts") },
+		EmptyMsg: "no contact-capable services configured",
+		DenyMsg:  "permission denied: agent access to contacts is not allowed",
+		FailMsg:  "failed to fetch contacts",
 	},
 	{
 		ID:              "photos",
@@ -175,11 +214,9 @@ var libraryKinds = []LibraryKind{
 			"photo", "picture",
 			"photo collection", "photos in my", "pictures in my",
 		},
-		EmptyMsg:     "no photo-capable services configured",
-		DenyMsg:      "permission denied: agent access to photos is not allowed",
-		FailMsg:      "failed to fetch photos",
-		HasProviders: func(s *Server) bool { return s.hasProvider[PhotoProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("photos") },
+		EmptyMsg: "no photo-capable services configured",
+		DenyMsg:  "permission denied: agent access to photos is not allowed",
+		FailMsg:  "failed to fetch photos",
 	},
 	{
 		ID:              "events",
@@ -197,11 +234,9 @@ var libraryKinds = []LibraryKind{
 			"appointments", "my events", "events this week",
 			"google calendar", "what's on my calendar", "whats on my calendar",
 		},
-		EmptyMsg:     "no calendar-capable services configured",
-		DenyMsg:      "permission denied: agent access to events is not allowed",
-		FailMsg:      "failed to fetch calendar events",
-		HasProviders: func(s *Server) bool { return s.hasProvider[CalendarEventProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("events") },
+		EmptyMsg: "no calendar-capable services configured",
+		DenyMsg:  "permission denied: agent access to events is not allowed",
+		FailMsg:  "failed to fetch calendar events",
 	},
 	{
 		ID:              "messages",
@@ -223,15 +258,6 @@ var libraryKinds = []LibraryKind{
 		EmptyMsg: "no message-capable services configured",
 		DenyMsg:  "permission denied: agent access to messages is not allowed",
 		FailMsg:  "failed to fetch messages",
-		HasProviders: func(s *Server) bool {
-			if s.hasProvider[MessageProvider]() {
-				return true
-			}
-			// Local mail archive (Gmail sync + Takeout) is a collection source
-			// even without a live connector (issue #139).
-			return s.mail != nil && s.mailReadable()
-		},
-		Readable: func(s *Server) bool { return s.libraryReadableFor("messages") },
 	},
 	{
 		ID:              "transactions",
@@ -254,11 +280,9 @@ var libraryKinds = []LibraryKind{
 			"groceries", "subscription", "subscriptions",
 			"ynab", "quicken", "mint",
 		},
-		EmptyMsg:     "no transaction-capable services configured",
-		DenyMsg:      "permission denied: agent access to transactions is not allowed",
-		FailMsg:      "failed to fetch transactions",
-		HasProviders: func(s *Server) bool { return s.hasProvider[TransactionProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("transactions") },
+		EmptyMsg: "no transaction-capable services configured",
+		DenyMsg:  "permission denied: agent access to transactions is not allowed",
+		FailMsg:  "failed to fetch transactions",
 	},
 	{
 		ID:              "places",
@@ -286,54 +310,17 @@ var libraryKinds = []LibraryKind{
 		EmptyMsg: "no places-capable services configured (enable places permissions and connect OwnTracks or import a Google Timeline export)",
 		DenyMsg:  "permission denied: agent access to places is not allowed (places defaults to none — enable city, read, or precise in service permissions)",
 		FailMsg:  "failed to fetch places",
-		HasProviders: func(s *Server) bool {
-			if s.hasProvider[PlaceVisitProvider]() {
-				return true
-			}
-			// Local Timeline import is a collection source even without a
-			// live connector (issue #142).
-			return s.timeline != nil && s.timeline.Enabled()
-		},
-		Readable: func(s *Server) bool { return s.libraryReadableFor("places") },
 	},
 }
 
 // LibraryKindByID returns the registered kind, or nil.
-func LibraryKindByID(id string) *LibraryKind {
+func LibraryKindByID(id string) *types.LibraryKind {
 	for i := range libraryKinds {
 		if libraryKinds[i].ID == id {
 			return &libraryKinds[i]
 		}
 	}
 	return nil
-}
-
-// Mentions reports whether the user message looks like a question about this
-// dataset without naming a service.
-func (k LibraryKind) Mentions(msg string) bool {
-	lower := strings.ToLower(msg)
-	for _, keyword := range k.Keywords {
-		if strings.Contains(lower, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-// Instructions builds the system-message hint for this library endpoint.
-func (k LibraryKind) Instructions(baseURL string) string {
-	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(
-		"Unified %s library (use when the user asks about %s):\n"+
-			"GET %s%s — %s.\n"+
-			"%s Prefer this endpoint for questions like %q so the answer includes "+
-			"every connected service.\n"+
-			"Check response.truncated (and by_service[].truncated) before claiming the list is complete; "+
-			"when true, say so and note that some items may still be missing upstream.\n"+
-			"sources[].canonical marks the authoritative non-Aegis location for that item "+
-			"(issue #16); prefer that service for writes or mirrors.",
-		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, k.ExampleQuestion,
-	)
 }
 
 // libraryInstructionsFor returns kind instructions plus a configured canonical
@@ -361,23 +348,9 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 
 // anyServiceTruncated reports whether any per-service status hit a page cap
 // or left an unfollowed continuation. Used for the top-level truncated flag.
-func anyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
+func anyServiceTruncated(bySvc map[string]types.LibraryServiceStatus) bool {
 	for _, st := range bySvc {
 		if st.Truncated {
-			return true
-		}
-	}
-	return false
-}
-
-// CacheKey is the in-memory cache key for the aggregate response.
-func (k LibraryKind) CacheKey() string { return "library:" + k.ID }
-
-// libraryAggregateDegraded reports whether any provider failed or was
-// unauthorized. Degraded aggregates must not be cached.
-func libraryAggregateDegraded(bySvc map[string]LibraryServiceStatus) bool {
-	for _, st := range bySvc {
-		if st.Status != LibraryStatusOK {
 			return true
 		}
 	}
@@ -413,10 +386,10 @@ func (s *Server) libraryReadableFor(permType string) bool {
 func (s *Server) libraryHintsForMessage(msg string) []string {
 	var out []string
 	for _, k := range libraryKinds {
-		if !k.Mentions(msg) || k.HasProviders == nil || k.Readable == nil {
+		if !k.Mentions(msg) {
 			continue
 		}
-		if !k.HasProviders(s) || !k.Readable(s) {
+		if !kindHasProviders(k.ID, s) || !kindReadable(k.ID, s) {
 			continue
 		}
 		out = append(out, s.libraryInstructionsFor(k.ID))
@@ -479,14 +452,14 @@ func collectProviders[T any, P any](
 
 // libraryKindSpec wires one typed dataset into the shared aggregate pipeline.
 type libraryKindSpec[T any] struct {
-	kind    LibraryKind
+	kind    types.LibraryKind
 	targets func(s *Server, r *http.Request) (targets []namedLister[T], denied []string)
 	// serviceOf returns the first source service name for stable pre-sort.
 	serviceOf func(T) string
 	// sortKey is the identity key used after service-name grouping.
 	sortKey func(T) string
 	merge   func([]T) []T
-	encode  func(merged []T, bySvc map[string]LibraryServiceStatus) any
+	encode  func(merged []T, bySvc map[string]types.LibraryServiceStatus) any
 	// markCanonical stamps Source.Canonical on items from a config-declared
 	// canonical_for service (issue #16). Nil skips config stamping.
 	markCanonical func(items []T, serviceID string)
@@ -599,7 +572,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		mu    sync.Mutex
 		wg    sync.WaitGroup
 		all   []T
-		bySvc = make(map[string]LibraryServiceStatus, len(targets))
+		bySvc = make(map[string]types.LibraryServiceStatus, len(targets))
 	)
 
 	ctx := r.Context()
@@ -624,14 +597,14 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 				}()
 				items, truncated, err = t.list(ctx)
 			}()
-			var status LibraryServiceStatus
+			var status types.LibraryServiceStatus
 			switch {
 			case err == nil:
 				if spec.markCanonical != nil {
 					spec.markCanonical(items, t.id)
 				}
-				status = LibraryServiceStatus{
-					Status:    LibraryStatusOK,
+				status = types.LibraryServiceStatus{
+					Status:    types.LibraryStatusOK,
 					Count:     len(items),
 					Truncated: truncated,
 				}
@@ -648,15 +621,15 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 				mu.Lock()
 				all = append(all, items...)
 				mu.Unlock()
-			case errors.Is(err, ErrUnauthorized):
+			case errors.Is(err, types.ErrUnauthorized):
 				logger.Info("library "+kind.ID+" unauthorized", "service", t.id)
-				status = LibraryServiceStatus{
-					Status: LibraryStatusUnauthorized,
+				status = types.LibraryServiceStatus{
+					Status: types.LibraryStatusUnauthorized,
 					Error:  "not authorized — connect at /v1/auth/" + t.id + "/login",
 				}
 			default:
 				logger.Warn("library "+kind.ID+" failed", "service", t.id, "error", err)
-				status = LibraryServiceStatus{Status: LibraryStatusError, Error: kind.FailMsg}
+				status = types.LibraryServiceStatus{Status: types.LibraryStatusError, Error: kind.FailMsg}
 			}
 			mu.Lock()
 			bySvc[t.id] = status
@@ -708,4 +681,15 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		DataType: kind.ID,
 		Cache:    MetricCacheMiss,
 	})
+}
+
+// libraryAggregateDegraded reports whether any provider failed or was
+// unauthorized. Degraded aggregates must not be cached.
+func libraryAggregateDegraded(bySvc map[string]types.LibraryServiceStatus) bool {
+	for _, st := range bySvc {
+		if st.Status != types.LibraryStatusOK {
+			return true
+		}
+	}
+	return false
 }

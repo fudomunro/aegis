@@ -6,37 +6,41 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakePlaceProvider struct {
-	visits    []PlaceVisit
+	visits    []types.PlaceVisit
 	truncated bool
 	err       error
 }
 
-func (f *fakePlaceProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakePlaceProvider) SystemInstructions(string) string  { return "" }
+func (f *fakePlaceProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakePlaceProvider) SystemInstructions(string) string { return "" }
 func (f *fakePlaceProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
-func (f *fakePlaceProvider) ListUserPlaceVisits(context.Context) ([]PlaceVisit, bool, error) {
+func (f *fakePlaceProvider) ListUserPlaceVisits(context.Context) ([]types.PlaceVisit, bool, error) {
 	return f.visits, f.truncated, f.err
 }
 
-func samplePlaces() []PlaceVisit {
+func samplePlaces() []types.PlaceVisit {
 	return GenerateSampleLibrary().Places
 }
 
 func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
-	if got := normalizePlaceVisitKind("placeVisit"); got != PlaceKindVisit {
+	if got := normalizePlaceVisitKind("placeVisit"); got != types.PlaceKindVisit {
 		t.Fatalf("kind = %q", got)
 	}
-	if got := normalizePlaceVisitKind("activitySegment"); got != PlaceKindTrip {
+	if got := normalizePlaceVisitKind("activitySegment"); got != types.PlaceKindTrip {
 		t.Fatalf("kind = %q", got)
 	}
-	if got := normalizeTripMode("IN_PASSENGER_VEHICLE"); got != TripModeDrive {
+	if got := normalizeTripMode("IN_PASSENGER_VEHICLE"); got != types.TripModeDrive {
 		t.Fatalf("mode = %q", got)
 	}
-	if got := normalizeTripMode("FLYING"); got != TripModeFlight {
+	if got := normalizeTripMode("FLYING"); got != types.TripModeFlight {
 		t.Fatalf("mode = %q", got)
 	}
 }
@@ -48,7 +52,7 @@ func TestMergePlaceVisits_WindowAndDurableID(t *testing.T) {
 	if len(merged) != 4 {
 		t.Fatalf("merged = %d, want 4: %+v", len(merged), merged)
 	}
-	var harbor *PlaceVisit
+	var harbor *types.PlaceVisit
 	for i := range merged {
 		if merged[i].EntityID == "tl-harbor-20230704" || containsService(merged[i], timelineServiceID) {
 			if merged[i].Place.Name == "Halifax Harbour" && merged[i].StartAt == "2023-07-04T16:00:00Z" {
@@ -78,7 +82,7 @@ func TestMergePlaceVisits_WindowAndDurableID(t *testing.T) {
 	}
 }
 
-func containsService(v PlaceVisit, id string) bool {
+func containsService(v types.PlaceVisit, id string) bool {
 	for _, s := range v.Sources {
 		if s.Service == id {
 			return true
@@ -99,7 +103,7 @@ func TestPlaceVisitFilters(t *testing.T) {
 	if len(got2) != 1 {
 		t.Fatalf("after filter = %d, want 1", len(got2))
 	}
-	f3 := PlaceVisitFilters{Kind: PlaceKindTrip}
+	f3 := PlaceVisitFilters{Kind: types.PlaceKindTrip}
 	got3 := filterPlaceVisits(visits, f3)
 	if len(got3) != 1 {
 		t.Fatalf("kind=trip filter = %d, want 1", len(got3))
@@ -141,34 +145,34 @@ func TestRedactPlaceVisitRead_OmitsCoordinates(t *testing.T) {
 
 func TestPlacesLevelForResponse(t *testing.T) {
 	cases := map[string]string{
-		AccessNone:    AccessNone,
-		AccessCity:    AccessCity,
-		AccessRead:    AccessRead,
-		AccessPrecise: AccessPrecise,
-		AccessWrite:   AccessPrecise,
-		AccessFull:    AccessPrecise,
+		types.AccessNone:    types.AccessNone,
+		types.AccessCity:    types.AccessCity,
+		types.AccessRead:    types.AccessRead,
+		types.AccessPrecise: types.AccessPrecise,
+		types.AccessWrite:   types.AccessPrecise,
+		types.AccessFull:    types.AccessPrecise,
 	}
 	for in, want := range cases {
-		if got := PlacesLevelForResponse(in); got != want {
-			t.Fatalf("PlacesLevelForResponse(%q) = %q, want %q", in, got, want)
+		if got := types.PlacesLevelForResponse(in); got != want {
+			t.Fatalf("types.PlacesLevelForResponse(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestPermissions_PlacesDefaultNone(t *testing.T) {
-	var nilPerm Permissions
-	if got := nilPerm.For("places"); got != AccessNone {
+	var nilPerm types.Permissions
+	if got := nilPerm.For("places"); got != types.AccessNone {
 		t.Fatalf("nil map places = %q, want none", got)
 	}
-	p := Permissions{"default": AccessFull, "tracks": AccessRead}
-	if got := p.For("places"); got != AccessNone {
+	p := types.Permissions{"default": types.AccessFull, "tracks": types.AccessRead}
+	if got := p.For("places"); got != types.AccessNone {
 		t.Fatalf("default key must not enable places: %q", got)
 	}
 	if p.AllowsRead("places") {
 		t.Fatal("places must not be readable by default")
 	}
-	enabled := Permissions{"places": AccessCity}
-	if got := enabled.For("places"); got != AccessCity {
+	enabled := types.Permissions{"places": types.AccessCity}
+	if got := enabled.For("places"); got != types.AccessCity {
 		t.Fatalf("explicit places = %q, want city", got)
 	}
 	if !enabled.AllowsRead("places") {
@@ -177,29 +181,29 @@ func TestPermissions_PlacesDefaultNone(t *testing.T) {
 }
 
 func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
-	if err := ValidatePermissions(Permissions{"places": AccessCity}); err != nil {
+	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessCity}); err != nil {
 		t.Fatalf("places city: %v", err)
 	}
-	if err := ValidatePermissions(Permissions{"places": AccessPrecise}); err != nil {
+	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessPrecise}); err != nil {
 		t.Fatalf("places precise: %v", err)
 	}
-	if err := ValidatePermissions(Permissions{"events": AccessCity}); err == nil {
+	if err := types.ValidatePermissions(types.Permissions{"events": types.AccessCity}); err == nil {
 		t.Fatal("city on events should be rejected")
 	}
-	if err := ValidatePermissions(Permissions{"places": AccessFreeBusy}); err == nil {
+	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessFreeBusy}); err == nil {
 		t.Fatal("freebusy on places should be rejected")
 	}
-	if err := ValidatePermissions(Permissions{"places": AccessSummary}); err == nil {
+	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessSummary}); err == nil {
 		t.Fatal("summary on places should be rejected")
 	}
 }
 
 func TestIsCityAndPreciseAccess(t *testing.T) {
-	if !IsCityAccess("city") || IsCityAccess("read") {
-		t.Fatal("IsCityAccess")
+	if !types.IsCityAccess("city") || types.IsCityAccess("read") {
+		t.Fatal("types.IsCityAccess")
 	}
-	if !IsPreciseAccess("precise") || IsPreciseAccess("city") {
-		t.Fatal("IsPreciseAccess")
+	if !types.IsPreciseAccess("precise") || types.IsPreciseAccess("city") {
+		t.Fatal("types.IsPreciseAccess")
 	}
 }
 
@@ -208,12 +212,12 @@ func TestIsCityAndPreciseAccess(t *testing.T) {
 func TestPhotosPlacesJoinDemo(t *testing.T) {
 	lib := GenerateSampleLibrary()
 	merged := MergePlaceVisits(lib.Places)
-	var harbor, lunenburg *PlaceVisit
+	var harbor, lunenburg *types.PlaceVisit
 	for i := range merged {
 		switch {
 		case merged[i].Place.Name == "Halifax Harbour" && merged[i].StartAt == "2023-07-04T16:00:00Z":
 			harbor = &merged[i]
-		case merged[i].Place.Name == "Lunenburg Beach" && merged[i].Kind == PlaceKindVisit:
+		case merged[i].Place.Name == "Lunenburg Beach" && merged[i].Kind == types.PlaceKindVisit:
 			lunenburg = &merged[i]
 		}
 	}
@@ -239,9 +243,9 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: Permissions{"places": AccessPrecise}},
+				Permissions: types.Permissions{"places": types.AccessPrecise}},
 			{ID: ownTracksServiceID, Name: "OwnTracks", Action: "inject",
-				Permissions: Permissions{"places": AccessRead}},
+				Permissions: types.Permissions{"places": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -256,7 +260,7 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list PlaceVisitList
+	var list types.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +293,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: Permissions{"places": AccessCity}},
+				Permissions: types.Permissions{"places": types.AccessCity}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -303,7 +307,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list PlaceVisitList
+	var list types.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -324,7 +328,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: Permissions{"places": AccessRead}},
+				Permissions: types.Permissions{"places": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -338,7 +342,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list PlaceVisitList
+	var list types.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +363,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: Permissions{"places": AccessPrecise}},
+				Permissions: types.Permissions{"places": types.AccessPrecise}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -370,7 +374,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryPlaceVisits)(w, req)
-	var list PlaceVisitList
+	var list types.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -403,16 +407,16 @@ func TestLibraryKindPlaces_Registered(t *testing.T) {
 
 func TestDataTypeForPath_Places(t *testing.T) {
 	cases := map[string]string{
-		"/me/places":          "places",
-		"/visits":             "places",
-		"/api/v0/locations":   "places",
-		"/api/v0/visit":       "places",
-		"/api/v1/points":      "places",
-		"/timeline/2023-01":   "places",
+		"/me/places":        "places",
+		"/visits":           "places",
+		"/api/v0/locations": "places",
+		"/api/v0/visit":     "places",
+		"/api/v1/points":    "places",
+		"/timeline/2023-01": "places",
 	}
 	for p, want := range cases {
-		if got := DataTypeForPath(p); got != want {
-			t.Fatalf("DataTypeForPath(%q) = %q, want %q", p, got, want)
+		if got := types.DataTypeForPath(p); got != want {
+			t.Fatalf("types.DataTypeForPath(%q) = %q, want %q", p, got, want)
 		}
 	}
 }

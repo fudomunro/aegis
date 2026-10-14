@@ -7,25 +7,12 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
-// PhotoProvider is implemented by connectors that can return the user's photos
-// in Aegis's neutral format. The aggregate library endpoint uses this so
-// agents can ask for "my photos" once and receive every service. Each returned
-// Photo should carry one PhotoSource for that service. Connectors must not
-// download or cache photo bytes — only metadata and service-provided URLs.
-// https://github.com/fudomunro/aegis/issues/19
-type PhotoProvider interface {
-	// ListUserPhotos fetches the user's photo metadata from the upstream
-	// service and maps them into neutral Photo values (service identity in
-	// Sources; bytes stay on the service). Return ErrUnauthorized when no
-	// valid token is available. truncated is true when the page cap was hit
-	// with more items still upstream.
-	ListUserPhotos(ctx context.Context) (photos []Photo, truncated bool, err error)
-}
-
 // photoServiceName returns the first source service name for stable pre-sort.
-func photoServiceName(p Photo) string {
+func photoServiceName(p types.Photo) string {
 	if len(p.Sources) > 0 {
 		return p.Sources[0].ServiceName
 	}
@@ -35,7 +22,7 @@ func photoServiceName(p Photo) string {
 // photoContentKey is the preferred merge identity: a content hash when the
 // provider supplied one, otherwise capture time + dimensions. Filename alone
 // is never used — two "IMG_0001.jpg" files from different days must not merge.
-func photoContentKey(p Photo) string {
+func photoContentKey(p types.Photo) string {
 	if h := strings.TrimSpace(photoExtraString(p.Extra, "content_hash")); h != "" {
 		return "hash:" + strings.ToLower(h)
 	}
@@ -82,7 +69,7 @@ func photoExtraString(extra map[string]any, key string) string {
 
 // photoIdentityKey is the sort/merge key used by the library aggregate.
 // Photos with no content identity fall back to service:id so they stay distinct.
-func photoIdentityKey(p Photo) string {
+func photoIdentityKey(p types.Photo) string {
 	if k := photoContentKey(p); k != "" {
 		return k
 	}
@@ -92,7 +79,7 @@ func photoIdentityKey(p Photo) string {
 	return "anon:" + photoServiceName(p) + ":" + p.Filename + ":" + p.Caption
 }
 
-func mergePhotoInto(dst *Photo, src Photo) {
+func mergePhotoInto(dst *types.Photo, src types.Photo) {
 	if dst.TakenAt == "" {
 		dst.TakenAt = src.TakenAt
 	}
@@ -122,29 +109,29 @@ func mergePhotoInto(dst *Photo, src Photo) {
 // identity matching as the contacts library (email → phone → handle → name).
 // This is the first cross-type link: photo.people[] can resolve to a Google
 // Contacts (or other) Contact entity.
-func mergePhotoPeople(dst, src []Contact) []Contact {
+func mergePhotoPeople(dst, src []types.Contact) []types.Contact {
 	if len(src) == 0 {
 		return dst
 	}
 	if len(dst) == 0 {
-		out := make([]Contact, len(src))
+		out := make([]types.Contact, len(src))
 		copy(out, src)
 		return out
 	}
-	return MergeContacts(append(append([]Contact(nil), dst...), src...))
+	return MergeContacts(append(append([]types.Contact(nil), dst...), src...))
 }
 
 // MergePhotos groups photos that share a content identity (hash, or taken_at
 // plus dimensions) into one user-facing photo with multiple Sources. Photos
 // without a content key are kept distinct via service:id. Canonical flags from
 // any merged source are preserved so agents still know where the bytes live.
-func MergePhotos(in []Photo) []Photo {
+func MergePhotos(in []types.Photo) []types.Photo {
 	if len(in) == 0 {
 		return nil
 	}
 
 	type slot struct {
-		p Photo
+		p types.Photo
 	}
 	var order []string
 	byKey := map[string]*slot{}
@@ -159,15 +146,15 @@ func MergePhotos(in []Photo) []Photo {
 			continue
 		}
 		cp := p
-		cp.Sources = append([]PhotoSource(nil), p.Sources...)
+		cp.Sources = append([]types.PhotoSource(nil), p.Sources...)
 		if len(p.People) > 0 {
-			cp.People = append([]Contact(nil), p.People...)
+			cp.People = append([]types.Contact(nil), p.People...)
 		}
 		byKey[key] = &slot{p: cp}
 		order = append(order, key)
 	}
 
-	out := make([]Photo, 0, len(order))
+	out := make([]types.Photo, 0, len(order))
 	for _, key := range order {
 		e := byKey[key]
 		sort.SliceStable(e.p.Sources, func(i, j int) bool {
@@ -196,20 +183,20 @@ func MergePhotos(in []Photo) []Photo {
 
 // newPhoto builds a single-source neutral photo. canonical should be true
 // when this service holds the authoritative bytes (the usual case for photos).
-func newPhoto(service, serviceName, id, filename, mimeType, takenAt string, width, height int) Photo {
-	src := PhotoSource{
+func newPhoto(service, serviceName, id, filename, mimeType, takenAt string, width, height int) types.Photo {
+	src := types.PhotoSource{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,
 		Canonical:   true,
 	}
-	return Photo{
+	return types.Photo{
 		TakenAt:  takenAt,
 		Width:    width,
 		Height:   height,
 		MimeType: mimeType,
 		Filename: filename,
-		Sources:  []PhotoSource{src},
+		Sources:  []types.PhotoSource{src},
 	}
 }
 
@@ -217,19 +204,19 @@ func newPhoto(service, serviceName, id, filename, mimeType, takenAt string, widt
 // photo-capable service: GET /v1/library/photos
 func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("photos")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Photo]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Photo]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Photo], []string) {
-			return collectProviders[Photo, PhotoProvider](s, kind.PermType,
-				func(p PhotoProvider) func(context.Context) ([]Photo, bool, error) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Photo], []string) {
+			return collectProviders[types.Photo, types.PhotoProvider](s, kind.PermType,
+				func(p types.PhotoProvider) func(context.Context) ([]types.Photo, bool, error) {
 					return p.ListUserPhotos
 				})
 		},
 		serviceOf: photoServiceName,
 		sortKey:   photoIdentityKey,
 		merge:     MergePhotos,
-		encode: func(merged []Photo, bySvc map[string]LibraryServiceStatus) any {
-			return PhotoList{Photos: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(merged []types.Photo, bySvc map[string]types.LibraryServiceStatus) any {
+			return types.PhotoList{Photos: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampPhotoCanonical,
 		stampCopies:   s.stampPhotoCopies,

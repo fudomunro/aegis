@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestSampleCalendarEvents_NearTermBusy(t *testing.T) {
@@ -30,7 +32,7 @@ func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 		Name:        sampleCalendarServiceName,
 		Action:      "inject",
 		Endpoint:    sampleCalendarEndpoint,
-		Permissions: Permissions{"events": AccessRead},
+		Permissions: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors[sampleCalendarServiceID] = NewSampleCalendarConnector()
@@ -42,7 +44,7 @@ func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	var resp FreeBusyList
+	var resp types.FreeBusyList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

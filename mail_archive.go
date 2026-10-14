@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -48,8 +49,8 @@ type MailArchiveRecord struct {
 	Snippet     string
 	FromName    string
 	FromEmail   string
-	To          []Contact
-	CC          []Contact
+	To          []types.Contact
+	CC          []types.Contact
 	SentAt      string
 	ReceivedAt  string
 	Direction   string
@@ -60,19 +61,19 @@ type MailArchiveRecord struct {
 
 // Message converts the row into the neutral library shape (body included when
 // BodyText is non-empty).
-func (r MailArchiveRecord) Message() Message {
-	var from *Contact
+func (r MailArchiveRecord) Message() types.Message {
+	var from *types.Contact
 	if r.FromName != "" || r.FromEmail != "" {
 		c := newContact(r.Service, r.ServiceName, "", r.FromName, []string{r.FromEmail}, nil)
 		if r.FromName == "" && r.FromEmail == "" {
-			c = Contact{}
+			c = types.Contact{}
 		}
 		if c.Name != "" || len(c.Emails) > 0 {
 			from = &c
 		}
 	}
 	// Takeout is a read-only sync location, never the mailbox home (issue #16/#139).
-	src := MessageSource{
+	src := types.MessageSource{
 		Service:     r.Service,
 		ServiceName: r.ServiceName,
 		ID:          r.ID,
@@ -89,8 +90,8 @@ func (r MailArchiveRecord) Message() Message {
 		}
 		src.Extra["snippet"] = r.Snippet
 	}
-	return Message{
-		Channel:    MessageChannelEmail,
+	return types.Message{
+		Channel:    types.MessageChannelEmail,
 		Subject:    r.Subject,
 		Snippet:    r.Snippet,
 		Body:       r.BodyText,
@@ -104,7 +105,7 @@ func (r MailArchiveRecord) Message() Message {
 		ThreadID:   r.ThreadID,
 		EntityID:   r.MessageID,
 		Labels:     r.Labels,
-		Sources:    []MessageSource{src},
+		Sources:    []types.MessageSource{src},
 	}
 }
 
@@ -126,11 +127,11 @@ type MailSearchQuery struct {
 
 // MailSearchResponse is the agent-facing search/list result.
 type MailSearchResponse struct {
-	Messages []Message `json:"messages"`
-	Total    int       `json:"total"`
-	Limit    int       `json:"limit"`
-	Offset   int       `json:"offset"`
-	Query    string    `json:"query,omitempty"`
+	Messages []types.Message `json:"messages"`
+	Total    int             `json:"total"`
+	Limit    int             `json:"limit"`
+	Offset   int             `json:"offset"`
+	Query    string          `json:"query,omitempty"`
 }
 
 // MailArchiveStatus reports store health for agents and admin.
@@ -447,7 +448,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	if err != nil {
 		return MailSearchResponse{}, err
 	}
-	msgs := make([]Message, 0, limit)
+	msgs := make([]types.Message, 0, limit)
 	for rows.Next() {
 		rec, err := scanMailRows(rows, q.WithBody)
 		if err != nil {
@@ -469,7 +470,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
 	total := len(merged)
 	if offset >= total {
-		return MailSearchResponse{Messages: []Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+		return MailSearchResponse{Messages: []types.Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
 	}
 	end := offset + limit
 	if end > total {
@@ -480,7 +481,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 
 // sortMailMessages orders merged messages like the SQL sent_at sort, with
 // empty timestamps last and a stable identity tiebreak (issue #139).
-func sortMailMessages(msgs []Message, asc bool) {
+func sortMailMessages(msgs []types.Message, asc bool) {
 	sort.SliceStable(msgs, func(i, j int) bool {
 		si, sj := msgs[i].SentAt, msgs[j].SentAt
 		ei, ej := si == "", sj == ""
@@ -504,7 +505,7 @@ func sortMailMessages(msgs []Message, asc bool) {
 // hydrateMessageSiblings loads other source rows that share an RFC Message-ID
 // with any message already selected, so multi-source identity survives
 // filter/FTS that only matched one copy (issue #139).
-func (a *MailArchive) hydrateMessageSiblings(msgs []Message) []Message {
+func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message) []types.Message {
 	if len(msgs) == 0 {
 		return msgs
 	}
@@ -564,7 +565,7 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []Message) []Message {
 // so Takeout and Gmail archive rows join live providers as one user collection
 // (issue #139). limit bounds the page; truncated reports that more archive
 // rows exist (full history remains /v1/mail/search).
-func (a *MailArchive) ListMessagesForLibrary(limit int) (msgs []Message, truncated bool, err error) {
+func (a *MailArchive) ListMessagesForLibrary(limit int) (msgs []types.Message, truncated bool, err error) {
 	if a == nil || a.db == nil {
 		return nil, false, fmt.Errorf("mail archive disabled")
 	}
@@ -728,7 +729,7 @@ func GzipPayload(raw []byte) ([]byte, error) {
 
 func mailParticipantsText(rec MailArchiveRecord) string {
 	var b strings.Builder
-	writeContacts := func(cs []Contact) {
+	writeContacts := func(cs []types.Contact) {
 		for _, c := range cs {
 			if c.Name != "" {
 				b.WriteString(c.Name)
@@ -860,7 +861,7 @@ func mailServiceName(service string) string {
 
 // RecordFromMessage builds an archive row from a neutral Message plus optional
 // gzip provider payload. Missing fields stay empty rather than failing ingest.
-func RecordFromMessage(service, serviceName string, msg Message, payloadGzip []byte) MailArchiveRecord {
+func RecordFromMessage(service, serviceName string, msg types.Message, payloadGzip []byte) MailArchiveRecord {
 	id := ""
 	if len(msg.Sources) > 0 {
 		id = msg.Sources[0].ID

@@ -71,7 +71,7 @@ A complete type touches these layers. Music types (`library.go` + `match.go`)
 and people/media types (`contacts.go`, `photos.go`, …) are the two templates.
 
 ```text
-models.go          Neutral item + *Source + *List
+internal/types/    Neutral item + *Source + *List, merge/identity, kind data
 <kind>.go          Provider interface, identity keys, merge, thin handler
 librarykind.go     Registry entry (instructions, keywords, messages)
 <provider>.go      Connector: Capabilities + ListUser… + optional proxy
@@ -88,11 +88,11 @@ README.md          Agent-facing semantics for the type
 The logical layers above are moving into packages. While `package main` is
 still flat, write new code so the move is a `git mv` + package rename:
 
-| Target package | Contents |
-|----------------|----------|
-| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, `TypePolicy` / access levels, capability shapes, path rules |
-| `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores |
-| `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) |
+| Target package | Contents | Status |
+|----------------|----------|--------|
+| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, `TypePolicy` / access levels, capability shapes, path rules | **landed** |
+| `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores | pending |
+| `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) | pending |
 
 Connectors take `Host` (`host.go`). Classification lives in `pathclass.go`.
 Type-level policy shape (`policy.go`) is the #148 home — service

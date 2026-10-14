@@ -1,4 +1,4 @@
-package main
+package types
 
 // Playlist is the user-facing playlist. Service identity (connector ID,
 // service-local ID, deep link) is never top-level — it lives in Sources so
@@ -658,10 +658,10 @@ type TransactionList struct {
 // used by the city permission redaction. Lat/Lng are optional and omitted
 // entirely at city and read access levels.
 type Place struct {
-	Name     string `json:"name,omitempty"`
-	Address  string `json:"address,omitempty"`
-	Locality string `json:"locality,omitempty"`
-	Country  string `json:"country,omitempty"`
+	Name     string  `json:"name,omitempty"`
+	Address  string  `json:"address,omitempty"`
+	Locality string  `json:"locality,omitempty"`
+	Country  string  `json:"country,omitempty"`
 	Lat      float64 `json:"lat,omitempty"`
 	Lng      float64 `json:"lng,omitempty"`
 }
@@ -722,11 +722,91 @@ const (
 
 // Trip mode values (normalized lowercase).
 const (
-	TripModeFlight   = "flight"
-	TripModeDrive    = "drive"
-	TripModeWalk     = "walk"
-	TripModeBicycle  = "bicycle"
-	TripModeTrain    = "train"
-	TripModeBus      = "bus"
-	TripModeUnknown  = "unknown"
+	TripModeFlight  = "flight"
+	TripModeDrive   = "drive"
+	TripModeWalk    = "walk"
+	TripModeBicycle = "bicycle"
+	TripModeTrain   = "train"
+	TripModeBus     = "bus"
+	TripModeUnknown = "unknown"
 )
+
+// CopyInfo is the library-facing projection of a ledger row, stamped onto
+// sources[] only when a matching copy exists (issue #76 / #90). The SQLite
+// ledger itself stays in core.
+type CopyInfo struct {
+	Role       string `json:"role,omitempty"`
+	SyncMode   string `json:"sync_mode,omitempty"`
+	SyncStatus string `json:"sync_status,omitempty"`
+	AsOf       string `json:"as_of,omitempty"`
+	CheckedAt  string `json:"checked_at,omitempty"`
+	Provenance string `json:"provenance,omitempty"`
+	Note       string `json:"note,omitempty"`
+}
+
+// CanonicalService returns the first source marked canonical, else the first
+// source service ID, else "".
+func (p Playlist) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(p.Sources),
+		func(i int) bool { return p.Sources[i].Canonical },
+		func(i int) string { return p.Sources[i].Service },
+	)
+}
+
+// CanonicalService returns the first source marked canonical, else primary.
+func (t Track) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(t.Sources),
+		func(i int) bool { return t.Sources[i].Canonical },
+		func(i int) string { return t.Sources[i].Service },
+	)
+}
+
+// CanonicalService returns the first source marked canonical, else primary.
+func (c Contact) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(c.Sources),
+		func(i int) bool { return c.Sources[i].Canonical },
+		func(i int) string { return c.Sources[i].Service },
+	)
+}
+
+// CanonicalService returns the first source marked canonical, else primary.
+func (p Photo) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(p.Sources),
+		func(i int) bool { return p.Sources[i].Canonical },
+		func(i int) string { return p.Sources[i].Service },
+	)
+}
+
+// CanonicalService returns the first source marked canonical, else primary.
+func (m Message) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(m.Sources),
+		func(i int) bool { return m.Sources[i].Canonical },
+		func(i int) string { return m.Sources[i].Service },
+	)
+}
+
+// CanonicalService returns the first source marked canonical, else primary.
+func (e CalendarEvent) CanonicalService() string {
+	return firstCanonicalOrPrimary(
+		len(e.Sources),
+		func(i int) bool { return e.Sources[i].Canonical },
+		func(i int) string { return e.Sources[i].Service },
+	)
+}
+
+func firstCanonicalOrPrimary(n int, isCanonical func(int) bool, serviceID func(int) string) string {
+	if n == 0 {
+		return ""
+	}
+	for i := 0; i < n; i++ {
+		if isCanonical(i) {
+			return serviceID(i)
+		}
+	}
+	return serviceID(0)
+}

@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestAmazonSimplify(t *testing.T) {
@@ -30,7 +32,7 @@ func TestAmazonSimplify(t *testing.T) {
 func TestAmazonListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := NewAmazonMusicConnector(srv)
-	if _, _, err := conn.ListUserPlaylists(context.Background()); err != ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaylists(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }

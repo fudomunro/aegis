@@ -13,6 +13,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GoogleGmailConnector proxies the Gmail API and implements MessageProvider.
@@ -53,25 +55,25 @@ func (c *GoogleGmailConnector) googleGmailUpstreamBase() string {
 }
 
 // Capabilities returns what Gmail data types and operations are supported.
-func (c *GoogleGmailConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "messages",
 				Description: "Messages — list mail messages/threads (metadata/snippet only by default; body stays on Gmail)",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "read_list",
 						Description: "List the user's messages as neutral Message values (paginated). Permission key: messages.",
 						Method:      "GET",
 						Path:        "/me/messages",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Gmail search query (default: newer_than:30d)"},
 							{Name: "maxResults", In: "query", Type: "integer", Description: "List page size for IDs (1-500)", Default: googleGmailListPageSize},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Alias for maxResults"},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral messages: channel, subject, snippet, from/to, sent_at, direction, read, sources[]",
 							Fields:      []string{"messages", "total"},
 						},
@@ -81,11 +83,11 @@ func (c *GoogleGmailConnector) Capabilities() ServiceCapabilities {
 						Description: "Get a single message by service-local ID (metadata; format=full includes decoded body)",
 						Method:      "GET",
 						Path:        "/messages/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local message ID", Required: true},
 							{Name: "format", In: "query", Type: "string", Description: "metadata or full", Default: googleGmailMetadataFormat},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral message with service-local id and sources[]",
 							Fields:      []string{"subject", "snippet", "from", "to", "sent_at", "sources"},
 						},
@@ -95,12 +97,12 @@ func (c *GoogleGmailConnector) Capabilities() ServiceCapabilities {
 						Description: "List recent threads (id + snippet)",
 						Method:      "GET",
 						Path:        "/me/threads",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Gmail search query"},
 							{Name: "maxResults", In: "query", Type: "integer", Description: "Max threads per page", Default: googleGmailListPageSize},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Threads: id, snippet, message_count, sources[]",
 							Fields:      []string{"threads", "total"},
 						},
@@ -110,10 +112,10 @@ func (c *GoogleGmailConnector) Capabilities() ServiceCapabilities {
 						Description: "Get one thread with its messages as neutral Message values",
 						Method:      "GET",
 						Path:        "/threads/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local thread ID", Required: true},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Thread messages in neutral Message shape",
 							Fields:      []string{"id", "messages", "total"},
 						},
@@ -236,7 +238,7 @@ func gmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 func (c *GoogleGmailConnector) handleListMessages(w http.ResponseWriter, r *http.Request) {
 	messages, truncated, err := c.listMessagesWithQuery(r.Context(), r.URL.Query())
 	if err != nil {
-		if err == ErrUnauthorized {
+		if err == types.ErrUnauthorized {
 			writeJSONError(w, http.StatusUnauthorized,
 				"no valid Gmail token — authorize at /v1/auth/"+googleGmailServiceID+"/login")
 			return
@@ -246,16 +248,16 @@ func (c *GoogleGmailConnector) handleListMessages(w http.ResponseWriter, r *http
 		return
 	}
 	if messages == nil {
-		messages = []Message{}
+		messages = []types.Message{}
 	}
-	result := MessageList{
+	result := types.MessageList{
 		Messages:  messages,
 		Total:     len(messages),
 		Synced:    true,
 		Truncated: truncated,
-		ByService: map[string]LibraryServiceStatus{
+		ByService: map[string]types.LibraryServiceStatus{
 			googleGmailServiceID: {
-				Status:    LibraryStatusOK,
+				Status:    types.LibraryStatusOK,
 				Count:     len(messages),
 				Truncated: truncated,
 			},
@@ -290,8 +292,8 @@ func (c *GoogleGmailConnector) handleListThreads(w http.ResponseWriter, r *http.
 		"threads":   threads,
 		"total":     len(threads),
 		"truncated": truncated,
-		"by_service": map[string]LibraryServiceStatus{
-			googleGmailServiceID: {Status: LibraryStatusOK, Count: len(threads), Truncated: truncated},
+		"by_service": map[string]types.LibraryServiceStatus{
+			googleGmailServiceID: {Status: types.LibraryStatusOK, Count: len(threads), Truncated: truncated},
 		},
 	}
 	data, err := json.Marshal(result)
@@ -440,7 +442,7 @@ func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Re
 		writeJSONError(w, http.StatusBadGateway, "failed to parse Gmail thread response")
 		return
 	}
-	messages := make([]Message, 0, len(raw.Messages))
+	messages := make([]types.Message, 0, len(raw.Messages))
 	for _, m := range raw.Messages {
 		messages = append(messages, mapGoogleGmailMessage(m, googleGmailMetadataFormat))
 	}
@@ -459,14 +461,14 @@ func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Re
 
 // ListMessages implements MessageProvider. Fetches recent Gmail messages and
 // hydrates headers into neutral Message metadata.
-func (c *GoogleGmailConnector) ListMessages(ctx context.Context) ([]Message, bool, error) {
+func (c *GoogleGmailConnector) ListMessages(ctx context.Context) ([]types.Message, bool, error) {
 	return c.listMessagesWithQuery(ctx, nil)
 }
 
-func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.Values) ([]Message, bool, error) {
+func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.Values) ([]types.Message, bool, error) {
 	token := c.host.GetValidToken(googleGmailServiceID, slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 	query := googleGmailDefaultQuery
 	if q != nil {
@@ -499,7 +501,7 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 		}
 	}
 
-	var all []Message
+	var all []types.Message
 	truncated := false
 	hydrated := 0
 	for page := 0; page < libraryPageCap; page++ {
@@ -567,10 +569,10 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 	return all, truncated, nil
 }
 
-func (c *GoogleGmailConnector) fetchAndMapMessage(ctx context.Context, token, id string) (Message, error) {
+func (c *GoogleGmailConnector) fetchAndMapMessage(ctx context.Context, token, id string) (types.Message, error) {
 	raw, err := c.fetchGmailMessage(ctx, token, id, googleGmailMetadataFormat)
 	if err != nil {
-		return Message{}, err
+		return types.Message{}, err
 	}
 	return mapGoogleGmailMessage(raw, googleGmailMetadataFormat), nil
 }
@@ -708,7 +710,7 @@ func gmailHeaderDateRFC3339(raw string) string {
 }
 
 // mapGmailAddressHeader parses a single address or address list into Contacts.
-func mapGmailAddressHeader(raw string) []Contact {
+func mapGmailAddressHeader(raw string) []types.Contact {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
@@ -718,12 +720,12 @@ func mapGmailAddressHeader(raw string) []Contact {
 		// Fail-open: keep a crude name/email split rather than dropping the party.
 		if strings.Contains(raw, "@") {
 			c := newContact(googleGmailServiceID, googleGmailServiceName, "", "", []string{raw}, nil)
-			return []Contact{c}
+			return []types.Contact{c}
 		}
 		c := newContact(googleGmailServiceID, googleGmailServiceName, "", raw, nil, nil)
-		return []Contact{c}
+		return []types.Contact{c}
 	}
-	out := make([]Contact, 0, len(addrs))
+	out := make([]types.Contact, 0, len(addrs))
 	for _, a := range addrs {
 		if a == nil {
 			continue
@@ -776,7 +778,7 @@ func gmailReadFromLabels(labels []string) bool {
 }
 
 // mapGoogleGmailMessage converts a Gmail message into the neutral shape.
-func mapGoogleGmailMessage(raw googleGmailMessage, format string) Message {
+func mapGoogleGmailMessage(raw googleGmailMessage, format string) types.Message {
 	fromList := mapGmailAddressHeader(gmailHeaderValue(raw, "From"))
 	toList := mapGmailAddressHeader(gmailHeaderValue(raw, "To"))
 	ccList := mapGmailAddressHeader(gmailHeaderValue(raw, "Cc"))
@@ -790,13 +792,13 @@ func mapGoogleGmailMessage(raw googleGmailMessage, format string) Message {
 		sentAt = gmailHeaderDateRFC3339(gmailHeaderValue(raw, "Date"))
 	}
 
-	var from *Contact
+	var from *types.Contact
 	if len(fromList) > 0 {
 		f := fromList[0]
 		from = &f
 	}
 
-	src := MessageSource{
+	src := types.MessageSource{
 		Service:     googleGmailServiceID,
 		ServiceName: googleGmailServiceName,
 		ID:          raw.ID,
@@ -816,8 +818,8 @@ func mapGoogleGmailMessage(raw googleGmailMessage, format string) Message {
 		src.Extra = extra
 	}
 
-	msg := Message{
-		Channel:    MessageChannelEmail,
+	msg := types.Message{
+		Channel:    types.MessageChannelEmail,
 		Subject:    subject,
 		Snippet:    raw.Snippet,
 		From:       from,
@@ -830,7 +832,7 @@ func mapGoogleGmailMessage(raw googleGmailMessage, format string) Message {
 		ThreadID:   raw.ThreadID,
 		EntityID:   messageID,
 		Labels:     append([]string(nil), raw.LabelIDs...),
-		Sources:    []MessageSource{src},
+		Sources:    []types.MessageSource{src},
 	}
 	if format == "full" {
 		msg.Body = gmailDecodeBody(raw)

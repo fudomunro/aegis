@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func openTestMailArchive(t *testing.T) *MailArchive {
@@ -32,7 +34,7 @@ func sampleMailRecord(id, subject, body string) MailArchiveRecord {
 		Snippet:     body[:minInt(20, len(body))],
 		FromName:    "Ada Lovelace",
 		FromEmail:   "ada@example.com",
-		To:          []Contact{newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil)},
+		To:          []types.Contact{newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil)},
 		SentAt:      "2024-06-01T09:00:00Z",
 		ReceivedAt:  "2024-06-01T09:00:05Z",
 		Direction:   "inbound",
@@ -197,8 +199,8 @@ func TestMailArchiveSyncCursor(t *testing.T) {
 }
 
 func TestRecordFromMessage(t *testing.T) {
-	msg := newMessage(googleGmailServiceID, googleGmailServiceName, "id9", MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")
-	msg.From = &Contact{Name: "Ada", Emails: []string{"Ada@Example.com"}}
+	msg := newMessage(googleGmailServiceID, googleGmailServiceName, "id9", types.MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")
+	msg.From = &types.Contact{Name: "Ada", Emails: []string{"Ada@Example.com"}}
 	msg.EntityID = "<id9@example.com>"
 	msg.Body = "body text"
 	rec := RecordFromMessage("", "", msg, []byte{1})
@@ -216,7 +218,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		ID:          googleGmailServiceID,
 		Name:        googleGmailServiceName,
 		Action:      "inject",
-		Permissions: Permissions{"messages": "read"},
+		Permissions: types.Permissions{"messages": "read"},
 	}}}
 	srv := &Server{
 		apiKey:      "test-key",
@@ -319,7 +321,7 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("get code = %d body=%s", w.Code, w.Body.String())
 	}
-	var msg Message
+	var msg types.Message
 	if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
 		t.Fatalf("get json: %v", err)
 	}
@@ -360,7 +362,7 @@ func TestMailHTTPDisabledAndDenied(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv = mailTestServer(t, a)
-	srv.config.Services[0].Permissions = Permissions{"messages": "none"}
+	srv.config.Services[0].Permissions = types.Permissions{"messages": "none"}
 	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/status", "")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("denied code = %d", w.Code)
@@ -380,7 +382,7 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 		ID:          "dummy",
 		Name:        "Dummy",
 		Action:      "inject",
-		Permissions: Permissions{"messages": "read"},
+		Permissions: types.Permissions{"messages": "read"},
 	})
 	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"dummy","reset_cursor":true}`)
 	if w.Code != http.StatusNotImplemented {
@@ -390,8 +392,10 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 
 type stubNoSyncConnector struct{}
 
-func (s *stubNoSyncConnector) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (s *stubNoSyncConnector) SystemInstructions(string) string  { return "" }
+func (s *stubNoSyncConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (s *stubNoSyncConnector) SystemInstructions(string) string { return "" }
 func (s *stubNoSyncConnector) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 

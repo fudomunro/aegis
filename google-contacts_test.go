@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
@@ -115,8 +117,8 @@ func TestGoogleContactsConnector_ListUserContacts_Unauthorized(t *testing.T) {
 	}}}, "https://aegis.example.com")
 	conn := NewGoogleContactsConnector(srv)
 	_, _, err := conn.ListUserContacts(context.Background())
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if !errors.Is(err, types.ErrUnauthorized) {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -186,7 +188,7 @@ func TestGoogleContactsConnector_HandleProxy_List(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp ContactList
+	var resp types.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -277,25 +279,25 @@ func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 
 func TestGoogleContactsConnector_ImplementsContactProvider(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	var _ ContactProvider = NewGoogleContactsConnector(srv)
+	var _ types.ContactProvider = NewGoogleContactsConnector(srv)
 	var _ ServiceConnector = NewGoogleContactsConnector(srv)
 }
 
 func TestMergePhotoPeople_UnionsSharedIdentity(t *testing.T) {
-	a := Contact{
+	a := types.Contact{
 		Name:    "Ada Lovelace",
 		Emails:  []string{"ada@example.com"},
-		Sources: []ContactSource{{Service: "google", ServiceName: "Google Contacts", ID: "people/c1"}},
+		Sources: []types.ContactSource{{Service: "google", ServiceName: "Google Contacts", ID: "people/c1"}},
 	}
-	b := Contact{
+	b := types.Contact{
 		Name:   "Ada L.",
 		Emails: []string{"ADA@example.com"},
 		Phones: []string{"+15551234567"},
-		Sources: []ContactSource{
+		Sources: []types.ContactSource{
 			{Service: "google-photos", ServiceName: "Google Photos", ID: "tag1"},
 		},
 	}
-	merged := mergePhotoPeople([]Contact{a}, []Contact{b})
+	merged := mergePhotoPeople([]types.Contact{a}, []types.Contact{b})
 	if len(merged) != 1 {
 		t.Fatalf("want 1 person, got %+v", merged)
 	}
@@ -314,9 +316,9 @@ func TestMergePhotoPeople_UnionsSharedIdentity(t *testing.T) {
 }
 
 func TestMergePhotoPeople_DistinctPeopleStaySeparate(t *testing.T) {
-	a := Contact{Name: "Alex Kim", Emails: []string{"a@example.com"}}
-	b := Contact{Name: "Alex Kim", Emails: []string{"b@example.com"}}
-	merged := mergePhotoPeople([]Contact{a}, []Contact{b})
+	a := types.Contact{Name: "Alex Kim", Emails: []string{"a@example.com"}}
+	b := types.Contact{Name: "Alex Kim", Emails: []string{"b@example.com"}}
+	merged := mergePhotoPeople([]types.Contact{a}, []types.Contact{b})
 	if len(merged) != 2 {
 		t.Fatalf("distinct emails must not merge by name: %+v", merged)
 	}
@@ -324,14 +326,14 @@ func TestMergePhotoPeople_DistinctPeopleStaySeparate(t *testing.T) {
 
 func TestMergePhotos_PreservesPeopleAcrossSources(t *testing.T) {
 	p1 := newPhoto("google-photos", "Google Photos", "p1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
-	p1.People = []Contact{{Name: "Ada", Emails: []string{"ada@example.com"}}}
+	p1.People = []types.Contact{{Name: "Ada", Emails: []string{"ada@example.com"}}}
 	p2 := newPhoto("icloud", "iCloud Photos", "p2", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
-	p2.People = []Contact{
+	p2.People = []types.Contact{
 		{Name: "Ada", Emails: []string{"ada@example.com"}, Phones: []string{"+15550001111"}},
 		{Name: "Grace", Emails: []string{"grace@example.com"}},
 	}
 
-	merged := MergePhotos([]Photo{p1, p2})
+	merged := MergePhotos([]types.Photo{p1, p2})
 	if len(merged) != 1 {
 		t.Fatalf("want 1 photo, got %d", len(merged))
 	}
@@ -348,8 +350,8 @@ func TestDataTypeForPath_PeopleAPI(t *testing.T) {
 		"/people:searchContacts": "contacts",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := types.DataTypeForPath(path); got != want {
+			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
@@ -359,7 +361,7 @@ func TestHasContactProviders_GoogleContacts(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		googleContactsServiceID: NewGoogleContactsConnector(srv),
 	}
-	if !LibraryKindByID("contacts").HasProviders(srv) {
+	if !kindHasProviders("contacts", srv) {
 		t.Fatal("Google Contacts connector should register as ContactProvider")
 	}
 }

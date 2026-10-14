@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // YNAB admin setup (issue #141). Saves a Personal Access Token into
@@ -114,7 +116,7 @@ func (s *Server) ynabSetupStatus(withProbe bool) YNABSetupStatus {
 	status.HasToken = has
 	status.TokenSource = src
 	status.LibraryReady = has && LibraryKindByID("transactions") != nil &&
-		s.hasProvider[TransactionProvider]() && s.libraryReadableFor("transactions")
+		s.hasProvider[types.TransactionProvider]() && s.libraryReadableFor("transactions")
 
 	if !status.Configured {
 		status.Hints = append(status.Hints, "Add a ynab service (this page can save it for you).")
@@ -200,7 +202,7 @@ func (s *Server) probeYNAB(ctx context.Context) YNABTestResult {
 	var out ynabBudgetsResponse
 	err := c.ynabAPIGet(ctx, slog.With("handler", "admin_ynab"), "/budgets", nil, &out)
 	switch {
-	case err == ErrUnauthorized:
+	case err == types.ErrUnauthorized:
 		return YNABTestResult{OK: false, Status: "unauthorized", Detail: "YNAB rejected the token — check the Personal Access Token"}
 	case err != nil:
 		return YNABTestResult{OK: false, Status: "error", Detail: err.Error()}

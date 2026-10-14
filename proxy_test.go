@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestHandleServiceProxy_GetForwarding(t *testing.T) {
@@ -358,7 +360,7 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var caps ServiceCapabilities
+	var caps types.ServiceCapabilities
 	json.NewDecoder(w.Body).Decode(&caps)
 
 	if len(caps.DataTypes) == 0 {
@@ -366,7 +368,7 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 	}
 
 	// Find "tracks" and verify it has "read" and "search".
-	var tracksCap *DataTypeCapability
+	var tracksCap *types.DataTypeCapability
 	for i, dt := range caps.DataTypes {
 		if dt.Name == "tracks" {
 			tracksCap = &caps.DataTypes[i]
@@ -390,7 +392,7 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 	}
 
 	// Verify read_saved operation has method and path.
-	var readSaved *Operation
+	var readSaved *types.Operation
 	for i, op := range tracksCap.Operations {
 		if op.Name == "read_saved" {
 			readSaved = &tracksCap.Operations[i]
@@ -411,7 +413,7 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 	}
 
 	// Verify search data type has the search operation.
-	var searchCap *DataTypeCapability
+	var searchCap *types.DataTypeCapability
 	for i, dt := range caps.DataTypes {
 		if dt.Name == "search" {
 			searchCap = &caps.DataTypes[i]
@@ -448,7 +450,7 @@ func TestHandleServiceProxy_Capabilities_AmazonMusic(t *testing.T) {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
 
-	var caps ServiceCapabilities
+	var caps types.ServiceCapabilities
 	json.NewDecoder(w.Body).Decode(&caps)
 
 	if len(caps.DataTypes) == 0 {
@@ -487,7 +489,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: Permissions{"default": AccessRead, "player": AccessNone},
+				Permissions: types.Permissions{"default": types.AccessRead, "player": types.AccessNone},
 			},
 		},
 	}
@@ -515,7 +517,7 @@ func TestHandleServiceProxy_NonCanonicalPathCannotBypassPermissions(t *testing.T
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: Permissions{"default": AccessRead, "player": AccessNone},
+				Permissions: types.Permissions{"default": types.AccessRead, "player": types.AccessNone},
 			},
 		},
 	}
@@ -578,7 +580,7 @@ func TestHandleServiceProxy_UnknownPathUsesStrictestPermission(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: Permissions{"default": AccessRead, "player": AccessNone},
+				Permissions: types.Permissions{"default": types.AccessRead, "player": types.AccessNone},
 			},
 		},
 	}
@@ -604,7 +606,7 @@ func TestHandleServiceProxy_Capabilities_FilteredByPermission(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: Permissions{"player": AccessNone},
+				Permissions: types.Permissions{"player": types.AccessNone},
 			},
 		},
 	}
@@ -620,7 +622,7 @@ func TestHandleServiceProxy_Capabilities_FilteredByPermission(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
 	}
-	var caps ServiceCapabilities
+	var caps types.ServiceCapabilities
 	json.NewDecoder(w.Body).Decode(&caps)
 	for _, dt := range caps.DataTypes {
 		if dt.Name == "player" {
