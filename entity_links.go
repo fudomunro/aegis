@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // EntityLink is a user-confirmed cross-service identity. Playlists have no
@@ -177,7 +179,7 @@ func (st *EntityLinkStore) Delete(id string) bool {
 
 // PlaylistLinkKey returns a stable merge key when any playlist source is in
 // an explicit link group; otherwise "".
-func (st *EntityLinkStore) PlaylistLinkKey(p Playlist) string {
+func (st *EntityLinkStore) PlaylistLinkKey(p types.Playlist) string {
 	if st == nil || len(p.Sources) == 0 {
 		return ""
 	}

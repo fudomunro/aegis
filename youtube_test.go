@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
@@ -191,7 +193,7 @@ func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 	}
 
 	result := conn.transformPlaylistItems(raw)
-	tracks, ok := result["tracks"].([]Track)
+	tracks, ok := result["tracks"].([]types.Track)
 	if !ok {
 		t.Fatalf("tracks type = %T", result["tracks"])
 	}
@@ -746,5 +748,17 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 	first := results[0].(map[string]any)
 	if first["title"] != "So What" {
 		t.Fatalf("title = %v", first["title"])
+	}
+}
+
+func TestIso8601DurationMs(t *testing.T) {
+	if got := iso8601DurationMs("PT3M42S"); got != 222000 {
+		t.Fatalf("PT3M42S = %d", got)
+	}
+	if got := iso8601DurationMs("PT1H2M3S"); got != 3723000 {
+		t.Fatalf("PT1H2M3S = %d", got)
+	}
+	if got := iso8601DurationMs("bogus"); got != 0 {
+		t.Fatalf("bogus = %d", got)
 	}
 }

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -120,7 +121,7 @@ func (s *TimelineStore) Path() string {
 func (s *TimelineStore) Enabled() bool { return s != nil && s.db != nil }
 
 // Upsert stores or replaces one imported visit keyed by source_id.
-func (s *TimelineStore) Upsert(filePath string, v PlaceVisit) error {
+func (s *TimelineStore) Upsert(filePath string, v types.PlaceVisit) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("timeline store disabled")
 	}
@@ -181,7 +182,7 @@ func (s *TimelineStore) Has(sourceID string) bool {
 }
 
 // List returns stored visits (chronological), optional filters.
-func (s *TimelineStore) List(f PlaceVisitFilters, limit int) ([]PlaceVisit, error) {
+func (s *TimelineStore) List(f PlaceVisitFilters, limit int) ([]types.PlaceVisit, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("timeline store disabled")
 	}
@@ -195,13 +196,13 @@ func (s *TimelineStore) List(f PlaceVisitFilters, limit int) ([]PlaceVisit, erro
 		return nil, err
 	}
 	defer rows.Close()
-	var out []PlaceVisit
+	var out []types.PlaceVisit
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var v PlaceVisit
+		var v types.PlaceVisit
 		if err := json.Unmarshal([]byte(raw), &v); err != nil {
 			continue
 		}
@@ -223,7 +224,7 @@ func (s *TimelineStore) Count() (int, error) {
 	return n, err
 }
 
-func placeVisitSourceID(v PlaceVisit) string {
+func placeVisitSourceID(v types.PlaceVisit) string {
 	if id := strings.TrimSpace(v.EntityID); id != "" {
 		return "e:" + id
 	}
@@ -308,8 +309,8 @@ func (d timelineDuration) end() string {
 	return ""
 }
 
-func (l timelineLocation) place() Place {
-	p := Place{
+func (l timelineLocation) place() types.Place {
+	p := types.Place{
 		Name:    strings.TrimSpace(l.Name),
 		Address: strings.TrimSpace(l.Address),
 	}
@@ -341,12 +342,12 @@ func (l timelineLocation) place() Place {
 
 // ParseTimelineJSON parses one Semantic Location History file into visits
 // (placeVisit) and trips (activitySegment).
-func ParseTimelineJSON(name string, data []byte) ([]PlaceVisit, error) {
+func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 	var root timelineExport
 	if err := json.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", name, err)
 	}
-	var out []PlaceVisit
+	var out []types.PlaceVisit
 	for _, obj := range root.TimelineObjects {
 		if obj.PlaceVisit != nil {
 			v := obj.PlaceVisit
@@ -369,11 +370,11 @@ func ParseTimelineJSON(name string, data []byte) ([]PlaceVisit, error) {
 			if pid == "" {
 				pid = v.PlaceID
 			}
-			visit := newPlaceVisit(timelineServiceID, timelineServiceName, pid, PlaceVisit{
+			visit := newPlaceVisit(timelineServiceID, timelineServiceName, pid, types.PlaceVisit{
 				StartAt:    v.Duration.start(),
 				EndAt:      v.Duration.end(),
 				Place:      place,
-				Kind:       PlaceKindVisit,
+				Kind:       types.PlaceKindVisit,
 				Confidence: conf,
 				EntityID:   pid,
 			})
@@ -401,11 +402,11 @@ func ParseTimelineJSON(name string, data []byte) ([]PlaceVisit, error) {
 			if aid == "" {
 				aid = a.StartLocation.PlaceID
 			}
-			trip := newPlaceVisit(timelineServiceID, timelineServiceName, "seg:"+a.Duration.start(), PlaceVisit{
+			trip := newPlaceVisit(timelineServiceID, timelineServiceName, "seg:"+a.Duration.start(), types.PlaceVisit{
 				StartAt: a.Duration.start(),
 				EndAt:   a.Duration.end(),
 				Place:   place,
-				Kind:    PlaceKindTrip,
+				Kind:    types.PlaceKindTrip,
 				Mode:    normalizeTripMode(a.ActivityType),
 			})
 			trip.Sources[0].Extra = map[string]any{"activity_type": a.ActivityType}
@@ -504,7 +505,7 @@ func isTimelineJSONName(name string) bool {
 		strings.Contains(lower, "semantic")
 }
 
-func parseTimelineFile(path string) ([]PlaceVisit, error) {
+func parseTimelineFile(path string) ([]types.PlaceVisit, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -574,25 +575,25 @@ func NewTimelineConnector(store *TimelineStore) *TimelineConnector {
 	return &TimelineConnector{store: store}
 }
 
-func (c *TimelineConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *TimelineConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "places",
 				Description: "Imported Google Maps Timeline visits and trips",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "list_place_visits",
 						Description: "Imported Timeline visits and trips (permission key: places)",
 						Method:      "GET",
 						Path:        "/v1/library/places",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "Visits overlapping this RFC3339 time or later"},
 							{Name: "before", In: "query", Type: "string", Description: "Visits starting before this RFC3339 time"},
 							{Name: "locality", In: "query", Type: "string", Description: "Filter by city/locality"},
 							{Name: "kind", In: "query", Type: "string", Description: "visit or trip"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral place visits with sources[]",
 							Fields:      []string{"visits", "total"},
 						},
@@ -613,9 +614,9 @@ func (c *TimelineConnector) HandleProxy(w http.ResponseWriter, r *http.Request, 
 }
 
 // ListUserPlaceVisits returns imported visits as a PlaceVisitProvider.
-func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []PlaceVisit, truncated bool, err error) {
+func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []types.PlaceVisit, truncated bool, err error) {
 	if c == nil || c.store == nil || !c.store.Enabled() {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 	logger := slog.With("connector", timelineServiceID)
 	items, listErr := c.store.List(PlaceVisitFilters{}, libraryPageCap)
@@ -626,7 +627,7 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []P
 	if n, cntErr := c.store.Count(); cntErr == nil && n > len(items) {
 		truncated = true
 	}
-	out := make([]PlaceVisit, 0, len(items))
+	out := make([]types.PlaceVisit, 0, len(items))
 	for _, v := range items {
 		out = append(out, newPlaceVisit(timelineServiceID, timelineServiceName, placeVisitSourceID(v), v))
 	}

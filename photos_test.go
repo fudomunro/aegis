@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestPhotoContentKey_MergesOnHashAndTime(t *testing.T) {
@@ -50,7 +52,7 @@ func TestMergePhotos_CombinesSourcesAndKeepsCanonical(t *testing.T) {
 	b := newPhoto("icloud", "iCloud Photos", "ic1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
 	b.Sources[0].Canonical = false
 
-	merged := MergePhotos([]Photo{a, b})
+	merged := MergePhotos([]types.Photo{a, b})
 	if len(merged) != 1 {
 		t.Fatalf("got %d photos, want 1: %+v", len(merged), merged)
 	}
@@ -69,16 +71,18 @@ func TestMergePhotos_Empty(t *testing.T) {
 }
 
 type fakePhotoProvider struct {
-	photos []Photo
+	photos []types.Photo
 	err    error
 }
 
-func (f *fakePhotoProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakePhotoProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakePhotoProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakePhotoProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakePhotoProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakePhotoProvider) ListUserPhotos(context.Context) ([]Photo, bool, error) {
+func (f *fakePhotoProvider) ListUserPhotos(context.Context) ([]types.Photo, bool, error) {
 	return f.photos, false, f.err
 }
 
@@ -89,11 +93,11 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []Photo{
+		"google-photos": &fakePhotoProvider{photos: []types.Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10),
 			newPhoto("google-photos", "Google Photos", "2", "b.jpg", "image/jpeg", "2024-01-02T00:00:00Z", 10, 10),
 		}},
-		"icloud": &fakePhotoProvider{photos: []Photo{
+		"icloud": &fakePhotoProvider{photos: []types.Photo{
 			newPhoto("icloud", "iCloud", "9", "c.jpg", "image/jpeg", "2024-01-03T00:00:00Z", 10, 10),
 		}},
 	}
@@ -105,7 +109,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp PhotoList
+	var resp types.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -137,11 +141,11 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 		ID:          "google-photos",
 		Name:        "Google Photos",
 		Action:      "inject",
-		Permissions: Permissions{"photos": AccessNone},
+		Permissions: types.Permissions{"photos": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []Photo{
+		"google-photos": &fakePhotoProvider{photos: []types.Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 	}
@@ -161,10 +165,10 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []Photo{
+		"google-photos": &fakePhotoProvider{photos: []types.Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
-		"icloud": &fakePhotoProvider{err: ErrUnauthorized},
+		"icloud": &fakePhotoProvider{err: types.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -173,11 +177,11 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp PhotoList
+	var resp types.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.ByService["icloud"].Status != LibraryStatusUnauthorized {
+	if resp.ByService["icloud"].Status != types.LibraryStatusUnauthorized {
 		t.Fatalf("icloud status = %+v", resp.ByService["icloud"])
 	}
 }
@@ -189,7 +193,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []Photo{
+		"google-photos": &fakePhotoProvider{photos: []types.Photo{
 			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 		"icloud": &fakePhotoProvider{err: errors.New("upstream boom")},
@@ -201,11 +205,11 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp PhotoList
+	var resp types.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.ByService["icloud"].Status != LibraryStatusError {
+	if resp.ByService["icloud"].Status != types.LibraryStatusError {
 		t.Fatalf("icloud status = %+v", resp.ByService["icloud"])
 	}
 	if resp.Total != 1 {
@@ -238,8 +242,8 @@ func TestDataTypeForPath_Photos(t *testing.T) {
 		"/mediaItems?pageSize": "photos",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := types.DataTypeForPath(path); got != want {
+			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
@@ -305,11 +309,11 @@ func TestPreRequest_InjectsPhotoLibraryHint(t *testing.T) {
 
 func TestHasPhotoProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	if LibraryKindByID("photos").HasProviders(srv) {
+	if kindHasProviders("photos", srv) {
 		t.Fatal("expected no photo providers")
 	}
 	srv.connectors["google-photos"] = &fakePhotoProvider{}
-	if !LibraryKindByID("photos").HasProviders(srv) {
+	if !kindHasProviders("photos", srv) {
 		t.Fatal("expected photo provider after registration")
 	}
 }
@@ -431,7 +435,7 @@ func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
 	if listW.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", listW.Code, listW.Body.String())
 	}
-	var listResp PhotoList
+	var listResp types.PhotoList
 	if err := json.Unmarshal(listW.Body.Bytes(), &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
@@ -477,8 +481,8 @@ func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 	}}}, "https://aegis.example.com")
 	conn := NewGooglePhotosConnector(srv)
 	_, _, err := conn.ListUserPhotos(context.Background())
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if !errors.Is(err, types.ErrUnauthorized) {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -506,8 +510,8 @@ func TestDataTypeForPath_Picker(t *testing.T) {
 		"/mediaItems?sessionId=s-1": "photos",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := types.DataTypeForPath(path); got != want {
+			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }

@@ -451,3 +451,23 @@ func TestExtractNested(t *testing.T) {
 func futureTime() time.Time {
 	return time.Now().Add(time.Hour)
 }
+
+func TestSpotifyNeutralAlbum_UPC(t *testing.T) {
+	al := spotifyNeutralAlbum(map[string]any{
+		"id":   "ab1",
+		"name": "Kind of Blue",
+		"uri":  "spotify:album:ab1",
+		"external_ids": map[string]any{
+			"upc": "00602537638569",
+		},
+		"artists": []any{
+			map[string]any{"id": "art1", "name": "Miles Davis"},
+		},
+	})
+	if al.EntityID != "00602537638569" {
+		t.Fatalf("entity_id = %q", al.EntityID)
+	}
+	if len(al.Artists) != 1 || al.Artists[0].Sources[0].ID != "art1" {
+		t.Fatalf("artists = %+v", al.Artists)
+	}
+}

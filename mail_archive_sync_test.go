@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // gmailPayloadJSON builds a minimal format=full Gmail message body.
@@ -130,7 +132,7 @@ func TestGmailSyncUnauthorized(t *testing.T) {
 	// No token in the store.
 	conn := NewGoogleGmailConnector(srv)
 	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{})
-	if err != ErrUnauthorized {
+	if err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 	if res.Error == "" {

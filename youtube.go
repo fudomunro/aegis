@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // YouTubeMusicConnector provides intelligent proxying for the YouTube Data API v3
@@ -28,98 +30,98 @@ func NewYouTubeMusicConnector(host Host) *YouTubeMusicConnector {
 }
 
 // Capabilities returns what YouTube Music data types and operations are supported.
-func (c *YouTubeMusicConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *YouTubeMusicConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "user",
 				Description: "Current user's YouTube channel",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read", Description: "Get current user's channel info", Method: "GET", Path: "/me",
-						Response: ResponseSpec{Description: "Channel with id, title, playlists", Fields: []string{"id", "title", "description", "playlists"}}},
+						Response: types.ResponseSpec{Description: "Channel with id, title, playlists", Fields: []string{"id", "title", "description", "playlists"}}},
 				},
 			},
 			{
 				Name:        "tracks",
 				Description: "Music videos and tracks — liked, search results",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_liked", Description: "List liked YouTube videos as neutral tracks (paginated; music-only filtering lives on /v1/library/tracks)", Method: "GET", Path: "/me/liked",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Neutral tracks from liked videos (unfiltered playlist)", Fields: []string{"tracks", "total"}}},
+						Response: types.ResponseSpec{Description: "Neutral tracks from liked videos (unfiltered playlist)", Fields: []string{"tracks", "total"}}},
 					{Name: "get_by_id", Description: "Get video details by ID", Method: "GET", Path: "/videos/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube video ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Video with title, channel, duration, stats", Fields: []string{"id", "title", "channel", "duration", "view_count", "like_count"}}},
+						Response: types.ResponseSpec{Description: "Video with title, channel, duration, stats", Fields: []string{"id", "title", "channel", "duration", "view_count", "like_count"}}},
 				},
 			},
 			{
 				Name:        "playlists",
 				Description: "User playlists — list, detail with items",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_list", Description: "List user's playlists (paginated)", Method: "GET", Path: "/me/playlists",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
+						Response: types.ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID", Method: "GET", Path: "/playlists/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[]", Fields: []string{"name", "description", "owner", "track_count", "sources", "extra"}}},
+						Response: types.ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[]", Fields: []string{"name", "description", "owner", "track_count", "sources", "extra"}}},
 					{Name: "read_items", Description: "List items in a playlist (paginated)", Method: "GET", Path: "/playlists/{id}/items",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Neutral tracks: name, artists[], album, sources[]", Fields: []string{"tracks", "total"}}},
+						Response: types.ResponseSpec{Description: "Neutral tracks: name, artists[], album, sources[]", Fields: []string{"tracks", "total"}}},
 				},
 			},
 			{
 				Name:        "artists",
 				Description: "Followed artists / subscribed channels (feeds /v1/library/artists)",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_followed", Description: "List followed artists via channel subscriptions (paginated). Permission key: artists.", Method: "GET", Path: "/me/subscriptions",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
+						Response: types.ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
 				},
 			},
 			{
 				Name:        "channels",
 				Description: "YouTube channels — lookup by id",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "get_by_id", Description: "Get channel details by ID", Method: "GET", Path: "/channels/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube channel ID", Required: true},
 						},
-						Response: ResponseSpec{Description: "Channel with title, description, stats", Fields: []string{"id", "title", "description"}}},
+						Response: types.ResponseSpec{Description: "Channel with title, description, stats", Fields: []string{"id", "title", "description"}}},
 				},
 			},
 			{
 				Name:        "search",
 				Description: "Search YouTube Music catalog",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "search", Description: "Search YouTube Music (defaults to music videos)", Method: "GET", Path: "/search",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Search query", Required: true},
 							{Name: "type", In: "query", Type: "string", Description: "Resource type: video, playlist, channel", Default: "video"},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{Description: "Search results with title, channel, type", Fields: []string{"results", "total"}}},
+						Response: types.ResponseSpec{Description: "Search results with title, channel, type", Fields: []string{"results", "total"}}},
 				},
 			},
 			{
 				Name:        "library",
 				Description: "User's liked videos and subscriptions",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{Name: "read_liked", Description: "List liked videos (alias for tracks.read_liked)", Method: "GET", Path: "/me/liked",
-						Response: ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
+						Response: types.ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
 					{Name: "read_followed", Description: "List subscriptions (alias for artists.read_followed)", Method: "GET", Path: "/me/subscriptions",
-						Response: ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
+						Response: types.ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
 				},
 			},
 		},
@@ -351,15 +353,15 @@ func (c *YouTubeMusicConnector) transformChannel(raw map[string]any) map[string]
 
 // ListUserFollowedArtists implements ArtistProvider. YouTube subscriptions
 // are the closest match to followed artists/channels.
-func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]Artist, bool, error) {
+func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]types.Artist, bool, error) {
 	token := c.host.GetValidToken("youtube-music", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
 
-	var all []Artist
+	var all []types.Artist
 	pageToken := ""
 	for page := 0; page < libraryPageCap; page++ {
 		u := upstreamBase + "/subscriptions?part=snippet&mine=true&maxResults=50"
@@ -404,7 +406,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 					channelID = id
 				}
 			}
-			a := newArtist("youtube-music", "YouTube Music", channelID, title)
+			a := types.NewArtist("youtube-music", "YouTube Music", channelID, title)
 			if len(a.Sources) > 0 && channelID != "" {
 				a.Sources[0].URL = "https://www.youtube.com/channel/" + channelID
 			}
@@ -488,10 +490,10 @@ func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, u
 // music-shaped videos via videos.list so the neutral library, agent answers,
 // and mirror do not treat tutorials/vlogs as liked songs.
 // https://github.com/fudomunro/aegis/issues/43
-func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Track, bool, error) {
+func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
 	token := c.host.GetValidToken("youtube-music", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	likedPlaylistID, err := c.getLikedPlaylistID()
@@ -555,7 +557,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]Trac
 		return nil, false, err
 	}
 
-	var all []Track
+	var all []types.Track
 	for _, p := range likedItems {
 		id := youtubePlaylistItemVideoID(p)
 		video, ok := snippets[id]
@@ -609,15 +611,15 @@ func youtubePlaylistItemVideoID(item map[string]any) string {
 
 // ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
 // and returns them in Aegis's neutral format.
-func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]Playlist, bool, error) {
+func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
 	token := c.host.GetValidToken("youtube-music", slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
 
-	var all []Playlist
+	var all []types.Playlist
 	pageToken := ""
 	for page := 0; page < libraryPageCap; page++ {
 		u := upstreamBase + "/playlists?part=snippet,contentDetails&mine=true&maxResults=50"
@@ -671,7 +673,7 @@ func youtubePlaylistURL(id string) string {
 
 // neutralPlaylist maps a raw YouTube playlist resource into the neutral type.
 // Service identity lives in Sources.
-func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
+func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) types.Playlist {
 	id, _ := p["id"].(string)
 	snippet, _ := p["snippet"].(map[string]any)
 	contentDetails, _ := p["contentDetails"].(map[string]any)
@@ -694,13 +696,13 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
 		extra["channel_id"] = channelID
 	}
 
-	return Playlist{
+	return types.Playlist{
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		Sources: []PlaylistSource{
-			primaryPlaylistSource("youtube-music", "YouTube Music", id, youtubePlaylistURL(id), extra),
+		Sources: []types.PlaylistSource{
+			types.PrimaryPlaylistSource("youtube-music", "YouTube Music", id, youtubePlaylistURL(id), extra),
 		},
 	}
 }
@@ -708,14 +710,14 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) Playlist {
 // neutralYouTubeTrack maps a raw playlistItem / liked video into the neutral Track.
 // Titles are cleaned of YouTube decoration so name matching can join catalog
 // tracks (issue #4). Original title is preserved in source extra.
-func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track, bool) {
+func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (types.Track, bool) {
 	snippet, _ := item["snippet"].(map[string]any)
 	contentDetails, _ := item["contentDetails"].(map[string]any)
 	if snippet == nil {
-		return Track{}, false
+		return types.Track{}, false
 	}
 	rawName, _ := snippet["title"].(string)
-	name := cleanYouTubeTitle(rawName)
+	name := types.CleanYouTubeTitle(rawName)
 	if name == "" {
 		name = rawName
 	}
@@ -753,9 +755,9 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 		}
 	}
 
-	var artists []Artist
+	var artists []types.Artist
 	if channel != "" {
-		artists = []Artist{newArtist("youtube-music", "YouTube Music", "", channel)}
+		artists = []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", channel)}
 	}
 
 	url := ""
@@ -770,12 +772,12 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (Track,
 		durationMs = iso8601DurationMs(iso)
 	}
 
-	return Track{
+	return types.Track{
 		Name:       name,
 		Artists:    artists,
 		DurationMs: durationMs,
 		Duration:   duration,
-		Sources: []TrackSource{{
+		Sources: []types.TrackSource{{
 			Service:     "youtube-music",
 			ServiceName: "YouTube Music",
 			ID:          videoID,
@@ -819,9 +821,9 @@ func iso8601DurationMs(s string) int {
 	return total
 }
 
-func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) PlaylistList {
+func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) types.PlaylistList {
 	items, _ := raw["items"].([]any)
-	playlists := make([]Playlist, 0, len(items))
+	playlists := make([]types.Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -837,12 +839,12 @@ func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) Playli
 			total = n
 		}
 	}
-	return PlaylistList{Playlists: playlists, Total: total}
+	return types.PlaylistList{Playlists: playlists, Total: total}
 }
 
 func (c *YouTubeMusicConnector) transformPlaylistItems(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
-	tracks := make([]Track, 0, len(items))
+	tracks := make([]types.Track, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -937,7 +939,7 @@ func (c *YouTubeMusicConnector) transformPlaylistDetail(raw map[string]any) any 
 	}
 	p, _ := items[0].(map[string]any)
 	base := c.neutralPlaylist(p)
-	return PlaylistDetail{
+	return types.PlaylistDetail{
 		Playlist:    base,
 		TotalTracks: base.TrackCount,
 	}

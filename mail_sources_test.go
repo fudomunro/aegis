@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // sharedMessageID is present in both sample Takeout mbox and gmailPayloadJSON("shared").
@@ -67,7 +69,7 @@ func importTakeout(t *testing.T, a *MailArchive, path string) TakeoutSyncResult 
 	return res
 }
 
-func searchMergedShared(t *testing.T, a *MailArchive) *Message {
+func searchMergedShared(t *testing.T, a *MailArchive) *types.Message {
 	t.Helper()
 	hits, err := a.Search(MailSearchQuery{Q: "Shared dual-source", WithBody: true})
 	if err != nil {
@@ -171,15 +173,15 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MessageList
+	var resp types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["mail-archive"].Status != LibraryStatusOK {
+	if resp.ByService["mail-archive"].Status != types.LibraryStatusOK {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 
-	var shared, takeoutOnly *Message
+	var shared, takeoutOnly *types.Message
 	for i := range resp.Messages {
 		m := &resp.Messages[i]
 		if normalizeMessageID(m.EntityID) == sharedMessageID {
@@ -203,7 +205,7 @@ func TestMailSources_HasProvidersArchiveOnly(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.connectors = map[string]ServiceConnector{}
-	if !LibraryKindByID("messages").HasProviders(srv) {
+	if !kindHasProviders("messages", srv) {
 		t.Fatal("expected archive-only HasProviders")
 	}
 	if err := a.Upsert(sampleMailRecord("a1", "Archive only", "hello")); err != nil {

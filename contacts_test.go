@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestNormalizeContactEmail(t *testing.T) {
@@ -45,7 +47,7 @@ func TestNormalizeContactHandle(t *testing.T) {
 }
 
 func TestContactIdentityKeys_PrefersEmailThenPhoneThenHandle(t *testing.T) {
-	c := Contact{
+	c := types.Contact{
 		Name:    "Ada Lovelace",
 		Emails:  []string{"Ada@Example.com"},
 		Phones:  []string{"+1 (555) 123-4567"},
@@ -71,7 +73,7 @@ func TestContactIdentityKeys_PrefersEmailThenPhoneThenHandle(t *testing.T) {
 }
 
 func TestContactIdentityKeys_NameOnly(t *testing.T) {
-	c := Contact{Name: "  Grace   Hopper "}
+	c := types.Contact{Name: "  Grace   Hopper "}
 	keys := ContactIdentityKeys(c)
 	if len(keys) != 1 || keys[0] != "name:grace hopper" {
 		t.Fatalf("keys = %v", keys)
@@ -89,7 +91,7 @@ func TestMergeContacts_SharedEmailAcrossServices(t *testing.T) {
 		[]string{"ada@example.com"}, nil)
 	b := newContact("outlook", "Outlook", "o9", "Ada L.",
 		[]string{"ADA@example.com"}, []string{"+1 (555) 123-4567"})
-	merged := MergeContacts([]Contact{a, b})
+	merged := MergeContacts([]types.Contact{a, b})
 	if len(merged) != 1 {
 		t.Fatalf("got %d contacts, want 1: %+v", len(merged), merged)
 	}
@@ -113,7 +115,7 @@ func TestMergeContacts_PhoneLinksDifferentEmails(t *testing.T) {
 		[]string{"bob@work.example"}, []string{"+15550001111"})
 	b := newContact("outlook", "Outlook", "o1", "Robert",
 		[]string{"bob@home.example"}, []string{"+1 (555) 000-1111"})
-	merged := MergeContacts([]Contact{a, b})
+	merged := MergeContacts([]types.Contact{a, b})
 	if len(merged) != 1 {
 		t.Fatalf("phone should link contacts: %+v", merged)
 	}
@@ -127,7 +129,7 @@ func TestMergeContacts_NameFallbackSeparatesDistinctPeople(t *testing.T) {
 		[]string{"alex1@example.com"}, nil)
 	b := newContact("google", "Google", "g2", "Alex Kim",
 		[]string{"alex2@example.com"}, nil)
-	merged := MergeContacts([]Contact{a, b})
+	merged := MergeContacts([]types.Contact{a, b})
 	if len(merged) != 2 {
 		t.Fatalf("distinct emails must not merge by name alone: %+v", merged)
 	}
@@ -135,23 +137,23 @@ func TestMergeContacts_NameFallbackSeparatesDistinctPeople(t *testing.T) {
 
 func TestMergeContacts_UnionFindChainsOnSharedEmail(t *testing.T) {
 	// A and B share email; B and C share phone → one entity via union-find.
-	a := Contact{
+	a := types.Contact{
 		Name:    "Sam One",
 		Emails:  []string{"sam@example.com"},
-		Sources: []ContactSource{{Service: "google", ServiceName: "Google", ID: "a"}},
+		Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "a"}},
 	}
-	b := Contact{
+	b := types.Contact{
 		Name:    "Sam Two",
 		Emails:  []string{"sam@example.com"},
 		Phones:  []string{"+15550002222"},
-		Sources: []ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "b"}},
+		Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "b"}},
 	}
-	c := Contact{
+	c := types.Contact{
 		Name:    "Sam Two",
 		Phones:  []string{"+1 555 000 2222"},
-		Sources: []ContactSource{{Service: "icloud", ServiceName: "iCloud", ID: "c"}},
+		Sources: []types.ContactSource{{Service: "icloud", ServiceName: "iCloud", ID: "c"}},
 	}
-	merged := MergeContacts([]Contact{a, b, c})
+	merged := MergeContacts([]types.Contact{a, b, c})
 	if len(merged) != 1 {
 		t.Fatalf("chained keys should merge into one: %+v", merged)
 	}
@@ -161,16 +163,16 @@ func TestMergeContacts_UnionFindChainsOnSharedEmail(t *testing.T) {
 }
 
 func TestMergeContacts_NameOnlyDoesNotJoinEmailContact(t *testing.T) {
-	withEmail := Contact{
+	withEmail := types.Contact{
 		Name:    "Alex Kim",
 		Emails:  []string{"alex@example.com"},
-		Sources: []ContactSource{{Service: "google", ServiceName: "Google", ID: "g"}},
+		Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g"}},
 	}
-	nameOnly := Contact{
+	nameOnly := types.Contact{
 		Name:    "Alex Kim",
-		Sources: []ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o"}},
+		Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o"}},
 	}
-	merged := MergeContacts([]Contact{withEmail, nameOnly})
+	merged := MergeContacts([]types.Contact{withEmail, nameOnly})
 	if len(merged) != 2 {
 		t.Fatalf("name-only must not join an email-bearing contact: %+v", merged)
 	}
@@ -183,16 +185,18 @@ func TestMergeContacts_Empty(t *testing.T) {
 }
 
 type fakeContactProvider struct {
-	contacts []Contact
+	contacts []types.Contact
 	err      error
 }
 
-func (f *fakeContactProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeContactProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakeContactProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeContactProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeContactProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeContactProvider) ListUserContacts(context.Context) ([]Contact, bool, error) {
+func (f *fakeContactProvider) ListUserContacts(context.Context) ([]types.Contact, bool, error) {
 	return f.contacts, false, f.err
 }
 
@@ -206,26 +210,26 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{
-			contacts: []Contact{
+			contacts: []types.Contact{
 				{
 					Name:    "Ada Lovelace",
 					Emails:  []string{"ada@example.com"},
-					Sources: []ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
+					Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
 				},
 			},
 		},
 		"outlook": &fakeContactProvider{
-			contacts: []Contact{
+			contacts: []types.Contact{
 				{
 					Name:    "Ada Lovelace",
 					Emails:  []string{"ada@example.com"},
 					Phones:  []string{"+15551234567"},
-					Sources: []ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o1"}},
+					Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o1"}},
 				},
 				{
 					Name:    "Grace Hopper",
 					Emails:  []string{"grace@example.com"},
-					Sources: []ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o2"}},
+					Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o2"}},
 				},
 			},
 		},
@@ -240,7 +244,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 
-	var resp ContactList
+	var resp types.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -258,10 +262,10 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 	if resp.Contacts[1].Name != "Grace Hopper" {
 		t.Fatalf("grace = %+v", resp.Contacts[1])
 	}
-	if resp.ByService["google"].Status != LibraryStatusOK || resp.ByService["google"].Count != 1 {
+	if resp.ByService["google"].Status != types.LibraryStatusOK || resp.ByService["google"].Count != 1 {
 		t.Fatalf("google status = %+v", resp.ByService["google"])
 	}
-	if resp.ByService["outlook"].Status != LibraryStatusOK || resp.ByService["outlook"].Count != 2 {
+	if resp.ByService["outlook"].Status != types.LibraryStatusOK || resp.ByService["outlook"].Count != 2 {
 		t.Fatalf("outlook status = %+v", resp.ByService["outlook"])
 	}
 }
@@ -291,14 +295,14 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "google", Name: "Google", Action: "inject",
-				Permissions: Permissions{"contacts": AccessNone},
+				Permissions: types.Permissions{"contacts": types.AccessNone},
 			},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{
-			contacts: []Contact{{Name: "Ada", Sources: []ContactSource{{Service: "google", ID: "1"}}}},
+			contacts: []types.Contact{{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ID: "1"}}}},
 		},
 	}
 
@@ -322,11 +326,11 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"google": &fakeContactProvider{
-			contacts: []Contact{
-				{Name: "Ada", Sources: []ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}}},
+			contacts: []types.Contact{
+				{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}}},
 			},
 		},
-		"outlook": &fakeContactProvider{err: ErrUnauthorized},
+		"outlook": &fakeContactProvider{err: types.ErrUnauthorized},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
@@ -337,11 +341,11 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	var resp ContactList
+	var resp types.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["outlook"].Status != LibraryStatusUnauthorized {
+	if resp.ByService["outlook"].Status != types.LibraryStatusUnauthorized {
 		t.Fatalf("outlook = %+v", resp.ByService["outlook"])
 	}
 	if !strings.Contains(resp.ByService["outlook"].Error, "/v1/auth/outlook/login") {
@@ -366,11 +370,11 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var resp ContactList
+	var resp types.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google"].Status != LibraryStatusError {
+	if resp.ByService["google"].Status != types.LibraryStatusError {
 		t.Fatalf("google = %+v", resp.ByService["google"])
 	}
 	if len(resp.Contacts) != 0 {
@@ -400,8 +404,8 @@ func TestDataTypeForPath_Contacts(t *testing.T) {
 		"/me/contact-lists": "",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := types.DataTypeForPath(path); got != want {
+			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
@@ -474,11 +478,11 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 func TestHasContactProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{}
-	if LibraryKindByID("contacts").HasProviders(srv) {
+	if kindHasProviders("contacts", srv) {
 		t.Fatal("empty connectors should have no contact providers")
 	}
 	srv.connectors["google"] = &fakeContactProvider{}
-	if !LibraryKindByID("contacts").HasProviders(srv) {
+	if !kindHasProviders("contacts", srv) {
 		t.Fatal("fake provider should register as contact provider")
 	}
 }

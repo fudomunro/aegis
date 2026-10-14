@@ -9,18 +9,20 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestTighterPlacesLevel(t *testing.T) {
 	cases := []struct {
 		a, b, want string
 	}{
-		{AccessCity, AccessPrecise, AccessCity},
-		{AccessPrecise, AccessCity, AccessCity},
-		{AccessRead, AccessCity, AccessCity},
-		{AccessPrecise, AccessRead, AccessRead},
-		{AccessNone, AccessRead, AccessNone},
-		{"", AccessRead, AccessNone},
+		{types.AccessCity, types.AccessPrecise, types.AccessCity},
+		{types.AccessPrecise, types.AccessCity, types.AccessCity},
+		{types.AccessRead, types.AccessCity, types.AccessCity},
+		{types.AccessPrecise, types.AccessRead, types.AccessRead},
+		{types.AccessNone, types.AccessRead, types.AccessNone},
+		{"", types.AccessRead, types.AccessNone},
 	}
 	for _, c := range cases {
 		if got := tighterPlacesLevel(c.a, c.b); got != c.want {
@@ -30,15 +32,15 @@ func TestTighterPlacesLevel(t *testing.T) {
 }
 
 func TestPlacesAccessLevels(t *testing.T) {
-	p := Permissions{"places": AccessCity, "tracks": AccessRead, "events": AccessNone}
+	p := types.Permissions{"places": types.AccessCity, "tracks": types.AccessRead, "events": types.AccessNone}
 	got := p.PlacesAccessLevels()
-	if got == nil || got["places"] != AccessCity {
+	if got == nil || got["places"] != types.AccessCity {
 		t.Fatalf("got = %v", got)
 	}
 	if _, ok := got["tracks"]; ok {
 		t.Fatal("tracks must not appear")
 	}
-	if (Permissions{}).PlacesAccessLevels() != nil {
+	if (types.Permissions{}).PlacesAccessLevels() != nil {
 		t.Fatal("empty map should be nil")
 	}
 }
@@ -148,7 +150,7 @@ func TestOwnTracksConnector_Unauthorized(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: ownTracksServiceID, Name: "OwnTracks"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	conn := NewOwnTracksConnector(srv)
-	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -245,7 +247,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 
 func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
 	conn := NewTimelineConnector(nil)
-	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 	if caps := conn.Capabilities(); len(caps.DataTypes) == 0 {
@@ -265,30 +267,30 @@ func TestMergePlaceVisits_EmptyAndAnon(t *testing.T) {
 	if MergePlaceVisits(nil) != nil {
 		t.Fatal("nil in")
 	}
-	v := PlaceVisit{StartAt: "2023-01-01T00:00:00Z", Kind: PlaceKindVisit}
+	v := types.PlaceVisit{StartAt: "2023-01-01T00:00:00Z", Kind: types.PlaceKindVisit}
 	// No place / no sources → still returns a distinct slot when key exists.
-	out := MergePlaceVisits([]PlaceVisit{v})
+	out := MergePlaceVisits([]types.PlaceVisit{v})
 	if len(out) != 1 {
 		t.Fatalf("out = %+v", out)
 	}
 }
 
 func TestPhotosTakenDuring_Edges(t *testing.T) {
-	v := PlaceVisit{StartAt: "2023-07-04T16:00:00Z"} // no end
+	v := types.PlaceVisit{StartAt: "2023-07-04T16:00:00Z"} // no end
 	if PhotosTakenDuring(nil, v) != nil && len(PhotosTakenDuring(nil, v)) != 0 {
 		t.Fatal("nil photos")
 	}
-	if len(PhotosTakenDuring([]Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, v)) != 1 {
+	if len(PhotosTakenDuring([]types.Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, v)) != 1 {
 		t.Fatal("open-ended window")
 	}
 	// Missing start → no join
-	if len(PhotosTakenDuring([]Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, PlaceVisit{})) != 0 {
+	if len(PhotosTakenDuring([]types.Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, types.PlaceVisit{})) != 0 {
 		t.Fatal("missing start")
 	}
 }
 
 func TestPlaceVisitFilters_CacheKey(t *testing.T) {
-	f := PlaceVisitFilters{After: "2023-01-01T00:00:00Z", Before: "2023-02-01T00:00:00Z", Locality: "Halifax", Kind: PlaceKindVisit}
+	f := PlaceVisitFilters{After: "2023-01-01T00:00:00Z", Before: "2023-02-01T00:00:00Z", Locality: "Halifax", Kind: types.PlaceKindVisit}
 	if f.cacheKeySuffix() == "" {
 		t.Fatal("expected cache key")
 	}

@@ -2,85 +2,28 @@ package main
 
 import (
 	"context"
-	"errors"
 	"net/http"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
-// ErrUnauthorized is returned by library providers when a service has no valid token.
-var ErrUnauthorized = errors.New("unauthorized")
-
-// PlaylistProvider is implemented by connectors that can return the user's
-// playlists in Aegis's neutral format. truncated is true when the page cap
-// was hit with more items still upstream.
-type PlaylistProvider interface {
-	ListUserPlaylists(ctx context.Context) (playlists []Playlist, truncated bool, err error)
-}
-
-// LikedTrackProvider is implemented by connectors that can return the user's
-// liked/saved tracks in Aegis's neutral format.
-type LikedTrackProvider interface {
-	ListUserLikedTracks(ctx context.Context) (tracks []Track, truncated bool, err error)
-}
-
-// AlbumProvider is implemented by connectors that can return the user's
-// saved albums in Aegis's neutral format.
-type AlbumProvider interface {
-	ListUserSavedAlbums(ctx context.Context) (albums []Album, truncated bool, err error)
-}
-
-// ArtistProvider is implemented by connectors that can return the user's
-// followed or top artists in Aegis's neutral format.
-type ArtistProvider interface {
-	ListUserFollowedArtists(ctx context.Context) (artists []Artist, truncated bool, err error)
-}
-
-func playlistServiceName(p Playlist) string {
-	if len(p.Sources) > 0 {
-		return p.Sources[0].ServiceName
-	}
-	return ""
-}
-
-func trackServiceName(t Track) string {
-	if len(t.Sources) > 0 {
-		return t.Sources[0].ServiceName
-	}
-	return ""
-}
-
-func albumServiceName(a Album) string {
-	if len(a.Sources) > 0 {
-		return a.Sources[0].ServiceName
-	}
-	return ""
-}
-
-func artistServiceName(a Artist) string {
-	if len(a.Sources) > 0 {
-		return a.Sources[0].ServiceName
-	}
-	return ""
-}
-
-// HandleLibraryPlaylists returns the user's playlists from every connected
-// service: GET /v1/library/playlists
 func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("playlists")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Playlist]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Playlist]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Playlist], []string) {
-			return collectProviders[Playlist, PlaylistProvider](s, kind.PermType,
-				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Playlist], []string) {
+			return collectProviders[types.Playlist, types.PlaylistProvider](s, kind.PermType,
+				func(p types.PlaylistProvider) func(context.Context) ([]types.Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
 		},
-		serviceOf: playlistServiceName,
-		sortKey:   func(p Playlist) string { return p.Name },
-		merge: func(in []Playlist) []Playlist {
-			return MergePlaylistsSyncLinked(in, s.links.PlaylistLinkKey)
+		serviceOf: types.PlaylistServiceName,
+		sortKey:   func(p types.Playlist) string { return p.Name },
+		merge: func(in []types.Playlist) []types.Playlist {
+			return types.MergePlaylistsSyncLinked(in, s.links.PlaylistLinkKey)
 		},
-		encode: func(merged []Playlist, bySvc map[string]LibraryServiceStatus) any {
-			return PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(merged []types.Playlist, bySvc map[string]types.LibraryServiceStatus) any {
+			return types.PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampPlaylistCanonical,
 		stampCopies:   s.stampPlaylistCopies,
@@ -90,22 +33,22 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 // HandleLibraryTracks returns liked/saved tracks: GET /v1/library/tracks
 func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("tracks")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Track]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Track]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Track], []string) {
-			return collectProviders[Track, LikedTrackProvider](s, kind.PermType,
-				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Track], []string) {
+			return collectProviders[types.Track, types.LikedTrackProvider](s, kind.PermType,
+				func(p types.LikedTrackProvider) func(context.Context) ([]types.Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
 		},
-		serviceOf: trackServiceName,
-		sortKey:   trackIdentityKey,
-		merge:     MergeTracksSync,
-		enrich: func(ctx context.Context, s *Server, tracks []Track) {
+		serviceOf: types.TrackServiceName,
+		sortKey:   types.TrackIdentityKey,
+		merge:     types.MergeTracksSync,
+		enrich: func(ctx context.Context, s *Server, tracks []types.Track) {
 			s.resolveTrackEntities(ctx, tracks)
 		},
-		encode: func(merged []Track, bySvc map[string]LibraryServiceStatus) any {
-			return TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(merged []types.Track, bySvc map[string]types.LibraryServiceStatus) any {
+			return types.TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampTrackCanonical,
 		stampCopies:   s.stampTrackCopies,
@@ -115,22 +58,22 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 // HandleLibraryAlbums returns saved albums: GET /v1/library/albums
 func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("albums")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Album]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Album]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Album], []string) {
-			return collectProviders[Album, AlbumProvider](s, kind.PermType,
-				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Album], []string) {
+			return collectProviders[types.Album, types.AlbumProvider](s, kind.PermType,
+				func(p types.AlbumProvider) func(context.Context) ([]types.Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
 		},
-		serviceOf: albumServiceName,
-		sortKey:   albumIdentityKey,
-		merge:     MergeAlbumsSync,
-		enrich: func(ctx context.Context, s *Server, albums []Album) {
+		serviceOf: types.AlbumServiceName,
+		sortKey:   types.AlbumIdentityKey,
+		merge:     types.MergeAlbumsSync,
+		enrich: func(ctx context.Context, s *Server, albums []types.Album) {
 			s.resolveAlbumEntities(ctx, albums)
 		},
-		encode: func(merged []Album, bySvc map[string]LibraryServiceStatus) any {
-			return AlbumList{Albums: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(merged []types.Album, bySvc map[string]types.LibraryServiceStatus) any {
+			return types.AlbumList{Albums: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }
@@ -138,22 +81,22 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 // HandleLibraryArtists returns followed/top artists: GET /v1/library/artists
 func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("artists")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Artist]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Artist]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Artist], []string) {
-			return collectProviders[Artist, ArtistProvider](s, kind.PermType,
-				func(p ArtistProvider) func(context.Context) ([]Artist, bool, error) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Artist], []string) {
+			return collectProviders[types.Artist, types.ArtistProvider](s, kind.PermType,
+				func(p types.ArtistProvider) func(context.Context) ([]types.Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})
 		},
-		serviceOf: artistServiceName,
-		sortKey:   func(a Artist) string { return NormalizeIdentityKey(a.Name) },
-		merge:     mergeArtistLibrary,
-		enrich: func(ctx context.Context, s *Server, artists []Artist) {
+		serviceOf: types.ArtistServiceName,
+		sortKey:   func(a types.Artist) string { return types.NormalizeIdentityKey(a.Name) },
+		merge:     types.MergeArtistLibrary,
+		enrich: func(ctx context.Context, s *Server, artists []types.Artist) {
 			s.resolveArtistEntities(ctx, artists)
 		},
-		encode: func(merged []Artist, bySvc map[string]LibraryServiceStatus) any {
-			return ArtistList{Artists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(merged []types.Artist, bySvc map[string]types.LibraryServiceStatus) any {
+			return types.ArtistList{Artists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 	})
 }

@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestWithPeerLog_IncludesIdentity(t *testing.T) {
@@ -65,7 +67,7 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 
 func TestCapabilities_PlaylistFieldsUseSources(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	check := func(name string, caps ServiceCapabilities) {
+	check := func(name string, caps types.ServiceCapabilities) {
 		t.Helper()
 		for _, dt := range caps.DataTypes {
 			if dt.Name != "playlists" {

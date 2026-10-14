@@ -1,6 +1,9 @@
-package main
+package types
 
-import "strings"
+import (
+	"errors"
+	"strings"
+)
 
 // dataTypePathRule classifies one canonical proxy path form into a data-type
 // permission key. Evaluation is first-match-wins in slice order, matching the
@@ -95,9 +98,9 @@ var dataTypePathRules = []dataTypePathRule{
 	{Prefix: "/me/recommendations", DataType: "recommendations"},
 }
 
-// dataTypeForCanonicalPath matches an already-canonicalized proxy path
+// DataTypeForCanonicalPath matches an already-canonicalized proxy path
 // (no query string, no dot segments) against the rule table.
-func dataTypeForCanonicalPath(p string) string {
+func DataTypeForCanonicalPath(p string) string {
 	for _, rule := range dataTypePathRules {
 		if rule.Exact != "" {
 			if p == rule.Exact {
@@ -111,3 +114,70 @@ func dataTypeForCanonicalPath(p string) string {
 	}
 	return ""
 }
+
+// CanonicalProxyPath normalizes a service-proxy remaining path so permission
+// classification and upstream routing see the same string (issue #94).
+// Duplicate slashes are collapsed. "." / ".." segments and other non-canonical
+// forms are rejected. Empty means the service root.
+func CanonicalProxyPath(remaining string) (string, error) {
+	if remaining == "" {
+		return "", nil
+	}
+	if !strings.HasPrefix(remaining, "/") {
+		remaining = "/" + remaining
+	}
+	// URL.Path is already percent-decoded (%2f → /). Reject leftover characters
+	// that can still smuggle alternate path forms through to upstream.
+	if strings.ContainsAny(remaining, "\\\x00") {
+		return "", errNonCanonicalPath
+	}
+	segs := strings.Split(remaining, "/")
+	out := make([]string, 0, len(segs))
+	for _, seg := range segs {
+		switch seg {
+		case "":
+			// Collapse leading/duplicate/trailing slashes.
+			continue
+		case ".", "..":
+			return "", errNonCanonicalPath
+		default:
+			out = append(out, seg)
+		}
+	}
+	if len(out) == 0 {
+		return "/", nil
+	}
+	return "/" + strings.Join(out, "/"), nil
+}
+
+// DataTypeForPath classifies a service-proxy path into a Aegis data type.
+// Unknown or non-canonical paths return "" so callers must apply the
+// strictest configured permission (not "default") — see accessForDataType.
+// Classification is the ordered rule table in pathclass.go (issue #15).
+// DataTypeForPath classifies a service-proxy path into a Aegis data type.
+// Unknown or non-canonical paths return "" so callers must apply the
+// strictest configured permission (not "default") — see accessForDataType.
+// Classification is the ordered rule table in pathclass.go (issue #15).
+func DataTypeForPath(path string) string {
+	p := strings.TrimSpace(path)
+	if p == "" {
+		return ""
+	}
+	// Drop query string if present.
+	if i := strings.IndexByte(p, '?'); i >= 0 {
+		p = p[:i]
+	}
+	clean, err := CanonicalProxyPath(p)
+	if err != nil {
+		return ""
+	}
+	if clean == "" || clean == "/" {
+		return ""
+	}
+	return DataTypeForCanonicalPath(clean)
+}
+
+// FilterCapabilities removes operations the permission map does not allow.
+// Data types set to "none" are dropped entirely; other types keep only
+// operations whose HTTP method is permitted.
+var errNonCanonicalPath = errors.New("non-canonical path")

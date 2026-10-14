@@ -5,20 +5,9 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-)
 
-// ContactProvider is implemented by connectors that can return the user's
-// contacts in Aegis's neutral format. The aggregate library endpoint uses
-// this so agents can ask for "my contacts" once and receive every service.
-// Each returned Contact should carry one ContactSource for that service.
-// https://github.com/fudomunro/aegis/issues/12
-type ContactProvider interface {
-	// ListUserContacts fetches the user's contacts from the upstream service
-	// and maps them into neutral Contact values (service identity in Sources).
-	// Return ErrUnauthorized when no valid token is available.
-	// truncated is true when the page cap was hit with more items still upstream.
-	ListUserContacts(ctx context.Context) (contacts []Contact, truncated bool, err error)
-}
+	"github.com/fudomunro/aegis/internal/types"
+)
 
 // NormalizeContactEmail lowercases and trims an address for identity matching.
 func NormalizeContactEmail(email string) string {
@@ -61,7 +50,7 @@ func NormalizeContactHandle(handle string) string {
 // contact has no stronger identifier, so two different "Alex Kim" addresses
 // do not merge just because the names match. Empty keys are omitted. The
 // first key is the contact's primary identity.
-func ContactIdentityKeys(c Contact) []string {
+func ContactIdentityKeys(c types.Contact) []string {
 	var keys []string
 	seen := map[string]bool{}
 	add := func(prefix, val string) {
@@ -85,7 +74,7 @@ func ContactIdentityKeys(c Contact) []string {
 		add("handle", NormalizeContactHandle(h))
 	}
 	if len(keys) == 0 {
-		if name := NormalizeIdentityKey(c.Name); name != "" {
+		if name := types.NormalizeIdentityKey(c.Name); name != "" {
 			add("name", name)
 		}
 	}
@@ -93,7 +82,7 @@ func ContactIdentityKeys(c Contact) []string {
 }
 
 // primaryContactKey is the first identity key, or "" when the contact has none.
-func primaryContactKey(c Contact) string {
+func primaryContactKey(c types.Contact) string {
 	keys := ContactIdentityKeys(c)
 	if len(keys) == 0 {
 		return ""
@@ -102,14 +91,14 @@ func primaryContactKey(c Contact) string {
 }
 
 // newContact builds a unified contact from one service spelling.
-func newContact(service, serviceName, id, name string, emails, phones []string) Contact {
+func newContact(service, serviceName, id, name string, emails, phones []string) types.Contact {
 	emails = normalizeEmailList(emails)
 	phones = normalizePhoneList(phones)
 	name = strings.TrimSpace(name)
 	if name == "" && len(emails) == 0 && len(phones) == 0 {
-		return Contact{}
+		return types.Contact{}
 	}
-	src := ContactSource{
+	src := types.ContactSource{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,
@@ -117,11 +106,11 @@ func newContact(service, serviceName, id, name string, emails, phones []string) 
 		Emails:      emails,
 		Phones:      phones,
 	}
-	return Contact{
+	return types.Contact{
 		Name:    name,
 		Emails:  emails,
 		Phones:  phones,
-		Sources: []ContactSource{src},
+		Sources: []types.ContactSource{src},
 	}
 }
 
@@ -208,7 +197,7 @@ func unionStrings(a, b []string) []string {
 // mergeContactInto folds src into dst (shared identity). Fills empty fields,
 // unions identifier lists (normalized so photo.people[] and library contacts
 // share one spelling) and sources, and keeps the first non-empty extra.
-func mergeContactInto(dst *Contact, src Contact) {
+func mergeContactInto(dst *types.Contact, src types.Contact) {
 	if dst.Name == "" {
 		dst.Name = src.Name
 	}
@@ -228,14 +217,14 @@ func mergeContactInto(dst *Contact, src Contact) {
 // handle, or normalized name) into one user-facing contact with multiple
 // Sources. Uses union-find so A~email and B~email and C~name(B) form one
 // entity. Order follows first appearance; sources are sorted by service name.
-func MergeContacts(in []Contact) []Contact {
+func MergeContacts(in []types.Contact) []types.Contact {
 	if len(in) == 0 {
 		return nil
 	}
 
 	// Drop contacts with no identity at all; keep them as distinct unnamed
 	// entries only if they have a source ID to stand on.
-	prepared := make([]Contact, 0, len(in))
+	prepared := make([]types.Contact, 0, len(in))
 	for _, c := range in {
 		if primaryContactKey(c) == "" && len(c.Sources) > 0 {
 			// Anonymous service-local entry: identity by service:id.
@@ -291,7 +280,7 @@ func MergeContacts(in []Contact) []Contact {
 	}
 
 	type slot struct {
-		c Contact
+		c types.Contact
 	}
 	order := []int{}
 	byRoot := map[int]*slot{}
@@ -305,15 +294,15 @@ func MergeContacts(in []Contact) []Contact {
 		cp.Emails = append([]string(nil), c.Emails...)
 		cp.Phones = append([]string(nil), c.Phones...)
 		cp.Handles = append([]string(nil), c.Handles...)
-		cp.Sources = append([]ContactSource(nil), c.Sources...)
+		cp.Sources = append([]types.ContactSource(nil), c.Sources...)
 		byRoot[r] = &slot{c: cp}
 		order = append(order, r)
 	}
 
-	out := make([]Contact, 0, len(order))
+	out := make([]types.Contact, 0, len(order))
 	for _, r := range order {
 		e := byRoot[r]
-		sortContactSourcesCanonicalFirst(e.c.Sources)
+		types.SortContactSourcesCanonicalFirst(e.c.Sources)
 		out = append(out, e.c)
 	}
 
@@ -337,26 +326,26 @@ func MergeContacts(in []Contact) []Contact {
 // service: GET /v1/library/contacts
 func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("contacts")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[Contact]{
+	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Contact]{
 		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[Contact], []string) {
-			return collectProviders[Contact, ContactProvider](s, kind.PermType,
-				func(p ContactProvider) func(context.Context) ([]Contact, bool, error) {
+		targets: func(s *Server, r *http.Request) ([]namedLister[types.Contact], []string) {
+			return collectProviders[types.Contact, types.ContactProvider](s, kind.PermType,
+				func(p types.ContactProvider) func(context.Context) ([]types.Contact, bool, error) {
 					return p.ListUserContacts
 				})
 		},
 		serviceOf: contactServiceName,
 		sortKey:   primaryContactKey,
 		merge:     MergeContacts,
-		encode: func(merged []Contact, bySvc map[string]LibraryServiceStatus) any {
-			return ContactList{Contacts: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(merged []types.Contact, bySvc map[string]types.LibraryServiceStatus) any {
+			return types.ContactList{Contacts: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
 		},
 		markCanonical: s.stampContactCanonical,
 		stampCopies:   s.stampContactCopies,
 	})
 }
 
-func contactServiceName(c Contact) string {
+func contactServiceName(c types.Contact) string {
 	if len(c.Sources) > 0 {
 		return c.Sources[0].ServiceName
 	}

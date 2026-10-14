@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // permissionsFileVersion is the on-disk schema version for permissions.json.
@@ -18,7 +20,7 @@ const permissionsFileVersion = 1
 type permissionsOverlayFile struct {
 	Version int `json:"version"`
 	// Services maps service id → permissions. Present+null means cleared.
-	Services map[string]*Permissions `json:"services"`
+	Services map[string]*types.Permissions `json:"services"`
 }
 
 // loadPermissionsOverlay reads the overlay file. A missing file yields an
@@ -26,7 +28,7 @@ type permissionsOverlayFile struct {
 func loadPermissionsOverlay(path string) (*permissionsOverlayFile, error) {
 	ov := &permissionsOverlayFile{
 		Version:  permissionsFileVersion,
-		Services: map[string]*Permissions{},
+		Services: map[string]*types.Permissions{},
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -39,13 +41,13 @@ func loadPermissionsOverlay(path string) (*permissionsOverlayFile, error) {
 		return nil, fmt.Errorf("parsing permissions overlay: %w", err)
 	}
 	if ov.Services == nil {
-		ov.Services = map[string]*Permissions{}
+		ov.Services = map[string]*types.Permissions{}
 	}
 	for id, p := range ov.Services {
 		if p == nil {
 			continue
 		}
-		if err := ValidatePermissions(*p); err != nil {
+		if err := types.ValidatePermissions(*p); err != nil {
 			return nil, fmt.Errorf("permissions overlay service %q: %w", id, err)
 		}
 	}
@@ -62,7 +64,7 @@ func savePermissionsOverlay(path string, ov *permissionsOverlayFile) error {
 		Services: ov.Services,
 	}
 	if out.Services == nil {
-		out.Services = map[string]*Permissions{}
+		out.Services = map[string]*types.Permissions{}
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -108,7 +110,7 @@ func (c *Config) applyPermissionsOverlayLocked() error {
 			c.Services[i].Permissions = nil
 			continue
 		}
-		c.Services[i].Permissions = Permissions(p.Clone())
+		c.Services[i].Permissions = types.Permissions(p.Clone())
 	}
 	return nil
 }
@@ -117,14 +119,14 @@ func (c *Config) applyPermissionsOverlayLocked() error {
 // service and persists the overlay file. Empty/nil p is stored as explicit
 // clear (JSON null) so bootstrap permissions do not resurface on reload.
 // Caller must hold c.mu.
-func (c *Config) setPermissionsOverlayEntryLocked(id string, p Permissions) error {
+func (c *Config) setPermissionsOverlayEntryLocked(id string, p types.Permissions) error {
 	if c.permsOverlay == nil {
-		c.permsOverlay = map[string]*Permissions{}
+		c.permsOverlay = map[string]*types.Permissions{}
 	}
 	if len(p) == 0 {
 		c.permsOverlay[id] = nil
 	} else {
-		cloned := Permissions(p.Clone())
+		cloned := types.Permissions(p.Clone())
 		c.permsOverlay[id] = &cloned
 	}
 	return savePermissionsOverlay(c.permsPath, &permissionsOverlayFile{

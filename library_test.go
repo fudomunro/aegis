@@ -9,19 +9,23 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakePlaylistProvider struct {
-	playlists []Playlist
+	playlists []types.Playlist
 	err       error
 }
 
-func (f *fakePlaylistProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakePlaylistProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakePlaylistProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakePlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakePlaylistProvider) ListUserPlaylists(context.Context) ([]Playlist, bool, error) {
+func (f *fakePlaylistProvider) ListUserPlaylists(context.Context) ([]types.Playlist, bool, error) {
 	return f.playlists, false, f.err
 }
 
@@ -35,20 +39,20 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
-			playlists: []Playlist{
+			playlists: []types.Playlist{
 				{
 					Name:       "Jazz Vibes",
 					TrackCount: 10,
-					Sources:    []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+					Sources:    []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
 				},
 			},
 		},
 		"youtube-music": &fakePlaylistProvider{
-			playlists: []Playlist{
+			playlists: []types.Playlist{
 				{
 					Name:       "Focus Mix",
 					TrackCount: 25,
-					Sources:    []PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt1"}},
+					Sources:    []types.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt1"}},
 				},
 			},
 		},
@@ -63,7 +67,7 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 
-	var resp PlaylistList
+	var resp types.PlaylistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -73,10 +77,10 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 	if len(resp.Playlists) != 2 {
 		t.Fatalf("got %d playlists, want 2", len(resp.Playlists))
 	}
-	if resp.ByService["spotify"].Status != LibraryStatusOK || resp.ByService["spotify"].Count != 1 {
+	if resp.ByService["spotify"].Status != types.LibraryStatusOK || resp.ByService["spotify"].Count != 1 {
 		t.Fatalf("spotify status = %+v", resp.ByService["spotify"])
 	}
-	if resp.ByService["youtube-music"].Status != LibraryStatusOK || resp.ByService["youtube-music"].Count != 1 {
+	if resp.ByService["youtube-music"].Status != types.LibraryStatusOK || resp.ByService["youtube-music"].Count != 1 {
 		t.Fatalf("youtube-music status = %+v", resp.ByService["youtube-music"])
 	}
 	// Synced merge sorts by name.
@@ -98,14 +102,14 @@ func TestHandleLibraryPlaylists_UnauthorizedService(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
-			playlists: []Playlist{
+			playlists: []types.Playlist{
 				{
 					Name:    "Jazz",
-					Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+					Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
 				},
 			},
 		},
-		"youtube-music": &fakePlaylistProvider{err: ErrUnauthorized},
+		"youtube-music": &fakePlaylistProvider{err: types.ErrUnauthorized},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
@@ -117,14 +121,14 @@ func TestHandleLibraryPlaylists_UnauthorizedService(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 
-	var resp PlaylistList
+	var resp types.PlaylistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if resp.Total != 1 {
 		t.Fatalf("total = %d, want 1", resp.Total)
 	}
-	if resp.ByService["youtube-music"].Status != LibraryStatusUnauthorized {
+	if resp.ByService["youtube-music"].Status != types.LibraryStatusUnauthorized {
 		t.Fatalf("youtube-music status = %+v", resp.ByService["youtube-music"])
 	}
 	if !strings.Contains(resp.ByService["youtube-music"].Error, "/v1/auth/youtube-music/login") {
@@ -152,11 +156,11 @@ func TestHandleLibraryPlaylists_ErrorService(t *testing.T) {
 		t.Fatalf("status = %d", w.Code)
 	}
 
-	var resp PlaylistList
+	var resp types.PlaylistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["spotify"].Status != LibraryStatusError {
+	if resp.ByService["spotify"].Status != types.LibraryStatusError {
 		t.Fatalf("spotify status = %+v", resp.ByService["spotify"])
 	}
 	if resp.Playlists == nil || len(resp.Playlists) != 0 {
@@ -289,8 +293,8 @@ func TestSpotifyConnector_ListUserPlaylists_Unauthorized(t *testing.T) {
 	conn := NewSpotifyConnector(srv)
 
 	_, _, err := conn.ListUserPlaylists(context.Background())
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if !errors.Is(err, types.ErrUnauthorized) {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -299,14 +303,14 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: Permissions{"playlists": AccessNone},
+				Permissions: types.Permissions{"playlists": types.AccessNone},
 			},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
-			playlists: []Playlist{{Name: "Jazz", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
+			playlists: []types.Playlist{{Name: "Jazz", Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
 		},
 	}
 
@@ -329,17 +333,17 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 			{
 				ID: "youtube-music", Name: "YouTube Music", Action: "inject",
-				Permissions: Permissions{"playlists": AccessNone},
+				Permissions: types.Permissions{"playlists": types.AccessNone},
 			},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakePlaylistProvider{
-			playlists: []Playlist{{Name: "Jazz", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
+			playlists: []types.Playlist{{Name: "Jazz", Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
 		},
 		"youtube-music": &fakePlaylistProvider{
-			playlists: []Playlist{{Name: "Focus", Sources: []PlaylistSource{{Service: "youtube-music", ID: "yt1"}}}},
+			playlists: []types.Playlist{{Name: "Focus", Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}}},
 		},
 	}
 
@@ -351,7 +355,7 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	var resp PlaylistList
+	var resp types.PlaylistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -361,16 +365,18 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 }
 
 type fakeLikedTrackProvider struct {
-	tracks []Track
+	tracks []types.Track
 	err    error
 }
 
-func (f *fakeLikedTrackProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeLikedTrackProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakeLikedTrackProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeLikedTrackProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeLikedTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeLikedTrackProvider) ListUserLikedTracks(context.Context) ([]Track, bool, error) {
+func (f *fakeLikedTrackProvider) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
 	return f.tracks, false, f.err
 }
 
@@ -384,30 +390,30 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{
-			tracks: []Track{
+			tracks: []types.Track{
 				{
 					Name:    "Blinding Lights",
-					Artists: []Artist{newArtist("spotify", "Spotify", "", "The Weeknd")},
-					Sources: []TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-bl"}},
+					Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "The Weeknd")},
+					Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-bl"}},
 				},
 				{
 					Name:    "Solo Spotify Song",
-					Artists: []Artist{newArtist("spotify", "Spotify", "", "Artist A")},
-					Sources: []TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-solo"}},
+					Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "Artist A")},
+					Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-solo"}},
 				},
 			},
 		},
 		"youtube-music": &fakeLikedTrackProvider{
-			tracks: []Track{
+			tracks: []types.Track{
 				{
 					Name:    "Blinding Lights",
-					Artists: []Artist{newArtist("youtube-music", "YouTube Music", "", "The Weeknd")},
-					Sources: []TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-bl"}},
+					Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", "The Weeknd")},
+					Sources: []types.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-bl"}},
 				},
 				{
 					Name:    "YouTube Only Hit",
-					Artists: []Artist{newArtist("youtube-music", "YouTube Music", "", "Artist B")},
-					Sources: []TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-only"}},
+					Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", "Artist B")},
+					Sources: []types.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-only"}},
 				},
 			},
 		},
@@ -422,7 +428,7 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 
-	var resp TrackList
+	var resp types.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -434,7 +440,7 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 		t.Fatal("expected synced=true")
 	}
 
-	var blinding *Track
+	var blinding *types.Track
 	for i := range resp.Tracks {
 		if resp.Tracks[i].Name == "Blinding Lights" {
 			blinding = &resp.Tracks[i]
@@ -450,10 +456,10 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 	if blinding.Sources[0].Service != "spotify" || blinding.Sources[1].Service != "youtube-music" {
 		t.Fatalf("source order = %+v", blinding.Sources)
 	}
-	if resp.ByService["spotify"].Status != LibraryStatusOK || resp.ByService["spotify"].Count != 2 {
+	if resp.ByService["spotify"].Status != types.LibraryStatusOK || resp.ByService["spotify"].Count != 2 {
 		t.Fatalf("spotify status = %+v", resp.ByService["spotify"])
 	}
-	if resp.ByService["youtube-music"].Status != LibraryStatusOK || resp.ByService["youtube-music"].Count != 2 {
+	if resp.ByService["youtube-music"].Status != types.LibraryStatusOK || resp.ByService["youtube-music"].Count != 2 {
 		t.Fatalf("youtube-music status = %+v", resp.ByService["youtube-music"])
 	}
 }
@@ -468,11 +474,11 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{
-			tracks: []Track{
-				{Name: "Solo", Sources: []TrackSource{{Service: "spotify", ID: "sp1"}}},
+			tracks: []types.Track{
+				{Name: "Solo", Sources: []types.TrackSource{{Service: "spotify", ID: "sp1"}}},
 			},
 		},
-		"youtube-music": &fakeLikedTrackProvider{err: ErrUnauthorized},
+		"youtube-music": &fakeLikedTrackProvider{err: types.ErrUnauthorized},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
@@ -483,14 +489,14 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var resp TrackList
+	var resp types.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	if resp.Total != 1 {
 		t.Fatalf("total = %d, want 1", resp.Total)
 	}
-	if resp.ByService["youtube-music"].Status != LibraryStatusUnauthorized {
+	if resp.ByService["youtube-music"].Status != types.LibraryStatusUnauthorized {
 		t.Fatalf("youtube-music status = %+v", resp.ByService["youtube-music"])
 	}
 }
@@ -500,14 +506,14 @@ func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: Permissions{"tracks": AccessNone},
+				Permissions: types.Permissions{"tracks": types.AccessNone},
 			},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{
-			tracks: []Track{{Name: "Solo", Sources: []TrackSource{{Service: "spotify", ID: "sp1"}}}},
+			tracks: []types.Track{{Name: "Solo", Sources: []types.TrackSource{{Service: "spotify", ID: "sp1"}}}},
 		},
 	}
 
@@ -758,16 +764,16 @@ func TestIsMusicShapedYouTubeVideo(t *testing.T) {
 }
 
 func TestMergeTracksSync_DifferentArtistsDoNotMerge(t *testing.T) {
-	merged := MergeTracksSync([]Track{
+	merged := types.MergeTracksSync([]types.Track{
 		{
 			Name:    "Home",
-			Artists: []Artist{newArtist("spotify", "Spotify", "", "Artist A")},
-			Sources: []TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "1"}},
+			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "Artist A")},
+			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "1"}},
 		},
 		{
 			Name:    "Home",
-			Artists: []Artist{newArtist("youtube-music", "YouTube Music", "", "Artist B")},
-			Sources: []TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "2"}},
+			Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", "Artist B")},
+			Sources: []types.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "2"}},
 		},
 	})
 	if len(merged) != 2 {
@@ -776,30 +782,34 @@ func TestMergeTracksSync_DifferentArtistsDoNotMerge(t *testing.T) {
 }
 
 type fakeAlbumProvider struct {
-	albums []Album
+	albums []types.Album
 	err    error
 }
 
-func (f *fakeAlbumProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeAlbumProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakeAlbumProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeAlbumProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeAlbumProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeAlbumProvider) ListUserSavedAlbums(context.Context) ([]Album, bool, error) {
+func (f *fakeAlbumProvider) ListUserSavedAlbums(context.Context) ([]types.Album, bool, error) {
 	return f.albums, false, f.err
 }
 
 type fakeArtistProvider struct {
-	artists []Artist
+	artists []types.Artist
 	err     error
 }
 
-func (f *fakeArtistProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeArtistProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakeArtistProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeArtistProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeArtistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeArtistProvider) ListUserFollowedArtists(context.Context) ([]Artist, bool, error) {
+func (f *fakeArtistProvider) ListUserFollowedArtists(context.Context) ([]types.Artist, bool, error) {
 	return f.artists, false, f.err
 }
 
@@ -812,11 +822,11 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeAlbumProvider{
-			albums: []Album{
+			albums: []types.Album{
 				{
 					Name:    "After Hours",
-					Artists: []Artist{newArtist("spotify", "Spotify", "", "The Weeknd")},
-					Sources: []AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al1"}},
+					Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "The Weeknd")},
+					Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al1"}},
 				},
 			},
 		},
@@ -830,7 +840,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	var resp AlbumList
+	var resp types.AlbumList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -845,12 +855,12 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{"albums": AccessNone}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{"albums": types.AccessNone}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"spotify": &fakeAlbumProvider{albums: []Album{{Name: "X", Sources: []AlbumSource{{Service: "spotify", ID: "1"}}}}},
+		"spotify": &fakeAlbumProvider{albums: []types.Album{{Name: "X", Sources: []types.AlbumSource{{Service: "spotify", ID: "1"}}}}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
@@ -872,14 +882,14 @@ func TestHandleLibraryArtists_AggregatesAndMerges(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"spotify": &fakeArtistProvider{
-			artists: []Artist{
-				newArtist("spotify", "Spotify", "sp1", "The Weeknd"),
+			artists: []types.Artist{
+				types.NewArtist("spotify", "Spotify", "sp1", "The Weeknd"),
 			},
 		},
 		"youtube-music": &fakeArtistProvider{
-			artists: []Artist{
-				newArtist("youtube-music", "YouTube Music", "ch1", "The Weeknd"),
-				newArtist("youtube-music", "YouTube Music", "ch2", "Dua Lipa"),
+			artists: []types.Artist{
+				types.NewArtist("youtube-music", "YouTube Music", "ch1", "The Weeknd"),
+				types.NewArtist("youtube-music", "YouTube Music", "ch2", "Dua Lipa"),
 			},
 		},
 	}
@@ -892,7 +902,7 @@ func TestHandleLibraryArtists_AggregatesAndMerges(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	var resp ArtistList
+	var resp types.ArtistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -900,7 +910,7 @@ func TestHandleLibraryArtists_AggregatesAndMerges(t *testing.T) {
 	if resp.Total != 2 {
 		t.Fatalf("total = %d, want 2; artists=%+v", resp.Total, resp.Artists)
 	}
-	var weeknd *Artist
+	var weeknd *types.Artist
 	for i := range resp.Artists {
 		if resp.Artists[i].Name == "The Weeknd" {
 			weeknd = &resp.Artists[i]

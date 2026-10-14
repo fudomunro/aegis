@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Flow topology node kinds.
@@ -331,11 +333,11 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		connector, hasConnector := s.connectors[svc.ID]
 		if hasConnector {
 			caps := connector.Capabilities()
-			types := make([]string, 0, len(caps.DataTypes))
+			dataTypes := make([]string, 0, len(caps.DataTypes))
 			for _, dt := range caps.DataTypes {
-				types = append(types, dt.Name)
+				dataTypes = append(dataTypes, dt.Name)
 			}
-			node.DataTypes = types
+			node.DataTypes = dataTypes
 
 			for _, kind := range libraryKinds {
 				if flowProvidesKind(connector, kind.ID) {
@@ -345,7 +347,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 					}
 				}
 			}
-			if _, ok := connector.(PhotoProvider); ok {
+			if _, ok := connector.(types.PhotoProvider); ok {
 				node.Notes = append(node.Notes, "Photo bytes stay on this service (canonical)")
 			}
 		}
@@ -675,31 +677,31 @@ func staticCredentialLabel(svc Service) string {
 func flowProvidesKind(connector ServiceConnector, kindID string) bool {
 	switch kindID {
 	case "playlists":
-		_, ok := connector.(PlaylistProvider)
+		_, ok := connector.(types.PlaylistProvider)
 		return ok
 	case "tracks":
-		_, ok := connector.(LikedTrackProvider)
+		_, ok := connector.(types.LikedTrackProvider)
 		return ok
 	case "albums":
-		_, ok := connector.(AlbumProvider)
+		_, ok := connector.(types.AlbumProvider)
 		return ok
 	case "artists":
-		_, ok := connector.(ArtistProvider)
+		_, ok := connector.(types.ArtistProvider)
 		return ok
 	case "contacts":
-		_, ok := connector.(ContactProvider)
+		_, ok := connector.(types.ContactProvider)
 		return ok
 	case "photos":
-		_, ok := connector.(PhotoProvider)
+		_, ok := connector.(types.PhotoProvider)
 		return ok
 	case "events":
-		_, ok := connector.(CalendarEventProvider)
+		_, ok := connector.(types.CalendarEventProvider)
 		return ok
 	case "messages":
-		_, ok := connector.(MessageProvider)
+		_, ok := connector.(types.MessageProvider)
 		return ok
 	case "transactions":
-		_, ok := connector.(TransactionProvider)
+		_, ok := connector.(types.TransactionProvider)
 		return ok
 	default:
 		return false
