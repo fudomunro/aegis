@@ -21,7 +21,7 @@ func writeSchemaFile(t *testing.T, dir, name, content string) {
 
 func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	dir := filepath.Join("..", "..", "examples", "user-types")
-	reg, loaded := LoadUserDefinedTypes(dir, nil)
+	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) == 0 {
 		t.Fatal("expected the reading-list example pack to load")
 	}
@@ -87,7 +87,7 @@ func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
 		"sources": [{"id": "s", "kind": "file_json", "path": "plants.json", "field_map": {"name": "name"}}]
 	}`)
 	types.UnmarkOptInDataType("garden-plants")
-	reg, loaded := LoadUserDefinedTypes(dir, nil)
+	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded %d schemas, want 1: %+v", len(loaded), loaded)
 	}
@@ -238,7 +238,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	types.UnmarkOptInDataType("reading-list")
 	t.Cleanup(func() { types.UnmarkOptInDataType("reading-list") })
 
-	reg, loaded := LoadUserDefinedTypes(dir, nil)
+	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
 	}
@@ -296,7 +296,7 @@ func TestServer_UDTDeniedWhenNotEnabled(t *testing.T) {
 	types.UnmarkOptInDataType("secret-log")
 	t.Cleanup(func() { types.UnmarkOptInDataType("secret-log") })
 
-	reg, _ := LoadUserDefinedTypes(dir, nil)
+	reg, _ := LoadUserDefinedTypes(dir, "", nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
 	srv.registerUserDefinedKinds()
