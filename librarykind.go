@@ -1,8 +1,6 @@
 package main
 
 import (
-	"github.com/fudomunro/aegis/internal/types"
-
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,18 +11,21 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
-// LibraryKind is the type-layer kind metadata (issue #15). Core attaches
-// runtime visibility predicates in kindRuntime, not on this data struct.
-
-// kindRuntime holds core-owned visibility predicates per kind ID. When the
-// types package split completes these stay here — not on the data struct.
+// kindRuntimeEntry is core-owned visibility wiring for one library kind.
+// Predicates stay here — not on types.LibraryKind (issue #15).
 type kindRuntimeEntry struct {
+	// HasProviders reports whether any connector can feed this kind.
 	HasProviders func(s *Server) bool
-	Readable     func(s *Server) bool
+	// Readable reports whether any non-blocked service allows reads.
+	Readable func(s *Server) bool
 }
 
+// kindRuntime maps kind ID → visibility predicates. Keep keys in sync with
+// libraryKinds (TestLibraryKinds_KindRuntimeInSync).
 var kindRuntime = map[string]kindRuntimeEntry{
 	"playlists": {
 		HasProviders: func(s *Server) bool { return s.hasProvider[types.PlaylistProvider]() },

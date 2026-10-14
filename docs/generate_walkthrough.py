@@ -30,14 +30,20 @@ FILE_ROLES = {
     "tokens.go": "AES-256-GCM token store (PBKDF2), keyed by connection ID",
     "statestore.go": "CSRF OAuth state TTL map",
     "connections.go": "Connection ↔ service surface resolution helpers",
-    "permissions.go": "Access levels, path classification, enforcement",
+    "host.go": "Connector Host seam (tokens, upstream base, cache) — issue #15",
+    "permissions.go": "Server-side permission clamp + per-request checks",
     "proxy.go": "Generic service proxy + connector delegation + cache",
     "connector_proxy.go": "Shared OAuth connector pipeline (token→cache→upstream→transform)",
     "httpclient.go": "Shared outbound HTTP client + configured upstream base",
-    "library.go": "Provider interfaces + thin per-kind library handlers",
-    "librarykind.go": "LibraryKind registry + generic parallel aggregate pipeline",
-    "models.go": "Neutral Playlist / Track / Artist / Album / Contact / Photo",
-    "match.go": "Cross-service identity keys and merge algorithms",
+    "library.go": "Thin per-kind library handlers + aggregate wiring",
+    "librarykind.go": "Library kind registry + kindRuntime predicates + aggregate pipeline",
+    "internal/types/models.go": "Neutral Playlist / Track / Artist / Album / Contact / Photo",
+    "internal/types/merge.go": "Cross-service identity keys and merge algorithms",
+    "internal/types/kind.go": "LibraryKind data (instructions, keywords, cache key)",
+    "internal/types/policy.go": "Access levels, Permissions map, TypePolicy (#148)",
+    "internal/types/pathclass.go": "Proxy path → data-type classification table",
+    "internal/types/capabilities.go": "ServiceCapabilities / Operation shapes + filtering",
+    "internal/types/providers.go": "Provider interfaces + ErrUnauthorized + service-name helpers",
     "musicbrainz.go": "Optional durable IDs (MBID) for artists/tracks/albums",
     "entity_links.go": "User-confirmed cross-service entity links",
     "entity_links_handlers.go": "Admin/API handlers for links and merge review",
@@ -45,7 +51,7 @@ FILE_ROLES = {
     "mirror.go": "Playlist / liked-tracks backup copy orchestration",
     "mirror_spotify.go": "Spotify side of mirror reads/writes",
     "mirror_youtube.go": "YouTube Music side of mirror reads/writes",
-    "contacts.go": "Contact identity, union-find merge, ContactProvider",
+    "contacts.go": "Contact identity + thin library handler",
     "photos.go": "Photo identity/merge; bytes stay on the source service",
     "metrics.go": "In-memory access ring buffer for the admin map",
     "flow.go": "Admin data-flow topology + recent access stats",
@@ -68,13 +74,19 @@ READING_ORDER = [
     "handler.go",
     "config.go",
     "identity.go",
+    "host.go",
+    "internal/types/models.go",
+    "internal/types/merge.go",
+    "internal/types/kind.go",
+    "internal/types/policy.go",
+    "internal/types/pathclass.go",
+    "internal/types/capabilities.go",
+    "internal/types/providers.go",
     "permissions.go",
     "proxy.go",
     "connector_proxy.go",
     "library.go",
     "librarykind.go",
-    "models.go",
-    "match.go",
     "musicbrainz.go",
     "entity_links.go",
     "entity_links_handlers.go",
@@ -126,6 +138,7 @@ def go_module() -> str:
 
 def go_sources() -> list[Path]:
     files = sorted(REPO.glob("*.go"))
+    files.extend(sorted((REPO / "internal").rglob("*.go")))
     return [p for p in files if not p.name.endswith("_test.go")]
 
 
@@ -167,8 +180,8 @@ def extract_library_kinds() -> list[str]:
 def file_map_rows() -> str:
     entries: list[tuple[str, int, str]] = []
     for path in go_sources():
-        name = path.name
-        entries.append((name, loc_of(path), FILE_ROLES.get(name, "Supporting code")))
+        name = path.relative_to(REPO).as_posix()
+        entries.append((name, loc_of(path), FILE_ROLES.get(name, FILE_ROLES.get(path.name, "Supporting code"))))
 
     admin_html = REPO / "web" / "admin.html"
     if admin_html.exists():

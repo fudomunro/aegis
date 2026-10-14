@@ -35,11 +35,6 @@ type LibraryKind struct {
 
 // Mentions reports whether the user message looks like a question about this
 // dataset without naming a service.
-// Instructions builds the system-message hint for this library endpoint.
-// CacheKey is the in-memory cache key for the aggregate response.
-
-// Mentions reports whether the user message looks like a question about this
-// dataset without naming a service.
 func (k LibraryKind) Mentions(msg string) bool {
 	lower := strings.ToLower(msg)
 	for _, keyword := range k.Keywords {

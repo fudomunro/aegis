@@ -41,7 +41,7 @@ func NormalizeIdentityKey(name string) string {
 	return strings.Join(out, " ")
 }
 
-// newArtist builds a unified artist from one service spelling.
+// NewArtist builds a unified artist from one service spelling.
 func NewArtist(service, serviceName, id, name string) Artist {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -58,7 +58,7 @@ func NewArtist(service, serviceName, id, name string) Artist {
 	}
 }
 
-// newAlbum builds a unified album from one service spelling.
+// NewAlbum builds a unified album from one service spelling.
 func NewAlbum(service, serviceName, id, name string) *Album {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -117,7 +117,7 @@ func (p Playlist) PrimaryService() string {
 	return p.Sources[0].Service
 }
 
-// primaryPlaylistSource is a convenience when a single-service transform has
+// PrimaryPlaylistSource is a convenience when a single-service transform has
 // exactly one location.
 func PrimaryPlaylistSource(service, serviceName, id, url string, extra map[string]any) PlaylistSource {
 	if len(extra) == 0 {
@@ -256,7 +256,7 @@ func TrackEntityID(t Track) string {
 // and still be treated as the same recording.
 const durationMsTolerance = 5000
 
-// durationCompatible reports whether two tracks may be the same recording
+// DurationCompatible reports whether two tracks may be the same recording
 // based on duration. Zero means unknown and does not block a merge.
 func DurationCompatible(a, b Track) bool {
 	if a.DurationMs <= 0 || b.DurationMs <= 0 {
@@ -274,7 +274,7 @@ func DurationCompatible(a, b Track) bool {
 var youtubeTitleNoise = regexp.MustCompile(
 	`(?i)\s*[\(\[]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|lyric\s*video?|lyrics?|visuali[sz]er|hd|hq|4k|live|explicit|clean|remaster(?:ed)?)(?:\s+[^)\]]*)?[\)\]]\s*$`)
 
-// cleanYouTubeTitle strips stacked trailing noise tags from a video title.
+// CleanYouTubeTitle strips stacked trailing noise tags from a video title.
 // The cleaned string is used as the neutral Track.Name; the original is
 // preserved in source extra as original_title when they differ.
 func CleanYouTubeTitle(name string) string {
