@@ -327,10 +327,10 @@ func main() {
 	srv.connectors[googleGmailServiceID] = gGmailConn
 	// Financial transactions (issue #141): YNAB live API + local Quicken import.
 	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
-	srv.connectors[quickenServiceID] = NewQuickenConnector(srv)
+	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, quickenStore)
 	// Location history (issue #142): OwnTracks live + local Google Timeline import.
 	srv.connectors[ownTracksServiceID] = NewOwnTracksConnector(srv)
-	srv.connectors[timelineServiceID] = NewTimelineConnector(srv, timelineStore)
+	srv.connectors[timelineServiceID] = NewTimelineConnector(timelineStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.

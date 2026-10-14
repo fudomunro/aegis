@@ -129,7 +129,7 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
-	srv.connectors[quickenServiceID] = NewQuickenConnector(srv)
+	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, srv.quicken)
 	// Quicken is file-based: even if present in config, keep it off the list.
 	cfg.Services = append(cfg.Services, Service{ID: quickenServiceID, Name: "Quicken", Action: "inject"})
 
@@ -171,7 +171,7 @@ func TestYNABCapabilities_OnlyTransactions(t *testing.T) {
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	qcaps := NewQuickenConnector(&Server{}).Capabilities()
+	qcaps := NewQuickenConnector(&Server{}, nil).Capabilities()
 	if len(qcaps.DataTypes) != 1 || qcaps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("quicken caps = %+v", qcaps)
 	}

@@ -45,7 +45,7 @@ func TestPlacesAccessLevels(t *testing.T) {
 
 func TestNormalizePlaceVisitTime_Variants(t *testing.T) {
 	cases := map[string]string{
-		"":                    "",
+		"":                     "",
 		"2023-01-15T10:00:00Z": "2023-01-15T10:00:00Z",
 		"2023-01-15":           "2023-01-15T00:00:00Z",
 		"1673776800":           "2023-01-15T10:00:00Z", // unix seconds
@@ -244,7 +244,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 }
 
 func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
-	conn := NewTimelineConnector(nil, nil)
+	conn := NewTimelineConnector(nil)
 	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}

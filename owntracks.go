@@ -50,37 +50,37 @@ type ownTracksLocationsResponse struct {
 
 // ownTracksVisit is a Recorder /api/v0/visit row when available.
 type ownTracksVisit struct {
-	Type     string  `json:"_type"`
-	Lat      float64 `json:"lat"`
-	Lon      float64 `json:"lon"`
-	Tst      int64   `json:"tst"`
-	TstEnd   int64   `json:"tst_end"`
-	Name     string  `json:"name"`
-	Addr     string  `json:"addr"`
-	ID       string  `json:"id"`
-	Vac      float64 `json:"vac"` // vertical accuracy / confidence proxy
+	Type   string  `json:"_type"`
+	Lat    float64 `json:"lat"`
+	Lon    float64 `json:"lon"`
+	Tst    int64   `json:"tst"`
+	TstEnd int64   `json:"tst_end"`
+	Name   string  `json:"name"`
+	Addr   string  `json:"addr"`
+	ID     string  `json:"id"`
+	Vac    float64 `json:"vac"` // vertical accuracy / confidence proxy
 }
 
 type ownTracksVisitsResponse struct {
-	Type string            `json:"_type"`
-	Data []ownTracksVisit  `json:"data"`
+	Type string           `json:"_type"`
+	Data []ownTracksVisit `json:"data"`
 }
 
 // OwnTracksConnector talks to an OwnTracks Recorder REST API.
 type OwnTracksConnector struct {
-	srv *Server
+	host Host
 }
 
 // NewOwnTracksConnector builds the live connector.
-func NewOwnTracksConnector(srv *Server) *OwnTracksConnector {
-	return &OwnTracksConnector{srv: srv}
+func NewOwnTracksConnector(host Host) *OwnTracksConnector {
+	return &OwnTracksConnector{host: host}
 }
 
 func (c *OwnTracksConnector) ownTracksUpstreamBase() string {
-	if c.srv == nil || c.srv.config == nil {
+	if c.host == nil {
 		return ""
 	}
-	svc := c.srv.config.GetService(ownTracksServiceID)
+	svc := c.host.ServiceConfig(ownTracksServiceID)
 	if svc == nil {
 		return ""
 	}
@@ -150,7 +150,7 @@ func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 	}
 	cacheKey := ownTracksServiceID + ":" + r.URL.RequestURI()
 	if r.Method == http.MethodGet {
-		if cached, ok := c.srv.cache.Get(cacheKey); ok {
+		if cached, ok := c.host.CacheGet(cacheKey); ok {
 			logger.Debug("cache hit")
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Aegis-Cache", "hit")
@@ -170,7 +170,7 @@ func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 		return
 	}
 	if r.Method == http.MethodGet && status == http.StatusOK {
-		c.srv.cache.Set(cacheKey, string(data), 60*time.Second)
+		c.host.CacheSet(cacheKey, string(data), 60*time.Second)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -180,10 +180,10 @@ func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 // ownTracksToken resolves static config headers (Authorization / X-API-Key)
 // or an OAuth token. Self-hosted Recorder typically uses a static token.
 func (c *OwnTracksConnector) ownTracksToken(logger *slog.Logger) string {
-	if c.srv == nil || c.srv.config == nil {
+	if c.host == nil {
 		return ""
 	}
-	if svc := c.srv.config.GetService(ownTracksServiceID); svc != nil {
+	if svc := c.host.ServiceConfig(ownTracksServiceID); svc != nil {
 		for k, v := range svc.Headers {
 			if strings.EqualFold(k, "Authorization") && strings.TrimSpace(v) != "" {
 				v = strings.TrimSpace(v)
@@ -197,7 +197,7 @@ func (c *OwnTracksConnector) ownTracksToken(logger *slog.Logger) string {
 			}
 		}
 	}
-	return c.srv.getValidToken(ownTracksServiceID, logger)
+	return c.host.GetValidToken(ownTracksServiceID, logger)
 }
 
 func (c *OwnTracksConnector) ListUserPlaceVisits(ctx context.Context) (visits []PlaceVisit, truncated bool, err error) {

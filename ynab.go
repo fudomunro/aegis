@@ -19,12 +19,12 @@ import (
 // YNAB milliunits and are emitted as signed decimal strings — never floats.
 // Read-only: no budget mutations are advertised.
 type YNABConnector struct {
-	server *Server
+	host Host
 }
 
-// NewYNABConnector creates a connector wired to the given server.
-func NewYNABConnector(srv *Server) *YNABConnector {
-	return &YNABConnector{server: srv}
+// NewYNABConnector creates a connector wired to the given Host (issue #15 seam).
+func NewYNABConnector(host Host) *YNABConnector {
+	return &YNABConnector{host: host}
 }
 
 const (
@@ -40,7 +40,7 @@ const (
 
 // ynabUpstreamBase returns the configured YNAB API base.
 func (c *YNABConnector) ynabUpstreamBase() string {
-	return c.server.upstreamBaseFor(ynabServiceID, "https://api.ynab.com/v1")
+	return c.host.UpstreamBaseFor(ynabServiceID, "https://api.ynab.com/v1")
 }
 
 // Capabilities returns YNAB transaction operations reachable through the proxy.
@@ -121,7 +121,7 @@ func (c *YNABConnector) HandleProxy(w http.ResponseWriter, r *http.Request, rema
 	}
 	cacheKey := ynabServiceID + ":" + r.URL.RequestURI()
 	if r.Method == http.MethodGet {
-		if cached, ok := c.server.cache.Get(cacheKey); ok {
+		if cached, ok := c.host.CacheGet(cacheKey); ok {
 			logger.Debug("cache hit")
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Aegis-Cache", "hit")
@@ -164,7 +164,7 @@ func (c *YNABConnector) HandleProxy(w http.ResponseWriter, r *http.Request, rema
 				return
 			}
 			if status == http.StatusOK {
-				c.server.cache.Set(cacheKey, string(result), 60*time.Second)
+				c.host.CacheSet(cacheKey, string(result), 60*time.Second)
 			}
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(status)
@@ -173,7 +173,7 @@ func (c *YNABConnector) HandleProxy(w http.ResponseWriter, r *http.Request, rema
 		}
 	}
 	if r.Method == http.MethodGet && status == http.StatusOK {
-		c.server.cache.Set(cacheKey, string(data), 60*time.Second)
+		c.host.CacheSet(cacheKey, string(data), 60*time.Second)
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -182,7 +182,7 @@ func (c *YNABConnector) HandleProxy(w http.ResponseWriter, r *http.Request, rema
 
 // ynabToken resolves the Authorization token from static headers or OAuth.
 func (c *YNABConnector) ynabToken(logger *slog.Logger) string {
-	if svc := c.server.config.GetService(ynabServiceID); svc != nil {
+	if svc := c.host.ServiceConfig(ynabServiceID); svc != nil {
 		for k, v := range svc.Headers {
 			if strings.EqualFold(k, "Authorization") && strings.TrimSpace(v) != "" {
 				v = strings.TrimSpace(v)
@@ -196,7 +196,7 @@ func (c *YNABConnector) ynabToken(logger *slog.Logger) string {
 			}
 		}
 	}
-	return c.server.getValidToken(ynabServiceID, logger)
+	return c.host.GetValidToken(ynabServiceID, logger)
 }
 
 // ynabAPIGet performs a GET against the YNAB API and decodes into out.
@@ -235,8 +235,8 @@ func (c *YNABConnector) ynabAPIGet(ctx context.Context, logger *slog.Logger, pat
 
 // ynabBudget is the subset of a YNAB budget we need.
 type ynabBudget struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
 	CurrencyFormat *struct {
 		ISOCode string `json:"iso_code"`
 	} `json:"currency_format"`
@@ -250,10 +250,10 @@ type ynabAccount struct {
 	Type string `json:"type"`
 	// Last4 is not part of the public YNAB account shape; some imports carry
 	// it in note/memo fields. Left empty unless a provider field supplies it.
-	Last4     string `json:"-"`
-	Closed    bool   `json:"closed"`
-	OnBudget  bool   `json:"on_budget"`
-	Debt      bool   `json:"debt"`
+	Last4    string `json:"-"`
+	Closed   bool   `json:"closed"`
+	OnBudget bool   `json:"on_budget"`
+	Debt     bool   `json:"debt"`
 }
 
 // ynabTransaction is the subset of a YNAB transaction we map to neutral form.
@@ -332,8 +332,8 @@ type ynabAccountsResponse struct {
 
 type ynabTransactionsResponse struct {
 	Data struct {
-		Transactions []ynabTransaction `json:"transactions"`
-		ServerKnowledge int64          `json:"server_knowledge"`
+		Transactions    []ynabTransaction `json:"transactions"`
+		ServerKnowledge int64             `json:"server_knowledge"`
 	} `json:"data"`
 }
 
@@ -500,6 +500,6 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 
 // Ensure the connector implements the required interfaces at compile time.
 var (
-	_ ServiceConnector   = (*YNABConnector)(nil)
+	_ ServiceConnector    = (*YNABConnector)(nil)
 	_ TransactionProvider = (*YNABConnector)(nil)
 )

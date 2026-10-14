@@ -32,12 +32,12 @@ func TestNormalizeTransactionAmount(t *testing.T) {
 
 func TestFormatMilliunitsAmount(t *testing.T) {
 	cases := map[int64]string{
-		0:      "0.00",
-		45670:  "45.67",
-		-45670: "-45.67",
-		1000:   "1.00",
-		1:      "0.00",
-		15:     "0.02", // rounds half-up at mills
+		0:       "0.00",
+		45670:   "45.67",
+		-45670:  "-45.67",
+		1000:    "1.00",
+		1:       "0.00",
+		15:      "0.02", // rounds half-up at mills
 		1000000: "1000.00",
 	}
 	for in, want := range cases {
@@ -499,13 +499,13 @@ func TestYNABNeutralTransaction_Millunits(t *testing.T) {
 	c := &YNABConnector{}
 	payee := "Amazon"
 	tx := c.neutralTransactionCurrency("budget-1", []ynabAccount{{ID: "a1", Name: "Checking", Type: "checking"}}, ynabTransaction{
-		ID:         "t1",
-		Date:       "2024-03-05",
-		Amount:     -45670,
-		PayeeName:  &payee,
-		AccountID:  "a1",
-		Cleared:    "cleared",
-		ImportID:   strPtr("IMP-1"),
+		ID:        "t1",
+		Date:      "2024-03-05",
+		Amount:    -45670,
+		PayeeName: &payee,
+		AccountID: "a1",
+		Cleared:   "cleared",
+		ImportID:  strPtr("IMP-1"),
 	}, "USD")
 	if tx.Amount != "-45.67" {
 		t.Fatalf("amount = %q", tx.Amount)
@@ -542,8 +542,8 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"data": map[string]any{
 				"budgets": []map[string]any{{
-					"id":   "b1",
-					"name": "My Budget",
+					"id":              "b1",
+					"name":            "My Budget",
 					"currency_format": map[string]any{"iso_code": "USD"},
 				}},
 			},
@@ -561,26 +561,26 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 			"data": map[string]any{
 				"transactions": []map[string]any{
 					{
-						"id":          "t1",
-						"date":        "2024-03-05",
-						"amount":      -12345,
-						"payee_name":  "Coffee Shop",
-						"account_id":  "a1",
-						"account_name": "Checking",
-						"cleared":     "cleared",
-						"import_id":   "IMP-9",
-						"deleted":     false,
-					},
-					{
-						"id":           "t2",
-						"date":         "2024-03-12",
-						"amount":       -200000,
-						"payee_name":   "Costco",
+						"id":           "t1",
+						"date":         "2024-03-05",
+						"amount":       -12345,
+						"payee_name":   "Coffee Shop",
 						"account_id":   "a1",
 						"account_name": "Checking",
 						"cleared":      "cleared",
-						"category_name": "Split",
+						"import_id":    "IMP-9",
 						"deleted":      false,
+					},
+					{
+						"id":            "t2",
+						"date":          "2024-03-12",
+						"amount":        -200000,
+						"payee_name":    "Costco",
+						"account_id":    "a1",
+						"account_name":  "Checking",
+						"cleared":       "cleared",
+						"category_name": "Split",
+						"deleted":       false,
 						"subtransactions": []map[string]any{
 							{"id": "s1", "amount": -50000, "category_name": "Groceries"},
 							{"id": "s2", "amount": -150000, "category_name": "Household Goods"},
@@ -705,7 +705,7 @@ func TestQuickenConnector_ListUserTransactions(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.quicken = store
-	c := NewQuickenConnector(srv)
+	c := NewQuickenConnector(srv, store)
 	txs, _, err := c.ListUserTransactions(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -765,7 +765,7 @@ func TestYNABCapabilitiesAndInstructions(t *testing.T) {
 }
 
 func TestQuickenCapabilitiesAndInstructions(t *testing.T) {
-	c := NewQuickenConnector(&Server{})
+	c := NewQuickenConnector(&Server{}, nil)
 	caps := c.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
@@ -792,7 +792,7 @@ func TestQuickenHandleProxy(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.quicken = store
-	c := NewQuickenConnector(srv)
+	c := NewQuickenConnector(srv, store)
 
 	req := httptest.NewRequest("GET", "/v1/services/quicken/import/status", nil)
 	w := httptest.NewRecorder()
@@ -946,13 +946,13 @@ func TestYNABListUserTransactions_PrefersNewest(t *testing.T) {
 		// 50 old rows first (2025), then 5 recent (2026-10).
 		for i := 0; i < 50; i++ {
 			txs = append(txs, map[string]any{
-				"id": "old-" + string(rune('a'+i%26)) + strconv.Itoa(i),
+				"id":   "old-" + string(rune('a'+i%26)) + strconv.Itoa(i),
 				"date": "2025-11-01", "amount": -1000, "payee_name": "Old", "cleared": "cleared",
 			})
 		}
 		for i := 0; i < 5; i++ {
 			txs = append(txs, map[string]any{
-				"id": "new-" + strconv.Itoa(i),
+				"id":   "new-" + strconv.Itoa(i),
 				"date": "2026-10-12", "amount": -2000, "payee_name": "Recent", "cleared": "cleared",
 			})
 		}
