@@ -118,10 +118,12 @@ func applyUserTypesOverlay(schema types.UserDefinedTypeSchema, ov UDTKindOverlay
 			// Multi-file selection: first path is the primary Path; the rest
 			// are fetched as additional sources with the same mapping.
 			src.Path = expandUserPath(fs.Paths[0])
-			for _, extra := range fs.Paths[1:] {
+			for i, extra := range fs.Paths[1:] {
 				clone := *src
-				clone.ID = src.ID + "+" + filepath.Base(expandUserPath(extra))
+				// Unique source id (basename alone collides across folders).
+				clone.ID = fmt.Sprintf("%s#%d", src.ID, i+2)
 				clone.Path = expandUserPath(extra)
+				clone.Name = src.Name + " (" + filepath.Base(clone.Path) + ")"
 				out.Sources = append(out.Sources, clone)
 			}
 		}
@@ -162,7 +164,11 @@ func nameMatchFieldMap(fields map[string]types.UserDefinedField) map[string]stri
 	return out
 }
 
-// resolveUDTFilePaths expands and validates one or more local paths.
+// validateHTTPJSONHeaders is kept as a thin wrapper for admin-time checks.
+func validateHTTPJSONHeaders(headers map[string]string) error {
+	return types.ValidateHTTPJSONHeaders(headers)
+}
+
 func resolveUDTFilePaths(paths []string) (out []string, err error) {
 	for _, p := range paths {
 		p = expandUserPath(strings.TrimSpace(p))

@@ -28,6 +28,7 @@ type udtAdminKind struct {
 	ID          string                            `json:"id"`
 	Label       string                            `json:"label"`
 	Path        string                            `json:"path"`
+	LibraryURL  string                            `json:"library_url,omitempty"`
 	Default     string                            `json:"default_access,omitempty"`
 	Fields      map[string]types.UserDefinedField `json:"fields,omitempty"`
 	FileSources []udtAdminFileSource              `json:"file_sources,omitempty"`
@@ -163,10 +164,11 @@ func (s *Server) udtStatus() udtAdminStatus {
 		}
 		kind.ExtraFiles = append(kind.ExtraFiles, kindOV.ExtraFiles...)
 		kind.SourceCount += len(kindOV.ExtraFiles)
-		st.Kinds = append(st.Kinds, kind)
 		if kind.Path != "" {
-			st.LibraryURL = root + kind.Path
+			kind.LibraryURL = root + kind.Path
+			st.LibraryURL = kind.LibraryURL
 		}
+		st.Kinds = append(st.Kinds, kind)
 	}
 	sort.Slice(st.Kinds, func(i, j int) bool { return st.Kinds[i].ID < st.Kinds[j].ID })
 	if st.Enabled {
@@ -329,18 +331,30 @@ func (s *Server) handleUDTExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 }
 
 func (s *Server) loadOrInitKindOverlay(kindID string) (*UserTypesOverlay, UDTKindOverlay, error) {
-	ov, err := s.udtOverlay()
-	if err != nil {
-		return nil, UDTKindOverlay{}, err
+	ov := s.udts.Overlay()
+	// Copy so concurrent writers do not share maps until save.
+	cp := &UserTypesOverlay{Version: ov.Version, Kinds: map[string]UDTKindOverlay{}}
+	for k, v := range ov.Kinds {
+		cp.Kinds[k] = v
 	}
-	if ov.Kinds == nil {
-		ov.Kinds = map[string]UDTKindOverlay{}
-	}
-	kindOV := ov.Kinds[kindID]
+	kindOV := cp.Kinds[kindID]
 	if kindOV.FileSources == nil {
 		kindOV.FileSources = map[string]UDTFileSourceOverlay{}
 	}
-	return ov, kindOV, nil
+	return cp, kindOV, nil
+}
+
+// saveUDTOverlayLocked writes user_types.json and refreshes the cache.
+// Caller must hold s.udts.overlayMu.
+func (s *Server) saveUDTOverlayLocked(ov *UserTypesOverlay) error {
+	if s.udts == nil {
+		return fmt.Errorf("user-defined types not loaded")
+	}
+	if err := saveUserTypesOverlay(s.udtOverlayPath(), ov); err != nil {
+		return err
+	}
+	s.udts.SetOverlay(ov)
+	return nil
 }
 
 func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID string, req udtSourceUpdateRequest) {
@@ -353,6 +367,8 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 		writeJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
+	s.udts.overlayMu.Lock()
+	defer s.udts.overlayMu.Unlock()
 	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -380,7 +396,7 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 		delete(kindOV.FileSources, sourceID)
 	}
 	ov.Kinds[kindID] = kindOV
-	if err := saveUserTypesOverlay(s.udtOverlayPath(), ov); err != nil {
+	if err := s.saveUDTOverlayLocked(ov); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
@@ -399,6 +415,8 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		writeJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
+	s.udts.overlayMu.Lock()
+	defer s.udts.overlayMu.Unlock()
 	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
@@ -409,7 +427,8 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		id = strings.TrimSpace(req.Extra.ID)
 	}
 	if id == "" {
-		id = fmt.Sprintf("extra-%d", time.Now().UnixNano()%1_000_000)
+		// Unique across restarts without relying on a tiny clock modulus.
+		id = fmt.Sprintf("extra-%d-%d", time.Now().UnixNano(), os.Getpid())
 	}
 	if req.Clear || req.Extra == nil || strings.TrimSpace(req.Extra.Path) == "" {
 		kept := make([]UDTExtraFile, 0, len(kindOV.ExtraFiles))
@@ -444,7 +463,7 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		}
 	}
 	ov.Kinds[kindID] = kindOV
-	if err := saveUserTypesOverlay(s.udtOverlayPath(), ov); err != nil {
+	if err := s.saveUDTOverlayLocked(ov); err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}

@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -53,8 +54,9 @@ type UserDefinedTypeSchema struct {
 	Identity UserDefinedIdentity `json:"identity,omitempty"`
 	// Sources lists how to fetch items for this type.
 	Sources []UserDefinedSourceSpec `json:"sources,omitempty"`
-	// DefaultAccess is the TypePolicy default for this kind. Empty means
-	// "none" — UDTs are opt-in until the admin enables them (places pattern).
+	// DefaultAccess is informational only (admin UI display). UDTs are always
+	// opt-in — a pack cannot grant agent access (issue #15 review). Enable a
+	// kind via type policy / permissions admin, never via the schema file.
 	DefaultAccess string `json:"default_access,omitempty"`
 }
 
@@ -180,7 +182,61 @@ var userDefinedSchemaFormatVersions = map[string]bool{
 	"1": true,
 }
 
+// userDefinedIDPattern is the only legal schema id / path segment form.
+// Keeps ids out of mux-pattern space and readable as a URL segment.
+var userDefinedIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
+
+// ReservedLibraryPathIDs are /v1/library/{id} segments owned by built-in
+// routes that are not LibraryKind entries (links, review, …). A UDT id may
+// never claim these paths (issue #15 review: path collision / mux panic).
+var ReservedLibraryPathIDs = map[string]bool{
+	"links":    true,
+	"review":   true,
+	"copies":   true,
+	"mirror":   true,
+	"freebusy": true,
+}
+
+// ReservedDataTypeKeys are permission / path-classification keys owned by
+// built-in types. A UDT id (and therefore perm_type) must not collide with
+// these — MarkOptInDataType on a built-in key would hide that data (issue #15
+// review). Keep in sync with dataTypePathRules and libraryKinds IDs.
+var ReservedDataTypeKeys = map[string]bool{
+	"albums": true, "artists": true, "channels": true, "contacts": true,
+	"events": true, "library": true, "messages": true, "photos": true,
+	"places": true, "player": true, "playlists": true,
+	"recommendations": true, "search": true, "tracks": true,
+	"transactions": true, "user": true,
+}
+
+// IsReservedUserDefinedID reports whether an id is owned by built-ins.
+func IsReservedUserDefinedID(id string) bool {
+	return ReservedLibraryPathIDs[id] || ReservedDataTypeKeys[id]
+}
+
+// ValidateHTTPJSONHeaders rejects credential-bearing headers in schema packs.
+// Tokens live in Aegis connections / the encrypted token store (issue #15).
+func ValidateHTTPJSONHeaders(headers map[string]string) error {
+	forbidden := map[string]bool{
+		"authorization": true, "proxy-authorization": true,
+		"cookie": true, "set-cookie": true,
+		"x-api-key": true, "api-key": true, "x-auth-token": true,
+	}
+	for k := range headers {
+		if forbidden[strings.ToLower(strings.TrimSpace(k))] {
+			return fmt.Errorf("header %q is not allowed in schema packs (use a named connection / token store)", k)
+		}
+	}
+	return nil
+}
+
 // Normalize fills defaults and validates required schema fields.
+//
+// Safety rules (a bad pack must not hide built-ins, steal routes, or crash
+// startup — issue #15 review):
+//   - id matches userDefinedIDPattern and is not a reserved library path
+//   - perm_type is always the id (no override that could shadow built-ins)
+//   - path is always "/v1/library/" + id (no free-form mux patterns)
 func (s *UserDefinedTypeSchema) Normalize() error {
 	if s == nil {
 		return fmt.Errorf("nil schema")
@@ -192,21 +248,26 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 	if s.ID == "" {
 		return fmt.Errorf("schema id is required")
 	}
-	if strings.ContainsAny(s.ID, "/\\") {
-		return fmt.Errorf("schema id %q must not contain path separators", s.ID)
+	if !userDefinedIDPattern.MatchString(s.ID) {
+		return fmt.Errorf("schema id %q must match %s", s.ID, userDefinedIDPattern)
+	}
+	if ReservedLibraryPathIDs[s.ID] || ReservedDataTypeKeys[s.ID] {
+		return fmt.Errorf("schema id %q is reserved by a built-in data type or /v1/library route", s.ID)
 	}
 	if s.Label == "" {
 		s.Label = s.ID
 	}
-	if s.PermType == "" {
-		s.PermType = s.ID
+	// perm_type is not overridable: a pack must not adopt a built-in
+	// permission key (e.g. "playlists") and flip it to opt-in/hidden.
+	if s.PermType != "" && s.PermType != s.ID {
+		return fmt.Errorf("schema %q: perm_type %q must equal id (no override)", s.ID, s.PermType)
 	}
-	if s.Path == "" {
-		s.Path = "/v1/library/" + s.ID
+	s.PermType = s.ID
+	// path is not overridable: only /v1/library/{id} is safe for ServeMux.
+	if s.Path != "" && s.Path != "/v1/library/"+s.ID {
+		return fmt.Errorf("schema %q: path %q must be /v1/library/%s", s.ID, s.Path, s.ID)
 	}
-	if !strings.HasPrefix(s.Path, "/") {
-		s.Path = "/" + s.Path
-	}
+	s.Path = "/v1/library/" + s.ID
 	if s.Usage == "" {
 		s.Usage = s.Label
 	}
@@ -226,10 +287,15 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 		s.FailMsg = "failed to fetch " + s.ID
 	}
 	if s.DefaultAccess == "" {
-		// UDTs are opt-in until enabled (places pattern, issue #15).
 		s.DefaultAccess = AccessNone
 	} else {
 		s.DefaultAccess = NormalizeAccess(s.DefaultAccess)
+	}
+	// Packs cannot enable themselves. Surface the requested level for admin
+	// display only; enforcement always starts at none until type policy
+	// names this key (issue #15 review).
+	if s.DefaultAccess == "" {
+		s.DefaultAccess = AccessNone
 	}
 	if len(s.Fields) == 0 {
 		return fmt.Errorf("schema %q: fields must not be empty", s.ID)
@@ -281,6 +347,9 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 		case "http_json":
 			if strings.TrimSpace(src.Endpoint) == "" {
 				return fmt.Errorf("schema %q: source %q: endpoint is required for http_json", s.ID, src.ID)
+			}
+			if err := ValidateHTTPJSONHeaders(src.Headers); err != nil {
+				return fmt.Errorf("schema %q: source %q: %w", s.ID, src.ID, err)
 			}
 		default:
 			return fmt.Errorf("schema %q: source %q: unsupported kind %q (want file_json or http_json)", s.ID, src.ID, src.Kind)

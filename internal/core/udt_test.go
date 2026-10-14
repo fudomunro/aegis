@@ -218,7 +218,6 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	writeSchemaFile(t, dir, "schema.json", `{
 		"id": "reading-list",
 		"label": "reading list",
-		"default_access": "read",
 		"fields": {
 			"id": {"type": "string"},
 			"title": {"type": "string"},
@@ -245,6 +244,8 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
 	srv.registerUserDefinedKinds()
+	// Packs cannot self-enable; an admin type policy must name the kind.
+	srv.config.SeedTypePolicy("reading-list", types.TypePolicy{Default: types.AccessRead})
 
 	schema, _ := reg.Get("reading-list")
 	handler := srv.HandleLibraryUserDefined(schema)
