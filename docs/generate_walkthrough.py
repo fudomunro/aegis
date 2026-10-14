@@ -22,7 +22,8 @@ OUTPUT = DOCS / "index.html"
 
 # Human labels for files the file-map section should explain.
 FILE_ROLES = {
-    "main.go": "Flags, env, Server wiring, connector registration, HTTP routes",
+    "main.go": "Thin entry: core.Run()",
+    "internal/core/run.go": "Flags, env, Server wiring, connector registration, HTTP routes",
     "handler.go": "Server, AuthMiddleware, ServiceConnector, pre-request hook",
     "config.go": "Services + shared OAuth connections, matching, reload",
     "identity.go": "Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity",
@@ -71,6 +72,9 @@ FILE_ROLES = {
 # Preferred reading order for the file-map table (unknown files append after).
 READING_ORDER = [
     "main.go",
+    "internal/core/run.go",
+    "internal/core/handler.go",
+    "internal/core/config.go",
     "handler.go",
     "config.go",
     "identity.go",
@@ -147,7 +151,7 @@ def loc_of(path: Path) -> int:
 
 
 def extract_connectors() -> list[str]:
-    main = (REPO / "main.go").read_text(encoding="utf-8")
+    main = (REPO / "internal/core/run.go").read_text(encoding="utf-8")
     ids: list[str] = []
     # Literal keys: srv.connectors["spotify"] = ...
     ids.extend(re.findall(r'srv\.connectors\["([^"]+)"\]', main))
@@ -176,7 +180,7 @@ def extract_connectors() -> list[str]:
 
 
 def extract_library_kinds() -> list[str]:
-    text = (REPO / "librarykind.go").read_text(encoding="utf-8")
+    text = (REPO / "internal/core/librarykind.go").read_text(encoding="utf-8")
     # Only the registry block IDs (first assignments after libraryKinds =).
     block = text.split("var libraryKinds", 1)[-1].split("func ", 1)[0]
     return re.findall(r'ID:\s*"([^"]+)"', block)
