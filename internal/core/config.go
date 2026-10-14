@@ -17,12 +17,21 @@ type Config struct {
 	mu          sync.RWMutex
 	Connections map[string]Connection `json:"connections,omitempty"`
 	Services    []Service             `json:"services"`
-	path        string
+	// TypePoliciesBootstrap is the optional aegis.json type-owned policy
+	// section (issue #148). The permissions.json overlay `types` map wins
+	// when present.
+	TypePoliciesBootstrap types.TypePolicies `json:"type_policies,omitempty"`
+	path                  string
 	// permsPath is the admin permissions overlay file (permissions.json).
 	// Admin permission saves always write here — never aegis.json.
 	permsPath string
+	// typePolicies is the primary type-owned agent-access policy (issue #148).
+	// Enforcement resolves type default → provider override → legacy service
+	// permissions (tighten-only). See types.EffectiveAccess.
+	typePolicies types.TypePolicies
 	// permsOverlay is the loaded overlay map (service id → permissions;
-	// present key with nil value means explicitly cleared).
+	// present key with nil value means explicitly cleared). Service maps are
+	// migration overrides that can only tighten type policy.
 	permsOverlay map[string]*types.Permissions
 	// svcConnPath is the admin service-connections overlay
 	// (service_connections.json). Immich/local-store setup writes here so
@@ -126,6 +135,7 @@ func LoadConfig(path string) (*Config, error) {
 	cfg.path = path
 	cfg.permsPath = defaultPermissionsPath(path)
 	cfg.svcConnPath = defaultServiceConnectionsPath(path)
+	cfg.typePolicies = cfg.TypePoliciesBootstrap
 	if err := cfg.applyPermissionsOverlayLocked(); err != nil {
 		return nil, err
 	}
@@ -153,6 +163,8 @@ func (c *Config) Reload() error {
 	}
 	c.Connections = fresh.Connections
 	c.Services = fresh.Services
+	c.TypePoliciesBootstrap = fresh.TypePoliciesBootstrap
+	c.typePolicies = fresh.TypePoliciesBootstrap
 	if err := c.applyPermissionsOverlayLocked(); err != nil {
 		return err
 	}
@@ -170,6 +182,9 @@ func validateConfig(cfg *Config) error {
 	}
 	if err := validateCanonicalFor(services); err != nil {
 		return err
+	}
+	if err := types.ValidateTypePolicies(cfg.TypePoliciesBootstrap); err != nil {
+		return fmt.Errorf("type_policies: %w", err)
 	}
 	for _, svc := range services {
 		if err := types.ValidatePermissions(svc.Permissions); err != nil {
@@ -332,6 +347,8 @@ func (c *Config) GetConnection(id string) *Connection {
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
 // Always writes the permissions overlay (permissions.json) — never aegis.json.
+// The map is a migration override: it can only tighten type policy, never
+// grant more than the type default (issue #148).
 func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
 	if err := types.ValidatePermissions(p); err != nil {
 		return err
@@ -357,4 +374,54 @@ func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
 		c.Services[idx].Permissions = types.Permissions(p.Clone())
 	}
 	return c.setPermissionsOverlayEntryLocked(id, p)
+}
+
+// TypePolicies returns a snapshot of the type-owned agent policy map.
+func (c *Config) TypePolicies() types.TypePolicies {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.typePolicies == nil {
+		return nil
+	}
+	out := make(types.TypePolicies, len(c.typePolicies))
+	for k, v := range c.typePolicies {
+		out[k] = cloneTypePolicy(v)
+	}
+	return out
+}
+
+// SetTypePolicies replaces the type-owned policy map and persists the overlay.
+// An empty map clears type policies (legacy service permissions remain as
+// migration overrides). Provider entries can only tighten the type default.
+func (c *Config) SetTypePolicies(policies types.TypePolicies) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.setTypePoliciesLocked(policies)
+}
+
+// EffectivePermissions returns the resolved service-scoped permission map
+// for a provider: type policy first, then legacy service permissions tightened
+// on top (issue #148).
+func (c *Config) EffectivePermissions(serviceID string) types.Permissions {
+	c.mu.RLock()
+	policies := c.typePolicies
+	var legacy types.Permissions
+	if svc := c.serviceByID(serviceID); svc != nil {
+		legacy = svc.Permissions
+	}
+	c.mu.RUnlock()
+	return types.EffectivePermissions(policies, legacy, serviceID)
+}
+
+// EffectiveAccess resolves one data type for a provider. Unclassified paths
+// pass dataType == "" and get the Strictest view (issue #94).
+func (c *Config) EffectiveAccess(serviceID, dataType string) string {
+	c.mu.RLock()
+	policies := c.typePolicies
+	var legacy types.Permissions
+	if svc := c.serviceByID(serviceID); svc != nil {
+		legacy = svc.Permissions
+	}
+	c.mu.RUnlock()
+	return types.EffectiveAccess(policies, legacy, dataType, serviceID)
 }

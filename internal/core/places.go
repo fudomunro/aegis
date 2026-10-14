@@ -489,7 +489,7 @@ func placesProviderTargets(s *Server, permType string, appLevel string) ([]named
 		inner := targets[i].list
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
-			level = svc.Permissions.For(permType)
+			level = s.effectivePermissions(svc).For(permType)
 		}
 		effective := types.PlacesLevelForResponse(level)
 		if appPlaces != "" && appPlaces != types.AccessNone {
