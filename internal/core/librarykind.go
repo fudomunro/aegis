@@ -85,6 +85,9 @@ var kindRuntime = map[string]kindRuntimeEntry{
 
 // kindHasProviders reports whether any connector can feed the kind.
 func kindHasProviders(id string, s *Server) bool {
+	if schema, ok := s.udtSchemaForKind(id); ok {
+		return len(schema.Sources) > 0
+	}
 	rt := kindRuntime[id]
 	if rt.HasProviders == nil {
 		return false
@@ -94,6 +97,9 @@ func kindHasProviders(id string, s *Server) bool {
 
 // kindReadable reports whether at least one non-blocked service allows reads.
 func kindReadable(id string, s *Server) bool {
+	if schema, ok := s.udtSchemaForKind(id); ok {
+		return s.userDefinedReadable(schema.PermType)
+	}
 	rt := kindRuntime[id]
 	if rt.Readable == nil {
 		return false
@@ -324,6 +330,30 @@ func LibraryKindByID(id string) *types.LibraryKind {
 	return nil
 }
 
+// allLibraryKinds returns built-in kinds plus any loaded user-defined kinds
+// (issue #15). Prefer this over ranging libraryKinds directly so UDTs appear
+// in pre-request injection, admin listings, and flow maps.
+func (s *Server) allLibraryKinds() []types.LibraryKind {
+	out := make([]types.LibraryKind, 0, len(libraryKinds))
+	out = append(out, libraryKinds...)
+	if s != nil && s.udts != nil {
+		for _, schema := range s.udts.All() {
+			if LibraryKindByID(schema.ID) == nil {
+				out = append(out, schema.LibraryKind())
+			}
+		}
+	}
+	return out
+}
+
+// udtSchemaForKind returns the user-defined schema backing a kind id, if any.
+func (s *Server) udtSchemaForKind(id string) (types.UserDefinedTypeSchema, bool) {
+	if s == nil || s.udts == nil {
+		return types.UserDefinedTypeSchema{}, false
+	}
+	return s.udts.Get(id)
+}
+
 // libraryInstructionsFor returns kind instructions plus a configured canonical
 // service hint when the instance declares one for this kind, and the
 // multi-source mutation rule.
@@ -386,11 +416,15 @@ func (s *Server) libraryReadableFor(permType string) bool {
 // that matches a service-less user question. Used by the pre-request hook.
 func (s *Server) libraryHintsForMessage(msg string) []string {
 	var out []string
-	for _, k := range libraryKinds {
+	for _, k := range s.allLibraryKinds() {
 		if !k.Mentions(msg) {
 			continue
 		}
 		if !kindHasProviders(k.ID, s) || !kindReadable(k.ID, s) {
+			continue
+		}
+		if schema, ok := s.udtSchemaForKind(k.ID); ok {
+			out = append(out, s.userDefinedHint(schema))
 			continue
 		}
 		out = append(out, s.libraryInstructionsFor(k.ID))
@@ -399,9 +433,10 @@ func (s *Server) libraryHintsForMessage(msg string) []string {
 }
 
 // libraryRouteHandlers maps each kind path to its HTTP handler so main can
-// register every dataset from the registry.
+// register every dataset from the registry. User-defined kinds (issue #15)
+// are merged in when schemas are loaded.
 func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
-	return map[string]http.HandlerFunc{
+	handlers := map[string]http.HandlerFunc{
 		"/v1/library/playlists":    s.HandleLibraryPlaylists,
 		"/v1/library/tracks":       s.HandleLibraryTracks,
 		"/v1/library/albums":       s.HandleLibraryAlbums,
@@ -418,6 +453,10 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/links":        s.HandleEntityLinks,
 		"/v1/library/links/":       s.HandleEntityLinks,
 	}
+	for path, handler := range s.udtRouteHandlers() {
+		handlers[path] = handler
+	}
+	return handlers
 }
 
 // namedLister is one service's typed fetch for a library aggregate.
