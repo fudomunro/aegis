@@ -189,7 +189,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
-| `permissions` | Optional map of data type → access level for agents (see [Data permissions](#data-permissions)) |
+| `permissions` | Optional map of data type → access level for agents (migration override; can only tighten type policy — see [Data permissions](#data-permissions)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis-issue-16)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
@@ -263,8 +263,34 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 
 ### Data permissions
 
-Beyond the coarse `action: inject|block` switch, each service can restrict
-**what kind of access agents have to specific data types**:
+Permissions live with **data types**, not service providers (issue #148). The
+primary model is a per-type policy: a type-level default plus optional
+per-provider overrides that can only **tighten** that default. Service
+`permissions` maps remain as migration overrides and can only further
+restrict what the type policy allows.
+
+Primary (aegis.json `type_policies` or permissions.json `types`, or admin “Data type policies”):
+
+```json
+"types": {
+  "tracks": {
+    "default": "read-write",
+    "providers": {
+      "spotify": "read"
+    }
+  },
+  "player": { "default": "none" },
+  "places": {
+    "default": "none",
+    "providers": {
+      "google-timeline": "city"
+    }
+  }
+}
+```
+
+Legacy service-scoped map (still accepted; tighten-only once a type policy
+exists for that key):
 
 ```json
 "permissions": {
@@ -287,13 +313,25 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
 
-- The reserved key `default` applies to data types not listed — **except
-  `places`**, which is opt-in (see below).
+**Resolution order** (issue #148):
+
+1. **Type default** — `types[type].default`. Empty default keeps previous
+   unrestricted behavior (`read-write`) except for opt-in types.
+2. **Provider override** — `types[type].providers[service_id]`, which can
+   only tighten the type default (e.g. `read` → `none`, `precise` → `city`).
+3. **Legacy service `permissions`** — during the migration window these are
+   provider overrides and can only tighten. When **no type policy exists** for
+   a key, the service map remains authoritative (so existing configs and
+   places opt-in keep working).
+
+- The reserved key `default` in a service map applies to data types not listed —
+  **except `places`**, which is opt-in (see below). Type policy has no cross-type
+  `default` key: each type owns its own default.
 - **`freebusy` is events-only** (issue #128). Scheduling apps can see when you
   are busy without reading titles, attendees, locations, or descriptions.
   Responses keep only `start_at`, `end_at`, `all_day`, and `status`. Prefer
   `GET /v1/library/freebusy` for availability; `/v1/library/events` and the
-  calendar proxy apply the same redaction when a service is set to `freebusy`.
+  calendar proxy apply the same redaction when events access is `freebusy`.
   The level is rejected on other data types and on `default`.
 - **`summary` is transactions-only** (issue #141). Apps can see how much was
   spent by category or month without reading line items or account names.
@@ -304,8 +342,10 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
   `default`.
 - **`places` is opt-in and uses a city / read / precise ladder** (issue #142).
   Location history is the most sensitive data type we ship: **default is
-  `none`**, and the `default` key never enables it. Pre-request injection never
-  advertises `places` until a service permission names it. Granularity:
+  `none`**, and neither a type-level empty default nor a service `default` key
+  enables it. Name it explicitly — type default, type `providers[id]`, or a
+  service `permissions.places` entry. Pre-request injection never advertises
+  `places` until it is named. Granularity:
   - `city` — locality, country, and the visit/trip window only (enough for
     "was I out of town?"). No names, addresses, coordinates, or raw point IDs.
   - `read` — full place names and addresses, still no coordinates.
@@ -314,19 +354,22 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
   `city` and `precise` are places-only and rejected on other keys. Import
   (Google Timeline) and live (OwnTracks) sources both honor the same ladder.
 - **Unknown proxy paths** (not a mapped data type) use the **strictest**
-  configured level, not `default`, so a tight type cannot be bypassed by an
+  configured level, not a type default, so a tight type cannot be bypassed by an
   unmapped endpoint (issue #94).
 - Proxy paths are **canonicalized before classification**. Duplicate slashes
   (including `%2f`) collapse to the real type; `.` / `..` segments are rejected
   with `400`. Classification and upstream routing always see the same path.
-- If `permissions` is omitted, agents keep unrestricted access (previous behavior).
-- **Bootstrap vs overlay (issue #71).** `aegis.json` may set default
+- If neither type policy nor service `permissions` is set, agents keep
+  unrestricted access (previous behavior).
+- **Bootstrap vs overlay (issue #71, #148).** `aegis.json` may set bootstrap
   `permissions` per service. Admin UI saves write a separate
-  `permissions.json` overlay (flag `-permissions-file`). A service present in
-  the overlay uses those permissions; a present key set to `null` means
-  unrestricted; services absent from the overlay keep the bootstrap map from
-  `aegis.json`. The overlay holds no secrets — admin permission edits never
-  rewrite OAuth client credentials.
+  `permissions.json` overlay (flag `-permissions-file`) schema **version 2**:
+  `types` (primary TypePolicy map) and `services` (tighten-only migration
+  overrides). A service present in the overlay uses those permissions; a
+  present key set to `null` means unrestricted; services absent from the
+  overlay keep the bootstrap map from `aegis.json`. Version 1 files
+  (`services` only) still load. The overlay holds no secrets — admin
+  permission edits never rewrite OAuth client credentials.
 - Permissions **further constrain** the connector; they never add capabilities.
   The admin form only offers **Editable** for types with a true agent data-write
   operation on the connector. Mirror backup writes and photo-picker session
@@ -337,6 +380,10 @@ Beyond the coarse `action: inject|block` switch, each service can restrict
 - Enforcement is on the service proxy, the unified library endpoint, and the
   `/capabilities` response (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
+- Admin API: `GET/PUT /v1/admin/type-policies` is the primary editor;
+  `GET/PUT /v1/admin/services/{id}/permissions` remains the secondary
+  per-service override (and still reports `effective_permissions` after
+  type-policy resolution).
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
@@ -1850,8 +1897,10 @@ POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSO
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Home access)
-GET /v1/admin/services/{id}/permissions  — current agent permission map + available/writable types
-PUT /v1/admin/services/{id}/permissions  — replace the map (clamped to connector capability; writes permissions.json overlay, not aegis.json)
+GET /v1/admin/type-policies  — type-owned agent policy map (primary, issue #148)
+PUT /v1/admin/type-policies  — replace type policies {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+GET /v1/admin/services/{id}/permissions  — service override map + effective_permissions + available/writable types
+PUT /v1/admin/services/{id}/permissions  — replace the service override (tighten-only vs type policy; writes permissions.json overlay, not aegis.json)
 GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
 POST /v1/admin/immich/test   — probe Immich endpoint/API key (key not stored from this call)
 POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json)

@@ -347,7 +347,9 @@ type TypePolicy struct {
 
 // For returns the effective access level for a provider (or the type default
 // when provider is empty / has no override). Provider overrides can only
-// tighten the type default.
+// tighten the type default. Opt-in types (places) stay none when Default is
+// empty — call TypePolicies.Access when the data-type key is known so opt-in
+// rules apply.
 func (tp TypePolicy) For(provider string) string {
 	level := NormalizeAccess(tp.Default)
 	if level == "" {
@@ -378,13 +380,197 @@ func (tp TypePolicies) For(dataType string) TypePolicy {
 	return tp[dataType]
 }
 
+// Access returns the effective agent access for a data type from a provider.
+// Type default applies first; the provider override can only tighten it
+// (issue #148). Opt-in types stay none unless named explicitly — either the
+// type default or that provider's override (the Permissions "default" key
+// never enables them).
+func (tp TypePolicies) Access(dataType, provider string) string {
+	policy := tp.For(dataType)
+	typeLevel := NormalizeAccess(policy.Default)
+	if typeLevel == "" {
+		typeLevel = AccessNone
+	}
+	explicitProvider := ""
+	if provider != "" {
+		if v, ok := policy.Providers[provider]; ok {
+			explicitProvider = NormalizeAccess(v)
+		}
+	}
+	if optInDefaultNone[dataType] {
+		if explicitProvider == "" {
+			if typeLevel == AccessNone {
+				return AccessNone
+			}
+			return typeLevel
+		}
+		// Type default never enables opt-in types. An explicit provider name
+		// does (it is the "named explicitly" opt-in). Otherwise tighten only.
+		if typeLevel == AccessNone {
+			return explicitProvider
+		}
+		return stricterAccess(typeLevel, explicitProvider)
+	}
+	level := typeLevel
+	if level == AccessNone && policy.Default == "" {
+		// Unset default preserves pre-permission behavior for normal types.
+		level = DefaultAccessType
+	}
+	if explicitProvider == "" {
+		return level
+	}
+	return stricterAccess(level, explicitProvider)
+}
+
+// PermissionsFor materializes a service-scoped Permissions map for one
+// provider from type policies. Used so FilterCapabilities, permissionNotice,
+// and legacy helpers can keep their map shape while ownership stays type-level.
+func (tp TypePolicies) PermissionsFor(provider string) Permissions {
+	out := Permissions{}
+	for dataType := range tp {
+		out[dataType] = tp.Access(dataType, provider)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// ValidateTypePolicies checks every type policy entry (default + provider
+// overrides) against the access vocabulary and type-scoped redaction rules.
+func ValidateTypePolicies(policies TypePolicies) error {
+	for dataType, policy := range policies {
+		if dataType == "" {
+			return fmt.Errorf("type policies: empty data type key")
+		}
+		// Empty default is allowed (DefaultAccessType / opt-in none).
+		if policy.Default != "" {
+			if err := ValidatePermissions(Permissions{dataType: policy.Default}); err != nil {
+				return fmt.Errorf("type policy %q: %w", dataType, err)
+			}
+		}
+		for provider, level := range policy.Providers {
+			if provider == "" {
+				return fmt.Errorf("type policy %q: empty provider key", dataType)
+			}
+			if err := ValidatePermissions(Permissions{dataType: level}); err != nil {
+				return fmt.Errorf("type policy %q provider %q: %w", dataType, provider, err)
+			}
+		}
+	}
+	return nil
+}
+
+// legacyOverride returns the legacy service-map opinion for a data type.
+// The second result is false when the map has no opinion (so type policy is
+// not tightened). Opt-in types only take an explicit key, never "default".
+func legacyOverride(p Permissions, dataType string) (string, bool) {
+	if len(p) == 0 {
+		return "", false
+	}
+	if v, ok := p[dataType]; ok {
+		return NormalizeAccess(v), true
+	}
+	if optInDefaultNone[dataType] {
+		return "", false
+	}
+	if v, ok := p[PermissionDefaultKey]; ok {
+		return NormalizeAccess(v), true
+	}
+	return "", false
+}
+
+// EffectiveAccess resolves agent access for a data type from a provider
+// (issue #148):
+//
+//  1. type policy is primary when present (default + provider tighten-only)
+//  2. legacy service permissions only tighten type policy
+//  3. when no type policy exists for the type, legacy service permissions
+//     remain the authority (compat window; they can still opt in places)
+//
+// Unclassified paths must pass dataType == "" and use the Strictest view so
+// unknown surface cannot inherit a wide default (issue #94).
+func EffectiveAccess(policies TypePolicies, legacy Permissions, dataType, provider string) string {
+	if dataType == "" {
+		level := policies.PermissionsFor(provider).Strictest()
+		if legacy != nil {
+			level = stricterAccess(level, legacy.Strictest())
+		}
+		return level
+	}
+	_, hasTypePolicy := policies[dataType]
+	if hasTypePolicy {
+		level := policies.Access(dataType, provider)
+		if ov, ok := legacyOverride(legacy, dataType); ok {
+			level = stricterAccess(level, ov)
+		}
+		return level
+	}
+	// No type-owned policy for this key: service permissions still decide
+	// during the migration window (they can name opt-in types explicitly).
+	if legacy != nil {
+		return legacy.For(dataType)
+	}
+	if optInDefaultNone[dataType] {
+		return AccessNone
+	}
+	return DefaultAccessType
+}
+
+// EffectivePermissions materializes the service-scoped map for a provider:
+// type policy first, legacy service permissions tightened on top. Callers that
+// still take Permissions (FilterCapabilities, permissionNotice, host
+// ServiceInfo) should use this rather than the raw service block.
+func EffectivePermissions(policies TypePolicies, legacy Permissions, provider string) Permissions {
+	// Collect every type the policies name plus every type the legacy map
+	// names (except "default"), so service-only keys still resolve.
+	keys := map[string]bool{}
+	for dataType := range policies {
+		keys[dataType] = true
+	}
+	for k := range legacy {
+		if k == PermissionDefaultKey {
+			continue
+		}
+		keys[k] = true
+	}
+	if len(keys) == 0 {
+		if legacy == nil {
+			return nil
+		}
+		return legacy.Clone()
+	}
+	out := Permissions{}
+	for dataType := range keys {
+		out[dataType] = EffectiveAccess(policies, legacy, dataType, provider)
+	}
+	// Preserve a legacy "default" key only as a documentation of unlisted
+	// types; enforcement for unlisted types uses EffectiveAccess/Strictest.
+	if v, ok := legacy[PermissionDefaultKey]; ok {
+		out[PermissionDefaultKey] = NormalizeAccess(v)
+	}
+	return out
+}
+
 // stricterAccess returns the more restrictive of two access levels.
 // Used so provider overrides can only tighten a type default (issue #148).
+// Within the places ladder, city is tighter than precise.
 func stricterAccess(a, b string) string {
+	a, b = NormalizeAccess(a), NormalizeAccess(b)
+	if isPlacesLevel(a) && isPlacesLevel(b) {
+		if a == AccessCity || b == AccessCity {
+			return AccessCity
+		}
+		return AccessPrecise
+	}
 	if accessRank(a) <= accessRank(b) {
 		return a
 	}
 	return b
+}
+
+func isPlacesLevel(level string) bool {
+	return level == AccessCity || level == AccessPrecise
 }
 
 // accessRank orders levels from most to least restrictive for clamping.

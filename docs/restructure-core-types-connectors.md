@@ -326,7 +326,7 @@ connector types except via `ServiceConnector` interface (already in the seam).
 **Done when:** AGENTS.md no longer claims single-package root layout;
 `go build -o aegis .` works; CI unchanged commands work.
 
-### Phase 5 — #148 type-level permissions (`feat/issue-148-type-permissions`)
+### Phase 5 — #148 type-level permissions (`feat/issue-148-type-permissions`) — implemented
 
 1. Persist type policy as primary (`permissions.json` schema version bump):
    `typeID → TypePolicy`.

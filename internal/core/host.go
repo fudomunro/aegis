@@ -29,7 +29,7 @@ func (s *Server) ServiceConfig(serviceID string) *connectors.ServiceInfo {
 		Endpoint:    svc.Endpoint,
 		Headers:     svc.Headers,
 		CacheTTL:    svc.CacheTTL.Duration,
-		Permissions: svc.Permissions,
+		Permissions: s.effectivePermissions(svc),
 	}
 }
 

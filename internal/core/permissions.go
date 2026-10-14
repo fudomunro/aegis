@@ -75,6 +75,16 @@ func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool 
 	return !types.DataTypeHasWriteOp(caps, dataType)
 }
 
+// effectivePermissions resolves agent access for a service from type policy
+// plus legacy service permissions (tighten-only). Type policy is primary
+// (issue #148); the service map remains a migration override.
+func (s *Server) effectivePermissions(svc *Service) types.Permissions {
+	if svc == nil || s == nil || s.config == nil {
+		return nil
+	}
+	return s.config.EffectivePermissions(svc.ID)
+}
+
 // AllowDataPermission enforces the service's permission for a proxy request.
 // Returns true when the request may proceed. On denial it writes a 403 JSON error.
 // Permissions further constrain the connector: a write level never unlocks
@@ -90,7 +100,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		return true
 	}
 	dataType := types.DataTypeForPath(remainingPath)
-	level := svc.Permissions.AccessForDataType(dataType)
+	level := s.effectivePermissions(svc).AccessForDataType(dataType)
 	if s.connectorWriteBlocked(svc.ID, dataType, r.Method) {
 		label := dataType
 		if label == "" {

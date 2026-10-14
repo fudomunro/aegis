@@ -39,16 +39,50 @@
       ]
     }
   },
+  "type_policies": {
+    "tracks": {
+      "default": "read",
+      "providers": {
+        "spotify": "read"
+      }
+    },
+    "playlists": {
+      "default": "read"
+    },
+    "player": {
+      "default": "none"
+    },
+    "recommendations": {
+      "default": "none"
+    },
+    "places": {
+      "default": "none",
+      "providers": {
+        "google-timeline": "city"
+      }
+    },
+    "events": {
+      "default": "read"
+    },
+    "transactions": {
+      "default": "read"
+    }
+  },
   "services": [
     {
       "id": "spotify",
       "name": "Spotify",
-      "aliases": ["spotify music"],
+      "aliases": [
+        "spotify music"
+      ],
       "action": "inject",
       "endpoint": "https://api.spotify.com/v1",
       "cache_ttl": "10m",
       "description": "Proxies Spotify API calls through Aegis for caching and auditing",
-      "canonical_for": ["playlists", "tracks"],
+      "canonical_for": [
+        "playlists",
+        "tracks"
+      ],
       "connection": "spotify",
       "permissions": {
         "default": "read",
@@ -61,7 +95,10 @@
     {
       "id": "youtube-music",
       "name": "YouTube Music",
-      "aliases": ["yt music", "ytmusic"],
+      "aliases": [
+        "yt music",
+        "ytmusic"
+      ],
       "action": "inject",
       "endpoint": "https://www.googleapis.com/youtube/v3",
       "cache_ttl": "15m",
@@ -77,7 +114,9 @@
     {
       "id": "amazon-music",
       "name": "Amazon Music",
-      "aliases": ["amazon music unlimited"],
+      "aliases": [
+        "amazon music unlimited"
+      ],
       "action": "inject",
       "endpoint": "https://api.amazonmusic.com/v1",
       "cache_ttl": "15m",
@@ -93,12 +132,20 @@
     {
       "id": "google-photos",
       "name": "Google Photos",
-      "aliases": ["photos", "photo", "pictures", "picture", "google photos library"],
+      "aliases": [
+        "photos",
+        "photo",
+        "pictures",
+        "picture",
+        "google photos library"
+      ],
       "action": "inject",
       "endpoint": "https://photospicker.googleapis.com/v1",
       "cache_ttl": "15m",
       "description": "Google Photos via the Picker API: the user selects photos once; Aegis lists that selection as neutral metadata. Photo bytes stay on Google Photos (non-Aegis canonical). Shares the Google connection with YouTube and Contacts.",
-      "canonical_for": ["photos"],
+      "canonical_for": [
+        "photos"
+      ],
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"
@@ -111,7 +158,16 @@
     {
       "id": "immich",
       "name": "Immich",
-      "aliases": ["immich photos", "self-hosted photos", "immich", "photo", "photos", "pictures", "picture", "photo library"],
+      "aliases": [
+        "immich photos",
+        "self-hosted photos",
+        "immich",
+        "photo",
+        "photos",
+        "pictures",
+        "picture",
+        "photo library"
+      ],
       "action": "inject",
       "endpoint": "http://192.168.1.10:2283/api",
       "headers": {
@@ -127,12 +183,18 @@
     {
       "id": "google",
       "name": "Google Contacts",
-      "aliases": ["google contacts", "contacts", "address book"],
+      "aliases": [
+        "google contacts",
+        "contacts",
+        "address book"
+      ],
       "action": "inject",
       "endpoint": "https://people.googleapis.com/v1",
       "cache_ttl": "15m",
       "description": "Lists Google People/Contacts address-book entries as neutral contacts so photo.people[] and other types can share identity matching. Shares the Google connection.",
-      "canonical_for": ["contacts"],
+      "canonical_for": [
+        "contacts"
+      ],
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/contacts.readonly"
@@ -145,12 +207,18 @@
     {
       "id": "google-calendar",
       "name": "Google Calendar",
-      "aliases": ["google calendar", "calendar", "my calendar"],
+      "aliases": [
+        "google calendar",
+        "calendar",
+        "my calendar"
+      ],
       "action": "inject",
       "endpoint": "https://www.googleapis.com/calendar/v3",
       "cache_ttl": "5m",
       "description": "Lists Google Calendar events as neutral calendar entries so /v1/library/events can answer schedule questions. Event content stays on Google Calendar (non-Aegis canonical). Shares the Google connection.",
-      "canonical_for": ["events"],
+      "canonical_for": [
+        "events"
+      ],
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/calendar.readonly"
@@ -163,12 +231,19 @@
     {
       "id": "google-gmail",
       "name": "Gmail",
-      "aliases": ["gmail", "email", "google mail", "my inbox"],
+      "aliases": [
+        "gmail",
+        "email",
+        "google mail",
+        "my inbox"
+      ],
       "action": "inject",
       "endpoint": "https://gmail.googleapis.com/gmail/v1",
       "cache_ttl": "5m",
       "description": "Lists Gmail messages as neutral message metadata so /v1/library/messages can answer email questions. Message bodies stay on Gmail (non-Aegis canonical). Shares the Google connection.",
-      "canonical_for": ["messages"],
+      "canonical_for": [
+        "messages"
+      ],
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/gmail.readonly"
@@ -181,7 +256,11 @@
     {
       "id": "ynab",
       "name": "YNAB",
-      "aliases": ["ynab", "you need a budget", "budget"],
+      "aliases": [
+        "ynab",
+        "you need a budget",
+        "budget"
+      ],
       "action": "inject",
       "endpoint": "https://api.ynab.com/v1",
       "headers": {
@@ -197,9 +276,15 @@
     {
       "id": "quicken",
       "name": "Quicken",
-      "aliases": ["quicken", "qif", "qfx", "ofx", "bank export"],
+      "aliases": [
+        "quicken",
+        "qif",
+        "qfx",
+        "ofx",
+        "bank export"
+      ],
       "action": "inject",
-      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only — statements/PDFs are never stored.",
+      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only \u2014 statements/PDFs are never stored.",
       "permissions": {
         "default": "read",
         "transactions": "read"
