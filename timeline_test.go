@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"archive/zip"
 	"context"
 	"os"
@@ -194,7 +196,7 @@ func TestOpenTimelineStore_EmptyPathDisabled(t *testing.T) {
 func TestOwnTracksClusterVisits(t *testing.T) {
 	// Three samples at the same spot (visit) then two far away (new visit + trip).
 	base := int64(1700000000)
-	locs := []ownTracksLocation{
+	locs := []connectors.OwnTracksLocation{
 		{Tst: base, Lat: 44.6488, Lon: -63.5752, Desc: "Harbour", TID: "ab"},
 		{Tst: base + 600, Lat: 44.6489, Lon: -63.5751, TID: "ab"},
 		{Tst: base + 1200, Lat: 44.6488, Lon: -63.5752, TID: "ab"},
@@ -203,7 +205,7 @@ func TestOwnTracksClusterVisits(t *testing.T) {
 		{Tst: base + 7800, Lat: 44.3765, Lon: -64.3187, TID: "ab"},
 		{Tst: base + 8400, Lat: 44.3764, Lon: -64.3188, TID: "ab"},
 	}
-	visits := clusterOwnTracksVisits(locs)
+	visits := connectors.ClusterOwnTracksVisits(locs)
 	if len(visits) < 2 {
 		t.Fatalf("clusters = %d, want >= 2: %+v", len(visits), visits)
 	}
@@ -217,7 +219,7 @@ func TestOwnTracksClusterVisits(t *testing.T) {
 
 func TestHaversineMeters(t *testing.T) {
 	// ~111m per 0.001° latitude.
-	d := haversineMeters(44.0, -63.0, 44.001, -63.0)
+	d := connectors.HaversineMeters(44.0, -63.0, 44.001, -63.0)
 	if d < 100 || d > 130 {
 		t.Fatalf("haversine = %f", d)
 	}

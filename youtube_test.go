@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"io"
 	"net/http"
@@ -14,7 +16,7 @@ import (
 
 func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	instructions := conn.SystemInstructions("https://aegis.example.com")
 
@@ -37,7 +39,7 @@ func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
 
 func TestYouTubeMusicConnector_MapPath(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 	query := map[string][]string{}
 
 	tests := []struct {
@@ -57,7 +59,7 @@ func TestYouTubeMusicConnector_MapPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.path, func(t *testing.T) {
-			apiPath, params, err := conn.mapPath(tt.path, query)
+			apiPath, params, err := conn.MapPath(tt.path, query)
 			if err != nil {
 				t.Fatalf("mapPath(%s) error: %v", tt.path, err)
 			}
@@ -75,10 +77,10 @@ func TestYouTubeMusicConnector_MapPath(t *testing.T) {
 
 func TestYouTubeMusicConnector_MapPath_SearchWithType(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 	query := map[string][]string{"type": {"playlist"}}
 
-	apiPath, params, err := conn.mapPath("/search", query)
+	apiPath, params, err := conn.MapPath("/search", query)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +98,7 @@ func TestYouTubeMusicConnector_MapPath_SearchWithType(t *testing.T) {
 
 func TestYouTubeMusicConnector_TransformChannel(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -117,7 +119,7 @@ func TestYouTubeMusicConnector_TransformChannel(t *testing.T) {
 		},
 	}
 
-	result := conn.transformChannel(raw)
+	result := conn.TransformChannel(raw)
 	if result["id"] != "ch1" {
 		t.Fatalf("id = %v", result["id"])
 	}
@@ -135,7 +137,7 @@ func TestYouTubeMusicConnector_TransformChannel(t *testing.T) {
 
 func TestYouTubeMusicConnector_TransformPlaylistList(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -153,7 +155,7 @@ func TestYouTubeMusicConnector_TransformPlaylistList(t *testing.T) {
 		"pageInfo": map[string]any{"totalResults": 1},
 	}
 
-	result := conn.transformPlaylistList(raw)
+	result := conn.TransformPlaylistList(raw)
 	if len(result.Playlists) != 1 {
 		t.Fatalf("got %d playlists, want 1", len(result.Playlists))
 	}
@@ -174,7 +176,7 @@ func TestYouTubeMusicConnector_TransformPlaylistList(t *testing.T) {
 
 func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -192,7 +194,7 @@ func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 		"pageInfo": map[string]any{"totalResults": 1},
 	}
 
-	result := conn.transformPlaylistItems(raw)
+	result := conn.TransformPlaylistItems(raw)
 	tracks, ok := result["tracks"].([]types.Track)
 	if !ok {
 		t.Fatalf("tracks type = %T", result["tracks"])
@@ -213,7 +215,7 @@ func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 
 func TestYouTubeMusicConnector_TransformSearch(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -232,7 +234,7 @@ func TestYouTubeMusicConnector_TransformSearch(t *testing.T) {
 		"pageInfo": map[string]any{"totalResults": 1},
 	}
 
-	result := conn.transformSearch(raw)
+	result := conn.TransformSearch(raw)
 	results, ok := result["results"].([]map[string]any)
 	if !ok {
 		t.Fatalf("results type = %T", result["results"])
@@ -253,7 +255,7 @@ func TestYouTubeMusicConnector_TransformSearch(t *testing.T) {
 
 func TestYouTubeMusicConnector_TransformVideo(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -275,7 +277,7 @@ func TestYouTubeMusicConnector_TransformVideo(t *testing.T) {
 		},
 	}
 
-	result := conn.transformVideo(raw)
+	result := conn.TransformVideo(raw)
 	if result["title"] != "So What" {
 		t.Fatalf("title = %v", result["title"])
 	}
@@ -289,7 +291,7 @@ func TestYouTubeMusicConnector_TransformVideo(t *testing.T) {
 
 func TestYouTubeMusicConnector_TransformSubscriptions(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -306,7 +308,7 @@ func TestYouTubeMusicConnector_TransformSubscriptions(t *testing.T) {
 		"pageInfo": map[string]any{"totalResults": 1},
 	}
 
-	result := conn.transformSubscriptions(raw)
+	result := conn.TransformSubscriptions(raw)
 	subs, ok := result["subscriptions"].([]map[string]any)
 	if !ok {
 		t.Fatalf("subscriptions type = %T", result["subscriptions"])
@@ -329,8 +331,8 @@ func TestYouTubeMusicConnector_HandleProxy_NoToken(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
-		"youtube-music": NewYouTubeMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/services/youtube-music/me", nil)
@@ -393,8 +395,8 @@ func TestYouTubeMusicConnector_Playlists_ReadList(t *testing.T) {
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"youtube-music": NewYouTubeMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/services/youtube-music/me/playlists", nil)
@@ -467,8 +469,8 @@ func TestYouTubeMusicConnector_Playlists_ReadList_Cached(t *testing.T) {
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"youtube-music": NewYouTubeMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
 	handler := srv.AuthMiddleware(srv.HandleServiceProxy)
@@ -535,8 +537,8 @@ func TestYouTubeMusicConnector_Playlists_GetByID(t *testing.T) {
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"youtube-music": NewYouTubeMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/services/youtube-music/playlists/PL_SPECIAL", nil)
@@ -620,8 +622,8 @@ func TestYouTubeMusicConnector_Playlists_ReadItems(t *testing.T) {
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"youtube-music": NewYouTubeMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/services/youtube-music/playlists/PL_JAZZ/items", nil)
@@ -701,8 +703,8 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"youtube-music": NewYouTubeMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
 	// Test /me — should be transformed.
@@ -752,13 +754,13 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 }
 
 func TestIso8601DurationMs(t *testing.T) {
-	if got := iso8601DurationMs("PT3M42S"); got != 222000 {
+	if got := connectors.Iso8601DurationMs("PT3M42S"); got != 222000 {
 		t.Fatalf("PT3M42S = %d", got)
 	}
-	if got := iso8601DurationMs("PT1H2M3S"); got != 3723000 {
+	if got := connectors.Iso8601DurationMs("PT1H2M3S"); got != 3723000 {
 		t.Fatalf("PT1H2M3S = %d", got)
 	}
-	if got := iso8601DurationMs("bogus"); got != 0 {
+	if got := connectors.Iso8601DurationMs("bogus"); got != 0 {
 		t.Fatalf("bogus = %d", got)
 	}
 }

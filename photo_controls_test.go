@@ -1,6 +1,10 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/types"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
@@ -83,8 +87,8 @@ func photoTestServer() *Server {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["immich"] = NewImmichConnector(srv)
-	srv.connectors["google-photos"] = NewGooglePhotosConnector(srv)
+	srv.connectors["immich"] = connectors.NewImmichConnector(srv)
+	srv.connectors["google-photos"] = connectors.NewGooglePhotosConnector(srv)
 	return srv
 }
 
@@ -98,7 +102,7 @@ func TestHandlePreRequest_OldestPhotoInCollection(t *testing.T) {
 	for _, want := range []string{
 		"/v1/library/photos",
 		"/v1/services/immich",
-		photoSourceDiscipline(),
+		types.PhotoSourceDiscipline(),
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("system message missing %q:\n%s", want, content)
@@ -134,7 +138,7 @@ func TestHandlePreRequest_PhotoLibraryHintsAlongsideServiceMatch(t *testing.T) {
 
 func TestPhotoSourceDiscipline_InConnectorInstructions(t *testing.T) {
 	srv := photoTestServer()
-	discipline := photoSourceDiscipline()
+	discipline := types.PhotoSourceDiscipline()
 	if !strings.Contains(srv.connectors["immich"].SystemInstructions("https://aegis.example.com"), discipline) {
 		t.Fatal("Immich instructions missing photo source discipline")
 	}
@@ -144,7 +148,7 @@ func TestPhotoSourceDiscipline_InConnectorInstructions(t *testing.T) {
 }
 
 func TestPhotoSourceDiscipline_MentionsBypassPaths(t *testing.T) {
-	s := photoSourceDiscipline()
+	s := types.PhotoSourceDiscipline()
 	for _, want := range []string{
 		"Photos Library.photoslibrary",
 		"Photo Booth",
@@ -162,7 +166,7 @@ func TestImmichSetup_DefaultAliasesMatchPhotoQuestions(t *testing.T) {
 	srv := photoTestServer()
 	// Mirrors immich_setup.go entry aliases used when saving from the admin UI.
 	cfg := &Config{Services: []Service{{
-		ID:     immichServiceID,
+		ID:     connectors.ImmichServiceID,
 		Name:   "Immich",
 		Action: "inject",
 		Aliases: []string{

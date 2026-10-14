@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -181,7 +183,7 @@ func TestHandleAdminImmichSetup_StatusAndConfig(t *testing.T) {
 	}
 
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors[immichServiceID] = NewImmichConnector(srv)
+	srv.connectors[connectors.ImmichServiceID] = connectors.NewImmichConnector(srv)
 
 	// Unauthenticated → 401
 	req := httptest.NewRequest("GET", "/v1/admin/immich/setup", nil)

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,7 +13,7 @@ import (
 )
 
 func TestSampleCalendarEvents_NearTermBusy(t *testing.T) {
-	events := sampleCalendarEvents()
+	events := connectors.SampleCalendarEvents()
 	if len(events) < 4 {
 		t.Fatalf("events = %d", len(events))
 	}
@@ -28,14 +30,14 @@ func TestSampleCalendarEvents_NearTermBusy(t *testing.T) {
 
 func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 	svc := &Service{
-		ID:          sampleCalendarServiceID,
-		Name:        sampleCalendarServiceName,
+		ID:          connectors.SampleCalendarServiceID,
+		Name:        connectors.SampleCalendarServiceName,
 		Action:      "inject",
-		Endpoint:    sampleCalendarEndpoint,
+		Endpoint:    connectors.SampleCalendarEndpoint,
 		Permissions: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
-	srv.connectors[sampleCalendarServiceID] = NewSampleCalendarConnector()
+	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()
 
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("X-Api-Key", "test-key")

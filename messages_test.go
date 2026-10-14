@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -39,7 +41,7 @@ func TestMessageIdentityKey_PrefersMessageID(t *testing.T) {
 
 func TestMessageIdentityKey_SubjectFromTimeFallback(t *testing.T) {
 	m := newMessage("google-gmail", "Gmail", "id1", types.MessageChannelEmail, "  Hello  ", "", "2024-06-01T09:00:00+00:00")
-	from := newContact(googleGmailServiceID, googleGmailServiceName, "", "Ada", []string{"Ada@Example.com"}, nil)
+	from := types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Ada", []string{"Ada@Example.com"}, nil)
 	m.From = &from
 	if got := messageIdentityKey(m); got != "subject:hello|from:ada@example.com|sent:2024-06-01T09:00:00Z" {
 		t.Fatalf("key = %q", got)
@@ -102,7 +104,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	b := newMessage("outlook-mail", "Outlook Mail", "o1", types.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
 	b.EntityID = "standup@example.com"
 	c := newMessage("google-gmail", "Gmail", "g2", types.MessageChannelEmail, "Other", "", "2024-06-02T10:00:00Z")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{messages: []types.Message{a, c}},
 		"outlook-mail": &fakeMessageProvider{messages: []types.Message{b}},
 	}
@@ -145,7 +147,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 		},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{messages: []types.Message{
 			newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
@@ -185,7 +187,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 		Permissions: types.Permissions{"messages": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{messages: []types.Message{
 			newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
@@ -202,7 +204,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{err: types.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -224,7 +226,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{err: errors.New("boom")},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -319,7 +321,7 @@ func TestMentionsMessages_Keyword(t *testing.T) {
 
 func TestHasMessageProviders_UsesRegistry(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{},
 	}
 	if !kindHasProviders("messages", srv) {

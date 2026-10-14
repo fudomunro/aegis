@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -60,15 +62,15 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &Config{Services: []Service{{
-		ID:       googleContactsServiceID,
-		Name:     googleContactsServiceName,
+		ID:       connectors.GoogleContactsServiceID,
+		Name:     connectors.GoogleContactsServiceName,
 		Action:   "inject",
 		Endpoint: upstream.URL,
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGoogleContactsConnector(srv)
+	conn := connectors.NewGoogleContactsConnector(srv)
 	contacts, truncated, err := conn.ListUserContacts(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserContacts: %v", err)
@@ -96,7 +98,7 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 		t.Fatalf("ada sources = %+v", ada.Sources)
 	}
 	src := ada.Sources[0]
-	if src.Service != googleContactsServiceID || src.ServiceName != googleContactsServiceName {
+	if src.Service != connectors.GoogleContactsServiceID || src.ServiceName != connectors.GoogleContactsServiceName {
 		t.Fatalf("ada source identity = %+v", src)
 	}
 	if src.ID != "people/c123" {
@@ -113,9 +115,9 @@ func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
 
 func TestGoogleContactsConnector_ListUserContacts_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject",
+		ID: connectors.GoogleContactsServiceID, Name: connectors.GoogleContactsServiceName, Action: "inject",
 	}}}, "https://aegis.example.com")
-	conn := NewGoogleContactsConnector(srv)
+	conn := connectors.NewGoogleContactsConnector(srv)
 	_, _, err := conn.ListUserContacts(context.Background())
 	if !errors.Is(err, types.ErrUnauthorized) {
 		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
@@ -127,7 +129,7 @@ func TestGoogleContactsConnector_ListUserContacts_PaginatesAndTruncates(t *testi
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pages++
 		w.Header().Set("Content-Type", "application/json")
-		// Always emit another page so the connector hits libraryPageCap.
+		// Always emit another page so the connector hits connectors.LibraryPageCap.
 		json.NewEncoder(w).Encode(map[string]any{
 			"connections": []map[string]any{
 				{
@@ -142,12 +144,12 @@ func TestGoogleContactsConnector_ListUserContacts_PaginatesAndTruncates(t *testi
 	defer upstream.Close()
 
 	cfg := &Config{Services: []Service{{
-		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
+		ID: connectors.GoogleContactsServiceID, Name: connectors.GoogleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGoogleContactsConnector(srv)
+	conn := connectors.NewGoogleContactsConnector(srv)
 	contacts, truncated, err := conn.ListUserContacts(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserContacts: %v", err)
@@ -155,8 +157,8 @@ func TestGoogleContactsConnector_ListUserContacts_PaginatesAndTruncates(t *testi
 	if !truncated {
 		t.Fatal("expected truncated after page cap")
 	}
-	if len(contacts) != libraryPageCap {
-		t.Fatalf("got %d contacts, want %d", len(contacts), libraryPageCap)
+	if len(contacts) != connectors.LibraryPageCap {
+		t.Fatalf("got %d contacts, want %d", len(contacts), connectors.LibraryPageCap)
 	}
 }
 
@@ -176,11 +178,11 @@ func TestGoogleContactsConnector_HandleProxy_List(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &Config{Services: []Service{{
-		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
+		ID: connectors.GoogleContactsServiceID, Name: connectors.GoogleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
-	conn := NewGoogleContactsConnector(srv)
+	srv.tokens.Save(connectors.GoogleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	conn := connectors.NewGoogleContactsConnector(srv)
 
 	req := httptest.NewRequest("GET", "/me/contacts", nil)
 	w := httptest.NewRecorder()
@@ -211,11 +213,11 @@ func TestGoogleContactsConnector_HandleProxy_GetByID(t *testing.T) {
 	defer upstream.Close()
 
 	cfg := &Config{Services: []Service{{
-		ID: googleContactsServiceID, Name: googleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
+		ID: connectors.GoogleContactsServiceID, Name: connectors.GoogleContactsServiceName, Action: "inject", Endpoint: upstream.URL,
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(googleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
-	conn := NewGoogleContactsConnector(srv)
+	srv.tokens.Save(connectors.GoogleContactsServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	conn := connectors.NewGoogleContactsConnector(srv)
 
 	req := httptest.NewRequest("GET", "/contacts/people/c9", nil)
 	w := httptest.NewRecorder()
@@ -236,7 +238,7 @@ func TestNormalizeGooglePeopleResourceName(t *testing.T) {
 		"":            "",
 	}
 	for in, want := range cases {
-		if got := normalizeGooglePeopleResourceName(in); got != want {
+		if got := connectors.NormalizeGooglePeopleResourceName(in); got != want {
 			t.Errorf("normalize(%q) = %q, want %q", in, got, want)
 		}
 	}
@@ -249,19 +251,19 @@ func TestContactIDFromProxyPath(t *testing.T) {
 		"/me/contacts/people/z": "people/z",
 	}
 	for path, want := range cases {
-		got, ok := contactIDFromProxyPath(path)
+		got, ok := connectors.ContactIDFromProxyPath(path)
 		if !ok || got != want {
-			t.Errorf("contactIDFromProxyPath(%q) = (%q,%v), want (%q,true)", path, got, ok, want)
+			t.Errorf("connectors.ContactIDFromProxyPath(%q) = (%q,%v), want (%q,true)", path, got, ok, want)
 		}
 	}
-	if _, ok := contactIDFromProxyPath("/contacts/"); ok {
+	if _, ok := connectors.ContactIDFromProxyPath("/contacts/"); ok {
 		t.Error("empty id should not match")
 	}
 }
 
 func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewGoogleContactsConnector(srv)
+	conn := connectors.NewGoogleContactsConnector(srv)
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	if !strings.Contains(instr, "/v1/library/contacts") {
 		t.Fatalf("missing library endpoint: %s", instr)
@@ -279,8 +281,8 @@ func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 
 func TestGoogleContactsConnector_ImplementsContactProvider(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	var _ types.ContactProvider = NewGoogleContactsConnector(srv)
-	var _ ServiceConnector = NewGoogleContactsConnector(srv)
+	var _ types.ContactProvider = connectors.NewGoogleContactsConnector(srv)
+	var _ connectors.ServiceConnector = connectors.NewGoogleContactsConnector(srv)
 }
 
 func TestMergePhotoPeople_UnionsSharedIdentity(t *testing.T) {
@@ -325,9 +327,9 @@ func TestMergePhotoPeople_DistinctPeopleStaySeparate(t *testing.T) {
 }
 
 func TestMergePhotos_PreservesPeopleAcrossSources(t *testing.T) {
-	p1 := newPhoto("google-photos", "Google Photos", "p1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
+	p1 := types.NewPhoto("google-photos", "Google Photos", "p1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
 	p1.People = []types.Contact{{Name: "Ada", Emails: []string{"ada@example.com"}}}
-	p2 := newPhoto("icloud", "iCloud Photos", "p2", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
+	p2 := types.NewPhoto("icloud", "iCloud Photos", "p2", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
 	p2.People = []types.Contact{
 		{Name: "Ada", Emails: []string{"ada@example.com"}, Phones: []string{"+15550001111"}},
 		{Name: "Grace", Emails: []string{"grace@example.com"}},
@@ -358,8 +360,8 @@ func TestDataTypeForPath_PeopleAPI(t *testing.T) {
 
 func TestHasContactProviders_GoogleContacts(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
-		googleContactsServiceID: NewGoogleContactsConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		connectors.GoogleContactsServiceID: connectors.NewGoogleContactsConnector(srv),
 	}
 	if !kindHasProviders("contacts", srv) {
 		t.Fatal("Google Contacts connector should register as ContactProvider")

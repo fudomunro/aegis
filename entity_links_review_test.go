@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -117,7 +119,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 	srv.cache.Set(artistMBIDCacheKey("The Weeknd"), "-", time.Hour)
 	srv.cache.Set(recordingMBIDCacheKey("Blinding Lights", "The Weeknd"), "-", time.Hour)
 	srv.cache.Set(releaseGroupMBIDCacheKey("After Hours", "The Weeknd"), "-", time.Hour)
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{
 			playlists: []types.Playlist{{
 				Name:    "Road Trip",
@@ -223,7 +225,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 func TestHandleMergeReview_ProviderErrorsStillReturn200(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{err: types.ErrUnauthorized},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/review", nil)

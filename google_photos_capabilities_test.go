@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -27,7 +29,7 @@ func TestGooglePhotosConnector_DeleteSession_Success(t *testing.T) {
 		ID: "google-photos", Name: "Google Photos", Action: "inject", Endpoint: upstream.URL,
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 
 	req := httptest.NewRequest(http.MethodDelete, "/picker/sessions/sess-del", nil)
 	w := httptest.NewRecorder()
@@ -65,7 +67,7 @@ func TestGooglePhotosConnector_DeleteSession_UpstreamError(t *testing.T) {
 		ID: "google-photos", Name: "Google Photos", Action: "inject", Endpoint: upstream.URL,
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 
 	req := httptest.NewRequest(http.MethodDelete, "/picker/sessions/sess-x", nil)
 	w := httptest.NewRecorder()
@@ -84,7 +86,7 @@ func TestGooglePhotosConnector_DeleteSession_UpstreamDown(t *testing.T) {
 		ID: "google-photos", Name: "Google Photos", Action: "inject", Endpoint: "http://127.0.0.1:1",
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 
 	req := httptest.NewRequest(http.MethodDelete, "/picker/sessions/sess-x", nil)
 	w := httptest.NewRecorder()
@@ -98,7 +100,7 @@ func TestGooglePhotosConnector_HandleProxy_SessionRouting(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject",
 	}}}, "https://aegis.example.com")
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 
 	// No token → 401
 	req := httptest.NewRequest(http.MethodPost, "/picker/sessions", nil)
@@ -162,7 +164,7 @@ func TestGooglePhotosConnector_HandleProxy_SessionRouting(t *testing.T) {
 func TestWriteGooglePhotosUpstreamError(t *testing.T) {
 	t.Run("google error message", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		writeGooglePhotosUpstreamError(w, []byte(`{"error":{"code":400,"message":"session not ready","status":"FAILED_PRECONDITION"}}`), http.StatusBadRequest)
+		connectors.WriteGooglePhotosUpstreamError(w, []byte(`{"error":{"code":400,"message":"session not ready","status":"FAILED_PRECONDITION"}}`), http.StatusBadRequest)
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("code = %d", w.Code)
 		}
@@ -172,14 +174,14 @@ func TestWriteGooglePhotosUpstreamError(t *testing.T) {
 	})
 	t.Run("scope keyword triggers reauth hint", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		writeGooglePhotosUpstreamError(w, []byte(`{"error":{"message":"Request had insufficient authentication scopes."}}`), http.StatusUnauthorized)
+		connectors.WriteGooglePhotosUpstreamError(w, []byte(`{"error":{"message":"Request had insufficient authentication scopes."}}`), http.StatusUnauthorized)
 		if !strings.Contains(w.Body.String(), "re-authorize") {
 			t.Fatalf("body = %s", w.Body.String())
 		}
 	})
 	t.Run("invalid body uses default", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		writeGooglePhotosUpstreamError(w, []byte("not-json"), http.StatusBadGateway)
+		connectors.WriteGooglePhotosUpstreamError(w, []byte("not-json"), http.StatusBadGateway)
 		if !strings.Contains(w.Body.String(), "Google Photos request failed") {
 			t.Fatalf("body = %s", w.Body.String())
 		}
@@ -188,7 +190,7 @@ func TestWriteGooglePhotosUpstreamError(t *testing.T) {
 
 func TestGoogleContactsConnector_Capabilities(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewGoogleContactsConnector(srv)
+	conn := connectors.NewGoogleContactsConnector(srv)
 	caps := conn.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "contacts" {
 		t.Fatalf("caps = %+v", caps)
@@ -208,7 +210,7 @@ func TestGoogleContactsConnector_Capabilities(t *testing.T) {
 
 func TestImmichConnector_Capabilities(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewImmichConnector(srv)
+	conn := connectors.NewImmichConnector(srv)
 	caps := conn.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "photos" {
 		t.Fatalf("caps = %+v", caps)

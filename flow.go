@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"sort"
@@ -674,7 +676,7 @@ func staticCredentialLabel(svc Service) string {
 	return ""
 }
 
-func flowProvidesKind(connector ServiceConnector, kindID string) bool {
+func flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
 	switch kindID {
 	case "playlists":
 		_, ok := connector.(types.PlaylistProvider)

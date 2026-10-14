@@ -341,7 +341,7 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", k.Label, name)
 	}
 	if kindID == "photos" {
-		text += "\n" + photoSourceDiscipline()
+		text += "\n" + types.PhotoSourceDiscipline()
 	}
 	text += "\n" + multiSourceMutationRule()
 	return text

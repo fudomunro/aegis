@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"fmt"
 	"net/url"
@@ -91,7 +93,7 @@ func (m *youtubeMirror) collectPlaylistItems(ctx context.Context, playlistID str
 }
 
 func (m *youtubeMirror) loadLikedTracks(ctx context.Context) ([]mirrorTrack, bool, error) {
-	conn, ok := m.s.connectors["youtube-music"].(*YouTubeMusicConnector)
+	conn, ok := m.s.connectors["youtube-music"].(*connectors.YouTubeMusicConnector)
 	if !ok {
 		return nil, false, fmt.Errorf("youtube-music connector not registered")
 	}

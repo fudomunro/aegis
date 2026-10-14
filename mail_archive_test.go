@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -23,8 +25,8 @@ func openTestMailArchive(t *testing.T) *MailArchive {
 
 func sampleMailRecord(id, subject, body string) MailArchiveRecord {
 	return MailArchiveRecord{
-		Service:     googleGmailServiceID,
-		ServiceName: googleGmailServiceName,
+		Service:     connectors.GoogleGmailServiceID,
+		ServiceName: connectors.GoogleGmailServiceName,
 		ID:          id,
 		ThreadID:    "t-" + id,
 		MessageID:   "<" + id + "@example.com>",
@@ -34,7 +36,7 @@ func sampleMailRecord(id, subject, body string) MailArchiveRecord {
 		Snippet:     body[:minInt(20, len(body))],
 		FromName:    "Ada Lovelace",
 		FromEmail:   "ada@example.com",
-		To:          []types.Contact{newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil)},
+		To:          []types.Contact{types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil)},
 		SentAt:      "2024-06-01T09:00:00Z",
 		ReceivedAt:  "2024-06-01T09:00:05Z",
 		Direction:   "inbound",
@@ -84,7 +86,7 @@ func TestMailArchiveUpsertGetSearch(t *testing.T) {
 	if err := a.Upsert(rec); err != nil {
 		t.Fatalf("upsert replace: %v", err)
 	}
-	got, err := a.Get(googleGmailServiceID, "m1")
+	got, err := a.Get(connectors.GoogleGmailServiceID, "m1")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -169,42 +171,42 @@ func TestMailArchiveUpsertGetSearch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if !st.Enabled || st.MessageCount != 2 || st.ByService[googleGmailServiceID] != 2 {
+	if !st.Enabled || st.MessageCount != 2 || st.ByService[connectors.GoogleGmailServiceID] != 2 {
 		t.Fatalf("status = %+v", st)
 	}
 }
 
 func TestMailArchiveSyncCursor(t *testing.T) {
 	a := openTestMailArchive(t)
-	if err := a.SaveSyncCursor(googleGmailServiceID, MailSyncCursor{
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, MailSyncCursor{
 		PageToken:  "tok1",
 		LastSyncAt: "2024-06-01T00:00:00Z",
 	}); err != nil {
 		t.Fatalf("save cursor: %v", err)
 	}
-	cur, err := a.LoadSyncCursor(googleGmailServiceID)
+	cur, err := a.LoadSyncCursor(connectors.GoogleGmailServiceID)
 	if err != nil {
 		t.Fatalf("load cursor: %v", err)
 	}
 	if cur.PageToken != "tok1" || cur.Done || cur.LastSyncAt != "2024-06-01T00:00:00Z" {
 		t.Fatalf("cursor = %+v", cur)
 	}
-	if err := a.SaveSyncCursor(googleGmailServiceID, MailSyncCursor{PageToken: "tok1", Done: true}); err != nil {
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, MailSyncCursor{PageToken: "tok1", Done: true}); err != nil {
 		t.Fatalf("save done: %v", err)
 	}
-	cur, _ = a.LoadSyncCursor(googleGmailServiceID)
+	cur, _ = a.LoadSyncCursor(connectors.GoogleGmailServiceID)
 	if !cur.Done {
 		t.Fatal("expected done cursor")
 	}
 }
 
 func TestRecordFromMessage(t *testing.T) {
-	msg := newMessage(googleGmailServiceID, googleGmailServiceName, "id9", types.MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")
+	msg := newMessage(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "id9", types.MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")
 	msg.From = &types.Contact{Name: "Ada", Emails: []string{"Ada@Example.com"}}
 	msg.EntityID = "<id9@example.com>"
 	msg.Body = "body text"
 	rec := RecordFromMessage("", "", msg, []byte{1})
-	if rec.Service != googleGmailServiceID || rec.ID != "id9" || rec.FromEmail != "Ada@Example.com" {
+	if rec.Service != connectors.GoogleGmailServiceID || rec.ID != "id9" || rec.FromEmail != "Ada@Example.com" {
 		t.Fatalf("rec = %+v", rec)
 	}
 	if rec.MessageID != "<id9@example.com>" || rec.BodyText != "body text" {
@@ -215,8 +217,8 @@ func TestRecordFromMessage(t *testing.T) {
 func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 	t.Helper()
 	cfg := &Config{Services: []Service{{
-		ID:          googleGmailServiceID,
-		Name:        googleGmailServiceName,
+		ID:          connectors.GoogleGmailServiceID,
+		Name:        connectors.GoogleGmailServiceName,
 		Action:      "inject",
 		Permissions: types.Permissions{"messages": "read"},
 	}}}
@@ -227,13 +229,13 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		cache:       NewCache(),
 		tokens:      mustTokens(t),
 		oauthStates: NewStateStore(),
-		connectors:  make(map[string]ServiceConnector),
+		connectors:  make(map[string]connectors.ServiceConnector),
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		links:       mustLinks(t),
 		mail:        archive,
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 	}
-	srv.connectors[googleGmailServiceID] = NewGoogleGmailConnector(srv)
+	srv.connectors[connectors.GoogleGmailServiceID] = connectors.NewGoogleGmailConnector(srv)
 	return srv
 }
 
@@ -317,7 +319,7 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 		t.Fatalf("hits = %+v", hits)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+googleGmailServiceID+"/m1", "")
+	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/m1", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("get code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -329,7 +331,7 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 		t.Fatalf("msg = %+v", msg)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+googleGmailServiceID+"/m1/raw", "")
+	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/m1/raw", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("raw code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -337,7 +339,7 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 		t.Fatalf("raw = %s", w.Body.String())
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+googleGmailServiceID+"/missing", "")
+	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/missing", "")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("missing code = %d", w.Code)
 	}

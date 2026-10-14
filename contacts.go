@@ -9,151 +9,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// NormalizeContactEmail lowercases and trims an address for identity matching.
-func NormalizeContactEmail(email string) string {
-	return strings.ToLower(strings.TrimSpace(email))
-}
-
-// NormalizeContactPhone reduces a phone number to a comparable digit form.
-// A leading "+" is preserved; punctuation and spaces are stripped.
-func NormalizeContactPhone(phone string) string {
-	s := strings.TrimSpace(phone)
-	if s == "" {
-		return ""
-	}
-	plus := strings.HasPrefix(s, "+")
-	var b strings.Builder
-	for _, r := range s {
-		if r >= '0' && r <= '9' {
-			b.WriteRune(r)
-		}
-	}
-	digits := b.String()
-	if digits == "" {
-		return ""
-	}
-	if plus {
-		return "+" + digits
-	}
-	return digits
-}
-
-// NormalizeContactHandle lowercases and trims a non-email handle.
-func NormalizeContactHandle(handle string) string {
-	s := strings.ToLower(strings.TrimSpace(handle))
-	s = strings.TrimPrefix(s, "@")
-	return s
-}
-
-// ContactIdentityKeys returns ordered merge keys for a contact: email first
-// (strongest), then phone, then handle. Display name is used only when the
-// contact has no stronger identifier, so two different "Alex Kim" addresses
-// do not merge just because the names match. Empty keys are omitted. The
-// first key is the contact's primary identity.
-func ContactIdentityKeys(c types.Contact) []string {
-	var keys []string
-	seen := map[string]bool{}
-	add := func(prefix, val string) {
-		if val == "" {
-			return
-		}
-		k := prefix + ":" + val
-		if seen[k] {
-			return
-		}
-		seen[k] = true
-		keys = append(keys, k)
-	}
-	for _, e := range c.Emails {
-		add("email", NormalizeContactEmail(e))
-	}
-	for _, p := range c.Phones {
-		add("phone", NormalizeContactPhone(p))
-	}
-	for _, h := range c.Handles {
-		add("handle", NormalizeContactHandle(h))
-	}
-	if len(keys) == 0 {
-		if name := types.NormalizeIdentityKey(c.Name); name != "" {
-			add("name", name)
-		}
-	}
-	return keys
-}
-
-// primaryContactKey is the first identity key, or "" when the contact has none.
-func primaryContactKey(c types.Contact) string {
-	keys := ContactIdentityKeys(c)
-	if len(keys) == 0 {
-		return ""
-	}
-	return keys[0]
-}
-
-// newContact builds a unified contact from one service spelling.
-func newContact(service, serviceName, id, name string, emails, phones []string) types.Contact {
-	emails = normalizeEmailList(emails)
-	phones = normalizePhoneList(phones)
-	name = strings.TrimSpace(name)
-	if name == "" && len(emails) == 0 && len(phones) == 0 {
-		return types.Contact{}
-	}
-	src := types.ContactSource{
-		Service:     service,
-		ServiceName: serviceName,
-		ID:          id,
-		Name:        name,
-		Emails:      emails,
-		Phones:      phones,
-	}
-	return types.Contact{
-		Name:    name,
-		Emails:  emails,
-		Phones:  phones,
-		Sources: []types.ContactSource{src},
-	}
-}
-
-func normalizeEmailList(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(in))
-	seen := map[string]bool{}
-	for _, e := range in {
-		n := NormalizeContactEmail(e)
-		if n == "" || seen[n] {
-			continue
-		}
-		seen[n] = true
-		out = append(out, n)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func normalizePhoneList(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(in))
-	seen := map[string]bool{}
-	for _, p := range in {
-		n := NormalizeContactPhone(p)
-		if n == "" || seen[n] {
-			continue
-		}
-		seen[n] = true
-		out = append(out, n)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
 func normalizeHandleList(in []string) []string {
 	if len(in) == 0 {
 		return nil
@@ -161,7 +16,7 @@ func normalizeHandleList(in []string) []string {
 	out := make([]string, 0, len(in))
 	seen := map[string]bool{}
 	for _, h := range in {
-		n := NormalizeContactHandle(h)
+		n := types.NormalizeContactHandle(h)
 		if n == "" || seen[n] {
 			continue
 		}
@@ -204,8 +59,8 @@ func mergeContactInto(dst *types.Contact, src types.Contact) {
 	if dst.Organization == "" {
 		dst.Organization = src.Organization
 	}
-	dst.Emails = normalizeEmailList(unionStrings(dst.Emails, src.Emails))
-	dst.Phones = normalizePhoneList(unionStrings(dst.Phones, src.Phones))
+	dst.Emails = types.NormalizeEmailList(unionStrings(dst.Emails, src.Emails))
+	dst.Phones = types.NormalizePhoneList(unionStrings(dst.Phones, src.Phones))
 	dst.Handles = normalizeHandleList(unionStrings(dst.Handles, src.Handles))
 	dst.Sources = append(dst.Sources, src.Sources...)
 	if len(dst.Extra) == 0 && len(src.Extra) > 0 {
@@ -226,7 +81,7 @@ func MergeContacts(in []types.Contact) []types.Contact {
 	// entries only if they have a source ID to stand on.
 	prepared := make([]types.Contact, 0, len(in))
 	for _, c := range in {
-		if primaryContactKey(c) == "" && len(c.Sources) > 0 {
+		if types.PrimaryContactKey(c) == "" && len(c.Sources) > 0 {
 			// Anonymous service-local entry: identity by service:id.
 			s := c.Sources[0]
 			key := "\x00" + s.Service + ":" + s.ID
@@ -237,7 +92,7 @@ func MergeContacts(in []types.Contact) []types.Contact {
 				c.Handles = []string{key}
 			}
 		}
-		if primaryContactKey(c) == "" {
+		if types.PrimaryContactKey(c) == "" {
 			continue
 		}
 		prepared = append(prepared, c)
@@ -270,7 +125,7 @@ func MergeContacts(in []types.Contact) []types.Contact {
 
 	keyOwner := map[string]int{}
 	for i, c := range prepared {
-		for _, key := range ContactIdentityKeys(c) {
+		for _, key := range types.ContactIdentityKeys(c) {
 			if j, ok := keyOwner[key]; ok {
 				union(i, j)
 			} else {
@@ -317,7 +172,7 @@ func MergeContacts(in []types.Contact) []types.Contact {
 			}
 			return ni < nj
 		}
-		return primaryContactKey(out[i]) < primaryContactKey(out[j])
+		return types.PrimaryContactKey(out[i]) < types.PrimaryContactKey(out[j])
 	})
 	return out
 }
@@ -335,7 +190,7 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 				})
 		},
 		serviceOf: contactServiceName,
-		sortKey:   primaryContactKey,
+		sortKey:   types.PrimaryContactKey,
 		merge:     MergeContacts,
 		encode: func(merged []types.Contact, bySvc map[string]types.LibraryServiceStatus) any {
 			return types.ContactList{Contacts: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}

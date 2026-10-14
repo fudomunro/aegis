@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -161,13 +161,13 @@ Always include the full proxy base URL in your requests.`, base, root, root)
 
 // HandleProxy processes a YouTube Music API request through the connector.
 func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	runConnectorProxy(c.host, w, r, remainingPath, connectorProxyOpts{
+	RunProxy(c.host, w, r, remainingPath, ProxyOpts{
 		serviceID:   "youtube-music",
 		displayName: "YouTube",
 		defaultBase: youtubeAPIBase,
 		defaultTTL:  60 * time.Second,
 		mapUpstream: func(path string, query url.Values) (string, url.Values, error) {
-			apiPath, extraParams, err := c.mapPath(path, query)
+			apiPath, extraParams, err := c.MapPath(path, query)
 			if err != nil {
 				return "", nil, err
 			}
@@ -180,15 +180,15 @@ func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 			return apiPath, query, nil
 		},
 		expandPages: func(ctx context.Context, path string, query url.Values, raw map[string]any, token string, logger *slog.Logger) map[string]any {
-			return c.fetchAllPagesRaw(ctx, path, query, raw, token, logger)
+			return c.FetchAllPagesRaw(ctx, path, query, raw, token, logger)
 		},
-		transform: c.transformResponse,
+		transform: c.TransformResponse,
 	})
 }
 
-// mapPath translates friendly proxy paths to YouTube Data API v3 calls.
+// MapPath translates friendly proxy paths to YouTube Data API v3 calls.
 // Returns the API path and any extra query parameters needed.
-func (c *YouTubeMusicConnector) mapPath(path string, query map[string][]string) (string, map[string]string, error) {
+func (c *YouTubeMusicConnector) MapPath(path string, query map[string][]string) (string, map[string]string, error) {
 	switch {
 	case path == "/me":
 		return "/channels", map[string]string{"part": "snippet,contentDetails", "mine": "true"}, nil
@@ -199,7 +199,7 @@ func (c *YouTubeMusicConnector) mapPath(path string, query map[string][]string) 
 	case path == "/me/liked":
 		// Liked videos require the likedVideos playlist ID from the channel.
 		// We'll handle this in the transform layer by first fetching the channel.
-		likedPlaylistID, err := c.getLikedPlaylistID()
+		likedPlaylistID, err := c.GetLikedPlaylistID()
 		if err != nil {
 			return "", nil, fmt.Errorf("failed to get liked playlist ID: %w", err)
 		}
@@ -256,8 +256,8 @@ func (c *YouTubeMusicConnector) mapPath(path string, query map[string][]string) 
 	}
 }
 
-// getLikedPlaylistID fetches the user's channel to get the likedVideos playlist ID.
-func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
+// GetLikedPlaylistID fetches the user's channel to get the likedVideos playlist ID.
+func (c *YouTubeMusicConnector) GetLikedPlaylistID() (string, error) {
 	token := c.host.GetValidToken("youtube-music", slog.Default())
 	if token == "" {
 		return "", fmt.Errorf("no valid token")
@@ -265,7 +265,7 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 
 	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
 	url := upstreamBase + "/channels?part=contentDetails&mine=true"
-	data, status, err := doUpstreamRequest(context.Background(), "GET", url, nil, token)
+	data, status, err := DoUpstreamRequest(context.Background(), "GET", url, nil, token)
 	if err != nil {
 		return "", err
 	}
@@ -291,8 +291,8 @@ func (c *YouTubeMusicConnector) getLikedPlaylistID() (string, error) {
 	return resp.Items[0].ContentDetails.RelatedPlaylists.Likes, nil
 }
 
-// transformResponse converts YouTube's verbose JSON into a compact format.
-func (c *YouTubeMusicConnector) transformResponse(path string, data []byte, logger *slog.Logger) any {
+// TransformResponse converts YouTube's verbose JSON into a compact format.
+func (c *YouTubeMusicConnector) TransformResponse(path string, data []byte, logger *slog.Logger) any {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return string(data)
@@ -305,29 +305,29 @@ func (c *YouTubeMusicConnector) transformResponse(path string, data []byte, logg
 
 	switch {
 	case path == "/me":
-		return c.transformChannel(raw)
+		return c.TransformChannel(raw)
 	case path == "/me/playlists":
-		return c.transformPlaylistList(raw)
+		return c.TransformPlaylistList(raw)
 	case path == "/me/liked":
-		return c.transformPlaylistItems(raw)
+		return c.TransformPlaylistItems(raw)
 	case path == "/me/subscriptions":
-		return c.transformSubscriptions(raw)
+		return c.TransformSubscriptions(raw)
 	case path == "/search":
-		return c.transformSearch(raw)
+		return c.TransformSearch(raw)
 	case strings.HasPrefix(path, "/playlists/") && !strings.HasSuffix(path, "/items"):
-		return c.transformPlaylistDetail(raw)
+		return c.TransformPlaylistDetail(raw)
 	case strings.HasPrefix(path, "/playlists/") && strings.HasSuffix(path, "/items"):
-		return c.transformPlaylistItems(raw)
+		return c.TransformPlaylistItems(raw)
 	case strings.HasPrefix(path, "/videos/"):
-		return c.transformVideo(raw)
+		return c.TransformVideo(raw)
 	case strings.HasPrefix(path, "/channels/"):
-		return c.transformChannel(raw)
+		return c.TransformChannel(raw)
 	default:
-		return c.simplify(raw)
+		return c.Simplify(raw)
 	}
 }
 
-func (c *YouTubeMusicConnector) transformChannel(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) TransformChannel(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
 	if len(items) == 0 {
 		return map[string]any{"message": "No channel found"}
@@ -363,7 +363,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 
 	var all []types.Artist
 	pageToken := ""
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		u := upstreamBase + "/subscriptions?part=snippet&mine=true&maxResults=50"
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
@@ -373,7 +373,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -400,7 +400,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 				continue
 			}
 			title, _ := snippet["title"].(string)
-			channelID, _ := extractNested(snippet, "resourceId", "channelId").(string)
+			channelID, _ := ExtractNested(snippet, "resourceId", "channelId").(string)
 			if channelID == "" {
 				if id, ok := snippet["channelId"].(string); ok {
 					channelID = id
@@ -425,24 +425,24 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 // youtubeMusicCategoryID is YouTube Data API v3 categoryId for Music.
 const youtubeMusicCategoryID = "10"
 
-// isMusicShapedYouTubeVideo reports whether a videos.list resource looks like
+// IsMusicShapedYouTubeVideo reports whether a videos.list resource looks like
 // music (category Music, or an official catalog channel ending in " - Topic").
 // Used to keep non-music YouTube likes out of the neutral liked-tracks library.
 // See https://github.com/fudomunro/aegis/issues/43.
-func isMusicShapedYouTubeVideo(categoryID, channelTitle string) bool {
+func IsMusicShapedYouTubeVideo(categoryID, channelTitle string) bool {
 	if categoryID == youtubeMusicCategoryID {
 		return true
 	}
 	return strings.HasSuffix(strings.TrimSpace(channelTitle), " - Topic")
 }
 
-// fetchVideoSnippets batch-fetches videos.list snippet metadata (categoryId,
+// FetchVideoSnippets batch-fetches videos.list snippet metadata (categoryId,
 // channelTitle, …) for the given video IDs. IDs not returned upstream are absent
 // from the map (deleted/private).
-// fetchVideoSnippets batch-fetches videos.list resources (snippet + duration)
+// FetchVideoSnippets batch-fetches videos.list resources (snippet + duration)
 // for the given video IDs. IDs not returned upstream are absent from the map
 // (deleted/private).
-func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, upstreamBase string, videoIDs []string) (map[string]map[string]any, error) {
+func (c *YouTubeMusicConnector) FetchVideoSnippets(ctx context.Context, token, upstreamBase string, videoIDs []string) (map[string]map[string]any, error) {
 	out := make(map[string]map[string]any, len(videoIDs))
 	const batch = 50
 	for start := 0; start < len(videoIDs); start += batch {
@@ -456,7 +456,7 @@ func (c *YouTubeMusicConnector) fetchVideoSnippets(ctx context.Context, token, u
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -496,7 +496,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 		return nil, false, types.ErrUnauthorized
 	}
 
-	likedPlaylistID, err := c.getLikedPlaylistID()
+	likedPlaylistID, err := c.GetLikedPlaylistID()
 	if err != nil {
 		return nil, false, err
 	}
@@ -507,7 +507,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 	var videoIDs []string
 	seenID := make(map[string]bool)
 	pageToken := ""
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		u := upstreamBase + "/playlistItems?part=snippet,contentDetails&playlistId=" +
 			likedPlaylistID + "&maxResults=50"
 		if pageToken != "" {
@@ -518,7 +518,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -541,7 +541,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 				continue
 			}
 			likedItems = append(likedItems, p)
-			if id := youtubePlaylistItemVideoID(p); id != "" && !seenID[id] {
+			if id := YoutubePlaylistItemVideoID(p); id != "" && !seenID[id] {
 				seenID[id] = true
 				videoIDs = append(videoIDs, id)
 			}
@@ -552,14 +552,14 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 		}
 	}
 
-	snippets, err := c.fetchVideoSnippets(ctx, token, upstreamBase, videoIDs)
+	snippets, err := c.FetchVideoSnippets(ctx, token, upstreamBase, videoIDs)
 	if err != nil {
 		return nil, false, err
 	}
 
 	var all []types.Track
 	for _, p := range likedItems {
-		id := youtubePlaylistItemVideoID(p)
+		id := YoutubePlaylistItemVideoID(p)
 		video, ok := snippets[id]
 		if !ok {
 			continue
@@ -570,7 +570,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 		}
 		categoryID, _ := snippet["categoryId"].(string)
 		channelTitle, _ := snippet["channelTitle"].(string)
-		if !isMusicShapedYouTubeVideo(categoryID, channelTitle) {
+		if !IsMusicShapedYouTubeVideo(categoryID, channelTitle) {
 			continue
 		}
 		// Prefer enriched videos.list contentDetails (duration) when present.
@@ -586,15 +586,15 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 				}
 			}
 		}
-		if track, ok := c.neutralYouTubeTrack(p); ok {
+		if track, ok := c.NeutralYouTubeTrack(p); ok {
 			all = append(all, track)
 		}
 	}
 	return all, pageToken != "", nil
 }
 
-// youtubePlaylistItemVideoID extracts the video ID from a playlistItem resource.
-func youtubePlaylistItemVideoID(item map[string]any) string {
+// YoutubePlaylistItemVideoID extracts the video ID from a playlistItem resource.
+func YoutubePlaylistItemVideoID(item map[string]any) string {
 	if contentDetails, ok := item["contentDetails"].(map[string]any); ok {
 		if id, _ := contentDetails["videoId"].(string); id != "" {
 			return id
@@ -621,7 +621,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.
 
 	var all []types.Playlist
 	pageToken := ""
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		u := upstreamBase + "/playlists?part=snippet,contentDetails&mine=true&maxResults=50"
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
@@ -631,7 +631,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -653,7 +653,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.
 			if !ok {
 				continue
 			}
-			all = append(all, c.neutralPlaylist(p))
+			all = append(all, c.NeutralPlaylist(p))
 		}
 		pageToken, _ = raw["nextPageToken"].(string)
 		if pageToken == "" {
@@ -663,8 +663,8 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.
 	return all, pageToken != "", nil
 }
 
-// youtubePlaylistURL builds a public YouTube playlist link.
-func youtubePlaylistURL(id string) string {
+// YoutubePlaylistURL builds a public YouTube playlist link.
+func YoutubePlaylistURL(id string) string {
 	if id == "" {
 		return ""
 	}
@@ -673,7 +673,7 @@ func youtubePlaylistURL(id string) string {
 
 // neutralPlaylist maps a raw YouTube playlist resource into the neutral type.
 // Service identity lives in Sources.
-func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) types.Playlist {
+func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist {
 	id, _ := p["id"].(string)
 	snippet, _ := p["snippet"].(map[string]any)
 	contentDetails, _ := p["contentDetails"].(map[string]any)
@@ -684,7 +684,7 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) types.Playlist
 	publishedAt, _ := snippet["publishedAt"].(string)
 
 	trackCount := 0
-	if n, ok := asInt(contentDetails["itemCount"]); ok {
+	if n, ok := AsInt(contentDetails["itemCount"]); ok {
 		trackCount = n
 	}
 
@@ -702,7 +702,7 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) types.Playlist
 		Owner:       owner,
 		TrackCount:  trackCount,
 		Sources: []types.PlaylistSource{
-			types.PrimaryPlaylistSource("youtube-music", "YouTube Music", id, youtubePlaylistURL(id), extra),
+			types.PrimaryPlaylistSource("youtube-music", "YouTube Music", id, YoutubePlaylistURL(id), extra),
 		},
 	}
 }
@@ -710,7 +710,7 @@ func (c *YouTubeMusicConnector) neutralPlaylist(p map[string]any) types.Playlist
 // neutralYouTubeTrack maps a raw playlistItem / liked video into the neutral Track.
 // Titles are cleaned of YouTube decoration so name matching can join catalog
 // tracks (issue #4). Original title is preserved in source extra.
-func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (types.Track, bool) {
+func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.Track, bool) {
 	snippet, _ := item["snippet"].(map[string]any)
 	contentDetails, _ := item["contentDetails"].(map[string]any)
 	if snippet == nil {
@@ -769,7 +769,7 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (types.
 	duration := ""
 	if iso, ok := contentDetails["duration"].(string); ok {
 		duration = iso
-		durationMs = iso8601DurationMs(iso)
+		durationMs = Iso8601DurationMs(iso)
 	}
 
 	return types.Track{
@@ -782,13 +782,13 @@ func (c *YouTubeMusicConnector) neutralYouTubeTrack(item map[string]any) (types.
 			ServiceName: "YouTube Music",
 			ID:          videoID,
 			URL:         url,
-			Extra:       extraOrNil(extra),
+			Extra:       ExtraOrNil(extra),
 		}},
 	}, true
 }
 
-// iso8601DurationMs parses a YouTube ISO-8601 duration (e.g. PT3M42S) into ms.
-func iso8601DurationMs(s string) int {
+// Iso8601DurationMs parses a YouTube ISO-8601 duration (e.g. PT3M42S) into ms.
+func Iso8601DurationMs(s string) int {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "PT") {
 		return 0
@@ -821,7 +821,7 @@ func iso8601DurationMs(s string) int {
 	return total
 }
 
-func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) types.PlaylistList {
+func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) types.PlaylistList {
 	items, _ := raw["items"].([]any)
 	playlists := make([]types.Playlist, 0, len(items))
 	for _, item := range items {
@@ -829,20 +829,20 @@ func (c *YouTubeMusicConnector) transformPlaylistList(raw map[string]any) types.
 		if !ok {
 			continue
 		}
-		playlists = append(playlists, c.neutralPlaylist(p))
+		playlists = append(playlists, c.NeutralPlaylist(p))
 	}
 	total := len(playlists)
-	if n, ok := asInt(raw["total_fetched"]); ok {
+	if n, ok := AsInt(raw["total_fetched"]); ok {
 		total = n
 	} else if pageInfo, ok := raw["pageInfo"].(map[string]any); ok {
-		if n, ok := asInt(pageInfo["totalResults"]); ok {
+		if n, ok := AsInt(pageInfo["totalResults"]); ok {
 			total = n
 		}
 	}
 	return types.PlaylistList{Playlists: playlists, Total: total}
 }
 
-func (c *YouTubeMusicConnector) transformPlaylistItems(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) TransformPlaylistItems(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
 	tracks := make([]types.Track, 0, len(items))
 	for _, item := range items {
@@ -850,15 +850,15 @@ func (c *YouTubeMusicConnector) transformPlaylistItems(raw map[string]any) map[s
 		if !ok {
 			continue
 		}
-		if track, ok := c.neutralYouTubeTrack(p); ok {
+		if track, ok := c.NeutralYouTubeTrack(p); ok {
 			tracks = append(tracks, track)
 		}
 	}
 	total := len(tracks)
-	if n, ok := asInt(raw["total_fetched"]); ok {
+	if n, ok := AsInt(raw["total_fetched"]); ok {
 		total = n
 	} else if pageInfo, ok := raw["pageInfo"].(map[string]any); ok {
-		if n, ok := asInt(pageInfo["totalResults"]); ok {
+		if n, ok := AsInt(pageInfo["totalResults"]); ok {
 			total = n
 		}
 	}
@@ -868,7 +868,7 @@ func (c *YouTubeMusicConnector) transformPlaylistItems(raw map[string]any) map[s
 	}
 }
 
-func (c *YouTubeMusicConnector) transformSubscriptions(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) TransformSubscriptions(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
 	channels := make([]map[string]any, 0, len(items))
 	for _, item := range items {
@@ -883,7 +883,7 @@ func (c *YouTubeMusicConnector) transformSubscriptions(raw map[string]any) map[s
 		channels = append(channels, map[string]any{
 			"title":       snippet["title"],
 			"description": snippet["description"],
-			"channel_id":  extractNested(snippet, "resourceId", "channelId"),
+			"channel_id":  ExtractNested(snippet, "resourceId", "channelId"),
 		})
 	}
 	return map[string]any{
@@ -893,7 +893,7 @@ func (c *YouTubeMusicConnector) transformSubscriptions(raw map[string]any) map[s
 	}
 }
 
-func (c *YouTubeMusicConnector) transformSearch(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) TransformSearch(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
 	results := make([]map[string]any, 0, len(items))
 	for _, item := range items {
@@ -932,20 +932,20 @@ func (c *YouTubeMusicConnector) transformSearch(raw map[string]any) map[string]a
 	}
 }
 
-func (c *YouTubeMusicConnector) transformPlaylistDetail(raw map[string]any) any {
+func (c *YouTubeMusicConnector) TransformPlaylistDetail(raw map[string]any) any {
 	items, _ := raw["items"].([]any)
 	if len(items) == 0 {
 		return map[string]any{"message": "Playlist not found"}
 	}
 	p, _ := items[0].(map[string]any)
-	base := c.neutralPlaylist(p)
+	base := c.NeutralPlaylist(p)
 	return types.PlaylistDetail{
 		Playlist:    base,
 		TotalTracks: base.TrackCount,
 	}
 }
 
-func (c *YouTubeMusicConnector) transformVideo(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) TransformVideo(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
 	if len(items) == 0 {
 		return map[string]any{"message": "Video not found"}
@@ -972,7 +972,7 @@ func (c *YouTubeMusicConnector) transformVideo(raw map[string]any) map[string]an
 }
 
 // simplify strips a raw YouTube response down to key fields.
-func (c *YouTubeMusicConnector) simplify(raw map[string]any) map[string]any {
+func (c *YouTubeMusicConnector) Simplify(raw map[string]any) map[string]any {
 	result := map[string]any{}
 	keep := []string{"items", "pageInfo", "nextPageToken", "prevPageToken", "totalResults"}
 	for _, k := range keep {
@@ -983,15 +983,15 @@ func (c *YouTubeMusicConnector) simplify(raw map[string]any) map[string]any {
 	return result
 }
 
-// isPaginated returns true if the response has a nextPageToken.
-func (c *YouTubeMusicConnector) isPaginated(raw map[string]any) bool {
+// IsPaginated returns true if the response has a nextPageToken.
+func (c *YouTubeMusicConnector) IsPaginated(raw map[string]any) bool {
 	_, ok := raw["nextPageToken"]
 	return ok
 }
 
-// fetchAllPagesRaw follows YouTube's pagination tokens on raw (untransformed) data.
+// FetchAllPagesRaw follows YouTube's pagination tokens on raw (untransformed) data.
 // It combines items arrays from all pages into the first page's response.
-func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path string, query map[string][]string, firstPage map[string]any, token string, logger *slog.Logger) map[string]any {
+func (c *YouTubeMusicConnector) FetchAllPagesRaw(ctx context.Context, path string, query map[string][]string, firstPage map[string]any, token string, logger *slog.Logger) map[string]any {
 	nextToken, _ := firstPage["nextPageToken"].(string)
 	if nextToken == "" {
 		return firstPage
@@ -1001,11 +1001,11 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path strin
 
 	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
 
-	apiPath, extraParams, _ := c.mapPath(path, query)
+	apiPath, extraParams, _ := c.MapPath(path, query)
 
-	// Follow up to libraryPageCap additional pages so large libraries are
+	// Follow up to LibraryPageCap additional pages so large libraries are
 	// not silently cut off. Hit the cap → mark truncated for the caller.
-	maxPages := libraryPageCap
+	maxPages := LibraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		q := map[string][]string{}
 		for k, v := range query {
@@ -1016,9 +1016,9 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path strin
 		}
 		q["pageToken"] = []string{nextToken}
 
-		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
+		upstreamURL := upstreamBase + apiPath + "?" + MapToQuery(q)
 
-		data, status, err := doUpstreamRequest(ctx, "GET", upstreamURL, nil, token)
+		data, status, err := DoUpstreamRequest(ctx, "GET", upstreamURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
 			break
@@ -1042,8 +1042,8 @@ func (c *YouTubeMusicConnector) fetchAllPagesRaw(ctx context.Context, path strin
 	return firstPage
 }
 
-// fetchAllPages follows YouTube's pagination tokens and combines items.
-func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, query map[string][]string, firstPage any, token string, logger *slog.Logger) any {
+// FetchAllPages follows YouTube's pagination tokens and combines items.
+func (c *YouTubeMusicConnector) FetchAllPages(ctx context.Context, path string, query map[string][]string, firstPage any, token string, logger *slog.Logger) any {
 	page, ok := firstPage.(map[string]any)
 	if !ok {
 		return firstPage
@@ -1055,21 +1055,21 @@ func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, 
 	}
 
 	// Determine the items key based on path.
-	itemsKey := c.itemsKeyForPath(path)
+	itemsKey := c.ItemsKeyForPath(path)
 	if itemsKey == "" {
 		return firstPage
 	}
 
 	allItems, _ := page[itemsKey].([]any)
 
-	// Follow up to libraryPageCap additional pages so large libraries are
+	// Follow up to LibraryPageCap additional pages so large libraries are
 	// not silently cut off. Hit the cap → mark truncated for the caller.
-	maxPages := libraryPageCap
+	maxPages := LibraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		// Build the next page URL.
 		upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
 
-		apiPath, extraParams, _ := c.mapPath(path, query)
+		apiPath, extraParams, _ := c.MapPath(path, query)
 		q := map[string][]string{}
 		for k, v := range query {
 			q[k] = v
@@ -1079,9 +1079,9 @@ func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, 
 		}
 		q["pageToken"] = []string{nextToken}
 
-		upstreamURL := upstreamBase + apiPath + "?" + mapToQuery(q)
+		upstreamURL := upstreamBase + apiPath + "?" + MapToQuery(q)
 
-		data, status, err := doUpstreamRequest(ctx, "GET", upstreamURL, nil, token)
+		data, status, err := DoUpstreamRequest(ctx, "GET", upstreamURL, nil, token)
 		if err != nil || status != http.StatusOK {
 			logger.Warn("pagination fetch failed", "url", upstreamURL, "status", status, "error", err)
 			break
@@ -1105,7 +1105,7 @@ func (c *YouTubeMusicConnector) fetchAllPages(ctx context.Context, path string, 
 	return page
 }
 
-func (c *YouTubeMusicConnector) itemsKeyForPath(path string) string {
+func (c *YouTubeMusicConnector) ItemsKeyForPath(path string) string {
 	switch path {
 	case "/me/playlists":
 		return "playlists"
@@ -1120,8 +1120,8 @@ func (c *YouTubeMusicConnector) itemsKeyForPath(path string) string {
 	}
 }
 
-// mapToQuery converts a map[string][]string to a URL query string.
-func mapToQuery(params map[string][]string) string {
+// MapToQuery converts a map[string][]string to a URL query string.
+func MapToQuery(params map[string][]string) string {
 	var parts []string
 	for k, vs := range params {
 		for _, v := range vs {

@@ -12,20 +12,20 @@ import (
 )
 
 func freeBusyTestEvents() []types.CalendarEvent {
-	full := newCalendarEvent("google-calendar", "Google Calendar", "e1", "Doctor appointment", "2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z", false)
+	full := types.NewCalendarEvent("google-calendar", "Google Calendar", "e1", "Doctor appointment", "2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z", false)
 	full.Description = "Bring insurance card"
 	full.Location = "Clinic"
 	full.Attendees = []types.Contact{{Name: "Dr. Ada", Emails: []string{"ada@example.com"}}}
 	full.EntityID = "e1@google.com"
-	cancelled := newCalendarEvent("google-calendar", "Google Calendar", "e2", "Cancelled standup", "2026-03-02T15:00:00Z", "2026-03-02T15:15:00Z", false)
+	cancelled := types.NewCalendarEvent("google-calendar", "Google Calendar", "e2", "Cancelled standup", "2026-03-02T15:00:00Z", "2026-03-02T15:15:00Z", false)
 	cancelled.Status = "cancelled"
-	allday := newCalendarEvent("google-calendar", "Google Calendar", "e3", "Offsite", "2026-03-05T00:00:00Z", "2026-03-06T00:00:00Z", true)
+	allday := types.NewCalendarEvent("google-calendar", "Google Calendar", "e3", "Offsite", "2026-03-05T00:00:00Z", "2026-03-06T00:00:00Z", true)
 	return []types.CalendarEvent{full, cancelled, allday}
 }
 
 func TestRedactCalendarEventFreeBusy_StripsContent(t *testing.T) {
 	e := freeBusyTestEvents()[0]
-	got := RedactCalendarEventFreeBusy(e)
+	got := types.RedactCalendarEventFreeBusy(e)
 	if got.Title != "" || got.Description != "" || got.Location != "" ||
 		got.EntityID != "" || len(got.Attendees) != 0 || len(got.Sources) != 0 {
 		t.Fatalf("leaked content: %+v", got)
@@ -208,7 +208,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: []types.CalendarEvent{
-		newCalendarEvent("google-calendar", "Google Calendar", "ok", "Busy", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false),
+		types.NewCalendarEvent("google-calendar", "Google Calendar", "ok", "Busy", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false),
 	}}
 
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)

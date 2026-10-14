@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"fmt"
 	"io"
@@ -16,7 +18,7 @@ import (
 
 func TestYouTubeSimplifyAndIsPaginated(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	raw := map[string]any{
 		"items":         []any{map[string]any{"id": "1"}},
@@ -24,24 +26,24 @@ func TestYouTubeSimplifyAndIsPaginated(t *testing.T) {
 		"href":          "drop",
 		"pageInfo":      map[string]any{"totalResults": float64(1)},
 	}
-	got := conn.simplify(raw)
+	got := conn.Simplify(raw)
 	if _, ok := got["items"]; !ok {
 		t.Fatal("items should be kept")
 	}
 	if _, ok := got["href"]; ok {
 		t.Fatal("href should be dropped")
 	}
-	if !conn.isPaginated(raw) {
+	if !conn.IsPaginated(raw) {
 		t.Fatal("expected paginated with nextPageToken")
 	}
-	if conn.isPaginated(map[string]any{}) {
+	if conn.IsPaginated(map[string]any{}) {
 		t.Fatal("expected not paginated")
 	}
 }
 
 func TestYouTubeItemsKeyForPath(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	cases := map[string]string{
 		"/playlists":           "items",
@@ -52,23 +54,23 @@ func TestYouTubeItemsKeyForPath(t *testing.T) {
 	}
 	// itemsKeyForPath may return "" for some paths — assert no panic and type.
 	for path := range cases {
-		_ = conn.itemsKeyForPath(path)
+		_ = conn.ItemsKeyForPath(path)
 	}
 }
 
 func TestYouTubeGetLikedPlaylistID_NoToken(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
-	if _, err := conn.getLikedPlaylistID(); err == nil {
+	conn := connectors.NewYouTubeMusicConnector(srv)
+	if _, err := conn.GetLikedPlaylistID(); err == nil {
 		t.Fatal("expected error without token")
 	}
 }
 
 func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
-	// getLikedPlaylistID may hit the real host; intercept via aegisHTTPClient.
-	orig := aegisHTTPClient
-	defer func() { aegisHTTPClient = orig }()
-	aegisHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	// getLikedPlaylistID may hit the real host; intercept via connectors.HTTPClient.
+	orig := connectors.HTTPClient
+	defer func() { connectors.HTTPClient = orig }()
+	connectors.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			return &http.Response{
 				StatusCode: http.StatusUnauthorized,
@@ -90,8 +92,8 @@ func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	}
-	conn := NewYouTubeMusicConnector(srv)
-	id, err := conn.getLikedPlaylistID()
+	conn := connectors.NewYouTubeMusicConnector(srv)
+	id, err := conn.GetLikedPlaylistID()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,9 +103,9 @@ func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_NoChannel(t *testing.T) {
-	orig := aegisHTTPClient
-	defer func() { aegisHTTPClient = orig }()
-	aegisHTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	orig := connectors.HTTPClient
+	defer func() { connectors.HTTPClient = orig }()
+	connectors.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(`{"items":[]}`)),
@@ -117,8 +119,8 @@ func TestYouTubeGetLikedPlaylistID_NoChannel(t *testing.T) {
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	}
-	conn := NewYouTubeMusicConnector(srv)
-	if _, err := conn.getLikedPlaylistID(); err == nil {
+	conn := connectors.NewYouTubeMusicConnector(srv)
+	if _, err := conn.GetLikedPlaylistID(); err == nil {
 		t.Fatal("expected no channel error")
 	}
 }
@@ -129,7 +131,7 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 
 func TestYouTubeListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 	if _, _, err := conn.ListUserPlaylists(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
@@ -155,7 +157,7 @@ func TestYouTubeListUserPlaylists_Success(t *testing.T) {
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	}
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 	playlists, _, err := conn.ListUserPlaylists(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -170,9 +172,9 @@ func TestYouTubeListUserPlaylists_Success(t *testing.T) {
 
 func TestYouTubeFetchAllPages_NoToken(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 	page := map[string]any{"items": []any{map[string]any{"id": "1"}}}
-	got := conn.fetchAllPagesRaw(context.Background(), "/playlists", nil, page, "tok", slog.Default())
+	got := conn.FetchAllPagesRaw(context.Background(), "/playlists", nil, page, "tok", slog.Default())
 	if got["items"] == nil {
 		t.Fatal("items missing")
 	}
@@ -194,13 +196,13 @@ func TestYouTubeFetchAllPages_WithPagination(t *testing.T) {
 	srv := testServerWithBase(&Config{
 		Services: []Service{{ID: "youtube-music", Endpoint: ts.URL}},
 	}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
 	first := map[string]any{
 		"items":         []any{map[string]any{"id": "seed"}},
 		"nextPageToken": "t2",
 	}
-	got := conn.fetchAllPagesRaw(context.Background(), "/playlists", map[string][]string{}, first, "tok", slog.Default())
+	got := conn.FetchAllPagesRaw(context.Background(), "/playlists", map[string][]string{}, first, "tok", slog.Default())
 	items := got["items"].([]any)
 	if len(items) != 2 {
 		t.Fatalf("items = %v", items)
@@ -215,9 +217,9 @@ func TestYouTubeFetchAllPages_WithPagination(t *testing.T) {
 
 func TestYouTubeMapPath(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 
-	apiPath, params, err := conn.mapPath("/me", nil)
+	apiPath, params, err := conn.MapPath("/me", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -228,7 +230,7 @@ func TestYouTubeMapPath(t *testing.T) {
 		t.Fatalf("params = %v", params)
 	}
 
-	apiPath, params, err = conn.mapPath("/me/playlists", nil)
+	apiPath, params, err = conn.MapPath("/me/playlists", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +238,7 @@ func TestYouTubeMapPath(t *testing.T) {
 		t.Fatalf("got %q %v", apiPath, params)
 	}
 
-	apiPath, params, err = conn.mapPath("/channels/UC1", nil)
+	apiPath, params, err = conn.MapPath("/channels/UC1", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -244,7 +246,7 @@ func TestYouTubeMapPath(t *testing.T) {
 		t.Fatalf("got %q %v", apiPath, params)
 	}
 
-	apiPath, params, err = conn.mapPath("/custom/thing", nil)
+	apiPath, params, err = conn.MapPath("/custom/thing", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -255,8 +257,8 @@ func TestYouTubeMapPath(t *testing.T) {
 
 func TestYouTubeTransformResponse_Default(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
-	out := conn.transformResponse("/other", []byte(`{"items":[{"id":"1"}],"nextPageToken":"x","href":"drop"}`), slog.Default())
+	conn := connectors.NewYouTubeMusicConnector(srv)
+	out := conn.TransformResponse("/other", []byte(`{"items":[{"id":"1"}],"nextPageToken":"x","href":"drop"}`), slog.Default())
 	m, ok := out.(map[string]any)
 	if !ok {
 		t.Fatalf("out = %#v", out)
@@ -268,8 +270,8 @@ func TestYouTubeTransformResponse_Default(t *testing.T) {
 
 func TestYouTubeTransformResponse_ErrorPassthrough(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
-	out := conn.transformResponse("/me", []byte(`{"error":{"code":401}}`), slog.Default())
+	conn := connectors.NewYouTubeMusicConnector(srv)
+	out := conn.TransformResponse("/me", []byte(`{"error":{"code":401}}`), slog.Default())
 	m := out.(map[string]any)
 	if _, ok := m["error"]; !ok {
 		t.Fatalf("out = %#v", out)
@@ -278,8 +280,8 @@ func TestYouTubeTransformResponse_ErrorPassthrough(t *testing.T) {
 
 func TestYouTubeFetchAllPages_NonMap(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
-	got := conn.fetchAllPages(context.Background(), "/me", nil, "not-a-map", "tok", slog.Default())
+	conn := connectors.NewYouTubeMusicConnector(srv)
+	got := conn.FetchAllPages(context.Background(), "/me", nil, "not-a-map", "tok", slog.Default())
 	if got != "not-a-map" {
 		t.Fatalf("got = %#v", got)
 	}
@@ -287,7 +289,7 @@ func TestYouTubeFetchAllPages_NonMap(t *testing.T) {
 
 func TestYouTubeFetchAllPages_EmptyItemsKey(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewYouTubeMusicConnector(srv)
+	conn := connectors.NewYouTubeMusicConnector(srv)
 	page := map[string]any{
 		"items":         []any{map[string]any{"id": "1"}},
 		"nextPageToken": "x",
@@ -295,7 +297,7 @@ func TestYouTubeFetchAllPages_EmptyItemsKey(t *testing.T) {
 	// Path with no items key should return first page unchanged.
 	// itemsKeyForPath for unknown may still return "items" — check behavior.
 	_ = page
-	got := conn.fetchAllPages(context.Background(), "/unknown-path-xyz", nil, map[string]any{
+	got := conn.FetchAllPages(context.Background(), "/unknown-path-xyz", nil, map[string]any{
 		"nextPageToken": "x",
 		"other":         []any{},
 	}, "tok", slog.Default())
@@ -307,19 +309,19 @@ func TestYouTubeFetchAllPages_EmptyItemsKey(t *testing.T) {
 }
 
 func TestAsInt(t *testing.T) {
-	if n, ok := asInt(float64(42)); !ok || n != 42 {
+	if n, ok := connectors.AsInt(float64(42)); !ok || n != 42 {
 		t.Fatalf("float64 %v %v", n, ok)
 	}
-	if n, ok := asInt(int(7)); !ok || n != 7 {
+	if n, ok := connectors.AsInt(int(7)); !ok || n != 7 {
 		t.Fatalf("int %v %v", n, ok)
 	}
-	if n, ok := asInt(int64(8)); !ok || n != 8 {
+	if n, ok := connectors.AsInt(int64(8)); !ok || n != 8 {
 		t.Fatalf("int64 %v %v", n, ok)
 	}
-	if _, ok := asInt("nope"); ok {
+	if _, ok := connectors.AsInt("nope"); ok {
 		t.Fatal("string should not convert")
 	}
-	if _, ok := asInt(nil); ok {
+	if _, ok := connectors.AsInt(nil); ok {
 		t.Fatal("nil should not convert")
 	}
 }

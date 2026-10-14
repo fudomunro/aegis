@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"bufio"
 	"context"
 	"database/sql"
@@ -359,9 +361,9 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		categories = []string{category}
 	}
 	memo := strings.TrimSpace(rec["M"])
-	status := TransactionStatusPosted
+	status := types.TransactionStatusPosted
 	if strings.Contains(strings.ToUpper(rec["C"]), "N") || strings.Contains(strings.ToUpper(rec["C"]), "U") || strings.Contains(strings.ToUpper(rec["C"]), "?") {
-		status = TransactionStatusPending
+		status = types.TransactionStatusPending
 	}
 	fitid := strings.TrimSpace(rec["N"])
 	if fitid == "" {
@@ -369,7 +371,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		fitid = "qif:" + shortHash(name+"|"+date+"|"+amountRaw+"|"+payee+"|"+memo)
 	}
 	amount := normalizeTransactionAmount(amountRaw)
-	posted := normalizeTransactionDate(qifDate(date))
+	posted := types.NormalizeTransactionDate(qifDate(date))
 	accountName := filepath.Base(name)
 	accountName = strings.TrimSuffix(accountName, filepath.Ext(accountName))
 	tx := types.Transaction{
@@ -384,7 +386,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		Status:      status,
 		EntityID:    fitid,
 	}
-	return newTransaction(quickenServiceID, quickenServiceName, fitid, tx), true
+	return types.NewTransaction(quickenServiceID, quickenServiceName, fitid, tx), true
 }
 
 // qifDate normalizes Quicken date forms (MM/DD/YYYY, M/D/YY, DD/MM/YYYY with
@@ -410,7 +412,7 @@ func qifDate(raw string) string {
 			return t.UTC().Format("2006-01-02")
 		}
 	}
-	return normalizeTransactionDate(raw)
+	return types.NormalizeTransactionDate(raw)
 }
 
 // ParseOFX parses OFX/QFX SGML or XML bank/CC statements.
@@ -566,7 +568,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	}
 	memo := strings.TrimSpace(fields["MEMO"])
 	trntype := strings.ToUpper(strings.TrimSpace(fields["TRNTYPE"]))
-	status := TransactionStatusPosted
+	status := types.TransactionStatusPosted
 	switch trntype {
 	case "PENDING", "AUTH", "DIRECTDEBIT":
 		// Keep posted unless OFX explicitly says pending elsewhere.
@@ -574,7 +576,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	if fitid == "" {
 		fitid = "ofx:" + shortHash(name+"|"+dateRaw+"|"+amountRaw+"|"+payee)
 	}
-	posted := normalizeTransactionDate(dateRaw)
+	posted := types.NormalizeTransactionDate(dateRaw)
 	if d := transactionDay(posted); d != "" {
 		posted = d
 	}
@@ -596,7 +598,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 		Status:      status,
 		EntityID:    fitid,
 	}
-	src := newTransaction(quickenServiceID, quickenServiceName, fitid, tx)
+	src := types.NewTransaction(quickenServiceID, quickenServiceName, fitid, tx)
 	if len(src.Sources) == 1 {
 		src.Sources[0].Extra = map[string]any{"fitid": fitid, "trntype": trntype}
 	}
@@ -669,12 +671,12 @@ func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, e
 
 // QuickenConnector lists imported Quicken transactions from the local store.
 type QuickenConnector struct {
-	host  Host
+	host  connectors.Host
 	store *QuickenStore
 }
 
 // NewQuickenConnector creates a connector wired to the given Host and local Quicken store.
-func NewQuickenConnector(host Host, store *QuickenStore) *QuickenConnector {
+func NewQuickenConnector(host connectors.Host, store *QuickenStore) *QuickenConnector {
 	return &QuickenConnector{host: host, store: store}
 }
 
@@ -798,6 +800,6 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 }
 
 var (
-	_ ServiceConnector          = (*QuickenConnector)(nil)
-	_ types.TransactionProvider = (*QuickenConnector)(nil)
+	_ connectors.ServiceConnector = (*QuickenConnector)(nil)
+	_ types.TransactionProvider   = (*QuickenConnector)(nil)
 )
