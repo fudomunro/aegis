@@ -375,7 +375,7 @@ func (s *Server) libraryReadableFor(permType string) bool {
 		if svc.Action == "block" {
 			continue
 		}
-		if svc.Permissions.AllowsRead(permType) {
+		if s.effectivePermissions(&svc).AllowsRead(permType) {
 			return true
 		}
 	}
@@ -442,7 +442,7 @@ func collectProviders[T any, P any](
 		if !ok {
 			continue
 		}
-		if !svc.Permissions.AllowsRead(permType) {
+		if !s.effectivePermissions(svc).AllowsRead(permType) {
 			denied = append(denied, id)
 			continue
 		}
@@ -533,7 +533,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		svc := s.config.GetService(id)
 		perm := ""
 		if svc != nil {
-			perm = svc.Permissions.For(kind.PermType)
+			perm = s.effectivePermissions(svc).For(kind.PermType)
 		}
 		logger.Info("library "+kind.ID+" denied by permission", "service", id, "permission", perm)
 		// Per-service denial for the audit trail (issue #105). Even when

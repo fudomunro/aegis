@@ -283,7 +283,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	// Admin sync is operator-owned; only the agent surface honors messages=read.
-	if requireAgentMessagesRead && !svc.Permissions.AllowsRead(mailPermType) {
+	if requireAgentMessagesRead && !s.effectivePermissions(svc).AllowsRead(mailPermType) {
 		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
 		return
 	}

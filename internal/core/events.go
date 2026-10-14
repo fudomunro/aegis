@@ -275,7 +275,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 				inner := targets[i].list
 				level := ""
 				if svc := s.config.GetService(id); svc != nil {
-					level = svc.Permissions.For(kind.PermType)
+					level = s.effectivePermissions(svc).For(kind.PermType)
 				}
 				if !appFreeBusy && !types.IsFreeBusyAccess(level) {
 					continue

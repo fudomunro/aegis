@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ f68dc4a</title>
+<title>Aegis — Code Walkthrough @ 847e680</title>
 <meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>f68dc4a</span>
-    <span class="version-meta">refactor/issue-15-core-pkg · 2026-10-14 · Merge pull request #157 from fudomunro/refactor/issue-15-connectors-pkg · generated 2026-10-14 13:32 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>847e680</span>
+    <span class="version-meta">feat/issue-148-type-permissions · 2026-10-14 · feat: make type-owned permissions primary (Phase 5 of #148) · generated 2026-10-14 15:55 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,7 +306,7 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">29,153</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">29,544</div><div class="l">source LOC (no tests)</div></div>
     <div class="stat"><div class="v">83</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">11</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">10</div><div class="l">library kinds</div></div>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ f68dc4a</h2>
+  <h2><span class="n">13</span>File map @ 847e680</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1255,13 +1255,13 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
     </thead>
     <tbody>
       <tr><td><code>main.go</code></td><td class="mono">5</td><td>Thin entry: core.Run()</td></tr>
-      <tr><td><code>internal/core/run.go</code></td><td class="mono">712</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
+      <tr><td><code>internal/core/run.go</code></td><td class="mono">714</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
       <tr><td><code>internal/core/handler.go</code></td><td class="mono">873</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
-      <tr><td><code>internal/core/config.go</code></td><td class="mono">331</td><td>Services + shared OAuth connections, matching, reload</td></tr>
+      <tr><td><code>internal/core/config.go</code></td><td class="mono">394</td><td>Services + shared OAuth connections, matching, reload</td></tr>
       <tr><td><code>internal/types/models.go</code></td><td class="mono">763</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
       <tr><td><code>internal/types/merge.go</code></td><td class="mono">716</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>internal/types/kind.go</code></td><td class="mono">60</td><td>LibraryKind data (instructions, keywords, cache key)</td></tr>
-      <tr><td><code>internal/types/policy.go</code></td><td class="mono">456</td><td>Access levels, Permissions map, TypePolicy (#148)</td></tr>
+      <tr><td><code>internal/types/policy.go</code></td><td class="mono">635</td><td>Access levels, Permissions map, TypePolicy (#148)</td></tr>
       <tr><td><code>internal/types/pathclass.go</code></td><td class="mono">165</td><td>Proxy path → data-type classification table</td></tr>
       <tr><td><code>internal/types/capabilities.go</code></td><td class="mono">160</td><td>ServiceCapabilities / Operation shapes + filtering</td></tr>
       <tr><td><code>internal/types/providers.go</code></td><td class="mono">136</td><td>Provider interfaces + ErrUnauthorized + service-name helpers</td></tr>
@@ -1280,7 +1280,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/connectors/spotify.go</code></td><td class="mono">1012</td><td>Spotify connector (proxy, providers, transforms)</td></tr>
       <tr><td><code>internal/connectors/ynab.go</code></td><td class="mono">478</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/youtube.go</code></td><td class="mono">1042</td><td>YouTube Music connector</td></tr>
-      <tr><td><code>internal/core/admin.go</code></td><td class="mono">415</td><td>Admin dashboard shell + JSON summary endpoints</td></tr>
+      <tr><td><code>internal/core/admin.go</code></td><td class="mono">487</td><td>Admin dashboard shell + JSON summary endpoints</td></tr>
       <tr><td><code>internal/core/apps.go</code></td><td class="mono">473</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/apps_admin.go</code></td><td class="mono">129</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/apps_grant.go</code></td><td class="mono">397</td><td>Supporting code</td></tr>
@@ -1321,8 +1321,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/mirror_youtube.go</code></td><td class="mono">219</td><td>YouTube Music side of mirror reads/writes</td></tr>
       <tr><td><code>internal/core/musicbrainz.go</code></td><td class="mono">279</td><td>Optional durable IDs (MBID) for artists/tracks/albums</td></tr>
       <tr><td><code>internal/core/oauth.go</code></td><td class="mono">276</td><td>Login, callback, code exchange, token refresh, revoke</td></tr>
-      <tr><td><code>internal/core/permissions.go</code></td><td class="mono">148</td><td>Server-side permission clamp + per-request checks</td></tr>
-      <tr><td><code>internal/core/permissions_overlay.go</code></td><td class="mono">127</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/permissions.go</code></td><td class="mono">157</td><td>Server-side permission clamp + per-request checks</td></tr>
+      <tr><td><code>internal/core/permissions_overlay.go</code></td><td class="mono">193</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/photos.go</code></td><td class="mono">176</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
       <tr><td><code>internal/core/places.go</code></td><td class="mono">562</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/proxy.go</code></td><td class="mono">241</td><td>Generic service proxy + connector delegation + cache</td></tr>
@@ -1359,8 +1359,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>f68dc4a</code></strong>
-    (refactor/issue-15-core-pkg · 2026-10-14 · Merge pull request #157 from fudomunro/refactor/issue-15-connectors-pkg).
+    <code>847e680</code></strong>
+    (feat/issue-148-type-permissions · 2026-10-14 · feat: make type-owned permissions primary (Phase 5 of #148)).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1391,12 +1391,12 @@ python3 docs/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>f68dc4a</strong>
+  Generated for <strong>847e680</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 83 files · 29,153 LOC · 11 connectors · 10 library kinds
-  · 2026-10-14 13:32 UTC
+  · 83 files · 29,544 LOC · 11 connectors · 10 library kinds
+  · 2026-10-14 15:55 UTC
 </footer>
 
 </div>

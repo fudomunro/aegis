@@ -637,7 +637,7 @@ func transactionsProviderTargets(s *Server, permType string, appLevel string) ([
 		inner := targets[i].list
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
-			level = svc.Permissions.For(permType)
+			level = s.effectivePermissions(svc).For(permType)
 		}
 		effective := level
 		if appSummary {
