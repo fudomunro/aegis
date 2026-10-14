@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"bytes"
 	"compress/gzip"
 	"database/sql"
@@ -64,7 +66,7 @@ type MailArchiveRecord struct {
 func (r MailArchiveRecord) Message() types.Message {
 	var from *types.Contact
 	if r.FromName != "" || r.FromEmail != "" {
-		c := newContact(r.Service, r.ServiceName, "", r.FromName, []string{r.FromEmail}, nil)
+		c := types.NewContact(r.Service, r.ServiceName, "", r.FromName, []string{r.FromEmail}, nil)
 		if r.FromName == "" && r.FromEmail == "" {
 			c = types.Contact{}
 		}
@@ -265,7 +267,7 @@ func (a *MailArchive) Upsert(rec MailArchiveRecord) error {
 	}
 	// Store Message-ID in the same normalized form identity matching uses so
 	// Gmail and Takeout copies of one message join (issue #139).
-	rec.MessageID = normalizeMessageID(rec.MessageID)
+	rec.MessageID = types.NormalizeMessageID(rec.MessageID)
 	if rec.Labels == nil {
 		rec.Labels = []string{}
 	}
@@ -517,12 +519,12 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message) []types.Messa
 				have[src.Service+"\x00"+src.ID] = true
 			}
 		}
-		if id := normalizeMessageID(m.EntityID); id != "" {
+		if id := types.NormalizeMessageID(m.EntityID); id != "" {
 			want[id] = true
 			continue
 		}
 		for _, src := range m.Sources {
-			if id := normalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
+			if id := types.NormalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
 				want[id] = true
 			}
 		}
@@ -850,8 +852,8 @@ func scanMailRows(rows *sql.Rows, withBody bool) (MailArchiveRecord, error) {
 
 func mailServiceName(service string) string {
 	switch service {
-	case googleGmailServiceID:
-		return googleGmailServiceName
+	case connectors.GoogleGmailServiceID:
+		return connectors.GoogleGmailServiceName
 	case takeoutServiceID:
 		return takeoutServiceName
 	default:

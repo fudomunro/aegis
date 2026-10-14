@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -128,7 +130,7 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 		Services: []Service{{ID: "ynab", Name: "YNAB", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
+	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
 	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, srv.quicken)
 	// Quicken is file-based: even if present in config, keep it off the list.
 	cfg.Services = append(cfg.Services, Service{ID: quickenServiceID, Name: "Quicken", Action: "inject"})
@@ -151,7 +153,7 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 		if resp.Services[i].ID == quickenServiceID {
 			t.Fatal("quicken must not appear in admin services list")
 		}
-		if resp.Services[i].ID == ynabServiceID {
+		if resp.Services[i].ID == connectors.YNABServiceID {
 			ynab = &resp.Services[i]
 		}
 	}
@@ -167,7 +169,7 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 }
 
 func TestYNABCapabilities_OnlyTransactions(t *testing.T) {
-	caps := NewYNABConnector(&Server{}).Capabilities()
+	caps := connectors.NewYNABConnector(&Server{}).Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
 	}

@@ -25,72 +25,6 @@ func placeVisitServiceName(v types.PlaceVisit) string {
 	return ""
 }
 
-// normalizePlaceVisitKind maps provider labels onto visit/trip.
-func normalizePlaceVisitKind(raw string) string {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	switch s {
-	case types.PlaceKindVisit, "placevisit", "place_visit", "stay", "dwell", "stop":
-		return types.PlaceKindVisit
-	case types.PlaceKindTrip, "activitysegment", "activity_segment", "travel", "journey":
-		return types.PlaceKindTrip
-	case "":
-		return types.PlaceKindVisit
-	default:
-		return types.PlaceKindVisit
-	}
-}
-
-// normalizeTripMode maps provider travel modes onto the neutral mode list.
-func normalizeTripMode(raw string) string {
-	s := strings.ToLower(strings.TrimSpace(raw))
-	s = strings.ReplaceAll(s, "-", "_")
-	s = strings.ReplaceAll(s, " ", "_")
-	switch s {
-	case "":
-		return ""
-	case "flight", "flying", "in_airplane", "airplane", "air", "plane":
-		return types.TripModeFlight
-	case "drive", "driving", "in_passenger_vehicle", "in_vehicle", "car", "vehicle", "motorcycle":
-		return types.TripModeDrive
-	case "walk", "walking", "on_foot", "foot":
-		return types.TripModeWalk
-	case "bicycle", "biking", "cycling", "on_bicycle":
-		return types.TripModeBicycle
-	case "train", "rail", "in_train":
-		return types.TripModeTrain
-	case "bus", "in_bus":
-		return types.TripModeBus
-	default:
-		return types.TripModeUnknown
-	}
-}
-
-// normalizePlaceVisitTime re-emits a provider timestamp at RFC3339 second
-// precision so the same window matches across services.
-func normalizePlaceVisitTime(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return t.UTC().Format(time.RFC3339)
-	}
-	if t, err := time.Parse(time.RFC3339, raw); err == nil {
-		return t.UTC().Format(time.RFC3339)
-	}
-	if t, err := time.Parse("2006-01-02T15:04:05", raw); err == nil {
-		return t.UTC().Format(time.RFC3339)
-	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		return t.UTC().Format(time.RFC3339)
-	}
-	// Unix seconds as decimal string.
-	if n, err := strconv.ParseInt(raw, 10, 64); err == nil && n > 1_000_000_000 && n < 4_000_000_000 {
-		return time.Unix(n, 0).UTC().Format(time.RFC3339)
-	}
-	return raw
-}
-
 // placeIdentityKey is the sort/merge key. Prefer durable provider IDs when
 // present; otherwise start day + end day + normalized place key. Visits
 // without any identity fall back to service:id so they stay distinct.
@@ -109,8 +43,8 @@ func placeIdentityKey(v types.PlaceVisit) string {
 			return "pid:" + id
 		}
 	}
-	start := normalizePlaceVisitTime(v.StartAt)
-	end := normalizePlaceVisitTime(v.EndAt)
+	start := types.NormalizePlaceVisitTime(v.StartAt)
+	end := types.NormalizePlaceVisitTime(v.EndAt)
 	placeKey := placeMergeKey(v.Place)
 	if start == "" || placeKey == "" {
 		if len(v.Sources) > 0 && v.Sources[0].Service != "" && v.Sources[0].ID != "" {
@@ -189,10 +123,10 @@ func mergePlaceVisitInto(dst *types.PlaceVisit, src types.PlaceVisit) {
 	}
 	if dst.StartAt == "" {
 		dst.StartAt = src.StartAt
-	} else if src.StartAt != "" && normalizePlaceVisitTime(src.StartAt) < normalizePlaceVisitTime(dst.StartAt) {
+	} else if src.StartAt != "" && types.NormalizePlaceVisitTime(src.StartAt) < types.NormalizePlaceVisitTime(dst.StartAt) {
 		dst.StartAt = src.StartAt
 	}
-	if src.EndAt != "" && normalizePlaceVisitTime(src.EndAt) > normalizePlaceVisitTime(dst.EndAt) {
+	if src.EndAt != "" && types.NormalizePlaceVisitTime(src.EndAt) > types.NormalizePlaceVisitTime(dst.EndAt) {
 		dst.EndAt = src.EndAt
 	}
 	mergePlaceInto(&dst.Place, src.Place)
@@ -212,18 +146,6 @@ func mergePlaceVisitInto(dst *types.PlaceVisit, src types.PlaceVisit) {
 	if len(dst.Extra) == 0 && len(src.Extra) > 0 {
 		dst.Extra = src.Extra
 	}
-}
-
-func clonePlaceVisit(v types.PlaceVisit) types.PlaceVisit {
-	cp := v
-	cp.Sources = append([]types.PlaceVisitSource(nil), v.Sources...)
-	if len(v.Extra) > 0 {
-		cp.Extra = make(map[string]any, len(v.Extra))
-		for k, val := range v.Extra {
-			cp.Extra[k] = val
-		}
-	}
-	return cp
 }
 
 // MergePlaceVisits groups visits that share a durable provider ID or the same
@@ -251,7 +173,7 @@ func MergePlaceVisits(in []types.PlaceVisit) []types.PlaceVisit {
 			mergePlaceVisitInto(&cur.v, v)
 			continue
 		}
-		cp := clonePlaceVisit(v)
+		cp := types.ClonePlaceVisit(v)
 		byKey[key] = &slot{v: cp, key: key}
 		order = append(order, key)
 	}
@@ -317,7 +239,7 @@ func MergePlaceVisits(in []types.PlaceVisit) []types.PlaceVisit {
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		si, sj := normalizePlaceVisitTime(out[i].StartAt), normalizePlaceVisitTime(out[j].StartAt)
+		si, sj := types.NormalizePlaceVisitTime(out[i].StartAt), types.NormalizePlaceVisitTime(out[j].StartAt)
 		if si != sj {
 			return si < sj // chronological
 		}
@@ -330,7 +252,7 @@ func MergePlaceVisits(in []types.PlaceVisit) []types.PlaceVisit {
 // place within a small time slack (overlapping or gap ≤ slack seconds).
 func placeVisitsMatchNearbyWindow(a, b types.PlaceVisit, slackSec int64) bool {
 	// Only merge like with like — a trip into a town is not the visit there.
-	if normalizePlaceVisitKind(a.Kind) != normalizePlaceVisitKind(b.Kind) {
+	if types.NormalizePlaceVisitKind(a.Kind) != types.NormalizePlaceVisitKind(b.Kind) {
 		return false
 	}
 	// Same durable ID is already handled in phase 1; only window+place here.
@@ -363,7 +285,7 @@ func placeVisitsMatchNearbyWindow(a, b types.PlaceVisit, slackSec int64) bool {
 
 func placeWindowSecs(v types.PlaceVisit) (start, end int64) {
 	parse := func(raw string) int64 {
-		t := normalizePlaceVisitTime(raw)
+		t := types.NormalizePlaceVisitTime(raw)
 		if t == "" {
 			return 0
 		}
@@ -420,10 +342,10 @@ type PlaceVisitFilters struct {
 func ParsePlaceVisitFilters(r *http.Request) PlaceVisitFilters {
 	q := r.URL.Query()
 	return PlaceVisitFilters{
-		After:    normalizePlaceVisitTime(q.Get("after")),
-		Before:   normalizePlaceVisitTime(q.Get("before")),
+		After:    types.NormalizePlaceVisitTime(q.Get("after")),
+		Before:   types.NormalizePlaceVisitTime(q.Get("before")),
 		Locality: strings.TrimSpace(q.Get("locality")),
-		Kind:     normalizePlaceVisitKind(q.Get("kind")),
+		Kind:     types.NormalizePlaceVisitKind(q.Get("kind")),
 	}
 }
 
@@ -432,7 +354,7 @@ func (f PlaceVisitFilters) Empty() bool {
 }
 
 func (f PlaceVisitFilters) matches(v types.PlaceVisit) bool {
-	if f.Kind != "" && normalizePlaceVisitKind(v.Kind) != f.Kind {
+	if f.Kind != "" && types.NormalizePlaceVisitKind(v.Kind) != f.Kind {
 		return false
 	}
 	if f.Locality != "" {
@@ -442,8 +364,8 @@ func (f PlaceVisitFilters) matches(v types.PlaceVisit) bool {
 			return false
 		}
 	}
-	start := normalizePlaceVisitTime(v.StartAt)
-	end := normalizePlaceVisitTime(v.EndAt)
+	start := types.NormalizePlaceVisitTime(v.StartAt)
+	end := types.NormalizePlaceVisitTime(v.EndAt)
 	if end == "" {
 		end = start
 	}
@@ -553,22 +475,6 @@ func redactPlaceVisitsForLevel(items []types.PlaceVisit, level string) []types.P
 	}
 }
 
-// newPlaceVisit builds a single-source neutral visit.
-func newPlaceVisit(service, serviceName, id string, v types.PlaceVisit) types.PlaceVisit {
-	out := clonePlaceVisit(v)
-	out.Kind = normalizePlaceVisitKind(out.Kind)
-	out.Mode = normalizeTripMode(out.Mode)
-	out.StartAt = normalizePlaceVisitTime(out.StartAt)
-	out.EndAt = normalizePlaceVisitTime(out.EndAt)
-	out.Sources = []types.PlaceVisitSource{{
-		Service:     service,
-		ServiceName: serviceName,
-		ID:          id,
-		Canonical:   true,
-	}}
-	return out
-}
-
 // placesProviderTargets collects providers, applying per-service and
 // app-level city/read/precise redaction so a city-only surface never
 // contributes place names or coordinates (issue #142).
@@ -627,8 +533,8 @@ func tighterPlacesLevel(a, b string) string {
 // trip window (issue #142). This is the photos/places join demo: sample
 // fixtures pair visits with photos captured during them.
 func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
-	start := normalizePlaceVisitTime(v.StartAt)
-	end := normalizePlaceVisitTime(v.EndAt)
+	start := types.NormalizePlaceVisitTime(v.StartAt)
+	end := types.NormalizePlaceVisitTime(v.EndAt)
 	if end == "" {
 		end = start
 	}
@@ -637,7 +543,7 @@ func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
 	}
 	out := make([]types.Photo, 0, 8)
 	for _, p := range photos {
-		taken := normalizePlaceVisitTime(p.TakenAt)
+		taken := types.NormalizePlaceVisitTime(p.TakenAt)
 		if taken == "" {
 			continue
 		}

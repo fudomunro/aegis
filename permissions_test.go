@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -414,7 +416,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 		Permissions: types.Permissions{"tracks": types.AccessFull, "playlists": types.AccessFull},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	svc := cfg.GetService("spotify")
 
 	req := httptest.NewRequest(http.MethodPost, "/v1/services/spotify/me/tracks", nil)
@@ -436,7 +438,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 	}
 
 	// Mirror does not make core types Editable in the admin form.
-	writable := srv.writableDataSet("spotify", NewSpotifyConnector(srv).Capabilities())
+	writable := srv.writableDataSet("spotify", connectors.NewSpotifyConnector(srv).Capabilities())
 	if len(writable) != 0 {
 		t.Fatalf("spotify writable set = %v, want empty (no agent data write ops)", writable)
 	}

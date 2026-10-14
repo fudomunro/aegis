@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -248,7 +250,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		}
 	}
 	if req.Service == "" {
-		req.Service = googleGmailServiceID
+		req.Service = connectors.GoogleGmailServiceID
 	}
 
 	// Takeout is a read-only sync location (mbox / zip / directory on disk).
@@ -286,8 +288,14 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 
-	syncer, ok := connector.(MailArchiveSyncer)
-	if !ok {
+	var syncer MailArchiveSyncer
+	{
+		gc, ok := connector.(*connectors.GoogleGmailConnector)
+		if ok {
+			syncer = &gmailArchiveSyncer{GoogleGmailConnector: gc, host: s}
+		}
+	}
+	if syncer == nil {
 		writeJSONError(w, http.StatusNotImplemented, "service does not support mail archive sync")
 		return
 	}

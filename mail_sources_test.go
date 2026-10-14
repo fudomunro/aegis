@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -52,10 +54,10 @@ func syncGmailShared(t *testing.T, srv *Server, a *MailArchive) {
 	})
 	up := httptest.NewServer(mux)
 	t.Cleanup(up.Close)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
-	conn := NewGoogleGmailConnector(srv)
-	if _, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	conn := connectors.NewGoogleGmailConnector(srv)
+	if _, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
 		t.Fatalf("gmail sync: %v", err)
 	}
 }
@@ -76,7 +78,7 @@ func searchMergedShared(t *testing.T, a *MailArchive) *types.Message {
 		t.Fatalf("search: %v", err)
 	}
 	for i := range hits.Messages {
-		if normalizeMessageID(hits.Messages[i].EntityID) == sharedMessageID {
+		if types.NormalizeMessageID(hits.Messages[i].EntityID) == sharedMessageID {
 			return &hits.Messages[i]
 		}
 	}
@@ -101,7 +103,7 @@ func TestMailSources_TakeoutThenGmail_MergesOnMessageID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if st.ByService[takeoutServiceID] < 4 || st.ByService[googleGmailServiceID] != 1 {
+	if st.ByService[takeoutServiceID] < 4 || st.ByService[connectors.GoogleGmailServiceID] != 1 {
 		t.Fatalf("by_service = %+v", st.ByService)
 	}
 
@@ -113,7 +115,7 @@ func TestMailSources_TakeoutThenGmail_MergesOnMessageID(t *testing.T) {
 	for _, src := range msg.Sources {
 		services = append(services, src.Service)
 	}
-	if !containsAll(services, googleGmailServiceID, takeoutServiceID) {
+	if !containsAll(services, connectors.GoogleGmailServiceID, takeoutServiceID) {
 		t.Fatalf("sources services = %v", services)
 	}
 	// Takeout is a sync location, not the mailbox home.
@@ -121,7 +123,7 @@ func TestMailSources_TakeoutThenGmail_MergesOnMessageID(t *testing.T) {
 		if src.Service == takeoutServiceID && src.Canonical {
 			t.Fatalf("takeout marked canonical: %+v", src)
 		}
-		if src.Service == googleGmailServiceID && !src.Canonical {
+		if src.Service == connectors.GoogleGmailServiceID && !src.Canonical {
 			t.Fatalf("gmail not canonical: %+v", src)
 		}
 	}
@@ -184,7 +186,7 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 	var shared, takeoutOnly *types.Message
 	for i := range resp.Messages {
 		m := &resp.Messages[i]
-		if normalizeMessageID(m.EntityID) == sharedMessageID {
+		if types.NormalizeMessageID(m.EntityID) == sharedMessageID {
 			shared = m
 		}
 		if strings.Contains(m.Subject, "Takeout hello") {
@@ -204,7 +206,7 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 func TestMailSources_HasProvidersArchiveOnly(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.connectors = map[string]ServiceConnector{}
+	srv.connectors = map[string]connectors.ServiceConnector{}
 	if !kindHasProviders("messages", srv) {
 		t.Fatal("expected archive-only HasProviders")
 	}

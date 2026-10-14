@@ -246,17 +246,6 @@ func multiSourceMutationRule() string {
 		"({\"kind\":\"playlists\"|\"tracks\", \"source_service\", \"source_id\", \"target_service\", \"dry_run\"})."
 }
 
-// photoSourceDiscipline is injected with photo guidance so agents do not fall
-// back to local Photos libraries, Immich Docker/Postgres, or a direct :2283
-// call when the prompt is vague (issue #125).
-func photoSourceDiscipline() string {
-	return "Photo source discipline: obtain photo metadata and bytes only through Aegis " +
-		"(/v1/library/photos or /v1/services/...). Do not open Photos.app, " +
-		"Photos Library.photoslibrary, Photo Booth, or ~/Pictures as a photo source; " +
-		"do not query Immich at :2283 or via Docker/Postgres; do not read Immich .env " +
-		"or compose files for credentials. Aegis owns photo credentials and the proxy URL."
-}
-
 // writePolicyNotice returns system-instruction text for this service's write
 // posture relative to configured canonical homes (issue #16 phase 2). Empty
 // when the service cannot write library kinds or no home relationship exists.

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -31,7 +30,7 @@ func photoContentKey(p types.Photo) string {
 			return "hash:" + strings.ToLower(h)
 		}
 	}
-	taken := normalizePhotoTakenAt(p.TakenAt)
+	taken := types.NormalizePhotoTakenAt(p.TakenAt)
 	if taken == "" {
 		return ""
 	}
@@ -39,20 +38,6 @@ func photoContentKey(p types.Photo) string {
 		return "time:" + taken
 	}
 	return fmt.Sprintf("time:%s|dim:%dx%d", taken, p.Width, p.Height)
-}
-
-// normalizePhotoTakenAt parses RFC3339 (or RFC3339Nano) and re-emits it at
-// second precision in UTC so the same capture matches across services.
-func normalizePhotoTakenAt(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	t, err := time.Parse(time.RFC3339Nano, raw)
-	if err != nil {
-		return raw
-	}
-	return t.UTC().Format(time.RFC3339)
 }
 
 func photoExtraString(extra map[string]any, key string) string {
@@ -179,25 +164,6 @@ func MergePhotos(in []types.Photo) []types.Photo {
 		return photoIdentityKey(out[i]) < photoIdentityKey(out[j])
 	})
 	return out
-}
-
-// newPhoto builds a single-source neutral photo. canonical should be true
-// when this service holds the authoritative bytes (the usual case for photos).
-func newPhoto(service, serviceName, id, filename, mimeType, takenAt string, width, height int) types.Photo {
-	src := types.PhotoSource{
-		Service:     service,
-		ServiceName: serviceName,
-		ID:          id,
-		Canonical:   true,
-	}
-	return types.Photo{
-		TakenAt:  takenAt,
-		Width:    width,
-		Height:   height,
-		MimeType: mimeType,
-		Filename: filename,
-		Sources:  []types.PhotoSource{src},
-	}
 }
 
 // HandleLibraryPhotos returns the user's photos from every connected

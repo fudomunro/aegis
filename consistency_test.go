@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"log/slog"
 	"net/http/httptest"
 	"strings"
@@ -45,11 +47,11 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	connectors := []struct {
 		name string
-		svc  ServiceConnector
+		svc  connectors.ServiceConnector
 	}{
-		{"spotify", NewSpotifyConnector(srv)},
-		{"youtube-music", NewYouTubeMusicConnector(srv)},
-		{"amazon-music", NewAmazonMusicConnector(srv)},
+		{"spotify", connectors.NewSpotifyConnector(srv)},
+		{"youtube-music", connectors.NewYouTubeMusicConnector(srv)},
+		{"amazon-music", connectors.NewAmazonMusicConnector(srv)},
 	}
 	for _, c := range connectors {
 		instr := c.svc.SystemInstructions("https://aegis.example.com")
@@ -88,6 +90,6 @@ func TestCapabilities_PlaylistFieldsUseSources(t *testing.T) {
 		}
 		t.Errorf("%s: no playlists data type", name)
 	}
-	check("spotify", NewSpotifyConnector(srv).Capabilities())
-	check("youtube-music", NewYouTubeMusicConnector(srv).Capabilities())
+	check("spotify", connectors.NewSpotifyConnector(srv).Capabilities())
+	check("youtube-music", connectors.NewYouTubeMusicConnector(srv).Capabilities())
 }
