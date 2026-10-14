@@ -74,6 +74,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service)
 - `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
 - `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
+- `GET /v1/library/{user-defined}` — schema-pack kinds under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in type policy before agents can read it. See [User-defined types](#user-defined-types-issue-15).
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
@@ -89,8 +90,44 @@ Aegis starts with these endpoints:
 - `GET /v1/admin/flow` — data-flow topology + recent access stats (`?window=5m|1h|24h`) for the Home tab (issue #32). Includes per-agent nodes and access arrows to library data types so the Home map can draw which agents touched which data (issue #114)
 - `GET /v1/admin/hook-health` — Aperture pre-request hook wiring diagnostics (stale Guardian names/URLs, auth failures, missing `send` fields)
 - `GET /v1/admin/library/{kind}` — admin Library tab preview (same data as `/v1/library/{kind}`, does not count as Home access)
+- `GET /v1/admin/udt/status` — loaded user-defined kinds + local file selection (issue #15)
+- `GET /v1/admin/udt/browse?path=` — list folders and `.json` files for file selection (admin auth; see SECURITY.md)
+- `PUT/DELETE /v1/admin/udt/kinds/{id}/sources/{sid}` — select/clear local JSON files for a schema source
+- `POST/DELETE /v1/admin/udt/kinds/{id}/extra[/{extraId}]` — attach/remove an extra local file feed
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
+
+## User-defined types (issue #15)
+
+Bring your own library kind with a **schema pack** (JSON) under
+`<data-dir>/user-types/` (or `AEGIS_USER_TYPES_DIR`). Packs become real
+`GET /v1/library/{id}` endpoints on the same aggregate pipeline as built-ins.
+
+```text
+user-types/
+  reading-list/
+    schema.json          # fields, identity, sources
+    sample/books.json    # demo file_json feed
+```
+
+Rules that keep packs safe:
+
+- **Opt-in.** A pack cannot grant agent access. Enable the kind in type policy
+  (`PUT /v1/admin/type-policies` or the admin UI) before agents can read it.
+- **No hijacking.** `id` / `perm_type` / `path` cannot collide with built-in
+  data types or routes (`path` is always `/v1/library/{id}`).
+- **Fail-open.** A bad source becomes `by_service` status; a bad pack is
+  skipped at load with a log line.
+- **Local file selection** lives in `user_types.json` (admin Advanced →
+  User-defined types). Schema packs are never rewritten.
+
+```bash
+export AEGIS_USER_TYPES_DIR=$PWD/examples/user-types   # or copy into <data-dir>/user-types/
+# enable after load (type policy), then:
+curl -s https://aegis.example.ts.net/v1/library/reading-list | jq .
+```
+
+See `docs/user-defined-types.md` for the schema format and `examples/user-types/` for a portable pack.
 
 ## Observability (issue #105)
 
@@ -572,6 +609,8 @@ on first run with mode `0700` (it holds secrets).
   permissions.json        # admin permissions overlay (non-secret)
   apps.json               # third-party app registry (0600; token hashes only)
   service_connections.json # admin Immich/static-auth overlay (0600; may hold API keys)
+  user_types.json         # admin UDT local-file selection overlay (issue #15)
+  user-types/             # user-defined type schema packs (issue #15)
   entity_links.json       # confirmed playlist/entity links
   tokens.json             # encrypted OAuth tokens (0600)
   copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)

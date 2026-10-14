@@ -134,6 +134,15 @@ from other LAN interfaces.
     mode 0700 directory, not world-readable, included in the same backup
     you use for other Aegis state. Default retention is 30 days
     (`-audit-retention-days`).
+13. **User-defined type file access is admin-equivalent.**
+    `GET /v1/admin/udt/browse` lists directories on the Aegis host and the
+    source/extra endpoints accept absolute local paths. Whatever file is
+    selected can then be read through `/v1/library/{udt}` by anyone who
+    passes `AuthMiddleware` (tailnet identity or API key) — the same trust
+    boundary as admin. Do not share an Aegis API key with untrusted agents.
+    Prefer `auth-mode=tailnet` and `allowed-logins` on multi-user tailnets.
+    Schema packs must not embed secrets in `http_json` headers (rejected at
+    load); use named connections / the encrypted token store.
 
 ## What “authorized” means for data
 

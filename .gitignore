@@ -10,6 +10,7 @@ guardian.json
 tokens.json
 entity_links.json
 permissions.json
+user_types.json
 mail-archive.db
 mail-archive.db-*
 .aegis-token-pass

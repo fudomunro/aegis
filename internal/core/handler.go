@@ -111,6 +111,9 @@ type Server struct {
 	apps *AppStore
 	// grants holds short-lived consent codes from the authorize page.
 	grants *GrantStore
+	// udts holds user-defined type schemas loaded from the user-types
+	// directory (issue #15). May be nil when none are configured.
+	udts *userDefinedRegistry
 }
 
 // appAllowedPrefixes are path prefixes a third-party app token may call.
