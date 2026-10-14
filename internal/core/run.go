@@ -319,7 +319,7 @@ func Run() {
 	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
 		userTypesDir = expandUserPath(v)
 	}
-	udtReg, udtLoaded := LoadUserDefinedTypes(userTypesDir, slog.Default())
+	udtReg, udtLoaded := LoadUserDefinedTypes(userTypesDir, defaultUserTypesOverlayPath(paths.Config), slog.Default())
 	srv.udts = udtReg
 	srv.registerUserDefinedKinds()
 	if len(udtLoaded) > 0 {
@@ -489,6 +489,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminQuicken)(w, r)
 	case path == "timeline" || strings.HasPrefix(path, "timeline/"):
 		s.AuthMiddleware(s.HandleAdminTimeline)(w, r)
+	case path == "udt" || strings.HasPrefix(path, "udt/"):
+		s.AuthMiddleware(s.HandleAdminUDT)(w, r)
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}

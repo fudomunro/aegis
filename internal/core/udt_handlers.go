@@ -11,9 +11,18 @@ import (
 // HandleLibraryUserDefined serves GET /v1/library/{udt-id} for one loaded
 // user-defined kind through the shared aggregate pipeline (cache, type
 // policy, fan-out, merge, JSON) — issue #15 Phase 6 PoC.
+// Schema is resolved with the admin file-selection overlay at request time
+// so /v1/admin/udt picks apply without a restart.
 func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) http.HandlerFunc {
+	kindID := schema.ID
 	kind := schema.LibraryKind()
 	return func(w http.ResponseWriter, r *http.Request) {
+		schema := schema
+		kind := kind
+		if s.udts != nil {
+			schema = s.udts.SchemaWithOverlay(kindID)
+			kind = schema.LibraryKind()
+		}
 		handleLibraryAggregate(s, w, r, libraryKindSpec[types.UserDefinedItem]{
 			kind: kind,
 			targets: func(s *Server, r *http.Request) (targets []namedLister[types.UserDefinedItem], denied []string) {

@@ -189,11 +189,25 @@ on the multi-source rows, `by_service.sample-export` ok.
 
 ### Deliberately not in this draft
 
-- Admin UI to edit schemas (files only for now)
+- Admin UI to author schemas from scratch (file selection **is** in: Advanced → User-defined types)
 - Write / mirror / copy-ledger stamping for UDTs
 - SQL / spreadsheet / CalDAV sources
 - Field-level sensitive redaction enforcement
-- Schema hot-reload (restart to pick up packs)
+- Schema hot-reload (restart to pick up new packs; **file path selection** hot-applies via overlay)
+
+### Admin local-file selection (this PR)
+
+Advanced → **User-defined types** lists loaded packs and their `file_json`
+sources. Operators can:
+
+1. **Browse** the local disk (folders + `.json`) and click a file to select it
+2. **Select** one or more files per schema source (replaces the pack’s relative path)
+3. **Add extra files** with name-matched fields (or an explicit field_map)
+4. Clear back to the schema default
+
+Selections persist in `user_types.json` next to `aegis.json` (never rewrites
+schema packs). Library fetches apply the overlay at request time and clear the
+aggregate cache on save.
 
 ---
 
@@ -267,7 +281,7 @@ permissions**; users own **their types and sources**.
 ## 8. Next steps after this draft
 
 1. Agree schema v1 (fields table above) and the own-repo extraction trigger.
-2. Admin: list/edit packs, enable/disable kinds (type policy UI already exists).
-3. Hot-reload or “reload packs” admin action.
+2. Admin: author packs in the UI (currently select files only), enable/disable kinds.
+3. Hot-reload of schema packs (file selection already hot-applies).
 4. Sensitive-field redaction hooks on the type policy attributes (#148).
 5. Optional second pack (e.g. `garden-plants`) to stress multi-field identity.

@@ -24,6 +24,8 @@ type userDefinedRegistry struct {
 	byPath    map[string]string // path → kind id
 	schemaDir map[string]string // kind id → directory of its schema.json
 	baseDir   string            // user-types root (discovery only)
+	// overlayPath is the admin-edited user_types.json (local file selection).
+	overlayPath string
 }
 
 func newUserDefinedRegistry() *userDefinedRegistry {
@@ -32,6 +34,28 @@ func newUserDefinedRegistry() *userDefinedRegistry {
 		byPath:    map[string]string{},
 		schemaDir: map[string]string{},
 	}
+}
+
+// OverlayPath returns the admin user_types.json path ("" when disabled).
+func (reg *userDefinedRegistry) OverlayPath() string {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	return reg.overlayPath
+}
+
+// SchemaWithOverlay returns the kind schema with admin-selected local files
+// applied (issue #15). Falls back to the bare schema when the overlay is
+// missing or unreadable.
+func (reg *userDefinedRegistry) SchemaWithOverlay(id string) types.UserDefinedTypeSchema {
+	schema, _ := reg.Get(id)
+	if reg == nil {
+		return schema
+	}
+	ov, err := loadUserTypesOverlay(reg.OverlayPath())
+	if err != nil {
+		return schema
+	}
+	return applyUserTypesOverlay(schema, ov.Kinds[id])
 }
 
 // DirFor returns the pack directory that holds a kind's schema and relative
@@ -43,6 +67,7 @@ func (reg *userDefinedRegistry) DirFor(id string) string {
 }
 
 // LoadUserDefinedTypes reads user-defined schema packs from dir.
+// overlayPath (optional) is the admin user_types.json that selects local files.
 //
 // Layout (pack model used by examples/user-types/):
 //
@@ -52,9 +77,10 @@ func (reg *userDefinedRegistry) DirFor(id string) string {
 //
 // Invalid schemas are skipped with a log line — fail-open for the server
 // (issue #15: a bad UDT file must not take down built-in kinds).
-func LoadUserDefinedTypes(dir string, logger *slog.Logger) (*userDefinedRegistry, []types.UserDefinedTypeSchema) {
+func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDefinedRegistry, []types.UserDefinedTypeSchema) {
 	reg := newUserDefinedRegistry()
 	reg.baseDir = dir
+	reg.overlayPath = overlayPath
 	if dir == "" {
 		return reg, nil
 	}
