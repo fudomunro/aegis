@@ -2,6 +2,8 @@ package main
 
 import (
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
@@ -23,9 +25,9 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		t.Fatalf("photos canonical ids = %v", photos)
 	}
 
-	items := []Track{
-		{Name: "A", Sources: []TrackSource{{Service: "spotify", ID: "1"}, {Service: "youtube-music", ID: "2"}}},
-		{Name: "B", Sources: []TrackSource{{Service: "youtube-music", ID: "3"}}},
+	items := []types.Track{
+		{Name: "A", Sources: []types.TrackSource{{Service: "spotify", ID: "1"}, {Service: "youtube-music", ID: "2"}}},
+		{Name: "B", Sources: []types.TrackSource{{Service: "youtube-music", ID: "3"}}},
 	}
 	markTrackSourcesCanonical(items, "spotify")
 	if !items[0].Sources[0].Canonical || items[0].Sources[1].Canonical || items[1].Sources[0].Canonical {
@@ -35,8 +37,8 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		t.Fatalf("CanonicalService = %q", items[0].CanonicalService())
 	}
 
-	contactsIn := []Contact{
-		{Name: "Ada", Sources: []ContactSource{{Service: "google", ID: "c1"}, {Service: "immich", ID: "c2"}}},
+	contactsIn := []types.Contact{
+		{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ID: "c1"}, {Service: "immich", ID: "c2"}}},
 	}
 	markContactSourcesCanonical(contactsIn, "google")
 	if !contactsIn[0].Sources[0].Canonical || contactsIn[0].Sources[1].Canonical {

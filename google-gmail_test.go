@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
@@ -96,7 +98,7 @@ func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
 		t.Fatalf("got %d messages, want 2", len(messages))
 	}
 	inbox := messages[0]
-	if inbox.Subject != "Meeting" || inbox.Channel != MessageChannelEmail {
+	if inbox.Subject != "Meeting" || inbox.Channel != types.MessageChannelEmail {
 		t.Fatalf("inbox = %+v", inbox)
 	}
 	if inbox.EntityID != "meet@example.com" || inbox.ThreadID != "t1" {
@@ -135,8 +137,8 @@ func TestGoogleGmailConnector_ListMessages_Unauthorized(t *testing.T) {
 	}}}, "https://aegis.example.com")
 	conn := NewGoogleGmailConnector(srv)
 	_, _, err := conn.ListMessages(context.Background())
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if !errors.Is(err, types.ErrUnauthorized) {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -231,7 +233,7 @@ func TestGoogleGmailConnector_HandleProxy_ListMessages(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MessageList
+	var resp types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -278,7 +280,7 @@ func TestGoogleGmailConnector_HandleProxy_GetMessageFull(t *testing.T) {
 	if !strings.Contains(gotPath, "/users/me/messages/abc") || !strings.Contains(gotPath, "format=full") {
 		t.Fatalf("upstream = %q", gotPath)
 	}
-	var msg Message
+	var msg types.Message
 	if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -351,9 +353,9 @@ func TestGoogleGmailConnector_HandleProxy_ListAndGetThread(t *testing.T) {
 		t.Fatalf("thread get status = %d body=%s", w.Code, w.Body.String())
 	}
 	var threadResp struct {
-		ID       string    `json:"id"`
-		Total    int       `json:"total"`
-		Messages []Message `json:"messages"`
+		ID       string          `json:"id"`
+		Total    int             `json:"total"`
+		Messages []types.Message `json:"messages"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &threadResp); err != nil {
 		t.Fatalf("decode thread: %v", err)
@@ -416,11 +418,11 @@ func TestGoogleGmailConnector_Capabilities_ReadOnlyMessages(t *testing.T) {
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "messages" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if dataTypeHasAgentWriteOp(caps, "messages") {
+	if types.DataTypeHasAgentWriteOp(caps, "messages") {
 		t.Fatal("messages must not advertise agent write ops in this phase")
 	}
 	for _, op := range caps.DataTypes[0].Operations {
-		if isMutatingMethod(op.Method) {
+		if types.IsMutatingMethod(op.Method) {
 			t.Fatalf("unexpected mutating op: %+v", op)
 		}
 	}

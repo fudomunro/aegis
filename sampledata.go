@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Synthetic sample fixtures for query testing (issue #77).
@@ -28,16 +30,16 @@ type SampleMailSet struct {
 // SampleLibrarySet holds neutral library fixtures covering every kind plus
 // deliberate merge pairs (ISRC tracks, contact identity chains, Message-IDs).
 type SampleLibrarySet struct {
-	Playlists    []Playlist      `json:"playlists"`
-	Tracks       []Track         `json:"tracks"`
-	Albums       []Album         `json:"albums"`
-	Artists      []Artist        `json:"artists"`
-	Contacts     []Contact       `json:"contacts"`
-	Photos       []Photo         `json:"photos"`
-	Events       []CalendarEvent `json:"events"`
-	Messages     []Message       `json:"messages"`
-	Transactions []Transaction   `json:"transactions"`
-	Places       []PlaceVisit    `json:"places"`
+	Playlists    []types.Playlist      `json:"playlists"`
+	Tracks       []types.Track         `json:"tracks"`
+	Albums       []types.Album         `json:"albums"`
+	Artists      []types.Artist        `json:"artists"`
+	Contacts     []types.Contact       `json:"contacts"`
+	Photos       []types.Photo         `json:"photos"`
+	Events       []types.CalendarEvent `json:"events"`
+	Messages     []types.Message       `json:"messages"`
+	Transactions []types.Transaction   `json:"transactions"`
+	Places       []types.PlaceVisit    `json:"places"`
 }
 
 // SampleMailCount is the default small-set size used by CI-shaped runs and the
@@ -127,18 +129,18 @@ func GenerateSampleMail(n int) SampleMailSet {
 			Snippet:     snippetOf(body),
 			FromName:    from.name,
 			FromEmail:   from.email,
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
-			SentAt:     sent.UTC().Format(time.RFC3339),
-			ReceivedAt: sent.UTC().Add(2 * time.Second).Format(time.RFC3339),
-			Direction:  direction,
-			Read:       !hasString(labels, "UNREAD"),
-			BodyText:   body,
+			SentAt:      sent.UTC().Format(time.RFC3339),
+			ReceivedAt:  sent.UTC().Add(2 * time.Second).Format(time.RFC3339),
+			Direction:   direction,
+			Read:        !hasString(labels, "UNREAD"),
+			BodyText:    body,
 			PayloadGzip: gz,
 		}
 		if i%6 == 2 {
-			rec.CC = []Contact{
+			rec.CC = []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Grace Hopper", []string{"grace@example.com"}, nil),
 			}
 		}
@@ -182,7 +184,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   "Unicode and RTL subject with mixed scripts.",
 			FromName:  "Nadia Farouk",
 			FromEmail: "nadia@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:     "2021-06-15T08:30:00Z",
@@ -200,7 +202,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   "This message had no plain-text part.",
 			FromName:  "Devs at Example",
 			FromEmail: "news@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:     "2022-03-03T11:15:00Z",
@@ -220,7 +222,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   snippetOf(huge),
 			FromName:  "Ada Lovelace",
 			FromEmail: "ada@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:     "2022-08-20T16:00:00Z",
@@ -238,7 +240,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   "sent_at is empty on purpose.",
 			FromName:  "Broken Header",
 			FromEmail: "broken@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			Direction: "unknown",
@@ -253,7 +255,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   "entity_id / message_id empty.",
 			FromName:  "Broken Header",
 			FromEmail: "broken@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:    "2023-01-12T09:00:00Z",
@@ -270,7 +272,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   "Classic spam shape for label filters.",
 			FromName:  "Spammer",
 			FromEmail: "spam@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:    "2023-04-01T02:02:02Z",
@@ -287,7 +289,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Snippet:   "Trash label for filter coverage.",
 			FromName:  "Me",
 			FromEmail: "me@example.com",
-			To: []Contact{
+			To: []types.Contact{
 				newContact(googleGmailServiceID, googleGmailServiceName, "", "Ada Lovelace", []string{"ada@example.com"}, nil),
 			},
 			SentAt:    "2023-09-09T09:09:09Z",
@@ -336,50 +338,50 @@ func lastSentID(recs []MailArchiveRecord) string {
 func GenerateSampleLibrary() SampleLibrarySet {
 	// --- Tracks: shared ISRC across services, name-only pair, distinct ISRCs ---
 	sharedISRC := "USSYN17000001"
-	tracks := []Track{
+	tracks := []types.Track{
 		{
 			Name:     "So What",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Miles Davis")},
+			Artists:  []types.Artist{types.NewArtist("spotify", "Spotify", "", "Miles Davis")},
 			EntityID: sharedISRC,
-			Sources: []TrackSource{
+			Sources: []types.TrackSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "sp-track-1", URL: "https://open.spotify.com/track/sp-track-1", Canonical: true},
 			},
 		},
 		{
 			Name:     "So What (Remastered)",
-			Artists:  []Artist{newArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
+			Artists:  []types.Artist{types.NewArtist("amazon-music", "Amazon Music", "", "Miles Davis")},
 			EntityID: sharedISRC,
-			Sources: []TrackSource{
+			Sources: []types.TrackSource{
 				{Service: "amazon-music", ServiceName: "Amazon Music", ID: "am-track-1"},
 			},
 		},
 		{
 			Name:    "Take Five",
-			Artists: []Artist{newArtist("spotify", "Spotify", "", "Dave Brubeck")},
-			Sources: []TrackSource{
+			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "Dave Brubeck")},
+			Sources: []types.TrackSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "sp-track-2", Canonical: true},
 			},
 		},
 		{
 			Name:    "Take Five",
-			Artists: []Artist{newArtist("youtube-music", "YouTube Music", "", "Dave Brubeck")},
-			Sources: []TrackSource{
+			Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", "Dave Brubeck")},
+			Sources: []types.TrackSource{
 				{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-track-2"},
 			},
 		},
 		{
 			Name:     "Song A",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Artist A")},
+			Artists:  []types.Artist{types.NewArtist("spotify", "Spotify", "", "Artist A")},
 			EntityID: "USSYN00000001",
-			Sources: []TrackSource{
+			Sources: []types.TrackSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "sp-track-a", Canonical: true},
 			},
 		},
 		{
 			Name:     "Song A",
-			Artists:  []Artist{newArtist("spotify", "Spotify", "", "Artist A")},
+			Artists:  []types.Artist{types.NewArtist("spotify", "Spotify", "", "Artist A")},
 			EntityID: "USSYN00000002",
-			Sources: []TrackSource{
+			Sources: []types.TrackSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "sp-track-b", Canonical: true},
 			},
 		},
@@ -387,159 +389,159 @@ func GenerateSampleLibrary() SampleLibrarySet {
 
 	// --- Contacts: email → phone → handle chain via shared keys (union-find) ---
 	// A (email+phone) ~ B (phone+handle) ~ C (handle). Name-only stays separate.
-	contacts := []Contact{
+	contacts := []types.Contact{
 		{
 			Name:    "Ada Lovelace",
 			Emails:  []string{"Ada@Example.com"},
 			Phones:  []string{"+1 555 0100"},
-			Sources: []ContactSource{{Service: "google-contacts", ServiceName: "Google Contacts", ID: "c-ada-1", Name: "Ada Lovelace", Emails: []string{"ada@example.com"}, Phones: []string{"+1 555 0100"}, Canonical: true}},
+			Sources: []types.ContactSource{{Service: "google-contacts", ServiceName: "Google Contacts", ID: "c-ada-1", Name: "Ada Lovelace", Emails: []string{"ada@example.com"}, Phones: []string{"+1 555 0100"}, Canonical: true}},
 		},
 		{
 			Name:    "A. Lovelace",
 			Phones:  []string{"+1 555 0100"},
 			Handles: []string{"ada_codes"},
-			Sources: []ContactSource{{Service: "immich", ServiceName: "Immich", ID: "c-ada-2", Name: "A. Lovelace", Phones: []string{"+15550100"}}},
+			Sources: []types.ContactSource{{Service: "immich", ServiceName: "Immich", ID: "c-ada-2", Name: "A. Lovelace", Phones: []string{"+15550100"}}},
 		},
 		{
 			Name:    "Ada L.",
 			Handles: []string{"@ada_codes"},
-			Sources: []ContactSource{{Service: "spotify", ServiceName: "Spotify", ID: "c-ada-3", Name: "Ada L."}},
+			Sources: []types.ContactSource{{Service: "spotify", ServiceName: "Spotify", ID: "c-ada-3", Name: "Ada L."}},
 		},
 		{
 			Name:    "Grace Hopper",
 			Emails:  []string{"grace@example.com"},
 			Phones:  []string{"+1 555 0199"},
-			Sources: []ContactSource{{Service: "google-contacts", ServiceName: "Google Contacts", ID: "c-grace-1", Name: "Grace Hopper", Emails: []string{"grace@example.com"}, Phones: []string{"+1 555 0199"}, Canonical: true}},
+			Sources: []types.ContactSource{{Service: "google-contacts", ServiceName: "Google Contacts", ID: "c-grace-1", Name: "Grace Hopper", Emails: []string{"grace@example.com"}, Phones: []string{"+1 555 0199"}, Canonical: true}},
 		},
 		{
 			Name:    "Grace H.",
 			Emails:  []string{"grace.hopper@example.org"},
 			Phones:  []string{"+1 555 0199"},
-			Sources: []ContactSource{{Service: "immich", ServiceName: "Immich", ID: "c-grace-2", Name: "Grace H."}},
+			Sources: []types.ContactSource{{Service: "immich", ServiceName: "Immich", ID: "c-grace-2", Name: "Grace H."}},
 		},
 		{
 			Name:    "Unrelated Sam",
 			Emails:  []string{"sam@example.com"},
-			Sources: []ContactSource{{Service: "google-contacts", ServiceName: "Google Contacts", ID: "c-sam", Name: "Unrelated Sam", Canonical: true}},
+			Sources: []types.ContactSource{{Service: "google-contacts", ServiceName: "Google Contacts", ID: "c-sam", Name: "Unrelated Sam", Canonical: true}},
 		},
 	}
 
 	// --- Messages: duplicate Message-IDs and subject+from+time fallback ---
 	sent := "2024-02-01T10:00:00Z"
-	messages := []Message{
+	messages := []types.Message{
 		{
-			Channel:  MessageChannelEmail,
+			Channel:  types.MessageChannelEmail,
 			Subject:  "Ship the release",
 			Snippet:  "Release checklist is green.",
 			SentAt:   sent,
 			EntityID: "<ship-release@synthetic.example>",
-			From:     &Contact{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
+			From:     &types.Contact{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
 			Labels:   []string{"INBOX"},
-			Sources: []MessageSource{
+			Sources: []types.MessageSource{
 				{Service: googleGmailServiceID, ServiceName: googleGmailServiceName, ID: "gm-msg-1", Canonical: true, Extra: map[string]any{"message_id": "<ship-release@synthetic.example>"}},
 			},
 		},
 		{
-			Channel:  MessageChannelEmail,
+			Channel:  types.MessageChannelEmail,
 			Subject:  "Ship the release",
 			Snippet:  "Release checklist is green.",
 			SentAt:   sent,
 			EntityID: "<ship-release@synthetic.example>",
-			From:     &Contact{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
+			From:     &types.Contact{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
 			Labels:   []string{"INBOX", "TAKEOUT"},
-			Sources: []MessageSource{
+			Sources: []types.MessageSource{
 				{Service: takeoutServiceID, ServiceName: takeoutServiceName, ID: "msgid:ship-release@synthetic.example", Extra: map[string]any{"message_id": "<ship-release@synthetic.example>"}},
 			},
 		},
 		{
-			Channel: MessageChannelEmail,
+			Channel: types.MessageChannelEmail,
 			Subject: "Invoice reminder",
 			Snippet: "Friendly reminder about the widgets invoice.",
 			SentAt:  "2024-02-02T10:00:00Z",
-			From:    &Contact{Name: "Billing", Emails: []string{"billing@example.com"}},
+			From:    &types.Contact{Name: "Billing", Emails: []string{"billing@example.com"}},
 			Labels:  []string{"INBOX"},
-			Sources: []MessageSource{
+			Sources: []types.MessageSource{
 				{Service: googleGmailServiceID, ServiceName: googleGmailServiceName, ID: "gm-msg-2", Canonical: true},
 			},
 		},
 		{
-			Channel: MessageChannelEmail,
+			Channel: types.MessageChannelEmail,
 			Subject: "Invoice reminder",
 			Snippet: "Friendly reminder about the widgets invoice.",
 			SentAt:  "2024-02-02T10:00:00Z",
-			From:    &Contact{Name: "Billing", Emails: []string{"billing@example.com"}},
+			From:    &types.Contact{Name: "Billing", Emails: []string{"billing@example.com"}},
 			Labels:  []string{"INBOX", "TAKEOUT"},
-			Sources: []MessageSource{
+			Sources: []types.MessageSource{
 				{Service: takeoutServiceID, ServiceName: takeoutServiceName, ID: "blob:invoice-reminder"},
 			},
 		},
 		{
-			Channel: MessageChannelEmail,
+			Channel: types.MessageChannelEmail,
 			Subject: "Unrelated note",
 			Snippet: "Nothing to merge here.",
 			SentAt:  "2024-02-03T10:00:00Z",
-			From:    &Contact{Name: "Me", Emails: []string{"me@example.com"}},
+			From:    &types.Contact{Name: "Me", Emails: []string{"me@example.com"}},
 			Labels:  []string{"SENT"},
-			Sources: []MessageSource{
+			Sources: []types.MessageSource{
 				{Service: googleGmailServiceID, ServiceName: googleGmailServiceName, ID: "gm-msg-3", Canonical: true},
 			},
 		},
 	}
 
 	// --- Playlists: same name across services merges ---
-	playlists := []Playlist{
+	playlists := []types.Playlist{
 		{
 			Name:       "Jazz Vibes",
 			TrackCount: 10,
-			Sources:    []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl-1", Canonical: true}},
+			Sources:    []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl-1", Canonical: true}},
 		},
 		{
 			Name:       "Jazz Vibes",
 			TrackCount: 12,
-			Sources:    []PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-pl-1"}},
+			Sources:    []types.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-pl-1"}},
 		},
 		{
 			Name:       "Focus Mix",
 			TrackCount: 25,
-			Sources:    []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl-2", Canonical: true}},
+			Sources:    []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl-2", Canonical: true}},
 		},
 	}
 
-	albums := []Album{
+	albums := []types.Album{
 		{
 			Name:     "Kind of Blue",
 			EntityID: "USSYNALBUM0001",
-			Sources:  []AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-al-1"}},
+			Sources:  []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-al-1"}},
 		},
 		{
 			Name:     "Kind of Blue",
 			EntityID: "USSYNALBUM0001",
-			Sources:  []AlbumSource{{Service: "amazon-music", ServiceName: "Amazon Music", ID: "am-al-1"}},
+			Sources:  []types.AlbumSource{{Service: "amazon-music", ServiceName: "Amazon Music", ID: "am-al-1"}},
 		},
 		{
 			Name:    "Time Out",
-			Sources: []AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-al-2"}},
+			Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-al-2"}},
 		},
 	}
 
-	artists := []Artist{
+	artists := []types.Artist{
 		{
 			Name:     "Miles Davis",
 			EntityID: "00000000-0000-0000-0000-000000000001",
-			Sources:  []ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-ar-1", Name: "Miles Davis"}},
+			Sources:  []types.ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-ar-1", Name: "Miles Davis"}},
 		},
 		{
 			Name:     "Miles Davis",
 			EntityID: "00000000-0000-0000-0000-000000000001",
-			Sources:  []ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-ar-1", Name: "Miles Davis - Topic"}},
+			Sources:  []types.ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-ar-1", Name: "Miles Davis - Topic"}},
 		},
 		{
 			Name:    "Dave Brubeck",
-			Sources: []ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-ar-2", Name: "Dave Brubeck"}},
+			Sources: []types.ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-ar-2", Name: "Dave Brubeck"}},
 		},
 	}
 
-	photos := []Photo{
+	photos := []types.Photo{
 		{
 			TakenAt:  "2023-07-04T18:30:00Z",
 			Width:    4032,
@@ -547,10 +549,10 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			MimeType: "image/jpeg",
 			Filename: "IMG_0001.jpg",
 			Caption:  "Fireworks over the harbor",
-			People: []Contact{
+			People: []types.Contact{
 				{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
 			},
-			Sources: []PhotoSource{
+			Sources: []types.PhotoSource{
 				{Service: "google-photos", ServiceName: "Google Photos", ID: "gp-1", Canonical: true, BlobURL: "https://photos.example.invalid/b/gp-1"},
 			},
 		},
@@ -560,7 +562,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Height:   3024,
 			MimeType: "image/jpeg",
 			Filename: "IMG_0001.jpg",
-			Sources: []PhotoSource{
+			Sources: []types.PhotoSource{
 				{Service: "immich", ServiceName: "Immich", ID: "im-1", Canonical: true, BlobURL: "https://immich.example.invalid/api/assets/im-1"},
 			},
 		},
@@ -572,7 +574,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			MimeType: "image/jpeg",
 			Filename: "IMG_0002.jpg",
 			Caption:  "Beach at low tide",
-			Sources: []PhotoSource{
+			Sources: []types.PhotoSource{
 				{Service: "google-photos", ServiceName: "Google Photos", ID: "gp-2", Canonical: true, BlobURL: "https://photos.example.invalid/b/gp-2"},
 			},
 		},
@@ -584,26 +586,26 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			MimeType: "image/jpeg",
 			Filename: "IMG_0003.jpg",
 			Caption:  "Office whiteboard",
-			Sources: []PhotoSource{
+			Sources: []types.PhotoSource{
 				{Service: "google-photos", ServiceName: "Google Photos", ID: "gp-3", Canonical: true, BlobURL: "https://photos.example.invalid/b/gp-3"},
 			},
 		},
 	}
 
-	events := []CalendarEvent{
+	events := []types.CalendarEvent{
 		{
-			Title:   "Project kickoff",
-			StartAt: "2024-03-11T15:00:00Z",
-			EndAt:   "2024-03-11T16:00:00Z",
-			Location: "Room 4B",
-			Status:  "confirmed",
-			EntityID: "kickoff-2024@synthetic.example",
-			Organizer: &Contact{Name: "Grace Hopper", Emails: []string{"grace@example.com"}},
-			Attendees: []Contact{
+			Title:     "Project kickoff",
+			StartAt:   "2024-03-11T15:00:00Z",
+			EndAt:     "2024-03-11T16:00:00Z",
+			Location:  "Room 4B",
+			Status:    "confirmed",
+			EntityID:  "kickoff-2024@synthetic.example",
+			Organizer: &types.Contact{Name: "Grace Hopper", Emails: []string{"grace@example.com"}},
+			Attendees: []types.Contact{
 				{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
 				{Name: "Me", Emails: []string{"me@example.com"}},
 			},
-			Sources: []CalendarEventSource{
+			Sources: []types.CalendarEventSource{
 				{Service: "google-calendar", ServiceName: "Google Calendar", ID: "ev-1", CalendarID: "primary", Canonical: true},
 			},
 		},
@@ -614,7 +616,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			AllDay:   true,
 			Status:   "confirmed",
 			EntityID: "allhands-2024@synthetic.example",
-			Sources: []CalendarEventSource{
+			Sources: []types.CalendarEventSource{
 				{Service: "google-calendar", ServiceName: "Google Calendar", ID: "ev-2", CalendarID: "primary", Canonical: true},
 			},
 		},
@@ -624,7 +626,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 	// 1) Shared durable import_id via YNAB + Quicken FITID.
 	// 2) Name/amount/date pair within ±1 day (merchant variants).
 	// 3) Near-miss that must NOT merge (same merchant, different amount).
-	transactions := []Transaction{
+	transactions := []types.Transaction{
 		{
 			PostedAt:    "2024-03-05",
 			Amount:      "-45.67",
@@ -634,8 +636,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Shopping"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "AQB-20240305-0001",
-			Account:     &TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
+			Sources: []types.TransactionSource{
 				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-1", AccountID: "acct-1", Canonical: true,
 					Extra: map[string]any{"import_id": "AQB-20240305-0001"}},
 			},
@@ -649,8 +651,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Shopping:Online"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "AQB-20240305-0001",
-			Account:     &TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
+			Sources: []types.TransactionSource{
 				{Service: quickenServiceID, ServiceName: quickenServiceName, ID: "AQB-20240305-0001",
 					Extra: map[string]any{"fitid": "AQB-20240305-0001"}},
 			},
@@ -664,8 +666,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Coffee"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "ynab-tx-coffee",
-			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []types.TransactionSource{
 				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-coffee", AccountID: "acct-2", Canonical: true},
 			},
 		},
@@ -679,8 +681,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Dining"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "qif-coffee",
-			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []types.TransactionSource{
 				{Service: quickenServiceID, ServiceName: quickenServiceName, ID: "qif-coffee",
 					Extra: map[string]any{"fitid": "qif-coffee"}},
 			},
@@ -695,8 +697,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Coffee"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "ynab-tx-coffee-2",
-			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []types.TransactionSource{
 				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-coffee-2", AccountID: "acct-2", Canonical: true},
 			},
 		},
@@ -709,8 +711,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Income"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "ynab-tx-payroll",
-			Account:     &TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
+			Sources: []types.TransactionSource{
 				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-payroll", AccountID: "acct-1", Canonical: true},
 			},
 		},
@@ -723,8 +725,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Subscriptions"},
 			Status:      TransactionStatusPending,
 			EntityID:    "ynab-tx-stream",
-			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []types.TransactionSource{
 				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-stream", AccountID: "acct-2", Canonical: true},
 			},
 		},
@@ -738,8 +740,8 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Category:    []string{"Groceries", "Household Goods"},
 			Status:      TransactionStatusPosted,
 			EntityID:    "ynab-tx-split",
-			Account:     &TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
-			Sources: []TransactionSource{
+			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
+			Sources: []types.TransactionSource{
 				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-split", AccountID: "acct-2", Canonical: true},
 			},
 		},
@@ -749,14 +751,14 @@ func GenerateSampleLibrary() SampleLibrarySet {
 	// Two providers report the same Lunenburg weekend (merge on window+place).
 	// A harbor evening visit overlaps the fireworks photo; the office is a
 	// near-miss (different window) that must not merge.
-	places := []PlaceVisit{
+	places := []types.PlaceVisit{
 		{
 			StartAt:    "2023-07-04T16:00:00Z",
 			EndAt:      "2023-07-04T21:00:00Z",
-			Kind:       PlaceKindVisit,
+			Kind:       types.PlaceKindVisit,
 			Confidence: "high",
 			EntityID:   "tl-harbor-20230704",
-			Place: Place{
+			Place: types.Place{
 				Name:     "Halifax Harbour",
 				Address:  "123 Harbour Way, Halifax, Nova Scotia, Canada",
 				Locality: "Halifax",
@@ -764,33 +766,33 @@ func GenerateSampleLibrary() SampleLibrarySet {
 				Lat:      44.6488,
 				Lng:      -63.5752,
 			},
-			Sources: []PlaceVisitSource{
+			Sources: []types.PlaceVisitSource{
 				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-harbor-20230704", Canonical: true, PointIDs: []string{"tl-harbor-20230704"}},
 			},
 		},
 		{
 			// Same harbour evening from OwnTracks — merge pair (window+place).
-			StartAt:  "2023-07-04T16:05:00Z",
-			EndAt:    "2023-07-04T20:55:00Z",
-			Kind:     PlaceKindVisit,
-			Place: Place{
+			StartAt: "2023-07-04T16:05:00Z",
+			EndAt:   "2023-07-04T20:55:00Z",
+			Kind:    types.PlaceKindVisit,
+			Place: types.Place{
 				Name:     "Halifax Harbour",
 				Locality: "Halifax",
 				Country:  "Canada",
 				Lat:      44.6490,
 				Lng:      -63.5750,
 			},
-			Sources: []PlaceVisitSource{
+			Sources: []types.PlaceVisitSource{
 				{Service: ownTracksServiceID, ServiceName: ownTracksServiceName, ID: "otc-20230704-1605"},
 			},
 		},
 		{
 			StartAt:    "2023-07-05T14:00:00Z",
 			EndAt:      "2023-07-05T17:00:00Z",
-			Kind:       PlaceKindVisit,
+			Kind:       types.PlaceKindVisit,
 			Confidence: "medium",
 			EntityID:   "tl-lunenburg-20230705",
-			Place: Place{
+			Place: types.Place{
 				Name:     "Lunenburg Beach",
 				Address:  "Beach Rd, Lunenburg, Nova Scotia, Canada",
 				Locality: "Lunenburg",
@@ -798,22 +800,22 @@ func GenerateSampleLibrary() SampleLibrarySet {
 				Lat:      44.3764,
 				Lng:      -64.3188,
 			},
-			Sources: []PlaceVisitSource{
+			Sources: []types.PlaceVisitSource{
 				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-lunenburg-20230705", Canonical: true},
 			},
 		},
 		{
 			StartAt: "2023-07-04T21:00:00Z",
 			EndAt:   "2023-07-05T14:00:00Z",
-			Kind:    PlaceKindTrip,
-			Mode:    TripModeDrive,
-			Place: Place{
+			Kind:    types.PlaceKindTrip,
+			Mode:    types.TripModeDrive,
+			Place: types.Place{
 				Name:     "Lunenburg Beach",
 				Locality: "Lunenburg",
 				Country:  "Canada",
 			},
 			EntityID: "tl-drive-halifax-lunenburg",
-			Sources: []PlaceVisitSource{
+			Sources: []types.PlaceVisitSource{
 				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-drive-halifax-lunenburg"},
 			},
 		},
@@ -822,14 +824,14 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			// harbour evening visit.
 			StartAt: "2024-03-11T09:00:00Z",
 			EndAt:   "2024-03-11T17:00:00Z",
-			Kind:    PlaceKindVisit,
-			Place: Place{
+			Kind:    types.PlaceKindVisit,
+			Place: types.Place{
 				Name:     "Halifax Harbour",
 				Locality: "Halifax",
 				Country:  "Canada",
 			},
 			EntityID: "tl-harbor-20240311",
-			Sources: []PlaceVisitSource{
+			Sources: []types.PlaceVisitSource{
 				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-harbor-20240311"},
 			},
 		},

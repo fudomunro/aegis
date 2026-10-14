@@ -10,6 +10,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*Server, *httptest.Server) {
@@ -17,9 +19,9 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 	ts := httptest.NewServer(upstream)
 	t.Cleanup(ts.Close)
 
-	perms := Permissions{"default": AccessRead}
+	perms := types.Permissions{"default": types.AccessRead}
 	if targetWrite {
-		perms = Permissions{"default": AccessRead, "playlists": AccessFull, "tracks": AccessFull}
+		perms = types.Permissions{"default": types.AccessRead, "playlists": types.AccessFull, "tracks": types.AccessFull}
 	}
 	cfg := &Config{
 		Services: []Service{

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
@@ -139,11 +141,11 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"items": []map[string]any{
 					{
-						"id":      "ev1",
-						"summary": "Therapy",
+						"id":       "ev1",
+						"summary":  "Therapy",
 						"location": "Office",
-						"start":   map[string]any{"dateTime": "2024-06-01T09:00:00Z"},
-						"end":     map[string]any{"dateTime": "2024-06-01T09:30:00Z"},
+						"start":    map[string]any{"dateTime": "2024-06-01T09:00:00Z"},
+						"end":      map[string]any{"dateTime": "2024-06-01T09:30:00Z"},
 						"attendees": []map[string]any{
 							{"email": "doc@example.com", "displayName": "Doc"},
 						},
@@ -161,7 +163,7 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 		Name:        googleCalendarServiceName,
 		Action:      "inject",
 		Endpoint:    upstream.URL,
-		Permissions: Permissions{"events": AccessFreeBusy},
+		Permissions: types.Permissions{"events": types.AccessFreeBusy},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(googleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
@@ -192,8 +194,8 @@ func TestGoogleCalendarConnector_ListCalendarEvents_Unauthorized(t *testing.T) {
 	}}}, "https://aegis.example.com")
 	conn := NewGoogleCalendarConnector(srv)
 	_, _, err := conn.ListCalendarEvents(context.Background())
-	if !errors.Is(err, ErrUnauthorized) {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if !errors.Is(err, types.ErrUnauthorized) {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -280,7 +282,7 @@ func TestGoogleCalendarConnector_HandleProxy_ListEvents(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp CalendarEventList
+	var resp types.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -361,7 +363,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventByID(t *testing.T) {
 	if gotPath != "/calendars/primary/events/abc" {
 		t.Fatalf("upstream path = %q", gotPath)
 	}
-	var ev CalendarEvent
+	var ev types.CalendarEvent
 	if err := json.Unmarshal(w.Body.Bytes(), &ev); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -400,7 +402,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventFromCalendarPath(t *testing
 	if !strings.Contains(gotPath, "/calendars/family@example.com/events/xyz") {
 		t.Fatalf("upstream path = %q", gotPath)
 	}
-	var ev CalendarEvent
+	var ev types.CalendarEvent
 	if err := json.Unmarshal(w.Body.Bytes(), &ev); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -461,14 +463,14 @@ func TestGoogleCalendarConnector_Capabilities_ReadOnlyEvents(t *testing.T) {
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "events" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if dataTypeHasAgentWriteOp(caps, "events") {
+	if types.DataTypeHasAgentWriteOp(caps, "events") {
 		t.Fatal("calendar events must not advertise agent write ops in this phase")
 	}
-	if !dataTypeHasWriteOp(caps, "events") {
+	if !types.DataTypeHasWriteOp(caps, "events") {
 		// Still no mutating ops at all — proxy write is blocked by connector capability.
 	}
 	for _, op := range caps.DataTypes[0].Operations {
-		if isMutatingMethod(op.Method) {
+		if types.IsMutatingMethod(op.Method) {
 			t.Fatalf("unexpected mutating op: %+v", op)
 		}
 	}

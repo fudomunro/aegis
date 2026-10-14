@@ -11,6 +11,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ImmichConnector exposes a self-hosted Immich library as neutral Photo
@@ -59,23 +61,23 @@ func (c *ImmichConnector) applyImmichAuth(req *http.Request, logger *slog.Logger
 }
 
 // Capabilities returns Immich photo operations reachable through the proxy.
-func (c *ImmichConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "photos",
 				Description: "Self-hosted Immich library — metadata only; bytes stay on Immich (foreign/local canonical)",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "list_assets",
 						Description: "List photo/video assets via Immich search/metadata (permission key: photos)",
 						Method:      "POST",
 						Path:        "/search/metadata",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "page", In: "body", Type: "integer", Description: "1-based page", Default: 1},
 							{Name: "size", In: "body", Type: "integer", Description: "Page size (default 250)", Default: 250},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Immich search response; use GET /v1/library/photos for neutral Photo values",
 							Fields:      []string{"assets.total", "assets.items", "assets.nextPage"},
 						},
@@ -85,7 +87,7 @@ func (c *ImmichConnector) Capabilities() ServiceCapabilities {
 						Description: "Download original bytes for one asset (permission key: photos)",
 						Method:      "GET",
 						Path:        "/assets/{id}/original",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Immich asset UUID", Required: true},
 						},
 					},
@@ -94,7 +96,7 @@ func (c *ImmichConnector) Capabilities() ServiceCapabilities {
 						Description: "Download a thumbnail for one asset (permission key: photos)",
 						Method:      "GET",
 						Path:        "/assets/{id}/thumbnail",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Immich asset UUID", Required: true},
 						},
 					},
@@ -103,7 +105,7 @@ func (c *ImmichConnector) Capabilities() ServiceCapabilities {
 						Description: "List Immich albums",
 						Method:      "GET",
 						Path:        "/albums",
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Immich album list",
 							Fields:      []string{"id", "albumName", "assetCount"},
 						},
@@ -219,11 +221,11 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 // ListUserPhotos implements PhotoProvider. It pages Immich POST /search/metadata
 // and maps assets to neutral Photo values with canonical sources pointing at
 // Immich (via Aegis proxy download URLs).
-func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, error) {
+func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bool, error) {
 	logger := slog.Default()
 	upstream := c.immichUpstreamBase() + "/search/metadata"
 
-	var all []Photo
+	var all []types.Photo
 	truncated := false
 	nextPage := 1
 	for page := 0; page < libraryPageCap; page++ {
@@ -254,7 +256,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, er
 			return nil, false, err
 		}
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return nil, false, ErrUnauthorized
+			return nil, false, types.ErrUnauthorized
 		}
 		if resp.StatusCode != http.StatusOK {
 			msg := strings.TrimSpace(string(data))
@@ -291,7 +293,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, er
 }
 
 // neutralPhoto maps one Immich asset to Aegis's Photo shape.
-func (c *ImmichConnector) neutralPhoto(a immichAsset) Photo {
+func (c *ImmichConnector) neutralPhoto(a immichAsset) types.Photo {
 	taken := ""
 	if a.Exif.DateTimeOriginal != "" {
 		taken = a.Exif.DateTimeOriginal
@@ -307,7 +309,7 @@ func (c *ImmichConnector) neutralPhoto(a immichAsset) Photo {
 	}
 
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + immichServiceID
-	src := PhotoSource{
+	src := types.PhotoSource{
 		Service:      immichServiceID,
 		ServiceName:  immichServiceName,
 		ID:           a.ID,
@@ -324,14 +326,14 @@ func (c *ImmichConnector) neutralPhoto(a immichAsset) Photo {
 		src.Extra["checksum"] = strings.ToLower(a.Checksum)
 	}
 
-	p := Photo{
+	p := types.Photo{
 		TakenAt:  taken,
 		Width:    a.Exif.ExifImageWidth,
 		Height:   a.Exif.ExifImageHeight,
 		MimeType: mime,
 		Filename: filename,
 		Caption:  strings.TrimSpace(a.Exif.Description),
-		Sources:  []PhotoSource{src},
+		Sources:  []types.PhotoSource{src},
 	}
 	return p
 }

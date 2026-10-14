@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestLookupArtistMBID_ConfidentHit(t *testing.T) {
@@ -86,7 +88,7 @@ func TestResolveArtistEntities_BudgetAndAttach(t *testing.T) {
 	defer func() { mbLookupBase = old }()
 
 	g := testServerWithBase(&Config{}, "https://aegis.example.com")
-	artists := []Artist{
+	artists := []types.Artist{
 		{Name: "Known Artist"},
 		{Name: "Already Has ID", EntityID: "keep-me"},
 	}
@@ -100,22 +102,22 @@ func TestResolveArtistEntities_BudgetAndAttach(t *testing.T) {
 }
 
 func TestMergeArtistLibrary_MBIDFirst(t *testing.T) {
-	merged := mergeArtistLibrary([]Artist{
+	merged := types.MergeArtistLibrary([]types.Artist{
 		{
 			Name:     "Miles Davis",
 			EntityID: "mbid-1",
-			Sources:  []ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+			Sources:  []types.ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
 		},
 		{
 			Name:     "Miles  Davis",
 			EntityID: "MBID-1",
-			Sources:  []ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "ch1"}},
+			Sources:  []types.ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "ch1"}},
 		},
 	})
 	if len(merged) != 1 {
 		t.Fatalf("shared MBID should merge: %+v", merged)
 	}
-	if merged[0].Match != ArtistMatchMBID {
+	if merged[0].Match != types.ArtistMatchMBID {
 		t.Fatalf("match = %q", merged[0].Match)
 	}
 	if len(merged[0].Sources) != 2 {
@@ -123,20 +125,20 @@ func TestMergeArtistLibrary_MBIDFirst(t *testing.T) {
 	}
 
 	// Distinct MBIDs with same display name stay separate.
-	merged = mergeArtistLibrary([]Artist{
-		{Name: "John Smith", EntityID: "a", Sources: []ArtistSource{{Service: "spotify", ID: "1"}}},
-		{Name: "John Smith", EntityID: "b", Sources: []ArtistSource{{Service: "spotify", ID: "2"}}},
+	merged = types.MergeArtistLibrary([]types.Artist{
+		{Name: "John Smith", EntityID: "a", Sources: []types.ArtistSource{{Service: "spotify", ID: "1"}}},
+		{Name: "John Smith", EntityID: "b", Sources: []types.ArtistSource{{Service: "spotify", ID: "2"}}},
 	})
 	if len(merged) != 2 {
 		t.Fatalf("distinct MBIDs must not merge: %+v", merged)
 	}
 
 	// Name-only absorbs into MBID group.
-	merged = mergeArtistLibrary([]Artist{
-		{Name: "Miles Davis", EntityID: "mbid-1", Sources: []ArtistSource{{Service: "spotify", ID: "1"}}},
-		{Name: "miles davis", Sources: []ArtistSource{{Service: "youtube-music", ID: "2"}}},
+	merged = types.MergeArtistLibrary([]types.Artist{
+		{Name: "Miles Davis", EntityID: "mbid-1", Sources: []types.ArtistSource{{Service: "spotify", ID: "1"}}},
+		{Name: "miles davis", Sources: []types.ArtistSource{{Service: "youtube-music", ID: "2"}}},
 	})
-	if len(merged) != 1 || merged[0].Match != ArtistMatchMBID {
+	if len(merged) != 1 || merged[0].Match != types.ArtistMatchMBID {
 		t.Fatalf("name fallback should join MBID group: %+v", merged)
 	}
 }
@@ -197,9 +199,9 @@ func TestResolveTrackEntities_KeepsISRC(t *testing.T) {
 	defer func() { mbLookupBase = old }()
 
 	g := testServerWithBase(&Config{}, "https://aegis.example.com")
-	tracks := []Track{
-		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
-		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "USRC123"},
+	tracks := []types.Track{
+		{Name: "Blue", Artists: []types.Artist{{Name: "Joni Mitchell"}}},
+		{Name: "Blue", Artists: []types.Artist{{Name: "Joni Mitchell"}}, EntityID: "USRC123"},
 	}
 	g.resolveTrackEntities(context.Background(), tracks)
 	if tracks[0].EntityID != "rec-1" {
@@ -238,9 +240,9 @@ func TestResolveAlbumEntities_KeepsUPC(t *testing.T) {
 	defer func() { mbLookupBase = old }()
 
 	g := testServerWithBase(&Config{}, "https://aegis.example.com")
-	albums := []Album{
-		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}},
-		{Name: "Blue", Artists: []Artist{{Name: "Joni Mitchell"}}, EntityID: "00123456789012"},
+	albums := []types.Album{
+		{Name: "Blue", Artists: []types.Artist{{Name: "Joni Mitchell"}}},
+		{Name: "Blue", Artists: []types.Artist{{Name: "Joni Mitchell"}}, EntityID: "00123456789012"},
 	}
 	g.resolveAlbumEntities(context.Background(), albums)
 	if albums[0].EntityID != "rg-1" {

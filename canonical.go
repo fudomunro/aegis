@@ -2,8 +2,9 @@ package main
 
 import (
 	"fmt"
-	"sort"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Known library kinds that may appear in a service's canonical_for list.
@@ -115,75 +116,8 @@ func (s *Server) canonicalServiceName(kind string) string {
 	return ""
 }
 
-// CanonicalService returns the first source marked canonical, else the first
-// source service ID, else "".
-func (p Playlist) CanonicalService() string {
-	return firstCanonicalOrPrimary(
-		len(p.Sources),
-		func(i int) bool { return p.Sources[i].Canonical },
-		func(i int) string { return p.Sources[i].Service },
-	)
-}
-
-// CanonicalService returns the first source marked canonical, else primary.
-func (t Track) CanonicalService() string {
-	return firstCanonicalOrPrimary(
-		len(t.Sources),
-		func(i int) bool { return t.Sources[i].Canonical },
-		func(i int) string { return t.Sources[i].Service },
-	)
-}
-
-// CanonicalService returns the first source marked canonical, else primary.
-func (c Contact) CanonicalService() string {
-	return firstCanonicalOrPrimary(
-		len(c.Sources),
-		func(i int) bool { return c.Sources[i].Canonical },
-		func(i int) string { return c.Sources[i].Service },
-	)
-}
-
-// CanonicalService returns the first source marked canonical, else primary.
-func (p Photo) CanonicalService() string {
-	return firstCanonicalOrPrimary(
-		len(p.Sources),
-		func(i int) bool { return p.Sources[i].Canonical },
-		func(i int) string { return p.Sources[i].Service },
-	)
-}
-
-// CanonicalService returns the first source marked canonical, else primary.
-func (m Message) CanonicalService() string {
-	return firstCanonicalOrPrimary(
-		len(m.Sources),
-		func(i int) bool { return m.Sources[i].Canonical },
-		func(i int) string { return m.Sources[i].Service },
-	)
-}
-
-// CanonicalService returns the first source marked canonical, else primary.
-func (e CalendarEvent) CanonicalService() string {
-	return firstCanonicalOrPrimary(
-		len(e.Sources),
-		func(i int) bool { return e.Sources[i].Canonical },
-		func(i int) string { return e.Sources[i].Service },
-	)
-}
-
-func firstCanonicalOrPrimary(n int, isCanonical func(int) bool, serviceID func(int) string) string {
-	if n == 0 {
-		return ""
-	}
-	for i := 0; i < n; i++ {
-		if isCanonical(i) {
-			return serviceID(i)
-		}
-	}
-	return serviceID(0)
-}
-
 // markPlaylistSourcesCanonical stamps sources from serviceID as canonical.
-func markPlaylistSourcesCanonical(items []Playlist, serviceID string) {
+func markPlaylistSourcesCanonical(items []types.Playlist, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -194,7 +128,7 @@ func markPlaylistSourcesCanonical(items []Playlist, serviceID string) {
 }
 
 // markTrackSourcesCanonical stamps sources from serviceID as canonical.
-func markTrackSourcesCanonical(items []Track, serviceID string) {
+func markTrackSourcesCanonical(items []types.Track, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -205,7 +139,7 @@ func markTrackSourcesCanonical(items []Track, serviceID string) {
 }
 
 // markContactSourcesCanonical stamps sources from serviceID as canonical.
-func markContactSourcesCanonical(items []Contact, serviceID string) {
+func markContactSourcesCanonical(items []types.Contact, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -216,7 +150,7 @@ func markContactSourcesCanonical(items []Contact, serviceID string) {
 }
 
 // markPhotoSourcesCanonical stamps sources from serviceID as canonical.
-func markPhotoSourcesCanonical(items []Photo, serviceID string) {
+func markPhotoSourcesCanonical(items []types.Photo, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -227,7 +161,7 @@ func markPhotoSourcesCanonical(items []Photo, serviceID string) {
 }
 
 // markCalendarEventSourcesCanonical stamps sources from serviceID as canonical.
-func markCalendarEventSourcesCanonical(items []CalendarEvent, serviceID string) {
+func markCalendarEventSourcesCanonical(items []types.CalendarEvent, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -238,7 +172,7 @@ func markCalendarEventSourcesCanonical(items []CalendarEvent, serviceID string) 
 }
 
 // markMessageSourcesCanonical stamps sources from serviceID as canonical.
-func markMessageSourcesCanonical(items []Message, serviceID string) {
+func markMessageSourcesCanonical(items []types.Message, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -250,7 +184,7 @@ func markMessageSourcesCanonical(items []Message, serviceID string) {
 
 // stampPlaylistCanonical marks sources when serviceID is config-declared
 // canonical for playlists.
-func (s *Server) stampPlaylistCanonical(items []Playlist, serviceID string) {
+func (s *Server) stampPlaylistCanonical(items []types.Playlist, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("playlists") {
 		markPlaylistSourcesCanonical(items, serviceID)
@@ -259,7 +193,7 @@ func (s *Server) stampPlaylistCanonical(items []Playlist, serviceID string) {
 
 // stampTrackCanonical marks sources when serviceID is config-declared
 // canonical for tracks.
-func (s *Server) stampTrackCanonical(items []Track, serviceID string) {
+func (s *Server) stampTrackCanonical(items []types.Track, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("tracks") {
 		markTrackSourcesCanonical(items, serviceID)
@@ -268,7 +202,7 @@ func (s *Server) stampTrackCanonical(items []Track, serviceID string) {
 
 // stampContactCanonical marks sources when serviceID is config-declared
 // canonical for contacts.
-func (s *Server) stampContactCanonical(items []Contact, serviceID string) {
+func (s *Server) stampContactCanonical(items []types.Contact, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("contacts") {
 		markContactSourcesCanonical(items, serviceID)
@@ -277,7 +211,7 @@ func (s *Server) stampContactCanonical(items []Contact, serviceID string) {
 
 // stampPhotoCanonical marks sources when serviceID is config-declared
 // canonical for photos (connectors may already set Canonical).
-func (s *Server) stampPhotoCanonical(items []Photo, serviceID string) {
+func (s *Server) stampPhotoCanonical(items []types.Photo, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("photos") {
 		markPhotoSourcesCanonical(items, serviceID)
@@ -286,7 +220,7 @@ func (s *Server) stampPhotoCanonical(items []Photo, serviceID string) {
 
 // stampCalendarEventCanonical marks sources when serviceID is config-declared
 // canonical for calendar events (connectors may already set Canonical).
-func (s *Server) stampCalendarEventCanonical(items []CalendarEvent, serviceID string) {
+func (s *Server) stampCalendarEventCanonical(items []types.CalendarEvent, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("events") {
 		markCalendarEventSourcesCanonical(items, serviceID)
@@ -295,50 +229,11 @@ func (s *Server) stampCalendarEventCanonical(items []CalendarEvent, serviceID st
 
 // stampMessageCanonical marks sources when serviceID is config-declared
 // canonical for messages (connectors may already set Canonical).
-func (s *Server) stampMessageCanonical(items []Message, serviceID string) {
+func (s *Server) stampMessageCanonical(items []types.Message, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("messages") {
 		markMessageSourcesCanonical(items, serviceID)
 	}
-}
-
-// sortPlaylistSourcesCanonicalFirst orders canonical sources before others.
-func sortPlaylistSourcesCanonicalFirst(src []PlaylistSource) {
-	sort.SliceStable(src, func(i, j int) bool {
-		if src[i].Canonical != src[j].Canonical {
-			return src[i].Canonical
-		}
-		if src[i].ServiceName != src[j].ServiceName {
-			return src[i].ServiceName < src[j].ServiceName
-		}
-		return src[i].Service < src[j].Service
-	})
-}
-
-// sortTrackSourcesCanonicalFirst orders canonical sources before others.
-func sortTrackSourcesCanonicalFirst(src []TrackSource) {
-	sort.SliceStable(src, func(i, j int) bool {
-		if src[i].Canonical != src[j].Canonical {
-			return src[i].Canonical
-		}
-		if src[i].ServiceName != src[j].ServiceName {
-			return src[i].ServiceName < src[j].ServiceName
-		}
-		return src[i].Service < src[j].Service
-	})
-}
-
-// sortContactSourcesCanonicalFirst orders canonical sources before others.
-func sortContactSourcesCanonicalFirst(src []ContactSource) {
-	sort.SliceStable(src, func(i, j int) bool {
-		if src[i].Canonical != src[j].Canonical {
-			return src[i].Canonical
-		}
-		if src[i].ServiceName != src[j].ServiceName {
-			return src[i].ServiceName < src[j].ServiceName
-		}
-		return src[i].Service < src[j].Service
-	})
 }
 
 // multiSourceMutationRule is injected whenever library instructions are used
@@ -421,7 +316,7 @@ func (s *Server) writePolicyNotices(matched []Service) []string {
 	return out
 }
 
-func markTransactionSourcesCanonical(items []Transaction, serviceID string) {
+func markTransactionSourcesCanonical(items []types.Transaction, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -433,14 +328,14 @@ func markTransactionSourcesCanonical(items []Transaction, serviceID string) {
 
 // stampTransactionCanonical marks sources when serviceID is config-declared
 // canonical for transactions (issue #141).
-func (s *Server) stampTransactionCanonical(items []Transaction, serviceID string) {
+func (s *Server) stampTransactionCanonical(items []types.Transaction, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("transactions") {
 		markTransactionSourcesCanonical(items, serviceID)
 	}
 }
 
-func markPlaceVisitSourcesCanonical(items []PlaceVisit, serviceID string) {
+func markPlaceVisitSourcesCanonical(items []types.PlaceVisit, serviceID string) {
 	for i := range items {
 		for j := range items[i].Sources {
 			if items[i].Sources[j].Service == serviceID {
@@ -452,7 +347,7 @@ func markPlaceVisitSourcesCanonical(items []PlaceVisit, serviceID string) {
 
 // stampPlaceVisitCanonical marks sources when serviceID is config-declared
 // canonical for places (issue #142).
-func (s *Server) stampPlaceVisitCanonical(items []PlaceVisit, serviceID string) {
+func (s *Server) stampPlaceVisitCanonical(items []types.PlaceVisit, serviceID string) {
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("places") {
 		markPlaceVisitSourcesCanonical(items, serviceID)

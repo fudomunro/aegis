@@ -7,6 +7,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // adminHTML is the admin dashboard shell (CSS + SPA JS). Data loads via API.
@@ -201,31 +203,31 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
 		}
 		if connector, ok := s.connectors[svc.ID]; ok {
-			if _, isProvider := connector.(PlaylistProvider); isProvider {
+			if _, isProvider := connector.(types.PlaylistProvider); isProvider {
 				item.HasPlaylist = true
 			}
-			if _, isProvider := connector.(LikedTrackProvider); isProvider {
+			if _, isProvider := connector.(types.LikedTrackProvider); isProvider {
 				item.HasLikedTrack = true
 			}
-			if _, isProvider := connector.(AlbumProvider); isProvider {
+			if _, isProvider := connector.(types.AlbumProvider); isProvider {
 				item.HasAlbum = true
 			}
-			if _, isProvider := connector.(ArtistProvider); isProvider {
+			if _, isProvider := connector.(types.ArtistProvider); isProvider {
 				item.HasArtist = true
 			}
-			if _, isProvider := connector.(ContactProvider); isProvider {
+			if _, isProvider := connector.(types.ContactProvider); isProvider {
 				item.HasContact = true
 			}
-			if _, isProvider := connector.(PhotoProvider); isProvider {
+			if _, isProvider := connector.(types.PhotoProvider); isProvider {
 				item.HasPhoto = true
 			}
-			if _, isProvider := connector.(CalendarEventProvider); isProvider {
+			if _, isProvider := connector.(types.CalendarEventProvider); isProvider {
 				item.HasEvent = true
 			}
-			if _, isProvider := connector.(MessageProvider); isProvider {
+			if _, isProvider := connector.(types.MessageProvider); isProvider {
 				item.HasMessage = true
 			}
-			if _, isProvider := connector.(TransactionProvider); isProvider {
+			if _, isProvider := connector.(types.TransactionProvider); isProvider {
 				item.HasTransaction = true
 			}
 			caps := connector.Capabilities()
@@ -316,7 +318,7 @@ func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 // adminPermissionsRequest is the body for PUT service permissions.
 type adminPermissionsRequest struct {
 	// Permissions is the new map. Empty/null clears the block (unrestricted).
-	Permissions Permissions `json:"permissions"`
+	Permissions types.Permissions `json:"permissions"`
 }
 
 // HandleAdminServicePermissions reads or writes a service's agent permission map.

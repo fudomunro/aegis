@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func main() {
@@ -242,7 +244,7 @@ func main() {
 			Name:        quickenServiceName,
 			Action:      "inject",
 			Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
-			Permissions: Permissions{"transactions": AccessRead},
+			Permissions: types.Permissions{"transactions": types.AccessRead},
 		})
 	} else {
 		slog.Info("quicken store disabled")
@@ -263,7 +265,7 @@ func main() {
 			Name:        timelineServiceName,
 			Action:      "inject",
 			Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
-			Permissions: Permissions{"places": AccessRead},
+			Permissions: types.Permissions{"places": types.AccessRead},
 		})
 	} else {
 		slog.Info("timeline store disabled")

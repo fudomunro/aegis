@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GooglePhotosConnector uses the Google Photos Picker API and implements
@@ -57,19 +59,19 @@ func (c *GooglePhotosConnector) getLastSession() string {
 }
 
 // Capabilities returns what Google Photos data types and operations are supported.
-func (c *GooglePhotosConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "photos",
 				Description: "Photos via the Google Photos Picker API — user selects photos; Aegis lists only that selection (metadata only; bytes stay on Google Photos)",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "create_picker_session",
 						Description: "Create a picker session and get a picker_uri for the user to open (permission key: photos)",
 						Method:      "POST",
 						Path:        "/picker/sessions",
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Session with id and picker_uri (user opens picker_uri to select photos)",
 							Fields:      []string{"id", "picker_uri", "media_items_set"},
 						},
@@ -79,10 +81,10 @@ func (c *GooglePhotosConnector) Capabilities() ServiceCapabilities {
 						Description: "Poll a picker session until media_items_set is true",
 						Method:      "GET",
 						Path:        "/picker/sessions/{id}",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Picker session ID", Required: true},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Session status including media_items_set and polling hints",
 							Fields:      []string{"id", "media_items_set", "picker_uri"},
 						},
@@ -92,12 +94,12 @@ func (c *GooglePhotosConnector) Capabilities() ServiceCapabilities {
 						Description: "List photos from a completed picker session as neutral Photo values",
 						Method:      "GET",
 						Path:        "/picker/mediaItems",
-						Parameters: []Parameter{
+						Parameters: []types.Parameter{
 							{Name: "sessionId", In: "query", Type: "string", Description: "Picker session ID (required by Google)", Required: true},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page (1-100)", Default: 100},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral photos: taken_at, dimensions, mime_type, filename, sources[] (canonical blob_url)",
 							Fields:      []string{"photos", "total"},
 						},
@@ -329,16 +331,16 @@ func (c *GooglePhotosConnector) handleListPickedMediaItems(w http.ResponseWriter
 		return
 	}
 	if photos == nil {
-		photos = []Photo{}
+		photos = []types.Photo{}
 	}
-	result := PhotoList{
+	result := types.PhotoList{
 		Photos:    photos,
 		Total:     len(photos),
 		Synced:    true,
 		Truncated: truncated,
-		ByService: map[string]LibraryServiceStatus{
+		ByService: map[string]types.LibraryServiceStatus{
 			googlePhotosServiceID: {
-				Status:    LibraryStatusOK,
+				Status:    types.LibraryStatusOK,
 				Count:     len(photos),
 				Truncated: truncated,
 			},
@@ -377,27 +379,27 @@ func writeGooglePhotosUpstreamError(w http.ResponseWriter, body []byte, status i
 // ListUserPhotos implements PhotoProvider. It returns the last completed
 // picker session's selection (empty when the user has not picked yet), so the
 // unified library works without requiring full Library API verification.
-func (c *GooglePhotosConnector) ListUserPhotos(ctx context.Context) ([]Photo, bool, error) {
+func (c *GooglePhotosConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bool, error) {
 	token := c.host.GetValidToken(googlePhotosServiceID, slog.Default())
 	if token == "" {
-		return nil, false, ErrUnauthorized
+		return nil, false, types.ErrUnauthorized
 	}
 	sessionID := c.getLastSession()
 	if sessionID == "" {
-		return []Photo{}, false, nil
+		return []types.Photo{}, false, nil
 	}
 	photos, truncated, err := c.listSessionPhotos(ctx, token, sessionID)
 	if err != nil {
 		// Session may have expired; degrade to empty rather than failing the library.
 		slog.Warn("google-photos last picker session list failed", "session", sessionID, "error", err)
-		return []Photo{}, false, nil
+		return []types.Photo{}, false, nil
 	}
 	return photos, truncated, nil
 }
 
-func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, sessionID string) ([]Photo, bool, error) {
+func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, sessionID string) ([]types.Photo, bool, error) {
 	upstreamBase := c.googlePhotosUpstreamBase()
-	var all []Photo
+	var all []types.Photo
 	pageToken := ""
 	truncated := false
 	for page := 0; page < libraryPageCap; page++ {
@@ -494,7 +496,7 @@ type googlePickerMediaItemList struct {
 	NextPageToken string                  `json:"nextPageToken"`
 }
 
-func mapPickedMediaItem(item googlePickerMediaItem, sessionID string) Photo {
+func mapPickedMediaItem(item googlePickerMediaItem, sessionID string) types.Photo {
 	filename := ""
 	mimeType := ""
 	baseURL := ""

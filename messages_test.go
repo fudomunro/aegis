@@ -8,25 +8,29 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeMessageProvider struct {
-	messages  []Message
+	messages  []types.Message
 	err       error
 	truncated bool
 }
 
-func (f *fakeMessageProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeMessageProvider) SystemInstructions(string) string  { return "fake" }
+func (f *fakeMessageProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeMessageProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeMessageProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeMessageProvider) ListMessages(context.Context) ([]Message, bool, error) {
+func (f *fakeMessageProvider) ListMessages(context.Context) ([]types.Message, bool, error) {
 	return f.messages, f.truncated, f.err
 }
 
 func TestMessageIdentityKey_PrefersMessageID(t *testing.T) {
-	m := newMessage("google-gmail", "Gmail", "id1", MessageChannelEmail, "Hi", "body", "2024-06-01T09:00:00Z")
+	m := newMessage("google-gmail", "Gmail", "id1", types.MessageChannelEmail, "Hi", "body", "2024-06-01T09:00:00Z")
 	m.EntityID = "<AbC@example.com>"
 	if got := messageIdentityKey(m); got != "msgid:abc@example.com" {
 		t.Fatalf("key = %q", got)
@@ -34,7 +38,7 @@ func TestMessageIdentityKey_PrefersMessageID(t *testing.T) {
 }
 
 func TestMessageIdentityKey_SubjectFromTimeFallback(t *testing.T) {
-	m := newMessage("google-gmail", "Gmail", "id1", MessageChannelEmail, "  Hello  ", "", "2024-06-01T09:00:00+00:00")
+	m := newMessage("google-gmail", "Gmail", "id1", types.MessageChannelEmail, "  Hello  ", "", "2024-06-01T09:00:00+00:00")
 	from := newContact(googleGmailServiceID, googleGmailServiceName, "", "Ada", []string{"Ada@Example.com"}, nil)
 	m.From = &from
 	if got := messageIdentityKey(m); got != "subject:hello|from:ada@example.com|sent:2024-06-01T09:00:00Z" {
@@ -43,20 +47,20 @@ func TestMessageIdentityKey_SubjectFromTimeFallback(t *testing.T) {
 }
 
 func TestMergeMessages_ByMessageIDAndSubjectFrom(t *testing.T) {
-	a := newMessage("google-gmail", "Gmail", "a1", MessageChannelEmail, "Invoice", "s", "2024-06-01T09:00:00Z")
+	a := newMessage("google-gmail", "Gmail", "a1", types.MessageChannelEmail, "Invoice", "s", "2024-06-01T09:00:00Z")
 	a.EntityID = "shared@example.com"
-	fromA := Contact{Name: "Ada", Emails: []string{"ada@example.com"}}
+	fromA := types.Contact{Name: "Ada", Emails: []string{"ada@example.com"}}
 	a.From = &fromA
-	b := newMessage("outlook-mail", "Outlook Mail", "b1", MessageChannelEmail, "Different", "s", "2024-06-01T09:00:00Z")
+	b := newMessage("outlook-mail", "Outlook Mail", "b1", types.MessageChannelEmail, "Different", "s", "2024-06-01T09:00:00Z")
 	b.EntityID = "shared@example.com"
-	c := newMessage("google-gmail", "Gmail", "c1", MessageChannelEmail, "Planning", "", "2024-06-02T14:00:00Z")
-	fromC := Contact{Name: "Grace", Emails: []string{"grace@example.com"}}
+	c := newMessage("google-gmail", "Gmail", "c1", types.MessageChannelEmail, "Planning", "", "2024-06-02T14:00:00Z")
+	fromC := types.Contact{Name: "Grace", Emails: []string{"grace@example.com"}}
 	c.From = &fromC
-	d := newMessage("outlook-mail", "Outlook Mail", "d1", MessageChannelEmail, "Planning", "", "2024-06-02T14:00:00+00:00")
-	fromD := Contact{Name: "Grace L", Emails: []string{"GRACE@example.com"}, Phones: []string{"+1 555 0100"}}
+	d := newMessage("outlook-mail", "Outlook Mail", "d1", types.MessageChannelEmail, "Planning", "", "2024-06-02T14:00:00+00:00")
+	fromD := types.Contact{Name: "Grace L", Emails: []string{"GRACE@example.com"}, Phones: []string{"+1 555 0100"}}
 	d.From = &fromD
 
-	merged := MergeMessages([]Message{a, b, c, d})
+	merged := MergeMessages([]types.Message{a, b, c, d})
 	if len(merged) != 2 {
 		t.Fatalf("merged = %d messages: %+v", len(merged), merged)
 	}
@@ -73,13 +77,13 @@ func TestMergeMessages_ByMessageIDAndSubjectFrom(t *testing.T) {
 }
 
 func TestMergeMessages_DistinctWhenDifferentIdentity(t *testing.T) {
-	a := newMessage("google-gmail", "Gmail", "a", MessageChannelEmail, "Meeting", "", "2024-06-01T09:00:00Z")
-	fromA := Contact{Emails: []string{"a@example.com"}}
+	a := newMessage("google-gmail", "Gmail", "a", types.MessageChannelEmail, "Meeting", "", "2024-06-01T09:00:00Z")
+	fromA := types.Contact{Emails: []string{"a@example.com"}}
 	a.From = &fromA
-	b := newMessage("google-gmail", "Gmail", "b", MessageChannelEmail, "Meeting", "", "2024-06-01T09:00:00Z")
-	fromB := Contact{Emails: []string{"b@example.com"}}
+	b := newMessage("google-gmail", "Gmail", "b", types.MessageChannelEmail, "Meeting", "", "2024-06-01T09:00:00Z")
+	fromB := types.Contact{Emails: []string{"b@example.com"}}
 	b.From = &fromB
-	merged := MergeMessages([]Message{a, b})
+	merged := MergeMessages([]types.Message{a, b})
 	if len(merged) != 2 {
 		t.Fatalf("merged = %d, want 2", len(merged))
 	}
@@ -91,16 +95,16 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 		{ID: "outlook-mail", Name: "Outlook Mail", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	a := newMessage("google-gmail", "Gmail", "g1", MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
+	a := newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
 	a.EntityID = "standup@example.com"
-	from := Contact{Emails: []string{"ada@example.com"}}
+	from := types.Contact{Emails: []string{"ada@example.com"}}
 	a.From = &from
-	b := newMessage("outlook-mail", "Outlook Mail", "o1", MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
+	b := newMessage("outlook-mail", "Outlook Mail", "o1", types.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
 	b.EntityID = "standup@example.com"
-	c := newMessage("google-gmail", "Gmail", "g2", MessageChannelEmail, "Other", "", "2024-06-02T10:00:00Z")
+	c := newMessage("google-gmail", "Gmail", "g2", types.MessageChannelEmail, "Other", "", "2024-06-02T10:00:00Z")
 	srv.connectors = map[string]ServiceConnector{
-		"google-gmail": &fakeMessageProvider{messages: []Message{a, c}},
-		"outlook-mail": &fakeMessageProvider{messages: []Message{b}},
+		"google-gmail": &fakeMessageProvider{messages: []types.Message{a, c}},
+		"outlook-mail": &fakeMessageProvider{messages: []types.Message{b}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -110,7 +114,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MessageList
+	var resp types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -120,7 +124,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	if resp.ByService["google-gmail"].Count != 2 || resp.ByService["outlook-mail"].Count != 1 {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
-	var standup *Message
+	var standup *types.Message
 	for i := range resp.Messages {
 		if resp.Messages[i].Subject == "Standup notes" {
 			standup = &resp.Messages[i]
@@ -142,8 +146,8 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-gmail": &fakeMessageProvider{messages: []Message{
-			newMessage("google-gmail", "Gmail", "g1", MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
+		"google-gmail": &fakeMessageProvider{messages: []types.Message{
+			newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -153,7 +157,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MessageList
+	var resp types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -178,12 +182,12 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 		ID:          "google-gmail",
 		Name:        "Gmail",
 		Action:      "inject",
-		Permissions: Permissions{"messages": AccessNone},
+		Permissions: types.Permissions{"messages": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-gmail": &fakeMessageProvider{messages: []Message{
-			newMessage("google-gmail", "Gmail", "g1", MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
+		"google-gmail": &fakeMessageProvider{messages: []types.Message{
+			newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -199,7 +203,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"google-gmail": &fakeMessageProvider{err: ErrUnauthorized},
+		"google-gmail": &fakeMessageProvider{err: types.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -208,11 +212,11 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MessageList
+	var resp types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google-gmail"].Status != LibraryStatusUnauthorized {
+	if resp.ByService["google-gmail"].Status != types.LibraryStatusUnauthorized {
 		t.Fatalf("status = %+v", resp.ByService)
 	}
 }
@@ -230,11 +234,11 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp MessageList
+	var resp types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google-gmail"].Status != LibraryStatusError {
+	if resp.ByService["google-gmail"].Status != types.LibraryStatusError {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 }
@@ -287,9 +291,9 @@ func TestStampMessageCanonical_OnlyWhenConfigured(t *testing.T) {
 		{ID: "other-mail", Name: "Other", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	items := []Message{
-		{Sources: []MessageSource{{Service: "google-gmail"}}},
-		{Sources: []MessageSource{{Service: "other-mail"}}},
+	items := []types.Message{
+		{Sources: []types.MessageSource{{Service: "google-gmail"}}},
+		{Sources: []types.MessageSource{{Service: "other-mail"}}},
 	}
 	srv.stampMessageCanonical(items, "google-gmail")
 	srv.stampMessageCanonical(items, "other-mail")
@@ -318,10 +322,10 @@ func TestHasMessageProviders_UsesRegistry(t *testing.T) {
 	srv.connectors = map[string]ServiceConnector{
 		"google-gmail": &fakeMessageProvider{},
 	}
-	if !LibraryKindByID("messages").HasProviders(srv) {
+	if !kindHasProviders("messages", srv) {
 		t.Fatal("expected message provider")
 	}
-	if !LibraryKindByID("messages").Readable(srv) {
+	if !kindReadable("messages", srv) {
 		t.Fatal("expected readable")
 	}
 }

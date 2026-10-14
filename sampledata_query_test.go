@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Query checklist for the mail archive and library merge (issue #77).
@@ -265,7 +267,7 @@ func TestMailQuery_FetchByIDAndRaw(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("fetch id code = %d body=%s", w.Code, w.Body.String())
 	}
-	var msg Message
+	var msg types.Message
 	if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
 		t.Fatalf("decode message: %v", err)
 	}
@@ -303,8 +305,8 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 	lib := GenerateSampleLibrary()
 
 	// Tracks: shared ISRC merges to one entity with match=isrc.
-	mergedTracks := MergeTracksSync(lib.Tracks)
-	var isrc *Track
+	mergedTracks := types.MergeTracksSync(lib.Tracks)
+	var isrc *types.Track
 	for i := range mergedTracks {
 		if mergedTracks[i].EntityID == "USSYN17000001" {
 			isrc = &mergedTracks[i]
@@ -314,7 +316,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 	if isrc == nil {
 		t.Fatalf("ISRC group missing: %+v", mergedTracks)
 	}
-	if isrc.Match != TrackMatchISRC || len(isrc.Sources) != 2 {
+	if isrc.Match != types.TrackMatchISRC || len(isrc.Sources) != 2 {
 		t.Fatalf("isrc merge = match %q sources %d", isrc.Match, len(isrc.Sources))
 	}
 
@@ -345,7 +347,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 
 	// Contacts: email → phone → handle → name union-find.
 	mergedContacts := MergeContacts(lib.Contacts)
-	var ada *Contact
+	var ada *types.Contact
 	for i := range mergedContacts {
 		if strings.Contains(strings.ToLower(mergedContacts[i].Name), "ada") {
 			ada = &mergedContacts[i]
@@ -359,7 +361,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 	}
 
 	// Grace merges on shared phone across different emails.
-	var grace *Contact
+	var grace *types.Contact
 	for i := range mergedContacts {
 		if strings.Contains(strings.ToLower(mergedContacts[i].Name), "grace") {
 			grace = &mergedContacts[i]
@@ -392,7 +394,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 
 	// Messages: Message-ID preferred; subject+from+time fallback.
 	mergedMsgs := MergeMessages(lib.Messages)
-	bySubject := map[string]Message{}
+	bySubject := map[string]types.Message{}
 	for _, m := range mergedMsgs {
 		bySubject[m.Subject] = m
 	}
@@ -454,7 +456,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("tracks status = %d body=%s", w.Code, w.Body.String())
 	}
-	var trackList TrackList
+	var trackList types.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &trackList); err != nil {
 		t.Fatalf("decode tracks: %v", err)
 	}
@@ -465,7 +467,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	for _, tr := range trackList.Tracks {
 		if tr.EntityID == "USSYN17000001" && len(tr.Sources) >= 2 {
 			foundISRC = true
-			if tr.Match != TrackMatchISRC {
+			if tr.Match != types.TrackMatchISRC {
 				t.Fatalf("library isrc match = %q", tr.Match)
 			}
 		}
@@ -482,7 +484,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("messages status = %d body=%s", w.Code, w.Body.String())
 	}
-	var msgList MessageList
+	var msgList types.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &msgList); err != nil {
 		t.Fatalf("decode messages: %v", err)
 	}
@@ -507,7 +509,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("contacts status = %d body=%s", w.Code, w.Body.String())
 	}
-	var contactList ContactList
+	var contactList types.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &contactList); err != nil {
 		t.Fatalf("decode contacts: %v", err)
 	}
@@ -521,7 +523,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 
 	// Permission-denied: the only tracks service forbids agent access.
 	deniedCfg := &Config{Services: []Service{
-		{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{"tracks": AccessNone}},
+		{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{"tracks": types.AccessNone}},
 	}}
 	srv := testServerWithBase(deniedCfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
@@ -556,7 +558,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("truncated tracks status = %d body=%s", w.Code, w.Body.String())
 	}
-	var trackList TrackList
+	var trackList types.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &trackList); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -572,67 +574,73 @@ type truncTrackProvider struct {
 	sampleTrackPlaylistProvider
 }
 
-func (f *truncTrackProvider) ListUserLikedTracks(_ context.Context) ([]Track, bool, error) {
+func (f *truncTrackProvider) ListUserLikedTracks(_ context.Context) ([]types.Track, bool, error) {
 	return f.tracks, true, f.err
 }
 
 // --- tiny fake providers used by the sample aggregate test ---
 
 type sampleContactProvider struct {
-	contacts  []Contact
+	contacts  []types.Contact
 	truncated bool
 	err       error
 }
 
-func (f *sampleContactProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *sampleContactProvider) SystemInstructions(string) string  { return "fake" }
+func (f *sampleContactProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *sampleContactProvider) SystemInstructions(string) string { return "fake" }
 func (f *sampleContactProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
-func (f *sampleContactProvider) ListUserContacts(_ context.Context) ([]Contact, bool, error) {
+func (f *sampleContactProvider) ListUserContacts(_ context.Context) ([]types.Contact, bool, error) {
 	return f.contacts, f.truncated, f.err
 }
 
 type sampleMessageProvider struct {
-	messages  []Message
+	messages  []types.Message
 	truncated bool
 	err       error
 }
 
-func (f *sampleMessageProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *sampleMessageProvider) SystemInstructions(string) string  { return "fake" }
+func (f *sampleMessageProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *sampleMessageProvider) SystemInstructions(string) string { return "fake" }
 func (f *sampleMessageProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
-func (f *sampleMessageProvider) ListMessages(_ context.Context) ([]Message, bool, error) {
+func (f *sampleMessageProvider) ListMessages(_ context.Context) ([]types.Message, bool, error) {
 	return f.messages, f.truncated, f.err
 }
 
 type sampleTrackPlaylistProvider struct {
-	playlists []Playlist
-	tracks    []Track
+	playlists []types.Playlist
+	tracks    []types.Track
 	err       error
 }
 
-func (f *sampleTrackPlaylistProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *sampleTrackPlaylistProvider) SystemInstructions(string) string  { return "fake" }
+func (f *sampleTrackPlaylistProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *sampleTrackPlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (f *sampleTrackPlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *sampleTrackPlaylistProvider) ListUserPlaylists(_ context.Context) ([]Playlist, bool, error) {
+func (f *sampleTrackPlaylistProvider) ListUserPlaylists(_ context.Context) ([]types.Playlist, bool, error) {
 	return f.playlists, false, f.err
 }
 
-func (f *sampleTrackPlaylistProvider) ListUserLikedTracks(_ context.Context) ([]Track, bool, error) {
+func (f *sampleTrackPlaylistProvider) ListUserLikedTracks(_ context.Context) ([]types.Track, bool, error) {
 	return f.tracks, false, f.err
 }
 
-func filterTracks(tracks []Track, service string) []Track {
-	var out []Track
+func filterTracks(tracks []types.Track, service string) []types.Track {
+	var out []types.Track
 	for _, tr := range tracks {
 		for _, src := range tr.Sources {
 			if src.Service == service {
 				// Single-source copy for the fake provider.
 				cp := tr
-				cp.Sources = []TrackSource{src}
+				cp.Sources = []types.TrackSource{src}
 				cp.EntityID = tr.EntityID
 				out = append(out, cp)
 				break
@@ -642,13 +650,13 @@ func filterTracks(tracks []Track, service string) []Track {
 	return out
 }
 
-func filterPlaylists(list []Playlist, service string) []Playlist {
-	var out []Playlist
+func filterPlaylists(list []types.Playlist, service string) []types.Playlist {
+	var out []types.Playlist
 	for _, p := range list {
 		for _, src := range p.Sources {
 			if src.Service == service {
 				cp := p
-				cp.Sources = []PlaylistSource{src}
+				cp.Sources = []types.PlaylistSource{src}
 				out = append(out, cp)
 				break
 			}
@@ -657,13 +665,13 @@ func filterPlaylists(list []Playlist, service string) []Playlist {
 	return out
 }
 
-func filterContactsByService(list []Contact, service string) []Contact {
-	var out []Contact
+func filterContactsByService(list []types.Contact, service string) []types.Contact {
+	var out []types.Contact
 	for _, c := range list {
 		for _, src := range c.Sources {
 			if src.Service == service {
 				cp := c
-				cp.Sources = []ContactSource{src}
+				cp.Sources = []types.ContactSource{src}
 				out = append(out, cp)
 				break
 			}
@@ -672,13 +680,13 @@ func filterContactsByService(list []Contact, service string) []Contact {
 	return out
 }
 
-func filterMessagesByService(list []Message, service string) []Message {
-	var out []Message
+func filterMessagesByService(list []types.Message, service string) []types.Message {
+	var out []types.Message
 	for _, m := range list {
 		for _, src := range m.Sources {
 			if src.Service == service {
 				cp := m
-				cp.Sources = []MessageSource{src}
+				cp.Sources = []types.MessageSource{src}
 				out = append(out, cp)
 				break
 			}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func flowTestServer() *Server {
@@ -38,9 +40,9 @@ func flowTestServer() *Server {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				Permissions: Permissions{
-					PermissionDefaultKey: AccessRead,
-					"player":             AccessNone,
+				Permissions: types.Permissions{
+					types.PermissionDefaultKey: types.AccessRead,
+					"player":                   types.AccessNone,
 				},
 			},
 			{

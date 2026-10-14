@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func mustWriteFile(t *testing.T, path, content string) {
@@ -54,13 +56,13 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 		t.Fatalf("InitPermissionsStore: %v", err)
 	}
 	// Bootstrap from aegis.json still applies when overlay is empty.
-	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != AccessRead {
+	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != types.AccessRead {
 		t.Fatalf("bootstrap tracks = %q, want read", got)
 	}
 
-	if err := cfg.SetServicePermissions("spotify", Permissions{
-		"default": AccessRead,
-		"player":  AccessNone,
+	if err := cfg.SetServicePermissions("spotify", types.Permissions{
+		"default": types.AccessRead,
+		"player":  types.AccessNone,
 	}); err != nil {
 		t.Fatalf("SetServicePermissions: %v", err)
 	}
@@ -87,7 +89,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if ov.Version != permissionsFileVersion {
 		t.Fatalf("overlay version = %d", ov.Version)
 	}
-	if ov.Services["spotify"] == nil || (*ov.Services["spotify"])["player"] != AccessNone {
+	if ov.Services["spotify"] == nil || (*ov.Services["spotify"])["player"] != types.AccessNone {
 		t.Fatalf("overlay spotify = %+v", ov.Services["spotify"])
 	}
 
@@ -103,7 +105,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if svc == nil {
 		t.Fatal("spotify missing after reload")
 	}
-	if svc.Permissions.For("player") != AccessNone || svc.Permissions.For("tracks") != AccessRead {
+	if svc.Permissions.For("player") != types.AccessNone || svc.Permissions.For("tracks") != types.AccessRead {
 		t.Fatalf("reloaded permissions = %+v", svc.Permissions)
 	}
 
@@ -152,7 +154,7 @@ func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T
 	if err := cfg.InitPermissionsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.SetServicePermissions("immich", Permissions{"photos": AccessRead, "default": AccessNone}); err != nil {
+	if err := cfg.SetServicePermissions("immich", types.Permissions{"photos": types.AccessRead, "default": types.AccessNone}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -164,14 +166,14 @@ func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T
 		t.Fatal(err)
 	}
 	// spotify not in overlay → bootstrap.
-	if got := fresh.GetService("spotify").Permissions.For("player"); got != AccessNone {
+	if got := fresh.GetService("spotify").Permissions.For("player"); got != types.AccessNone {
 		t.Fatalf("spotify player = %q, want none from bootstrap", got)
 	}
 	// immich in overlay → overlay wins.
-	if got := fresh.GetService("immich").Permissions.For("contacts"); got != AccessNone {
+	if got := fresh.GetService("immich").Permissions.For("contacts"); got != types.AccessNone {
 		t.Fatalf("immich contacts = %q, want none from overlay default", got)
 	}
-	if got := fresh.GetService("immich").Permissions.For("photos"); got != AccessRead {
+	if got := fresh.GetService("immich").Permissions.For("photos"); got != types.AccessRead {
 		t.Fatalf("immich photos = %q, want read", got)
 	}
 }
@@ -188,7 +190,7 @@ func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 	if err := cfg.InitPermissionsStore(permsPath); err != nil {
 		t.Fatalf("missing overlay should not fail: %v", err)
 	}
-	if got := cfg.GetService("spotify").Permissions.For("player"); got != AccessNone {
+	if got := cfg.GetService("spotify").Permissions.For("player"); got != types.AccessNone {
 		t.Fatalf("player = %q, want none from bootstrap", got)
 	}
 }
@@ -216,7 +218,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != AccessNone {
+	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != types.AccessNone {
 		t.Fatalf("overlay tracks = %q, want none", got)
 	}
 
@@ -226,7 +228,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 		t.Fatalf("Reload: %v", err)
 	}
 	// Overlay still wins for default.
-	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != AccessNone {
+	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != types.AccessNone {
 		t.Fatalf("after reload tracks = %q, want none from overlay", got)
 	}
 }

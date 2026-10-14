@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func mustCopyLedger(t *testing.T) *CopyLedger {
@@ -166,9 +168,9 @@ func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
 		t.Fatal("origin should not be stamped")
 	}
 
-	items := []Playlist{{
+	items := []types.Playlist{{
 		Name: "Road Trip",
-		Sources: []PlaylistSource{
+		Sources: []types.PlaylistSource{
 			{Service: "spotify", ID: "abc"},
 			{Service: "youtube-music", ID: "xyz"},
 		},
@@ -327,31 +329,31 @@ func TestStampOtherKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	photos := []Photo{{Sources: []PhotoSource{{Service: "immich", ID: "img1"}}}}
+	photos := []types.Photo{{Sources: []types.PhotoSource{{Service: "immich", ID: "img1"}}}}
 	srv.stampPhotoCopies(photos)
 	if photos[0].Sources[0].Copy == nil {
 		t.Fatal("photo copy stamp missing")
 	}
 
-	msgs := []Message{{Sources: []MessageSource{{Service: "google-gmail", ID: "m1"}}}}
+	msgs := []types.Message{{Sources: []types.MessageSource{{Service: "google-gmail", ID: "m1"}}}}
 	srv.stampMessageCopies(msgs)
 	if msgs[0].Sources[0].Copy == nil {
 		t.Fatal("message copy stamp missing")
 	}
 
-	contacts := []Contact{{Sources: []ContactSource{{Service: "google-contacts", ID: "c1"}}}}
+	contacts := []types.Contact{{Sources: []types.ContactSource{{Service: "google-contacts", ID: "c1"}}}}
 	srv.stampContactCopies(contacts)
 	if contacts[0].Sources[0].Copy == nil {
 		t.Fatal("contact copy stamp missing")
 	}
 
-	events := []CalendarEvent{{Sources: []CalendarEventSource{{Service: "google-calendar", ID: "e1"}}}}
+	events := []types.CalendarEvent{{Sources: []types.CalendarEventSource{{Service: "google-calendar", ID: "e1"}}}}
 	srv.stampEventCopies(events)
 	if events[0].Sources[0].Copy == nil {
 		t.Fatal("event copy stamp missing")
 	}
 
-	tracks := []Track{{Sources: []TrackSource{{Service: "spotify", ID: "t1"}}}}
+	tracks := []types.Track{{Sources: []types.TrackSource{{Service: "spotify", ID: "t1"}}}}
 	srv.stampTrackCopies(tracks)
 	if tracks[0].Sources[0].Copy == nil {
 		t.Fatal("track copy stamp missing")

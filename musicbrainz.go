@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // MusicBrainz is the open music catalog used to attach durable MBIDs when
@@ -43,15 +45,15 @@ type mbHit struct {
 }
 
 func artistMBIDCacheKey(name string) string {
-	return "mbid:artist:" + NormalizeIdentityKey(name)
+	return "mbid:artist:" + types.NormalizeIdentityKey(name)
 }
 
 func recordingMBIDCacheKey(title, artist string) string {
-	return "mbid:rec:" + NormalizeIdentityKey(title) + "|" + NormalizeIdentityKey(artist)
+	return "mbid:rec:" + types.NormalizeIdentityKey(title) + "|" + types.NormalizeIdentityKey(artist)
 }
 
 func releaseGroupMBIDCacheKey(title, artist string) string {
-	return "mbid:rg:" + NormalizeIdentityKey(title) + "|" + NormalizeIdentityKey(artist)
+	return "mbid:rg:" + types.NormalizeIdentityKey(title) + "|" + types.NormalizeIdentityKey(artist)
 }
 
 // mbGetJSON performs a MusicBrainz search and returns the raw body.
@@ -86,7 +88,7 @@ func (s *Server) mbGetJSON(ctx context.Context, path, query string) ([]byte, boo
 
 // mbPickHit returns the first high-confidence hit whose name matches want.
 func mbPickHit(hits []mbHit, want string) string {
-	wantKey := NormalizeIdentityKey(want)
+	wantKey := types.NormalizeIdentityKey(want)
 	if wantKey == "" {
 		return ""
 	}
@@ -94,7 +96,7 @@ func mbPickHit(hits []mbHit, want string) string {
 		if hit.Score < mbMinScore || hit.ID == "" {
 			continue
 		}
-		if NormalizeIdentityKey(hit.Name) == wantKey {
+		if types.NormalizeIdentityKey(hit.Name) == wantKey {
 			return hit.ID
 		}
 	}
@@ -205,7 +207,7 @@ func quoteMBField(s string) string {
 	return `"` + s + `"`
 }
 
-func primaryArtistName(artists []Artist) string {
+func primaryArtistName(artists []types.Artist) string {
 	if len(artists) == 0 {
 		return ""
 	}
@@ -214,7 +216,7 @@ func primaryArtistName(artists []Artist) string {
 
 // resolveArtistEntities attaches MusicBrainz MBIDs to artists that lack an
 // EntityID. Failures are ignored — name matching remains the fallback.
-func (s *Server) resolveArtistEntities(ctx context.Context, artists []Artist) {
+func (s *Server) resolveArtistEntities(ctx context.Context, artists []types.Artist) {
 	if s == nil || len(artists) == 0 {
 		return
 	}
@@ -228,7 +230,7 @@ func (s *Server) resolveArtistEntities(ctx context.Context, artists []Artist) {
 			continue
 		}
 		q := strings.TrimSuffix(strings.TrimSpace(name), " - Topic")
-		if NormalizeIdentityKey(q) == "" {
+		if types.NormalizeIdentityKey(q) == "" {
 			continue
 		}
 		if lookups >= mbLookupBudget {
@@ -244,9 +246,9 @@ func (s *Server) resolveArtistEntities(ctx context.Context, artists []Artist) {
 }
 
 // resolveTrackEntities attaches MusicBrainz recording MBIDs to tracks that
-// lack EntityID (no ISRC). Used before MergeTracksSync so YouTube-only or
+// lack EntityID (no ISRC). Used before types.MergeTracksSync so YouTube-only or
 // ISRC-less catalog tracks can still join durable identity groups.
-func (s *Server) resolveTrackEntities(ctx context.Context, tracks []Track) {
+func (s *Server) resolveTrackEntities(ctx context.Context, tracks []types.Track) {
 	if s == nil || len(tracks) == 0 {
 		return
 	}
@@ -257,7 +259,7 @@ func (s *Server) resolveTrackEntities(ctx context.Context, tracks []Track) {
 		}
 		title := tracks[i].Name
 		artist := primaryArtistName(tracks[i].Artists)
-		if NormalizeIdentityKey(title) == "" || NormalizeIdentityKey(artist) == "" {
+		if types.NormalizeIdentityKey(title) == "" || types.NormalizeIdentityKey(artist) == "" {
 			continue
 		}
 		key := recordingMBIDCacheKey(title, artist)
@@ -275,7 +277,7 @@ func (s *Server) resolveTrackEntities(ctx context.Context, tracks []Track) {
 
 // resolveAlbumEntities attaches MusicBrainz release-group MBIDs to albums
 // that lack EntityID (no UPC).
-func (s *Server) resolveAlbumEntities(ctx context.Context, albums []Album) {
+func (s *Server) resolveAlbumEntities(ctx context.Context, albums []types.Album) {
 	if s == nil || len(albums) == 0 {
 		return
 	}
@@ -286,7 +288,7 @@ func (s *Server) resolveAlbumEntities(ctx context.Context, albums []Album) {
 		}
 		title := albums[i].Name
 		artist := primaryArtistName(albums[i].Artists)
-		if NormalizeIdentityKey(title) == "" || NormalizeIdentityKey(artist) == "" {
+		if types.NormalizeIdentityKey(title) == "" || types.NormalizeIdentityKey(artist) == "" {
 			continue
 		}
 		key := releaseGroupMBIDCacheKey(title, artist)

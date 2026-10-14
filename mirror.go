@@ -11,6 +11,8 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Mirror kinds supported by POST /v1/library/mirror.
@@ -291,7 +293,7 @@ func (s *Server) writeMirrorUpstreamError(w http.ResponseWriter, logger *slog.Lo
 }
 
 func errorsIsUnauthorized(err error) bool {
-	return err != nil && (err == ErrUnauthorized || strings.Contains(err.Error(), "unauthorized"))
+	return err != nil && (err == types.ErrUnauthorized || strings.Contains(err.Error(), "unauthorized"))
 }
 
 // requireMirrorWritable checks the target allows writes for the kind.
@@ -379,7 +381,7 @@ func (s *Server) mirrorUpstream(ctx context.Context, serviceID, method, path str
 	}
 	token := s.GetValidToken(serviceID, slog.Default())
 	if token == "" {
-		return nil, 0, ErrUnauthorized
+		return nil, 0, types.ErrUnauthorized
 	}
 
 	u := trimRightSlash(svc.Endpoint) + path
@@ -415,7 +417,7 @@ func (s *Server) mirrorUpstream(ctx context.Context, serviceID, method, path str
 		return nil, 0, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, resp.StatusCode, ErrUnauthorized
+		return nil, resp.StatusCode, types.ErrUnauthorized
 	}
 	if resp.StatusCode >= 400 {
 		msg := strings.TrimSpace(string(data))

@@ -4,6 +4,8 @@ import (
 	"context"
 	"net/http"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // SampleCalendarConnector serves synthetic calendar events for demos and
@@ -24,19 +26,19 @@ func NewSampleCalendarConnector() *SampleCalendarConnector {
 	return &SampleCalendarConnector{}
 }
 
-func (c *SampleCalendarConnector) Capabilities() ServiceCapabilities {
-	return ServiceCapabilities{
-		DataTypes: []DataTypeCapability{
+func (c *SampleCalendarConnector) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{
+		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "events",
 				Description: "Synthetic calendar events for demos (no upstream provider).",
-				Operations: []Operation{
+				Operations: []types.Operation{
 					{
 						Name:        "list_events",
 						Description: "List synthetic events as neutral CalendarEvent values. Permission key: events.",
 						Method:      "GET",
 						Path:        "/me/events",
-						Response: ResponseSpec{
+						Response: types.ResponseSpec{
 							Description: "Neutral events with near-term busy blocks for free/busy demos.",
 							Fields:      []string{"events", "total"},
 						},
@@ -57,7 +59,7 @@ func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 		return
 	}
 	events := sampleCalendarEvents()
-	writeJSON(w, CalendarEventList{
+	writeJSON(w, types.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 	})
@@ -65,13 +67,13 @@ func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 // ListCalendarEvents implements CalendarEventProvider with deterministic
 // synthetic events near "now" so free/busy demos show busy blocks today.
-func (c *SampleCalendarConnector) ListCalendarEvents(_ context.Context) ([]CalendarEvent, bool, error) {
+func (c *SampleCalendarConnector) ListCalendarEvents(_ context.Context) ([]types.CalendarEvent, bool, error) {
 	return sampleCalendarEvents(), false, nil
 }
 
 // sampleCalendarEvents returns fictional events anchored a few days from now.
 // Cancelled rows exist to prove free/busy omits them (issue #128).
-func sampleCalendarEvents() []CalendarEvent {
+func sampleCalendarEvents() []types.CalendarEvent {
 	base := time.Now().UTC().Truncate(24 * time.Hour)
 	day := func(offset int, hour, minute, durMin int) (start, end string) {
 		s := base.AddDate(0, 0, offset).Add(time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute)
@@ -92,7 +94,7 @@ func sampleCalendarEvents() []CalendarEvent {
 	full := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-1", "Project kickoff", s1, e1, false)
 	full.Description = "Bring the roadmap draft"
 	full.Location = "Room 4B"
-	full.Attendees = []Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}}
+	full.Attendees = []types.Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}}
 	full.EntityID = "kickoff@synthetic.example"
 
 	oneOnOne := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-2", "1:1 with Grace", s2, e2, false)
@@ -109,7 +111,7 @@ func sampleCalendarEvents() []CalendarEvent {
 	cancelled.Status = "cancelled"
 	cancelled.EntityID = "standup@synthetic.example"
 
-	return []CalendarEvent{full, oneOnOne, workshop, allday, cancelled}
+	return []types.CalendarEvent{full, oneOnOne, workshop, allday, cancelled}
 }
 
 // isSampleCalendarService reports whether a service endpoint is fixture-backed.

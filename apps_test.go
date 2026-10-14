@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func testAppStore(t *testing.T) *AppStore {
@@ -18,7 +20,7 @@ func testAppStore(t *testing.T) *AppStore {
 	return store
 }
 
-func createTestApp(t *testing.T, store *AppStore, id string, scopes Permissions) (view AppView, token string) {
+func createTestApp(t *testing.T, store *AppStore, id string, scopes types.Permissions) (view AppView, token string) {
 	t.Helper()
 	view, token, err := store.Create(AppCreateRequest{ID: id, Name: id, Scopes: scopes})
 	if err != nil {
@@ -32,7 +34,7 @@ func TestAppStore_CreateReturnsTokenOnce(t *testing.T) {
 	view, token, err := store.Create(AppCreateRequest{
 		ID:     "eco",
 		Name:   "Event Coordinator",
-		Scopes: Permissions{"events": AccessFreeBusy},
+		Scopes: types.Permissions{"events": types.AccessFreeBusy},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -55,18 +57,18 @@ func TestAppStore_CreateReturnsTokenOnce(t *testing.T) {
 		t.Fatalf("list hint mismatch")
 	}
 	got, ok := store.Get("eco")
-	if !ok || got.Scopes["events"] != AccessFreeBusy {
+	if !ok || got.Scopes["events"] != types.AccessFreeBusy {
 		t.Fatalf("get = %+v ok=%v", got, ok)
 	}
 	// Scopes default to deny-all when not listed.
-	if got.Scopes[PermissionDefaultKey] != AccessNone {
-		t.Fatalf("default scope = %q, want none", got.Scopes[PermissionDefaultKey])
+	if got.Scopes[types.PermissionDefaultKey] != types.AccessNone {
+		t.Fatalf("default scope = %q, want none", got.Scopes[types.PermissionDefaultKey])
 	}
 }
 
 func TestAppStore_FindByTokenAndRotate(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", Permissions{"events": AccessRead})
+	_, token := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessRead})
 	if store.FindByToken(token) == nil {
 		t.Fatal("expected token to resolve")
 	}
@@ -88,7 +90,7 @@ func TestAppStore_FindByTokenAndRotate(t *testing.T) {
 
 func TestAppStore_DeleteAndDisable(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", Permissions{"events": AccessRead})
+	_, token := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessRead})
 	disabled := true
 	if _, err := store.Update("eco", AppUpdateRequest{Disabled: &disabled}); err != nil {
 		t.Fatalf("Update disabled: %v", err)
@@ -106,28 +108,28 @@ func TestAppStore_DeleteAndDisable(t *testing.T) {
 
 func TestAppStore_CreateRejectsBadIDAndScopes(t *testing.T) {
 	store := testAppStore(t)
-	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: Permissions{"events": AccessRead}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: types.Permissions{"events": types.AccessRead}}); err == nil {
 		t.Fatal("expected bad id rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: Permissions{"tracks": AccessFreeBusy}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: types.Permissions{"tracks": types.AccessFreeBusy}}); err == nil {
 		t.Fatal("expected freebusy on tracks rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: Permissions{"events": "write-only-oops"}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: types.Permissions{"events": "write-only-oops"}}); err == nil {
 		t.Fatal("expected unknown level rejected")
 	}
 }
 
 func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", Permissions{
-		"events":   AccessRead,
-		"contacts": AccessNone,
+	_, token := createTestApp(t, store, "eco", types.Permissions{
+		"events":   types.AccessRead,
+		"contacts": types.AccessNone,
 	})
 	svc := &Service{
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: Permissions{"events": AccessRead},
+		Permissions: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -175,12 +177,12 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 
 func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", Permissions{"events": AccessFreeBusy})
+	_, token := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessFreeBusy})
 	svc := &Service{
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: Permissions{"events": AccessRead},
+		Permissions: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -214,13 +216,13 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 
 func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 	store := testAppStore(t)
-	_, fbToken := createTestApp(t, store, "eco-fb", Permissions{"events": AccessFreeBusy})
-	_, roToken := createTestApp(t, store, "eco-ro", Permissions{"events": AccessRead})
+	_, fbToken := createTestApp(t, store, "eco-fb", types.Permissions{"events": types.AccessFreeBusy})
+	_, roToken := createTestApp(t, store, "eco-ro", types.Permissions{"events": types.AccessRead})
 	svc := &Service{
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: Permissions{"events": AccessRead},
+		Permissions: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -350,7 +352,7 @@ func TestAppPathAllowed(t *testing.T) {
 
 func TestAgentForRequest_AppIdentity(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
-	req = withAppIdentity(req, &App{ID: "eco", Name: "E Co", Scopes: Permissions{"events": AccessRead}})
+	req = withAppIdentity(req, &App{ID: "eco", Name: "E Co", Scopes: types.Permissions{"events": types.AccessRead}})
 	if got := agentForRequest(req); got != "app:eco" {
 		t.Fatalf("agent = %q", got)
 	}

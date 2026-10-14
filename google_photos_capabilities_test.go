@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGooglePhotosConnector_DeleteSession_Success(t *testing.T) {
@@ -227,12 +229,12 @@ func TestImmichConnector_Capabilities(t *testing.T) {
 }
 
 func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
-	if albumServiceName(Album{}) != "" {
+	if types.AlbumServiceName(types.Album{}) != "" {
 		t.Fatal("empty album should have empty service name")
 	}
-	got := albumServiceName(Album{Sources: []AlbumSource{{Service: "spotify", ServiceName: "Spotify"}}})
+	got := types.AlbumServiceName(types.Album{Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify"}}})
 	if got != "Spotify" {
-		t.Fatalf("albumServiceName = %q", got)
+		t.Fatalf("types.AlbumServiceName = %q", got)
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Copy ledger (issue #76): durable memory of where copies of library items
@@ -101,18 +103,6 @@ type CopyRecord struct {
 	LastCheckedAt string      `json:"last_checked_at,omitempty"`
 	CreatedAt     time.Time   `json:"created_at"`
 	UpdatedAt     time.Time   `json:"updated_at"`
-}
-
-// CopyInfo is the library-facing projection of a ledger row, stamped onto
-// sources[] only when a matching copy exists (issue #76 / #90).
-type CopyInfo struct {
-	Role       string `json:"role,omitempty"`
-	SyncMode   string `json:"sync_mode,omitempty"`
-	SyncStatus string `json:"sync_status,omitempty"`
-	AsOf       string `json:"as_of,omitempty"`
-	CheckedAt  string `json:"checked_at,omitempty"`
-	Provenance string `json:"provenance,omitempty"`
-	Note       string `json:"note,omitempty"`
 }
 
 // CopyFilter narrows List/HandleLibraryCopies queries.
@@ -444,12 +434,12 @@ func scanCopyRecord(row copyRowScanner) (CopyRecord, error) {
 }
 
 // toCopyInfo projects a ledger row onto a library source stamp.
-func (rec CopyRecord) toCopyInfo() *CopyInfo {
+func (rec CopyRecord) toCopyInfo() *types.CopyInfo {
 	asOf := rec.LastSyncedAt
 	if asOf == "" {
 		asOf = rec.Watermark
 	}
-	return &CopyInfo{
+	return &types.CopyInfo{
 		Role:       rec.Role,
 		SyncMode:   rec.SyncMode,
 		SyncStatus: rec.Status,
@@ -462,7 +452,7 @@ func (rec CopyRecord) toCopyInfo() *CopyInfo {
 
 // copyInfoFor looks up a stamp for one service-local location. Returns nil
 // when disabled or unknown — library responses stay unchanged (fail-open).
-func (s *Server) copyInfoFor(kind, service, externalID string) *CopyInfo {
+func (s *Server) copyInfoFor(kind, service, externalID string) *types.CopyInfo {
 	if s == nil || s.copies == nil || service == "" || externalID == "" {
 		return nil
 	}

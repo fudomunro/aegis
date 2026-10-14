@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestParseScopeList(t *testing.T) {
@@ -14,7 +16,7 @@ func TestParseScopeList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(entries) != 2 || entries[0].Type != "events" || entries[0].Level != AccessFreeBusy {
+	if len(entries) != 2 || entries[0].Type != "events" || entries[0].Level != types.AccessFreeBusy {
 		t.Fatalf("entries = %+v", entries)
 	}
 	if _, err := parseScopeList("tracks:freebusy"); err == nil {
@@ -25,7 +27,7 @@ func TestParseScopeList(t *testing.T) {
 	}
 	// bare type means read
 	entries, err = parseScopeList("events")
-	if err != nil || entries[0].Level != AccessRead {
+	if err != nil || entries[0].Level != types.AccessRead {
 		t.Fatalf("bare = %+v err=%v", entries, err)
 	}
 }
@@ -90,7 +92,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 
 	// App exists with freebusy scope.
 	view, ok := store.Get("eco-demo")
-	if !ok || view.Scopes["events"] != AccessFreeBusy {
+	if !ok || view.Scopes["events"] != types.AccessFreeBusy {
 		t.Fatalf("app = %+v ok=%v", view, ok)
 	}
 
@@ -129,7 +131,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: Permissions{"events": AccessRead},
+		Permissions: types.Permissions{"events": types.AccessRead},
 	}
 	srv.config = &Config{Services: []Service{*svc}}
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -208,7 +210,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	}
 
 	// App token must not call authorize (cannot mint more grants).
-	_, token := createTestApp(t, store, "other", Permissions{"events": AccessRead})
+	_, token := createTestApp(t, store, "other", types.Permissions{"events": types.AccessRead})
 	req = httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -259,7 +261,7 @@ func TestHandleAppToken_Errors(t *testing.T) {
 
 func TestGrantStore_Expires(t *testing.T) {
 	g := NewGrantStore()
-	code, err := g.issue(GrantCode{AppID: "eco", Scopes: Permissions{"events": AccessRead}})
+	code, err := g.issue(GrantCode{AppID: "eco", Scopes: types.Permissions{"events": types.AccessRead}})
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}
