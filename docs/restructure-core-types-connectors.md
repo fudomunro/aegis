@@ -313,7 +313,7 @@ Registration in `main.go` stays the explicit list (or a `connectors.RegisterAll(
 **Done when:** connectors package does not import `main`; core does not import
 connector types except via `ServiceConnector` interface (already in the seam).
 
-### Phase 4 — Core residual + layout docs (`refactor/issue-15-core-pkg`)
+### Phase 4 — Core residual + layout docs (`refactor/issue-15-core-pkg`) — **done**
 
 - Move runtime into `internal/core` (Server, handler hook, proxy, oauth,
   tokens, admin API, overlays, metrics, state stores, sampledata, mail).

@@ -2014,53 +2014,25 @@ stress data locally with `-seed-sample-stress`.
 
 ```
 aegis/
-  main.go           Entry point, CLI flags, route wiring
-  datadir.go        Data directory resolution + state path layout (issue #74)
-  config.go         Service/Config types, JSON loading, matching
-  atomicfile.go     Atomic temp+rename writes for the permissions overlay
-  permissions_overlay.go  Admin permissions.json overlay (issue #71)
-  service_connections.go  Admin service_connections.json overlay (Immich setup)
-  immich_setup.go     Admin Immich setup API + checks (issue #39)
-  handler.go        Pre-request hook: parse payload, block/modify
-  identity.go       Tailscale Serve headers + WhoIs identity resolvers
-  models.go         Neutral data types (Playlist, Track, Contact, Photo, CalendarEvent, and their list wrappers)
-  library.go        Library providers + thin per-kind handlers
-  librarykind.go    LibraryKind registry + shared generic aggregate pipeline
-  contacts.go       Contact identity, merge, ContactProvider, /v1/library/contacts
-  photos.go         Photo identity/merge, PhotoProvider, /v1/library/photos
-  events.go         CalendarEvent identity/merge, CalendarEventProvider, /v1/library/events
-  messages.go       Message identity/merge, MessageProvider, /v1/library/messages
-  google-gmail.go   Gmail connector (MessageProvider; metadata/snippet library path)
-  mail_archive.go   Local SQLite FTS5 mail archive (compressed payloads + search)
-  mail_archive_http.go  /v1/mail/search|status|sync|messages routes
-  mail_archive_sync.go  Resumable Gmail → archive ingest
-  mail_takeout.go   Read-only Google Takeout mbox/zip/directory sync
-  sampledata.go     Synthetic sample mail + library fixtures (issue #77)
-  match.go          Cross-service name identity + playlist sync merge
-  proxy.go          Service proxy: cache, forward, inject tokens
-  permissions.go    Agent data-type access levels, path classification, enforcement
-  cache.go          In-memory TTL cache with RWMutex
-  oauth.go          OAuth2 login/callback/refresh flows
-  tokens.go         AES-256-GCM encrypted token storage (versioned PBKDF2 KDF)
-  statestore.go     CSRF state validation with TTL
-  admin.go          Admin dashboard HTML + summary/cache APIs
-  brand.go          Public favicon/logo embed + routes (issue #87)
-  flow.go           Data-flow topology builder + /v1/admin/flow
-  SECURITY.md       Tailnet auth model, ACLs, operational guidance
-  spotify.go        Spotify connector (neutral playlists + ListUserPlaylists)
-  youtube.go        YouTube Music connector (neutral playlists + ListUserPlaylists)
-  amazonmusic.go    Amazon Music connector (neutral playlists + ListUserPlaylists)
-  google-photos.go  Google Photos Picker connector (user-selected photos; bytes stay upstream)
-  google-contacts.go Google Contacts / People API connector (ContactProvider)
-  google-calendar.go Google Calendar connector (CalendarEventProvider)
-  immich.go         Immich connector (local/foreign canonical photos)
-  immich_setup.go   Admin Immich setup API (issue #39)
-  service_connections.go  Admin-saved static-auth service overlay
-  aegis.example.json   Example configuration
-  docs/index.html   Code walkthrough (Go vs Python)
+  main.go                    Thin entry (core.Run())
+  internal/types/            Neutral models, merge/identity, LibraryKind data,
+                             TypePolicy, path rules, provider interfaces
+  internal/core/             Runtime: Server, auth, config, tokens/OAuth, proxy,
+                             permissions enforcement, library aggregate, admin,
+                             state stores (mail, copy ledger, Quicken, Timeline),
+                             sample data, web/ embeds
+  internal/connectors/       Named services (Spotify, YouTube Music, Amazon Music,
+                             Google *, Immich, YNAB, OwnTracks, sample calendar)
+                             implementing ServiceConnector + *Provider via Host
+  web/ → internal/core/web/  Admin SPA + brand assets (//go:embed)
+  SECURITY.md                Tailnet auth model, ACLs, operational guidance
+  aegis.example.json         Example configuration
+  docs/index.html            Code walkthrough (regenerated artifact)
   docs/adding-data-types.md  Guide: defining a new library data type (issue #92)
-  docs/immich-live-testing.md  Live Immich acceptance guide (issue #39)
 ```
+
+Layout is the #15 split: **types** (data) / **core** (runtime) / **connectors**
+(named services). See `docs/restructure-core-types-connectors.md`.
 
 ## License
 
