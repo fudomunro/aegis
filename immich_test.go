@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -18,8 +20,8 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 	cfg := &Config{
 		Services: []Service{
 			{
-				ID:           immichServiceID,
-				Name:         immichServiceName,
+				ID:           connectors.ImmichServiceID,
+				Name:         connectors.ImmichServiceName,
 				Action:       "inject",
 				Endpoint:     ts.URL,
 				Headers:      map[string]string{"X-API-Key": "test-immich-key"},
@@ -29,13 +31,13 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors[immichServiceID] = NewImmichConnector(srv)
+	srv.connectors[connectors.ImmichServiceID] = connectors.NewImmichConnector(srv)
 	return srv, ts
 }
 
 func TestImmichConnector_SystemInstructions(t *testing.T) {
-	conn := NewImmichConnector(testServerWithBase(&Config{Services: []Service{{
-		ID: immichServiceID, Endpoint: "http://immich.local:2283/api",
+	conn := connectors.NewImmichConnector(testServerWithBase(&Config{Services: []Service{{
+		ID: connectors.ImmichServiceID, Endpoint: "http://immich.local:2283/api",
 	}}}, "https://aegis.example.com"))
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
@@ -96,7 +98,7 @@ func TestImmichConnector_ListUserPhotos(t *testing.T) {
 		})
 	}))
 
-	conn := NewImmichConnector(srv)
+	conn := connectors.NewImmichConnector(srv)
 	photos, truncated, err := conn.ListUserPhotos(context.Background())
 	if err != nil {
 		t.Fatalf("ListUserPhotos: %v", err)
@@ -128,7 +130,7 @@ func TestImmichConnector_ListUserPhotos(t *testing.T) {
 		t.Fatalf("mime = %q", p.MimeType)
 	}
 	src := p.Sources[0]
-	if !src.Canonical || src.Service != immichServiceID {
+	if !src.Canonical || src.Service != connectors.ImmichServiceID {
 		t.Fatalf("source = %+v", src)
 	}
 	if !strings.Contains(src.BlobURL, "/v1/services/immich/assets/asset-1/original") {
@@ -154,7 +156,7 @@ func TestImmichConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 		w.WriteHeader(http.StatusUnauthorized)
 		w.Write([]byte(`{"message":"Invalid API key"}`))
 	}))
-	_, _, err := NewImmichConnector(srv).ListUserPhotos(context.Background())
+	_, _, err := connectors.NewImmichConnector(srv).ListUserPhotos(context.Background())
 	if err != types.ErrUnauthorized {
 		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
@@ -180,7 +182,7 @@ func TestImmichConnector_ListUserPhotos_Paginates(t *testing.T) {
 			},
 		})
 	}))
-	photos, truncated, err := NewImmichConnector(srv).ListUserPhotos(context.Background())
+	photos, truncated, err := connectors.NewImmichConnector(srv).ListUserPhotos(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -208,7 +210,7 @@ func TestImmichConnector_HandleProxy_BinaryPassthrough(t *testing.T) {
 	req = req.WithContext(req.Context())
 	// Drive the connector HandleProxy directly with remaining path.
 	w := httptest.NewRecorder()
-	NewImmichConnector(srv).HandleProxy(w, req, "/assets/asset-1/original")
+	connectors.NewImmichConnector(srv).HandleProxy(w, req, "/assets/asset-1/original")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -253,7 +255,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 	if !list.Photos[0].Sources[0].Canonical {
 		t.Fatal("immich source should be canonical")
 	}
-	if list.ByService[immichServiceID].Status != types.LibraryStatusOK {
+	if list.ByService[connectors.ImmichServiceID].Status != types.LibraryStatusOK {
 		t.Fatalf("by_service = %+v", list.ByService)
 	}
 }

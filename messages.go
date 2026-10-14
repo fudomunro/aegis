@@ -31,14 +31,6 @@ func messageExtraString(extra map[string]any, key string) string {
 	return s
 }
 
-// normalizeMessageID strips angle brackets and lowercases an RFC Message-ID.
-func normalizeMessageID(raw string) string {
-	raw = strings.TrimSpace(raw)
-	raw = strings.TrimPrefix(raw, "<")
-	raw = strings.TrimSuffix(raw, ">")
-	return strings.ToLower(strings.TrimSpace(raw))
-}
-
 // messageSentNormalized parses RFC3339 (or RFC3339Nano) and re-emits it at
 // second precision in UTC so the same send time matches across services.
 func messageSentNormalized(raw string) string {
@@ -58,18 +50,18 @@ func messagePrimaryFromEmail(m types.Message) string {
 	if m.From == nil || len(m.From.Emails) == 0 {
 		return ""
 	}
-	return NormalizeContactEmail(m.From.Emails[0])
+	return types.NormalizeContactEmail(m.From.Emails[0])
 }
 
 // messageIdentityKey is the sort/merge key used by the library aggregate.
 // Prefer durable RFC Message-ID when present; otherwise subject + from + sent_at.
 // Messages without any identity fall back to service:id so they stay distinct.
 func messageIdentityKey(m types.Message) string {
-	if id := normalizeMessageID(m.EntityID); id != "" {
+	if id := types.NormalizeMessageID(m.EntityID); id != "" {
 		return "msgid:" + id
 	}
 	for _, src := range m.Sources {
-		if id := normalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
+		if id := types.NormalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
 			return "msgid:" + id
 		}
 	}

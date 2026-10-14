@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -271,7 +273,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.audit = a
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakePlaylistProvider{
 			playlists: []types.Playlist{{Name: "Jazz", Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
 		},

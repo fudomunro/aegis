@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -33,11 +33,11 @@ func NewGoogleGmailConnector(host Host) *GoogleGmailConnector {
 	return &GoogleGmailConnector{host: host}
 }
 
-// googleGmailServiceID is the connector/service ID used in config, tokens,
+// GoogleGmailServiceID is the connector/service ID used in config, tokens,
 // sources[], and admin. Documented name is "Gmail".
-const googleGmailServiceID = "google-gmail"
+const GoogleGmailServiceID = "google-gmail"
 
-const googleGmailServiceName = "Gmail"
+const GoogleGmailServiceName = "Gmail"
 
 // Default library window and caps. Gmail list endpoints return IDs only, so
 // the library hydrates metadata per message up to a modest cap to keep
@@ -45,13 +45,13 @@ const googleGmailServiceName = "Gmail"
 const (
 	googleGmailDefaultQuery   = "newer_than:30d"
 	googleGmailListPageSize   = 25
-	googleGmailLibraryCap     = 50
+	GoogleGmailLibraryCap     = 50
 	googleGmailMetadataFormat = "metadata"
 )
 
-// googleGmailUpstreamBase returns the configured Gmail API base.
-func (c *GoogleGmailConnector) googleGmailUpstreamBase() string {
-	return c.host.UpstreamBaseFor(googleGmailServiceID, "https://gmail.googleapis.com/gmail/v1")
+// GoogleGmailUpstreamBase returns the configured Gmail API base.
+func (c *GoogleGmailConnector) GoogleGmailUpstreamBase() string {
+	return c.host.UpstreamBaseFor(GoogleGmailServiceID, "https://gmail.googleapis.com/gmail/v1")
 }
 
 // Capabilities returns what Gmail data types and operations are supported.
@@ -129,7 +129,7 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Gmail is referenced.
 func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + googleGmailServiceID
+	base := root + "/v1/services/" + GoogleGmailServiceID
 	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, you MUST use the Aegis proxy at %s instead of calling Gmail API directly.
 
 For "my email" across every connected mail/message service, prefer the unified library endpoint first:
@@ -148,72 +148,72 @@ Always include the full proxy base URL in your requests.`, base, root)
 
 // HandleProxy processes a Gmail API request through the connector.
 func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", googleGmailServiceID, "method", r.Method, "path", remainingPath)
+	logger := slog.With("service", GoogleGmailServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.host.GetValidToken(googleGmailServiceID, logger)
+	token := c.host.GetValidToken(GoogleGmailServiceID, logger)
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Gmail token — authorize at /v1/auth/"+googleGmailServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 		return
 	}
 
 	if remainingPath == "/me/messages" || remainingPath == "/me/messages/" ||
 		remainingPath == "/messages" || remainingPath == "/messages/" {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleListMessages(w, r)
+		c.HandleListMessages(w, r)
 		return
 	}
 
 	if remainingPath == "/me/threads" || remainingPath == "/me/threads/" ||
 		remainingPath == "/threads" || remainingPath == "/threads/" {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleListThreads(w, r)
+		c.HandleListThreads(w, r)
 		return
 	}
 
-	if id, ok := gmailBareIDFromProxyPath(remainingPath, "messages"); ok {
+	if id, ok := GmailBareIDFromProxyPath(remainingPath, "messages"); ok {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleGetMessage(w, r, token, id)
+		c.HandleGetMessage(w, r, token, id)
 		return
 	}
 
-	if id, ok := gmailBareIDFromProxyPath(remainingPath, "threads"); ok {
+	if id, ok := GmailBareIDFromProxyPath(remainingPath, "threads"); ok {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleGetThread(w, r, token, id)
+		c.HandleGetThread(w, r, token, id)
 		return
 	}
 
 	// Generic authenticated pass-through for other Gmail API paths under this base.
-	upstreamURL := c.googleGmailUpstreamBase() + remainingPath
+	upstreamURL := c.GoogleGmailUpstreamBase() + remainingPath
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
 	if err != nil {
 		logger.Error("failed to build upstream request", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Gmail request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Gmail request failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -222,9 +222,9 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	io.Copy(w, resp.Body)
 }
 
-// gmailBareIDFromProxyPath extracts an id from /messages/{id}, /me/messages/{id},
+// GmailBareIDFromProxyPath extracts an id from /messages/{id}, /me/messages/{id},
 // /threads/{id}, or /me/threads/{id}.
-func gmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
+func GmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 	p := remainingPath
 	for _, prefix := range []string{"/me/" + kind + "/", "/" + kind + "/"} {
 		if strings.HasPrefix(p, prefix) {
@@ -235,16 +235,16 @@ func gmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 	return "", false
 }
 
-func (c *GoogleGmailConnector) handleListMessages(w http.ResponseWriter, r *http.Request) {
-	messages, truncated, err := c.listMessagesWithQuery(r.Context(), r.URL.Query())
+func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http.Request) {
+	messages, truncated, err := c.ListMessagesWithQuery(r.Context(), r.URL.Query())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			writeJSONError(w, http.StatusUnauthorized,
-				"no valid Gmail token — authorize at /v1/auth/"+googleGmailServiceID+"/login")
+			WriteJSONError(w, http.StatusUnauthorized,
+				"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 			return
 		}
 		slog.Warn("gmail list messages failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch messages from Gmail")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch messages from Gmail")
 		return
 	}
 	if messages == nil {
@@ -256,7 +256,7 @@ func (c *GoogleGmailConnector) handleListMessages(w http.ResponseWriter, r *http
 		Synced:    true,
 		Truncated: truncated,
 		ByService: map[string]types.LibraryServiceStatus{
-			googleGmailServiceID: {
+			GoogleGmailServiceID: {
 				Status:    types.LibraryStatusOK,
 				Count:     len(messages),
 				Truncated: truncated,
@@ -265,24 +265,24 @@ func (c *GoogleGmailConnector) handleListMessages(w http.ResponseWriter, r *http
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build messages list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build messages list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-func (c *GoogleGmailConnector) handleListThreads(w http.ResponseWriter, r *http.Request) {
-	token := c.host.GetValidToken(googleGmailServiceID, slog.Default())
+func (c *GoogleGmailConnector) HandleListThreads(w http.ResponseWriter, r *http.Request) {
+	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Gmail token — authorize at /v1/auth/"+googleGmailServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 		return
 	}
-	threads, truncated, err := c.listThreads(r.Context(), token, r.URL.Query())
+	threads, truncated, err := c.ListThreads(r.Context(), token, r.URL.Query())
 	if err != nil {
 		slog.Warn("gmail list threads failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch threads from Gmail")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch threads from Gmail")
 		return
 	}
 	if threads == nil {
@@ -293,12 +293,12 @@ func (c *GoogleGmailConnector) handleListThreads(w http.ResponseWriter, r *http.
 		"total":     len(threads),
 		"truncated": truncated,
 		"by_service": map[string]types.LibraryServiceStatus{
-			googleGmailServiceID: {Status: types.LibraryStatusOK, Count: len(threads), Truncated: truncated},
+			GoogleGmailServiceID: {Status: types.LibraryStatusOK, Count: len(threads), Truncated: truncated},
 		},
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build threads list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build threads list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -317,7 +317,7 @@ type googleGmailThreadList struct {
 	ResultSizeEstimate int                        `json:"resultSizeEstimate"`
 }
 
-func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q url.Values) ([]map[string]any, bool, error) {
+func (c *GoogleGmailConnector) ListThreads(ctx context.Context, token string, q url.Values) ([]map[string]any, bool, error) {
 	query := ""
 	pageToken := ""
 	pageSize := googleGmailListPageSize
@@ -325,14 +325,14 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 		query = strings.TrimSpace(q.Get("q"))
 		pageToken = q.Get("pageToken")
 		if v := strings.TrimSpace(q.Get("maxResults")); v != "" {
-			if n, err := parseIntLoose(v); err == nil && n > 0 {
+			if n, err := ParseIntLoose(v); err == nil && n > 0 {
 				pageSize = n
 			}
 		}
 	}
 	var out []map[string]any
 	truncated := false
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("maxResults", fmt.Sprint(pageSize))
 		if query != "" {
@@ -341,13 +341,13 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 		if pageToken != "" {
 			values.Set("pageToken", pageToken)
 		}
-		u := c.googleGmailUpstreamBase() + "/users/me/threads?" + values.Encode()
+		u := c.GoogleGmailUpstreamBase() + "/users/me/threads?" + values.Encode()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -357,7 +357,7 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, false, gmailListHTTPError("threads list", resp.StatusCode, data)
+			return nil, false, GmailListHTTPError("threads list", resp.StatusCode, data)
 		}
 		var raw googleGmailThreadList
 		if err := json.Unmarshal(data, &raw); err != nil {
@@ -372,8 +372,8 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 				"snippet":   th.Snippet,
 				"historyId": th.HistoryID,
 				"source": map[string]string{
-					"service":      googleGmailServiceID,
-					"service_name": googleGmailServiceName,
+					"service":      GoogleGmailServiceID,
+					"service_name": GoogleGmailServiceName,
 					"id":           th.ID,
 					"url":          "https://mail.google.com/mail/u/0/#all/" + th.ID,
 				},
@@ -383,52 +383,52 @@ func (c *GoogleGmailConnector) listThreads(ctx context.Context, token string, q 
 		if pageToken == "" {
 			break
 		}
-		if page == libraryPageCap-1 && pageToken != "" {
+		if page == LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
 	return out, truncated, nil
 }
 
-func (c *GoogleGmailConnector) handleGetMessage(w http.ResponseWriter, r *http.Request, token, id string) {
+func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.Request, token, id string) {
 	format := strings.TrimSpace(r.URL.Query().Get("format"))
 	if format == "" {
 		format = googleGmailMetadataFormat
 	}
-	raw, err := c.fetchGmailMessage(r.Context(), token, id, format)
+	raw, err := c.FetchGmailMessage(r.Context(), token, id, format)
 	if err != nil {
 		slog.Warn("gmail get message failed", "id", id, "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
 		return
 	}
-	msg := mapGoogleGmailMessage(raw, format)
+	msg := MapGoogleGmailMessage(raw, format)
 	data, err := json.Marshal(msg)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to encode message")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode message")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Request, token, id string) {
-	upstreamURL := c.googleGmailUpstreamBase() + "/users/me/threads/" + url.PathEscape(id) +
-		"?format=metadata&metadataHeaders=" + strings.Join(gmailMetadataHeaders(), "&metadataHeaders=")
+func (c *GoogleGmailConnector) HandleGetThread(w http.ResponseWriter, r *http.Request, token, id string) {
+	upstreamURL := c.GoogleGmailUpstreamBase() + "/users/me/threads/" + url.PathEscape(id) +
+		"?format=metadata&metadataHeaders=" + strings.Join(GmailMetadataHeaders(), "&metadataHeaders=")
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "Gmail thread request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Gmail thread request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Gmail thread response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Gmail thread response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -439,12 +439,12 @@ func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Re
 	}
 	var raw googleGmailThread
 	if err := json.Unmarshal(data, &raw); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to parse Gmail thread response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to parse Gmail thread response")
 		return
 	}
 	messages := make([]types.Message, 0, len(raw.Messages))
 	for _, m := range raw.Messages {
-		messages = append(messages, mapGoogleGmailMessage(m, googleGmailMetadataFormat))
+		messages = append(messages, MapGoogleGmailMessage(m, googleGmailMetadataFormat))
 	}
 	out, err := json.Marshal(map[string]any{
 		"id":       raw.ID,
@@ -452,7 +452,7 @@ func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Re
 		"total":    len(messages),
 	})
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to encode thread")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode thread")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -462,11 +462,11 @@ func (c *GoogleGmailConnector) handleGetThread(w http.ResponseWriter, r *http.Re
 // ListMessages implements MessageProvider. Fetches recent Gmail messages and
 // hydrates headers into neutral Message metadata.
 func (c *GoogleGmailConnector) ListMessages(ctx context.Context) ([]types.Message, bool, error) {
-	return c.listMessagesWithQuery(ctx, nil)
+	return c.ListMessagesWithQuery(ctx, nil)
 }
 
-func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.Values) ([]types.Message, bool, error) {
-	token := c.host.GetValidToken(googleGmailServiceID, slog.Default())
+func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.Values) ([]types.Message, bool, error) {
+	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
@@ -483,20 +483,20 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 	pageSize := googleGmailListPageSize
 	if q != nil {
 		if v := strings.TrimSpace(q.Get("maxResults")); v != "" {
-			if n, err := parseIntLoose(v); err == nil && n > 0 {
+			if n, err := ParseIntLoose(v); err == nil && n > 0 {
 				pageSize = n
 			}
 		} else if v := strings.TrimSpace(q.Get("pageSize")); v != "" {
-			if n, err := parseIntLoose(v); err == nil && n > 0 {
+			if n, err := ParseIntLoose(v); err == nil && n > 0 {
 				pageSize = n
 			}
 		}
 	}
 
 	// Library vs proxy caps: proxy may request more pages; library stays modest.
-	hydrateCap := googleGmailLibraryCap
+	hydrateCap := GoogleGmailLibraryCap
 	if q != nil && q.Get("maxHydrate") != "" {
-		if n, err := parseIntLoose(q.Get("maxHydrate")); err == nil && n > 0 {
+		if n, err := ParseIntLoose(q.Get("maxHydrate")); err == nil && n > 0 {
 			hydrateCap = n
 		}
 	}
@@ -504,7 +504,7 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 	var all []types.Message
 	truncated := false
 	hydrated := 0
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("maxResults", fmt.Sprint(pageSize))
 		if query != "" {
@@ -513,13 +513,13 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 		if pageToken != "" {
 			values.Set("pageToken", pageToken)
 		}
-		listURL := c.googleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
+		listURL := c.GoogleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -529,9 +529,9 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 			return nil, false, err
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, false, gmailListHTTPError("messages list", resp.StatusCode, data)
+			return nil, false, GmailListHTTPError("messages list", resp.StatusCode, data)
 		}
-		var raw googleGmailMessageList
+		var raw GoogleGmailMessageList
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return nil, false, err
 		}
@@ -543,7 +543,7 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 				truncated = true
 				break
 			}
-			msg, err := c.fetchAndMapMessage(ctx, token, item.ID)
+			msg, err := c.FetchAndMapMessage(ctx, token, item.ID)
 			if err != nil {
 				// Fail-open per message: one unreadable item must not empty the library.
 				slog.Warn("gmail message fetch failed", "id", item.ID, "error", err)
@@ -562,62 +562,62 @@ func (c *GoogleGmailConnector) listMessagesWithQuery(ctx context.Context, q url.
 		if pageToken == "" {
 			break
 		}
-		if hydrated >= hydrateCap || (page == libraryPageCap-1 && pageToken != "") {
+		if hydrated >= hydrateCap || (page == LibraryPageCap-1 && pageToken != "") {
 			truncated = true
 		}
 	}
 	return all, truncated, nil
 }
 
-func (c *GoogleGmailConnector) fetchAndMapMessage(ctx context.Context, token, id string) (types.Message, error) {
-	raw, err := c.fetchGmailMessage(ctx, token, id, googleGmailMetadataFormat)
+func (c *GoogleGmailConnector) FetchAndMapMessage(ctx context.Context, token, id string) (types.Message, error) {
+	raw, err := c.FetchGmailMessage(ctx, token, id, googleGmailMetadataFormat)
 	if err != nil {
 		return types.Message{}, err
 	}
-	return mapGoogleGmailMessage(raw, googleGmailMetadataFormat), nil
+	return MapGoogleGmailMessage(raw, googleGmailMetadataFormat), nil
 }
 
-func (c *GoogleGmailConnector) fetchGmailMessage(ctx context.Context, token, id, format string) (googleGmailMessage, error) {
+func (c *GoogleGmailConnector) FetchGmailMessage(ctx context.Context, token, id, format string) (GoogleGmailMessage, error) {
 	if format == "" {
 		format = googleGmailMetadataFormat
 	}
-	u := c.googleGmailUpstreamBase() + "/users/me/messages/" + url.PathEscape(id) + "?format=" + url.QueryEscape(format)
+	u := c.GoogleGmailUpstreamBase() + "/users/me/messages/" + url.PathEscape(id) + "?format=" + url.QueryEscape(format)
 	if format == googleGmailMetadataFormat || format == "raw" {
-		for _, h := range gmailMetadataHeaders() {
+		for _, h := range GmailMetadataHeaders() {
 			u += "&metadataHeaders=" + url.QueryEscape(h)
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
-		return googleGmailMessage{}, err
+		return GoogleGmailMessage{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		return googleGmailMessage{}, err
+		return GoogleGmailMessage{}, err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return googleGmailMessage{}, err
+		return GoogleGmailMessage{}, err
 	}
 	if resp.StatusCode != http.StatusOK {
-		return googleGmailMessage{}, gmailListHTTPError("message get", resp.StatusCode, data)
+		return GoogleGmailMessage{}, GmailListHTTPError("message get", resp.StatusCode, data)
 	}
-	var raw googleGmailMessage
+	var raw GoogleGmailMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return googleGmailMessage{}, err
+		return GoogleGmailMessage{}, err
 	}
 	return raw, nil
 }
 
-type googleGmailMessageListRef struct {
+type GoogleGmailMessageListRef struct {
 	ID       string `json:"id"`
 	ThreadID string `json:"threadId"`
 }
 
-type googleGmailMessageList struct {
-	Messages           []googleGmailMessageListRef `json:"messages"`
+type GoogleGmailMessageList struct {
+	Messages           []GoogleGmailMessageListRef `json:"messages"`
 	NextPageToken      string                      `json:"nextPageToken"`
 	ResultSizeEstimate int                         `json:"resultSizeEstimate"`
 }
@@ -625,10 +625,10 @@ type googleGmailMessageList struct {
 type googleGmailThread struct {
 	ID       string               `json:"id"`
 	Snippet  string               `json:"snippet"`
-	Messages []googleGmailMessage `json:"messages"`
+	Messages []GoogleGmailMessage `json:"messages"`
 }
 
-type googleGmailMessage struct {
+type GoogleGmailMessage struct {
 	ID           string   `json:"id"`
 	ThreadID     string   `json:"threadId"`
 	LabelIDs     []string `json:"labelIds"`
@@ -656,11 +656,11 @@ type googleGmailMessage struct {
 	} `json:"payload"`
 }
 
-func gmailMetadataHeaders() []string {
+func GmailMetadataHeaders() []string {
 	return []string{"From", "To", "Cc", "Subject", "Date", "Message-ID"}
 }
 
-func gmailHeaderValue(h googleGmailMessage, name string) string {
+func GmailHeaderValue(h GoogleGmailMessage, name string) string {
 	if h.Payload == nil {
 		return ""
 	}
@@ -672,7 +672,7 @@ func gmailHeaderValue(h googleGmailMessage, name string) string {
 	return ""
 }
 
-func gmailInternalDateRFC3339(ms string) string {
+func GmailInternalDateRFC3339(ms string) string {
 	ms = strings.TrimSpace(ms)
 	if ms == "" {
 		return ""
@@ -684,7 +684,7 @@ func gmailInternalDateRFC3339(ms string) string {
 	return time.UnixMilli(n).UTC().Format(time.RFC3339)
 }
 
-func gmailHeaderDateRFC3339(raw string) string {
+func GmailHeaderDateRFC3339(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return ""
@@ -709,8 +709,8 @@ func gmailHeaderDateRFC3339(raw string) string {
 	return ""
 }
 
-// mapGmailAddressHeader parses a single address or address list into Contacts.
-func mapGmailAddressHeader(raw string) []types.Contact {
+// MapGmailAddressHeader parses a single address or address list into Contacts.
+func MapGmailAddressHeader(raw string) []types.Contact {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
@@ -719,10 +719,10 @@ func mapGmailAddressHeader(raw string) []types.Contact {
 	if err != nil {
 		// Fail-open: keep a crude name/email split rather than dropping the party.
 		if strings.Contains(raw, "@") {
-			c := newContact(googleGmailServiceID, googleGmailServiceName, "", "", []string{raw}, nil)
+			c := types.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", "", []string{raw}, nil)
 			return []types.Contact{c}
 		}
-		c := newContact(googleGmailServiceID, googleGmailServiceName, "", raw, nil, nil)
+		c := types.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", raw, nil, nil)
 		return []types.Contact{c}
 	}
 	out := make([]types.Contact, 0, len(addrs))
@@ -734,12 +734,12 @@ func mapGmailAddressHeader(raw string) []types.Contact {
 		if a.Address != "" {
 			emails = []string{a.Address}
 		}
-		out = append(out, newContact(googleGmailServiceID, googleGmailServiceName, "", a.Name, emails, nil))
+		out = append(out, types.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", a.Name, emails, nil))
 	}
 	return out
 }
 
-func gmailDirectionFromLabels(labels []string) string {
+func GmailDirectionFromLabels(labels []string) string {
 	has := func(l string) bool {
 		for _, x := range labels {
 			if strings.EqualFold(x, l) {
@@ -758,7 +758,7 @@ func gmailDirectionFromLabels(labels []string) string {
 	}
 }
 
-func gmailMailboxFromLabels(labels []string) string {
+func GmailMailboxFromLabels(labels []string) string {
 	for _, l := range labels {
 		switch strings.ToUpper(l) {
 		case "INBOX", "SENT", "DRAFT", "SPAM", "TRASH", "STARRED", "IMPORTANT", "UNREAD":
@@ -768,7 +768,7 @@ func gmailMailboxFromLabels(labels []string) string {
 	return ""
 }
 
-func gmailReadFromLabels(labels []string) bool {
+func GmailReadFromLabels(labels []string) bool {
 	for _, l := range labels {
 		if strings.EqualFold(l, "UNREAD") {
 			return false
@@ -777,19 +777,19 @@ func gmailReadFromLabels(labels []string) bool {
 	return true
 }
 
-// mapGoogleGmailMessage converts a Gmail message into the neutral shape.
-func mapGoogleGmailMessage(raw googleGmailMessage, format string) types.Message {
-	fromList := mapGmailAddressHeader(gmailHeaderValue(raw, "From"))
-	toList := mapGmailAddressHeader(gmailHeaderValue(raw, "To"))
-	ccList := mapGmailAddressHeader(gmailHeaderValue(raw, "Cc"))
-	subject := strings.TrimSpace(gmailHeaderValue(raw, "Subject"))
+// MapGoogleGmailMessage converts a Gmail message into the neutral shape.
+func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message {
+	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
+	toList := MapGmailAddressHeader(GmailHeaderValue(raw, "To"))
+	ccList := MapGmailAddressHeader(GmailHeaderValue(raw, "Cc"))
+	subject := strings.TrimSpace(GmailHeaderValue(raw, "Subject"))
 	if decoded, err := new(mime.WordDecoder).DecodeHeader(subject); err == nil {
 		subject = strings.TrimSpace(decoded)
 	}
-	messageID := normalizeMessageID(gmailHeaderValue(raw, "Message-ID"))
-	sentAt := gmailInternalDateRFC3339(raw.InternalDate)
+	messageID := types.NormalizeMessageID(GmailHeaderValue(raw, "Message-ID"))
+	sentAt := GmailInternalDateRFC3339(raw.InternalDate)
 	if sentAt == "" {
-		sentAt = gmailHeaderDateRFC3339(gmailHeaderValue(raw, "Date"))
+		sentAt = GmailHeaderDateRFC3339(GmailHeaderValue(raw, "Date"))
 	}
 
 	var from *types.Contact
@@ -799,12 +799,12 @@ func mapGoogleGmailMessage(raw googleGmailMessage, format string) types.Message 
 	}
 
 	src := types.MessageSource{
-		Service:     googleGmailServiceID,
-		ServiceName: googleGmailServiceName,
+		Service:     GoogleGmailServiceID,
+		ServiceName: GoogleGmailServiceName,
 		ID:          raw.ID,
 		ThreadID:    raw.ThreadID,
-		URL:         gmailMessageURL(raw.ID),
-		Mailbox:     gmailMailboxFromLabels(raw.LabelIDs),
+		URL:         GmailMessageURL(raw.ID),
+		Mailbox:     GmailMailboxFromLabels(raw.LabelIDs),
 		Canonical:   true,
 	}
 	extra := map[string]any{}
@@ -827,53 +827,53 @@ func mapGoogleGmailMessage(raw googleGmailMessage, format string) types.Message 
 		CC:         ccList,
 		SentAt:     sentAt,
 		ReceivedAt: sentAt,
-		Direction:  gmailDirectionFromLabels(raw.LabelIDs),
-		Read:       gmailReadFromLabels(raw.LabelIDs),
+		Direction:  GmailDirectionFromLabels(raw.LabelIDs),
+		Read:       GmailReadFromLabels(raw.LabelIDs),
 		ThreadID:   raw.ThreadID,
 		EntityID:   messageID,
 		Labels:     append([]string(nil), raw.LabelIDs...),
 		Sources:    []types.MessageSource{src},
 	}
 	if format == "full" {
-		msg.Body = gmailDecodeBody(raw)
+		msg.Body = GmailDecodeBody(raw)
 	}
 	return msg
 }
 
-func gmailMessageURL(id string) string {
+func GmailMessageURL(id string) string {
 	if id == "" {
 		return ""
 	}
 	return "https://mail.google.com/mail/u/0/#all/" + id
 }
 
-// gmailDecodeBody walks the Gmail payload for text/plain (fallback text/html
+// GmailDecodeBody walks the Gmail payload for text/plain (fallback text/html
 // stripped of tags is intentionally not done — agents can fetch HTML via proxy).
-func gmailDecodeBody(raw googleGmailMessage) string {
+func GmailDecodeBody(raw GoogleGmailMessage) string {
 	if raw.Payload == nil {
 		return ""
 	}
 	if data := strings.TrimSpace(raw.Payload.Body.Data); data != "" {
-		return gmailBase64Decode(data)
+		return GmailBase64Decode(data)
 	}
 	for _, part := range raw.Payload.Parts {
 		if strings.HasPrefix(strings.ToLower(part.MimeType), "text/plain") {
 			if data := strings.TrimSpace(part.Body.Data); data != "" {
-				return gmailBase64Decode(data)
+				return GmailBase64Decode(data)
 			}
 		}
 	}
 	for _, part := range raw.Payload.Parts {
 		if strings.HasPrefix(strings.ToLower(part.MimeType), "text/") {
 			if data := strings.TrimSpace(part.Body.Data); data != "" {
-				return gmailBase64Decode(data)
+				return GmailBase64Decode(data)
 			}
 		}
 	}
 	return ""
 }
 
-func gmailBase64Decode(data string) string {
+func GmailBase64Decode(data string) string {
 	// Gmail uses base64url without padding.
 	data = strings.ReplaceAll(data, "-", "+")
 	data = strings.ReplaceAll(data, "_", "/")
@@ -887,9 +887,9 @@ func gmailBase64Decode(data string) string {
 	return string(out)
 }
 
-// gmailListHTTPError keeps the operator-facing reason (API disabled, quota,
+// GmailListHTTPError keeps the operator-facing reason (API disabled, quota,
 // insufficient scope) instead of a bare status code. Fail-open callers log this.
-func gmailListHTTPError(op string, status int, body []byte) error {
+func GmailListHTTPError(op string, status int, body []byte) error {
 	snippet := strings.TrimSpace(string(body))
 	if len(snippet) > 400 {
 		snippet = snippet[:400]
@@ -905,8 +905,8 @@ func gmailListHTTPError(op string, status int, body []byte) error {
 	return fmt.Errorf("gmail %s returned %d: %s", op, status, snippet)
 }
 
-// parseIntLoose parses a positive-ish integer from a query param.
-func parseIntLoose(s string) (int, error) {
+// ParseIntLoose parses a positive-ish integer from a query param.
+func ParseIntLoose(s string) (int, error) {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return 0, fmt.Errorf("empty")
@@ -918,3 +918,6 @@ func parseIntLoose(s string) (int, error) {
 	}
 	return n, nil
 }
+
+// Host returns the runtime host for mail-archive sync (package main).
+func (c *GoogleGmailConnector) Host() Host { return c.host }

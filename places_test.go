@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -31,16 +33,16 @@ func samplePlaces() []types.PlaceVisit {
 }
 
 func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
-	if got := normalizePlaceVisitKind("placeVisit"); got != types.PlaceKindVisit {
+	if got := types.NormalizePlaceVisitKind("placeVisit"); got != types.PlaceKindVisit {
 		t.Fatalf("kind = %q", got)
 	}
-	if got := normalizePlaceVisitKind("activitySegment"); got != types.PlaceKindTrip {
+	if got := types.NormalizePlaceVisitKind("activitySegment"); got != types.PlaceKindTrip {
 		t.Fatalf("kind = %q", got)
 	}
-	if got := normalizeTripMode("IN_PASSENGER_VEHICLE"); got != types.TripModeDrive {
+	if got := types.NormalizeTripMode("IN_PASSENGER_VEHICLE"); got != types.TripModeDrive {
 		t.Fatalf("mode = %q", got)
 	}
-	if got := normalizeTripMode("FLYING"); got != types.TripModeFlight {
+	if got := types.NormalizeTripMode("FLYING"); got != types.TripModeFlight {
 		t.Fatalf("mode = %q", got)
 	}
 }
@@ -244,14 +246,14 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
 				Permissions: types.Permissions{"places": types.AccessPrecise}},
-			{ID: ownTracksServiceID, Name: "OwnTracks", Action: "inject",
+			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject",
 				Permissions: types.Permissions{"places": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
-		timelineServiceID:  &fakePlaceProvider{visits: samplePlaces()},
-		ownTracksServiceID: &fakePlaceProvider{visits: samplePlaces()},
+	srv.connectors = map[string]connectors.ServiceConnector{
+		timelineServiceID:             &fakePlaceProvider{visits: samplePlaces()},
+		connectors.OwnTracksServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -276,7 +278,7 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
@@ -297,7 +299,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
@@ -332,7 +334,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
@@ -367,7 +369,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)

@@ -298,7 +298,7 @@ tests (aggregate, auth) in main/core tests.
 **Done when:** `types` package has no import of `core` or `connectors`;
 build + full suite green.
 
-### Phase 3 — Extract `internal/connectors` (`refactor/issue-15-connectors-pkg`)
+### Phase 3 — Extract `internal/connectors` (`refactor/issue-15-connectors-pkg`) — **done**
 
 Move named providers and their setup:
 

@@ -1,6 +1,10 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
+	"github.com/fudomunro/aegis/internal/types"
+
 	"archive/zip"
 	"bufio"
 	"bytes"
@@ -220,7 +224,7 @@ var errTakeoutCap = fmt.Errorf("takeout import batch cap reached")
 // Gmail and Takeout may both hold the same RFC Message-ID as separate sources
 // of one user collection (issue #139). Only the same service re-import is skipped.
 func (a *MailArchive) hasSourceRecord(rec MailArchiveRecord) (bool, error) {
-	if id := normalizeMessageID(rec.MessageID); id != "" {
+	if id := types.NormalizeMessageID(rec.MessageID); id != "" {
 		var n int
 		err := a.db.QueryRow(`SELECT COUNT(*) FROM mail_messages WHERE message_id=? AND service=?`,
 			id, rec.Service).Scan(&n)
@@ -468,14 +472,14 @@ func recordFromTakeoutMessage(raw []byte, source string) (MailArchiveRecord, err
 		return strings.TrimSpace(v)
 	}
 	subject := decode(msg.Header.Get("Subject"))
-	messageID := normalizeMessageID(msg.Header.Get("Message-ID"))
-	sentAt := gmailHeaderDateRFC3339(msg.Header.Get("Date"))
+	messageID := types.NormalizeMessageID(msg.Header.Get("Message-ID"))
+	sentAt := connectors.GmailHeaderDateRFC3339(msg.Header.Get("Date"))
 	if sentAt == "" {
 		sentAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	fromList := mapGmailAddressHeader(decode(msg.Header.Get("From")))
-	toList := mapGmailAddressHeader(decode(msg.Header.Get("To")))
-	ccList := mapGmailAddressHeader(decode(msg.Header.Get("Cc")))
+	fromList := connectors.MapGmailAddressHeader(decode(msg.Header.Get("From")))
+	toList := connectors.MapGmailAddressHeader(decode(msg.Header.Get("To")))
+	ccList := connectors.MapGmailAddressHeader(decode(msg.Header.Get("Cc")))
 	body := extractRFC822TextBody(msg)
 	snippet := body
 	if len(snippet) > 200 {

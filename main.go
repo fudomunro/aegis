@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"flag"
 	"fmt"
 	"io"
@@ -295,7 +297,7 @@ func main() {
 		cache:         NewCache(),
 		tokens:        tokens,
 		oauthStates:   NewStateStore(),
-		connectors:    make(map[string]ServiceConnector),
+		connectors:    make(map[string]connectors.ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
 		apps:          apps,
@@ -311,37 +313,37 @@ func main() {
 	}
 
 	// Register service connectors.
-	spotifyConn := NewSpotifyConnector(srv)
+	spotifyConn := connectors.NewSpotifyConnector(srv)
 	srv.connectors["spotify"] = spotifyConn
-	ytMusicConn := NewYouTubeMusicConnector(srv)
+	ytMusicConn := connectors.NewYouTubeMusicConnector(srv)
 	srv.connectors["youtube-music"] = ytMusicConn
-	amzMusicConn := NewAmazonMusicConnector(srv)
+	amzMusicConn := connectors.NewAmazonMusicConnector(srv)
 	srv.connectors["amazon-music"] = amzMusicConn
-	gPhotosConn := NewGooglePhotosConnector(srv)
-	srv.connectors[googlePhotosServiceID] = gPhotosConn
-	gContactsConn := NewGoogleContactsConnector(srv)
-	srv.connectors[googleContactsServiceID] = gContactsConn
-	immichConn := NewImmichConnector(srv)
-	srv.connectors[immichServiceID] = immichConn
-	gCalendarConn := NewGoogleCalendarConnector(srv)
-	srv.connectors[googleCalendarServiceID] = gCalendarConn
-	gGmailConn := NewGoogleGmailConnector(srv)
-	srv.connectors[googleGmailServiceID] = gGmailConn
+	gPhotosConn := connectors.NewGooglePhotosConnector(srv)
+	srv.connectors[connectors.GooglePhotosServiceID] = gPhotosConn
+	gContactsConn := connectors.NewGoogleContactsConnector(srv)
+	srv.connectors[connectors.GoogleContactsServiceID] = gContactsConn
+	immichConn := connectors.NewImmichConnector(srv)
+	srv.connectors[connectors.ImmichServiceID] = immichConn
+	gCalendarConn := connectors.NewGoogleCalendarConnector(srv)
+	srv.connectors[connectors.GoogleCalendarServiceID] = gCalendarConn
+	gGmailConn := connectors.NewGoogleGmailConnector(srv)
+	srv.connectors[connectors.GoogleGmailServiceID] = gGmailConn
 	// Financial transactions (issue #141): YNAB live API + local Quicken import.
-	srv.connectors[ynabServiceID] = NewYNABConnector(srv)
+	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
 	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, quickenStore)
 	// Location history (issue #142): OwnTracks live + local Google Timeline import.
-	srv.connectors[ownTracksServiceID] = NewOwnTracksConnector(srv)
+	srv.connectors[connectors.OwnTracksServiceID] = connectors.NewOwnTracksConnector(srv)
 	srv.connectors[timelineServiceID] = NewTimelineConnector(timelineStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
 	for _, svc := range cfg.ServiceSnapshots() {
-		if isSampleCalendarService(&svc) {
-			srv.connectors[svc.ID] = NewSampleCalendarConnector()
+		if connectors.IsSampleCalendarService(&connectors.ServiceInfo{ID: svc.ID, Endpoint: svc.Endpoint}) {
+			srv.connectors[svc.ID] = connectors.NewSampleCalendarConnector()
 		}
 	}
-	srv.connectors[sampleCalendarServiceID] = NewSampleCalendarConnector()
+	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()
 
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)

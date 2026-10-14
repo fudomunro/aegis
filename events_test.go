@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -31,7 +33,7 @@ func (f *fakeCalendarEventProvider) ListCalendarEvents(context.Context) ([]types
 }
 
 func TestCalendarEventIdentityKey_PrefersICalUID(t *testing.T) {
-	e := newCalendarEvent("google-calendar", "Google Calendar", "id1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
+	e := types.NewCalendarEvent("google-calendar", "Google Calendar", "id1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
 	e.EntityID = "uid@google.com"
 	if got := calendarEventIdentityKey(e); got != "ical:uid@google.com" {
 		t.Fatalf("key = %q", got)
@@ -39,19 +41,19 @@ func TestCalendarEventIdentityKey_PrefersICalUID(t *testing.T) {
 }
 
 func TestCalendarEventIdentityKey_TitleStartFallback(t *testing.T) {
-	e := newCalendarEvent("google-calendar", "Google Calendar", "id1", "  Standup  ", "2024-06-01T09:00:00+00:00", "2024-06-01T09:30:00Z", false)
+	e := types.NewCalendarEvent("google-calendar", "Google Calendar", "id1", "  Standup  ", "2024-06-01T09:00:00+00:00", "2024-06-01T09:30:00Z", false)
 	if got := calendarEventIdentityKey(e); got != "title:standup|start:2024-06-01T09:00:00Z|allday:0" {
 		t.Fatalf("key = %q", got)
 	}
 }
 
 func TestMergeCalendarEvents_ByICalUIDAndTitleStart(t *testing.T) {
-	a := newCalendarEvent("google-calendar", "Google Calendar", "a1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
+	a := types.NewCalendarEvent("google-calendar", "Google Calendar", "a1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
 	a.EntityID = "shared@ical"
-	b := newCalendarEvent("outlook-calendar", "Outlook Calendar", "b1", "Different title", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
+	b := types.NewCalendarEvent("outlook-calendar", "Outlook Calendar", "b1", "Different title", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false)
 	b.EntityID = "shared@ical"
-	c := newCalendarEvent("google-calendar", "Google Calendar", "c1", "Planning", "2024-06-02T14:00:00Z", "2024-06-02T15:00:00Z", false)
-	d := newCalendarEvent("outlook-calendar", "Outlook Calendar", "d1", "Planning", "2024-06-02T14:00:00+00:00", "2024-06-02T15:00:00Z", false)
+	c := types.NewCalendarEvent("google-calendar", "Google Calendar", "c1", "Planning", "2024-06-02T14:00:00Z", "2024-06-02T15:00:00Z", false)
+	d := types.NewCalendarEvent("outlook-calendar", "Outlook Calendar", "d1", "Planning", "2024-06-02T14:00:00+00:00", "2024-06-02T15:00:00Z", false)
 
 	merged := MergeCalendarEvents([]types.CalendarEvent{a, b, c, d})
 	if len(merged) != 2 {
@@ -67,8 +69,8 @@ func TestMergeCalendarEvents_ByICalUIDAndTitleStart(t *testing.T) {
 }
 
 func TestMergeCalendarEvents_DistinctWhenDifferentStart(t *testing.T) {
-	a := newCalendarEvent("google-calendar", "Google Calendar", "a", "Meeting", "2024-06-01T09:00:00Z", "", false)
-	b := newCalendarEvent("google-calendar", "Google Calendar", "b", "Meeting", "2024-06-01T10:00:00Z", "", false)
+	a := types.NewCalendarEvent("google-calendar", "Google Calendar", "a", "Meeting", "2024-06-01T09:00:00Z", "", false)
+	b := types.NewCalendarEvent("google-calendar", "Google Calendar", "b", "Meeting", "2024-06-01T10:00:00Z", "", false)
 	merged := MergeCalendarEvents([]types.CalendarEvent{a, b})
 	if len(merged) != 2 {
 		t.Fatalf("merged = %d, want 2", len(merged))
@@ -76,10 +78,10 @@ func TestMergeCalendarEvents_DistinctWhenDifferentStart(t *testing.T) {
 }
 
 func TestMergeCalendarEvents_MergesAttendeesAsContacts(t *testing.T) {
-	a := newCalendarEvent("google-calendar", "Google Calendar", "a", "Allhands", "2024-06-01T09:00:00Z", "", false)
+	a := types.NewCalendarEvent("google-calendar", "Google Calendar", "a", "Allhands", "2024-06-01T09:00:00Z", "", false)
 	a.EntityID = "allhands@ical"
 	a.Attendees = []types.Contact{{Name: "Ada", Emails: []string{"Ada@Example.com"}}}
-	b := newCalendarEvent("outlook-calendar", "Outlook Calendar", "b", "Allhands", "2024-06-01T09:00:00Z", "", false)
+	b := types.NewCalendarEvent("outlook-calendar", "Outlook Calendar", "b", "Allhands", "2024-06-01T09:00:00Z", "", false)
 	b.EntityID = "allhands@ical"
 	b.Attendees = []types.Contact{{Name: "Ada L", Emails: []string{"ada@example.com"}, Phones: []string{"+1 555 0100"}}}
 	org := types.Contact{Name: "Grace", Emails: []string{"grace@example.com"}}
@@ -106,13 +108,13 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 		{ID: "outlook-calendar", Name: "Outlook Calendar", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
-			newCalendarEvent("google-calendar", "Google Calendar", "g2", "Offsite", "2024-06-10T00:00:00Z", "2024-06-11T00:00:00Z", true),
+			types.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
+			types.NewCalendarEvent("google-calendar", "Google Calendar", "g2", "Offsite", "2024-06-10T00:00:00Z", "2024-06-11T00:00:00Z", true),
 		}},
 		"outlook-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			newCalendarEvent("outlook-calendar", "Outlook Calendar", "o1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
+			types.NewCalendarEvent("outlook-calendar", "Outlook Calendar", "o1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
 		}},
 	}
 
@@ -155,9 +157,9 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 		},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
+			types.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
 		}},
 	}
 	// Connector fixture already sets Canonical; stamp should keep it true.
@@ -196,9 +198,9 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 		Permissions: types.Permissions{"events": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			newCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
+			types.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
@@ -213,7 +215,7 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{err: types.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
@@ -236,7 +238,7 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 func TestHandleLibraryEvents_ErrorService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{err: errors.New("boom")},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
@@ -321,7 +323,7 @@ func TestStampCalendarEventCanonical_OnlyWhenConfigured(t *testing.T) {
 }
 
 func TestGoogleCalendarDefaultWindow_CoversPastAndFuture(t *testing.T) {
-	minS, maxS := googleCalendarDefaultWindow()
+	minS, maxS := connectors.GoogleCalendarDefaultWindow()
 	minT, err := time.Parse(time.RFC3339, minS)
 	if err != nil {
 		t.Fatalf("timeMin parse: %v", err)

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,8 +12,6 @@ import (
 	"net/http"
 	"strings"
 	"sync"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -81,7 +81,7 @@ type Server struct {
 	oauthStates *StateStore
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
 	refreshFlight tokenFlight
-	connectors    map[string]ServiceConnector
+	connectors    map[string]connectors.ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
@@ -369,17 +369,6 @@ func warnIdentityMismatch(logger *slog.Logger, apertureLogin string, r *http.Req
 			"path", r.URL.Path,
 		)
 	}
-}
-
-// ServiceConnector is an optional interface for services that provide
-// intelligent proxying beyond simple request forwarding.
-type ServiceConnector interface {
-	// Capabilities returns what data types and operations this connector supports.
-	Capabilities() types.ServiceCapabilities
-	// SystemInstructions returns the system message for agents referencing this service.
-	SystemInstructions(baseURL string) string
-	// HandleProxy handles a proxied request for this service.
-	HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string)
 }
 
 func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {

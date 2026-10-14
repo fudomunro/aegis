@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -30,11 +30,11 @@ func NewGoogleCalendarConnector(host Host) *GoogleCalendarConnector {
 	return &GoogleCalendarConnector{host: host}
 }
 
-// googleCalendarServiceID is the connector/service ID used in config, tokens,
+// GoogleCalendarServiceID is the connector/service ID used in config, tokens,
 // sources[], and admin. Documented name is "Google Calendar".
-const googleCalendarServiceID = "google-calendar"
+const GoogleCalendarServiceID = "google-calendar"
 
-const googleCalendarServiceName = "Google Calendar"
+const GoogleCalendarServiceName = "Google Calendar"
 
 // Default library window: recent past + near future, so "my calendar" answers
 // cover both last month's meetings and upcoming plans without unbounded scans.
@@ -44,9 +44,9 @@ const (
 	googleCalendarMaxCalendars      = 20
 )
 
-// googleCalendarUpstreamBase returns the configured Calendar API base.
-func (c *GoogleCalendarConnector) googleCalendarUpstreamBase() string {
-	return c.host.UpstreamBaseFor(googleCalendarServiceID, "https://www.googleapis.com/calendar/v3")
+// GoogleCalendarUpstreamBase returns the configured Calendar API base.
+func (c *GoogleCalendarConnector) GoogleCalendarUpstreamBase() string {
+	return c.host.UpstreamBaseFor(GoogleCalendarServiceID, "https://www.googleapis.com/calendar/v3")
 }
 
 // Capabilities returns what Google Calendar data types and operations are supported.
@@ -126,7 +126,7 @@ func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Google Calendar is referenced.
 func (c *GoogleCalendarConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + googleCalendarServiceID
+	base := root + "/v1/services/" + GoogleCalendarServiceID
 	return fmt.Sprintf(`When the user's request involves Google Calendar, their schedule, meetings, or calendar events, you MUST use the Aegis proxy at %s instead of calling Google Calendar API directly.
 
 For "my calendar" across every connected calendar service, prefer the unified library endpoint first:
@@ -145,76 +145,76 @@ Always include the full proxy base URL in your requests.`, base, root)
 
 // HandleProxy processes a Google Calendar API request through the connector.
 func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", googleCalendarServiceID, "method", r.Method, "path", remainingPath)
+	logger := slog.With("service", GoogleCalendarServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.host.GetValidToken(googleCalendarServiceID, logger)
+	token := c.host.GetValidToken(GoogleCalendarServiceID, logger)
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 		return
 	}
 
 	if remainingPath == "/me/events" || remainingPath == "/me/events/" ||
 		remainingPath == "/events" || remainingPath == "/events/" {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleListEvents(w, r)
+		c.HandleListEvents(w, r)
 		return
 	}
 
 	if remainingPath == "/me/calendars" || remainingPath == "/me/calendars/" ||
 		remainingPath == "/calendars" || remainingPath == "/calendars/" {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleListCalendars(w, r)
+		c.HandleListCalendars(w, r)
 		return
 	}
 
-	if calendarID, eventID, ok := calendarEventPathParts(remainingPath); ok {
+	if calendarID, eventID, ok := CalendarEventPathParts(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		if eventID != "" {
-			c.handleGetEvent(w, r, token, calendarID, eventID)
+			c.HandleGetEvent(w, r, token, calendarID, eventID)
 			return
 		}
-		c.handleListCalendarEvents(w, r, calendarID)
+		c.HandleListCalendarEvents(w, r, calendarID)
 		return
 	}
 
-	if id, ok := bareEventIDFromProxyPath(remainingPath); ok {
+	if id, ok := BareEventIDFromProxyPath(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleGetEvent(w, r, token, "primary", id)
+		c.HandleGetEvent(w, r, token, "primary", id)
 		return
 	}
 
 	// Generic authenticated pass-through for other Calendar API paths.
-	upstreamURL := c.googleCalendarUpstreamBase() + remainingPath
+	upstreamURL := c.GoogleCalendarUpstreamBase() + remainingPath
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
 	if err != nil {
 		logger.Error("failed to build upstream request", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -223,10 +223,10 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	io.Copy(w, resp.Body)
 }
 
-// calendarEventPathParts parses /calendars/{id}/events and
+// CalendarEventPathParts parses /calendars/{id}/events and
 // /calendars/{id}/events/{eventId} (also under /me/calendars/...).
 // eventID is empty for list requests.
-func calendarEventPathParts(remainingPath string) (calendarID, eventID string, ok bool) {
+func CalendarEventPathParts(remainingPath string) (calendarID, eventID string, ok bool) {
 	p := strings.Trim(remainingPath, "/")
 	if p == "" {
 		return "", "", false
@@ -264,8 +264,8 @@ func calendarEventPathParts(remainingPath string) (calendarID, eventID string, o
 	return "", "", false
 }
 
-// bareEventIDFromProxyPath extracts an event id from /events/{id} or /me/events/{id}.
-func bareEventIDFromProxyPath(remainingPath string) (string, bool) {
+// BareEventIDFromProxyPath extracts an event id from /events/{id} or /me/events/{id}.
+func BareEventIDFromProxyPath(remainingPath string) (string, bool) {
 	p := remainingPath
 	for _, prefix := range []string{"/me/events/", "/events/"} {
 		if strings.HasPrefix(p, prefix) {
@@ -276,36 +276,36 @@ func bareEventIDFromProxyPath(remainingPath string) (string, bool) {
 	return "", false
 }
 
-// eventsFreeBusyOnly reports whether this service's events permission is the
+// EventsFreeBusyOnly reports whether this service's events permission is the
 // free/busy share (issue #128). Proxy responses must drop titles/attendees.
-func (c *GoogleCalendarConnector) eventsFreeBusyOnly() bool {
+func (c *GoogleCalendarConnector) EventsFreeBusyOnly() bool {
 	if c.host == nil {
 		return false
 	}
-	svc := c.host.ServiceConfig(googleCalendarServiceID)
+	svc := c.host.ServiceConfig(GoogleCalendarServiceID)
 	if svc == nil {
 		return false
 	}
 	return types.IsFreeBusyAccess(svc.Permissions.For("events"))
 }
 
-func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *http.Request) {
-	events, truncated, err := c.listEventsWithWindow(r.Context(), r.URL.Query())
+func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {
+	events, truncated, err := c.ListEventsWithWindow(r.Context(), r.URL.Query())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			writeJSONError(w, http.StatusUnauthorized,
-				"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
+			WriteJSONError(w, http.StatusUnauthorized,
+				"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 			return
 		}
 		slog.Warn("google calendar list events failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
 		return
 	}
 	if events == nil {
 		events = []types.CalendarEvent{}
 	}
-	if c.eventsFreeBusyOnly() {
-		events = redactCalendarEventsFreeBusy(events)
+	if c.EventsFreeBusyOnly() {
+		events = types.RedactCalendarEventsFreeBusy(events)
 	}
 	result := types.CalendarEventList{
 		Events:    events,
@@ -313,7 +313,7 @@ func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *htt
 		Synced:    true,
 		Truncated: truncated,
 		ByService: map[string]types.LibraryServiceStatus{
-			googleCalendarServiceID: {
+			GoogleCalendarServiceID: {
 				Status:    types.LibraryStatusOK,
 				Count:     len(events),
 				Truncated: truncated,
@@ -322,38 +322,38 @@ func (c *GoogleCalendarConnector) handleListEvents(w http.ResponseWriter, r *htt
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build events list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-func (c *GoogleCalendarConnector) handleListCalendarEvents(w http.ResponseWriter, r *http.Request, calendarID string) {
-	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
+func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter, r *http.Request, calendarID string) {
+	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 		return
 	}
-	events, truncated, err := c.listEventsForCalendar(r.Context(), token, calendarID, r.URL.Query())
+	events, truncated, err := c.ListEventsForCalendar(r.Context(), token, calendarID, r.URL.Query())
 	if err != nil {
 		slog.Warn("google calendar list calendar events failed", "calendar", calendarID, "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
 		return
 	}
 	if events == nil {
 		events = []types.CalendarEvent{}
 	}
-	if c.eventsFreeBusyOnly() {
-		events = redactCalendarEventsFreeBusy(events)
+	if c.EventsFreeBusyOnly() {
+		events = types.RedactCalendarEventsFreeBusy(events)
 	}
 	result := types.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 		Synced: true,
 		ByService: map[string]types.LibraryServiceStatus{
-			googleCalendarServiceID: {
+			GoogleCalendarServiceID: {
 				Status:    types.LibraryStatusOK,
 				Count:     len(events),
 				Truncated: truncated,
@@ -363,24 +363,24 @@ func (c *GoogleCalendarConnector) handleListCalendarEvents(w http.ResponseWriter
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build events list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-func (c *GoogleCalendarConnector) handleListCalendars(w http.ResponseWriter, r *http.Request) {
-	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
+func (c *GoogleCalendarConnector) HandleListCalendars(w http.ResponseWriter, r *http.Request) {
+	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Google Calendar token — authorize at /v1/auth/"+googleCalendarServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 		return
 	}
-	calendars, truncated, err := c.listCalendars(r.Context(), token, r.URL.Query())
+	calendars, truncated, err := c.ListCalendars(r.Context(), token, r.URL.Query())
 	if err != nil {
 		slog.Warn("google calendar list calendars failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch calendars from Google Calendar")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch calendars from Google Calendar")
 		return
 	}
 	result := map[string]any{
@@ -388,7 +388,7 @@ func (c *GoogleCalendarConnector) handleListCalendars(w http.ResponseWriter, r *
 		"total":     len(calendars),
 		"truncated": truncated,
 		"by_service": map[string]types.LibraryServiceStatus{
-			googleCalendarServiceID: {
+			GoogleCalendarServiceID: {
 				Status:    types.LibraryStatusOK,
 				Count:     len(calendars),
 				Truncated: truncated,
@@ -397,31 +397,31 @@ func (c *GoogleCalendarConnector) handleListCalendars(w http.ResponseWriter, r *
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build calendars list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build calendars list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-func (c *GoogleCalendarConnector) handleGetEvent(w http.ResponseWriter, r *http.Request, token, calendarID, eventID string) {
-	upstreamURL := c.googleCalendarUpstreamBase() + "/calendars/" + url.PathEscape(calendarID) +
+func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.Request, token, calendarID, eventID string) {
+	upstreamURL := c.GoogleCalendarUpstreamBase() + "/calendars/" + url.PathEscape(calendarID) +
 		"/events/" + url.PathEscape(eventID) + "?singleEvents=true"
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Google Calendar response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Calendar response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -432,16 +432,16 @@ func (c *GoogleCalendarConnector) handleGetEvent(w http.ResponseWriter, r *http.
 	}
 	var raw googleCalendarEvent
 	if err := json.Unmarshal(data, &raw); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to parse Google Calendar response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to parse Google Calendar response")
 		return
 	}
-	ev := mapGoogleCalendarEvent(raw, calendarID, googleCalendarServiceName)
-	if c.eventsFreeBusyOnly() {
-		ev = RedactCalendarEventFreeBusy(ev)
+	ev := MapGoogleCalendarEvent(raw, calendarID, GoogleCalendarServiceName)
+	if c.EventsFreeBusyOnly() {
+		ev = types.RedactCalendarEventFreeBusy(ev)
 	}
 	out, err := json.Marshal(ev)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to encode event")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode event")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -451,22 +451,22 @@ func (c *GoogleCalendarConnector) handleGetEvent(w http.ResponseWriter, r *http.
 // ListCalendarEvents implements CalendarEventProvider. Fetches calendarList,
 // then events from each readable calendar within the default time window.
 func (c *GoogleCalendarConnector) ListCalendarEvents(ctx context.Context) ([]types.CalendarEvent, bool, error) {
-	return c.listEventsWithWindow(ctx, nil)
+	return c.ListEventsWithWindow(ctx, nil)
 }
 
-func (c *GoogleCalendarConnector) listEventsWithWindow(ctx context.Context, q url.Values) ([]types.CalendarEvent, bool, error) {
-	token := c.host.GetValidToken(googleCalendarServiceID, slog.Default())
+func (c *GoogleCalendarConnector) ListEventsWithWindow(ctx context.Context, q url.Values) ([]types.CalendarEvent, bool, error) {
+	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
-	calendars, calTruncated, err := c.listCalendars(ctx, token, nil)
+	calendars, calTruncated, err := c.ListCalendars(ctx, token, nil)
 	if err != nil {
 		return nil, false, err
 	}
 	var all []types.CalendarEvent
 	truncated := calTruncated
 	for _, cal := range calendars {
-		events, tr, err := c.listEventsForCalendar(ctx, token, cal.ID, q)
+		events, tr, err := c.ListEventsForCalendar(ctx, token, cal.ID, q)
 		if err != nil {
 			// Fail-open per calendar: one unreadable calendar must not empty the library.
 			slog.Warn("google calendar events fetch failed", "calendar", cal.ID, "error", err)
@@ -494,15 +494,15 @@ type googleCalendarList struct {
 	NextPageToken string                   `json:"nextPageToken"`
 }
 
-func (c *GoogleCalendarConnector) listCalendars(ctx context.Context, token string, q url.Values) ([]googleCalendarListItem, bool, error) {
-	base := c.googleCalendarUpstreamBase() + "/users/me/calendarList"
+func (c *GoogleCalendarConnector) ListCalendars(ctx context.Context, token string, q url.Values) ([]googleCalendarListItem, bool, error) {
+	base := c.GoogleCalendarUpstreamBase() + "/users/me/calendarList"
 	pageToken := ""
 	if q != nil {
 		pageToken = q.Get("pageToken")
 	}
 	var all []googleCalendarListItem
 	truncated := false
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		u := base + "?maxResults=250&showHidden=true"
 		if pageToken != "" {
 			u += "&pageToken=" + url.QueryEscape(pageToken)
@@ -512,7 +512,7 @@ func (c *GoogleCalendarConnector) listCalendars(ctx context.Context, token strin
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -548,15 +548,15 @@ func (c *GoogleCalendarConnector) listCalendars(ctx context.Context, token strin
 		if pageToken == "" {
 			break
 		}
-		if page == libraryPageCap-1 && pageToken != "" {
+		if page == LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
 	return all, truncated, nil
 }
 
-// googleCalendarEventTime is Google's start/end payload (dateTime or date).
-type googleCalendarEventTime struct {
+// GoogleCalendarEventTime is Google's start/end payload (dateTime or date).
+type GoogleCalendarEventTime struct {
 	DateTime string `json:"dateTime"`
 	Date     string `json:"date"`
 	TimeZone string `json:"timeZone"`
@@ -577,8 +577,8 @@ type googleCalendarEvent struct {
 	Summary     string                  `json:"summary"`
 	Description string                  `json:"description"`
 	Location    string                  `json:"location"`
-	Start       googleCalendarEventTime `json:"start"`
-	End         googleCalendarEventTime `json:"end"`
+	Start       GoogleCalendarEventTime `json:"start"`
+	End         GoogleCalendarEventTime `json:"end"`
 	Organizer   *struct {
 		Email       string `json:"email"`
 		DisplayName string `json:"displayName"`
@@ -593,9 +593,9 @@ type googleCalendarEventsList struct {
 	NextPageToken string                `json:"nextPageToken"`
 }
 
-func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]types.CalendarEvent, bool, error) {
-	base := c.googleCalendarUpstreamBase() + "/calendars/" + url.PathEscape(calendarID) + "/events"
-	timeMin, timeMax := googleCalendarDefaultWindow()
+func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]types.CalendarEvent, bool, error) {
+	base := c.GoogleCalendarUpstreamBase() + "/calendars/" + url.PathEscape(calendarID) + "/events"
+	timeMin, timeMax := GoogleCalendarDefaultWindow()
 	if q != nil {
 		if v := strings.TrimSpace(q.Get("timeMin")); v != "" {
 			timeMin = v
@@ -618,7 +618,7 @@ func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, tok
 	calName := calendarID
 	var all []types.CalendarEvent
 	truncated := false
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("singleEvents", "true")
 		values.Set("orderBy", "startTime")
@@ -638,7 +638,7 @@ func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, tok
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -655,7 +655,7 @@ func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, tok
 			return nil, false, err
 		}
 		for _, item := range raw.Items {
-			mapped := mapGoogleCalendarEvent(item, calendarID, calName)
+			mapped := MapGoogleCalendarEvent(item, calendarID, calName)
 			if mapped.Title == "" && mapped.EntityID == "" && len(mapped.Sources) == 0 {
 				continue
 			}
@@ -665,28 +665,28 @@ func (c *GoogleCalendarConnector) listEventsForCalendar(ctx context.Context, tok
 		if pageToken == "" {
 			break
 		}
-		if page == libraryPageCap-1 && pageToken != "" {
+		if page == LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
 	return all, truncated, nil
 }
 
-// googleCalendarDefaultWindow is the library listing window (past + future).
-func googleCalendarDefaultWindow() (timeMin, timeMax string) {
+// GoogleCalendarDefaultWindow is the library listing window (past + future).
+func GoogleCalendarDefaultWindow() (timeMin, timeMax string) {
 	now := time.Now().UTC()
 	return now.AddDate(0, 0, -googleCalendarDefaultPastDays).Format(time.RFC3339),
 		now.AddDate(0, 0, googleCalendarDefaultFutureDays).Format(time.RFC3339)
 }
 
-// mapGoogleCalendarEvent converts a Google Calendar event into the neutral shape.
-func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName string) types.CalendarEvent {
-	startAt, allDay := googleCalendarTimeToRFC3339(raw.Start)
-	endAt, _ := googleCalendarTimeToRFC3339(raw.End)
+// MapGoogleCalendarEvent converts a Google Calendar event into the neutral shape.
+func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName string) types.CalendarEvent {
+	startAt, allDay := GoogleCalendarTimeToRFC3339(raw.Start)
+	endAt, _ := GoogleCalendarTimeToRFC3339(raw.End)
 
 	src := types.CalendarEventSource{
-		Service:     googleCalendarServiceID,
-		ServiceName: googleCalendarServiceName,
+		Service:     GoogleCalendarServiceID,
+		ServiceName: GoogleCalendarServiceName,
 		ID:          raw.ID,
 		CalendarID:  calendarID,
 		URL:         raw.HTMLLink,
@@ -722,9 +722,9 @@ func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 	}
 
 	if raw.Organizer != nil {
-		org := newContact(
-			googleCalendarServiceID,
-			googleCalendarServiceName,
+		org := types.NewContact(
+			GoogleCalendarServiceID,
+			GoogleCalendarServiceName,
 			"",
 			raw.Organizer.DisplayName,
 			[]string{raw.Organizer.Email},
@@ -737,9 +737,9 @@ func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 		if strings.TrimSpace(att.Email) == "" && strings.TrimSpace(att.DisplayName) == "" {
 			continue
 		}
-		c := newContact(
-			googleCalendarServiceID,
-			googleCalendarServiceName,
+		c := types.NewContact(
+			GoogleCalendarServiceID,
+			GoogleCalendarServiceName,
 			"",
 			att.DisplayName,
 			[]string{att.Email},
@@ -759,9 +759,9 @@ func mapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 	return ev
 }
 
-// googleCalendarTimeToRFC3339 maps Google dateTime or date to RFC3339 UTC.
+// GoogleCalendarTimeToRFC3339 maps Google dateTime or date to RFC3339 UTC.
 // All-day events use the date at midnight UTC and set allDay=true.
-func googleCalendarTimeToRFC3339(t googleCalendarEventTime) (string, bool) {
+func GoogleCalendarTimeToRFC3339(t GoogleCalendarEventTime) (string, bool) {
 	if strings.TrimSpace(t.DateTime) != "" {
 		raw := strings.TrimSpace(t.DateTime)
 		if parsed, err := time.Parse(time.RFC3339Nano, raw); err == nil {

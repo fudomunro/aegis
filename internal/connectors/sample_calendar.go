@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 // without live Google OAuth.
 type SampleCalendarConnector struct{}
 
-// sampleCalendarServiceID is the config connector/service id for fixtures.
-const sampleCalendarServiceID = "sample-calendar"
+// SampleCalendarServiceID is the config connector/service id for fixtures.
+const SampleCalendarServiceID = "sample-calendar"
 
-const sampleCalendarServiceName = "Sample Calendar"
+const SampleCalendarServiceName = "Sample Calendar"
 
-// sampleCalendarEndpoint marks a service as fixture-backed.
-const sampleCalendarEndpoint = "sample://calendar"
+// SampleCalendarEndpoint marks a service as fixture-backed.
+const SampleCalendarEndpoint = "sample://calendar"
 
 func NewSampleCalendarConnector() *SampleCalendarConnector {
 	return &SampleCalendarConnector{}
@@ -55,11 +55,11 @@ func (c *SampleCalendarConnector) SystemInstructions(baseURL string) string {
 
 func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	events := sampleCalendarEvents()
-	writeJSON(w, types.CalendarEventList{
+	events := SampleCalendarEvents()
+	WriteJSON(w, types.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 	})
@@ -68,12 +68,12 @@ func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 // ListCalendarEvents implements CalendarEventProvider with deterministic
 // synthetic events near "now" so free/busy demos show busy blocks today.
 func (c *SampleCalendarConnector) ListCalendarEvents(_ context.Context) ([]types.CalendarEvent, bool, error) {
-	return sampleCalendarEvents(), false, nil
+	return SampleCalendarEvents(), false, nil
 }
 
-// sampleCalendarEvents returns fictional events anchored a few days from now.
+// SampleCalendarEvents returns fictional events anchored a few days from now.
 // Cancelled rows exist to prove free/busy omits them (issue #128).
-func sampleCalendarEvents() []types.CalendarEvent {
+func SampleCalendarEvents() []types.CalendarEvent {
 	base := time.Now().UTC().Truncate(24 * time.Hour)
 	day := func(offset int, hour, minute, durMin int) (start, end string) {
 		s := base.AddDate(0, 0, offset).Add(time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute)
@@ -91,23 +91,23 @@ func sampleCalendarEvents() []types.CalendarEvent {
 	allDayStart := base.AddDate(0, 0, 3).Format(time.RFC3339)
 	allDayEnd := base.AddDate(0, 0, 4).Format(time.RFC3339)
 
-	full := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-1", "Project kickoff", s1, e1, false)
+	full := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-1", "Project kickoff", s1, e1, false)
 	full.Description = "Bring the roadmap draft"
 	full.Location = "Room 4B"
 	full.Attendees = []types.Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}}
 	full.EntityID = "kickoff@synthetic.example"
 
-	oneOnOne := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-2", "1:1 with Grace", s2, e2, false)
+	oneOnOne := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-2", "1:1 with Grace", s2, e2, false)
 	oneOnOne.EntityID = "oneonone@synthetic.example"
 
-	workshop := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-3", "Design workshop", s3, e3, false)
+	workshop := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-3", "Design workshop", s3, e3, false)
 	workshop.Location = "Studio B"
 	workshop.EntityID = "workshop@synthetic.example"
 
-	allday := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-4", "Offsite", allDayStart, allDayEnd, true)
+	allday := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-4", "Offsite", allDayStart, allDayEnd, true)
 	allday.EntityID = "offsite@synthetic.example"
 
-	cancelled := newCalendarEvent(sampleCalendarServiceID, sampleCalendarServiceName, "s-ev-5", "Cancelled standup", s5, e5, false)
+	cancelled := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-5", "Cancelled standup", s5, e5, false)
 	cancelled.Status = "cancelled"
 	cancelled.EntityID = "standup@synthetic.example"
 
@@ -115,9 +115,9 @@ func sampleCalendarEvents() []types.CalendarEvent {
 }
 
 // isSampleCalendarService reports whether a service endpoint is fixture-backed.
-func isSampleCalendarService(svc *Service) bool {
+func IsSampleCalendarService(svc *ServiceInfo) bool {
 	if svc == nil {
 		return false
 	}
-	return svc.Endpoint == sampleCalendarEndpoint || svc.ID == sampleCalendarServiceID
+	return svc.Endpoint == SampleCalendarEndpoint || svc.ID == SampleCalendarServiceID
 }

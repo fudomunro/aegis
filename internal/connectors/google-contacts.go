@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -26,18 +26,18 @@ func NewGoogleContactsConnector(host Host) *GoogleContactsConnector {
 	return &GoogleContactsConnector{host: host}
 }
 
-// googleContactsServiceID is the connector/service ID used in config, tokens,
+// GoogleContactsServiceID is the connector/service ID used in config, tokens,
 // sources[], and admin. Documented name is "Google Contacts".
-const googleContactsServiceID = "google"
+const GoogleContactsServiceID = "google"
 
-const googleContactsServiceName = "Google Contacts"
+const GoogleContactsServiceName = "Google Contacts"
 
 // personFields is the People API projection needed for neutral contacts.
 const googleContactsPersonFields = "names,emailAddresses,phoneNumbers,organizations"
 
-// googleContactsUpstreamBase returns the configured People API base.
-func (c *GoogleContactsConnector) googleContactsUpstreamBase() string {
-	return c.host.UpstreamBaseFor(googleContactsServiceID, "https://people.googleapis.com/v1")
+// GoogleContactsUpstreamBase returns the configured People API base.
+func (c *GoogleContactsConnector) GoogleContactsUpstreamBase() string {
+	return c.host.UpstreamBaseFor(GoogleContactsServiceID, "https://people.googleapis.com/v1")
 }
 
 // Capabilities returns what Google Contacts data types and operations are supported.
@@ -84,7 +84,7 @@ func (c *GoogleContactsConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Google Contacts is referenced.
 func (c *GoogleContactsConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + googleContactsServiceID
+	base := root + "/v1/services/" + GoogleContactsServiceID
 	return fmt.Sprintf(`When the user's request involves Google Contacts or their address book, you MUST use the Aegis proxy at %s instead of calling Google People API directly.
 
 For "my contacts" across every connected contact service, prefer the unified library endpoint first:
@@ -100,12 +100,12 @@ Always include the full proxy base URL in your requests.`, base, root)
 
 // HandleProxy processes a Google People API request through the connector.
 func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", googleContactsServiceID, "method", r.Method, "path", remainingPath)
+	logger := slog.With("service", GoogleContactsServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.host.GetValidToken(googleContactsServiceID, logger)
+	token := c.host.GetValidToken(GoogleContactsServiceID, logger)
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Google Contacts token — authorize at /v1/auth/"+googleContactsServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Google Contacts token — authorize at /v1/auth/"+GoogleContactsServiceID+"/login")
 		return
 	}
 
@@ -113,41 +113,41 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	if remainingPath == "/me/contacts" || remainingPath == "/me/contacts/" ||
 		remainingPath == "/contacts" || remainingPath == "/contacts/" {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleListContacts(w, r)
+		c.HandleListContacts(w, r)
 		return
 	}
 
-	if id, ok := contactIDFromProxyPath(remainingPath); ok {
+	if id, ok := ContactIDFromProxyPath(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleGetContact(w, r, token, id)
+		c.HandleGetContact(w, r, token, id)
 		return
 	}
 
 	// Generic authenticated pass-through for other People Library paths.
-	upstreamURL := c.googleContactsUpstreamBase() + remainingPath
+	upstreamURL := c.GoogleContactsUpstreamBase() + remainingPath
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
 	if err != nil {
 		logger.Error("failed to build upstream request", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -156,10 +156,10 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	io.Copy(w, resp.Body)
 }
 
-// contactIDFromProxyPath extracts a contact id from /contacts/{id} or
+// ContactIDFromProxyPath extracts a contact id from /contacts/{id} or
 // /me/contacts/{id}. The id may be a full resource name ("people/c123") or a
 // bare ID ("c123"); the slash form is preserved as path segments.
-func contactIDFromProxyPath(remainingPath string) (string, bool) {
+func ContactIDFromProxyPath(remainingPath string) (string, bool) {
 	p := remainingPath
 	for _, prefix := range []string{"/me/contacts/", "/contacts/"} {
 		if strings.HasPrefix(p, prefix) {
@@ -170,16 +170,16 @@ func contactIDFromProxyPath(remainingPath string) (string, bool) {
 	return "", false
 }
 
-func (c *GoogleContactsConnector) handleListContacts(w http.ResponseWriter, r *http.Request) {
+func (c *GoogleContactsConnector) HandleListContacts(w http.ResponseWriter, r *http.Request) {
 	contacts, truncated, err := c.ListUserContacts(r.Context())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			writeJSONError(w, http.StatusUnauthorized,
-				"no valid Google Contacts token — authorize at /v1/auth/"+googleContactsServiceID+"/login")
+			WriteJSONError(w, http.StatusUnauthorized,
+				"no valid Google Contacts token — authorize at /v1/auth/"+GoogleContactsServiceID+"/login")
 			return
 		}
 		slog.Warn("google contacts list failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch contacts from Google Contacts")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch contacts from Google Contacts")
 		return
 	}
 	if contacts == nil {
@@ -191,7 +191,7 @@ func (c *GoogleContactsConnector) handleListContacts(w http.ResponseWriter, r *h
 		Synced:    true,
 		Truncated: truncated,
 		ByService: map[string]types.LibraryServiceStatus{
-			googleContactsServiceID: {
+			GoogleContactsServiceID: {
 				Status:    types.LibraryStatusOK,
 				Count:     len(contacts),
 				Truncated: truncated,
@@ -200,36 +200,36 @@ func (c *GoogleContactsConnector) handleListContacts(w http.ResponseWriter, r *h
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build contacts list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build contacts list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-func (c *GoogleContactsConnector) handleGetContact(w http.ResponseWriter, r *http.Request, token, id string) {
-	resourceName := normalizeGooglePeopleResourceName(id)
-	logger := slog.With("service", googleContactsServiceID, "method", r.Method, "path", "/"+resourceName)
+func (c *GoogleContactsConnector) HandleGetContact(w http.ResponseWriter, r *http.Request, token, id string) {
+	resourceName := NormalizeGooglePeopleResourceName(id)
+	logger := slog.With("service", GoogleContactsServiceID, "method", r.Method, "path", "/"+resourceName)
 	// resourceName is already "people/{id}" — People API path is /v1/people/{id}.
-	upstreamURL := c.googleContactsUpstreamBase() + "/" + resourceName +
+	upstreamURL := c.GoogleContactsUpstreamBase() + "/" + resourceName +
 		"?personFields=" + googleContactsPersonFields
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
 		logger.Error("failed to build contact request", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("contact request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Google Contacts response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Contacts response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -240,22 +240,22 @@ func (c *GoogleContactsConnector) handleGetContact(w http.ResponseWriter, r *htt
 	}
 	var person googlePeoplePerson
 	if err := json.Unmarshal(data, &person); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to parse Google Contacts response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to parse Google Contacts response")
 		return
 	}
-	contact := mapGooglePerson(person)
+	contact := MapGooglePerson(person)
 	out, err := json.Marshal(contact)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to encode contact")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode contact")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(out)
 }
 
-// normalizeGooglePeopleResourceName accepts "people/c123" or "c123" and
+// NormalizeGooglePeopleResourceName accepts "people/c123" or "c123" and
 // returns the path segment form used by the People API.
-func normalizeGooglePeopleResourceName(id string) string {
+func NormalizeGooglePeopleResourceName(id string) string {
 	id = strings.TrimSpace(id)
 	id = strings.TrimPrefix(id, "/")
 	if id == "" {
@@ -271,16 +271,16 @@ func normalizeGooglePeopleResourceName(id string) string {
 // and maps them into neutral Contact values for the unified library and for
 // photo.people[] cross-type matching.
 func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types.Contact, bool, error) {
-	token := c.host.GetValidToken(googleContactsServiceID, slog.Default())
+	token := c.host.GetValidToken(GoogleContactsServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
 
-	upstreamBase := c.googleContactsUpstreamBase()
+	upstreamBase := c.GoogleContactsUpstreamBase()
 	var all []types.Contact
 	pageToken := ""
 	truncated := false
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		u := upstreamBase + "/people/me/connections?pageSize=100&personFields=" + googleContactsPersonFields
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
@@ -290,7 +290,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -307,8 +307,8 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 			return nil, false, err
 		}
 		for _, person := range raw.Connections {
-			mapped := mapGooglePerson(person)
-			if primaryContactKey(mapped) != "" || len(mapped.Sources) > 0 {
+			mapped := MapGooglePerson(person)
+			if types.PrimaryContactKey(mapped) != "" || len(mapped.Sources) > 0 {
 				all = append(all, mapped)
 			}
 		}
@@ -316,7 +316,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 		if pageToken == "" {
 			break
 		}
-		if page == libraryPageCap-1 && pageToken != "" {
+		if page == LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
@@ -349,7 +349,7 @@ type googlePeopleConnectionsList struct {
 	TotalItems    int                  `json:"totalItems"`
 }
 
-func mapGooglePerson(person googlePeoplePerson) types.Contact {
+func MapGooglePerson(person googlePeoplePerson) types.Contact {
 	name := ""
 	if len(person.Names) > 0 {
 		name = person.Names[0].DisplayName
@@ -364,9 +364,9 @@ func mapGooglePerson(person googlePeoplePerson) types.Contact {
 	for _, p := range person.PhoneNumbers {
 		phones = append(phones, p.Value)
 	}
-	contact := newContact(
-		googleContactsServiceID,
-		googleContactsServiceName,
+	contact := types.NewContact(
+		GoogleContactsServiceID,
+		GoogleContactsServiceName,
 		person.ResourceName,
 		name,
 		emails,

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -74,7 +76,7 @@ func (s *Server) HandleAdminYNABSetup(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ynabEndpoint() string {
-	svc := s.config.GetService(ynabServiceID)
+	svc := s.config.GetService(connectors.YNABServiceID)
 	if svc == nil || strings.TrimSpace(svc.Endpoint) == "" {
 		return "https://api.ynab.com/v1"
 	}
@@ -82,7 +84,7 @@ func (s *Server) ynabEndpoint() string {
 }
 
 func (s *Server) ynabHasToken() (bool, string) {
-	svc := s.config.GetService(ynabServiceID)
+	svc := s.config.GetService(connectors.YNABServiceID)
 	if svc != nil {
 		for k, v := range svc.Headers {
 			if strings.EqualFold(k, "Authorization") || strings.EqualFold(k, "X-YNAB-Token") {
@@ -92,17 +94,17 @@ func (s *Server) ynabHasToken() (bool, string) {
 			}
 		}
 	}
-	if s.GetValidToken(ynabServiceID, slog.Default()) != "" {
+	if s.GetValidToken(connectors.YNABServiceID, slog.Default()) != "" {
 		return true, "oauth"
 	}
 	return false, ""
 }
 
 func (s *Server) ynabSetupStatus(withProbe bool) YNABSetupStatus {
-	svc := s.config.GetService(ynabServiceID)
+	svc := s.config.GetService(connectors.YNABServiceID)
 	status := YNABSetupStatus{
-		ServiceID:      ynabServiceID,
-		DisplayName:    ynabServiceName,
+		ServiceID:      connectors.YNABServiceID,
+		DisplayName:    connectors.YNABServiceName,
 		Endpoint:       s.ynabEndpoint(),
 		SampleQuestion: "did we go over on groceries this month?",
 	}
@@ -184,7 +186,7 @@ func (s *Server) handleYNABConfig(w http.ResponseWriter, r *http.Request) {
 		}
 		entry.Headers["Authorization"] = "Bearer " + tok
 	}
-	if err := s.config.SetServiceConnection(ynabServiceID, entry); err != nil {
+	if err := s.config.SetServiceConnection(connectors.YNABServiceID, entry); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -198,9 +200,9 @@ func (s *Server) handleYNABConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) probeYNAB(ctx context.Context) YNABTestResult {
-	c := NewYNABConnector(s)
-	var out ynabBudgetsResponse
-	err := c.ynabAPIGet(ctx, slog.With("handler", "admin_ynab"), "/budgets", nil, &out)
+	c := connectors.NewYNABConnector(s)
+	var out connectors.BudgetsResponse
+	err := c.APIGet(ctx, slog.With("handler", "admin_ynab"), "/budgets", nil, &out)
 	switch {
 	case err == types.ErrUnauthorized:
 		return YNABTestResult{OK: false, Status: "unauthorized", Detail: "YNAB rejected the token — check the Personal Access Token"}

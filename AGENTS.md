@@ -20,8 +20,8 @@ It does two jobs:
 
 Module: `github.com/fudomunro/aegis`  
 Layout: **`package main` at repo root** + **`internal/types`** (data-type
-layer: models, merge, LibraryKind data, permissions vocabulary, path rules).
-Issue #15 continues with `internal/connectors` then `internal/core`.
+layer) + **`internal/connectors`** (named-service adapters on `Host`).
+Issue #15 continues with `internal/core`.
 See `docs/restructure-core-types-connectors.md`.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
@@ -214,9 +214,9 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Packages follow the #15 split.** `internal/types` holds the data-type
-  layer. Do not invent other internal packages outside
-  `docs/restructure-core-types-connectors.md` (connectors, then core).
+- **Packages follow the #15 split.** `internal/types` (data) and
+  `internal/connectors` (named services on `Host`) have landed. Do not invent
+  other internal packages outside `docs/restructure-core-types-connectors.md`.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,

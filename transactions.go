@@ -12,12 +12,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// Transaction status values.
-const (
-	TransactionStatusPending = "pending"
-	TransactionStatusPosted  = "posted"
-)
-
 // Match methods for Transaction.
 const (
 	TransactionMatchProviderID         = "provider_id"
@@ -73,65 +67,9 @@ func normalizeTransactionAmount(raw string) string {
 	return s
 }
 
-// FormatMilliunitsAmount converts YNAB-style milliunits (1/1000 of a currency
-// unit) to a signed decimal string. 45670 → "45.67".
-func FormatMilliunitsAmount(milliunits int64) string {
-	sign := ""
-	v := milliunits
-	if v < 0 {
-		sign = "-"
-		v = -v
-	}
-	units := v / 1000
-	frac := v % 1000
-	// milliunits carry three digits; money is two. Round half-up at mills.
-	cents := frac / 10
-	if frac%10 >= 5 {
-		cents++
-	}
-	if cents >= 100 {
-		units++
-		cents -= 100
-	}
-	return fmt.Sprintf("%s%d.%02d", sign, units, cents)
-}
-
-// normalizeTransactionDate re-emits a provider date at date or RFC3339 UTC
-// second precision so the same day matches across services.
-func normalizeTransactionDate(raw string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ""
-	}
-	// Quicken/OFX compact dates: YYYYMMDD or YYYYMMDDHHMMSS.
-	if len(raw) == 8 && raw[0] >= '1' && raw[0] <= '3' {
-		if t, err := time.Parse("20060102", raw); err == nil {
-			return t.UTC().Format("2006-01-02")
-		}
-	}
-	if len(raw) == 14 {
-		if t, err := time.Parse("20060102150405", raw); err == nil {
-			return t.UTC().Format(time.RFC3339)
-		}
-	}
-	if t, err := time.Parse(time.RFC3339Nano, raw); err == nil {
-		return t.UTC().Format(time.RFC3339)
-	}
-	if t, err := time.Parse("2006-01-02", raw); err == nil {
-		return t.UTC().Format("2006-01-02")
-	}
-	if t, err := time.Parse("01/02/2006", raw); err == nil {
-		return t.UTC().Format("2006-01-02")
-	}
-	if t, err := time.Parse("1/2/2006", raw); err == nil {
-		return t.UTC().Format("2006-01-02")
-	}
-	return raw
-}
-
 // transactionDay returns the calendar day (UTC) of a posted/authorized time.
 func transactionDay(raw string) string {
-	n := normalizeTransactionDate(raw)
+	n := types.NormalizeTransactionDate(raw)
 	if n == "" {
 		return ""
 	}
@@ -262,25 +200,6 @@ func mergeTransactionInto(dst *types.Transaction, src types.Transaction) {
 	}
 }
 
-func cloneTransaction(t types.Transaction) types.Transaction {
-	cp := t
-	cp.Sources = append([]types.TransactionSource(nil), t.Sources...)
-	if t.Account != nil {
-		acc := *t.Account
-		cp.Account = &acc
-	}
-	if len(t.Category) > 0 {
-		cp.Category = append([]string(nil), t.Category...)
-	}
-	if len(t.Extra) > 0 {
-		cp.Extra = make(map[string]any, len(t.Extra))
-		for k, v := range t.Extra {
-			cp.Extra[k] = v
-		}
-	}
-	return cp
-}
-
 // MergeTransactions groups transactions that share a durable provider ID
 // (YNAB import_id, Quicken FITID) or the same amount + posted day + normalized
 // merchant into one user-facing entry with multiple Sources. A second pass
@@ -311,7 +230,7 @@ func MergeTransactions(in []types.Transaction) []types.Transaction {
 			mergeTransactionInto(&cur.t, tx)
 			continue
 		}
-		cp := cloneTransaction(tx)
+		cp := types.CloneTransaction(tx)
 		byKey[key] = &slot{t: cp, key: key}
 		order = append(order, key)
 	}
@@ -701,18 +620,6 @@ func centsToAmount(cents int64) string {
 		cents = -cents
 	}
 	return fmt.Sprintf("%s%d.%02d", sign, cents/100, cents%100)
-}
-
-// newTransaction builds a single-source neutral transaction.
-func newTransaction(service, serviceName, id string, tx types.Transaction) types.Transaction {
-	out := cloneTransaction(tx)
-	out.Sources = []types.TransactionSource{{
-		Service:     service,
-		ServiceName: serviceName,
-		ID:          id,
-		Canonical:   true,
-	}}
-	return out
 }
 
 // transactionsProviderTargets collects providers, applying per-service and

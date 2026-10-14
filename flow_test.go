@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -70,9 +72,9 @@ func flowTestServer() *Server {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
-	srv.connectors["youtube-music"] = NewYouTubeMusicConnector(srv)
-	srv.connectors["google-photos"] = NewGooglePhotosConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
+	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
+	srv.connectors["google-photos"] = connectors.NewGooglePhotosConnector(srv)
 	srv.tokens.Tokens["spotify"] = &OAuthToken{
 		AccessToken:  "access-token-secret",
 		RefreshToken: "refresh-token-secret",

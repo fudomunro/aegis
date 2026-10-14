@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -263,7 +265,7 @@ func TestMailQuery_FetchByIDAndRaw(t *testing.T) {
 	srv := mailTestServer(t, a)
 
 	id := set.Records[0].ID
-	w := doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+googleGmailServiceID+"/"+id, "")
+	w := doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/"+id, "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("fetch id code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -275,7 +277,7 @@ func TestMailQuery_FetchByIDAndRaw(t *testing.T) {
 		t.Fatalf("message missing subject: %+v", msg)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+googleGmailServiceID+"/"+id+"/raw", "")
+	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/"+id+"/raw", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("raw code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -424,7 +426,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	// Split sample tracks across fake connectors so the aggregate merges them.
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &sampleTrackPlaylistProvider{
 			playlists: filterPlaylists(lib.Playlists, "spotify"),
 			tracks:    filterTracks(lib.Tracks, "spotify"),
@@ -441,7 +443,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 			contacts: filterContactsByService(lib.Contacts, "google-contacts"),
 		},
 		"google-gmail": &sampleMessageProvider{
-			messages: filterMessagesByService(lib.Messages, googleGmailServiceID),
+			messages: filterMessagesByService(lib.Messages, connectors.GoogleGmailServiceID),
 		},
 		takeoutServiceID: &sampleMessageProvider{
 			messages: filterMessagesByService(lib.Messages, takeoutServiceID),
@@ -526,7 +528,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 		{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{"tracks": types.AccessNone}},
 	}}
 	srv := testServerWithBase(deniedCfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &sampleTrackPlaylistProvider{tracks: filterTracks(lib.Tracks, "spotify")},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
@@ -543,7 +545,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 		{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 	}}
 	srv = testServerWithBase(okCfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &sampleTrackPlaylistProvider{
 			tracks: filterTracks(lib.Tracks, "spotify"),
 		},

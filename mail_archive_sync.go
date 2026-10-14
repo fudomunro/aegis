@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,6 +15,14 @@ import (
 
 	"github.com/fudomunro/aegis/internal/types"
 )
+
+// gmailArchiveSyncer implements MailArchiveSyncer on top of the Gmail
+// connector (issue #15: connector lives in internal/connectors; the local
+// mail archive store stays in core).
+type gmailArchiveSyncer struct {
+	*connectors.GoogleGmailConnector
+	host connectors.Host
+}
 
 // MailSyncOptions bounds one ingest run so a huge mailbox cannot stall a request.
 type MailSyncOptions struct {
@@ -66,8 +76,8 @@ func isGmailQuotaError(err error) bool {
 
 // SyncMailArchive implements MailArchiveSyncer. Each call lists up to
 // MaxMessages IDs (continuing the stored page token) and stores full payloads.
-func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *MailArchive, opts MailSyncOptions) (MailSyncResult, error) {
-	res := MailSyncResult{Service: googleGmailServiceID}
+func (c *gmailArchiveSyncer) SyncMailArchive(ctx context.Context, archive *MailArchive, opts MailSyncOptions) (MailSyncResult, error) {
+	res := MailSyncResult{Service: connectors.GoogleGmailServiceID}
 	if archive == nil {
 		res.Error = "mail archive disabled"
 		return res, fmt.Errorf("mail archive disabled")
@@ -82,15 +92,15 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 	}
 	res.Query = query
 
-	logger := slog.With("service", googleGmailServiceID, "handler", "mail_archive_sync")
-	token := c.host.GetValidToken(googleGmailServiceID, logger)
+	logger := slog.With("service", connectors.GoogleGmailServiceID, "handler", "mail_archive_sync")
+	token := c.host.GetValidToken(connectors.GoogleGmailServiceID, logger)
 	if token == "" {
 		res.Error = "no valid Gmail token"
-		_ = archive.SaveSyncCursor(googleGmailServiceID, MailSyncCursor{Error: res.Error})
+		_ = archive.SaveSyncCursor(connectors.GoogleGmailServiceID, MailSyncCursor{Error: res.Error})
 		return res, types.ErrUnauthorized
 	}
 
-	cursor, err := archive.LoadSyncCursor(googleGmailServiceID)
+	cursor, err := archive.LoadSyncCursor(connectors.GoogleGmailServiceID)
 	if err != nil {
 		cursor = MailSyncCursor{}
 	}
@@ -112,7 +122,7 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 		if pageToken != "" {
 			values.Set("pageToken", pageToken)
 		}
-		listURL := c.googleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
+		listURL := c.GoogleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
 		if err != nil {
 			return c.finishMailSync(archive, res, cursor, err)
@@ -127,11 +137,11 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 			return c.finishMailSync(archive, res, cursor, err)
 		}
 		if resp.StatusCode != http.StatusOK {
-			listErr := gmailListHTTPError("messages list", resp.StatusCode, data)
+			listErr := connectors.GmailListHTTPError("messages list", resp.StatusCode, data)
 			// Keep the fetch page token so a quota blip retries this page.
 			return c.finishMailSync(archive, res, cursor, listErr)
 		}
-		var raw googleGmailMessageList
+		var raw connectors.GoogleGmailMessageList
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return c.finishMailSync(archive, res, cursor, err)
 		}
@@ -187,18 +197,18 @@ func (c *GoogleGmailConnector) SyncMailArchive(ctx context.Context, archive *Mai
 	cursor.Done = res.Done
 	cursor.LastSyncAt = now
 	cursor.Error = res.Error
-	if err := archive.SaveSyncCursor(googleGmailServiceID, cursor); err != nil {
+	if err := archive.SaveSyncCursor(connectors.GoogleGmailServiceID, cursor); err != nil {
 		logger.Warn("mail archive cursor save failed", "error", err)
 	}
 	return res, nil
 }
 
-func (c *GoogleGmailConnector) finishMailSync(archive *MailArchive, res MailSyncResult, cursor MailSyncCursor, err error) (MailSyncResult, error) {
+func (c *gmailArchiveSyncer) finishMailSync(archive *MailArchive, res MailSyncResult, cursor MailSyncCursor, err error) (MailSyncResult, error) {
 	res.Error = err.Error()
 	now := time.Now().UTC().Format(time.RFC3339)
 	cursor.LastSyncAt = now
 	cursor.Error = res.Error
-	_ = archive.SaveSyncCursor(googleGmailServiceID, cursor)
+	_ = archive.SaveSyncCursor(connectors.GoogleGmailServiceID, cursor)
 	return res, err
 }
 
@@ -218,8 +228,8 @@ func paceGmailArchiveGet(ctx context.Context) error {
 	}
 }
 
-func (c *GoogleGmailConnector) storeGmailMessageArchive(ctx context.Context, archive *MailArchive, token, id string) error {
-	raw, err := c.fetchGmailMessage(ctx, token, id, "full")
+func (c *gmailArchiveSyncer) storeGmailMessageArchive(ctx context.Context, archive *MailArchive, token, id string) error {
+	raw, err := c.FetchGmailMessage(ctx, token, id, "full")
 	if err != nil {
 		return err
 	}
@@ -231,8 +241,8 @@ func (c *GoogleGmailConnector) storeGmailMessageArchive(ctx context.Context, arc
 	if err != nil {
 		return err
 	}
-	msg := mapGoogleGmailMessage(raw, "full")
-	rec := RecordFromMessage(googleGmailServiceID, googleGmailServiceName, msg, gz)
+	msg := connectors.MapGoogleGmailMessage(raw, "full")
+	rec := RecordFromMessage(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, msg, gz)
 	return archive.Upsert(rec)
 }
 

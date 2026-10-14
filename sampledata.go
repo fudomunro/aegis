@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"fmt"
 	"os"
@@ -118,8 +120,8 @@ func GenerateSampleMail(n int) SampleMailSet {
 		payload := fmt.Sprintf(`{"id":%q,"subject":%q,"synthetic":true}`, id, subject)
 		gz, _ := GzipPayload([]byte(payload))
 		rec := MailArchiveRecord{
-			Service:     googleGmailServiceID,
-			ServiceName: googleGmailServiceName,
+			Service:     connectors.GoogleGmailServiceID,
+			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          id,
 			ThreadID:    fmt.Sprintf("thr-%04d", (i/3)+1),
 			MessageID:   fmt.Sprintf("<%s@synthetic.example>", id),
@@ -130,7 +132,7 @@ func GenerateSampleMail(n int) SampleMailSet {
 			FromName:    from.name,
 			FromEmail:   from.email,
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:      sent.UTC().Format(time.RFC3339),
 			ReceivedAt:  sent.UTC().Add(2 * time.Second).Format(time.RFC3339),
@@ -141,7 +143,7 @@ func GenerateSampleMail(n int) SampleMailSet {
 		}
 		if i%6 == 2 {
 			rec.CC = []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Grace Hopper", []string{"grace@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Grace Hopper", []string{"grace@example.com"}, nil),
 			}
 		}
 		recs = append(recs, rec)
@@ -162,10 +164,10 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 	huge := strings.Repeat("padding paragraph for the stress body. ", 800) // ~32KB
 	mk := func(rec MailArchiveRecord) MailArchiveRecord {
 		if rec.Service == "" {
-			rec.Service = googleGmailServiceID
+			rec.Service = connectors.GoogleGmailServiceID
 		}
 		if rec.ServiceName == "" {
-			rec.ServiceName = googleGmailServiceName
+			rec.ServiceName = connectors.GoogleGmailServiceName
 		}
 		if rec.PayloadGzip == nil {
 			gz, _ := GzipPayload([]byte(`{"synthetic":true,"edge":true}`))
@@ -185,7 +187,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Nadia Farouk",
 			FromEmail: "nadia@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:     "2021-06-15T08:30:00Z",
 			ReceivedAt: "2021-06-15T08:30:02Z",
@@ -203,7 +205,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Devs at Example",
 			FromEmail: "news@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:     "2022-03-03T11:15:00Z",
 			ReceivedAt: "2022-03-03T11:15:04Z",
@@ -223,7 +225,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Ada Lovelace",
 			FromEmail: "ada@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:     "2022-08-20T16:00:00Z",
 			ReceivedAt: "2022-08-20T16:00:10Z",
@@ -241,7 +243,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Broken Header",
 			FromEmail: "broken@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			Direction: "unknown",
 			BodyText:  "No send time recorded.",
@@ -256,7 +258,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Broken Header",
 			FromEmail: "broken@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:    "2023-01-12T09:00:00Z",
 			Direction: "inbound",
@@ -273,7 +275,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Spammer",
 			FromEmail: "spam@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil),
 			},
 			SentAt:    "2023-04-01T02:02:02Z",
 			Direction: "inbound",
@@ -290,7 +292,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			FromName:  "Me",
 			FromEmail: "me@example.com",
 			To: []types.Contact{
-				newContact(googleGmailServiceID, googleGmailServiceName, "", "Ada Lovelace", []string{"ada@example.com"}, nil),
+				types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Ada Lovelace", []string{"ada@example.com"}, nil),
 			},
 			SentAt:    "2023-09-09T09:09:09Z",
 			Direction: "outbound",
@@ -438,7 +440,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			From:     &types.Contact{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
 			Labels:   []string{"INBOX"},
 			Sources: []types.MessageSource{
-				{Service: googleGmailServiceID, ServiceName: googleGmailServiceName, ID: "gm-msg-1", Canonical: true, Extra: map[string]any{"message_id": "<ship-release@synthetic.example>"}},
+				{Service: connectors.GoogleGmailServiceID, ServiceName: connectors.GoogleGmailServiceName, ID: "gm-msg-1", Canonical: true, Extra: map[string]any{"message_id": "<ship-release@synthetic.example>"}},
 			},
 		},
 		{
@@ -461,7 +463,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			From:    &types.Contact{Name: "Billing", Emails: []string{"billing@example.com"}},
 			Labels:  []string{"INBOX"},
 			Sources: []types.MessageSource{
-				{Service: googleGmailServiceID, ServiceName: googleGmailServiceName, ID: "gm-msg-2", Canonical: true},
+				{Service: connectors.GoogleGmailServiceID, ServiceName: connectors.GoogleGmailServiceName, ID: "gm-msg-2", Canonical: true},
 			},
 		},
 		{
@@ -483,7 +485,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			From:    &types.Contact{Name: "Me", Emails: []string{"me@example.com"}},
 			Labels:  []string{"SENT"},
 			Sources: []types.MessageSource{
-				{Service: googleGmailServiceID, ServiceName: googleGmailServiceName, ID: "gm-msg-3", Canonical: true},
+				{Service: connectors.GoogleGmailServiceID, ServiceName: connectors.GoogleGmailServiceName, ID: "gm-msg-3", Canonical: true},
 			},
 		},
 	}
@@ -634,11 +636,11 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "AMAZON.COM",
 			Merchant:    "Amazon",
 			Category:    []string{"Shopping"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "AQB-20240305-0001",
 			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
 			Sources: []types.TransactionSource{
-				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-1", AccountID: "acct-1", Canonical: true,
+				{Service: connectors.YNABServiceID, ServiceName: connectors.YNABServiceName, ID: "ynab-tx-1", AccountID: "acct-1", Canonical: true,
 					Extra: map[string]any{"import_id": "AQB-20240305-0001"}},
 			},
 		},
@@ -649,7 +651,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "Amazon.com",
 			Merchant:    "Amazon.com",
 			Category:    []string{"Shopping:Online"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "AQB-20240305-0001",
 			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
 			Sources: []types.TransactionSource{
@@ -664,11 +666,11 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "BLUE BOTTLE",
 			Merchant:    "Blue Bottle Coffee",
 			Category:    []string{"Coffee"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "ynab-tx-coffee",
 			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
 			Sources: []types.TransactionSource{
-				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-coffee", AccountID: "acct-2", Canonical: true},
+				{Service: connectors.YNABServiceID, ServiceName: connectors.YNABServiceName, ID: "ynab-tx-coffee", AccountID: "acct-2", Canonical: true},
 			},
 		},
 		{
@@ -679,7 +681,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "BLUE BOTTLE COFFEE",
 			Merchant:    "Blue Bottle Coffee",
 			Category:    []string{"Dining"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "qif-coffee",
 			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
 			Sources: []types.TransactionSource{
@@ -695,11 +697,11 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "BLUE BOTTLE",
 			Merchant:    "Blue Bottle Coffee",
 			Category:    []string{"Coffee"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "ynab-tx-coffee-2",
 			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
 			Sources: []types.TransactionSource{
-				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-coffee-2", AccountID: "acct-2", Canonical: true},
+				{Service: connectors.YNABServiceID, ServiceName: connectors.YNABServiceName, ID: "ynab-tx-coffee-2", AccountID: "acct-2", Canonical: true},
 			},
 		},
 		{
@@ -709,11 +711,11 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "ACME PAYROLL",
 			Merchant:    "Acme Corp",
 			Category:    []string{"Income"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "ynab-tx-payroll",
 			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
 			Sources: []types.TransactionSource{
-				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-payroll", AccountID: "acct-1", Canonical: true},
+				{Service: connectors.YNABServiceID, ServiceName: connectors.YNABServiceName, ID: "ynab-tx-payroll", AccountID: "acct-1", Canonical: true},
 			},
 		},
 		{
@@ -723,11 +725,11 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "STREAMING SERVICE",
 			Merchant:    "StreamCo",
 			Category:    []string{"Subscriptions"},
-			Status:      TransactionStatusPending,
+			Status:      types.TransactionStatusPending,
 			EntityID:    "ynab-tx-stream",
 			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
 			Sources: []types.TransactionSource{
-				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-stream", AccountID: "acct-2", Canonical: true},
+				{Service: connectors.YNABServiceID, ServiceName: connectors.YNABServiceName, ID: "ynab-tx-stream", AccountID: "acct-2", Canonical: true},
 			},
 		},
 		// YNAB-style split: categories without amounts (issue #141 follow-up).
@@ -738,11 +740,11 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			Description: "COSTCO",
 			Merchant:    "Costco",
 			Category:    []string{"Groceries", "Household Goods"},
-			Status:      TransactionStatusPosted,
+			Status:      types.TransactionStatusPosted,
 			EntityID:    "ynab-tx-split",
 			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
 			Sources: []types.TransactionSource{
-				{Service: ynabServiceID, ServiceName: ynabServiceName, ID: "ynab-tx-split", AccountID: "acct-2", Canonical: true},
+				{Service: connectors.YNABServiceID, ServiceName: connectors.YNABServiceName, ID: "ynab-tx-split", AccountID: "acct-2", Canonical: true},
 			},
 		},
 	}
@@ -783,7 +785,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 				Lng:      -63.5750,
 			},
 			Sources: []types.PlaceVisitSource{
-				{Service: ownTracksServiceID, ServiceName: ownTracksServiceName, ID: "otc-20230704-1605"},
+				{Service: connectors.OwnTracksServiceID, ServiceName: connectors.OwnTracksServiceName, ID: "otc-20230704-1605"},
 			},
 		},
 		{

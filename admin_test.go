@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -312,8 +314,8 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 		})
 	}))
 	t.Cleanup(up.Close)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	req = httptest.NewRequest("POST", "/v1/admin/mail/sync", strings.NewReader(`{"max_messages":5,"reset_cursor":true}`))
 	req.Header.Set("X-Api-Key", "test-key")
@@ -439,7 +441,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 		t.Fatal(err)
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.cache.Set("stale", "x", time.Minute)
 
 	body := `{"permissions":{"default":"read","player":"none","playlists":"read-write"}}`
@@ -524,7 +526,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 func TestAdminSummary_IncludesAvailableDataTypes(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -549,8 +551,8 @@ func TestAdminSummary_SupportsPhotoPicker(t *testing.T) {
 		{ID: "spotify", Name: "Spotify", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["google-photos"] = NewGooglePhotosConnector(srv)
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["google-photos"] = connectors.NewGooglePhotosConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")

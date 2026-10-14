@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -77,11 +79,11 @@ func TestGmailSyncMailArchive(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGoogleGmailConnector(srv)
-	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 2})
+	conn := connectors.NewGoogleGmailConnector(srv)
+	res, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 2})
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -93,7 +95,7 @@ func TestGmailSyncMailArchive(t *testing.T) {
 	}
 
 	// Continue from cursor — second batch finishes the archive.
-	res2, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
+	res2, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
@@ -117,7 +119,7 @@ func TestGmailSyncMailArchive(t *testing.T) {
 	}
 
 	// Reset cursor re-ingests from the first page.
-	res3, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 2, ResetCursor: true})
+	res3, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 2, ResetCursor: true})
 	if err != nil {
 		t.Fatalf("sync3: %v", err)
 	}
@@ -130,8 +132,8 @@ func TestGmailSyncUnauthorized(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	// No token in the store.
-	conn := NewGoogleGmailConnector(srv)
-	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{})
+	conn := connectors.NewGoogleGmailConnector(srv)
+	res, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{})
 	if err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
@@ -148,18 +150,18 @@ func TestGmailSyncListErrorIsFailOpen(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGoogleGmailConnector(srv)
-	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 5})
+	conn := connectors.NewGoogleGmailConnector(srv)
+	res, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 5})
 	if err == nil {
 		t.Fatal("expected list error")
 	}
 	if res.Error == "" || res.Stored != 0 {
 		t.Fatalf("result = %+v", res)
 	}
-	cur, _ := a.LoadSyncCursor(googleGmailServiceID)
+	cur, _ := a.LoadSyncCursor(connectors.GoogleGmailServiceID)
 	if cur.Error == "" {
 		t.Fatal("expected cursor error to be recorded")
 	}
@@ -189,11 +191,11 @@ func TestGmailSyncSkipsBadMessage(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGoogleGmailConnector(srv)
-	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
+	conn := connectors.NewGoogleGmailConnector(srv)
+	res, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -217,8 +219,8 @@ func TestMailHTTPSyncRunsIngest(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	w := doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
 	if w.Code != http.StatusOK {
@@ -271,11 +273,11 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.config.updateService(googleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(googleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGoogleGmailConnector(srv)
-	res, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
+	conn := connectors.NewGoogleGmailConnector(srv)
+	res, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
 	if err == nil {
 		t.Fatal("expected quota error")
 	}
@@ -285,7 +287,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	if res.Stored != 1 || res.Failed != 0 || !res.Truncated {
 		t.Fatalf("result = %+v", res)
 	}
-	cur, err := a.LoadSyncCursor(googleGmailServiceID)
+	cur, err := a.LoadSyncCursor(connectors.GoogleGmailServiceID)
 	if err != nil {
 		t.Fatalf("cursor: %v", err)
 	}
@@ -296,7 +298,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	// Next call resumes the same page and stores the rest once quota clears.
 	quotaMode = false
 	getCalls = 0
-	res2, err := conn.SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
+	res2, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
@@ -307,7 +309,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if st.ByService[googleGmailServiceID] != 3 {
+	if st.ByService[connectors.GoogleGmailServiceID] != 3 {
 		t.Fatalf("by_service = %+v", st.ByService)
 	}
 }

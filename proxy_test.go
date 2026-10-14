@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"io"
 	"net/http"
@@ -348,7 +350,7 @@ func TestHandleServiceProxy_Capabilities_Spotify(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -438,7 +440,7 @@ func TestHandleServiceProxy_Capabilities_AmazonMusic(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["amazon-music"] = NewAmazonMusicConnector(srv)
+	srv.connectors["amazon-music"] = connectors.NewAmazonMusicConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/amazon-music/capabilities", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -494,7 +496,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/player", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -522,7 +524,7 @@ func TestHandleServiceProxy_NonCanonicalPathCannotBypassPermissions(t *testing.T
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	handler := srv.AuthMiddleware(srv.HandleServiceProxy)
 
 	// %2f decodes to "/" inside URL.Path, producing "//me/player".
@@ -585,7 +587,7 @@ func TestHandleServiceProxy_UnknownPathUsesStrictestPermission(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	handler := srv.AuthMiddleware(srv.HandleServiceProxy)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/unknown/endpoint", nil)
@@ -611,7 +613,7 @@ func TestHandleServiceProxy_Capabilities_FilteredByPermission(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = NewSpotifyConnector(srv)
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -643,7 +645,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		cache:       NewCache(),
 		tokens:      &TokenStore{Tokens: make(map[string]*OAuthToken)},
 		oauthStates: NewStateStore(),
-		connectors:  make(map[string]ServiceConnector),
+		connectors:  make(map[string]connectors.ServiceConnector),
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 		prom:        NewPromMetrics(),

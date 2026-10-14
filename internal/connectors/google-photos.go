@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -37,22 +37,22 @@ func NewGooglePhotosConnector(host Host) *GooglePhotosConnector {
 	return &GooglePhotosConnector{host: host}
 }
 
-const googlePhotosServiceID = "google-photos"
+const GooglePhotosServiceID = "google-photos"
 
-const googlePhotosServiceName = "Google Photos"
+const GooglePhotosServiceName = "Google Photos"
 
-// googlePhotosUpstreamBase returns the configured Photos Picker API base.
-func (c *GooglePhotosConnector) googlePhotosUpstreamBase() string {
-	return c.host.UpstreamBaseFor(googlePhotosServiceID, "https://photospicker.googleapis.com/v1")
+// GooglePhotosUpstreamBase returns the configured Photos Picker API base.
+func (c *GooglePhotosConnector) GooglePhotosUpstreamBase() string {
+	return c.host.UpstreamBaseFor(GooglePhotosServiceID, "https://photospicker.googleapis.com/v1")
 }
 
-func (c *GooglePhotosConnector) setLastSession(id string) {
+func (c *GooglePhotosConnector) SetLastSession(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.lastSessionID = id
 }
 
-func (c *GooglePhotosConnector) getLastSession() string {
+func (c *GooglePhotosConnector) GetLastSession() string {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.lastSessionID
@@ -113,7 +113,7 @@ func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Google Photos is referenced.
 func (c *GooglePhotosConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + googlePhotosServiceID
+	base := root + "/v1/services/" + GooglePhotosServiceID
 	return fmt.Sprintf(`When the user's request involves Google Photos, you MUST use the Aegis proxy at %s instead of calling Google Photos directly.
 
 Google Photos uses the Picker API: the user must explicitly select photos once. Full library sync is not available without Google app verification.
@@ -128,72 +128,72 @@ GET %s/v1/library/photos — last completed Google Photos pick plus other photo 
 Photos are metadata-only. Aegis never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour) — do not treat it as a permanent link.
 Always include the full proxy base URL in your requests.
 
-%s`, base, root, photoSourceDiscipline())
+%s`, base, root, types.PhotoSourceDiscipline())
 }
 
 // HandleProxy processes a Google Photos Picker API request through the connector.
 func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", googlePhotosServiceID, "method", r.Method, "path", remainingPath)
+	logger := slog.With("service", GooglePhotosServiceID, "method", r.Method, "path", remainingPath)
 
-	token := c.host.GetValidToken(googlePhotosServiceID, logger)
+	token := c.host.GetValidToken(GooglePhotosServiceID, logger)
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
-			"no valid Google Photos token — authorize at /v1/auth/"+googlePhotosServiceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized,
+			"no valid Google Photos token — authorize at /v1/auth/"+GooglePhotosServiceID+"/login")
 		return
 	}
 
 	switch {
 	case remainingPath == "/picker/sessions" || remainingPath == "/picker/sessions/":
 		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed — use POST to create a session")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed — use POST to create a session")
 			return
 		}
-		c.handleCreateSession(w, r, token)
+		c.HandleCreateSession(w, r, token)
 		return
 	case strings.HasPrefix(remainingPath, "/picker/sessions/"):
 		id := strings.Trim(strings.TrimPrefix(remainingPath, "/picker/sessions/"), "/")
 		if id == "" || strings.Contains(id, "/") {
-			writeJSONError(w, http.StatusBadRequest, "missing session id")
+			WriteJSONError(w, http.StatusBadRequest, "missing session id")
 			return
 		}
 		switch r.Method {
 		case http.MethodGet:
-			c.handleGetSession(w, r, token, id)
+			c.HandleGetSession(w, r, token, id)
 		case http.MethodDelete:
-			c.handleDeleteSession(w, r, token, id)
+			c.HandleDeleteSession(w, r, token, id)
 		default:
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	case remainingPath == "/picker/mediaItems" || remainingPath == "/picker/mediaItems/" ||
 		remainingPath == "/mediaItems" || remainingPath == "/mediaItems/":
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		c.handleListPickedMediaItems(w, r, token)
+		c.HandleListPickedMediaItems(w, r, token)
 		return
 	}
 
 	// Generic authenticated pass-through for other Picker paths (/v1/…).
-	upstreamURL := c.googlePhotosUpstreamBase() + remainingPath
+	upstreamURL := c.GooglePhotosUpstreamBase() + remainingPath
 	if r.URL.RawQuery != "" {
 		upstreamURL += "?" + r.URL.RawQuery
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
 	if err != nil {
 		logger.Error("failed to build upstream request", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Google Photos request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Photos request failed")
 		return
 	}
 	defer resp.Body.Close()
@@ -202,42 +202,42 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	io.Copy(w, resp.Body)
 }
 
-func (c *GooglePhotosConnector) handleCreateSession(w http.ResponseWriter, r *http.Request, token string) {
-	upstreamURL := c.googlePhotosUpstreamBase() + "/sessions"
+func (c *GooglePhotosConnector) HandleCreateSession(w http.ResponseWriter, r *http.Request, token string) {
+	upstreamURL := c.GooglePhotosUpstreamBase() + "/sessions"
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, strings.NewReader("{}"))
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		slog.Error("picker session create failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Google Photos picker session create failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session create failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		writeGooglePhotosUpstreamError(w, data, resp.StatusCode)
+		WriteGooglePhotosUpstreamError(w, data, resp.StatusCode)
 		return
 	}
 	var session googlePickerSession
 	if err := json.Unmarshal(data, &session); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to parse picker session")
+		WriteJSONError(w, http.StatusBadGateway, "failed to parse picker session")
 		return
 	}
 	if session.ID != "" {
-		c.setLastSession(session.ID)
+		c.SetLastSession(session.ID)
 	}
-	out, err := json.Marshal(mapPickerSession(session))
+	out, err := json.Marshal(MapPickerSession(session))
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to encode session")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode session")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -245,89 +245,89 @@ func (c *GooglePhotosConnector) handleCreateSession(w http.ResponseWriter, r *ht
 	w.Write(out)
 }
 
-func (c *GooglePhotosConnector) handleGetSession(w http.ResponseWriter, r *http.Request, token, id string) {
-	upstreamURL := c.googlePhotosUpstreamBase() + "/sessions/" + url.PathEscape(id)
+func (c *GooglePhotosConnector) HandleGetSession(w http.ResponseWriter, r *http.Request, token, id string) {
+	upstreamURL := c.GooglePhotosUpstreamBase() + "/sessions/" + url.PathEscape(id)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "Google Photos picker session get failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session get failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
-		writeGooglePhotosUpstreamError(w, data, resp.StatusCode)
+		WriteGooglePhotosUpstreamError(w, data, resp.StatusCode)
 		return
 	}
 	var session googlePickerSession
 	if err := json.Unmarshal(data, &session); err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to parse picker session")
+		WriteJSONError(w, http.StatusBadGateway, "failed to parse picker session")
 		return
 	}
 	if session.MediaItemsSet {
-		c.setLastSession(id)
+		c.SetLastSession(id)
 	}
-	out, err := json.Marshal(mapPickerSession(session))
+	out, err := json.Marshal(MapPickerSession(session))
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to encode session")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode session")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(out)
 }
 
-func (c *GooglePhotosConnector) handleDeleteSession(w http.ResponseWriter, r *http.Request, token, id string) {
-	upstreamURL := c.googlePhotosUpstreamBase() + "/sessions/" + url.PathEscape(id)
+func (c *GooglePhotosConnector) HandleDeleteSession(w http.ResponseWriter, r *http.Request, token, id string) {
+	upstreamURL := c.GooglePhotosUpstreamBase() + "/sessions/" + url.PathEscape(id)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodDelete, upstreamURL, nil)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "Google Photos picker session delete failed")
+		WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session delete failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-		writeGooglePhotosUpstreamError(w, data, resp.StatusCode)
+		WriteGooglePhotosUpstreamError(w, data, resp.StatusCode)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"status": "deleted", "session_id": id})
 }
 
-func (c *GooglePhotosConnector) handleListPickedMediaItems(w http.ResponseWriter, r *http.Request, token string) {
+func (c *GooglePhotosConnector) HandleListPickedMediaItems(w http.ResponseWriter, r *http.Request, token string) {
 	sessionID := r.URL.Query().Get("sessionId")
 	if sessionID == "" {
-		sessionID = c.getLastSession()
+		sessionID = c.GetLastSession()
 	}
 	if sessionID == "" {
-		writeJSONError(w, http.StatusBadRequest,
+		WriteJSONError(w, http.StatusBadRequest,
 			"missing sessionId — create a picker session at POST /picker/sessions, have the user open picker_uri, then pass sessionId")
 		return
 	}
-	c.setLastSession(sessionID)
+	c.SetLastSession(sessionID)
 
-	photos, truncated, err := c.listSessionPhotos(r.Context(), token, sessionID)
+	photos, truncated, err := c.ListSessionPhotos(r.Context(), token, sessionID)
 	if err != nil {
 		slog.Warn("google-photos picker list failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch picked photos from Google Photos")
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch picked photos from Google Photos")
 		return
 	}
 	if photos == nil {
@@ -339,7 +339,7 @@ func (c *GooglePhotosConnector) handleListPickedMediaItems(w http.ResponseWriter
 		Synced:    true,
 		Truncated: truncated,
 		ByService: map[string]types.LibraryServiceStatus{
-			googlePhotosServiceID: {
+			GooglePhotosServiceID: {
 				Status:    types.LibraryStatusOK,
 				Count:     len(photos),
 				Truncated: truncated,
@@ -348,16 +348,16 @@ func (c *GooglePhotosConnector) handleListPickedMediaItems(w http.ResponseWriter
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build photos list")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build photos list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(data)
 }
 
-// writeGooglePhotosUpstreamError surfaces Google's message (e.g. insufficient
+// WriteGooglePhotosUpstreamError surfaces Google's message (e.g. insufficient
 // scopes, session not ready) when present.
-func writeGooglePhotosUpstreamError(w http.ResponseWriter, body []byte, status int) {
+func WriteGooglePhotosUpstreamError(w http.ResponseWriter, body []byte, status int) {
 	var payload struct {
 		Error struct {
 			Code    int    `json:"code"`
@@ -369,26 +369,26 @@ func writeGooglePhotosUpstreamError(w http.ResponseWriter, body []byte, status i
 	if err := json.Unmarshal(body, &payload); err == nil && payload.Error.Message != "" {
 		msg = payload.Error.Message
 		if status == http.StatusForbidden || strings.Contains(strings.ToLower(msg), "scope") {
-			msg += " — re-authorize at /v1/auth/" + googlePhotosServiceID + "/login with the Photos Picker scope " +
+			msg += " — re-authorize at /v1/auth/" + GooglePhotosServiceID + "/login with the Photos Picker scope " +
 				"(enable the Photos Picker API; Library API readonly no longer lists the full library for unverified apps)"
 		}
 	}
-	writeJSONError(w, status, msg)
+	WriteJSONError(w, status, msg)
 }
 
 // ListUserPhotos implements PhotoProvider. It returns the last completed
 // picker session's selection (empty when the user has not picked yet), so the
 // unified library works without requiring full Library API verification.
 func (c *GooglePhotosConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bool, error) {
-	token := c.host.GetValidToken(googlePhotosServiceID, slog.Default())
+	token := c.host.GetValidToken(GooglePhotosServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
-	sessionID := c.getLastSession()
+	sessionID := c.GetLastSession()
 	if sessionID == "" {
 		return []types.Photo{}, false, nil
 	}
-	photos, truncated, err := c.listSessionPhotos(ctx, token, sessionID)
+	photos, truncated, err := c.ListSessionPhotos(ctx, token, sessionID)
 	if err != nil {
 		// Session may have expired; degrade to empty rather than failing the library.
 		slog.Warn("google-photos last picker session list failed", "session", sessionID, "error", err)
@@ -397,12 +397,12 @@ func (c *GooglePhotosConnector) ListUserPhotos(ctx context.Context) ([]types.Pho
 	return photos, truncated, nil
 }
 
-func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, sessionID string) ([]types.Photo, bool, error) {
-	upstreamBase := c.googlePhotosUpstreamBase()
+func (c *GooglePhotosConnector) ListSessionPhotos(ctx context.Context, token, sessionID string) ([]types.Photo, bool, error) {
+	upstreamBase := c.GooglePhotosUpstreamBase()
 	var all []types.Photo
 	pageToken := ""
 	truncated := false
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		u := upstreamBase + "/mediaItems?pageSize=100&sessionId=" + url.QueryEscape(sessionID)
 		if pageToken != "" {
 			u += "&pageToken=" + url.QueryEscape(pageToken)
@@ -412,7 +412,7 @@ func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, se
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -429,7 +429,7 @@ func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, se
 			return nil, false, err
 		}
 		for _, item := range raw.MediaItems {
-			p := mapPickedMediaItem(item, sessionID)
+			p := MapPickedMediaItem(item, sessionID)
 			if len(p.Sources) > 0 && p.Sources[0].ID != "" {
 				all = append(all, p)
 			}
@@ -438,7 +438,7 @@ func (c *GooglePhotosConnector) listSessionPhotos(ctx context.Context, token, se
 		if pageToken == "" {
 			break
 		}
-		if page == libraryPageCap-1 && pageToken != "" {
+		if page == LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
@@ -456,8 +456,8 @@ type googlePickerSession struct {
 	} `json:"pollingConfig"`
 }
 
-// mapPickerSession returns an agent-friendly session payload.
-func mapPickerSession(s googlePickerSession) map[string]any {
+// MapPickerSession returns an agent-friendly session payload.
+func MapPickerSession(s googlePickerSession) map[string]any {
 	out := map[string]any{
 		"id":              s.ID,
 		"picker_uri":      s.PickerURI,
@@ -496,7 +496,7 @@ type googlePickerMediaItemList struct {
 	NextPageToken string                  `json:"nextPageToken"`
 }
 
-func mapPickedMediaItem(item googlePickerMediaItem, sessionID string) types.Photo {
+func MapPickedMediaItem(item googlePickerMediaItem, sessionID string) types.Photo {
 	filename := ""
 	mimeType := ""
 	baseURL := ""
@@ -521,9 +521,9 @@ func mapPickedMediaItem(item googlePickerMediaItem, sessionID string) types.Phot
 	if t, err := time.Parse(time.RFC3339Nano, item.CreateTime); err == nil {
 		takenAt = t.UTC().Format(time.RFC3339)
 	}
-	p := newPhoto(
-		googlePhotosServiceID,
-		googlePhotosServiceName,
+	p := types.NewPhoto(
+		GooglePhotosServiceID,
+		GooglePhotosServiceName,
 		item.ID,
 		filename,
 		mimeType,
