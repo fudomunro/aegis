@@ -1,0 +1,64 @@
+{
+  "version": "1",
+  "id": "reading-list",
+  "label": "reading list",
+  "usage": "books or articles they want to read, are reading, or finished",
+  "summary": "user-defined reading-list items in one neutral list (name, fields{title,author,status,notes}, sources[])",
+  "sync_rule": "Same title+author (or shared id) syncs into one entry with multiple sources[].",
+  "example_question": "what's on my reading list?",
+  "keywords": [
+    "reading list",
+    "want to read",
+    "books to read",
+    "on my list",
+    "currently reading",
+    "finish reading"
+  ],
+  "empty_msg": "no reading-list sources configured (add a schema source under user-types/reading-list/)",
+  "deny_msg": "permission denied: agent access to the reading list is not allowed",
+  "fail_msg": "failed to fetch reading list",
+  "fields": {
+    "id": {
+      "type": "string",
+      "description": "durable identifier when the source supplies one (ISBN, URL, row id)"
+    },
+    "title": {
+      "type": "string",
+      "required": true,
+      "description": "book or article title"
+    },
+    "author": {
+      "type": "string",
+      "description": "author or publication"
+    },
+    "status": {
+      "type": "string",
+      "description": "want | reading | done"
+    },
+    "notes": {
+      "type": "string",
+      "description": "free-form note"
+    }
+  },
+  "identity": {
+    "fields": ["title", "author"],
+    "entity_id_field": "id"
+  },
+  "sources": [
+    {
+      "id": "sample-export",
+      "name": "Sample export",
+      "kind": "file_json",
+      "path": "sample/books.json",
+      "items_path": "items",
+      "id_field": "row_id",
+      "field_map": {
+        "id": "id",
+        "title": "title",
+        "author": "author",
+        "status": "status",
+        "notes": "notes"
+      }
+    }
+  ]
+}

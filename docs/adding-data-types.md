@@ -497,11 +497,32 @@ agents more upstream shapes.
 
 ---
 
+## User-defined kinds (#15 PoC)
+
+A **user-defined type** is a schema pack (JSON) loaded at startup from the
+`user-types/` directory. It becomes a real `LibraryKind` and rides the same
+aggregate pipeline — it is not a parallel API.
+
+| Piece | Home |
+|-------|------|
+| Schema, neutral item, merge | `internal/types/udt.go` |
+| Loader, field map, `file_json` / `http_json` fetch | `internal/core/udt.go` |
+| Aggregate handler | `internal/core/udt_handlers.go` |
+| Reference pack | `examples/user-types/reading-list/` |
+| Design + own-repo recommendation | `docs/user-defined-types.md` |
+
+Rules that still apply: fail-open per source; identity in `sources[]`; opt-in
+permissions (`default_access`, else none); no media storage. Named OAuth
+providers stay named connectors — UDT sources are user-supplied feeds.
+
+---
+
 ## Out of scope (still open)
 
 Do not assume these are solved when designing a type:
 
-- User-defined / bring-your-own types (#15)
+- Full UDT product surface (admin UI, hot-reload, sensitive-field redaction) —
+  PoC only, see `docs/user-defined-types.md`
 - Photo ownership / provenance proofs (#20)
 - Live Immich canonical photos (#39)
 - Generic auto-detected type expansion (not the default; named services first)

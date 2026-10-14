@@ -1,0 +1,42 @@
+{
+  "items": [
+    {
+      "row_id": "export-a1",
+      "id": "isbn:9780061054884",
+      "title": "The Dispossessed",
+      "author": "Ursula K. Le Guin",
+      "status": "reading",
+      "notes": "Chapter 4 — the wall metaphor"
+    },
+    {
+      "row_id": "export-b9",
+      "id": "isbn:9780061054884",
+      "title": "The Dispossessed",
+      "author": "Le Guin",
+      "status": "reading",
+      "notes": "Second export of the same ISBN — should merge via entity_id"
+    },
+    {
+      "row_id": "export-c1",
+      "title": "The Left Hand of Darkness",
+      "author": "Ursula K. Le Guin",
+      "status": "want",
+      "notes": "No durable id in this export"
+    },
+    {
+      "row_id": "export-c2",
+      "title": "  the left hand of darkness ",
+      "author": "Ursula K. Le Guin",
+      "status": "reading",
+      "notes": "Same book, different export spelling — should merge via name"
+    },
+    {
+      "row_id": "export-d1",
+      "id": "row:csv-17",
+      "title": "A Psalm for the Wild-Built",
+      "author": "Becky Chambers",
+      "status": "done",
+      "notes": "Liked the tea monk"
+    }
+  ]
+}

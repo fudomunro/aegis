@@ -104,7 +104,7 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var handler http.HandlerFunc
-	for _, kind := range libraryKinds {
+	for _, kind := range s.allLibraryKinds() {
 		if kind.ID != kindID {
 			continue
 		}

@@ -312,6 +312,20 @@ func Run() {
 		apertureURL:   *apertureURL,
 	}
 
+	// User-defined types (issue #15): load schema packs from the user-types
+	// directory (default <data-dir>/user-types). Fail-open — a bad schema is
+	// skipped and logged; built-in kinds always stay available.
+	userTypesDir := filepath.Join(paths.Dir, "user-types")
+	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
+		userTypesDir = expandUserPath(v)
+	}
+	udtReg, udtLoaded := LoadUserDefinedTypes(userTypesDir, defaultUserTypesOverlayPath(paths.Config), slog.Default())
+	srv.udts = udtReg
+	srv.registerUserDefinedKinds()
+	if len(udtLoaded) > 0 {
+		slog.Info("user-defined types ready", "dir", userTypesDir, "count", len(udtLoaded))
+	}
+
 	// Register service connectors.
 	spotifyConn := connectors.NewSpotifyConnector(srv)
 	srv.connectors["spotify"] = spotifyConn
@@ -475,6 +489,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminQuicken)(w, r)
 	case path == "timeline" || strings.HasPrefix(path, "timeline/"):
 		s.AuthMiddleware(s.HandleAdminTimeline)(w, r)
+	case path == "udt" || strings.HasPrefix(path, "udt/"):
+		s.AuthMiddleware(s.HandleAdminUDT)(w, r)
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}

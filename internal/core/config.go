@@ -399,6 +399,24 @@ func (c *Config) SetTypePolicies(policies types.TypePolicies) error {
 	return c.setTypePoliciesLocked(policies)
 }
 
+// SeedTypePolicy installs a type-policy default when the key has no entry yet.
+// Used for user-defined kinds whose schema declares default_access (issue #15).
+// Never overwrites an existing policy and never persists — admin overlay wins.
+func (c *Config) SeedTypePolicy(dataType string, policy types.TypePolicy) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if dataType == "" {
+		return
+	}
+	if c.typePolicies == nil {
+		c.typePolicies = types.TypePolicies{}
+	}
+	if _, exists := c.typePolicies[dataType]; exists {
+		return
+	}
+	c.typePolicies[dataType] = policy
+}
+
 // EffectivePermissions returns the resolved service-scoped permission map
 // for a provider: type policy first, then legacy service permissions tightened
 // on top (issue #148).

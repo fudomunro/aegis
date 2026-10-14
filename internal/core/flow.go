@@ -309,7 +309,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 
 	// Library kinds this server can aggregate, with which services feed them.
 	libraryProviders := make(map[string][]string)
-	for _, kind := range libraryKinds {
+	for _, kind := range s.allLibraryKinds() {
 		libraryProviders[kind.ID] = nil
 	}
 
@@ -341,7 +341,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			}
 			node.DataTypes = dataTypes
 
-			for _, kind := range libraryKinds {
+			for _, kind := range s.allLibraryKinds() {
 				if flowProvidesKind(connector, kind.ID) {
 					node.Providers = append(node.Providers, kind.ID)
 					if !strings.EqualFold(svc.Action, "block") {
@@ -423,9 +423,16 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		return edges[i].Label < edges[j].Label
 	})
 
-	libraries := make([]FlowLibrary, 0, len(libraryKinds))
-	for _, kind := range libraryKinds {
+	kinds := s.allLibraryKinds()
+	libraries := make([]FlowLibrary, 0, len(kinds))
+	for _, kind := range kinds {
 		providers := append([]string(nil), libraryProviders[kind.ID]...)
+		// User-defined kinds are fed by schema sources, not OAuth connectors.
+		if schema, ok := s.udtSchemaForKind(kind.ID); ok && len(providers) == 0 {
+			for _, src := range schema.Sources {
+				providers = append(providers, src.ID)
+			}
+		}
 		sort.Strings(providers)
 		libraries = append(libraries, FlowLibrary{
 			ID:        kind.ID,
