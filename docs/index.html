@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ 847e680</title>
+<title>Aegis — Code Walkthrough @ 5512aff</title>
 <meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>847e680</span>
-    <span class="version-meta">feat/issue-148-type-permissions · 2026-10-14 · feat: make type-owned permissions primary (Phase 5 of #148) · generated 2026-10-14 15:55 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>5512aff</span>
+    <span class="version-meta">feat/issue-15-user-defined-types · 2026-10-14 · feat: admin UI for UDT local file selection (issue #15) · generated 2026-10-14 22:26 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,8 +306,8 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">29,544</div><div class="l">source LOC (no tests)</div></div>
-    <div class="stat"><div class="v">83</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">31,223</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">89</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">11</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">10</div><div class="l">library kinds</div></div>
   </div>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ 847e680</h2>
+  <h2><span class="n">13</span>File map @ 5512aff</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1255,9 +1255,9 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
     </thead>
     <tbody>
       <tr><td><code>main.go</code></td><td class="mono">5</td><td>Thin entry: core.Run()</td></tr>
-      <tr><td><code>internal/core/run.go</code></td><td class="mono">714</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
-      <tr><td><code>internal/core/handler.go</code></td><td class="mono">873</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
-      <tr><td><code>internal/core/config.go</code></td><td class="mono">394</td><td>Services + shared OAuth connections, matching, reload</td></tr>
+      <tr><td><code>internal/core/run.go</code></td><td class="mono">729</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
+      <tr><td><code>internal/core/handler.go</code></td><td class="mono">876</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
+      <tr><td><code>internal/core/config.go</code></td><td class="mono">411</td><td>Services + shared OAuth connections, matching, reload</td></tr>
       <tr><td><code>internal/types/models.go</code></td><td class="mono">763</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
       <tr><td><code>internal/types/merge.go</code></td><td class="mono">716</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>internal/types/kind.go</code></td><td class="mono">60</td><td>LibraryKind data (instructions, keywords, cache key)</td></tr>
@@ -1265,6 +1265,12 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/types/pathclass.go</code></td><td class="mono">165</td><td>Proxy path → data-type classification table</td></tr>
       <tr><td><code>internal/types/capabilities.go</code></td><td class="mono">160</td><td>ServiceCapabilities / Operation shapes + filtering</td></tr>
       <tr><td><code>internal/types/providers.go</code></td><td class="mono">136</td><td>Provider interfaces + ErrUnauthorized + service-name helpers</td></tr>
+      <tr><td><code>internal/types/udt.go</code></td><td class="mono">495</td><td>User-defined type schema, neutral item, merge (#15)</td></tr>
+      <tr><td><code>internal/types/optin.go</code></td><td class="mono">20</td><td>Opt-in data-type marks for UDTs / places (#15, #142)</td></tr>
+      <tr><td><code>internal/core/udt.go</code></td><td class="mono">374</td><td>UDT pack loader, field map, file_json/http_json fetch (#15)</td></tr>
+      <tr><td><code>internal/core/udt_handlers.go</code></td><td class="mono">117</td><td>UDT library aggregate handler + type-policy gate (#15)</td></tr>
+      <tr><td><code>internal/core/udt_overlay.go</code></td><td class="mono">168</td><td>user_types.json overlay: admin local-file selection (#15)</td></tr>
+      <tr><td><code>internal/core/udt_admin.go</code></td><td class="mono">433</td><td>Admin UDT status/browse/file-select API (#15)</td></tr>
       <tr><td><code>internal/connectors/amazonmusic.go</code></td><td class="mono">556</td><td>Amazon Music connector</td></tr>
       <tr><td><code>internal/connectors/google-calendar.go</code></td><td class="mono">735</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/google-contacts.go</code></td><td class="mono">360</td><td>Google Contacts connector (service id: google)</td></tr>
@@ -1308,7 +1314,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/identity.go</code></td><td class="mono">243</td><td>Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
       <tr><td><code>internal/core/immich_setup.go</code></td><td class="mono">846</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/library.go</code></td><td class="mono">96</td><td>Thin per-kind library handlers + aggregate wiring</td></tr>
-      <tr><td><code>internal/core/librarykind.go</code></td><td class="mono">664</td><td>Library kind registry + kindRuntime predicates + aggregate pipeline</td></tr>
+      <tr><td><code>internal/core/librarykind.go</code></td><td class="mono">701</td><td>Library kind registry + kindRuntime predicates + aggregate pipeline</td></tr>
       <tr><td><code>internal/core/mail_archive.go</code></td><td class="mono">864</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/mail_archive_http.go</code></td><td class="mono">429</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/mail_archive_sync.go</code></td><td class="mono">231</td><td>Supporting code</td></tr>
@@ -1359,8 +1365,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>847e680</code></strong>
-    (feat/issue-148-type-permissions · 2026-10-14 · feat: make type-owned permissions primary (Phase 5 of #148)).
+    <code>5512aff</code></strong>
+    (feat/issue-15-user-defined-types · 2026-10-14 · feat: admin UI for UDT local file selection (issue #15)).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1391,12 +1397,12 @@ python3 docs/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>847e680</strong>
+  Generated for <strong>5512aff</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 83 files · 29,544 LOC · 11 connectors · 10 library kinds
-  · 2026-10-14 15:55 UTC
+  · 89 files · 31,223 LOC · 11 connectors · 10 library kinds
+  · 2026-10-14 22:26 UTC
 </footer>
 
 </div>
