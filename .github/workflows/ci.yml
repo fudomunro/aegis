@@ -24,7 +24,7 @@ jobs:
         run: go vet ./...
 
       - name: Test
-        run: go test ./... -count=1 -race -covermode=atomic -coverprofile=coverage.out
+        run: go test ./... -count=1 -race -covermode=atomic -coverpkg=./... -coverprofile=coverage.out
 
       - name: Coverage summary
         run: |

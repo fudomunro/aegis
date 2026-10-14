@@ -9,14 +9,31 @@ import (
 
 // Access levels for agent access to a data type.
 const (
-	AccessNone     = "none"
+	// AccessNone denies all operations on the data type.
+	AccessNone = "none"
+	// AccessFreeBusy allows safe methods on events, but responses are
+	// reduced to availability only (start/end/all_day/status) — no titles,
+	// attendees, locations, or descriptions (issue #128). Events-only.
 	AccessFreeBusy = "freebusy"
-	AccessSummary  = "summary"
-	AccessCity     = "city"
-	AccessPrecise  = "precise"
-	AccessRead     = "read"
-	AccessWrite    = "write"
-	AccessFull     = "read-write"
+	// AccessSummary allows safe methods on transactions, but responses are
+	// reduced to totals by category/month only — no line items and no
+	// account identifiers (issue #141). Transactions-only.
+	AccessSummary = "summary"
+	// AccessCity allows safe methods on places, but responses are reduced to
+	// locality, country, and the visit/trip time window only — enough to ask
+	// "was I out of town?" without names, addresses, or coordinates
+	// (issue #142). Places-only.
+	AccessCity = "city"
+	// AccessPrecise allows safe methods on places with full place names,
+	// addresses, and coordinates (issue #142). Places-only. The maximum
+	// places read level; there is no agent write surface for places.
+	AccessPrecise = "precise"
+	// AccessRead allows safe methods (GET, HEAD).
+	AccessRead = "read"
+	// AccessWrite allows mutating methods (POST, PUT, PATCH, DELETE).
+	AccessWrite = "write"
+	// AccessFull allows both read and write methods.
+	AccessFull = "read-write"
 )
 
 // freeBusyOnlyTypes lists data types that honor AccessFreeBusy redaction.
@@ -147,7 +164,7 @@ func (p Permissions) Strictest() string {
 	return DefaultAccessType
 }
 
-// accessForDataType resolves the effective level for a classified path.
+// AccessForDataType resolves the effective level for a classified path.
 // Unclassified paths use Strictest, never the default key (issue #94).
 func (p Permissions) AccessForDataType(dataType string) string {
 	if dataType == "" {
@@ -267,9 +284,9 @@ func (p Permissions) Clone() map[string]string {
 	return out
 }
 
-// ValidatePermissions checks that every level is a known access type.
-// freebusy is events-only, summary is transactions-only, and city/precise are
-// places-only: other types cannot honor those redactions.
+// NormalizeAccess canonicalizes a user/config access-level token to one of
+// the Access* constants. Unknown tokens are returned lowercased so validation
+// can reject them.
 func NormalizeAccess(level string) string {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case AccessNone, "deny", "off", "false":
@@ -293,6 +310,8 @@ func NormalizeAccess(level string) string {
 	}
 }
 
+// AllowsMethod reports whether the access level permits the HTTP method
+// (GET/HEAD are reads; POST/PUT/PATCH/DELETE are writes).
 func AllowsMethod(level, method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
@@ -309,46 +328,6 @@ func AllowsMethod(level, method string) bool {
 	}
 }
 
-// IsFreeBusyAccess reports whether the level is the events free/busy view.
-// IsFreeBusyAccess reports whether the level is the events free/busy view.
-// IsSummaryAccess reports whether the level is the transactions totals-only
-// view (issue #141).
-// IsCityAccess reports whether the level is the places city-only view
-// (issue #142).
-// IsPreciseAccess reports whether the level is the places precise view
-// (coordinates included, issue #142).
-// PlacesLevelForResponse picks the redaction to apply for a places response.
-// City strips to locality/country/window; read keeps names without
-// coordinates; precise (and unrestricted write/full) keeps coordinates.
-// Opt-in types never inherit "default" (issue #142).
-// Strictest returns the most restrictive access level configured on the map.
-// Used when a proxy path does not map to a known data type: unknown endpoints
-// must not inherit "default" if any type is tighter (issue #94). A nil or empty
-// map is unrestricted. If reads and writes both appear, no single level is
-// tighter than every known type for an unknown method class — deny.
-// For returns the access level for a data type.
-// Unknown/empty data types fall through to "default" (or DefaultAccessType),
-// except opt-in types (places) which stay "none" unless named explicitly —
-// the "default" key never enables them (issue #142).
-// Proxy callers with an unclassified path must use Strictest instead so
-// unknown surface cannot outrank a tighter type (issue #94).
-// accessForDataType resolves the effective level for a classified path.
-// Unclassified paths use Strictest, never the default key (issue #94).
-// Allows reports whether the given HTTP method is permitted for the data type.
-// AllowsRead reports whether read (GET/HEAD) is permitted for the data type.
-// AllowsWrite reports whether any mutating method is permitted for the data type.
-// DeniedDataTypes returns sorted data-type names explicitly set to "none".
-// The reserved "default" key is omitted.
-// FreeBusyDataTypes returns sorted data-type names limited to free/busy
-// (issue #128). Used in pre-request injection so agents know they only get
-// availability, not event content.
-// SummaryDataTypes returns sorted data-type names limited to totals-only
-// summary (issue #141). Used in pre-request injection so agents know they
-// only get category/month totals, not line items.
-// PlacesAccessLevels returns the effective places access level per service key
-// that explicitly enables places (issue #142). Opt-in: keys not listed are
-// omitted (they mean none).
-// Clone returns a shallow copy suitable for admin/API responses.
 // TypePolicy is the agent-access policy owned by a data type (issue #148).
 // Service-level Permissions remain a minority override during migration;
 // the type default is the primary model. Enforcement still applies on
@@ -427,21 +406,6 @@ func accessRank(level string) int {
 		return 0
 	}
 }
-
-// ValidatePermissions checks that every level is a known access type.
-// freebusy is events-only, summary is transactions-only, and city/precise are
-// places-only: other types cannot honor those redactions.
-// IsFreeBusyAccess reports whether the level is the events free/busy view.
-// IsSummaryAccess reports whether the level is the transactions totals-only
-// view (issue #141).
-// IsCityAccess reports whether the level is the places city-only view
-// (issue #142).
-// IsPreciseAccess reports whether the level is the places precise view
-// (coordinates included, issue #142).
-// PlacesLevelForResponse picks the redaction to apply for a places response.
-// City strips to locality/country/window; read keeps names without
-// coordinates; precise (and unrestricted write/full) keeps coordinates.
-// Opt-in types never inherit "default" (issue #142).
 
 // ValidatePermissions checks that every level is a known access type.
 // freebusy is events-only, summary is transactions-only, and city/precise are

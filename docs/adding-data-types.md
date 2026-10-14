@@ -67,20 +67,24 @@ These are non-negotiable (see `AGENTS.md`). New types inherit them.
 
 ## Anatomy of a data type
 
-A complete type touches these layers. Music types (`library.go` + `match.go`)
-and people/media types (`contacts.go`, `photos.go`, …) are the two templates.
+A complete type touches these layers. Music types (`internal/types/merge.go`
++ `library.go`) and people/media types (`contacts.go`, `photos.go`, …) are the
+two templates.
 
 ```text
-internal/types/    Neutral item + *Source + *List, merge/identity, kind data
-<kind>.go          Provider interface, identity keys, merge, thin handler
-librarykind.go     Registry entry (instructions, keywords, messages)
-<provider>.go      Connector: Capabilities + ListUser… + optional proxy
-canonical.go       canonicalKindIDs + stamp*Canonical (if sources can be home)
-copy_ledger_stamp.go  stamp*Copies (if sources can hold tracked copies)
-sampledata.go      Deterministic fixtures + deliberate merge pairs
-pathclass.go       dataTypePathRules for the provider's proxy paths
-tests              Merge, aggregate, permissions, sample-data query checks
-README.md          Agent-facing semantics for the type
+internal/types/models.go     Neutral item + *Source + *List
+internal/types/merge.go      Identity keys + Merge* algorithms
+internal/types/providers.go  Provider interface (WidgetProvider) + ErrUnauthorized
+internal/types/kind.go       LibraryKind data helpers (already generic)
+internal/types/pathclass.go  dataTypePathRules for the provider's proxy paths
+<kind>.go                    Thin handler + kind-specific merge glue if any
+librarykind.go               libraryKinds entry + kindRuntime predicates
+<provider>.go                Connector: Capabilities + ListUser… + optional proxy
+canonical.go                 canonicalKindIDs + stamp*Canonical (if sources can be home)
+copy_ledger_stamp.go         stamp*Copies (if sources can hold tracked copies)
+sampledata.go                Deterministic fixtures + deliberate merge pairs
+tests                        Merge, aggregate, permissions, sample-data query checks
+README.md                    Agent-facing semantics for the type
 ```
 
 ### Target package map (issue #15)
@@ -94,9 +98,10 @@ still flat, write new code so the move is a `git mv` + package rename:
 | `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores | pending |
 | `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) | pending |
 
-Connectors take `Host` (`host.go`). Classification lives in `pathclass.go`.
-Type-level policy shape (`policy.go`) is the #148 home — service
-`permissions` remain a migration override, not the primary model.
+Connectors take `Host` (`host.go`). Classification lives in
+`internal/types/pathclass.go`. Type-level policy shape
+(`internal/types/policy.go`) is the #148 home — service `permissions` remain
+a migration override, not the primary model.
 
 You do **not** need every optional hook on day one. Ship the spine first
 (model + provider + kind + handler + tests), then add locations (#76), durable
@@ -104,7 +109,7 @@ IDs (#4), and sample edge cases (#89) as the type matures.
 
 ---
 
-### 1. Neutral model (`models.go`)
+### 1. Neutral model (`internal/types/models.go`)
 
 Define three types: the user-facing item, its per-service source, and the list
 wrapper.
@@ -161,9 +166,11 @@ schema.
 
 ---
 
-### 2. Provider interface (in the kind file)
+### 2. Provider interface (`internal/types/providers.go`)
 
-One method, neutral types, explicit truncation:
+One method, neutral types, explicit truncation. Put the interface next to the
+other `*Provider` contracts in `internal/types/providers.go` (not in the kind
+handler file).
 
 ```go
 // WidgetProvider is implemented by connectors that can return the user's
@@ -190,10 +197,12 @@ type WidgetProvider interface {
 
 ### 3. Registry entry (`librarykind.go`)
 
-Append to `libraryKinds`. This is the single place that teaches agents how to
-use the dataset.
+Append a **data** entry to `libraryKinds` and a matching **runtime** entry to
+`kindRuntime`. Both are required: a kind with no `kindRuntime` row never
+appears in pre-request hints (and `TestLibraryKinds_KindRuntimeInSync` fails).
 
 ```go
+// libraryKinds (types.LibraryKind data only — no predicates):
 {
     ID:              "widgets",
     Path:            "/v1/library/widgets",
@@ -207,8 +216,12 @@ use the dataset.
     EmptyMsg:        "no widget-capable services configured",
     DenyMsg:         "permission denied: agent access to widgets is not allowed",
     FailMsg:         "failed to fetch widgets",
-    HasProviders:    func(s *Server) bool { return s.hasProvider[WidgetProvider]() },
-    Readable:        func(s *Server) bool { return s.libraryReadableFor("widgets") },
+},
+
+// kindRuntime (core-owned visibility predicates):
+"widgets": {
+    HasProviders: func(s *Server) bool { return s.hasProvider[WidgetProvider]() },
+    Readable:     func(s *Server) bool { return s.libraryReadableFor("widgets") },
 },
 ```
 
@@ -221,7 +234,7 @@ Field guidance:
 | `SyncRule` | Name the **match keys** and the `match=` values you will emit |
 | `Keywords` | Service-less questions that should inject this endpoint; include common misspellings and the service brand only if users say it as the data ("gmail inbox", "google calendar") |
 | `EmptyMsg` / `DenyMsg` / `FailMsg` | Short, agent-safe; no secrets, no stack traces |
-| `HasProviders` / `Readable` | Wire to `hasProvider[P]` and `libraryReadableFor` — do not hand-roll |
+| `kindRuntime` row | Wire `HasProviders` to `hasProvider[P]` and `Readable` to `libraryReadableFor` — do not hand-roll; keep IDs in sync with `libraryKinds` |
 
 `LibraryKind.Instructions` automatically adds truncated-flag wording and the
 canonical-source hint. `libraryInstructionsFor` appends the multi-source
@@ -353,7 +366,7 @@ A type is invisible until permissions and path classification know it.
 **Permission key** (`PermType` / `DataTypeCapability.Name`) must match what
 `DataTypeForPath` returns for that provider's proxy paths.
 
-1. **`pathclass.go` → `dataTypePathRules`**  
+1. **`internal/types/pathclass.go` → `dataTypePathRules`**  
    Map provider paths (`/me/widgets`, `/widgets/...`, …) to `"widgets"` via
    `DataTypeForPath`.  
    Unknown paths fall through to `default` — that is fail-open for access, not
@@ -432,9 +445,9 @@ agents more upstream shapes.
 
 **Spine**
 
-- [ ] Neutral `Widget` / `WidgetSource` / `WidgetList` in `models.go` (sources[], Match, Extra)
-- [ ] `WidgetProvider` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
-- [ ] `LibraryKind` registry entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages)
+- [ ] Neutral `Widget` / `WidgetSource` / `WidgetList` in `internal/types/models.go` (sources[], Match, Extra)
+- [ ] `WidgetProvider` in `internal/types/providers.go` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
+- [ ] `libraryKinds` data entry **and** `kindRuntime` predicates (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages)
 - [ ] Route in `libraryRouteHandlers()`
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
 - [ ] Identity key + `MergeWidgets` (durable ID first; record `Match`)
@@ -471,7 +484,7 @@ agents more upstream shapes.
 
 | Look at | When you need |
 |---------|----------------|
-| `library.go` + `match.go` | Music-shaped types: durable IDs, duration guard, playlist links |
+| `library.go` + `internal/types/merge.go` | Music-shaped types: durable IDs, duration guard, playlist links |
 | `contacts.go` | Chained identity (email/phone/handle), union-find merge |
 | `photos.go` | Non-name identity (hash/time+dim), "bytes stay upstream" sources |
 | `events.go` | Time-windowed items, iCalUID vs title+start matching |

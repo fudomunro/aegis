@@ -150,14 +150,6 @@ func CanonicalProxyPath(remaining string) (string, error) {
 	return "/" + strings.Join(out, "/"), nil
 }
 
-// DataTypeForPath classifies a service-proxy path into a Aegis data type.
-// Unknown or non-canonical paths return "" so callers must apply the
-// strictest configured permission (not "default") — see accessForDataType.
-// Classification is the ordered rule table in pathclass.go (issue #15).
-// DataTypeForPath classifies a service-proxy path into a Aegis data type.
-// Unknown or non-canonical paths return "" so callers must apply the
-// strictest configured permission (not "default") — see accessForDataType.
-// Classification is the ordered rule table in pathclass.go (issue #15).
 func DataTypeForPath(path string) string {
 	p := strings.TrimSpace(path)
 	if p == "" {
@@ -177,7 +169,4 @@ func DataTypeForPath(path string) string {
 	return DataTypeForCanonicalPath(clean)
 }
 
-// FilterCapabilities removes operations the permission map does not allow.
-// Data types set to "none" are dropped entirely; other types keep only
-// operations whose HTTP method is permitted.
 var errNonCanonicalPath = errors.New("non-canonical path")

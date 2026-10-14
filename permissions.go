@@ -77,7 +77,7 @@ func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool 
 
 // AllowDataPermission enforces the service's permission for a proxy request.
 // Returns true when the request may proceed. On denial it writes a 403 JSON error.
-// types.Permissions further constrain the connector: a write level never unlocks
+// Permissions further constrain the connector: a write level never unlocks
 // mutating calls the connector does not implement.
 // remainingPath should already be canonical; unclassified paths use the
 // strictest configured level, never "default" (issue #94).

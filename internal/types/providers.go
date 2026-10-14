@@ -119,6 +119,7 @@ type PlaceVisitProvider interface {
 	ListUserPlaceVisits(ctx context.Context) (visits []PlaceVisit, truncated bool, err error)
 }
 
+// PlaylistServiceName returns the display name of the first source, or "".
 func PlaylistServiceName(p Playlist) string {
 	if len(p.Sources) > 0 {
 		return p.Sources[0].ServiceName
@@ -126,6 +127,7 @@ func PlaylistServiceName(p Playlist) string {
 	return ""
 }
 
+// TrackServiceName returns the display name of the first source, or "".
 func TrackServiceName(t Track) string {
 	if len(t.Sources) > 0 {
 		return t.Sources[0].ServiceName
@@ -133,6 +135,7 @@ func TrackServiceName(t Track) string {
 	return ""
 }
 
+// AlbumServiceName returns the display name of the first source, or "".
 func AlbumServiceName(a Album) string {
 	if len(a.Sources) > 0 {
 		return a.Sources[0].ServiceName
@@ -140,12 +143,10 @@ func AlbumServiceName(a Album) string {
 	return ""
 }
 
+// ArtistServiceName returns the display name of the first source, or "".
 func ArtistServiceName(a Artist) string {
 	if len(a.Sources) > 0 {
 		return a.Sources[0].ServiceName
 	}
 	return ""
 }
-
-// HandleLibraryPlaylists returns the user's playlists from every connected
-// service: GET /v1/library/playlists

@@ -13,17 +13,17 @@ type ServiceCapabilities struct {
 
 // DataTypeCapability describes supported operations for a specific data type.
 type DataTypeCapability struct {
-	Name        string      `json:"name"`
-	Description string      `json:"description"`
+	Name        string      `json:"name"`        // e.g. "tracks", "playlists", "search"
+	Description string      `json:"description"` // human-readable description
 	Operations  []Operation `json:"operations"`
 }
 
 // Operation describes a single callable operation on a data type.
 type Operation struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Method      string       `json:"method"`
-	Path        string       `json:"path"`
+	Name        string       `json:"name"`        // "read_saved", "search", "get_by_id"
+	Description string       `json:"description"` // human-readable
+	Method      string       `json:"method"`      // "GET", "POST", etc.
+	Path        string       `json:"path"`        // "/me/tracks"
 	Parameters  []Parameter  `json:"parameters,omitempty"`
 	Response    ResponseSpec `json:"response"`
 }
@@ -31,8 +31,8 @@ type Operation struct {
 // Parameter describes a query or path parameter for an operation.
 type Parameter struct {
 	Name        string `json:"name"`
-	In          string `json:"in"`
-	Type        string `json:"type"`
+	In          string `json:"in"`   // "query" or "path"
+	Type        string `json:"type"` // "string", "integer", "boolean"
 	Description string `json:"description"`
 	Default     any    `json:"default,omitempty"`
 	Required    bool   `json:"required,omitempty"`
@@ -41,22 +41,8 @@ type Parameter struct {
 // ResponseSpec describes what the operation returns.
 type ResponseSpec struct {
 	Description string   `json:"description"`
-	Fields      []string `json:"fields,omitempty"`
+	Fields      []string `json:"fields,omitempty"` // top-level field names in the response
 }
-
-// FilterCapabilities removes operations the permission map does not allow.
-// Data types set to "none" are dropped entirely; other types keep only
-// operations whose HTTP method is permitted.
-// isMutatingMethod reports whether the HTTP method changes data.
-// dataTypeKnown reports whether the connector advertises the data type.
-// dataTypeHasWriteOp reports whether the connector exposes any mutating
-// operation for the data type (including session/search POSTs). Used for
-// proxy enforcement: a permission write level never unlocks methods the
-// connector does not implement at all.
-// dataTypeHasAgentWriteOp reports whether the connector exposes a mutating
-// operation that actually changes data of this type (not picker/search).
-// writableDataTypesFromCapabilities lists data types with at least one
-// agent-meaningful mutating connector operation.
 
 // FilterCapabilities removes operations the permission map does not allow.
 // Data types set to "none" are dropped entirely; other types keep only
@@ -87,7 +73,7 @@ func FilterCapabilities(caps ServiceCapabilities, p Permissions) ServiceCapabili
 	return out
 }
 
-// isMutatingMethod reports whether the HTTP method changes data.
+// IsMutatingMethod reports whether the HTTP method changes data.
 func IsMutatingMethod(method string) bool {
 	switch strings.ToUpper(strings.TrimSpace(method)) {
 	case http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
@@ -97,7 +83,7 @@ func IsMutatingMethod(method string) bool {
 	}
 }
 
-// dataTypeKnown reports whether the connector advertises the data type.
+// DataTypeKnown reports whether the connector advertises the data type.
 func DataTypeKnown(caps ServiceCapabilities, dataType string) bool {
 	if dataType == "" {
 		return false
@@ -110,7 +96,7 @@ func DataTypeKnown(caps ServiceCapabilities, dataType string) bool {
 	return false
 }
 
-// dataTypeHasWriteOp reports whether the connector exposes any mutating
+// DataTypeHasWriteOp reports whether the connector exposes any mutating
 // operation for the data type (including session/search POSTs). Used for
 // proxy enforcement: a permission write level never unlocks methods the
 // connector does not implement at all.
@@ -135,7 +121,7 @@ func DataTypeHasWriteOp(caps ServiceCapabilities, dataType string) bool {
 	return false
 }
 
-// dataTypeHasAgentWriteOp reports whether the connector exposes a mutating
+// DataTypeHasAgentWriteOp reports whether the connector exposes a mutating
 // operation that actually changes data of this type (not picker/search).
 func DataTypeHasAgentWriteOp(caps ServiceCapabilities, dataType string) bool {
 	if dataType == "" {
@@ -158,7 +144,7 @@ func DataTypeHasAgentWriteOp(caps ServiceCapabilities, dataType string) bool {
 	return false
 }
 
-// writableDataTypesFromCapabilities lists data types with at least one
+// WritableDataTypesFromCapabilities lists data types with at least one
 // agent-meaningful mutating connector operation.
 func WritableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
 	var out []string
@@ -171,7 +157,7 @@ func WritableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
 	return out
 }
 
-// isAgentDataWritePath filters mutating ops that are not "agents may change
+// IsAgentDataWritePath filters mutating ops that are not "agents may change
 // this data type". Picker session creates and metadata search POSTs are
 // operational helpers, not library write surface for the permissions form.
 func IsAgentDataWritePath(path string) bool {
