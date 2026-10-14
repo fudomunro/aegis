@@ -45,7 +45,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// Handle /capabilities requests — return connector metadata filtered by permissions.
 	if remainingPath == "/capabilities" {
 		if connector, ok := s.connectors[serviceID]; ok {
-			caps := types.FilterCapabilities(connector.Capabilities(), svc.Permissions)
+			caps := types.FilterCapabilities(connector.Capabilities(), s.effectivePermissions(svc))
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(caps)
 		} else {
@@ -55,7 +55,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dataType := types.DataTypeForPath(remainingPath)
-	accessLevel := svc.Permissions.AccessForDataType(dataType)
+	accessLevel := s.effectivePermissions(svc).AccessForDataType(dataType)
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)

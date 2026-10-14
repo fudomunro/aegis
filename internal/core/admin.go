@@ -321,6 +321,71 @@ type adminPermissionsRequest struct {
 	Permissions types.Permissions `json:"permissions"`
 }
 
+// adminTypePoliciesRequest is the body for PUT type policies.
+type adminTypePoliciesRequest struct {
+	// Types maps data-type / permission keys to TypePolicy (issue #148).
+	Types map[string]types.TypePolicy `json:"types"`
+}
+
+// HandleAdminTypePolicies reads or writes the type-owned agent policy map.
+//
+//	GET /v1/admin/type-policies
+//	PUT /v1/admin/type-policies  {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+//
+// Type policy is primary: default plus optional per-provider overrides that
+// can only tighten. Service permission maps remain migration overrides.
+func (s *Server) HandleAdminTypePolicies(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		policies := s.config.TypePolicies()
+		if policies == nil {
+			policies = types.TypePolicies{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"version": permissionsFileVersion,
+			"types":   policies,
+		})
+	case http.MethodPut:
+		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		if !ok {
+			return
+		}
+		var req adminTypePoliciesRequest
+		if len(body) > 0 {
+			if err := json.Unmarshal(body, &req); err != nil {
+				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				return
+			}
+		}
+		policies := req.Types
+		if policies == nil {
+			policies = types.TypePolicies{}
+		}
+		if err := s.config.SetTypePolicies(policies); err != nil {
+			withPeerLog(slog.With("handler", "admin_type_policies"), r).
+				Warn("failed to save type policies", "error", err)
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		s.cache.Clear()
+		withPeerLog(slog.With("handler", "admin_type_policies"), r).
+			Info("type policies updated", "types", len(policies))
+		saved := s.config.TypePolicies()
+		if saved == nil {
+			saved = types.TypePolicies{}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(map[string]any{
+			"version": permissionsFileVersion,
+			"types":   saved,
+			"status":  "saved",
+		})
+	default:
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+	}
+}
+
 // HandleAdminServicePermissions reads or writes a service's agent permission map.
 //
 //	GET /v1/admin/services/{id}/permissions
@@ -347,6 +412,14 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 		if perms == nil {
 			perms = map[string]string{}
 		}
+		effective := s.effectivePermissions(svc)
+		var effectiveOut map[string]string
+		if effective != nil {
+			effectiveOut = effective.Clone()
+		}
+		if effectiveOut == nil {
+			effectiveOut = map[string]string{}
+		}
 		var types []string
 		var writable []string
 		if connector, ok := s.connectors[id]; ok {
@@ -358,10 +431,11 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"service_id":           id,
-			"permissions":          perms,
-			"available_data_types": types,
-			"writable_data_types":  writable,
+			"service_id":            id,
+			"permissions":           perms,
+			"effective_permissions": effectiveOut,
+			"available_data_types":  types,
+			"writable_data_types":   writable,
 		})
 	case http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)

@@ -370,7 +370,21 @@
 
       <div id="agent-data-access-help" class="help-box">
         <h3>Agent data access</h3>
-        <p>Choose what agents can use on each service. Available = read · Free/busy only = calendar availability without titles/attendees · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
+        <p>Permissions live with <strong>data types</strong> (issue #148). Set a type default below — it applies to every connected service. Use each service card’s form only to <em>tighten</em> further (a per-service override can never grant more than the type default). Available = read · Free/busy only = calendar availability without titles/attendees · Totals only = category/month sums · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
+      </div>
+
+      <div class="help-box" id="type-policy-panel">
+        <div class="card-header" style="margin:0">
+          <h3 style="margin:0">Data type policies</h3>
+          <div class="grow"></div>
+          <button class="btn btn-primary" id="type-policy-save" type="button">Save type policies</button>
+        </div>
+        <p class="meta" style="margin:0.55rem 0 0.35rem">
+          Primary agent-access policy, owned by each data type. Optional per-service overrides live on the service cards and can only tighten these defaults.
+          <code>places</code> stays off until you name it (city / read / precise).
+        </p>
+        <div id="type-policy-list" class="perm-list"></div>
+        <div class="perm-status" id="type-policy-status"></div>
       </div>
 
       <div class="help-box" id="immich-setup-panel">
@@ -1748,7 +1762,7 @@ job.read</pre>
   // Core data types — same synced library kinds the Map shows (flow.go).
   // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
   // any explicit keys from aegis.json that are not rendered.
-  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages", "transactions"];
+  const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages", "transactions", "places"];
   const DATA_TYPE_LABELS = {
     playlists: "Playlists",
     tracks: "Liked tracks",
@@ -1759,12 +1773,15 @@ job.read</pre>
     events: "Calendar events",
     messages: "Messages",
     transactions: "Transactions",
+    places: "Places",
   };
-  // User-facing access options. Backend still stores none/freebusy/summary/read/write/read-write.
+  // User-facing access options. Backend still stores none/freebusy/summary/city/precise/read/write/read-write.
   const ACCESS_CHOICES = [
     { value: "read", label: "Available" },
     { value: "summary", label: "Totals only" },
     { value: "freebusy", label: "Free/busy only" },
+    { value: "city", label: "City only" },
+    { value: "precise", label: "Precise" },
     { value: "read-write", label: "Editable" },
     { value: "none", label: "Off" },
   ];
@@ -1772,6 +1789,8 @@ job.read</pre>
   const FREEBUSY_TYPES = new Set(["events"]);
   // summary redaction is transactions-only (issue #141).
   const SUMMARY_TYPES = new Set(["transactions"]);
+  // city/precise redaction is places-only (issue #142).
+  const PLACES_TYPES = new Set(["places"]);
   // Per-service Advanced disclosure under the permissions form (issue #69).
   const openAdvanced = new Set();
 
@@ -1780,6 +1799,8 @@ job.read</pre>
     if (v === "none" || v === "deny" || v === "off" || v === "false") return "none";
     if (v === "freebusy" || v === "fb" || v === "busy" || v === "busy-only" || v === "free-busy") return "freebusy";
     if (v === "summary" || v === "totals" || v === "totals-only" || v === "sum") return "summary";
+    if (v === "city" || v === "locality" || v === "city-only" || v === "metro") return "city";
+    if (v === "precise" || v === "coordinates" || v === "coords" || v === "gps" || v === "exact" || v === "full-places") return "precise";
     if (v === "read" || v === "ro" || v === "readonly" || v === "read-only") return "read";
     if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only" || v === "mutate") return "write";
     if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite" || v === "read_write") return "read-write";
@@ -1799,6 +1820,7 @@ job.read</pre>
       if (o.value === "read-write" && !allowWrite) return false;
       if (o.value === "freebusy" && !FREEBUSY_TYPES.has(name)) return false;
       if (o.value === "summary" && !SUMMARY_TYPES.has(name)) return false;
+      if ((o.value === "city" || o.value === "precise") && !PLACES_TYPES.has(name)) return false;
       return true;
     });
     if (options.every((o) => o.value !== display) && display) {
@@ -1959,6 +1981,100 @@ job.read</pre>
         status.className = "perm-status err";
       } else {
         showGlobalError(err.message || "Failed to save permissions");
+      }
+    }
+  }
+
+  // Type-owned policy editor (issue #148). Primary map: type default +
+  // optional per-provider tighten-only overrides.
+  async function loadTypePolicies() {
+    const root = $("type-policy-list");
+    if (!root) return;
+    try {
+      const data = await api("/v1/admin/type-policies");
+      const types = data.types || {};
+      root.innerHTML = LIBRARY_DATA_TYPES.map((key) => {
+        const policy = types[key] || {};
+        const level = policy.default != null && policy.default !== "" ? policy.default : (key === "places" ? "none" : "read-write");
+        const allowWrite = true;
+        const providers = policy.providers || {};
+        const providerKeys = Object.keys(providers).sort();
+        const providerRows = providerKeys.map((pid) =>
+          '<div class="perm-row" data-provider-row="' + escapeHtml(key) + '|' + escapeHtml(pid) + '">' +
+            '<label><span class="perm-type-label">↳ ' + escapeHtml(pid) + " (tighten only)</span></label>" +
+            '<select data-provider-key="' + escapeHtml(key) + '" data-provider-id="' + escapeHtml(pid) + '" aria-label="Override for ' + escapeHtml(pid) + '">' +
+            ["inherit", "none", "freebusy", "summary", "city", "precise", "read", "read-write"].map((v) =>
+              '<option value="' + v + '"' + (v === "inherit" && !providers[pid] ? " selected" : "") + ">" + v + "</option>"
+            ).join("") +
+            "</select></div>"
+        ).join("");
+        return '<div class="perm-row">' +
+          '<label for="type-policy-' + escapeHtml(key) + '">' +
+          dataTypeIconHTML(key) +
+          '<span class="perm-type-label">' + escapeHtml(dataTypeLabel(key)) + "</span></label>" +
+          accessSelect(key, level, allowWrite).replace("<select ", '<select id="type-policy-' + escapeHtml(key) + '" data-type-policy-default="' + escapeHtml(key) + '" ') +
+          "</div>" + providerRows;
+      }).join("");
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      root.innerHTML = '<p class="meta">Failed to load type policies.</p>';
+    }
+  }
+
+  async function saveTypePolicies() {
+    const root = $("type-policy-list");
+    const status = $("type-policy-status");
+    if (!root) return;
+    if (status) {
+      status.textContent = "Saving…";
+      status.className = "perm-status";
+    }
+    const types = {};
+    root.querySelectorAll("select[data-type-policy-default]").forEach((sel) => {
+      const key = sel.getAttribute("data-type-policy-default");
+      if (!key) return;
+      const level = sel.value;
+      // Unset display defaults need not be persisted unless places (opt-in).
+      if (key !== "places" && level === "read-write") return;
+      if (key === "places" && level === "none") {
+        types[key] = { default: "none" };
+        return;
+      }
+      types[key] = { default: level };
+    });
+    root.querySelectorAll("select[data-provider-key]").forEach((sel) => {
+      const key = sel.getAttribute("data-provider-key");
+      const pid = sel.getAttribute("data-provider-id");
+      if (!key || !pid) return;
+      const level = sel.value;
+      if (level === "inherit") return;
+      if (!types[key]) types[key] = { default: "" };
+      if (!types[key].providers) types[key].providers = {};
+      types[key].providers[pid] = level;
+    });
+    try {
+      await api("/v1/admin/type-policies", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ types: types }),
+      });
+      if (status) {
+        status.textContent = "Saved.";
+        status.className = "perm-status ok";
+      }
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      if (status) {
+        status.textContent = err.message || "Failed to save type policies";
+        status.className = "perm-status err";
+      } else {
+        showGlobalError(err.message || "Failed to save type policies");
       }
     }
   }
@@ -3418,6 +3534,7 @@ function selectTab(name, opts) {
   });
 
   $("service-filter").addEventListener("input", (e) => renderServices(e.target.value));
+  $("type-policy-save").addEventListener("click", () => saveTypePolicies());
   $("library-filter").addEventListener("input", () => {
     libraryPage = 1;
     if (libraryDataByKind[libraryKind]) renderLibrary(libraryDataByKind[libraryKind]);
@@ -4116,6 +4233,7 @@ function selectTab(name, opts) {
   });
 
   loadSummary();
+  loadTypePolicies();
   loadImmichSetup();
 })();
 </script>
