@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -54,7 +56,7 @@ func TestNormalizePlaceVisitTime_Variants(t *testing.T) {
 		"not-a-time":           "not-a-time",
 	}
 	for in, want := range cases {
-		if got := normalizePlaceVisitTime(in); got != want {
+		if got := types.NormalizePlaceVisitTime(in); got != want {
 			t.Fatalf("normalize(%q)=%q want %q", in, got, want)
 		}
 	}
@@ -86,14 +88,14 @@ func TestOwnTracksConnector_ListVisitsAndLocations(t *testing.T) {
 	defer ts.Close()
 
 	cfg := &Config{Services: []Service{{
-		ID:       ownTracksServiceID,
+		ID:       connectors.OwnTracksServiceID,
 		Name:     "OwnTracks",
 		Action:   "inject",
 		Endpoint: ts.URL,
 		Headers:  map[string]string{"X-API-Key": "secret"},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	conn := NewOwnTracksConnector(srv)
+	conn := connectors.NewOwnTracksConnector(srv)
 	visits, _, err := conn.ListUserPlaceVisits(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +103,7 @@ func TestOwnTracksConnector_ListVisitsAndLocations(t *testing.T) {
 	if len(visits) != 1 || visits[0].Place.Name != "Harbour" {
 		t.Fatalf("visits = %+v", visits)
 	}
-	if visits[0].Sources[0].Service != ownTracksServiceID {
+	if visits[0].Sources[0].Service != connectors.OwnTracksServiceID {
 		t.Fatalf("source = %+v", visits[0].Sources[0])
 	}
 }
@@ -126,14 +128,14 @@ func TestOwnTracksConnector_FallbackToLocations(t *testing.T) {
 	defer ts.Close()
 
 	cfg := &Config{Services: []Service{{
-		ID:       ownTracksServiceID,
+		ID:       connectors.OwnTracksServiceID,
 		Name:     "OwnTracks",
 		Action:   "inject",
 		Endpoint: ts.URL,
 		Headers:  map[string]string{"Authorization": "Bearer tok"},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	conn := NewOwnTracksConnector(srv)
+	conn := connectors.NewOwnTracksConnector(srv)
 	visits, _, err := conn.ListUserPlaceVisits(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -147,9 +149,9 @@ func TestOwnTracksConnector_FallbackToLocations(t *testing.T) {
 }
 
 func TestOwnTracksConnector_Unauthorized(t *testing.T) {
-	cfg := &Config{Services: []Service{{ID: ownTracksServiceID, Name: "OwnTracks"}}}
+	cfg := &Config{Services: []Service{{ID: connectors.OwnTracksServiceID, Name: "OwnTracks"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	conn := NewOwnTracksConnector(srv)
+	conn := connectors.NewOwnTracksConnector(srv)
 	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
@@ -166,14 +168,14 @@ func TestOwnTracksConnector_HandleProxy(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 	cfg := &Config{Services: []Service{{
-		ID:       ownTracksServiceID,
+		ID:       connectors.OwnTracksServiceID,
 		Name:     "OwnTracks",
 		Action:   "inject",
 		Endpoint: ts.URL,
 		Headers:  map[string]string{"X-API-Key": "secret"},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	conn := NewOwnTracksConnector(srv)
+	conn := connectors.NewOwnTracksConnector(srv)
 	if caps := conn.Capabilities(); len(caps.DataTypes) == 0 {
 		t.Fatal("capabilities empty")
 	}

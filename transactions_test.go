@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -43,8 +45,8 @@ func TestFormatMilliunitsAmount(t *testing.T) {
 		1000000: "1000.00",
 	}
 	for in, want := range cases {
-		if got := FormatMilliunitsAmount(in); got != want {
-			t.Fatalf("FormatMilliunitsAmount(%d) = %q, want %q", in, got, want)
+		if got := types.FormatMilliunitsAmount(in); got != want {
+			t.Fatalf("types.FormatMilliunitsAmount(%d) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -169,9 +171,9 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 	groceries := "Groceries"
 	household := "Household Goods"
 	shopping := "Shopping"
-	cats := ynabCategories(ynabTransaction{
+	cats := connectors.YnabCategories(connectors.YnabTransaction{
 		CategoryName: &split,
-		Subtransactions: []ynabSubtransaction{
+		Subtransactions: []connectors.YnabSubtransaction{
 			{CategoryName: &groceries},
 			{CategoryName: &household},
 			{CategoryName: &groceries}, // duplicate
@@ -181,7 +183,7 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 		t.Fatalf("cats = %v", cats)
 	}
 	// Parent-only category (no splits).
-	cats2 := ynabCategories(ynabTransaction{CategoryName: &shopping})
+	cats2 := connectors.YnabCategories(connectors.YnabTransaction{CategoryName: &shopping})
 	if len(cats2) != 1 || cats2[0] != "Shopping" {
 		t.Fatalf("cats2 = %v", cats2)
 	}
@@ -434,7 +436,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"ynab": &fakeTransactionProvider{txs: GenerateSampleLibrary().Transactions[:3]},
 		"quicken": &fakeTransactionProvider{txs: []types.Transaction{{
 			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
@@ -478,7 +480,7 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"ynab": &fakeTransactionProvider{txs: []types.Transaction{
 			{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "1"}}},
 			{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "2"}}},
@@ -500,9 +502,9 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 }
 
 func TestYNABNeutralTransaction_Millunits(t *testing.T) {
-	c := &YNABConnector{}
+	c := &connectors.YNABConnector{}
 	payee := "Amazon"
-	tx := c.neutralTransactionCurrency("budget-1", []ynabAccount{{ID: "a1", Name: "Checking", Type: "checking"}}, ynabTransaction{
+	tx := c.NeutralTransactionCurrency("budget-1", []connectors.YNABAccount{{ID: "a1", Name: "Checking", Type: "checking"}}, connectors.YnabTransaction{
 		ID:        "t1",
 		Date:      "2024-03-05",
 		Amount:    -45670,
@@ -523,7 +525,7 @@ func TestYNABNeutralTransaction_Millunits(t *testing.T) {
 	if tx.Account == nil || tx.Account.Name != "Checking" {
 		t.Fatalf("account = %+v", tx.Account)
 	}
-	if tx.Status != TransactionStatusPosted {
+	if tx.Status != types.TransactionStatusPosted {
 		t.Fatalf("status = %q", tx.Status)
 	}
 }
@@ -533,7 +535,7 @@ func strPtr(s string) *string { return &s }
 func TestYNABListUserTransactions_Unauthorized(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "ynab", Name: "YNAB"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	c := NewYNABConnector(srv)
+	c := connectors.NewYNABConnector(srv)
 	_, _, err := c.ListUserTransactions(context.Background())
 	if err != types.ErrUnauthorized {
 		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
@@ -606,7 +608,7 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 		}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	c := NewYNABConnector(srv)
+	c := connectors.NewYNABConnector(srv)
 	txs, truncated, err := c.ListUserTransactions(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -751,7 +753,7 @@ func TestRedactTransactionsForLevel(t *testing.T) {
 }
 
 func TestYNABCapabilitiesAndInstructions(t *testing.T) {
-	c := NewYNABConnector(&Server{})
+	c := connectors.NewYNABConnector(&Server{})
 	caps := c.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
@@ -836,7 +838,7 @@ func TestQuickenHandleProxy(t *testing.T) {
 
 func TestYNABHandleProxy_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	c := NewYNABConnector(srv)
+	c := connectors.NewYNABConnector(srv)
 	req := httptest.NewRequest("GET", "/v1/services/ynab/budgets", nil)
 	w := httptest.NewRecorder()
 	c.HandleProxy(w, req, "/budgets")
@@ -871,7 +873,7 @@ func TestYNABHandleProxy_Mock(t *testing.T) {
 		}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	c := NewYNABConnector(srv)
+	c := connectors.NewYNABConnector(srv)
 
 	req := httptest.NewRequest("GET", "/v1/services/ynab/budgets", nil)
 	w := httptest.NewRecorder()
@@ -970,7 +972,7 @@ func TestYNABListUserTransactions_PrefersNewest(t *testing.T) {
 		Headers: map[string]string{"Authorization": "Bearer t"},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	txs, truncated, err := NewYNABConnector(srv).ListUserTransactions(context.Background())
+	txs, truncated, err := connectors.NewYNABConnector(srv).ListUserTransactions(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

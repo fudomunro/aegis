@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"bytes"
@@ -29,33 +29,33 @@ func NewImmichConnector(host Host) *ImmichConnector {
 }
 
 const (
-	immichServiceID   = "immich"
-	immichServiceName = "Immich"
+	ImmichServiceID   = "immich"
+	ImmichServiceName = "Immich"
 	// immichPageSize is the per-request asset page size for search/metadata.
 	immichPageSize = 250
 )
 
-// immichUpstreamBase returns the configured Immich API base (…/api).
-func (c *ImmichConnector) immichUpstreamBase() string {
-	return c.host.UpstreamBaseFor(immichServiceID, "http://localhost:2283/api")
+// ImmichUpstreamBase returns the configured Immich API base (…/api).
+func (c *ImmichConnector) ImmichUpstreamBase() string {
+	return c.host.UpstreamBaseFor(ImmichServiceID, "http://localhost:2283/api")
 }
 
-// immichWebBase derives the Immich web UI origin from the API endpoint
+// ImmichWebBase derives the Immich web UI origin from the API endpoint
 // (https://host:2283/api → https://host:2283) for deep links.
-func (c *ImmichConnector) immichWebBase() string {
-	base := strings.TrimSuffix(c.immichUpstreamBase(), "/api")
+func (c *ImmichConnector) ImmichWebBase() string {
+	base := strings.TrimSuffix(c.ImmichUpstreamBase(), "/api")
 	return strings.TrimRight(base, "/")
 }
 
-// applyImmichAuth copies configured static headers (API key) onto the request.
+// ApplyImmichAuth copies configured static headers (API key) onto the request.
 // An OAuth token, if present, is also sent as a Bearer fallback.
-func (c *ImmichConnector) applyImmichAuth(req *http.Request, logger *slog.Logger) {
-	if svc := c.host.ServiceConfig(immichServiceID); svc != nil {
+func (c *ImmichConnector) ApplyImmichAuth(req *http.Request, logger *slog.Logger) {
+	if svc := c.host.ServiceConfig(ImmichServiceID); svc != nil {
 		for k, v := range svc.Headers {
 			req.Header.Set(k, v)
 		}
 	}
-	if tok := c.host.GetValidToken(immichServiceID, logger); tok != "" {
+	if tok := c.host.GetValidToken(ImmichServiceID, logger); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 }
@@ -119,7 +119,7 @@ func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the agent hint when Immich is referenced.
 func (c *ImmichConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	proxy := root + "/v1/services/" + immichServiceID
+	proxy := root + "/v1/services/" + ImmichServiceID
 	return fmt.Sprintf(`When the user's request involves Immich (self-hosted photos), you MUST use the Aegis proxy at %s instead of calling Immich directly. Aegis adds the Immich API key (X-API-Key header from config) — do not ask the user for it.
 
 Preferred unified library first:
@@ -134,19 +134,19 @@ GET /albums — list albums
 Photos are metadata-only in the library. Use sources[].blob_url (Aegis proxy URL) to fetch bytes; Immich holds the authoritative copy (foreign canonical).
 Always include the full proxy base URL in your requests.
 
-%s`, proxy, root, photoSourceDiscipline())
+%s`, proxy, root, types.PhotoSourceDiscipline())
 }
 
 // HandleProxy forwards Immich API paths, attaching the configured API key.
 // Binary download paths are passed through without JSON rewriting.
 func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", immichServiceID, "method", r.Method, "path", remainingPath)
+	logger := slog.With("service", ImmichServiceID, "method", r.Method, "path", remainingPath)
 
 	if remainingPath == "" {
 		remainingPath = "/"
 	}
 
-	upstream := c.immichUpstreamBase() + remainingPath
+	upstream := c.ImmichUpstreamBase() + remainingPath
 	if r.URL.RawQuery != "" {
 		upstream += "?" + r.URL.RawQuery
 	}
@@ -162,30 +162,30 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream, body)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to build Immich request")
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build Immich request")
 		return
 	}
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	c.applyImmichAuth(req, logger)
+	c.ApplyImmichAuth(req, logger)
 
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("immich request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "Immich request failed")
+		WriteJSONError(w, http.StatusBadGateway, "Immich request failed")
 		return
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		writeJSONError(w, http.StatusBadGateway, "failed to read Immich response")
+		WriteJSONError(w, http.StatusBadGateway, "failed to read Immich response")
 		return
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		writeJSONError(w, resp.StatusCode,
+		WriteJSONError(w, resp.StatusCode,
 			"Immich rejected the request — set an API key in service headers (X-API-Key)")
 		return
 	}
@@ -209,7 +209,7 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		if len(msg) > 240 {
 			msg = msg[:240] + "…"
 		}
-		writeJSONError(w, resp.StatusCode, fmt.Sprintf("Immich returned %d: %s", resp.StatusCode, msg))
+		WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Immich returned %d: %s", resp.StatusCode, msg))
 		return
 	}
 
@@ -223,12 +223,12 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 // Immich (via Aegis proxy download URLs).
 func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bool, error) {
 	logger := slog.Default()
-	upstream := c.immichUpstreamBase() + "/search/metadata"
+	upstream := c.ImmichUpstreamBase() + "/search/metadata"
 
 	var all []types.Photo
 	truncated := false
 	nextPage := 1
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < LibraryPageCap; page++ {
 		payload := map[string]any{
 			"page":     nextPage,
 			"size":     immichPageSize,
@@ -244,9 +244,9 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 			return nil, false, err
 		}
 		req.Header.Set("Content-Type", "application/json")
-		c.applyImmichAuth(req, logger)
+		c.ApplyImmichAuth(req, logger)
 
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -272,7 +272,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 		}
 
 		for _, asset := range raw.Assets.Items {
-			if p := c.neutralPhoto(asset); p.TakenAt != "" || p.Filename != "" || len(p.Sources) > 0 {
+			if p := c.NeutralPhoto(asset); p.TakenAt != "" || p.Filename != "" || len(p.Sources) > 0 {
 				all = append(all, p)
 			}
 		}
@@ -280,11 +280,11 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 		if raw.Assets.NextPage.raw == nil {
 			return all, false, nil
 		}
-		next, ok := raw.Assets.NextPage.asInt()
+		next, ok := raw.Assets.NextPage.AsInt()
 		if !ok || next <= 0 {
 			return all, false, nil
 		}
-		if page == libraryPageCap-1 {
+		if page == LibraryPageCap-1 {
 			truncated = true
 		}
 		nextPage = next
@@ -292,28 +292,28 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 	return all, truncated, nil
 }
 
-// neutralPhoto maps one Immich asset to Aegis's Photo shape.
-func (c *ImmichConnector) neutralPhoto(a immichAsset) types.Photo {
+// NeutralPhoto maps one Immich asset to Aegis's Photo shape.
+func (c *ImmichConnector) NeutralPhoto(a immichAsset) types.Photo {
 	taken := ""
 	if a.Exif.DateTimeOriginal != "" {
 		taken = a.Exif.DateTimeOriginal
 	} else if a.FileCreatedAt != "" {
 		taken = a.FileCreatedAt
 	}
-	taken = normalizePhotoTakenAt(taken)
+	taken = types.NormalizePhotoTakenAt(taken)
 
-	mime := immichMimeForType(a.Type, a.OriginalFileName)
+	mime := ImmichMimeForType(a.Type, a.OriginalFileName)
 	filename := a.OriginalFileName
 	if filename == "" {
 		filename = a.ID
 	}
 
-	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + immichServiceID
+	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + ImmichServiceID
 	src := types.PhotoSource{
-		Service:      immichServiceID,
-		ServiceName:  immichServiceName,
+		Service:      ImmichServiceID,
+		ServiceName:  ImmichServiceName,
 		ID:           a.ID,
-		URL:          c.immichWebBase() + "/photos/" + a.ID,
+		URL:          c.ImmichWebBase() + "/photos/" + a.ID,
 		Canonical:    true,
 		BlobURL:      proxyRoot + "/assets/" + url.PathEscape(a.ID) + "/original",
 		ThumbnailURL: proxyRoot + "/assets/" + url.PathEscape(a.ID) + "/thumbnail",
@@ -338,7 +338,7 @@ func (c *ImmichConnector) neutralPhoto(a immichAsset) types.Photo {
 	return p
 }
 
-func immichMimeForType(assetType, filename string) string {
+func ImmichMimeForType(assetType, filename string) string {
 	lower := strings.ToLower(filename)
 	switch {
 	case strings.HasSuffix(lower, ".jpg"), strings.HasSuffix(lower, ".jpeg"):
@@ -405,7 +405,7 @@ func (p immichPage) String() string {
 	}
 }
 
-func (p immichPage) asInt() (int, bool) {
+func (p immichPage) AsInt() (int, bool) {
 	s := strings.TrimSpace(p.String())
 	if s == "" {
 		return 0, false

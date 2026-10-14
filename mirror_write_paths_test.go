@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -618,7 +620,7 @@ func TestYouTubeMirror_LoadLikedTracks(t *testing.T) {
 
 		srv, _ := testMirrorServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}), true)
 		srv.config.updateService("youtube-music", func(svc *Service) { svc.Endpoint = upstream.URL })
-		srv.connectors["youtube-music"] = NewYouTubeMusicConnector(srv)
+		srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 		m := &youtubeMirror{s: srv}
 		tracks, truncated, err := m.loadLikedTracks(context.Background())
 		if err != nil {

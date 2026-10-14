@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 )
 
 // connectorProxyOpts is the connector-specific parts of the shared proxy path.
-type connectorProxyOpts struct {
+type ProxyOpts struct {
 	serviceID   string
 	displayName string
 	defaultBase string
@@ -28,12 +28,12 @@ type connectorProxyOpts struct {
 
 // runConnectorProxy is the shared HandleProxy pipeline for OAuth connectors:
 // token check → cache → upstream → 401/429 → optional pagination → transform → cache-on-200.
-func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath string, opts connectorProxyOpts) {
+func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath string, opts ProxyOpts) {
 	logger := slog.With("service", opts.serviceID, "method", r.Method, "path", remainingPath)
 
 	token := s.GetValidToken(opts.serviceID, logger)
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized, "no valid "+opts.displayName+" token — authorize at /v1/auth/"+opts.serviceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized, "no valid "+opts.displayName+" token — authorize at /v1/auth/"+opts.serviceID+"/login")
 		return
 	}
 
@@ -42,7 +42,7 @@ func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remaining
 	if opts.mapUpstream != nil {
 		mappedPath, mappedQuery, err := opts.mapUpstream(remainingPath, query.Clone())
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		upstreamPath = mappedPath
@@ -69,25 +69,25 @@ func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remaining
 	}
 
 	upstreamStart := time.Now()
-	data, status, err := doUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
+	data, status, err := DoUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
 	upstreamElapsed := time.Since(upstreamStart)
-	s.ObserveUpstream(opts.serviceID, upstreamElapsed, statusOrZero(status, err))
+	s.ObserveUpstream(opts.serviceID, upstreamElapsed, StatusOrZero(status, err))
 	if err != nil {
 		logger.Error(opts.serviceID+" request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, opts.displayName+" API request failed")
+		WriteJSONError(w, http.StatusBadGateway, opts.displayName+" API request failed")
 		return
 	}
 	logger.Debug(opts.serviceID+" response", "status", status, "bytes", len(data))
 
 	if status == http.StatusUnauthorized {
 		logger.Warn(opts.serviceID + " returned 401, token may be revoked")
-		writeJSONError(w, http.StatusUnauthorized, opts.displayName+" token is invalid or expired — re-authorize at /v1/auth/"+opts.serviceID+"/login")
+		WriteJSONError(w, http.StatusUnauthorized, opts.displayName+" token is invalid or expired — re-authorize at /v1/auth/"+opts.serviceID+"/login")
 		return
 	}
 	if status == http.StatusTooManyRequests {
 		logger.Warn(opts.serviceID + " rate limited")
 		w.Header().Set("Retry-After", "30")
-		writeJSONError(w, http.StatusTooManyRequests, opts.displayName+" rate limit exceeded — retry later")
+		WriteJSONError(w, http.StatusTooManyRequests, opts.displayName+" rate limit exceeded — retry later")
 		return
 	}
 
@@ -105,7 +105,7 @@ func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remaining
 	result, err := json.Marshal(transformed)
 	if err != nil {
 		logger.Error("failed to marshal transformed response", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "response transformation failed")
+		WriteJSONError(w, http.StatusInternalServerError, "response transformation failed")
 		return
 	}
 
@@ -114,8 +114,8 @@ func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remaining
 		if ttl == 0 {
 			ttl = 60 * time.Second
 		}
-		if svc := s.ServiceConfig(opts.serviceID); svc != nil && svc.CacheTTL.Duration > 0 {
-			ttl = svc.CacheTTL.Duration
+		if svc := s.ServiceConfig(opts.serviceID); svc != nil && svc.CacheTTL > 0 {
+			ttl = svc.CacheTTL
 		}
 		s.CacheSet(cacheKey, string(result), ttl)
 	}
@@ -124,4 +124,11 @@ func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remaining
 	w.Header().Set("X-Aegis-Cache", "miss")
 	w.WriteHeader(status)
 	w.Write(result)
+}
+
+func StatusOrZero(status int, err error) int {
+	if err != nil {
+		return 0
+	}
+	return status
 }

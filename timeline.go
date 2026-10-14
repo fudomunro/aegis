@@ -162,8 +162,8 @@ ON CONFLICT(source_id) DO UPDATE SET
   place_id=excluded.place_id,
   raw_json=excluded.raw_json
 `,
-		id, filePath, v.StartAt, v.EndAt, normalizePlaceVisitKind(v.Kind),
-		normalizeTripMode(v.Mode), v.Confidence,
+		id, filePath, v.StartAt, v.EndAt, types.NormalizePlaceVisitKind(v.Kind),
+		types.NormalizeTripMode(v.Mode), v.Confidence,
 		v.Place.Name, v.Place.Address, v.Place.Locality, v.Place.Country,
 		lat, lng, v.EntityID, string(raw),
 	)
@@ -287,7 +287,7 @@ type timelineDuration struct {
 
 func (d timelineDuration) start() string {
 	if d.StartTimestamp != "" {
-		return normalizePlaceVisitTime(d.StartTimestamp)
+		return types.NormalizePlaceVisitTime(d.StartTimestamp)
 	}
 	if d.StartTimestampMs != "" {
 		if ms, err := strconv.ParseInt(d.StartTimestampMs, 10, 64); err == nil {
@@ -299,7 +299,7 @@ func (d timelineDuration) start() string {
 
 func (d timelineDuration) end() string {
 	if d.EndTimestamp != "" {
-		return normalizePlaceVisitTime(d.EndTimestamp)
+		return types.NormalizePlaceVisitTime(d.EndTimestamp)
 	}
 	if d.EndTimestampMs != "" {
 		if ms, err := strconv.ParseInt(d.EndTimestampMs, 10, 64); err == nil {
@@ -370,7 +370,7 @@ func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 			if pid == "" {
 				pid = v.PlaceID
 			}
-			visit := newPlaceVisit(timelineServiceID, timelineServiceName, pid, types.PlaceVisit{
+			visit := types.NewPlaceVisit(timelineServiceID, timelineServiceName, pid, types.PlaceVisit{
 				StartAt:    v.Duration.start(),
 				EndAt:      v.Duration.end(),
 				Place:      place,
@@ -402,12 +402,12 @@ func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 			if aid == "" {
 				aid = a.StartLocation.PlaceID
 			}
-			trip := newPlaceVisit(timelineServiceID, timelineServiceName, "seg:"+a.Duration.start(), types.PlaceVisit{
+			trip := types.NewPlaceVisit(timelineServiceID, timelineServiceName, "seg:"+a.Duration.start(), types.PlaceVisit{
 				StartAt: a.Duration.start(),
 				EndAt:   a.Duration.end(),
 				Place:   place,
 				Kind:    types.PlaceKindTrip,
-				Mode:    normalizeTripMode(a.ActivityType),
+				Mode:    types.NormalizeTripMode(a.ActivityType),
 			})
 			trip.Sources[0].Extra = map[string]any{"activity_type": a.ActivityType}
 			if aid != "" {
@@ -629,7 +629,7 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []t
 	}
 	out := make([]types.PlaceVisit, 0, len(items))
 	for _, v := range items {
-		out = append(out, newPlaceVisit(timelineServiceID, timelineServiceName, placeVisitSourceID(v), v))
+		out = append(out, types.NewPlaceVisit(timelineServiceID, timelineServiceName, placeVisitSourceID(v), v))
 	}
 	return out, truncated, nil
 }

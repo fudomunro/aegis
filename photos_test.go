@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,41 +17,41 @@ import (
 )
 
 func TestPhotoContentKey_MergesOnHashAndTime(t *testing.T) {
-	a := newPhoto("google-photos", "Google Photos", "a", "a.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
+	a := types.NewPhoto("google-photos", "Google Photos", "a", "a.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
 	a.Extra = map[string]any{"content_hash": "ABC123"}
-	b := newPhoto("other", "Other", "b", "copy.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
+	b := types.NewPhoto("other", "Other", "b", "copy.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
 	b.Extra = map[string]any{"content_hash": "abc123"}
 
 	if photoContentKey(a) != photoContentKey(b) {
 		t.Fatalf("hash keys should match case-insensitively: %q vs %q", photoContentKey(a), photoContentKey(b))
 	}
 
-	c := newPhoto("google-photos", "Google Photos", "c", "c.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
-	d := newPhoto("other", "Other", "d", "d.jpg", "image/jpeg", "2024-06-01T12:00:00.500Z", 100, 80)
+	c := types.NewPhoto("google-photos", "Google Photos", "c", "c.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
+	d := types.NewPhoto("other", "Other", "d", "d.jpg", "image/jpeg", "2024-06-01T12:00:00.500Z", 100, 80)
 	if photoContentKey(c) != photoContentKey(d) {
 		t.Fatalf("same second + dims should match: %q vs %q", photoContentKey(c), photoContentKey(d))
 	}
 
 	// Different dimensions must not merge even with the same timestamp.
-	e := newPhoto("google-photos", "Google Photos", "e", "e.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 200, 80)
+	e := types.NewPhoto("google-photos", "Google Photos", "e", "e.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 200, 80)
 	if photoContentKey(c) == photoContentKey(e) {
 		t.Fatal("different dimensions should not share a content key")
 	}
 
 	// Filename alone is never an identity.
-	f := newPhoto("google-photos", "Google Photos", "f", "IMG_0001.jpg", "image/jpeg", "", 0, 0)
-	g := newPhoto("google-photos", "Google Photos", "g", "IMG_0001.jpg", "image/jpeg", "", 0, 0)
+	f := types.NewPhoto("google-photos", "Google Photos", "f", "IMG_0001.jpg", "image/jpeg", "", 0, 0)
+	g := types.NewPhoto("google-photos", "Google Photos", "g", "IMG_0001.jpg", "image/jpeg", "", 0, 0)
 	if photoIdentityKey(f) == photoIdentityKey(g) {
 		t.Fatal("photos with no content key must stay distinct via service:id")
 	}
 }
 
 func TestMergePhotos_CombinesSourcesAndKeepsCanonical(t *testing.T) {
-	a := newPhoto("google-photos", "Google Photos", "gp1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
+	a := types.NewPhoto("google-photos", "Google Photos", "gp1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
 	if len(a.Sources) != 1 || !a.Sources[0].Canonical {
 		t.Fatalf("newPhoto should mark canonical source: %+v", a.Sources)
 	}
-	b := newPhoto("icloud", "iCloud Photos", "ic1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
+	b := types.NewPhoto("icloud", "iCloud Photos", "ic1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
 	b.Sources[0].Canonical = false
 
 	merged := MergePhotos([]types.Photo{a, b})
@@ -92,13 +94,13 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 		{ID: "icloud", Name: "iCloud", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10),
-			newPhoto("google-photos", "Google Photos", "2", "b.jpg", "image/jpeg", "2024-01-02T00:00:00Z", 10, 10),
+			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10),
+			types.NewPhoto("google-photos", "Google Photos", "2", "b.jpg", "image/jpeg", "2024-01-02T00:00:00Z", 10, 10),
 		}},
 		"icloud": &fakePhotoProvider{photos: []types.Photo{
-			newPhoto("icloud", "iCloud", "9", "c.jpg", "image/jpeg", "2024-01-03T00:00:00Z", 10, 10),
+			types.NewPhoto("icloud", "iCloud", "9", "c.jpg", "image/jpeg", "2024-01-03T00:00:00Z", 10, 10),
 		}},
 	}
 
@@ -144,9 +146,9 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 		Permissions: types.Permissions{"photos": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
+			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
@@ -164,9 +166,9 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 		{ID: "icloud", Name: "iCloud", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
+			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 		"icloud": &fakePhotoProvider{err: types.ErrUnauthorized},
 	}
@@ -192,9 +194,9 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 		{ID: "icloud", Name: "iCloud", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			newPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
+			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 		"icloud": &fakePhotoProvider{err: errors.New("upstream boom")},
 	}
@@ -220,7 +222,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 func TestHandleLibraryPhotos_MethodNotAllowed(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-photos", Name: "Google Photos", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{"google-photos": &fakePhotoProvider{}}
+	srv.connectors = map[string]connectors.ServiceConnector{"google-photos": &fakePhotoProvider{}}
 	req := httptest.NewRequest("POST", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -386,7 +388,7 @@ func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 
 	// No session yet — library is empty, not an error.
 	photos, _, err := conn.ListUserPhotos(context.Background())
@@ -479,7 +481,7 @@ func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "google-photos", Name: "Google Photos", Action: "inject",
 	}}}, "https://aegis.example.com")
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 	_, _, err := conn.ListUserPhotos(context.Background())
 	if !errors.Is(err, types.ErrUnauthorized) {
 		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
@@ -488,7 +490,7 @@ func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 
 func TestGooglePhotosConnector_SystemInstructions_MentionPicker(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewGooglePhotosConnector(srv)
+	conn := connectors.NewGooglePhotosConnector(srv)
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/library/photos",

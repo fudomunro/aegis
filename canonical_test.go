@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"net/http"
@@ -193,7 +195,7 @@ func TestLibraryPlaylists_ConfigCanonicalForStampsAndSorts(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify":       twoSourcePlaylistProvider{},
 		"youtube-music": youtubePlaylistProvider{},
 	}

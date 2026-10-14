@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"fmt"
 	"log/slog"
@@ -13,7 +15,7 @@ import (
 
 func TestSimplify(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
 	raw := map[string]any{
 		"id":            "x",
@@ -21,7 +23,7 @@ func TestSimplify(t *testing.T) {
 		"external_urls": map[string]any{"spotify": "https://open.spotify.com/track/x"},
 		"followers":     map[string]any{"total": 1},
 	}
-	got := conn.simplify(raw)
+	got := conn.Simplify(raw)
 	if got["id"] != "x" || got["name"] != "Track" {
 		t.Fatalf("simplify = %+v", got)
 	}
@@ -32,19 +34,19 @@ func TestSimplify(t *testing.T) {
 
 func TestIsPaginated(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
-	if !conn.isPaginated("/me/playlists") {
+	if !conn.IsPaginated("/me/playlists") {
 		t.Fatal("expected /me/playlists paginated")
 	}
-	if conn.isPaginated("/me") {
+	if conn.IsPaginated("/me") {
 		t.Fatal("expected /me not paginated")
 	}
 }
 
 func TestTransformSavedAlbums(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -57,7 +59,7 @@ func TestTransformSavedAlbums(t *testing.T) {
 		},
 		"total": 3,
 	}
-	got := conn.transformSavedAlbums(raw)
+	got := conn.TransformSavedAlbums(raw)
 	albums, _ := got["albums"].([]map[string]any)
 	if len(albums) != 1 {
 		t.Fatalf("albums = %+v", got)
@@ -69,7 +71,7 @@ func TestTransformSavedAlbums(t *testing.T) {
 
 func TestTransformRecentlyPlayed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -85,7 +87,7 @@ func TestTransformRecentlyPlayed(t *testing.T) {
 			"skip",
 		},
 	}
-	got := conn.transformRecentlyPlayed(raw)
+	got := conn.TransformRecentlyPlayed(raw)
 	tracks, _ := got["tracks"].([]map[string]any)
 	if len(tracks) != 1 {
 		t.Fatalf("tracks = %+v", got)
@@ -97,9 +99,9 @@ func TestTransformRecentlyPlayed(t *testing.T) {
 
 func TestTransformTrackListAndArtistList(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
-	tracks := conn.transformTrackList(map[string]any{
+	tracks := conn.TransformTrackList(map[string]any{
 		"items": []any{
 			map[string]any{
 				"name":    "Blue in Green",
@@ -115,7 +117,7 @@ func TestTransformTrackListAndArtistList(t *testing.T) {
 		t.Fatalf("tracks = %+v", tracks)
 	}
 
-	artists := conn.transformArtistList(map[string]any{
+	artists := conn.TransformArtistList(map[string]any{
 		"items": []any{
 			map[string]any{"name": "Miles Davis", "id": "a1", "uri": "spotify:artist:a1", "genres": []any{"jazz"}},
 		},
@@ -128,9 +130,9 @@ func TestTransformTrackListAndArtistList(t *testing.T) {
 
 func TestTransformTrackAndAlbum(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
-	track := conn.transformTrack(map[string]any{
+	track := conn.TransformTrack(map[string]any{
 		"name":        "So What",
 		"id":          "t1",
 		"uri":         "spotify:track:t1",
@@ -142,7 +144,7 @@ func TestTransformTrackAndAlbum(t *testing.T) {
 		t.Fatalf("track = %+v", track)
 	}
 
-	album := conn.transformAlbum(map[string]any{
+	album := conn.TransformAlbum(map[string]any{
 		"name":         "Kind of Blue",
 		"id":           "ab1",
 		"uri":          "spotify:album:ab1",
@@ -163,8 +165,8 @@ func TestTransformTrackAndAlbum(t *testing.T) {
 	}
 }
 
-func TestSpotifyNeutralTrack(t *testing.T) {
-	tr := spotifyNeutralTrack(map[string]any{
+func TestNeutralSpotifyTrack(t *testing.T) {
+	tr := connectors.NeutralSpotifyTrack(map[string]any{
 		"id":          "t1",
 		"name":        "So What",
 		"uri":         "spotify:track:t1",
@@ -211,9 +213,9 @@ func TestSpotifyNeutralTrack(t *testing.T) {
 
 func TestTransformPlaylistDetail(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
-	detail := conn.transformPlaylistDetail(map[string]any{
+	detail := conn.TransformPlaylistDetail(map[string]any{
 		"id":          "pl1",
 		"name":        "Jazz Vibes",
 		"description": "Smooth",
@@ -256,7 +258,7 @@ func TestFetchAllPagesRaw(t *testing.T) {
 	page2URL = ts.URL + "/page2"
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
 	first := map[string]any{
 		"items":    []any{map[string]any{"id": "a"}},
@@ -266,7 +268,7 @@ func TestFetchAllPagesRaw(t *testing.T) {
 		"offset":   float64(0),
 		"previous": nil,
 	}
-	got := conn.fetchAllPagesRaw(context.Background(), first, "tok", slog.Default())
+	got := conn.FetchAllPagesRaw(context.Background(), first, "tok", slog.Default())
 	items, _ := got["items"].([]any)
 	if len(items) != 3 {
 		t.Fatalf("items = %d (%+v)", len(items), got["items"])
@@ -289,36 +291,36 @@ func TestExtractNamesAndNested(t *testing.T) {
 		},
 		"album": map[string]any{"name": "Al", "id": "1"},
 	}
-	names := extractNames(obj, "artists")
+	names := connectors.ExtractNames(obj, "artists")
 	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
 		t.Fatalf("names = %v", names)
 	}
-	if extractNames(obj, "missing") != nil {
+	if connectors.ExtractNames(obj, "missing") != nil {
 		t.Fatal("missing key should be nil")
 	}
-	if got := extractNested(obj, "album", "name"); got != "Al" {
+	if got := connectors.ExtractNested(obj, "album", "name"); got != "Al" {
 		t.Fatalf("nested = %v", got)
 	}
-	if got := extractNested(obj, "album", "id"); got != "1" {
+	if got := connectors.ExtractNested(obj, "album", "id"); got != "1" {
 		t.Fatalf("nested id = %v", got)
 	}
-	if got := extractNested(obj, "album", "missing"); got != nil {
+	if got := connectors.ExtractNested(obj, "album", "missing"); got != nil {
 		t.Fatalf("missing nested = %v", got)
 	}
-	if got := extractNested(map[string]any{}, "a", "b"); got != nil {
+	if got := connectors.ExtractNested(map[string]any{}, "a", "b"); got != nil {
 		t.Fatalf("empty = %v", got)
 	}
 }
 
 func TestExtraOrNil(t *testing.T) {
-	if extraOrNil(nil) != nil {
+	if connectors.ExtraOrNil(nil) != nil {
 		t.Fatal("nil map should stay nil")
 	}
-	if extraOrNil(map[string]any{}) != nil {
+	if connectors.ExtraOrNil(map[string]any{}) != nil {
 		t.Fatal("empty map should be nil")
 	}
 	m := map[string]any{"uri": "x"}
-	if extraOrNil(m)["uri"] != "x" {
+	if connectors.ExtraOrNil(m)["uri"] != "x" {
 		t.Fatal("non-empty map preserved")
 	}
 }
@@ -344,9 +346,9 @@ func TestFirstSourceID(t *testing.T) {
 
 func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
+	conn := connectors.NewSpotifyConnector(srv)
 
-	out := conn.transformResponse("/unknown/path", []byte(`{"id":"1","name":"n","href":"drop"}`), slog.Default())
+	out := conn.TransformResponse("/unknown/path", []byte(`{"id":"1","name":"n","href":"drop"}`), slog.Default())
 	m, ok := out.(map[string]any)
 	if !ok || m["id"] != "1" || m["name"] != "n" {
 		t.Fatalf("out = %#v", out)
@@ -355,7 +357,7 @@ func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
 		t.Fatal("simplify should drop href")
 	}
 
-	errOut := conn.transformResponse("/me", []byte(`{"error":{"status":401}}`), slog.Default())
+	errOut := conn.TransformResponse("/me", []byte(`{"error":{"status":401}}`), slog.Default())
 	em, ok := errOut.(map[string]any)
 	if !ok {
 		t.Fatalf("errOut = %#v", errOut)
@@ -367,8 +369,8 @@ func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
 
 func TestSpotify_NeutralPlaylistMissingExternalURL(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewSpotifyConnector(srv)
-	p := conn.neutralPlaylist(map[string]any{
+	conn := connectors.NewSpotifyConnector(srv)
+	p := conn.NeutralPlaylist(map[string]any{
 		"id":   "pl1",
 		"name": "Mix",
 	})

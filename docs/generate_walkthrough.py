@@ -151,14 +151,19 @@ def extract_connectors() -> list[str]:
     ids: list[str] = []
     # Literal keys: srv.connectors["spotify"] = ...
     ids.extend(re.findall(r'srv\.connectors\["([^"]+)"\]', main))
-    # Constant keys: srv.connectors[googlePhotosServiceID] = ...
+    # connectors.PackageID constants referenced in main registration.
     const_map = {
-        "googlePhotosServiceID": "google-photos",
-        "googleContactsServiceID": "google",
-        "immichServiceID": "immich",
+        "GooglePhotosServiceID": "google-photos",
+        "GoogleContactsServiceID": "google",
+        "ImmichServiceID": "immich",
+        "GoogleCalendarServiceID": "google-calendar",
+        "GoogleGmailServiceID": "google-gmail",
+        "YNABServiceID": "ynab",
+        "OwnTracksServiceID": "owntracks",
+        "SampleCalendarServiceID": "sample-calendar",
     }
     for const, value in const_map.items():
-        if re.search(rf"srv\.connectors\[{const}\]", main):
+        if re.search(rf"connectors\.{const}", main) or re.search(rf"srv\.connectors\[{const}\]", main):
             ids.append(value)
     # Preserve registration order, drop dupes.
     seen: set[str] = set()

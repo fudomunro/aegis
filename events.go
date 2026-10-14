@@ -211,23 +211,6 @@ func MergeCalendarEvents(in []types.CalendarEvent) []types.CalendarEvent {
 	return out
 }
 
-// newCalendarEvent builds a single-source neutral calendar event.
-func newCalendarEvent(service, serviceName, id, title, startAt, endAt string, allDay bool) types.CalendarEvent {
-	src := types.CalendarEventSource{
-		Service:     service,
-		ServiceName: serviceName,
-		ID:          id,
-		Canonical:   true,
-	}
-	return types.CalendarEvent{
-		Title:   title,
-		StartAt: startAt,
-		EndAt:   endAt,
-		AllDay:  allDay,
-		Sources: []types.CalendarEventSource{src},
-	}
-}
-
 // calendarEventIsBusy reports whether the event should block time on a
 // free/busy share. Cancelled events do not occupy the calendar.
 func calendarEventIsBusy(e types.CalendarEvent) bool {
@@ -241,29 +224,6 @@ func freeBusyBlockFromEvent(e types.CalendarEvent) types.FreeBusyBlock {
 		EndAt:   e.EndAt,
 		AllDay:  e.AllDay,
 	}
-}
-
-// RedactCalendarEventFreeBusy strips event content, leaving only the fields
-// a scheduling consumer may see (issue #128). Used when the events permission
-// is freebusy.
-func RedactCalendarEventFreeBusy(e types.CalendarEvent) types.CalendarEvent {
-	return types.CalendarEvent{
-		StartAt: e.StartAt,
-		EndAt:   e.EndAt,
-		AllDay:  e.AllDay,
-		Status:  e.Status,
-	}
-}
-
-func redactCalendarEventsFreeBusy(events []types.CalendarEvent) []types.CalendarEvent {
-	if len(events) == 0 {
-		return events
-	}
-	out := make([]types.CalendarEvent, len(events))
-	for i, e := range events {
-		out[i] = RedactCalendarEventFreeBusy(e)
-	}
-	return out
 }
 
 // freeBusyListFromEvents builds the share-friendly busy list (issue #128).
@@ -322,7 +282,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 				}
 				targets[i].list = func(ctx context.Context) ([]types.CalendarEvent, bool, error) {
 					events, truncated, err := inner(ctx)
-					return redactCalendarEventsFreeBusy(events), truncated, err
+					return types.RedactCalendarEventsFreeBusy(events), truncated, err
 				}
 			}
 			return targets, denied

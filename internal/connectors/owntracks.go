@@ -1,4 +1,4 @@
-package main
+package connectors
 
 import (
 	"context"
@@ -24,12 +24,12 @@ import (
 // service endpoint (never hardcoded).
 
 const (
-	ownTracksServiceID   = "owntracks"
-	ownTracksServiceName = "OwnTracks"
+	OwnTracksServiceID   = "owntracks"
+	OwnTracksServiceName = "OwnTracks"
 )
 
-// ownTracksLocation is one Recorder /api/v0/locations sample.
-type ownTracksLocation struct {
+// OwnTracksLocation is one Recorder /api/v0/locations sample.
+type OwnTracksLocation struct {
 	Type      string   `json:"_type"`
 	Lat       float64  `json:"lat"`
 	Lon       float64  `json:"lon"`
@@ -47,7 +47,7 @@ type ownTracksLocation struct {
 
 type ownTracksLocationsResponse struct {
 	Type string              `json:"_type"`
-	Data []ownTracksLocation `json:"data"`
+	Data []OwnTracksLocation `json:"data"`
 }
 
 // ownTracksVisit is a Recorder /api/v0/visit row when available.
@@ -78,11 +78,11 @@ func NewOwnTracksConnector(host Host) *OwnTracksConnector {
 	return &OwnTracksConnector{host: host}
 }
 
-func (c *OwnTracksConnector) ownTracksUpstreamBase() string {
+func (c *OwnTracksConnector) OwnTracksUpstreamBase() string {
 	if c.host == nil {
 		return ""
 	}
-	svc := c.host.ServiceConfig(ownTracksServiceID)
+	svc := c.host.ServiceConfig(OwnTracksServiceID)
 	if svc == nil {
 		return ""
 	}
@@ -138,19 +138,19 @@ func (c *OwnTracksConnector) SystemInstructions(baseURL string) string {
 }
 
 func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", ownTracksServiceID, "method", r.Method, "path", remainingPath)
-	token := c.ownTracksToken(logger)
+	logger := slog.With("service", OwnTracksServiceID, "method", r.Method, "path", remainingPath)
+	token := c.OwnTracksToken(logger)
 	if token == "" {
-		writeJSONError(w, http.StatusUnauthorized,
+		WriteJSONError(w, http.StatusUnauthorized,
 			"no valid OwnTracks token — set Authorization/X-API-Key headers on the owntracks service")
 		return
 	}
-	upstreamBase := c.ownTracksUpstreamBase()
+	upstreamBase := c.OwnTracksUpstreamBase()
 	upstreamURL := upstreamBase + remainingPath
 	if encoded := r.URL.Query().Encode(); encoded != "" {
 		upstreamURL += "?" + encoded
 	}
-	cacheKey := ownTracksServiceID + ":" + r.URL.RequestURI()
+	cacheKey := OwnTracksServiceID + ":" + r.URL.RequestURI()
 	if r.Method == http.MethodGet {
 		if cached, ok := c.host.CacheGet(cacheKey); ok {
 			logger.Debug("cache hit")
@@ -160,15 +160,15 @@ func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 			return
 		}
 	}
-	data, status, err := doUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
+	data, status, err := DoUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
 	if err != nil {
 		logger.Error("owntracks request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, ownTracksServiceName+" API request failed")
+		WriteJSONError(w, http.StatusBadGateway, OwnTracksServiceName+" API request failed")
 		return
 	}
 	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		writeJSONError(w, http.StatusUnauthorized,
-			ownTracksServiceName+" rejected the request — set an API key in service headers")
+		WriteJSONError(w, http.StatusUnauthorized,
+			OwnTracksServiceName+" rejected the request — set an API key in service headers")
 		return
 	}
 	if r.Method == http.MethodGet && status == http.StatusOK {
@@ -179,13 +179,13 @@ func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 	w.Write(data)
 }
 
-// ownTracksToken resolves static config headers (Authorization / X-API-Key)
+// OwnTracksToken resolves static config headers (Authorization / X-API-Key)
 // or an OAuth token. Self-hosted Recorder typically uses a static token.
-func (c *OwnTracksConnector) ownTracksToken(logger *slog.Logger) string {
+func (c *OwnTracksConnector) OwnTracksToken(logger *slog.Logger) string {
 	if c.host == nil {
 		return ""
 	}
-	if svc := c.host.ServiceConfig(ownTracksServiceID); svc != nil {
+	if svc := c.host.ServiceConfig(OwnTracksServiceID); svc != nil {
 		for k, v := range svc.Headers {
 			if strings.EqualFold(k, "Authorization") && strings.TrimSpace(v) != "" {
 				v = strings.TrimSpace(v)
@@ -199,34 +199,34 @@ func (c *OwnTracksConnector) ownTracksToken(logger *slog.Logger) string {
 			}
 		}
 	}
-	return c.host.GetValidToken(ownTracksServiceID, logger)
+	return c.host.GetValidToken(OwnTracksServiceID, logger)
 }
 
 func (c *OwnTracksConnector) ListUserPlaceVisits(ctx context.Context) (visits []types.PlaceVisit, truncated bool, err error) {
-	base := c.ownTracksUpstreamBase()
+	base := c.OwnTracksUpstreamBase()
 	if base == "" {
 		return nil, false, types.ErrUnauthorized
 	}
-	logger := slog.With("connector", ownTracksServiceID)
+	logger := slog.With("connector", OwnTracksServiceID)
 	// Prefer explicit visits when the Recorder exposes them.
-	if vs, ok, err := c.listRecorderVisits(ctx, base, logger); err == nil && ok {
+	if vs, ok, err := c.ListRecorderVisits(ctx, base, logger); err == nil && ok {
 		return vs, false, nil
 	} else if err != nil {
 		// Fail-open: fall back to clustering locations.
 		logger.Debug("visit endpoint failed; falling back to locations", "error", err)
 	}
-	locs, truncated, err := c.listRecorderLocations(ctx, base, logger)
+	locs, truncated, err := c.ListRecorderLocations(ctx, base, logger)
 	if err != nil {
 		return nil, truncated, err
 	}
-	return clusterOwnTracksVisits(locs), truncated, nil
+	return ClusterOwnTracksVisits(locs), truncated, nil
 }
 
-func (c *OwnTracksConnector) listRecorderVisits(ctx context.Context, base string, logger *slog.Logger) ([]types.PlaceVisit, bool, error) {
+func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string, logger *slog.Logger) ([]types.PlaceVisit, bool, error) {
 	q := url.Values{}
-	q.Set("limit", strconv.Itoa(libraryPageCap*2))
+	q.Set("limit", strconv.Itoa(LibraryPageCap*2))
 	var parsed ownTracksVisitsResponse
-	if err := c.ownTracksAPIGet(ctx, logger, base+"/api/v0/visit", q, &parsed); err != nil {
+	if err := c.OwnTracksAPIGet(ctx, logger, base+"/api/v0/visit", q, &parsed); err != nil {
 		return nil, false, err
 	}
 	if len(parsed.Data) == 0 {
@@ -253,7 +253,7 @@ func (c *OwnTracksConnector) listRecorderVisits(ctx context.Context, base string
 		} else if v.Vac > 50 {
 			conf = "medium"
 		}
-		visit := newPlaceVisit(ownTracksServiceID, ownTracksServiceName, id, types.PlaceVisit{
+		visit := types.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, id, types.PlaceVisit{
 			StartAt:    start,
 			EndAt:      end,
 			Kind:       types.PlaceKindVisit,
@@ -271,19 +271,19 @@ func (c *OwnTracksConnector) listRecorderVisits(ctx context.Context, base string
 	return out, true, nil
 }
 
-func (c *OwnTracksConnector) listRecorderLocations(ctx context.Context, base string, logger *slog.Logger) ([]ownTracksLocation, bool, error) {
+func (c *OwnTracksConnector) ListRecorderLocations(ctx context.Context, base string, logger *slog.Logger) ([]OwnTracksLocation, bool, error) {
 	q := url.Values{}
-	q.Set("limit", strconv.Itoa(libraryPageCap*4))
+	q.Set("limit", strconv.Itoa(LibraryPageCap*4))
 	var parsed ownTracksLocationsResponse
-	if err := c.ownTracksAPIGet(ctx, logger, base+"/api/v0/locations", q, &parsed); err != nil {
+	if err := c.OwnTracksAPIGet(ctx, logger, base+"/api/v0/locations", q, &parsed); err != nil {
 		return nil, false, err
 	}
-	truncated := len(parsed.Data) >= libraryPageCap*4
+	truncated := len(parsed.Data) >= LibraryPageCap*4
 	return parsed.Data, truncated, nil
 }
 
-func (c *OwnTracksConnector) ownTracksAPIGet(ctx context.Context, logger *slog.Logger, rawURL string, query url.Values, out any) error {
-	token := c.ownTracksToken(logger)
+func (c *OwnTracksConnector) OwnTracksAPIGet(ctx context.Context, logger *slog.Logger, rawURL string, query url.Values, out any) error {
+	token := c.OwnTracksToken(logger)
 	if token == "" {
 		return types.ErrUnauthorized
 	}
@@ -300,7 +300,7 @@ func (c *OwnTracksConnector) ownTracksAPIGet(ctx context.Context, logger *slog.L
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -314,16 +314,16 @@ func (c *OwnTracksConnector) ownTracksAPIGet(ctx context.Context, logger *slog.L
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-// clusterOwnTracksVisits groups consecutive samples that stay within
+// ClusterOwnTracksVisits groups consecutive samples that stay within
 // ~200m for at least 15 minutes into a visit. Movement between clusters is
 // recorded as a trip when the gap is short enough to be travel (issue #142).
-func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
+func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 	if len(locs) == 0 {
 		return nil
 	}
 	// Sort chronologically.
-	sorted := append([]ownTracksLocation(nil), locs...)
-	sortOwnTracks(sorted)
+	sorted := append([]OwnTracksLocation(nil), locs...)
+	SortOwnTracks(sorted)
 
 	const (
 		stayRadiusM   = 200.0
@@ -335,7 +335,7 @@ func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
 	type cluster struct {
 		start, end time.Time
 		lat, lng   float64
-		points     []ownTracksLocation
+		points     []OwnTracksLocation
 	}
 
 	var clusters []cluster
@@ -343,7 +343,7 @@ func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
 	for _, loc := range sorted {
 		ts := time.Unix(loc.Tst, 0).UTC()
 		if cur != nil {
-			dist := haversineMeters(cur.lat, cur.lng, loc.Lat, loc.Lon)
+			dist := HaversineMeters(cur.lat, cur.lng, loc.Lat, loc.Lon)
 			gap := ts.Sub(cur.end)
 			if dist <= stayRadiusM && gap <= sampleTimeout {
 				cur.end = ts
@@ -353,7 +353,7 @@ func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
 			clusters = append(clusters, *cur)
 			cur = nil
 		}
-		cur = &cluster{start: ts, end: ts, lat: loc.Lat, lng: loc.Lon, points: []ownTracksLocation{loc}}
+		cur = &cluster{start: ts, end: ts, lat: loc.Lat, lng: loc.Lon, points: []OwnTracksLocation{loc}}
 	}
 	if cur != nil {
 		clusters = append(clusters, *cur)
@@ -383,7 +383,7 @@ func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
 		if len(cl.points) >= 3 {
 			conf = "high"
 		}
-		visit := newPlaceVisit(ownTracksServiceID, ownTracksServiceName, id, types.PlaceVisit{
+		visit := types.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, id, types.PlaceVisit{
 			StartAt:    cl.start.UTC().Format(time.RFC3339),
 			EndAt:      cl.end.UTC().Format(time.RFC3339),
 			Kind:       types.PlaceKindVisit,
@@ -411,14 +411,14 @@ func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
 			next := clusters[i+1]
 			gap := next.start.Sub(cl.end)
 			if gap > sampleTimeout && gap <= tripMaxGap {
-				dist := haversineMeters(cl.lat, cl.lng, next.lat, next.lng)
+				dist := HaversineMeters(cl.lat, cl.lng, next.lat, next.lng)
 				if dist > stayRadiusM {
 					tid := "ott:" + strconv.FormatInt(cl.end.Unix(), 10) + ":" + strconv.FormatInt(next.start.Unix(), 10)
 					mode := types.TripModeDrive
 					if dist < 2000 && gap > 30*time.Minute {
 						mode = types.TripModeWalk
 					}
-					trip := newPlaceVisit(ownTracksServiceID, ownTracksServiceName, tid, types.PlaceVisit{
+					trip := types.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, tid, types.PlaceVisit{
 						StartAt:  cl.end.UTC().Format(time.RFC3339),
 						EndAt:    next.start.UTC().Format(time.RFC3339),
 						Kind:     types.PlaceKindTrip,
@@ -439,12 +439,12 @@ func clusterOwnTracksVisits(locs []ownTracksLocation) []types.PlaceVisit {
 	return out
 }
 
-func sortOwnTracks(locs []ownTracksLocation) {
+func SortOwnTracks(locs []OwnTracksLocation) {
 	sort.SliceStable(locs, func(i, j int) bool { return locs[i].Tst < locs[j].Tst })
 }
 
-// haversineMeters returns the great-circle distance between two points.
-func haversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
+// HaversineMeters returns the great-circle distance between two points.
+func HaversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
 	const r = 6371000.0
 	toRad := func(v float64) float64 { return v * math.Pi / 180 }
 	dLat := toRad(lat2 - lat1)

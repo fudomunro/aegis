@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"encoding/json"
 	"io"
 	"net/http"
@@ -12,7 +14,7 @@ import (
 
 func TestAmazonMusicConnector_SystemInstructions(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	instructions := conn.SystemInstructions("https://aegis.example.com")
 
@@ -32,7 +34,7 @@ func TestAmazonMusicConnector_SystemInstructions(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformUser(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	// Standard format.
 	raw := map[string]any{
@@ -42,7 +44,7 @@ func TestAmazonMusicConnector_TransformUser(t *testing.T) {
 		"customer_id": "CUST456",
 		"extra_field": "should be stripped",
 	}
-	result := conn.transformUser(raw)
+	result := conn.TransformUser(raw)
 	if result["id"] != "amz123" {
 		t.Fatalf("id = %v", result["id"])
 	}
@@ -58,7 +60,7 @@ func TestAmazonMusicConnector_TransformUser(t *testing.T) {
 		"user_id":      "u1",
 		"display_name": "Bob",
 	}
-	result2 := conn.transformUser(raw2)
+	result2 := conn.TransformUser(raw2)
 	if result2["id"] != "u1" {
 		t.Fatalf("id = %v", result2["id"])
 	}
@@ -69,7 +71,7 @@ func TestAmazonMusicConnector_TransformUser(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	raw := map[string]any{
 		"items": []any{
@@ -83,7 +85,7 @@ func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
 		"total": 1,
 	}
 
-	result := conn.transformPlaylistList(raw)
+	result := conn.TransformPlaylistList(raw)
 	if len(result.Playlists) != 1 {
 		t.Fatalf("got %d playlists, want 1", len(result.Playlists))
 	}
@@ -101,7 +103,7 @@ func TestAmazonMusicConnector_TransformPlaylistList(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformSearch(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	// Categorized results.
 	raw := map[string]any{
@@ -125,7 +127,7 @@ func TestAmazonMusicConnector_TransformSearch(t *testing.T) {
 		},
 	}
 
-	result := conn.transformSearch(raw)
+	result := conn.TransformSearch(raw)
 	tracks, ok := result["tracks"].([]map[string]any)
 	if !ok {
 		t.Fatalf("tracks type = %T", result["tracks"])
@@ -143,7 +145,7 @@ func TestAmazonMusicConnector_TransformSearch(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformSearch_FlatList(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	// Flat items list (no categories).
 	raw := map[string]any{
@@ -155,7 +157,7 @@ func TestAmazonMusicConnector_TransformSearch_FlatList(t *testing.T) {
 		},
 	}
 
-	result := conn.transformSearch(raw)
+	result := conn.TransformSearch(raw)
 	results, ok := result["results"].([]map[string]any)
 	if !ok {
 		t.Fatalf("results type = %T", result["results"])
@@ -167,7 +169,7 @@ func TestAmazonMusicConnector_TransformSearch_FlatList(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformTrack(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	// Direct track object.
 	raw := map[string]any{
@@ -177,7 +179,7 @@ func TestAmazonMusicConnector_TransformTrack(t *testing.T) {
 		"album":       "Kind of Blue",
 		"duration_ms": 562000,
 	}
-	result := conn.transformTrack(raw)
+	result := conn.TransformTrack(raw)
 	if result["name"] != "So What" {
 		t.Fatalf("name = %v", result["name"])
 	}
@@ -188,7 +190,7 @@ func TestAmazonMusicConnector_TransformTrack(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformAlbum(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	raw := map[string]any{
 		"id":           "a1",
@@ -204,7 +206,7 @@ func TestAmazonMusicConnector_TransformAlbum(t *testing.T) {
 			},
 		},
 	}
-	result := conn.transformAlbum(raw)
+	result := conn.TransformAlbum(raw)
 	if result["name"] != "Kind of Blue" {
 		t.Fatalf("name = %v", result["name"])
 	}
@@ -219,7 +221,7 @@ func TestAmazonMusicConnector_TransformAlbum(t *testing.T) {
 
 func TestAmazonMusicConnector_TransformArtist(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	raw := map[string]any{
 		"id":         "ar1",
@@ -227,7 +229,7 @@ func TestAmazonMusicConnector_TransformArtist(t *testing.T) {
 		"genres":     []any{"jazz", "bebop"},
 		"popularity": 85,
 	}
-	result := conn.transformArtist(raw)
+	result := conn.TransformArtist(raw)
 	if result["name"] != "Miles Davis" {
 		t.Fatalf("name = %v", result["name"])
 	}
@@ -235,22 +237,22 @@ func TestAmazonMusicConnector_TransformArtist(t *testing.T) {
 
 func TestAmazonMusicConnector_ExtractArtistName(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	// Direct string.
-	if conn.extractArtistName(map[string]any{"artist": "Miles"}) != "Miles" {
+	if conn.ExtractArtistName(map[string]any{"artist": "Miles"}) != "Miles" {
 		t.Fatal("direct string failed")
 	}
 	// Nested object.
-	if conn.extractArtistName(map[string]any{"artist": map[string]any{"name": "Miles"}}) != "Miles" {
+	if conn.ExtractArtistName(map[string]any{"artist": map[string]any{"name": "Miles"}}) != "Miles" {
 		t.Fatal("nested object failed")
 	}
 	// Array.
-	if conn.extractArtistName(map[string]any{"artists": []any{map[string]any{"name": "Miles"}}}) != "Miles" {
+	if conn.ExtractArtistName(map[string]any{"artists": []any{map[string]any{"name": "Miles"}}}) != "Miles" {
 		t.Fatal("array failed")
 	}
 	// Missing.
-	if conn.extractArtistName(map[string]any{}) != "" {
+	if conn.ExtractArtistName(map[string]any{}) != "" {
 		t.Fatal("expected empty for missing")
 	}
 }
@@ -262,8 +264,8 @@ func TestAmazonMusicConnector_HandleProxy_NoToken(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
-		"amazon-music": NewAmazonMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"amazon-music": connectors.NewAmazonMusicConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/services/amazon-music/me", nil)
@@ -305,8 +307,8 @@ func TestAmazonMusicConnector_HandleProxy_WithMockAPI(t *testing.T) {
 		AccessToken: "mock-amz-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"amazon-music": NewAmazonMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"amazon-music": connectors.NewAmazonMusicConnector(srv),
 	}
 
 	// Test /me — should be transformed.
@@ -362,8 +364,8 @@ func TestAmazonMusicConnector_HandleProxy_UpstreamDown(t *testing.T) {
 		AccessToken: "token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.connectors = map[string]ServiceConnector{
-		"amazon-music": NewAmazonMusicConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"amazon-music": connectors.NewAmazonMusicConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/services/amazon-music/me", nil)
@@ -379,13 +381,13 @@ func TestAmazonMusicConnector_HandleProxy_UpstreamDown(t *testing.T) {
 
 func TestAmazonMusicConnector_FirstNonNil(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
 	m := map[string]any{"a": nil, "b": "found", "c": "also"}
-	if conn.firstNonNil(m, "a", "b", "c") != "found" {
+	if conn.FirstNonNil(m, "a", "b", "c") != "found" {
 		t.Fatal("expected 'found'")
 	}
-	if conn.firstNonNil(m, "missing") != nil {
+	if conn.FirstNonNil(m, "missing") != nil {
 		t.Fatal("expected nil")
 	}
 }

@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"fmt"
@@ -193,7 +195,7 @@ func (s *Server) writeImmichSetupStatus(w http.ResponseWriter, r *http.Request, 
 }
 
 func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichSetupStatus {
-	svc := s.config.GetService(immichServiceID)
+	svc := s.config.GetService(connectors.ImmichServiceID)
 	status := ImmichSetupStatus{}
 	if svc != nil {
 		status.Configured = true
@@ -204,7 +206,7 @@ func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichS
 	// Surface who currently owns photos when Immich does not.
 	if svc == nil || !svc.IsCanonicalFor("photos") {
 		for _, other := range s.config.ServiceSnapshots() {
-			if other.ID == immichServiceID {
+			if other.ID == connectors.ImmichServiceID {
 				continue
 			}
 			if other.IsCanonicalFor("photos") {
@@ -402,7 +404,7 @@ func (s *Server) runImmichChecks(ctx context.Context, status *ImmichSetupStatus)
 		checks[i].Detail = detail
 	}
 
-	svc := s.config.GetService(immichServiceID)
+	svc := s.config.GetService(connectors.ImmichServiceID)
 	if svc == nil {
 		mark("service_configured", "Add Immich with the form above (or aegis.json)", false)
 		mark("api_key", "Not configured", false)
@@ -778,10 +780,10 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse, empt
 }
 
 func (s *Server) listImmichPhotos(ctx context.Context) ([]types.Photo, bool, error) {
-	conn, ok := s.connectors[immichServiceID].(*ImmichConnector)
+	conn, ok := s.connectors[connectors.ImmichServiceID].(*connectors.ImmichConnector)
 	if !ok || conn == nil {
 		// Connector not registered in this process — use a temporary one.
-		conn = NewImmichConnector(s)
+		conn = connectors.NewImmichConnector(s)
 	}
 	return conn.ListUserPhotos(ctx)
 }
@@ -790,10 +792,10 @@ func immichStampSummary(photos []types.Photo, baseURL string) (bool, string) {
 	if len(photos) == 0 {
 		return false, "no photos to inspect"
 	}
-	proxyPrefix := strings.TrimRight(baseURL, "/") + "/v1/services/" + immichServiceID + "/"
+	proxyPrefix := strings.TrimRight(baseURL, "/") + "/v1/services/" + connectors.ImmichServiceID + "/"
 	for _, p := range photos {
 		for _, src := range p.Sources {
-			if src.Service != immichServiceID {
+			if src.Service != connectors.ImmichServiceID {
 				continue
 			}
 			if !src.Canonical {
@@ -826,7 +828,7 @@ func (s *Server) handleImmichTest(w http.ResponseWriter, r *http.Request) {
 	endpoint := strings.TrimSpace(req.Endpoint)
 	apiKey := strings.TrimSpace(req.APIKey)
 	if endpoint == "" || apiKey == "" {
-		if svc := s.config.GetService(immichServiceID); svc != nil {
+		if svc := s.config.GetService(connectors.ImmichServiceID); svc != nil {
 			if endpoint == "" {
 				endpoint = svc.Endpoint
 			}
@@ -884,7 +886,7 @@ func (s *Server) handleImmichConfig(w http.ResponseWriter, r *http.Request) {
 		entry.ClearCanonicalFor = true
 	}
 
-	if err := s.config.SetServiceConnection(immichServiceID, entry); err != nil {
+	if err := s.config.SetServiceConnection(connectors.ImmichServiceID, entry); err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}

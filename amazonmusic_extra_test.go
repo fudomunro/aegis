@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"fmt"
 	"net/http"
@@ -13,14 +15,14 @@ import (
 
 func TestAmazonSimplify(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 	raw := map[string]any{
 		"id":            "1",
 		"name":          "n",
 		"external_urls": map[string]any{},
 		"items":         []any{},
 	}
-	got := conn.simplify(raw)
+	got := conn.Simplify(raw)
 	if got["id"] != "1" || got["name"] != "n" {
 		t.Fatalf("got = %+v", got)
 	}
@@ -31,7 +33,7 @@ func TestAmazonSimplify(t *testing.T) {
 
 func TestAmazonListUserPlaylists_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 	if _, _, err := conn.ListUserPlaylists(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
@@ -61,7 +63,7 @@ func TestAmazonListUserPlaylists_Success(t *testing.T) {
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	}
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 	playlists, _, err := conn.ListUserPlaylists(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -93,7 +95,7 @@ func TestAmazonListUserPlaylists_NextTokenTruncated(t *testing.T) {
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	}
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 	playlists, truncated, err := conn.ListUserPlaylists(context.Background())
 	if err != nil {
 		t.Fatal(err)
@@ -119,7 +121,7 @@ func TestAmazonListUserPlaylists_HTTPError(t *testing.T) {
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	}
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 	if _, _, err := conn.ListUserPlaylists(context.Background()); err == nil {
 		t.Fatal("expected HTTP error")
 	}
@@ -127,9 +129,9 @@ func TestAmazonListUserPlaylists_HTTPError(t *testing.T) {
 
 func TestAmazonNeutralAmazonTrack(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	tr := conn.neutralAmazonTrack(map[string]any{
+	tr := conn.NeutralAmazonTrack(map[string]any{
 		"id":          "t1",
 		"title":       "Blue Train",
 		"artistName":  "John Coltrane",
@@ -158,9 +160,9 @@ func TestAmazonNeutralAmazonTrack(t *testing.T) {
 
 func TestAmazonTransformLibrary(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	got := conn.transformLibrary(map[string]any{
+	got := conn.TransformLibrary(map[string]any{
 		"items": []any{
 			map[string]any{"id": "1", "title": "Song", "artist": "A", "album": "B"},
 		},
@@ -174,9 +176,9 @@ func TestAmazonTransformLibrary(t *testing.T) {
 
 func TestAmazonTransformRecommendations(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	got := conn.transformRecommendations(map[string]any{
+	got := conn.TransformRecommendations(map[string]any{
 		"results": []any{
 			map[string]any{"id": "1", "name": "Rec", "artist": map[string]any{"name": "A"}},
 		},
@@ -189,9 +191,9 @@ func TestAmazonTransformRecommendations(t *testing.T) {
 
 func TestAmazonTransformPlaylistDetail(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	detail := conn.transformPlaylistDetail(map[string]any{
+	detail := conn.TransformPlaylistDetail(map[string]any{
 		"id":         "pl1",
 		"name":       "Focus",
 		"item_count": 2,
@@ -209,7 +211,7 @@ func TestAmazonTransformPlaylistDetail(t *testing.T) {
 	}
 
 	// Top-level items path
-	detail2 := conn.transformPlaylistDetail(map[string]any{
+	detail2 := conn.TransformPlaylistDetail(map[string]any{
 		"id":    "pl2",
 		"title": "Alt",
 		"items": []any{
@@ -223,9 +225,9 @@ func TestAmazonTransformPlaylistDetail(t *testing.T) {
 
 func TestAmazonTransformTrackListAndSingle(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	listed := conn.transformTrack(map[string]any{
+	listed := conn.TransformTrack(map[string]any{
 		"items": []any{
 			map[string]any{"id": "t1", "title": "One", "artist": "A", "album": "B", "duration_ms": float64(100)},
 		},
@@ -234,7 +236,7 @@ func TestAmazonTransformTrackListAndSingle(t *testing.T) {
 		t.Fatalf("listed = %+v", listed)
 	}
 
-	single := conn.transformTrack(map[string]any{
+	single := conn.TransformTrack(map[string]any{
 		"id":     "t2",
 		"name":   "Two",
 		"artist": "C",
@@ -246,9 +248,9 @@ func TestAmazonTransformTrackListAndSingle(t *testing.T) {
 
 func TestAmazonTransformAlbum(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	got := conn.transformAlbum(map[string]any{
+	got := conn.TransformAlbum(map[string]any{
 		"id":           "ab1",
 		"title":        "Album",
 		"artistName":   "A",
@@ -268,44 +270,44 @@ func TestAmazonTransformAlbum(t *testing.T) {
 
 func TestAmazonExtractHelpers(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 
-	if items := conn.extractItems(map[string]any{"results": []any{1}}); len(items) != 1 {
+	if items := conn.ExtractItems(map[string]any{"results": []any{1}}); len(items) != 1 {
 		t.Fatalf("results items = %v", items)
 	}
-	if items := conn.extractItems(map[string]any{"data": []any{1, 2}}); len(items) != 2 {
+	if items := conn.ExtractItems(map[string]any{"data": []any{1, 2}}); len(items) != 2 {
 		t.Fatalf("data items = %v", items)
 	}
-	if items := conn.extractItems(map[string]any{}); items != nil {
+	if items := conn.ExtractItems(map[string]any{}); items != nil {
 		t.Fatalf("empty items = %v", items)
 	}
 
-	if n := conn.totalCount(map[string]any{"pageInfo": map[string]any{"totalResults": float64(9)}}); n != float64(9) {
+	if n := conn.TotalCount(map[string]any{"pageInfo": map[string]any{"totalResults": float64(9)}}); n != float64(9) {
 		t.Fatalf("pageInfo total = %v", n)
 	}
-	if n := conn.totalCount(map[string]any{}); n != nil {
+	if n := conn.TotalCount(map[string]any{}); n != nil {
 		t.Fatalf("empty total = %v", n)
 	}
 
-	if got := conn.extractArtistName(map[string]any{"artists": []any{map[string]any{"name": "A"}}}); got != "A" {
+	if got := conn.ExtractArtistName(map[string]any{"artists": []any{map[string]any{"name": "A"}}}); got != "A" {
 		t.Fatalf("artists array = %q", got)
 	}
-	if got := conn.extractArtistName(map[string]any{"artist": map[string]any{"name": "B"}}); got != "B" {
+	if got := conn.ExtractArtistName(map[string]any{"artist": map[string]any{"name": "B"}}); got != "B" {
 		t.Fatalf("artist obj = %q", got)
 	}
-	if got := conn.extractAlbumName(map[string]any{"album": map[string]any{"name": "Al"}}); got != "Al" {
+	if got := conn.ExtractAlbumName(map[string]any{"album": map[string]any{"name": "Al"}}); got != "Al" {
 		t.Fatalf("album obj = %q", got)
 	}
 }
 
 func TestAmazonFirstNonNil(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := NewAmazonMusicConnector(srv)
+	conn := connectors.NewAmazonMusicConnector(srv)
 	m := map[string]any{"a": nil, "b": "val"}
-	if got := conn.firstNonNil(m, "a", "b"); got != "val" {
+	if got := conn.FirstNonNil(m, "a", "b"); got != "val" {
 		t.Fatalf("got = %v", got)
 	}
-	if got := conn.firstNonNil(m, "missing"); got != nil {
+	if got := conn.FirstNonNil(m, "missing"); got != nil {
 		t.Fatalf("got = %v", got)
 	}
 }

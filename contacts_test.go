@@ -1,6 +1,8 @@
 package main
 
 import (
+	"github.com/fudomunro/aegis/internal/connectors"
+
 	"context"
 	"encoding/json"
 	"errors"
@@ -19,8 +21,8 @@ func TestNormalizeContactEmail(t *testing.T) {
 		"":                   "",
 	}
 	for in, want := range cases {
-		if got := NormalizeContactEmail(in); got != want {
-			t.Errorf("NormalizeContactEmail(%q) = %q, want %q", in, got, want)
+		if got := types.NormalizeContactEmail(in); got != want {
+			t.Errorf("types.NormalizeContactEmail(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -34,14 +36,14 @@ func TestNormalizeContactPhone(t *testing.T) {
 		"abc":               "",
 	}
 	for in, want := range cases {
-		if got := NormalizeContactPhone(in); got != want {
-			t.Errorf("NormalizeContactPhone(%q) = %q, want %q", in, got, want)
+		if got := types.NormalizeContactPhone(in); got != want {
+			t.Errorf("types.NormalizeContactPhone(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestNormalizeContactHandle(t *testing.T) {
-	if got := NormalizeContactHandle("  @AdaL "); got != "adal" {
+	if got := types.NormalizeContactHandle("  @AdaL "); got != "adal" {
 		t.Fatalf("handle = %q, want adal", got)
 	}
 }
@@ -53,7 +55,7 @@ func TestContactIdentityKeys_PrefersEmailThenPhoneThenHandle(t *testing.T) {
 		Phones:  []string{"+1 (555) 123-4567"},
 		Handles: []string{"@ada"},
 	}
-	keys := ContactIdentityKeys(c)
+	keys := types.ContactIdentityKeys(c)
 	want := []string{
 		"email:ada@example.com",
 		"phone:+15551234567",
@@ -67,29 +69,29 @@ func TestContactIdentityKeys_PrefersEmailThenPhoneThenHandle(t *testing.T) {
 			t.Fatalf("keys[%d] = %q, want %q", i, keys[i], want[i])
 		}
 	}
-	if primaryContactKey(c) != "email:ada@example.com" {
-		t.Fatalf("primary = %q", primaryContactKey(c))
+	if types.PrimaryContactKey(c) != "email:ada@example.com" {
+		t.Fatalf("primary = %q", types.PrimaryContactKey(c))
 	}
 }
 
 func TestContactIdentityKeys_NameOnly(t *testing.T) {
 	c := types.Contact{Name: "  Grace   Hopper "}
-	keys := ContactIdentityKeys(c)
+	keys := types.ContactIdentityKeys(c)
 	if len(keys) != 1 || keys[0] != "name:grace hopper" {
 		t.Fatalf("keys = %v", keys)
 	}
 }
 
 func TestNewContact_Empty(t *testing.T) {
-	if got := newContact("google", "Google", "id1", "  ", nil, nil); got.Name != "" {
+	if got := types.NewContact("google", "Google", "id1", "  ", nil, nil); got.Name != "" {
 		t.Fatalf("expected empty contact, got %+v", got)
 	}
 }
 
 func TestMergeContacts_SharedEmailAcrossServices(t *testing.T) {
-	a := newContact("google", "Google Contacts", "g1", "Ada Lovelace",
+	a := types.NewContact("google", "Google Contacts", "g1", "Ada Lovelace",
 		[]string{"ada@example.com"}, nil)
-	b := newContact("outlook", "Outlook", "o9", "Ada L.",
+	b := types.NewContact("outlook", "Outlook", "o9", "Ada L.",
 		[]string{"ADA@example.com"}, []string{"+1 (555) 123-4567"})
 	merged := MergeContacts([]types.Contact{a, b})
 	if len(merged) != 1 {
@@ -111,9 +113,9 @@ func TestMergeContacts_SharedEmailAcrossServices(t *testing.T) {
 }
 
 func TestMergeContacts_PhoneLinksDifferentEmails(t *testing.T) {
-	a := newContact("google", "Google", "g1", "Bob",
+	a := types.NewContact("google", "Google", "g1", "Bob",
 		[]string{"bob@work.example"}, []string{"+15550001111"})
-	b := newContact("outlook", "Outlook", "o1", "Robert",
+	b := types.NewContact("outlook", "Outlook", "o1", "Robert",
 		[]string{"bob@home.example"}, []string{"+1 (555) 000-1111"})
 	merged := MergeContacts([]types.Contact{a, b})
 	if len(merged) != 1 {
@@ -125,9 +127,9 @@ func TestMergeContacts_PhoneLinksDifferentEmails(t *testing.T) {
 }
 
 func TestMergeContacts_NameFallbackSeparatesDistinctPeople(t *testing.T) {
-	a := newContact("google", "Google", "g1", "Alex Kim",
+	a := types.NewContact("google", "Google", "g1", "Alex Kim",
 		[]string{"alex1@example.com"}, nil)
-	b := newContact("google", "Google", "g2", "Alex Kim",
+	b := types.NewContact("google", "Google", "g2", "Alex Kim",
 		[]string{"alex2@example.com"}, nil)
 	merged := MergeContacts([]types.Contact{a, b})
 	if len(merged) != 2 {
@@ -208,7 +210,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{
 			contacts: []types.Contact{
 				{
@@ -273,8 +275,8 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 func TestHandleLibraryContacts_NoProviders(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
-		"spotify": NewSpotifyConnector(srv),
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"spotify": connectors.NewSpotifyConnector(srv),
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
@@ -300,7 +302,7 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{
 			contacts: []types.Contact{{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ID: "1"}}}},
 		},
@@ -324,7 +326,7 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{
 			contacts: []types.Contact{
 				{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}}},
@@ -358,7 +360,7 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 		Services: []Service{{ID: "google", Name: "Google", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{err: errors.New("upstream boom")},
 	}
 
@@ -442,7 +444,7 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{
+	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{},
 	}
 
@@ -477,7 +479,7 @@ func TestPreRequest_ContactsWithoutServiceName(t *testing.T) {
 
 func TestHasContactProviders(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.connectors = map[string]ServiceConnector{}
+	srv.connectors = map[string]connectors.ServiceConnector{}
 	if kindHasProviders("contacts", srv) {
 		t.Fatal("empty connectors should have no contact providers")
 	}
