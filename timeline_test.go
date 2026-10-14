@@ -121,7 +121,7 @@ func TestImportTimelinePath_FileAndStore(t *testing.T) {
 	if err != nil || n != 3 {
 		t.Fatalf("count = %d err=%v", n, err)
 	}
-	conn := NewTimelineConnector(nil, store)
+	conn := NewTimelineConnector(store)
 	visits, truncated, err := conn.ListUserPlaceVisits(context.Background())
 	if err != nil {
 		t.Fatal(err)

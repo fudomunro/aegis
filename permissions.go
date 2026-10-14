@@ -469,6 +469,7 @@ func canonicalProxyPath(remaining string) (string, error) {
 // DataTypeForPath classifies a service-proxy path into a Aegis data type.
 // Unknown or non-canonical paths return "" so callers must apply the
 // strictest configured permission (not "default") — see accessForDataType.
+// Classification is the ordered rule table in pathclass.go (issue #15).
 func DataTypeForPath(path string) string {
 	p := strings.TrimSpace(path)
 	if p == "" {
@@ -485,77 +486,7 @@ func DataTypeForPath(path string) string {
 	if clean == "" || clean == "/" {
 		return ""
 	}
-	p = clean
-
-	switch {
-	case p == "/me":
-		return "user"
-	case strings.HasPrefix(p, "/me/player"):
-		return "player"
-	case p == "/me/tracks" || strings.HasPrefix(p, "/tracks"):
-		return "tracks"
-	case p == "/me/liked" || p == "/me/top/tracks":
-		return "tracks"
-	case strings.HasPrefix(p, "/videos"):
-		return "tracks"
-	case p == "/me/albums" || strings.HasPrefix(p, "/albums"):
-		return "albums"
-	case p == "/me/artists" || p == "/me/top/artists" || strings.HasPrefix(p, "/artists"):
-		return "artists"
-	// Followed artists: Spotify /me/following and YouTube subscriptions back
-	// the unified artists library, so they share the artists permission key.
-	case p == "/me/following":
-		return "artists"
-	case p == "/me/playlists" || strings.HasPrefix(p, "/playlists"):
-		return "playlists"
-	case p == "/me/contacts" || strings.HasPrefix(p, "/contacts") || strings.HasPrefix(p, "/people"):
-		return "contacts"
-	case p == "/me/events" || strings.HasPrefix(p, "/events") || strings.HasPrefix(p, "/calendars") ||
-		p == "/me/calendars" || strings.HasPrefix(p, "/calendarList") || strings.HasPrefix(p, "/users/me/calendarList"):
-		return "events"
-	case p == "/me/messages" || strings.HasPrefix(p, "/messages") ||
-		p == "/me/threads" || strings.HasPrefix(p, "/threads") ||
-		strings.HasPrefix(p, "/me/mail") || strings.HasPrefix(p, "/gmail") ||
-		strings.HasPrefix(p, "/users/me/messages") || strings.HasPrefix(p, "/users/me/threads"):
-		return "messages"
-	case p == "/me/photos" || strings.HasPrefix(p, "/photos") || strings.HasPrefix(p, "/mediaItems") || strings.HasPrefix(p, "/picker"):
-		return "photos"
-	// Self-hosted / foreign photo stores (Immich, …). /search/metadata is the
-	// Immich asset search; keep it under photos so the permission key matches
-	// the unified photos library.
-	case strings.HasPrefix(p, "/assets") || p == "/search/metadata":
-		return "photos"
-	// Financial transactions (issue #141): YNAB budgets/accounts/transactions
-	// and Quicken/OFX bank statement paths share the transactions permission.
-	case p == "/me/transactions" || strings.HasPrefix(p, "/transactions") ||
-		strings.HasPrefix(p, "/budgets") || strings.HasPrefix(p, "/accounts") ||
-		strings.HasPrefix(p, "/categories") || strings.HasPrefix(p, "/payees") ||
-		strings.HasPrefix(p, "/bank") || strings.HasPrefix(p, "/cc") ||
-		strings.HasPrefix(p, "/invstmt") || strings.HasPrefix(p, "/ofx") ||
-		strings.HasPrefix(p, "/quicken"):
-		return "transactions"
-	// Location history (issue #142): OwnTracks Recorder, Dawarich, and
-	// Google Timeline proxy paths share the places permission key.
-	case p == "/me/places" || strings.HasPrefix(p, "/places") ||
-		strings.HasPrefix(p, "/visits") || strings.HasPrefix(p, "/trips") ||
-		strings.HasPrefix(p, "/locations") || strings.HasPrefix(p, "/api/v0/locations") ||
-		strings.HasPrefix(p, "/api/v0/visit") || strings.HasPrefix(p, "/api/v0/places") ||
-		strings.HasPrefix(p, "/api/v1/points") || strings.HasPrefix(p, "/api/v1/visits") ||
-		strings.HasPrefix(p, "/timeline") || strings.HasPrefix(p, "/semantic"):
-		return "places"
-	case p == "/search":
-		return "search"
-	case p == "/me/subscriptions":
-		return "artists"
-	case strings.HasPrefix(p, "/channels"):
-		return "channels"
-	case strings.HasPrefix(p, "/me/library"):
-		return "library"
-	case strings.HasPrefix(p, "/me/recommendations"):
-		return "recommendations"
-	default:
-		return ""
-	}
+	return dataTypeForCanonicalPath(clean)
 }
 
 // FilterCapabilities removes operations the permission map does not allow.

@@ -28,10 +28,10 @@ type connectorProxyOpts struct {
 
 // runConnectorProxy is the shared HandleProxy pipeline for OAuth connectors:
 // token check → cache → upstream → 401/429 → optional pagination → transform → cache-on-200.
-func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remainingPath string, opts connectorProxyOpts) {
+func runConnectorProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath string, opts connectorProxyOpts) {
 	logger := slog.With("service", opts.serviceID, "method", r.Method, "path", remainingPath)
 
-	token := s.getValidToken(opts.serviceID, logger)
+	token := s.GetValidToken(opts.serviceID, logger)
 	if token == "" {
 		writeJSONError(w, http.StatusUnauthorized, "no valid "+opts.displayName+" token — authorize at /v1/auth/"+opts.serviceID+"/login")
 		return
@@ -51,7 +51,7 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 		}
 	}
 
-	upstreamBase := s.upstreamBaseFor(opts.serviceID, opts.defaultBase)
+	upstreamBase := s.UpstreamBaseFor(opts.serviceID, opts.defaultBase)
 	upstreamURL := upstreamBase + upstreamPath
 	if encoded := query.Encode(); encoded != "" {
 		upstreamURL += "?" + encoded
@@ -59,7 +59,7 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 
 	cacheKey := opts.serviceID + ":" + r.URL.RequestURI()
 	if r.Method == http.MethodGet {
-		if cached, ok := s.cache.Get(cacheKey); ok {
+		if cached, ok := s.CacheGet(cacheKey); ok {
 			logger.Debug("cache hit")
 			w.Header().Set("Content-Type", "application/json")
 			w.Header().Set("X-Aegis-Cache", "hit")
@@ -71,9 +71,7 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 	upstreamStart := time.Now()
 	data, status, err := doUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
 	upstreamElapsed := time.Since(upstreamStart)
-	if s.prom != nil {
-		s.prom.observeUpstream(opts.serviceID, upstreamElapsed, statusOrZero(status, err))
-	}
+	s.ObserveUpstream(opts.serviceID, upstreamElapsed, statusOrZero(status, err))
 	if err != nil {
 		logger.Error(opts.serviceID+" request failed", "error", err)
 		writeJSONError(w, http.StatusBadGateway, opts.displayName+" API request failed")
@@ -116,10 +114,10 @@ func runConnectorProxy(s *Server, w http.ResponseWriter, r *http.Request, remain
 		if ttl == 0 {
 			ttl = 60 * time.Second
 		}
-		if svc := s.config.GetService(opts.serviceID); svc != nil && svc.CacheTTL.Duration > 0 {
+		if svc := s.ServiceConfig(opts.serviceID); svc != nil && svc.CacheTTL.Duration > 0 {
 			ttl = svc.CacheTTL.Duration
 		}
-		s.cache.Set(cacheKey, string(result), ttl)
+		s.CacheSet(cacheKey, string(result), ttl)
 	}
 
 	w.Header().Set("Content-Type", "application/json")

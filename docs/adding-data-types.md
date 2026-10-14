@@ -78,10 +78,25 @@ librarykind.go     Registry entry (instructions, keywords, messages)
 canonical.go       canonicalKindIDs + stamp*Canonical (if sources can be home)
 copy_ledger_stamp.go  stamp*Copies (if sources can hold tracked copies)
 sampledata.go      Deterministic fixtures + deliberate merge pairs
-permissions.go     DataTypeForPath cases for the provider's paths
+pathclass.go       dataTypePathRules for the provider's proxy paths
 tests              Merge, aggregate, permissions, sample-data query checks
 README.md          Agent-facing semantics for the type
 ```
+
+### Target package map (issue #15)
+
+The logical layers above are moving into packages. While `package main` is
+still flat, write new code so the move is a `git mv` + package rename:
+
+| Target package | Contents |
+|----------------|----------|
+| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, `TypePolicy` / access levels, capability shapes, path rules |
+| `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores |
+| `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) |
+
+Connectors take `Host` (`host.go`). Classification lives in `pathclass.go`.
+Type-level policy shape (`policy.go`) is the #148 home — service
+`permissions` remain a migration override, not the primary model.
 
 You do **not** need every optional hook on day one. Ship the spine first
 (model + provider + kind + handler + tests), then add locations (#76), durable
@@ -338,8 +353,9 @@ A type is invisible until permissions and path classification know it.
 **Permission key** (`PermType` / `DataTypeCapability.Name`) must match what
 `DataTypeForPath` returns for that provider's proxy paths.
 
-1. **`permissions.go` → `DataTypeForPath`**  
-   Map provider paths (`/me/widgets`, `/widgets/...`, …) to `"widgets"`.  
+1. **`pathclass.go` → `dataTypePathRules`**  
+   Map provider paths (`/me/widgets`, `/widgets/...`, …) to `"widgets"` via
+   `DataTypeForPath`.  
    Unknown paths fall through to `default` — that is fail-open for access, not
    a substitute for classification.
 

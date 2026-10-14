@@ -18,12 +18,12 @@ import (
 // (issue #16 phase 4 / issue #21). Auth is an API key in service headers
 // (typically X-API-Key); no OAuth flow is required.
 type ImmichConnector struct {
-	server *Server
+	host Host
 }
 
-// NewImmichConnector creates a connector wired to the given server.
-func NewImmichConnector(srv *Server) *ImmichConnector {
-	return &ImmichConnector{server: srv}
+// NewImmichConnector creates a connector wired to the given Host (issue #15 seam).
+func NewImmichConnector(host Host) *ImmichConnector {
+	return &ImmichConnector{host: host}
 }
 
 const (
@@ -35,7 +35,7 @@ const (
 
 // immichUpstreamBase returns the configured Immich API base (…/api).
 func (c *ImmichConnector) immichUpstreamBase() string {
-	return c.server.upstreamBaseFor(immichServiceID, "http://localhost:2283/api")
+	return c.host.UpstreamBaseFor(immichServiceID, "http://localhost:2283/api")
 }
 
 // immichWebBase derives the Immich web UI origin from the API endpoint
@@ -48,12 +48,12 @@ func (c *ImmichConnector) immichWebBase() string {
 // applyImmichAuth copies configured static headers (API key) onto the request.
 // An OAuth token, if present, is also sent as a Bearer fallback.
 func (c *ImmichConnector) applyImmichAuth(req *http.Request, logger *slog.Logger) {
-	if svc := c.server.config.GetService(immichServiceID); svc != nil {
+	if svc := c.host.ServiceConfig(immichServiceID); svc != nil {
 		for k, v := range svc.Headers {
 			req.Header.Set(k, v)
 		}
 	}
-	if tok := c.server.getValidToken(immichServiceID, logger); tok != "" {
+	if tok := c.host.GetValidToken(immichServiceID, logger); tok != "" {
 		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 }
@@ -306,7 +306,7 @@ func (c *ImmichConnector) neutralPhoto(a immichAsset) Photo {
 		filename = a.ID
 	}
 
-	proxyRoot := strings.TrimRight(c.server.baseURL, "/") + "/v1/services/" + immichServiceID
+	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + immichServiceID
 	src := PhotoSource{
 		Service:      immichServiceID,
 		ServiceName:  immichServiceName,
