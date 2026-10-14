@@ -19,10 +19,10 @@ It does two jobs:
    neutral models.
 
 Module: `github.com/fudomunro/aegis`  
-Layout: **`package main` at repo root** + **`internal/types`** (data-type
-layer) + **`internal/connectors`** (named-service adapters on `Host`).
-Issue #15 continues with `internal/core`.
-See `docs/restructure-core-types-connectors.md`.  
+Layout: **`internal/types`** (data-type layer) + **`internal/core`**
+(runtime: auth, config, tokens, proxy, admin, state) +
+**`internal/connectors`** (named-service adapters on `Host`). Root
+`main.go` is thin (`core.Run()`). See `docs/restructure-core-types-connectors.md`.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
 ## Non-negotiable product rules
@@ -214,9 +214,9 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Packages follow the #15 split.** `internal/types` (data) and
-  `internal/connectors` (named services on `Host`) have landed. Do not invent
-  other internal packages outside `docs/restructure-core-types-connectors.md`.
+- **Packages follow the #15 split.** `internal/types`, `internal/core`, and
+  `internal/connectors` have landed. Do not invent other internal packages
+  outside `docs/restructure-core-types-connectors.md`.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -239,7 +239,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Testing conventions
 
-- Tests live beside sources: `*_test.go`, package `main`.
+- Tests live beside sources: `*_test.go`, same package as the code (`core`, `types`, `connectors`).
 - Handler tests **must wrap auth** when the route is protected:
   `srv.AuthMiddleware(srv.HandleX)(w, req)`.
   Calling the handler directly skips auth and lies about status codes.
