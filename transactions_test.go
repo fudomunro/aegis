@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestNormalizeTransactionAmount(t *testing.T) {
@@ -48,14 +50,14 @@ func TestFormatMilliunitsAmount(t *testing.T) {
 }
 
 func TestMergeTransactions_ProviderID(t *testing.T) {
-	in := []Transaction{
+	in := []types.Transaction{
 		{
 			PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", EntityID: "AQB-1",
-			Sources: []TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
+			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
 		},
 		{
 			PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon.com", EntityID: "AQB-1",
-			Sources: []TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q1"}},
+			Sources: []types.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q1"}},
 		},
 	}
 	merged := MergeTransactions(in)
@@ -71,14 +73,14 @@ func TestMergeTransactions_ProviderID(t *testing.T) {
 }
 
 func TestMergeTransactions_AmountDateMerchant(t *testing.T) {
-	in := []Transaction{
+	in := []types.Transaction{
 		{
 			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Sources: []TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
+			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
 		},
 		{
 			PostedAt: "2024-03-07", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Sources: []TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q1"}},
+			Sources: []types.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q1"}},
 		},
 	}
 	merged := MergeTransactions(in)
@@ -94,14 +96,14 @@ func TestMergeTransactions_AmountDateMerchant(t *testing.T) {
 }
 
 func TestMergeTransactions_NearMissDoesNotMerge(t *testing.T) {
-	in := []Transaction{
+	in := []types.Transaction{
 		{
 			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Sources: []TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
+			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
 		},
 		{
 			PostedAt: "2024-03-06", Amount: "-24.00", Merchant: "Blue Bottle Coffee",
-			Sources: []TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y2"}},
+			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y2"}},
 		},
 	}
 	merged := MergeTransactions(in)
@@ -111,7 +113,7 @@ func TestMergeTransactions_NearMissDoesNotMerge(t *testing.T) {
 }
 
 func TestBuildTransactionSummary(t *testing.T) {
-	items := []Transaction{
+	items := []types.Transaction{
 		{PostedAt: "2024-03-05", Amount: "-45.67", Category: []string{"Shopping"}, Currency: "USD"},
 		{PostedAt: "2024-03-06", Amount: "-12.00", Category: []string{"Coffee"}, Currency: "USD"},
 		{PostedAt: "2024-03-01", Amount: "3200.00", Category: []string{"Income"}, Currency: "USD"},
@@ -140,7 +142,7 @@ func TestBuildTransactionSummary(t *testing.T) {
 func TestBuildTransactionSummary_MultiCategorySplit(t *testing.T) {
 	// YNAB split: categories without amounts. Full total credits each category
 	// so the line item "shows up" in grocery/household views.
-	items := []Transaction{
+	items := []types.Transaction{
 		{PostedAt: "2024-03-12", Amount: "-200.00", Category: []string{"Groceries", "Household Goods"}, Currency: "USD"},
 	}
 	sum := buildTransactionSummary(items)
@@ -186,11 +188,11 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 }
 
 func TestRedactTransactionRead_StripsAccount(t *testing.T) {
-	tx := Transaction{
+	tx := types.Transaction{
 		PostedAt: "2024-03-05",
 		Amount:   "-45.67",
 		Merchant: "Amazon",
-		Account:  &TransactionAccount{Name: "Checking", Last4: "4421"},
+		Account:  &types.TransactionAccount{Name: "Checking", Last4: "4421"},
 	}
 	got := RedactTransactionRead(tx)
 	if got.Account != nil {
@@ -202,13 +204,13 @@ func TestRedactTransactionRead_StripsAccount(t *testing.T) {
 }
 
 func TestValidatePermissions_SummaryOnlyOnTransactions(t *testing.T) {
-	if err := ValidatePermissions(Permissions{"transactions": AccessSummary}); err != nil {
+	if err := types.ValidatePermissions(types.Permissions{"transactions": types.AccessSummary}); err != nil {
 		t.Fatalf("summary on transactions: %v", err)
 	}
-	if err := ValidatePermissions(Permissions{"tracks": AccessSummary}); err == nil {
+	if err := types.ValidatePermissions(types.Permissions{"tracks": types.AccessSummary}); err == nil {
 		t.Fatal("expected summary on tracks rejected")
 	}
-	if err := ValidatePermissions(Permissions{"default": AccessSummary}); err == nil {
+	if err := types.ValidatePermissions(types.Permissions{"default": types.AccessSummary}); err == nil {
 		t.Fatal("expected summary on default rejected")
 	}
 }
@@ -384,9 +386,9 @@ LCoffee
 }
 
 func TestTransactionFilters(t *testing.T) {
-	items := []Transaction{
-		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: []string{"Shopping"}, Account: &TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
-		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: []string{"Coffee"}, Account: &TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
+	items := []types.Transaction{
+		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: []string{"Shopping"}, Account: &types.TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
+		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: []string{"Coffee"}, Account: &types.TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
 	}
 	if got := filterTransactions(items, TransactionFilters{After: "2024-03-06"}); len(got) != 1 {
 		t.Fatalf("after filter = %d", len(got))
@@ -406,19 +408,21 @@ func TestTransactionFilters(t *testing.T) {
 }
 
 type fakeTransactionProvider struct {
-	txs []Transaction
+	txs []types.Transaction
 	err error
 }
 
-func (f *fakeTransactionProvider) ListUserTransactions(ctx context.Context) ([]Transaction, bool, error) {
+func (f *fakeTransactionProvider) ListUserTransactions(ctx context.Context) ([]types.Transaction, bool, error) {
 	if f.err != nil {
 		return nil, false, f.err
 	}
 	return f.txs, false, nil
 }
 
-func (f *fakeTransactionProvider) Capabilities() ServiceCapabilities { return ServiceCapabilities{} }
-func (f *fakeTransactionProvider) SystemInstructions(string) string  { return "" }
+func (f *fakeTransactionProvider) Capabilities() types.ServiceCapabilities {
+	return types.ServiceCapabilities{}
+}
+func (f *fakeTransactionProvider) SystemInstructions(string) string { return "" }
 func (f *fakeTransactionProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
@@ -432,10 +436,10 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
 		"ynab": &fakeTransactionProvider{txs: GenerateSampleLibrary().Transactions[:3]},
-		"quicken": &fakeTransactionProvider{txs: []Transaction{{
+		"quicken": &fakeTransactionProvider{txs: []types.Transaction{{
 			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Account: &TransactionAccount{Name: "Credit Card"},
-			Sources: []TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q-coffee"}},
+			Account: &types.TransactionAccount{Name: "Credit Card"},
+			Sources: []types.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q-coffee"}},
 		}}},
 	}
 
@@ -445,7 +449,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list TransactionList
+	var list types.TransactionList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -458,7 +462,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 
 	// Service-level summary redaction: no line items from that service, and
 	// app-level summary returns totals only.
-	cfg.Services[0].Permissions = Permissions{"transactions": AccessSummary}
+	cfg.Services[0].Permissions = types.Permissions{"transactions": types.AccessSummary}
 	req2 := httptest.NewRequest("GET", "/v1/library/transactions", nil)
 	w2 := httptest.NewRecorder()
 	srv.HandleLibraryTransactions(w2, req2)
@@ -475,9 +479,9 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]ServiceConnector{
-		"ynab": &fakeTransactionProvider{txs: []Transaction{
-			{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Sources: []TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "1"}}},
-			{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Sources: []TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "2"}}},
+		"ynab": &fakeTransactionProvider{txs: []types.Transaction{
+			{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "1"}}},
+			{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "2"}}},
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/transactions?after=2024-03-08", nil)
@@ -486,7 +490,7 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var list TransactionList
+	var list types.TransactionList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -531,8 +535,8 @@ func TestYNABListUserTransactions_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	c := NewYNABConnector(srv)
 	_, _, err := c.ListUserTransactions(context.Background())
-	if err != ErrUnauthorized {
-		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	if err != types.ErrUnauthorized {
+		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
 	}
 }
 
@@ -664,8 +668,8 @@ func TestDataTypeForPath_Transactions(t *testing.T) {
 		"/budgets", "/budgets/x/transactions", "/accounts", "/transactions",
 		"/me/transactions", "/categories", "/payees", "/quicken/import",
 	} {
-		if got := DataTypeForPath(p); got != "transactions" {
-			t.Fatalf("DataTypeForPath(%q) = %q", p, got)
+		if got := types.DataTypeForPath(p); got != "transactions" {
+			t.Fatalf("types.DataTypeForPath(%q) = %q", p, got)
 		}
 	}
 }
@@ -719,28 +723,28 @@ func TestQuickenConnector_ListUserTransactions(t *testing.T) {
 }
 
 func TestSummaryDataTypes(t *testing.T) {
-	p := Permissions{"transactions": AccessSummary, "tracks": AccessRead}
+	p := types.Permissions{"transactions": types.AccessSummary, "tracks": types.AccessRead}
 	got := p.SummaryDataTypes()
 	if len(got) != 1 || got[0] != "transactions" {
 		t.Fatalf("SummaryDataTypes = %v", got)
 	}
-	if (&Permissions{}).SummaryDataTypes() != nil {
+	if (&types.Permissions{}).SummaryDataTypes() != nil {
 		t.Fatal("nil map should return nil")
 	}
 }
 
 func TestRedactTransactionsForLevel(t *testing.T) {
-	items := []Transaction{
-		{Amount: "-1.00", Merchant: "A", Account: &TransactionAccount{Name: "X"}},
+	items := []types.Transaction{
+		{Amount: "-1.00", Merchant: "A", Account: &types.TransactionAccount{Name: "X"}},
 	}
-	if got := redactTransactionsForLevel(items, AccessSummary); got != nil {
+	if got := redactTransactionsForLevel(items, types.AccessSummary); got != nil {
 		t.Fatalf("summary should drop line items, got %v", got)
 	}
-	read := redactTransactionsForLevel(items, AccessRead)
+	read := redactTransactionsForLevel(items, types.AccessRead)
 	if len(read) != 1 || read[0].Account != nil || read[0].Merchant != "A" {
 		t.Fatalf("read redaction = %+v", read)
 	}
-	full := redactTransactionsForLevel(items, AccessFull)
+	full := redactTransactionsForLevel(items, types.AccessFull)
 	if full[0].Account == nil {
 		t.Fatal("full should keep account")
 	}
@@ -807,7 +811,7 @@ func TestQuickenHandleProxy(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status code %d body=%s", w2.Code, w2.Body.String())
 	}
-	var list TransactionList
+	var list types.TransactionList
 	if err := json.Unmarshal(w2.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -906,12 +910,12 @@ func TestQIFDateFormats(t *testing.T) {
 }
 
 func TestStrictest_Summary(t *testing.T) {
-	p := Permissions{"transactions": AccessSummary}
-	if got := p.Strictest(); got != AccessNone {
+	p := types.Permissions{"transactions": types.AccessSummary}
+	if got := p.Strictest(); got != types.AccessNone {
 		t.Fatalf("Strictest = %q, want none when summary is tightest", got)
 	}
-	p2 := Permissions{"transactions": AccessSummary, "tracks": AccessRead}
-	if got := p2.Strictest(); got != AccessRead {
+	p2 := types.Permissions{"transactions": types.AccessSummary, "tracks": types.AccessRead}
+	if got := p2.Strictest(); got != types.AccessRead {
 		t.Fatalf("Strictest = %q", got)
 	}
 }

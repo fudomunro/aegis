@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestEntityLinkStore_AddListDelete(t *testing.T) {
@@ -46,13 +48,13 @@ func TestEntityLinkStore_AddListDelete(t *testing.T) {
 		t.Fatalf("reloaded links = %+v", st2.List())
 	}
 
-	key := st2.PlaylistLinkKey(Playlist{
-		Sources: []PlaylistSource{{Service: "youtube-music", ID: "PL1"}},
+	key := st2.PlaylistLinkKey(types.Playlist{
+		Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "PL1"}},
 	})
 	if key != "link:"+link.ID {
 		t.Fatalf("link key = %q", key)
 	}
-	if st2.PlaylistLinkKey(Playlist{Sources: []PlaylistSource{{Service: "spotify", ID: "other"}}}) != "" {
+	if st2.PlaylistLinkKey(types.Playlist{Sources: []types.PlaylistSource{{Service: "spotify", ID: "other"}}}) != "" {
 		t.Fatal("unlinked playlist should have empty key")
 	}
 
@@ -66,10 +68,10 @@ func TestEntityLinkStore_AddListDelete(t *testing.T) {
 
 func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	// Different names but explicitly linked → one entity, match=link.
-	merged := MergePlaylistsSyncLinked([]Playlist{
-		{Name: "Road Trip", Sources: []PlaylistSource{{Service: "spotify", ID: "sp1"}}},
-		{Name: "Vacation Mix", Sources: []PlaylistSource{{Service: "youtube-music", ID: "yt1"}}},
-	}, func(p Playlist) string {
+	merged := types.MergePlaylistsSyncLinked([]types.Playlist{
+		{Name: "Road Trip", Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}},
+		{Name: "Vacation Mix", Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}},
+	}, func(p types.Playlist) string {
 		if len(p.Sources) > 0 && p.Sources[0].ID == "sp1" {
 			return "link:abc"
 		}
@@ -81,7 +83,7 @@ func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	if len(merged) != 1 {
 		t.Fatalf("want linked merge, got %+v", merged)
 	}
-	if merged[0].Match != PlaylistMatchLink {
+	if merged[0].Match != types.PlaylistMatchLink {
 		t.Fatalf("match = %q", merged[0].Match)
 	}
 	if len(merged[0].Sources) != 2 {
@@ -89,11 +91,11 @@ func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	}
 
 	// Same name without link → match=name.
-	merged = MergePlaylistsSync([]Playlist{
-		{Name: "Road Trip", Sources: []PlaylistSource{{Service: "spotify", ID: "a"}}},
-		{Name: "road trip", Sources: []PlaylistSource{{Service: "youtube-music", ID: "b"}}},
+	merged = types.MergePlaylistsSync([]types.Playlist{
+		{Name: "Road Trip", Sources: []types.PlaylistSource{{Service: "spotify", ID: "a"}}},
+		{Name: "road trip", Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "b"}}},
 	})
-	if len(merged) != 1 || merged[0].Match != PlaylistMatchName {
+	if len(merged) != 1 || merged[0].Match != types.PlaylistMatchName {
 		t.Fatalf("name merge = %+v", merged)
 	}
 }

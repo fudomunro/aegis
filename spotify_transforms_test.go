@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestSimplify(t *testing.T) {
@@ -322,20 +324,20 @@ func TestExtraOrNil(t *testing.T) {
 }
 
 func TestNewAlbum(t *testing.T) {
-	if newAlbum("spotify", "Spotify", "1", "  ") != nil {
+	if types.NewAlbum("spotify", "Spotify", "1", "  ") != nil {
 		t.Fatal("blank album name should be nil")
 	}
-	a := newAlbum("spotify", "Spotify", "1", " Kind of Blue ")
+	a := types.NewAlbum("spotify", "Spotify", "1", " Kind of Blue ")
 	if a == nil || a.Name != "Kind of Blue" || a.Sources[0].Service != "spotify" {
 		t.Fatalf("album = %+v", a)
 	}
 }
 
 func TestFirstSourceID(t *testing.T) {
-	if firstSourceID(Playlist{}) != "" {
+	if types.FirstSourceID(types.Playlist{}) != "" {
 		t.Fatal("empty sources")
 	}
-	if firstSourceID(Playlist{Sources: []PlaylistSource{{ID: "pl1"}}}) != "pl1" {
+	if types.FirstSourceID(types.Playlist{Sources: []types.PlaylistSource{{ID: "pl1"}}}) != "pl1" {
 		t.Fatal("id")
 	}
 }

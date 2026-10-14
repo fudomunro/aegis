@@ -6,6 +6,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -219,7 +221,7 @@ func TestDuration_MarshalJSON(t *testing.T) {
 func TestGetService_ReturnsSnapshot(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Permissions: Permissions{"player": AccessNone}},
+			{ID: "spotify", Name: "Spotify", Permissions: types.Permissions{"player": types.AccessNone}},
 		},
 	}
 
@@ -229,13 +231,13 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 	}
 	// Mutating the snapshot must not touch the live store.
 	svc.Endpoint = "https://mutated.example"
-	svc.Permissions["player"] = AccessFull
+	svc.Permissions["player"] = types.AccessFull
 
 	live := cfg.GetService("spotify")
 	if live.Endpoint != "" {
 		t.Fatalf("Endpoint leaked to store: %q", live.Endpoint)
 	}
-	if live.Permissions.For("player") != AccessNone {
+	if live.Permissions.For("player") != types.AccessNone {
 		t.Fatalf("Permissions mutated via snapshot: %q", live.Permissions.For("player"))
 	}
 
@@ -255,8 +257,8 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{PermissionDefaultKey: AccessRead, "player": AccessNone}},
-			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Permissions: Permissions{PermissionDefaultKey: AccessRead}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone}},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead}},
 		},
 	}
 	permsPath := filepath.Join(t.TempDir(), "permissions.json")
@@ -272,9 +274,9 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			p := Permissions{PermissionDefaultKey: AccessRead, "player": AccessNone, "tracks": AccessNone}
+			p := types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone, "tracks": types.AccessNone}
 			if i%2 == 0 {
-				p = Permissions{"player": AccessNone, "default": AccessRead, "playlists": AccessRead}
+				p = types.Permissions{"player": types.AccessNone, "default": types.AccessRead, "playlists": types.AccessRead}
 			}
 			if err := cfg.SetServicePermissions("spotify", p); err != nil {
 				t.Errorf("SetServicePermissions: %v", err)
@@ -292,7 +294,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 				return
 			}
 			_ = svc.Permissions.AllowsRead("tracks")
-			_ = svc.Permissions.accessForDataType("")
+			_ = svc.Permissions.AccessForDataType("")
 			_ = svc.Endpoint
 		}
 	}()

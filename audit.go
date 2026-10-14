@@ -305,8 +305,8 @@ FROM audit_events WHERE 1=1`
 	var out []AuditEvent
 	for rows.Next() {
 		var (
-			ev  AuditEvent
-			at  string
+			ev AuditEvent
+			at string
 		)
 		if err := rows.Scan(&at, &ev.Agent, &ev.Surface, &ev.Target, &ev.DataType,
 			&ev.Decision, &ev.Reason, &ev.Cache, &ev.Method, &ev.Status); err != nil {

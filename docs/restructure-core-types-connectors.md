@@ -270,7 +270,7 @@ pattern table parity.
 **Done when:** `go vet`, race tests, 80% floor, staticcheck clean; no public
 API change; connectors compile against `Host` only.
 
-### Phase 2 — Extract `internal/types` (`refactor/issue-15-types-pkg`)
+### Phase 2 — Extract `internal/types` (`refactor/issue-15-types-pkg`) — **done**
 
 Move (and rename package):
 

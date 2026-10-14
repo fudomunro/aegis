@@ -10,6 +10,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // immichAPIKeyPermissions is the single Immich v3 checkbox set for one key
@@ -443,7 +445,7 @@ func (s *Server) runImmichChecks(ctx context.Context, status *ImmichSetupStatus)
 	photos, truncated, err := s.listImmichPhotos(ctx)
 	if err != nil {
 		status.LibraryStatus = "error"
-		if err == ErrUnauthorized {
+		if err == types.ErrUnauthorized {
 			status.LibraryStatus = "unauthorized"
 		}
 		status.LibraryError = err.Error()
@@ -775,7 +777,7 @@ func immichNextStepFrom(steps []ImmichSetupStep, probe *ImmichTestResponse, empt
 	return "Immich setup is complete. Agents can list photos via /v1/library/photos."
 }
 
-func (s *Server) listImmichPhotos(ctx context.Context) ([]Photo, bool, error) {
+func (s *Server) listImmichPhotos(ctx context.Context) ([]types.Photo, bool, error) {
 	conn, ok := s.connectors[immichServiceID].(*ImmichConnector)
 	if !ok || conn == nil {
 		// Connector not registered in this process — use a temporary one.
@@ -784,7 +786,7 @@ func (s *Server) listImmichPhotos(ctx context.Context) ([]Photo, bool, error) {
 	return conn.ListUserPhotos(ctx)
 }
 
-func immichStampSummary(photos []Photo, baseURL string) (bool, string) {
+func immichStampSummary(photos []types.Photo, baseURL string) (bool, string) {
 	if len(photos) == 0 {
 		return false, "no photos to inspect"
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestCache_SnapshotStatsClear(t *testing.T) {
@@ -142,9 +144,9 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				Permissions: Permissions{
-					"default": AccessRead,
-					"player":  AccessNone,
+				Permissions: types.Permissions{
+					"default": types.AccessRead,
+					"player":  types.AccessNone,
 				},
 			},
 			{ID: "tidal", Name: "Tidal", Action: "block"},
@@ -191,7 +193,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	if !spotify.HasOAuth || !spotify.HasSecret || !spotify.HasClientID {
 		t.Fatal("expected oauth flags set without exposing values")
 	}
-	if spotify.Permissions["player"] != AccessNone || spotify.Permissions["default"] != AccessRead {
+	if spotify.Permissions["player"] != types.AccessNone || spotify.Permissions["default"] != types.AccessRead {
 		t.Fatalf("permissions = %+v", spotify.Permissions)
 	}
 	if spotify.Token == nil || !spotify.Token.HasToken {
@@ -274,7 +276,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	}
 	srv := mailTestServer(t, a)
 	// Agent messages=none must not block the operator admin panel.
-	srv.config.Services[0].Permissions = Permissions{"messages": "none"}
+	srv.config.Services[0].Permissions = types.Permissions{"messages": "none"}
 
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -379,15 +381,15 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 
-	if err := cfg.SetServicePermissions("spotify", Permissions{
-		"default": AccessRead,
-		"player":  AccessNone,
+	if err := cfg.SetServicePermissions("spotify", types.Permissions{
+		"default": types.AccessRead,
+		"player":  types.AccessNone,
 	}); err != nil {
 		t.Fatalf("SetServicePermissions: %v", err)
 	}
 
 	// In-memory updated.
-	if cfg.GetService("spotify").Permissions.For("player") != AccessNone {
+	if cfg.GetService("spotify").Permissions.For("player") != types.AccessNone {
 		t.Fatal("in-memory player permission not applied")
 	}
 
@@ -397,7 +399,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 	svc := fresh.GetService("spotify")
-	if svc == nil || svc.Permissions.For("player") != AccessNone || svc.Permissions.For("tracks") != AccessRead {
+	if svc == nil || svc.Permissions.For("player") != types.AccessNone || svc.Permissions.For("tracks") != types.AccessRead {
 		t.Fatalf("disk permissions = %+v", svc)
 	}
 
@@ -417,10 +419,10 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	}
 
 	// Unknown service / invalid level.
-	if err := cfg.SetServicePermissions("nope", Permissions{"default": AccessRead}); err == nil {
+	if err := cfg.SetServicePermissions("nope", types.Permissions{"default": types.AccessRead}); err == nil {
 		t.Fatal("expected error for unknown service")
 	}
-	if err := cfg.SetServicePermissions("spotify", Permissions{"tracks": "maybe"}); err == nil {
+	if err := cfg.SetServicePermissions("spotify", types.Permissions{"tracks": "maybe"}); err == nil {
 		t.Fatal("expected error for invalid level")
 	}
 }
@@ -449,11 +451,11 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if cfg.GetService("spotify").Permissions.For("player") != AccessNone {
+	if cfg.GetService("spotify").Permissions.For("player") != types.AccessNone {
 		t.Fatal("permissions not applied via admin route")
 	}
 	// Mirror adapters are not agent "Editable" — playlists write is clamped on save.
-	if got := cfg.GetService("spotify").Permissions.For("playlists"); got != AccessRead {
+	if got := cfg.GetService("spotify").Permissions.For("playlists"); got != types.AccessRead {
 		t.Fatalf("playlists permission = %q, want read (clamped; not agent-writable)", got)
 	}
 	// Search is read-only on the connector — write levels are clamped to read.
@@ -465,7 +467,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("clamp put status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if got := cfg.GetService("spotify").Permissions.For("search"); got != AccessRead {
+	if got := cfg.GetService("spotify").Permissions.For("search"); got != types.AccessRead {
 		t.Fatalf("search permission = %q, want read (clamped; no agent write path)", got)
 	}
 	if live, _, _ := srv.cache.Stats(); live != 0 {

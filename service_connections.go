@@ -32,7 +32,7 @@ type serviceConnectionEntry struct {
 // present service entry replaces endpoint/headers/canonical_for as a unit so
 // the admin UI can own Immich setup without rewriting aegis.json.
 type serviceConnectionsFile struct {
-	Version  int                              `json:"version"`
+	Version  int                               `json:"version"`
 	Services map[string]serviceConnectionEntry `json:"services"`
 }
 

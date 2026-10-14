@@ -19,11 +19,10 @@ It does two jobs:
    neutral models.
 
 Module: `github.com/fudomunro/aegis`  
-Layout: **single package `main`** (flat `*.go` files at the repo root) — **ending**.
-Issue #15 is splitting this into `internal/types` (data-type layer),
-`internal/core` (runtime), and `internal/connectors` (named services).
-Until those packages land, keep the flat layout; do not invent a second
-structure. See `docs/restructure-core-types-connectors.md`.  
+Layout: **`package main` at repo root** + **`internal/types`** (data-type
+layer: models, merge, LibraryKind data, permissions vocabulary, path rules).
+Issue #15 continues with `internal/connectors` then `internal/core`.
+See `docs/restructure-core-types-connectors.md`.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
 ## Non-negotiable product rules
@@ -78,8 +77,8 @@ Agent → Aegis proxy / library / admin → provider APIs
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared proxy path | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request` |
 | Tokens / OAuth / CSRF | `tokens.go`, `oauth.go`, `statestore.go`, `connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
-| Neutral models + library | `models.go`, `library.go`, `librarykind.go` | LibraryKind registry + parallel provider fan-out |
-| Merge / entity IDs | `match.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
+| Neutral models + library | `internal/types` (models/merge/kind), `library.go`, `librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline stays in main until core extract |
+| Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `spotify.go`, `youtube.go`, `amazonmusic.go`, `google-*.go`, `immich.go` | Register in `main.go` `srv.connectors` |
 | Location history (places) | `places.go`, `timeline.go`, `owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
@@ -114,7 +113,8 @@ type ServiceConnector interface {
   cross-connector runtime needs; provider-specific stores are constructor
   args (see `NewQuickenConnector`).
 - Proxy path → data-type classification is the ordered table in
-  `pathclass.go`. Do not reintroduce a `switch` or a second classifier.
+  `internal/types/pathclass.go`. Do not reintroduce a `switch` or a second
+  classifier.
 
 ### Local state layout (issue #74)
 
@@ -173,7 +173,7 @@ Use a login shell if `go` is not on PATH; on this machine Go is typically
 ```bash
 # Full local CI-shaped test run (do this before claiming done)
 go vet ./...
-go test ./... -count=1 -race -covermode=atomic -coverprofile=coverage.out
+go test ./... -count=1 -race -covermode=atomic -coverpkg=./... -coverprofile=coverage.out
 go tool cover -func=coverage.out | tail -n 1
 go tool cover -func=coverage.out | sort -t$'\t' -k3 -n | head -n 20
 
@@ -214,9 +214,9 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Single package (until #15 split lands).** No *ad hoc* internal packages.
-  The reviewed reason to introduce packages is the core / types / connectors
-  split in `docs/restructure-core-types-connectors.md` — not convenience.
+- **Packages follow the #15 split.** `internal/types` holds the data-type
+  layer. Do not invent other internal packages outside
+  `docs/restructure-core-types-connectors.md` (connectors, then core).
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -283,8 +283,8 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
 | Admin permission writes | `permissions_overlay.go`, `config.go` `SetServicePermissions`, README “Data permissions” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
-| Unified library + merge | `librarykind.go`, `match.go`, `models.go` |
-| Permissions / agent visibility | `permissions.go`, `pathclass.go`, `policy.go` | Type policy shape (#148); path rules are the type-layer classifier (#15) |
+| Unified library + merge | `librarykind.go`, `internal/types/{merge,models}.go` |
+| Permissions / agent visibility | `permissions.go`, `internal/types` (policy, pathclass, capabilities) | Type policy shape (#148); path rules live with the type layer |
 | Admin map / flow | `flow.go`, `admin.go`, `web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `identity.go` |
 | Product/API docs | `README.md` |

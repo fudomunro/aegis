@@ -1,4 +1,4 @@
-package main
+package types
 
 import (
 	"regexp"
@@ -41,8 +41,8 @@ func NormalizeIdentityKey(name string) string {
 	return strings.Join(out, " ")
 }
 
-// newArtist builds a unified artist from one service spelling.
-func newArtist(service, serviceName, id, name string) Artist {
+// NewArtist builds a unified artist from one service spelling.
+func NewArtist(service, serviceName, id, name string) Artist {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return Artist{}
@@ -58,8 +58,8 @@ func newArtist(service, serviceName, id, name string) Artist {
 	}
 }
 
-// newAlbum builds a unified album from one service spelling.
-func newAlbum(service, serviceName, id, name string) *Album {
+// NewAlbum builds a unified album from one service spelling.
+func NewAlbum(service, serviceName, id, name string) *Album {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil
@@ -75,9 +75,9 @@ func newAlbum(service, serviceName, id, name string) *Album {
 	}
 }
 
-// mergeArtists folds service-local artist names into unified identities by
+// MergeArtists folds service-local artist names into unified identities by
 // normalized display name. Order follows first appearance.
-func mergeArtists(items ...Artist) []Artist {
+func MergeArtists(items ...Artist) []Artist {
 	type slot struct {
 		key string
 		a   Artist
@@ -117,9 +117,9 @@ func (p Playlist) PrimaryService() string {
 	return p.Sources[0].Service
 }
 
-// primaryPlaylistSource is a convenience when a single-service transform has
+// PrimaryPlaylistSource is a convenience when a single-service transform has
 // exactly one location.
-func primaryPlaylistSource(service, serviceName, id, url string, extra map[string]any) PlaylistSource {
+func PrimaryPlaylistSource(service, serviceName, id, url string, extra map[string]any) PlaylistSource {
 	if len(extra) == 0 {
 		extra = nil
 	}
@@ -162,7 +162,7 @@ func MergePlaylistsSyncLinked(in []Playlist, linkKey func(Playlist) string) []Pl
 		}
 		key := NormalizeIdentityKey(p.Name)
 		if key == "" {
-			key = "\x00" + p.PrimaryService() + ":" + firstSourceID(p)
+			key = "\x00" + p.PrimaryService() + ":" + FirstSourceID(p)
 		}
 		return "name:" + key
 	}
@@ -205,7 +205,7 @@ func MergePlaylistsSyncLinked(in []Playlist, linkKey func(Playlist) string) []Pl
 	for _, k := range order {
 		e := byKey[k]
 		// Canonical sources first so the authoritative home is obvious.
-		sortPlaylistSourcesCanonicalFirst(e.p.Sources)
+		SortPlaylistSourcesCanonicalFirst(e.p.Sources)
 		// Drop Match on still-single name-only playlists (not a join).
 		if e.p.Match == PlaylistMatchName && len(e.p.Sources) <= 1 {
 			e.p.Match = ""
@@ -219,17 +219,17 @@ func MergePlaylistsSyncLinked(in []Playlist, linkKey func(Playlist) string) []Pl
 	return out
 }
 
-func firstSourceID(p Playlist) string {
+func FirstSourceID(p Playlist) string {
 	if len(p.Sources) == 0 {
 		return ""
 	}
 	return p.Sources[0].ID
 }
 
-// trackIdentityKey produces the fallback merge key for a liked track:
+// TrackIdentityKey produces the fallback merge key for a liked track:
 // normalized title plus primary artist. Used when no durable EntityID (ISRC)
 // is available. Same v1 quality as playlist name matching.
-func trackIdentityKey(t Track) string {
+func TrackIdentityKey(t Track) string {
 	title := NormalizeIdentityKey(t.Name)
 	artist := ""
 	if len(t.Artists) > 0 {
@@ -247,8 +247,8 @@ func trackIdentityKey(t Track) string {
 	return title + "|" + artist
 }
 
-// trackEntityID returns a normalized durable catalog ID (ISRC) when present.
-func trackEntityID(t Track) string {
+// TrackEntityID returns a normalized durable catalog ID (ISRC) when present.
+func TrackEntityID(t Track) string {
 	return strings.ToUpper(strings.TrimSpace(t.EntityID))
 }
 
@@ -256,9 +256,9 @@ func trackEntityID(t Track) string {
 // and still be treated as the same recording.
 const durationMsTolerance = 5000
 
-// durationCompatible reports whether two tracks may be the same recording
+// DurationCompatible reports whether two tracks may be the same recording
 // based on duration. Zero means unknown and does not block a merge.
-func durationCompatible(a, b Track) bool {
+func DurationCompatible(a, b Track) bool {
 	if a.DurationMs <= 0 || b.DurationMs <= 0 {
 		return true
 	}
@@ -274,10 +274,10 @@ func durationCompatible(a, b Track) bool {
 var youtubeTitleNoise = regexp.MustCompile(
 	`(?i)\s*[\(\[]\s*(?:official\s+)?(?:music\s+)?(?:video|audio|lyric\s*video?|lyrics?|visuali[sz]er|hd|hq|4k|live|explicit|clean|remaster(?:ed)?)(?:\s+[^)\]]*)?[\)\]]\s*$`)
 
-// cleanYouTubeTitle strips stacked trailing noise tags from a video title.
+// CleanYouTubeTitle strips stacked trailing noise tags from a video title.
 // The cleaned string is used as the neutral Track.Name; the original is
 // preserved in source extra as original_title when they differ.
-func cleanYouTubeTitle(name string) string {
+func CleanYouTubeTitle(name string) string {
 	s := strings.TrimSpace(name)
 	for i := 0; i < 5; i++ {
 		next := strings.TrimSpace(youtubeTitleNoise.ReplaceAllString(s, ""))
@@ -293,7 +293,7 @@ func cleanYouTubeTitle(name string) string {
 // method used for this join.
 func mergeTrackInto(a *Track, b Track, match string) {
 	a.Sources = append(a.Sources, b.Sources...)
-	a.Artists = mergeArtists(append(a.Artists, b.Artists...)...)
+	a.Artists = MergeArtists(append(a.Artists, b.Artists...)...)
 	if a.Album == nil && b.Album != nil {
 		album := *b.Album
 		a.Album = &album
@@ -353,7 +353,7 @@ func MergeTracksSync(in []Track) []Track {
 	var nameOnly []Track
 
 	for _, t := range in {
-		if id := trackEntityID(t); id != "" {
+		if id := TrackEntityID(t); id != "" {
 			if cur, ok := byEntity[id]; ok {
 				mergeTrackInto(&cur.t, t, TrackMatchISRC)
 				continue
@@ -376,16 +376,16 @@ func MergeTracksSync(in []Track) []Track {
 	sort.Strings(ids)
 	for _, id := range ids {
 		e := byEntity[id]
-		k := trackIdentityKey(e.t)
+		k := TrackIdentityKey(e.t)
 		entityByName[k] = append(entityByName[k], e)
 	}
 
 	byName := map[string]*entry{}
 	for _, t := range nameOnly {
-		k := trackIdentityKey(t)
+		k := TrackIdentityKey(t)
 		absorbed := false
 		for _, e := range entityByName[k] {
-			if durationCompatible(e.t, t) {
+			if DurationCompatible(e.t, t) {
 				mergeTrackInto(&e.t, t, TrackMatchName)
 				absorbed = true
 				break
@@ -395,7 +395,7 @@ func MergeTracksSync(in []Track) []Track {
 			continue
 		}
 		if e, ok := byName[k]; ok {
-			if durationCompatible(e.t, t) {
+			if DurationCompatible(e.t, t) {
 				mergeTrackInto(&e.t, t, TrackMatchName)
 				continue
 			}
@@ -427,7 +427,7 @@ func MergeTracksSync(in []Track) []Track {
 		if e == nil {
 			continue
 		}
-		sortTrackSourcesCanonicalFirst(e.t.Sources)
+		SortTrackSourcesCanonicalFirst(e.t.Sources)
 		if e.t.Artists != nil {
 			sort.SliceStable(e.t.Artists, func(i, j int) bool {
 				return e.t.Artists[i].Name < e.t.Artists[j].Name
@@ -441,18 +441,18 @@ func MergeTracksSync(in []Track) []Track {
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		ei, ej := trackEntityID(out[i]), trackEntityID(out[j])
+		ei, ej := TrackEntityID(out[i]), TrackEntityID(out[j])
 		if ei != "" && ej != "" && ei != ej {
 			return ei < ej
 		}
-		return trackIdentityKey(out[i]) < trackIdentityKey(out[j])
+		return TrackIdentityKey(out[i]) < TrackIdentityKey(out[j])
 	})
 	return out
 }
 
-// albumIdentityKey produces the fallback merge key for a saved album:
+// AlbumIdentityKey produces the fallback merge key for a saved album:
 // normalized title plus primary artist.
-func albumIdentityKey(a Album) string {
+func AlbumIdentityKey(a Album) string {
 	title := NormalizeIdentityKey(a.Name)
 	artist := ""
 	if len(a.Artists) > 0 {
@@ -470,14 +470,14 @@ func albumIdentityKey(a Album) string {
 	return title + "|" + artist
 }
 
-// albumEntityID returns a normalized durable catalog ID (UPC) when present.
-func albumEntityID(a Album) string {
+// AlbumEntityID returns a normalized durable catalog ID (UPC) when present.
+func AlbumEntityID(a Album) string {
 	return strings.ToUpper(strings.TrimSpace(a.EntityID))
 }
 
 func mergeAlbumInto(dst *Album, src Album, match string) {
 	dst.Sources = append(dst.Sources, src.Sources...)
-	dst.Artists = mergeArtists(append(dst.Artists, src.Artists...)...)
+	dst.Artists = MergeArtists(append(dst.Artists, src.Artists...)...)
 	if dst.EntityID == "" {
 		dst.EntityID = src.EntityID
 	}
@@ -513,7 +513,7 @@ func MergeAlbumsSync(in []Album) []Album {
 	var nameOnly []Album
 
 	for _, a := range in {
-		if id := albumEntityID(a); id != "" {
+		if id := AlbumEntityID(a); id != "" {
 			if cur, ok := byEntity[id]; ok {
 				mergeAlbumInto(&cur.a, a, AlbumMatchUPC)
 				continue
@@ -535,13 +535,13 @@ func MergeAlbumsSync(in []Album) []Album {
 	sort.Strings(ids)
 	for _, id := range ids {
 		e := byEntity[id]
-		k := albumIdentityKey(e.a)
+		k := AlbumIdentityKey(e.a)
 		entityByName[k] = append(entityByName[k], e)
 	}
 
 	byName := map[string]*entry{}
 	for _, a := range nameOnly {
-		k := albumIdentityKey(a)
+		k := AlbumIdentityKey(a)
 		absorbed := false
 		for _, e := range entityByName[k] {
 			mergeAlbumInto(&e.a, a, TrackMatchName)
@@ -590,17 +590,17 @@ func MergeAlbumsSync(in []Album) []Album {
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		ei, ej := albumEntityID(out[i]), albumEntityID(out[j])
+		ei, ej := AlbumEntityID(out[i]), AlbumEntityID(out[j])
 		if ei != "" && ej != "" && ei != ej {
 			return ei < ej
 		}
-		return albumIdentityKey(out[i]) < albumIdentityKey(out[j])
+		return AlbumIdentityKey(out[i]) < AlbumIdentityKey(out[j])
 	})
 	return out
 }
 
-// artistEntityID returns a normalized MusicBrainz MBID when present.
-func artistEntityID(a Artist) string {
+// ArtistEntityID returns a normalized MusicBrainz MBID when present.
+func ArtistEntityID(a Artist) string {
 	return strings.ToLower(strings.TrimSpace(a.EntityID))
 }
 
@@ -616,12 +616,12 @@ func mergeArtistInto(dst *Artist, src Artist, match string) {
 	}
 }
 
-// mergeArtistLibrary folds followed artists across services.
+// MergeArtistLibrary folds followed artists across services.
 //
 // Identity order (issue #4):
 //  1. Shared EntityID (MusicBrainz MBID) — durable (Match=mbid)
 //  2. Normalized display name — fallback (Match=name)
-func mergeArtistLibrary(in []Artist) []Artist {
+func MergeArtistLibrary(in []Artist) []Artist {
 	if len(in) == 0 {
 		return nil
 	}
@@ -633,7 +633,7 @@ func mergeArtistLibrary(in []Artist) []Artist {
 	var nameOnly []Artist
 
 	for _, a := range in {
-		if id := artistEntityID(a); id != "" {
+		if id := ArtistEntityID(a); id != "" {
 			if cur, ok := byEntity[id]; ok {
 				mergeArtistInto(&cur.a, a, ArtistMatchMBID)
 				continue
@@ -722,11 +722,50 @@ func mergeArtistLibrary(in []Artist) []Artist {
 	}
 
 	sort.SliceStable(out, func(i, j int) bool {
-		ei, ej := artistEntityID(out[i]), artistEntityID(out[j])
+		ei, ej := ArtistEntityID(out[i]), ArtistEntityID(out[j])
 		if ei != "" && ej != "" && ei != ej {
 			return ei < ej
 		}
 		return NormalizeIdentityKey(out[i].Name) < NormalizeIdentityKey(out[j].Name)
 	})
 	return out
+}
+
+// SortPlaylistSourcesCanonicalFirst orders canonical sources before others.
+func SortPlaylistSourcesCanonicalFirst(src []PlaylistSource) {
+	sort.SliceStable(src, func(i, j int) bool {
+		if src[i].Canonical != src[j].Canonical {
+			return src[i].Canonical
+		}
+		if src[i].ServiceName != src[j].ServiceName {
+			return src[i].ServiceName < src[j].ServiceName
+		}
+		return src[i].Service < src[j].Service
+	})
+}
+
+// SortTrackSourcesCanonicalFirst orders canonical sources before others.
+func SortTrackSourcesCanonicalFirst(src []TrackSource) {
+	sort.SliceStable(src, func(i, j int) bool {
+		if src[i].Canonical != src[j].Canonical {
+			return src[i].Canonical
+		}
+		if src[i].ServiceName != src[j].ServiceName {
+			return src[i].ServiceName < src[j].ServiceName
+		}
+		return src[i].Service < src[j].Service
+	})
+}
+
+// SortContactSourcesCanonicalFirst orders canonical sources before others.
+func SortContactSourcesCanonicalFirst(src []ContactSource) {
+	sort.SliceStable(src, func(i, j int) bool {
+		if src[i].Canonical != src[j].Canonical {
+			return src[i].Canonical
+		}
+		if src[i].ServiceName != src[j].ServiceName {
+			return src[i].ServiceName < src[j].ServiceName
+		}
+		return src[i].Service < src[j].Service
+	})
 }

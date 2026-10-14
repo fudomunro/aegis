@@ -1,10 +1,12 @@
 package main
 
+import "github.com/fudomunro/aegis/internal/types"
+
 // Library stamping for the copy ledger (issue #76). Each helper attaches
 // CopyInfo to sources[] when a ledger row matches (service, id). Missing
 // rows leave sources unchanged — fail-open.
 
-func (s *Server) stampPlaylistCopies(items []Playlist) {
+func (s *Server) stampPlaylistCopies(items []types.Playlist) {
 	for i := range items {
 		for j := range items[i].Sources {
 			src := &items[i].Sources[j]
@@ -13,7 +15,7 @@ func (s *Server) stampPlaylistCopies(items []Playlist) {
 	}
 }
 
-func (s *Server) stampTrackCopies(items []Track) {
+func (s *Server) stampTrackCopies(items []types.Track) {
 	for i := range items {
 		for j := range items[i].Sources {
 			src := &items[i].Sources[j]
@@ -22,7 +24,7 @@ func (s *Server) stampTrackCopies(items []Track) {
 	}
 }
 
-func (s *Server) stampPhotoCopies(items []Photo) {
+func (s *Server) stampPhotoCopies(items []types.Photo) {
 	for i := range items {
 		for j := range items[i].Sources {
 			src := &items[i].Sources[j]
@@ -31,7 +33,7 @@ func (s *Server) stampPhotoCopies(items []Photo) {
 	}
 }
 
-func (s *Server) stampMessageCopies(items []Message) {
+func (s *Server) stampMessageCopies(items []types.Message) {
 	for i := range items {
 		for j := range items[i].Sources {
 			src := &items[i].Sources[j]
@@ -40,7 +42,7 @@ func (s *Server) stampMessageCopies(items []Message) {
 	}
 }
 
-func (s *Server) stampContactCopies(items []Contact) {
+func (s *Server) stampContactCopies(items []types.Contact) {
 	for i := range items {
 		for j := range items[i].Sources {
 			src := &items[i].Sources[j]
@@ -49,7 +51,7 @@ func (s *Server) stampContactCopies(items []Contact) {
 	}
 }
 
-func (s *Server) stampEventCopies(items []CalendarEvent) {
+func (s *Server) stampEventCopies(items []types.CalendarEvent) {
 	for i := range items {
 		for j := range items[i].Sources {
 			src := &items[i].Sources[j]

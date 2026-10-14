@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestAccessMetrics_AgentDetailBreakdown(t *testing.T) {
@@ -225,13 +227,13 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 				ID:          "spotify",
 				Name:        "Spotify",
 				Action:      "inject",
-				Permissions: Permissions{PermissionDefaultKey: AccessRead},
+				Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead},
 			},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = &fakePlaylistProvider{
-		playlists: []Playlist{{Name: "Mix", Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
+		playlists: []types.Playlist{{Name: "Mix", Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
@@ -258,13 +260,13 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 				ID:          "spotify",
 				Name:        "Spotify",
 				Action:      "inject",
-				Permissions: Permissions{PermissionDefaultKey: AccessRead},
+				Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead},
 			},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = &fakePlaylistProvider{
-		playlists: []Playlist{{Name: "Mix", Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
+		playlists: []types.Playlist{{Name: "Mix", Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)

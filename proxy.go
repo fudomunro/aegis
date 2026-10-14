@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // HandleServiceProxy proxies requests to a configured service's upstream endpoint.
@@ -24,7 +26,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Canonicalize once so permission classification, connector routing, and
 	// the upstream URL cannot diverge (issue #94). Non-canonical paths 400.
-	canonical, err := canonicalProxyPath(remainingPath)
+	canonical, err := types.CanonicalProxyPath(remainingPath)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, "invalid request path")
 		return
@@ -43,7 +45,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// Handle /capabilities requests — return connector metadata filtered by permissions.
 	if remainingPath == "/capabilities" {
 		if connector, ok := s.connectors[serviceID]; ok {
-			caps := FilterCapabilities(connector.Capabilities(), svc.Permissions)
+			caps := types.FilterCapabilities(connector.Capabilities(), svc.Permissions)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(caps)
 		} else {
@@ -52,8 +54,8 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dataType := DataTypeForPath(remainingPath)
-	accessLevel := svc.Permissions.accessForDataType(dataType)
+	dataType := types.DataTypeForPath(remainingPath)
+	accessLevel := svc.Permissions.AccessForDataType(dataType)
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)

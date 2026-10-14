@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
@@ -17,13 +19,13 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 				Name:         "Spotify",
 				Action:       "inject",
 				CanonicalFor: []string{"playlists"},
-				Permissions:  Permissions{"playlists": AccessWrite, "tracks": AccessWrite},
+				Permissions:  types.Permissions{"playlists": types.AccessWrite, "tracks": types.AccessWrite},
 			},
 			{
 				ID:          "youtube-music",
 				Name:        "YouTube Music",
 				Action:      "inject",
-				Permissions: Permissions{"playlists": AccessWrite, "tracks": AccessRead},
+				Permissions: types.Permissions{"playlists": types.AccessWrite, "tracks": types.AccessRead},
 			},
 		},
 	}
@@ -62,7 +64,7 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 func TestWritePolicyNotice_EmptyWithoutWriteOrHome(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: Permissions{"default": AccessRead}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{"default": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -91,7 +93,7 @@ func TestPreRequest_InjectsWritePolicy(t *testing.T) {
 				Aliases:      []string{"spotify music"},
 				Action:       "inject",
 				CanonicalFor: []string{"playlists"},
-				Permissions:  Permissions{"playlists": AccessWrite},
+				Permissions:  types.Permissions{"playlists": types.AccessWrite},
 				Endpoint:     "https://api.spotify.com/v1",
 			},
 		},
@@ -146,11 +148,11 @@ func TestWritePolicyNotices_DedupesIdentical(t *testing.T) {
 		ID:          "spotify",
 		Name:        "Spotify",
 		Action:      "inject",
-		Permissions: Permissions{"playlists": AccessWrite},
+		Permissions: types.Permissions{"playlists": types.AccessWrite},
 	}
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}, Permissions: Permissions{"playlists": AccessWrite}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}, Permissions: types.Permissions{"playlists": types.AccessWrite}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

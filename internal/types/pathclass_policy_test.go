@@ -1,6 +1,8 @@
-package main
+package types
 
-import "testing"
+import (
+	"testing"
+)
 
 // TestDataTypePathRules_Parity pins the ordered rule table to the historical
 // DataTypeForPath switch (issue #15). When a type gains paths, extend both
@@ -57,8 +59,8 @@ func TestDataTypePathRules_Parity(t *testing.T) {
 		"/unknown/thing":             "",
 	}
 	for path, want := range cases {
-		if got := dataTypeForCanonicalPath(path); got != want {
-			t.Errorf("dataTypeForCanonicalPath(%q) = %q, want %q", path, got, want)
+		if got := DataTypeForCanonicalPath(path); got != want {
+			t.Errorf("DataTypeForCanonicalPath(%q) = %q, want %q", path, got, want)
 		}
 		if got := DataTypeForPath(path); got != want {
 			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
