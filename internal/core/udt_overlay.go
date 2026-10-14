@@ -164,11 +164,6 @@ func nameMatchFieldMap(fields map[string]types.UserDefinedField) map[string]stri
 	return out
 }
 
-// validateHTTPJSONHeaders is kept as a thin wrapper for admin-time checks.
-func validateHTTPJSONHeaders(headers map[string]string) error {
-	return types.ValidateHTTPJSONHeaders(headers)
-}
-
 func resolveUDTFilePaths(paths []string) (out []string, err error) {
 	for _, p := range paths {
 		p = expandUserPath(strings.TrimSpace(p))
