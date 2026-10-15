@@ -1083,6 +1083,22 @@ Tracked in [issue #4](https://github.com/fudomunro/aegis/issues/4).
 
 Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
 
+### Library source overview (issue #162)
+
+Aggregate library responses enrich each `by_service` entry so clients can render a **source overview** — relative-sized boxes for every source of that data type (admin Library does this at the top of each kind):
+
+| Field | Description |
+|-------|-------------|
+| `name` | Human-readable service label |
+| `count` | Items returned (or archive inventory size for mail source rows) |
+| `status` / `truncated` / `error` | Fetch health (unchanged) |
+| `last_synced_at` | When Aegis last ingested or fetched this source, if known |
+| `canonical` | Configured home copy for this kind (`canonical_for`, issue #16) |
+| `role` | `"canonical"` / `"mirror"` when the kind has a configured home |
+| `parent` | Optional nest key (e.g. `google-takeout` under `google-gmail` for messages) |
+
+For messages, when the local mail archive knows both, `by_service` also includes separate `google-gmail` and `google-takeout` rows with archive inventory counts and per-source `last_synced_at`, so the overview can show Gmail and Google Takeout side by side (with Takeout nested under Gmail). The `mail-archive` fetch target remains for compatibility.
+
 ### Sync completeness
 
 Aegis aims to surface a user’s **full** library, not a prefix. Two layers matter:
