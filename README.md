@@ -1408,6 +1408,15 @@ headers (`X-Bluesky-Handle`, `X-Bluesky-App-Password`); Aegis owns the
 credential and exchanges it for a session. Permissions: source needs
 `photos` read, target needs `photos` write.
 
+The connector also **syncs library metadata** (bytes stay on Bluesky):
+
+- `GET /v1/library/photos` includes the user's Bluesky image posts
+  (`sources[].blob_url` is the Aegis `getBlob` proxy — not a permanent CDN link).
+- `GET /v1/library/messages` includes Bluesky **notifications** (likes,
+  replies, mentions, follows) as `channel: "social"` messages.
+- Proxy reads: `GET /v1/services/bluesky/xrpc/com.atproto.sync.getBlob`,
+  `app.bsky.notification.listNotifications`, `app.bsky.feed.getAuthorFeed`.
+
 #### Immich (local / foreign canonical)
 
 Immich is a self-hosted photo library (open-source “Google Photos on your own

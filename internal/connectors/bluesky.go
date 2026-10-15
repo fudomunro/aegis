@@ -54,13 +54,13 @@ func (c *BlueskyConnector) BlueskyUpstreamBase() string {
 	return c.host.UpstreamBaseFor(BlueskyServiceID, blueskyDefaultEndpoint)
 }
 
-// Capabilities returns Bluesky share operations reachable through Aegis.
+// Capabilities returns Bluesky share and library operations reachable through Aegis.
 func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
 		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "photos",
-				Description: "Share photos to Bluesky as public image posts (ownership-claim PoC, issue #20). Photo bytes stay on the canonical source; Bluesky receives a copy for the post.",
+				Description: "Share photos to Bluesky as public image posts, and list the user's Bluesky image posts (ownership-claim PoC, issue #20). Photo bytes stay on the PDS/CDN; Aegis does not store media.",
 				Operations: []types.Operation{
 					{
 						Name:        "share_photo",
@@ -79,6 +79,40 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 							Fields:      []string{"target_service", "post_uri", "post_url", "claim"},
 						},
 					},
+					{
+						Name:        "get_blob",
+						Description: "Download one image blob by CID (permission key: photos). Used by sources[].blob_url.",
+						Method:      "GET",
+						Path:        "/xrpc/com.atproto.sync.getBlob",
+						Parameters: []types.Parameter{
+							{Name: "did", In: "query", Type: "string", Description: "Repo DID that holds the blob", Required: true},
+							{Name: "cid", In: "query", Type: "string", Description: "Blob CID", Required: true},
+						},
+						Response: types.ResponseSpec{
+							Description: "Raw image bytes",
+							Fields:      []string{"(binary)"},
+						},
+					},
+				},
+			},
+			{
+				Name:        "messages",
+				Description: "Bluesky notifications (likes, replies, mentions, follows) as neutral messages for /v1/library/messages.",
+				Operations: []types.Operation{
+					{
+						Name:        "list_notifications",
+						Description: "List recent notifications as neutral Message values (permission key: messages)",
+						Method:      "GET",
+						Path:        "/xrpc/app.bsky.notification.listNotifications",
+						Parameters: []types.Parameter{
+							{Name: "limit", In: "query", Type: "integer", Description: "Page size (default 50)", Default: 50},
+							{Name: "cursor", In: "query", Type: "string", Description: "Pagination cursor"},
+						},
+						Response: types.ResponseSpec{
+							Description: "Neutral messages: subject, snippet, from, sent_at, sources[]",
+							Fields:      []string{"messages", "total"},
+						},
+					},
 				},
 			},
 		},
@@ -88,28 +122,153 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Bluesky is referenced.
 func (c *BlueskyConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves sharing photos to Bluesky, you MUST use Aegis at %s instead of calling Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
+	return fmt.Sprintf(`When the user's request involves Bluesky (sharing photos, their feed images, or notifications), you MUST use Aegis at %s instead of calling Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
 
-Share flow (proof of concept for photo ownership claims):
+Share photos (proof of concept for photo ownership claims):
 1. Resolve a photo via GET %s/v1/library/photos (or ask for source_service + source_id).
 2. POST %s/v1/library/photos/share with {"source_service":"immich","source_id":"...","caption":"..." }.
 3. Return the post_url to the user and keep claim.sha256 / claim.post_uri as the ownership evidence.
 
+Library sync (metadata only; bytes stay on Bluesky):
+- GET %s/v1/library/photos — includes Bluesky image posts from the user's feed.
+- GET %s/v1/library/messages — includes Bluesky notifications (likes/replies/mentions/follows).
+- Image bytes: use sources[].blob_url (Aegis proxy getBlob); do not scrape cdn.bsky.app directly.
+
 Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC (issue #20) — content hash + public post — not a cryptographic proof.
 
 Always include the full Aegis base URL in your requests.
-%s`, root, root, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, root, root, types.PhotoSourceDiscipline())
 }
 
-// HandleProxy is unused for the share PoC: publishing goes through
-// POST /v1/library/photos/share so type-level permissions and the claim
-// pipeline stay in core. Raw xrpc remains available only if later phases
-// need it.
+// HandleProxy serves read-only Bluesky xrpc paths that agents need for
+// library detail (blob download, notifications). Mutating xrpc remains
+// reserved for the orchestrated share endpoint.
 func (c *BlueskyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", BlueskyServiceID, "method", r.Method, "path", remainingPath)
-	logger.Info("bluesky proxy path not implemented in PoC; use POST /v1/library/photos/share")
+	path := "/" + strings.TrimPrefix(remainingPath, "/")
+
+	switch {
+	case r.Method == http.MethodGet && (path == "/xrpc/com.atproto.sync.getBlob" || strings.HasPrefix(path, "/xrpc/com.atproto.sync.getBlob")):
+		c.handleGetBlob(w, r, logger)
+		return
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/xrpc/app.bsky.notification.listNotifications"):
+		c.handleListNotificationsProxy(w, r, logger)
+		return
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/xrpc/app.bsky.feed.getAuthorFeed"):
+		c.handleAuthorFeedProxy(w, r, logger)
+		return
+	case r.Method == http.MethodGet && strings.HasPrefix(path, "/xrpc/"):
+		// Generic read-only xrpc GET passthrough with session auth.
+		c.handleXRPCGet(w, r, path, logger)
+		return
+	}
+
+	logger.Info("bluesky proxy path not implemented; prefer library/share endpoints")
 	WriteJSONError(w, http.StatusNotFound,
-		"bluesky proxy is not implemented in this PoC — use POST /v1/library/photos/share")
+		"bluesky proxy path not implemented in this PoC — use POST /v1/library/photos/share or GET /v1/library/{photos,messages}")
+}
+
+func (c *BlueskyConnector) handleGetBlob(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+	q := r.URL.Query()
+	did := strings.TrimSpace(q.Get("did"))
+	cid := strings.TrimSpace(q.Get("cid"))
+	if did == "" || cid == "" {
+		WriteJSONError(w, http.StatusBadRequest, "did and cid query parameters are required")
+		return
+	}
+	sess, err := c.createSession(r.Context())
+	if err != nil {
+		if err == types.ErrUnauthorized {
+			WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
+			return
+		}
+		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	u := TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.sync.getBlob?did=" +
+		url.QueryEscape(did) + "&cid=" + url.QueryEscape(cid)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
+	if err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+sess.AccessJwt)
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		WriteJSONError(w, http.StatusUnauthorized, "bluesky rejected the blob request")
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("bluesky getBlob returned %d: %s", resp.StatusCode, truncateBytes(body, 200)))
+		return
+	}
+	mime := resp.Header.Get("Content-Type")
+	if mime == "" {
+		mime = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.WriteHeader(http.StatusOK)
+	io.Copy(w, resp.Body)
+	logger.Debug("served bluesky blob", "cid", cid, "did", did)
+}
+
+func (c *BlueskyConnector) handleListNotificationsProxy(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+	c.handleXRPCGet(w, r, "/xrpc/app.bsky.notification.listNotifications", logger)
+}
+
+func (c *BlueskyConnector) handleAuthorFeedProxy(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
+	c.handleXRPCGet(w, r, "/xrpc/app.bsky.feed.getAuthorFeed", logger)
+}
+
+func (c *BlueskyConnector) handleXRPCGet(w http.ResponseWriter, r *http.Request, path string, logger *slog.Logger) {
+	sess, err := c.createSession(r.Context())
+	if err != nil {
+		if err == types.ErrUnauthorized {
+			WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
+			return
+		}
+		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	u := TrimRightSlash(c.BlueskyUpstreamBase()) + path
+	if r.URL.RawQuery != "" {
+		u += "?" + r.URL.RawQuery
+	}
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
+	if err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+sess.AccessJwt)
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		WriteJSONError(w, http.StatusUnauthorized, "bluesky rejected the request")
+		return
+	}
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	if w.Header().Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/json")
+	}
+	w.WriteHeader(resp.StatusCode)
+	w.Write(body)
+	logger.Debug("bluesky xrpc get", "path", path, "status", resp.StatusCode, "bytes", len(body))
 }
 
 // BlueskyCredentials holds the app-password pair from service headers.
@@ -379,9 +538,7 @@ func rkeyFromATURI(uri string) string {
 func blueskyPostURL(handle, atURI string) string {
 	handle = strings.TrimSpace(handle)
 	if handle == "" {
-		if u, err := url.Parse(atURI); err == nil {
-			handle = u.Host
-		}
+		handle = didFromPostURI(atURI)
 	}
 	rkey := rkeyFromATURI(atURI)
 	if handle == "" || rkey == "" {
