@@ -970,10 +970,57 @@ job.read</pre>
         <section class="wizard-page" data-wiz-page="5" hidden>
           <h3>Friendly tailnet URL (VIP Service)</h3>
           <p id="immich-tailnet-why">Give Immich a stable <code>https://…ts.net</code> name with a Tailscale <strong>VIP Service</strong> — no <code>:2283</code>, real certs, host-move safe. Tailnet-only Serve; never Funnel. Issue <a href="https://github.com/fudomunro/aegis/issues/124" target="_blank" rel="noopener noreferrer">#124</a>.</p>
+
           <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
             <div class="meta" id="immich-tailnet-meta">Loading VIP Service guide…</div>
             <ul id="immich-tailnet-reqs" class="meta" style="margin:0.55rem 0 0; padding-left:1.1rem"></ul>
           </div>
+
+          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">Tailscale Admin API (optional — live checks &amp; one-click fixes)</span>
+            </div>
+            <p class="meta" style="margin:0 0 0.55rem">
+              Paste an access token from
+              <a href="https://console.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer">Keys</a>
+              (scopes: <code>services</code>, <code>devices:core</code>). Stored in
+              <code>service_connections.json</code> (0600) — never echoed back. Aegis only offers to fix steps that still need work.
+            </p>
+            <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
+              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
+                Tailscale API key
+                <input id="immich-ts-api-key" type="password" placeholder="tskey-api-…" autocomplete="off" spellcheck="false">
+              </label>
+              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
+                Tailnet
+                <input id="immich-ts-tailnet" type="text" placeholder="- (default)" autocomplete="off" spellcheck="false">
+              </label>
+              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
+                Immich host device
+                <select id="immich-ts-host">
+                  <option value="">(select after checking)</option>
+                </select>
+              </label>
+            </div>
+            <div class="toolbar" style="margin:0.65rem 0 0">
+              <button class="btn" id="immich-ts-save-key" type="button">Save key</button>
+              <button class="btn" id="immich-ts-check" type="button">Check steps</button>
+              <button class="btn btn-primary" id="immich-ts-apply" type="button">Fix needed steps</button>
+            </div>
+            <div class="meta" id="immich-ts-msg" style="margin-top:0.55rem"></div>
+          </div>
+
+          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
+            <div class="toolbar" style="margin-bottom:0.45rem">
+              <span class="meta">Live step status</span>
+              <div class="grow"></div>
+              <span class="meta" id="immich-ts-live-meta"></span>
+            </div>
+            <ol id="immich-ts-live" style="margin:0; padding-left:1.15rem; font-size:0.88rem">
+              <li class="meta">No Tailscale API key yet — add one above, or use the copyable walkthrough.</li>
+            </ol>
+          </div>
+
           <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
             <div class="toolbar" style="margin-bottom:0.45rem">
               <span class="meta">VIP Service walkthrough (copyable)</span>
@@ -4470,6 +4517,156 @@ function selectTab(name, opts) {
     if (ep && guide.suggested_endpoint) ep.textContent = guide.suggested_endpoint;
   }
 
+  function renderImmichTailnetLive(live) {
+    const list = $("immich-ts-live");
+    const liveMeta = $("immich-ts-live-meta");
+    const hostSel = $("immich-ts-host");
+    if (!list) return;
+    if (!live) {
+      list.innerHTML = '<li class="meta">No live status.</li>';
+      return;
+    }
+    if (liveMeta) {
+      const bits = [];
+      bits.push(live.has_api_key ? "API key set" : "no API key");
+      if (live.checked) bits.push("live-checked");
+      if (live.host_tag) bits.push(live.host_tag);
+      liveMeta.textContent = bits.join(" · ");
+    }
+    if (hostSel && live.devices && live.devices.length) {
+      const prev = hostSel.value || live.host_device_id || "";
+      hostSel.innerHTML =
+        '<option value="">(select Immich host)</option>' +
+        live.devices
+          .map((d) => {
+            const label =
+              (d.hostname || d.name || d.id) +
+              (d.tags && d.tags.length ? " — " + d.tags.join(", ") : "");
+            return (
+              '<option value="' +
+              escapeHtml(d.id) +
+              '">' +
+              escapeHtml(label) +
+              "</option>"
+            );
+          })
+          .join("");
+      hostSel.value = prev;
+    }
+    if (live.error && !(live.steps && live.steps.length)) {
+      list.innerHTML = "<li class='meta'>" + escapeHtml(live.error) + "</li>";
+      return;
+    }
+    list.innerHTML = (live.steps || [])
+      .map((st) => {
+        let badge;
+        if (!st.checked) badge = '<span class="meta">manual</span>';
+        else if (st.ok) badge = "<span style='color:var(--ok,#2f9e44)'>OK</span>";
+        else if (st.needs_fix && st.fixable)
+          badge = "<span style='color:var(--warn,#e67700)'>needs fix</span>";
+        else badge = "<span style='color:var(--warn,#e67700)'>todo</span>";
+        const fixBtn =
+          st.needs_fix && st.fixable
+            ? ' <button class="btn immich-ts-fix" type="button" data-step="' +
+              escapeHtml(st.id) +
+              '" style="padding:0.1rem 0.4rem; font-size:0.78rem">Fix</button>'
+            : "";
+        return (
+          "<li style='margin-bottom:0.45rem'><strong>" +
+          escapeHtml(st.title) +
+          "</strong> " +
+          badge +
+          fixBtn +
+          "<div class='meta'>" +
+          escapeHtml(st.detail || "") +
+          "</div></li>"
+        );
+      })
+      .join("");
+    if (live.error) {
+      list.innerHTML += "<li class='meta'>" + escapeHtml(live.error) + "</li>";
+    }
+    list.querySelectorAll(".immich-ts-fix").forEach((btn) => {
+      btn.addEventListener("click", () => applyImmichTailnetSteps([btn.getAttribute("data-step")]));
+    });
+  }
+
+  async function saveImmichTailscaleKey() {
+    const key = ($("immich-ts-api-key") || {}).value || "";
+    const tailnet = ($("immich-ts-tailnet") || {}).value || "";
+    const host = ($("immich-ts-host") || {}).value || "";
+    const body = {};
+    if (key.trim()) body.api_key = key.trim();
+    if (tailnet.trim()) body.tailnet = tailnet.trim();
+    if (host) body.host_device_id = host;
+    if (!body.api_key && !body.tailnet && !body.host_device_id) {
+      $("immich-ts-msg").textContent = "Paste a Tailscale API key (or pick a host device) first.";
+      return;
+    }
+    try {
+      $("immich-ts-msg").textContent = "Saving…";
+      const status = await api("/v1/admin/immich/tailnet/config", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      $("immich-ts-msg").textContent = body.api_key
+        ? "Key saved. Running live checks…"
+        : "Saved.";
+      if ($("immich-ts-api-key")) $("immich-ts-api-key").value = "";
+      renderImmichStatus(status);
+      if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
+    } catch (e) {
+      $("immich-ts-msg").textContent = e.message || String(e);
+    }
+  }
+
+  async function checkImmichTailnetSteps() {
+    try {
+      $("immich-ts-msg").textContent = "Checking…";
+      const live = await api("/v1/admin/immich/tailnet/check", { method: "POST" });
+      renderImmichTailnetLive(live);
+      $("immich-ts-msg").textContent = live && live.checked
+        ? "Live checks complete. Fix buttons appear only on steps that need work."
+        : (live && live.error) || "Checked.";
+    } catch (e) {
+      $("immich-ts-msg").textContent = e.message || String(e);
+    }
+  }
+
+  async function applyImmichTailnetSteps(steps) {
+    const host = ($("immich-ts-host") || {}).value || "";
+    const body = { steps: steps || [] };
+    if (host) body.host_device_id = host;
+    if (!body.steps.length) {
+      // Fix only steps that currently need work.
+      body.steps = [];
+      document.querySelectorAll("#immich-ts-live .immich-ts-fix").forEach((btn) => {
+        const id = btn.getAttribute("data-step");
+        if (id) body.steps.push(id);
+      });
+      if (!body.steps.length) {
+        $("immich-ts-msg").textContent = "Nothing to fix — all checked steps are OK (or manual).";
+        return;
+      }
+    }
+    try {
+      $("immich-ts-msg").textContent = "Applying " + body.steps.join(", ") + "…";
+      const res = await api("/v1/admin/immich/tailnet/apply", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      const parts = [];
+      if (res.applied && res.applied.length) parts.push("fixed: " + res.applied.join(", "));
+      if (res.skipped && res.skipped.length) parts.push("skipped: " + res.skipped.join(", "));
+      if (res.failed && res.failed.length) parts.push("failed: " + res.failed.join(", "));
+      $("immich-ts-msg").textContent = parts.join(" · ") || "Done.";
+      if (res.live) renderImmichTailnetLive(res.live);
+      loadImmichSetup();
+    } catch (e) {
+      $("immich-ts-msg").textContent = e.message || String(e);
+    }
+  }
+
   function renderImmichStatus(status) {
     if (!status) return;
     const meta = $("immich-status-meta");
@@ -4495,6 +4692,7 @@ function selectTab(name, opts) {
     if (status.checks) renderImmichChecks(status.checks);
     if (status.steps) renderImmichSteps(status.steps);
     if (status.tailnet) renderImmichTailnet(status.tailnet);
+    if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
     renderImmichNext(status);
     // Do not put stored API keys into the form.
     if (status.has_api_key && $("immich-api-key").placeholder.indexOf("saved") < 0) {
@@ -4628,6 +4826,15 @@ function selectTab(name, opts) {
   if ($("copy-immich-tailnet")) {
     $("copy-immich-tailnet").addEventListener("click", () =>
       copyFromEl($("copy-immich-tailnet"), "immich-tailnet-commands", "Copy all commands"));
+  }
+  if ($("immich-ts-save-key")) {
+    $("immich-ts-save-key").addEventListener("click", saveImmichTailscaleKey);
+  }
+  if ($("immich-ts-check")) {
+    $("immich-ts-check").addEventListener("click", checkImmichTailnetSteps);
+  }
+  if ($("immich-ts-apply")) {
+    $("immich-ts-apply").addEventListener("click", () => applyImmichTailnetSteps(null));
   }
   if ($("copy-immich-vip-endpoint")) {
     $("copy-immich-vip-endpoint").addEventListener("click", () =>
