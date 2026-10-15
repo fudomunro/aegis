@@ -428,11 +428,13 @@ type FreeBusyList struct {
 
 // MessageChannel values for the neutral message type. Email is the first
 // named-service path (Gmail); SMS/WhatsApp remain reserved for connectors
-// that can authenticate a real user history (issue #60).
+// that can authenticate a real user history (issue #60). Social covers
+// in-network activity (Bluesky notifications/replies) delivered as messages.
 const (
 	MessageChannelEmail    = "email"
 	MessageChannelSMS      = "sms"
 	MessageChannelWhatsApp = "whatsapp"
+	MessageChannelSocial   = "social"
 )
 
 // Message is a user-facing message (email, and later SMS/WhatsApp when a
