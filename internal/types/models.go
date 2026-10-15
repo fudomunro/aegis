@@ -477,6 +477,8 @@ type MessageList struct {
 }
 
 // LibraryServiceStatus reports per-service results for an aggregate call.
+// Extra Name / LastSyncedAt / Canonical / Role fields feed the library
+// source-overview header (issue #162).
 type LibraryServiceStatus struct {
 	// Status is "ok", "unauthorized", "error", or "skipped".
 	Status string `json:"status"`
@@ -487,6 +489,20 @@ type LibraryServiceStatus struct {
 	Truncated bool `json:"truncated,omitempty"`
 	// Error is a short reason when Status is "error" or "unauthorized".
 	Error string `json:"error,omitempty"`
+	// Name is the human-readable service label for the library source overview.
+	Name string `json:"name,omitempty"`
+	// LastSyncedAt is when Aegis last successfully ingested or fetched this
+	// source (RFC3339). Empty when unknown or the source is live-only.
+	LastSyncedAt string `json:"last_synced_at,omitempty"`
+	// Canonical is true when this service is the configured home for the kind
+	// (issue #16).
+	Canonical bool `json:"canonical,omitempty"`
+	// Role labels the copy relationship for mirrored kinds: "canonical",
+	// "mirror", or empty when the kind is not mirrored.
+	Role string `json:"role,omitempty"`
+	// Parent, when set, nests this source under another source ID in the
+	// overview (e.g. Google Takeout under Gmail for messages).
+	Parent string `json:"parent,omitempty"`
 }
 
 // PlaylistList is the neutral response for listing playlists — either for a

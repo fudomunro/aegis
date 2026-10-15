@@ -235,6 +235,53 @@
   .copy-chip-stale { background: rgba(210,153,34,0.15); color: var(--orange); }
   .copy-chip-missing { background: rgba(248,81,73,0.15); color: var(--red); }
   .copy-chip-unknown { background: var(--surface2); color: var(--dim); }
+
+  /* Library source overview (issue #162) */
+  .source-overview {
+    display: flex; flex-direction: column; gap: 0.55rem;
+    margin: 0 0 0.85rem; padding: 0.75rem;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+  }
+  .source-overview-title {
+    font-size: 0.78rem; font-weight: 600; color: var(--dim);
+    text-transform: uppercase; letter-spacing: 0.04em;
+  }
+  .source-box-row {
+    display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: stretch;
+  }
+  .source-box-row.nested {
+    margin-left: 1.15rem; padding-left: 0.65rem;
+    border-left: 2px solid var(--border);
+  }
+  .source-box {
+    flex: 1 1 140px; min-width: 120px; max-width: 100%;
+    display: flex; flex-direction: column; gap: 0.2rem;
+    padding: 0.55rem 0.7rem; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface2);
+    box-sizing: border-box; overflow: hidden;
+  }
+  .source-box-ok { border-color: rgba(63,185,80,0.45); }
+  .source-box-warn { border-color: rgba(210,153,34,0.55); }
+  .source-box-err { border-color: rgba(248,81,73,0.5); }
+  .source-box-name {
+    font-size: 0.86rem; font-weight: 600; color: var(--text);
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .source-box-meta {
+    font-size: 0.75rem; color: var(--dim); line-height: 1.35;
+  }
+  .source-box-count {
+    font-size: 0.95rem; font-weight: 650; color: var(--text);
+    font-variant-numeric: tabular-nums;
+  }
+  .source-role {
+    display: inline-block; margin-left: 0.35rem;
+    font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.03em; padding: 0.05rem 0.35rem; border-radius: 999px;
+    vertical-align: middle;
+  }
+  .source-role-canonical { background: rgba(88,166,255,0.18); color: var(--accent); }
+  .source-role-mirror { background: var(--surface2); color: var(--dim); }
   .source-copy-line {
     display: block; margin-top: 0.2rem; color: var(--dim); font-size: 0.72rem; line-height: 1.35;
   }
@@ -523,6 +570,7 @@
         </div>
         <button class="btn" id="reload-library" type="button">Reload from services</button>
       </div>
+      <div id="library-sources" class="source-overview" hidden></div>
       <div id="library-meta" class="meta" style="margin-bottom:0.75rem"></div>
       <div id="library-list"><div class="empty">Loading library…</div></div>
       <div id="library-pager" class="pager" hidden></div>
@@ -2608,6 +2656,90 @@ job.read</pre>
     else renderLibrary(libraryDataByKind[kind]);
   }
 
+  function sourceBoxClass(st) {
+    if (!st || st.status !== "ok") return "source-box source-box-err";
+    if (st.truncated) return "source-box source-box-warn";
+    return "source-box source-box-ok";
+  }
+
+  function sourceBoxRole(st) {
+    if (!st || !st.role) return "";
+    const cls = st.role === "canonical" ? "source-role source-role-canonical" : "source-role source-role-mirror";
+    const title = st.role === "canonical"
+      ? "Authoritative non-Aegis home for this type (issue #16)"
+      : "Mirror / non-home copy";
+    return '<span class="' + cls + '" title="' + escapeHtml(title) + '">' + escapeHtml(st.role) + "</span>";
+  }
+
+  function sourceBoxMeta(st) {
+    const bits = [];
+    if (st.status && st.status !== "ok") bits.push(escapeHtml(st.status));
+    else if (st.truncated) bits.push("truncated");
+    if (st.last_synced_at) {
+      let when = st.last_synced_at;
+      try {
+        when = new Date(st.last_synced_at).toLocaleDateString();
+      } catch (e) { /* keep raw */ }
+      bits.push("synced " + escapeHtml(when));
+    } else if (st.status === "ok") {
+      bits.push("live fetch");
+    }
+    if (st.error) bits.push(escapeHtml(st.error));
+    return bits.join(" · ");
+  }
+
+  function renderSourceBox(st, id) {
+    const name = st.name || id;
+    const count = (st.status === "ok" && typeof st.count === "number")
+      ? '<div class="source-box-count">' + st.count.toLocaleString() + "</div>"
+      : '<div class="source-box-count">—</div>';
+    // Relative sizing: wider flex when the source holds more items.
+    const n = Math.max(0, st.count || 0);
+    const grow = Math.min(4, Math.max(1, 1 + Math.log10(n + 1) / 2));
+    return '<div class="' + sourceBoxClass(st) + '" style="flex-grow:' + grow.toFixed(2) + '" data-source="' + escapeHtml(id) + '">' +
+      '<div class="source-box-name">' + escapeHtml(name) + sourceBoxRole(st) + "</div>" +
+      count +
+      '<div class="source-box-meta">' + sourceBoxMeta(st) + "</div>" +
+      "</div>";
+  }
+
+  // Source-overview header (issue #162): relative-sized boxes per source,
+  // nested when Parent marks a subset (e.g. Google Takeout under Gmail).
+  function renderLibrarySourceOverview(byService) {
+    const el = $("library-sources");
+    if (!el) return;
+    const entries = Object.keys(byService || {}).map((id) => {
+      return { id: id, st: byService[id] };
+    });
+    // Hide the synthetic mail-archive rollup when real source rows exist.
+    const real = entries.filter((e) => e.id !== "mail-archive");
+    const shown = real.length ? real : entries;
+    if (!shown.length) {
+      el.hidden = true;
+      el.innerHTML = "";
+      return;
+    }
+    const byId = {};
+    shown.forEach((e) => { byId[e.id] = e; });
+    const roots = shown.filter((e) => !(e.st.parent && byId[e.st.parent]));
+    const childrenOf = (pid) => shown.filter((e) => e.st.parent === pid);
+    const rowHtml = (e) => {
+      const kids = childrenOf(e.id);
+      let html = '<div class="source-box-row">' + renderSourceBox(e.st, e.id) + "</div>";
+      if (kids.length) {
+        html += '<div class="source-box-row nested">' +
+          kids.map((k) => renderSourceBox(k.st, k.id)).join("") +
+          "</div>";
+      }
+      return html;
+    };
+    const total = shown.reduce((n, e) => n + (e.st.count || 0), 0);
+    el.hidden = false;
+    el.innerHTML =
+      '<div class="source-overview-title">Sources · ' + total.toLocaleString() + " items</div>" +
+      roots.map(rowHtml).join("");
+  }
+
   function libraryStatusBadges(byService) {
     return Object.keys(byService || {}).sort().map((id) => {
       const st = byService[id];
@@ -2870,6 +3002,8 @@ job.read</pre>
     if (!data) {
       list.innerHTML = '<div class="empty">Loading library…</div>';
       meta.textContent = "";
+      const src = $("library-sources");
+      if (src) { src.hidden = true; src.innerHTML = ""; }
       if (pager) {
         pager.hidden = true;
         pager.innerHTML = "";
@@ -2877,6 +3011,7 @@ job.read</pre>
       return;
     }
     const items = data[kind.key] || [];
+    renderLibrarySourceOverview(data.by_service);
     const statusBits = libraryStatusBadges(data.by_service);
     const endpoint = '<code>' + escapeHtml(kind.path) + "</code>";
     meta.innerHTML = "<strong>" + items.length + "</strong> " + kind.label +

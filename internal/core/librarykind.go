@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -677,6 +678,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		}(t)
 	}
 	wg.Wait()
+	enrichLibraryServiceStatuses(s, kind.ID, bySvc)
 
 	sort.SliceStable(all, func(i, j int) bool {
 		si, sj := spec.serviceOf(all[i]), spec.serviceOf(all[j])
@@ -732,4 +734,147 @@ func libraryAggregateDegraded(bySvc map[string]types.LibraryServiceStatus) bool 
 		}
 	}
 	return false
+}
+
+// enrichLibraryServiceStatuses fills display name, canonical role, and
+// last-sync fields used by the library source-overview header (issue #162).
+// Fail-open: missing config or archive metadata leaves the original status.
+func enrichLibraryServiceStatuses(s *Server, kindID string, bySvc map[string]types.LibraryServiceStatus) {
+	if len(bySvc) == 0 {
+		return
+	}
+	canonicalID := ""
+	for _, svc := range s.config.ServiceSnapshots() {
+		if svc.IsCanonicalFor(kindID) {
+			canonicalID = svc.ID
+			break
+		}
+	}
+	mirrored := canonicalID != ""
+	for id, st := range bySvc {
+		st.Name = librarySourceDisplayName(s, id)
+		if mirrored {
+			if id == canonicalID {
+				st.Canonical = true
+				st.Role = "canonical"
+			} else {
+				st.Role = "mirror"
+			}
+		}
+		if ts := librarySourceLastSyncedAt(s, id); ts != "" {
+			st.LastSyncedAt = ts
+		}
+		bySvc[id] = st
+	}
+	// Messages: surface Gmail + Google Takeout as separate overview sources
+	// (issue #162) when the local archive knows both. Keep the mail-archive
+	// fetch row so by_service still reports the aggregate target.
+	if kindID == "messages" && s.mail != nil {
+		expandMailArchiveSources(s, bySvc)
+	}
+}
+
+func librarySourceDisplayName(s *Server, id string) string {
+	switch id {
+	case "mail-archive":
+		return "Mail archive"
+	case takeoutServiceID:
+		return takeoutServiceName
+	case connectors.GoogleGmailServiceID:
+		return connectors.GoogleGmailServiceName
+	case connectors.GoogleCalendarServiceID:
+		return connectors.GoogleCalendarServiceName
+	case connectors.GoogleContactsServiceID:
+		return connectors.GoogleContactsServiceName
+	case connectors.GooglePhotosServiceID:
+		return connectors.GooglePhotosServiceName
+	case connectors.ImmichServiceID:
+		return connectors.ImmichServiceName
+	case connectors.YNABServiceID:
+		return connectors.YNABServiceName
+	case connectors.OwnTracksServiceID:
+		return connectors.OwnTracksServiceName
+	}
+	if svc := s.config.GetService(id); svc != nil && svc.Name != "" {
+		return svc.Name
+	}
+	return id
+}
+
+func librarySourceLastSyncedAt(s *Server, id string) string {
+	if s.mail == nil {
+		return ""
+	}
+	switch id {
+	case "mail-archive", takeoutServiceID, connectors.GoogleGmailServiceID:
+		st, err := s.mail.Status()
+		if err != nil {
+			return ""
+		}
+		if id == takeoutServiceID || id == connectors.GoogleGmailServiceID {
+			if cur, err := s.mail.LoadSyncCursor(id); err == nil && cur.LastSyncAt != "" {
+				return cur.LastSyncAt
+			}
+		}
+		return st.LastSyncAt
+	}
+	return ""
+}
+
+// expandMailArchiveSources adds per-source rows for Gmail-synced and Takeout
+// mail when the archive has both. Counts come from the archive inventory
+// (the affirmative understanding of those sources), not the library page cap.
+func expandMailArchiveSources(s *Server, bySvc map[string]types.LibraryServiceStatus) {
+	st, err := s.mail.Status()
+	if err != nil {
+		return
+	}
+	for svc, n := range st.ByService {
+		if n <= 0 {
+			continue
+		}
+		id := svc
+		name := mailServiceName(svc)
+		last := ""
+		if cur, err := s.mail.LoadSyncCursor(svc); err == nil {
+			last = cur.LastSyncAt
+		}
+		if last == "" {
+			last = st.LastSyncAt
+		}
+		role := ""
+		canonical := false
+		// Takeout is a historical export nested under the live Gmail home when
+		// Gmail is present; otherwise it stands alone.
+		parent := ""
+		if id == takeoutServiceID {
+			if _, ok := bySvc[connectors.GoogleGmailServiceID]; ok {
+				parent = connectors.GoogleGmailServiceID
+			} else if _, ok := bySvc["mail-archive"]; ok {
+				parent = "mail-archive"
+			}
+		}
+		existing, exists := bySvc[id]
+		if exists && existing.Count >= n {
+			// Keep the live-fetch row; just fill overview metadata.
+			existing.Name = name
+			if existing.LastSyncedAt == "" {
+				existing.LastSyncedAt = last
+			}
+			if parent != "" && existing.Parent == "" {
+				existing.Parent = parent
+			}
+			bySvc[id] = existing
+			continue
+		}
+		bySvc[id] = types.LibraryServiceStatus{
+			Status:       types.LibraryStatusOK,
+			Count:        n,
+			Name:         name,
+			LastSyncedAt: last,
+			Canonical:    canonical,
+			Role:         role,
+			Parent:       parent,
+		}
+	}
 }
