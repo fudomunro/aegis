@@ -289,6 +289,28 @@
         "default": "read",
         "transactions": "read"
       }
+    },
+    {
+      "id": "bluesky",
+      "name": "Bluesky",
+      "aliases": [
+        "bluesky",
+        "bsky",
+        "atproto",
+        "share photos"
+      ],
+      "action": "inject",
+      "endpoint": "https://bsky.social",
+      "headers": {
+        "X-Bluesky-Handle": "$ENV:BLUESKY_HANDLE",
+        "X-Bluesky-App-Password": "$ENV:BLUESKY_APP_PASSWORD"
+      },
+      "cache_ttl": "5m",
+      "description": "Share photos to Bluesky as public image posts (ownership-claim PoC, issue #20). Aegis stores no photo bytes; it fetches from the canonical photo service, posts a copy, and returns a sha256 + post_uri claim. Image embeds cap at 1MB. Use an app password, not your main password.",
+      "permissions": {
+        "default": "read",
+        "photos": "write"
+      }
     }
   ]
 }

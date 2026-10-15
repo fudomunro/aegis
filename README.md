@@ -69,6 +69,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/artists` — unified followed/top artists across all connected services
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
+- `POST /v1/library/photos/share` — publish one photo to Bluesky and return a PoC ownership claim (sha256 + public post; issue #20)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service)
@@ -1355,7 +1356,57 @@ until the user has picked once). Metadata only — Aegis still never downloads
 or stores image bytes; `blob_url` values expire in about an hour.
 
 Ownership / provenance proofs for photos are intentionally deferred:
-[issue #20](https://github.com/fudomunro/aegis/issues/20).
+[issue #20](https://github.com/fudomunro/aegis/issues/20). A **Bluesky share
+PoC** is available so a published photo carries a lightweight claim (content
+hash + public post locator) — see [Photo share to Bluesky](#photo-share-to-bluesky-issue-20-poc).
+
+#### Photo share to Bluesky (issue #20 PoC)
+
+```
+POST /v1/library/photos/share
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "source_service": "immich",
+  "source_id": "asset-uuid",
+  "caption": "optional post text",
+  "alt": "optional image alt text"
+}
+```
+
+Aegis fetches the original bytes from the canonical photo source **for this
+request only** (nothing is cached or stored), hashes them, uploads the image
+to Bluesky, and creates an `app.bsky.feed.post` with an images embed. Response:
+
+```json
+{
+  "target_service": "bluesky",
+  "source_service": "immich",
+  "source_id": "asset-uuid",
+  "post_uri": "at://did:plc:…/app.bsky.feed.post/…",
+  "post_url": "https://bsky.app/profile/you.bsky.social/post/…",
+  "claim": {
+    "type": "sha256+public-post",
+    "sha256": "…",
+    "mime_type": "image/jpeg",
+    "byte_size": 123456,
+    "target_service": "bluesky",
+    "post_uri": "at://…",
+    "note": "PoC ownership claim for issue #20 …"
+  }
+}
+```
+
+The share is also recorded in the copy ledger (`provenance: "share"`), so
+`GET /v1/library/copies` and `sources[].copy` can surface the breadcrumb.
+
+**Limits (PoC):** Bluesky image embeds cap at 1 MB. The claim is a content
+hash plus a public post locator — not a cryptographic proof (no signature or
+trusted timestamp). Auth is a Bluesky **app password** + handle in service
+headers (`X-Bluesky-Handle`, `X-Bluesky-App-Password`); Aegis owns the
+credential and exchanges it for a session. Permissions: source needs
+`photos` read, target needs `photos` write.
 
 #### Immich (local / foreign canonical)
 

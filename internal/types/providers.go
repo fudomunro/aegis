@@ -76,6 +76,56 @@ type PhotoProvider interface {
 	ListUserPhotos(ctx context.Context) (photos []Photo, truncated bool, err error)
 }
 
+// PhotoBytesProvider is an optional connector capability used by the photo
+// share / ownership-claim PoC (issue #20). Implementations must treat bytes
+// as ephemeral: fetch for this call only and do not store or cache them.
+// https://github.com/fudomunro/aegis/issues/20
+type PhotoBytesProvider interface {
+	// FetchPhotoBytes downloads one original photo (by service-local ID)
+	// and returns the bytes plus a MIME type. Return ErrUnauthorized when
+	// no valid credential is available. Callers must not retain the slice
+	// beyond the share/claim request that needed it.
+	FetchPhotoBytes(ctx context.Context, id string) (data []byte, mimeType string, err error)
+}
+
+// PhotoShareRequest is the neutral input for publishing one photo to a
+// share target (issue #20 PoC). Data is ephemeral caller-supplied bytes.
+type PhotoShareRequest struct {
+	// SourceService / SourceID name the photo origin for the claim.
+	SourceService string `json:"source_service,omitempty"`
+	SourceID      string `json:"source_id,omitempty"`
+	// Data is the original (or approved derivative) image bytes.
+	Data []byte `json:"-"`
+	// MimeType is the image media type (e.g. "image/jpeg").
+	MimeType string `json:"mime_type,omitempty"`
+	// Caption is optional post text.
+	Caption string `json:"caption,omitempty"`
+	// Alt is optional image alt text.
+	Alt string `json:"alt,omitempty"`
+	// ContentSHA256 is the lowercase hex digest of Data, when computed.
+	ContentSHA256 string `json:"content_sha256,omitempty"`
+}
+
+// PhotoShareResult is the neutral result of publishing a photo.
+type PhotoShareResult struct {
+	// Service is the share-target connector ID (e.g. "bluesky").
+	Service string `json:"service"`
+	// PostURI is the provider-native record URI when available (AT URI).
+	PostURI string `json:"post_uri,omitempty"`
+	// PostURL is a human-openable web URL for the share.
+	PostURL string `json:"post_url,omitempty"`
+	// PostID is a provider-local record/rkey identifier.
+	PostID string `json:"post_id,omitempty"`
+	// SharedAt is the publish timestamp in RFC3339, when known.
+	SharedAt string `json:"shared_at,omitempty"`
+}
+
+// PhotoShareTarget is implemented by connectors that can publish a photo
+// (issue #20 PoC). Bytes are provided for this call only.
+type PhotoShareTarget interface {
+	SharePhoto(ctx context.Context, req PhotoShareRequest) (PhotoShareResult, error)
+}
+
 // CalendarEventProvider is implemented by connectors that can return the
 // user's calendar entries in Aegis's neutral format. The aggregate library
 // endpoint uses this so agents can ask for "my calendar" once and receive
