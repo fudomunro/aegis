@@ -180,6 +180,15 @@ func TestAdminHTML_LibrarySourceOverview(t *testing.T) {
 		"source-role-canonical",
 		"source-role-mirror",
 		"data-source",
+		// Icons for data types + services/files (issue #162 follow-up).
+		"sourceIconHTML",
+		"sourceIconPath",
+		"dataTypeIconHTML",
+		"FLOW_ICONS",
+		`"google-gmail"`,
+		`"google-takeout"`,
+		`"mail-archive"`,
+		"source-box-name-label",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing %q", want)
