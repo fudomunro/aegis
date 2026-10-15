@@ -463,3 +463,57 @@ func TestHujsonToJSON_StripsCommentsAndTrailingCommas(t *testing.T) {
 		t.Fatalf("owners = %v", owners)
 	}
 }
+
+func TestImmichTailnetServe_ProbeVip(t *testing.T) {
+	immich := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/server/ping" {
+			writeJSON(w, map[string]string{"res": "pong"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer immich.Close()
+
+	mock := newMockTailscaleAdmin()
+	mock.policy.TagOwners = map[string][]string{"tag:immich-host": {"autogroup:admin"}}
+	mock.services["svc:immich"] = tailscaleService{Name: "svc:immich", Ports: []string{"tcp:443"}}
+	mock.devices = []tailscaleDevice{{ID: "n1", Hostname: "media", Tags: []string{"tag:immich-host"}}}
+	mock.approved["n1"] = true
+
+	srv, cfg := tailscaleTestServer(t, mock)
+	if err := cfg.SetTailscaleAdmin(tailscaleAdminEntry{APIKey: "tskey-api-test", HostDeviceID: "n1"}); err != nil {
+		t.Fatal(err)
+	}
+	// Point Immich endpoint at the ping mock so the serve probe has a target.
+	if err := cfg.SetServiceConnection("immich", serviceConnectionEntry{
+		Name:     "Immich",
+		Action:   "inject",
+		Endpoint: immich.URL + "/api",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	req := httptest.NewRequest("POST", "/v1/admin/immich/tailnet/check", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	var live ImmichTailnetLiveStatus
+	if err := json.Unmarshal(w.Body.Bytes(), &live); err != nil {
+		t.Fatal(err)
+	}
+	var serve *ImmichTailnetStepStatus
+	for i := range live.Steps {
+		if live.Steps[i].ID == "serve" {
+			serve = &live.Steps[i]
+		}
+	}
+	if serve == nil {
+		t.Fatal("missing serve step")
+	}
+	if !serve.Checked || !serve.OK {
+		t.Fatalf("serve should be probed OK: %+v", serve)
+	}
+	if serve.Fixable {
+		t.Fatal("serve should stay not-fixable (host-local)")
+	}
+}

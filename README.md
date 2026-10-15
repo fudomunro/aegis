@@ -1384,7 +1384,7 @@ offers a **Fix** action only for steps that still need work:
 | `acl_tag` | `tagOwners` has the host tag | yes — adds `tag → ["autogroup:admin"]` (prerequisite for the next three) |
 | `create_service` | `svc:immich` exists | yes — `PUT …/services/svc:immich` |
 | `tag_host` | selected host device carries the tag | yes — `POST /device/{id}/tags` (preserves existing tags) |
-| `serve` | host-local `tailscale serve` | no (runs on the Immich machine) |
+| `serve` | probes the VIP/Immich `/api/server/ping` | no (mapping is host-local; probe turns green when it answers) |
 | `approve` | service host approved | yes — `POST …/device/{id}/approved` |
 | `connect` | Aegis Immich endpoint | yes — saves the VIP `…/api` endpoint |
 

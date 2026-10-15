@@ -370,12 +370,9 @@ func (s *Server) checkImmichTailnetSteps(ctx context.Context) *ImmichTailnetLive
 	s.tsCheckCreateService(ctx, c, byID["create_service"], live.HostTag)
 	// 3) tag_host
 	s.tsCheckTagHost(ctx, c, devices, byID["tag_host"], hostID, live.HostTag)
-	// 4) serve — host-local; mark checked=false with copyable command.
-	if st := byID["serve"]; st != nil {
-		st.Checked = false
-		st.Fixable = false
-		st.Detail = "Runs on the Immich host (tailscale serve). Aegis cannot apply this remotely unless it shares that host."
-	}
+	// 4) serve — probe the VIP name (or configured Immich endpoint) so a
+	// working host-local tailscale serve turns this green without SSH.
+	s.tsCheckServe(ctx, byID["serve"])
 	// 5) approve
 	s.tsCheckApprove(ctx, c, byID["approve"], hostID)
 	// 6) connect — Aegis-side endpoint.
@@ -599,6 +596,61 @@ func (s *Server) tsCheckApprove(ctx context.Context, c *tailscaleAdminClient, st
 	st.OK = false
 	st.NeedsFix = true
 	st.Detail = "host advertised but not approved"
+}
+
+// tsCheckServe probes whether the VIP name (or configured endpoint) is
+// actually serving Immich. The mapping is host-local, but a live /api/server/ping
+// is the acceptance signal that tailscale serve is up and approved.
+func (s *Server) tsCheckServe(ctx context.Context, st *ImmichTailnetStepStatus) {
+	if st == nil {
+		return
+	}
+	st.Checked = true
+	st.Fixable = false // still host-local; we only observe the result
+	suffix := tailnetDNSFromBaseURL(s.baseURL)
+	candidates := []string{}
+	if ep := strings.TrimSpace(s.immichConfiguredEndpoint()); ep != "" {
+		candidates = append(candidates, ep)
+	}
+	if suffix != "" {
+		candidates = append(candidates, immichSuggestedEndpoint(suffix))
+	}
+	if len(candidates) == 0 {
+		st.OK = false
+		st.Detail = "no VIP/Immich endpoint to probe — run tailscale serve on the Immich host"
+		return
+	}
+	var lastErr string
+	for _, ep := range candidates {
+		base, ok := normalizeImmichEndpoint(ep)
+		if !ok || base == "" {
+			base = strings.TrimRight(ep, "/")
+		}
+		ping := strings.TrimRight(base, "/") + "/server/ping"
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ping, nil)
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		resp, err := aegisHTTPClient.Do(req)
+		if err != nil {
+			lastErr = err.Error()
+			continue
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		resp.Body.Close()
+		if resp.StatusCode == http.StatusOK &&
+			(strings.Contains(strings.ToLower(string(body)), "pong") ||
+				strings.Contains(strings.ToLower(string(body)), "immich") ||
+				len(bytes.TrimSpace(body)) > 0) {
+			st.OK = true
+			st.Detail = fmt.Sprintf("reachable at %s (HTTP %d)", ping, resp.StatusCode)
+			return
+		}
+		lastErr = fmt.Sprintf("%s: HTTP %d", ping, resp.StatusCode)
+	}
+	st.OK = false
+	st.Detail = "VIP/Immich not answering yet — run tailscale serve on the Immich host. " + lastErr
 }
 
 func (s *Server) tsCheckConnect(st *ImmichTailnetStepStatus) {
