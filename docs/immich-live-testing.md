@@ -218,8 +218,11 @@ walkthrough with copy buttons:
 Notes:
 
 - This is **Serve**, not Funnel — traffic stays on the tailnet (product rule).
-- Aegis only *documents* these steps today; it does not call the Tailscale
-  Admin API or LocalAPI for you (automation is a later phase of #124).
+- **Phase 2 (#124):** with a Tailscale Admin API key saved in the Immich
+  wizard, Aegis live-checks these steps and can fix `create_service`,
+  `tag_host`, `approve`, and the Aegis connect endpoint. `acl_tag` stays
+  operator-owned (copyable snippet); `serve` stays on the Immich host.
+  Apply is explicit and re-checks first so already-OK steps are skipped.
 - Skipping VIP Services is fine for first runs: `http://localhost:2283/api`
   or MagicDNS + `:2283` work immediately.
 

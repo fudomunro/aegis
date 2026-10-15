@@ -39,6 +39,9 @@ type Config struct {
 	svcConnPath string
 	// svcConnOverlay is the loaded overlay map (service id → connection).
 	svcConnOverlay map[string]serviceConnectionEntry
+	// tailscaleAdmin holds the optional Tailscale Admin API credential used
+	// for Immich VIP Service setup checks/fixes (issue #124).
+	tailscaleAdmin *tailscaleAdminEntry
 }
 
 // defaultPermissionsPath returns the overlay path beside a aegis.json path.

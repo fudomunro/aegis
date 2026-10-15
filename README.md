@@ -608,7 +608,7 @@ on first run with mode `0700` (it holds secrets).
   aegis.json              # bootstrap config (OAuth clients live here)
   permissions.json        # admin permissions overlay (non-secret)
   apps.json               # third-party app registry (0600; token hashes only)
-  service_connections.json # admin Immich/static-auth overlay (0600; may hold API keys)
+  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (0600; may hold API keys)
   user_types.json         # admin UDT local-file selection overlay (issue #15)
   user-types/             # user-defined type schema packs (issue #15)
   entity_links.json       # confirmed playlist/entity links
@@ -1389,6 +1389,26 @@ enough.
 emits the copyable walk-through (issue [#124](https://github.com/fudomunro/aegis/issues/124)).
 Serve is tailnet-only; never Funnel.
 
+**Tailscale Admin API automation (optional).** Paste a Tailscale access token
+(Keys page; scopes `services` + `devices:core`) in the same wizard step. Aegis
+stores it in `service_connections.json` (`tailscale.api_key`, mode 0600; never
+echoed back), **checks each walkthrough step** against `api.tailscale.com`, and
+offers a **Fix** action only for steps that still need work:
+
+| Step | Check | Auto-fix |
+|------|-------|----------|
+| `acl_tag` | `tagOwners` has the host tag | yes — adds `tag → ["autogroup:admin"]` (prerequisite for the next three) |
+| `create_service` | `svc:immich` exists | yes — `PUT …/services/svc:immich` |
+| `tag_host` | selected host device carries the tag | yes — `POST /device/{id}/tags` (preserves existing tags) |
+| `serve` | probes the VIP/Immich `/api/server/ping` | no (mapping is host-local; probe turns green when it answers) |
+| `approve` | service host approved | yes — `POST …/device/{id}/approved` |
+| `connect` | Aegis Immich endpoint | yes — saves the VIP `…/api` endpoint |
+
+Apply is explicit (`POST /v1/admin/immich/tailnet/apply`) and re-checks first so
+already-OK steps are skipped. `create_service` / `tag_host` / `approve` first
+ensure the host tag is declared in `tagOwners` (Tailscale rejects undeclared
+tags). Aegis never mutates tailnet topology from the pre-request hook.
+
 Only **one** non-blocked service may claim `canonical_for: ["photos"]`. If
 Immich is the home copy, remove that key from `google-photos` (or omit it).
 
@@ -1960,6 +1980,9 @@ GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
 POST /v1/admin/immich/test   — probe Immich endpoint/API key (key not stored from this call)
 POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json)
 POST /v1/admin/immich/check  — re-run the live acceptance checklist
+POST /v1/admin/immich/tailnet/config — save Tailscale Admin API key/host (service_connections.json; key never echoed)
+POST /v1/admin/immich/tailnet/check  — live-check VIP Service setup steps (issue #124)
+POST /v1/admin/immich/tailnet/apply  — fix only the named steps that still need work
 ```
 
 Public brand assets (no auth; issue #87) are served from the process root:
