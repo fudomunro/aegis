@@ -69,13 +69,15 @@ type ImmichSetupStatus struct {
 	// LastProbe is the most recent connection diagnosis (when available).
 	LastProbe *ImmichTestResponse `json:"last_probe,omitempty"`
 	// Tailnet guides operators to a friendly ts.net URL via Tailscale
-	// VIP Services (issue #124). Optional automation is a later phase.
+	// VIP Services (issue #124). Live is set when an Admin API key is held.
 	Tailnet *ImmichTailnetGuide `json:"tailnet,omitempty"`
+	// TailnetLive is the live per-step check/fix view (issue #124).
+	TailnetLive *ImmichTailnetLiveStatus `json:"tailnet_live,omitempty"`
 }
 
 // ImmichTailnetGuide is the issue #124 operator path: give Immich a stable
-// VIP Service name (svc:immich) instead of a raw host:port. Aegis only
-// emits copyable steps — it does not mutate tailnet topology.
+// VIP Service name (svc:immich) instead of a raw host:port. The guide is
+// always copyable; live Admin-API checks/fixes attach as TailnetLive.
 type ImmichTailnetGuide struct {
 	// ServiceName is the recommended VIP service name.
 	ServiceName string `json:"service_name"`
@@ -184,6 +186,9 @@ func (s *Server) HandleAdminImmichSetup(w http.ResponseWriter, r *http.Request) 
 		}
 		s.writeImmichSetupStatus(w, r, true)
 	default:
+		if dispatchImmichTailnetSubroute(s, w, r, path) {
+			return
+		}
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
 }
@@ -217,6 +222,7 @@ func (s *Server) immichSetupStatus(ctx context.Context, withChecks bool) ImmichS
 	}
 	status.Snippet = immichConfigSnippet(status.Endpoint, s.baseURL)
 	status.Tailnet = immichTailnetGuide(s.baseURL, status.Endpoint)
+	status.TailnetLive = s.checkImmichTailnetSteps(ctx)
 
 	if !withChecks {
 		status.Steps = immichGuidedSteps(&status)
@@ -276,8 +282,9 @@ func immichSuggestedEndpoint(tailnetDNS string) string {
 }
 
 // immichTailnetGuide builds the issue #124 VIP Services walkthrough.
-// Aegis never calls the Tailscale API here — this is copyable operator
-// guidance so we do not mutate tailnet topology from a request handler.
+// The guide itself is always copyable. Live checks/fixes live in
+// tailscale_admin.go and only run from explicit admin calls — never the
+// pre-request hook.
 func immichTailnetGuide(baseURL, configuredEndpoint string) *ImmichTailnetGuide {
 	suffix := tailnetDNSFromBaseURL(baseURL)
 	suggested := immichSuggestedEndpoint(suffix)

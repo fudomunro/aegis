@@ -34,6 +34,22 @@ type serviceConnectionEntry struct {
 type serviceConnectionsFile struct {
 	Version  int                               `json:"version"`
 	Services map[string]serviceConnectionEntry `json:"services"`
+	// Tailscale holds operator credentials for the Admin API used to check
+	// and fix Immich VIP Service setup (issue #124). Presence only in APIs.
+	Tailscale *tailscaleAdminEntry `json:"tailscale,omitempty"`
+}
+
+// tailscaleAdminEntry is the operator-held Tailscale Admin API credential
+// (issue #124). Secrets live here — file mode 0600. Never echoed back.
+type tailscaleAdminEntry struct {
+	// APIKey is a tskey-api-… access token (or OAuth access token).
+	APIKey string `json:"api_key,omitempty"`
+	// Tailnet is the API tailnet path ("-" for the default tailnet).
+	Tailnet string `json:"tailnet,omitempty"`
+	// HostDeviceID is the device that runs Immich (for tagging / approval).
+	HostDeviceID string `json:"host_device_id,omitempty"`
+	// HostTag is the service-host tag (default tag:immich-host).
+	HostTag string `json:"host_tag,omitempty"`
 }
 
 func defaultServiceConnectionsPath(configPath string) string {
@@ -70,6 +86,9 @@ func loadServiceConnections(path string) (*serviceConnectionsFile, error) {
 		ov.Services = map[string]serviceConnectionEntry{}
 	}
 	resolveServiceConnectionSecrets(ov.Services)
+	if ov.Tailscale != nil && ov.Tailscale.APIKey != "" {
+		ov.Tailscale.APIKey = resolveSecret("service_connections.tailscale.api_key", ov.Tailscale.APIKey)
+	}
 	return ov, nil
 }
 
@@ -78,8 +97,9 @@ func saveServiceConnections(path string, ov *serviceConnectionsFile) error {
 		return fmt.Errorf("service connections overlay has no path; cannot save")
 	}
 	out := serviceConnectionsFile{
-		Version:  serviceConnectionsFileVersion,
-		Services: ov.Services,
+		Version:   serviceConnectionsFileVersion,
+		Services:  ov.Services,
+		Tailscale: ov.Tailscale,
 	}
 	if out.Services == nil {
 		out.Services = map[string]serviceConnectionEntry{}
@@ -117,6 +137,7 @@ func (c *Config) applyServiceConnectionsOverlayLocked() error {
 		return err
 	}
 	c.svcConnOverlay = ov.Services
+	c.tailscaleAdmin = ov.Tailscale
 	for id, entry := range ov.Services {
 		c.applyServiceConnectionEntryLocked(id, entry)
 	}
@@ -316,8 +337,9 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 		return err
 	}
 	if err := saveServiceConnections(c.svcConnPath, &serviceConnectionsFile{
-		Version:  serviceConnectionsFileVersion,
-		Services: c.svcConnOverlay,
+		Version:   serviceConnectionsFileVersion,
+		Services:  c.svcConnOverlay,
+		Tailscale: c.tailscaleAdmin,
 	}); err != nil {
 		return err
 	}
@@ -334,4 +356,83 @@ func (s Service) HasStaticAPIKey() bool {
 		}
 	}
 	return false
+}
+
+// tailscaleAdminSnapshot is a redacted view of the stored Tailscale Admin
+// credential. The API key is never included — only presence and routing.
+type tailscaleAdminSnapshot struct {
+	HasAPIKey    bool   `json:"has_api_key"`
+	Tailnet      string `json:"tailnet,omitempty"`
+	HostDeviceID string `json:"host_device_id,omitempty"`
+	HostTag      string `json:"host_tag,omitempty"`
+}
+
+// TailscaleAdminSnapshot returns non-secret Tailscale Admin settings.
+func (c *Config) TailscaleAdminSnapshot() tailscaleAdminSnapshot {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.tailscaleAdminSnapshotLocked()
+}
+
+func (c *Config) tailscaleAdminSnapshotLocked() tailscaleAdminSnapshot {
+	if c.tailscaleAdmin == nil {
+		return tailscaleAdminSnapshot{}
+	}
+	return tailscaleAdminSnapshot{
+		HasAPIKey:    strings.TrimSpace(c.tailscaleAdmin.APIKey) != "",
+		Tailnet:      strings.TrimSpace(c.tailscaleAdmin.Tailnet),
+		HostDeviceID: strings.TrimSpace(c.tailscaleAdmin.HostDeviceID),
+		HostTag:      strings.TrimSpace(c.tailscaleAdmin.HostTag),
+	}
+}
+
+// TailscaleAdminAPIKey returns the stored Admin API key for outbound calls
+// (internal only — never serialize this into admin responses).
+func (c *Config) TailscaleAdminAPIKey() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.tailscaleAdmin == nil {
+		return ""
+	}
+	return strings.TrimSpace(c.tailscaleAdmin.APIKey)
+}
+
+// SetTailscaleAdmin upserts operator Tailscale Admin settings and persists
+// service_connections.json. An empty API key leaves the stored key unchanged.
+func (c *Config) SetTailscaleAdmin(entry tailscaleAdminEntry) error {
+	entry.Tailnet = strings.TrimSpace(entry.Tailnet)
+	entry.HostDeviceID = strings.TrimSpace(entry.HostDeviceID)
+	entry.HostTag = strings.TrimSpace(entry.HostTag)
+	entry.APIKey = strings.TrimSpace(entry.APIKey)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	merged := tailscaleAdminEntry{}
+	if c.tailscaleAdmin != nil {
+		merged = *c.tailscaleAdmin
+	}
+	if entry.APIKey != "" {
+		merged.APIKey = entry.APIKey
+	}
+	if entry.Tailnet != "" {
+		merged.Tailnet = entry.Tailnet
+	}
+	if entry.HostDeviceID == "-" {
+		merged.HostDeviceID = ""
+	} else if entry.HostDeviceID != "" {
+		merged.HostDeviceID = entry.HostDeviceID
+	}
+	if entry.HostTag != "" {
+		merged.HostTag = entry.HostTag
+	}
+	c.tailscaleAdmin = &merged
+
+	if err := saveServiceConnections(c.svcConnPath, &serviceConnectionsFile{
+		Version:   serviceConnectionsFileVersion,
+		Services:  c.svcConnOverlay,
+		Tailscale: c.tailscaleAdmin,
+	}); err != nil {
+		return err
+	}
+	return nil
 }
