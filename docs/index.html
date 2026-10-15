@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ caf8eb1</title>
+<title>Aegis — Code Walkthrough @ 05f5f15</title>
 <meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>caf8eb1</span>
-    <span class="version-meta">feat/issue-124-tailscale-api-setup · 2026-10-14 · feat: probe VIP Immich URL for the serve step (issue #124) · generated 2026-10-15 02:14 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>05f5f15</span>
+    <span class="version-meta">feat/issue-124-tailscale-api-setup · 2026-10-14 · Merge origin/main into feat/issue-124-tailscale-api-setup · generated 2026-10-15 02:21 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,7 +306,7 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">32,429</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">32,586</div><div class="l">source LOC (no tests)</div></div>
     <div class="stat"><div class="v">90</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">11</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">10</div><div class="l">library kinds</div></div>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ caf8eb1</h2>
+  <h2><span class="n">13</span>File map @ 05f5f15</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1258,7 +1258,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/run.go</code></td><td class="mono">729</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
       <tr><td><code>internal/core/handler.go</code></td><td class="mono">876</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
       <tr><td><code>internal/core/config.go</code></td><td class="mono">414</td><td>Services + shared OAuth connections, matching, reload</td></tr>
-      <tr><td><code>internal/types/models.go</code></td><td class="mono">763</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
+      <tr><td><code>internal/types/models.go</code></td><td class="mono">779</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
       <tr><td><code>internal/types/merge.go</code></td><td class="mono">716</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>internal/types/kind.go</code></td><td class="mono">60</td><td>LibraryKind data (instructions, keywords, cache key)</td></tr>
       <tr><td><code>internal/types/policy.go</code></td><td class="mono">635</td><td>Access levels, Permissions map, TypePolicy (#148)</td></tr>
@@ -1317,7 +1317,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/httphardening.go</code></td><td class="mono">154</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/identity.go</code></td><td class="mono">243</td><td>Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
       <tr><td><code>internal/core/library.go</code></td><td class="mono">96</td><td>Thin per-kind library handlers + aggregate wiring</td></tr>
-      <tr><td><code>internal/core/librarykind.go</code></td><td class="mono">701</td><td>Library kind registry + kindRuntime predicates + aggregate pipeline</td></tr>
+      <tr><td><code>internal/core/librarykind.go</code></td><td class="mono">842</td><td>Library kind registry + kindRuntime predicates + aggregate pipeline</td></tr>
       <tr><td><code>internal/core/mail_archive.go</code></td><td class="mono">864</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/mail_archive_http.go</code></td><td class="mono">429</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/mail_archive_sync.go</code></td><td class="mono">231</td><td>Supporting code</td></tr>
@@ -1366,8 +1366,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>caf8eb1</code></strong>
-    (feat/issue-124-tailscale-api-setup · 2026-10-14 · feat: probe VIP Immich URL for the serve step (issue #124)).
+    <code>05f5f15</code></strong>
+    (feat/issue-124-tailscale-api-setup · 2026-10-14 · Merge origin/main into feat/issue-124-tailscale-api-setup).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1398,12 +1398,12 @@ python3 docs/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>caf8eb1</strong>
+  Generated for <strong>05f5f15</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 90 files · 32,429 LOC · 11 connectors · 10 library kinds
-  · 2026-10-15 02:14 UTC
+  · 90 files · 32,586 LOC · 11 connectors · 10 library kinds
+  · 2026-10-15 02:21 UTC
 </footer>
 
 </div>
