@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -44,7 +45,31 @@ func (m *mockTailscaleAdmin) handler() http.Handler {
 		}
 		path := strings.TrimPrefix(r.URL.Path, "/api/v2")
 		switch {
-		case r.Method == http.MethodGet && path == "/tailnet/-/acl/policy":
+		case r.Method == http.MethodGet && path == "/tailnet/-/acl":
+			// Serve HuJSON like the real API (comments allowed).
+			w.Header().Set("Content-Type", "application/json")
+			var owners []string
+			for tag, list := range m.policy.TagOwners {
+				quoted := make([]string, 0, len(list))
+				for _, o := range list {
+					quoted = append(quoted, `"`+o+`"`)
+				}
+				owners = append(owners, `"`+tag+`": [`+strings.Join(quoted, ", ")+`]`)
+			}
+			tagOwners := "{}"
+			if len(owners) > 0 {
+				tagOwners = "{" + strings.Join(owners, ", ") + "}"
+			}
+			w.Write([]byte("// test policy\n{\n  \"tagOwners\": " + tagOwners + ",\n  \"grants\": [],\n}\n"))
+		case r.Method == http.MethodPost && path == "/tailnet/-/acl":
+			raw, _ := io.ReadAll(r.Body)
+			var pol tailscalePolicy
+			if err := json.Unmarshal(hujsonToJSON(raw), &pol); err != nil {
+				w.WriteHeader(http.StatusBadRequest)
+				writeJSON(w, map[string]string{"message": err.Error()})
+				return
+			}
+			m.policy = pol
 			writeJSON(w, m.policy)
 		case r.Method == http.MethodGet && path == "/tailnet/-/devices":
 			writeJSON(w, map[string]any{"devices": m.devices})
@@ -368,5 +393,73 @@ func TestImmichTailnetSteps_SkipAlreadyOK(t *testing.T) {
 				t.Fatalf("unexpected mutation: %s", call)
 			}
 		}
+	}
+}
+
+func TestImmichTailnetApply_FixesMissingTagFirst(t *testing.T) {
+	mock := newMockTailscaleAdmin()
+	// No tagOwners entry — the real failure mode that blocked create/tag/approve.
+	mock.policy.TagOwners = map[string][]string{}
+	mock.devices = []tailscaleDevice{{ID: "n1", Hostname: "media"}}
+
+	srv, cfg := tailscaleTestServer(t, mock)
+	if err := cfg.SetTailscaleAdmin(tailscaleAdminEntry{
+		APIKey:       "tskey-api-test",
+		HostDeviceID: "n1",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Only request create_service — tag must be fixed as a prerequisite.
+	body, _ := json.Marshal(ImmichTailnetApplyRequest{Steps: []string{"create_service"}})
+	req := httptest.NewRequest("POST", "/v1/admin/immich/tailnet/apply", strings.NewReader(string(body)))
+	req.Header.Set("Authorization", "Bearer test-key")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("apply status = %d body=%s", w.Code, w.Body.String())
+	}
+	var res ImmichTailnetApplyResult
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatal(err)
+	}
+	applied := map[string]bool{}
+	for _, id := range res.Applied {
+		applied[id] = true
+	}
+	if !applied["create_service"] {
+		t.Fatalf("create_service should apply: %+v", res)
+	}
+	if _, ok := mock.services["svc:immich"]; !ok {
+		t.Fatalf("service should exist after apply: %+v", res)
+	}
+	// Tag was declared as a prerequisite even though not requested.
+	if owners := mock.policy.TagOwners["tag:immich-host"]; len(owners) == 0 {
+		t.Fatalf("tagOwners should include tag:immich-host: %+v", mock.policy)
+	}
+}
+
+func TestHujsonToJSON_StripsCommentsAndTrailingCommas(t *testing.T) {
+	src := []byte(`// header
+{
+  // comment
+  "tagOwners": {
+    "tag:immich-host": ["autogroup:admin"], // trailing
+  },
+  "grants": [],
+}
+`)
+	var pol map[string]any
+	if err := json.Unmarshal(hujsonToJSON(src), &pol); err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	owners, ok := pol["tagOwners"].(map[string]any)
+	if !ok {
+		t.Fatalf("tagOwners missing: %v", pol)
+	}
+	list, ok := owners["tag:immich-host"].([]any)
+	if !ok || len(list) != 1 || list[0] != "autogroup:admin" {
+		t.Fatalf("owners = %v", owners)
 	}
 }

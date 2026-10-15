@@ -51,21 +51,45 @@ func newTailscaleAdminClient(apiKey, tailnet string) *tailscaleAdminClient {
 }
 
 func (c *tailscaleAdminClient) do(ctx context.Context, method, path string, body any, out any) (int, error) {
+	code, data, err := c.doRaw(ctx, method, path, body)
+	if err != nil {
+		return code, err
+	}
+	if out != nil && len(data) > 0 {
+		if err := json.Unmarshal(data, out); err != nil {
+			return code, err
+		}
+	}
+	return code, nil
+}
+
+// doRaw performs the request and returns the raw body. The policy endpoint
+// serves HuJSON (comments + trailing commas), so callers parse that themselves.
+func (c *tailscaleAdminClient) doRaw(ctx context.Context, method, path string, body any) (int, []byte, error) {
 	if c == nil || c.apiKey == "" {
-		return 0, fmt.Errorf("tailscale api key not configured")
+		return 0, nil, fmt.Errorf("tailscale api key not configured")
 	}
 	var rdr io.Reader
 	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			return 0, err
+		var raw []byte
+		var err error
+		switch b := body.(type) {
+		case []byte:
+			raw = b
+		case string:
+			raw = []byte(b)
+		default:
+			raw, err = json.Marshal(body)
+			if err != nil {
+				return 0, nil, err
+			}
 		}
 		rdr = bytes.NewReader(raw)
 	}
 	url := c.base + path
 	req, err := http.NewRequestWithContext(ctx, method, url, rdr)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
@@ -79,23 +103,102 @@ func (c *tailscaleAdminClient) do(ctx context.Context, method, path string, body
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		return resp.StatusCode, err
+		return resp.StatusCode, nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return resp.StatusCode, fmt.Errorf("tailscale api %s %s: %s: %s",
+		return resp.StatusCode, data, fmt.Errorf("tailscale api %s %s: %s: %s",
 			method, path, resp.Status, strings.TrimSpace(string(data)))
 	}
-	if out != nil && len(data) > 0 {
-		if err := json.Unmarshal(data, out); err != nil {
-			return resp.StatusCode, err
+	return resp.StatusCode, data, nil
+}
+
+// hujsonToJSON strips // and /* */ comments and trailing commas so the
+// policy file (HuJSON) can be decoded with encoding/json. Enough for
+// Tailscale ACL text; not a general HuJSON implementation.
+func hujsonToJSON(src []byte) []byte {
+	var out []byte
+	out = make([]byte, 0, len(src))
+	inStr := false
+	esc := false
+	for i := 0; i < len(src); i++ {
+		ch := src[i]
+		if inStr {
+			out = append(out, ch)
+			if esc {
+				esc = false
+				continue
+			}
+			if ch == '\\' {
+				esc = true
+				continue
+			}
+			if ch == '"' {
+				inStr = false
+			}
+			continue
 		}
+		if ch == '"' {
+			inStr = true
+			out = append(out, ch)
+			continue
+		}
+		// line comment
+		if ch == '/' && i+1 < len(src) && src[i+1] == '/' {
+			for i < len(src) && src[i] != '\n' {
+				i++
+			}
+			if i < len(src) {
+				out = append(out, '\n')
+			}
+			continue
+		}
+		// block comment
+		if ch == '/' && i+1 < len(src) && src[i+1] == '*' {
+			i += 2
+			for i+1 < len(src) && !(src[i] == '*' && src[i+1] == '/') {
+				i++
+			}
+			i++ // skip '/'
+			continue
+		}
+		// trailing comma before } or ]
+		if ch == ',' {
+			j := i + 1
+			for j < len(src) {
+				c := src[j]
+				if c == ' ' || c == '\t' || c == '\n' || c == '\r' {
+					j++
+					continue
+				}
+				// skip comments after the comma
+				if c == '/' && j+1 < len(src) && src[j+1] == '/' {
+					for j < len(src) && src[j] != '\n' {
+						j++
+					}
+					continue
+				}
+				if c == '/' && j+1 < len(src) && src[j+1] == '*' {
+					j += 2
+					for j+1 < len(src) && !(src[j] == '*' && src[j+1] == '/') {
+						j++
+					}
+					j++
+					continue
+				}
+				break
+			}
+			if j < len(src) && (src[j] == '}' || src[j] == ']') {
+				continue // drop trailing comma
+			}
+		}
+		out = append(out, ch)
 	}
-	return resp.StatusCode, nil
+	return out
 }
 
 func (c *tailscaleAdminClient) tailnetPath() string {
@@ -260,7 +363,8 @@ func (s *Server) checkImmichTailnetSteps(ctx context.Context) *ImmichTailnetLive
 		byID[live.Steps[i].ID] = &live.Steps[i]
 	}
 
-	// 1) acl_tag — tag present in policy tagOwners (check-only; fix is copyable).
+	// 1) acl_tag — tag present in policy tagOwners. Must be first: create
+	// and tag both reject undeclared tags.
 	s.tsCheckACLTag(ctx, c, byID["acl_tag"], live.HostTag)
 	// 2) create_service
 	s.tsCheckCreateService(ctx, c, byID["create_service"], live.HostTag)
@@ -304,27 +408,96 @@ func pickImmichHostDevice(devices []tailscaleDevice) string {
 	return ""
 }
 
+// loadTailscalePolicy reads the tailnet policy as a generic JSON object.
+// GET /acl returns HuJSON; we strip comments and decode with encoding/json.
+func (c *tailscaleAdminClient) loadPolicy(ctx context.Context) (map[string]any, []byte, error) {
+	path := "/tailnet/" + c.tailnetPath() + "/acl"
+	_, raw, err := c.doRaw(ctx, http.MethodGet, path, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	normalized := hujsonToJSON(raw)
+	var pol map[string]any
+	if err := json.Unmarshal(normalized, &pol); err != nil {
+		return nil, nil, fmt.Errorf("parse policy: %w", err)
+	}
+	return pol, normalized, nil
+}
+
 func (s *Server) tsCheckACLTag(ctx context.Context, c *tailscaleAdminClient, st *ImmichTailnetStepStatus, tag string) {
 	if st == nil {
 		return
 	}
-	var pol tailscalePolicy
-	path := "/tailnet/" + c.tailnetPath() + "/acl/policy"
-	_, err := c.do(ctx, http.MethodGet, path, nil, &pol)
+	pol, _, err := c.loadPolicy(ctx)
 	if err != nil {
 		st.Checked = false
+		st.Fixable = true
 		st.Detail = "could not read policy: " + err.Error()
 		return
 	}
 	st.Checked = true
-	st.Fixable = false // policy writes are operator-controlled
-	if owners, ok := pol.TagOwners[tag]; ok && len(owners) > 0 {
+	st.Fixable = true
+	owners := tagOwnersOf(pol, tag)
+	if len(owners) > 0 {
 		st.OK = true
 		st.Detail = fmt.Sprintf("%s declared in tagOwners (%s)", tag, strings.Join(owners, ", "))
 		return
 	}
 	st.OK = false
-	st.Detail = fmt.Sprintf("%s missing from tagOwners — add it in Access Controls (copyable snippet in the guide).", tag)
+	st.NeedsFix = true
+	st.Detail = fmt.Sprintf("%s missing from tagOwners — create/tag/approve all reject undeclared tags", tag)
+}
+
+func tagOwnersOf(pol map[string]any, tag string) []string {
+	raw, ok := pol["tagOwners"]
+	if !ok {
+		return nil
+	}
+	m, ok := raw.(map[string]any)
+	if !ok {
+		return nil
+	}
+	list, ok := m[tag]
+	if !ok {
+		return nil
+	}
+	var out []string
+	switch v := list.(type) {
+	case []any:
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				out = append(out, s)
+			}
+		}
+	case []string:
+		out = append(out, v...)
+	}
+	return out
+}
+
+// tsFixACLTag adds tag → [autogroup:admin] to tagOwners (preserves the rest
+// of the policy). This unblocks create_service / tag_host / approve.
+func (s *Server) tsFixACLTag(ctx context.Context, c *tailscaleAdminClient, tag string) error {
+	pol, _, err := c.loadPolicy(ctx)
+	if err != nil {
+		return err
+	}
+	if len(tagOwnersOf(pol, tag)) > 0 {
+		return nil
+	}
+	owners, _ := pol["tagOwners"].(map[string]any)
+	if owners == nil {
+		owners = map[string]any{}
+	}
+	owners[tag] = []string{"autogroup:admin"}
+	pol["tagOwners"] = owners
+	body, err := json.Marshal(pol)
+	if err != nil {
+		return err
+	}
+	path := "/tailnet/" + c.tailnetPath() + "/acl"
+	_, _, err = c.doRaw(ctx, http.MethodPost, path, body)
+	return err
 }
 
 func (s *Server) tsCheckCreateService(ctx context.Context, c *tailscaleAdminClient, st *ImmichTailnetStepStatus, tag string) {
@@ -529,8 +702,25 @@ func (s *Server) applyImmichTailnetSteps(ctx context.Context, req ImmichTailnetA
 		return res
 	}
 
-	// Order matters: create service before approve; tag before approve.
-	order := []string{"create_service", "tag_host", "approve", "connect", "acl_tag", "serve"}
+	// create/tag/approve all reject undeclared tags — ensure tagOwners first
+	// when those steps are requested, even if acl_tag was not named.
+	if want["create_service"] || want["tag_host"] || want["approve"] {
+		if st, ok := byID["acl_tag"]; ok && st.Checked && !st.OK {
+			if err := s.tsFixACLTag(ctx, c, tag); err != nil {
+				res.Details = append(res.Details, "acl_tag (prerequisite): "+err.Error())
+			} else {
+				res.Details = append(res.Details, "acl_tag (prerequisite): fixed")
+				if _, ok := want["acl_tag"]; !ok {
+					// Not an explicit request; don't count it as applied.
+					delete(want, "acl_tag")
+				}
+			}
+		}
+	}
+
+	// Order matters: declare the tag before create/tag/approve (Tailscale
+	// rejects undeclared tags on all three).
+	order := []string{"acl_tag", "create_service", "tag_host", "approve", "connect", "serve"}
 	for _, id := range order {
 		if !want[id] {
 			continue
@@ -553,6 +743,8 @@ func (s *Server) applyImmichTailnetSteps(ctx context.Context, req ImmichTailnetA
 		}
 		var err error
 		switch id {
+		case "acl_tag":
+			err = s.tsFixACLTag(ctx, c, tag)
 		case "create_service":
 			err = s.tsFixCreateService(ctx, c, tag)
 		case "tag_host":
@@ -747,7 +939,8 @@ func (s *Server) handleImmichTailnetApply(w http.ResponseWriter, r *http.Request
 	}
 	res := s.applyImmichTailnetSteps(r.Context(), req)
 	slogImmich().Info("tailscale vip apply",
-		"applied", res.Applied, "skipped", res.Skipped, "failed", res.Failed)
+		"applied", res.Applied, "skipped", res.Skipped, "failed", res.Failed,
+		"details", res.Details)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(res)
 }

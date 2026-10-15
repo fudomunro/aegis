@@ -1381,7 +1381,7 @@ offers a **Fix** action only for steps that still need work:
 
 | Step | Check | Auto-fix |
 |------|-------|----------|
-| `acl_tag` | `tagOwners` has the host tag | no (policy is operator-owned; snippet stays copyable) |
+| `acl_tag` | `tagOwners` has the host tag | yes — adds `tag → ["autogroup:admin"]` (prerequisite for the next three) |
 | `create_service` | `svc:immich` exists | yes — `PUT …/services/svc:immich` |
 | `tag_host` | selected host device carries the tag | yes — `POST /device/{id}/tags` (preserves existing tags) |
 | `serve` | host-local `tailscale serve` | no (runs on the Immich machine) |
@@ -1389,8 +1389,9 @@ offers a **Fix** action only for steps that still need work:
 | `connect` | Aegis Immich endpoint | yes — saves the VIP `…/api` endpoint |
 
 Apply is explicit (`POST /v1/admin/immich/tailnet/apply`) and re-checks first so
-already-OK steps are skipped. Aegis never mutates tailnet topology from the
-pre-request hook.
+already-OK steps are skipped. `create_service` / `tag_host` / `approve` first
+ensure the host tag is declared in `tagOwners` (Tailscale rejects undeclared
+tags). Aegis never mutates tailnet topology from the pre-request hook.
 
 Only **one** non-blocked service may claim `canonical_for: ["photos"]`. If
 Immich is the home copy, remove that key from `google-photos` (or omit it).
