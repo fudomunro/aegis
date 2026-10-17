@@ -338,6 +338,50 @@ func (c *ImmichConnector) NeutralPhoto(a immichAsset) types.Photo {
 	return p
 }
 
+// FetchPhotoBytes implements types.PhotoBytesProvider for the photo-share /
+// ownership-claim PoC (issue #20). It downloads one asset original from
+// Immich and returns the bytes for this call only — Aegis still does not
+// store photo bytes on disk or in cache.
+func (c *ImmichConnector) FetchPhotoBytes(ctx context.Context, id string) ([]byte, string, error) {
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, "", fmt.Errorf("immich asset id is required")
+	}
+	upstream := c.ImmichUpstreamBase() + "/assets/" + url.PathEscape(id) + "/original"
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, upstream, nil)
+	if err != nil {
+		return nil, "", err
+	}
+	c.ApplyImmichAuth(req, slog.Default())
+
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	// Cap at Bluesky's image embed limit plus slack so a huge original cannot
+	// exhaust memory during a share. Callers surface a clearer size error.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 8<<20))
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		return nil, "", types.ErrUnauthorized
+	}
+	if resp.StatusCode != http.StatusOK {
+		msg := strings.TrimSpace(string(data))
+		if len(msg) > 200 {
+			msg = msg[:200] + "…"
+		}
+		return nil, "", fmt.Errorf("immich asset original returned %d: %s", resp.StatusCode, msg)
+	}
+	mime := strings.TrimSpace(resp.Header.Get("Content-Type"))
+	if mime == "" || mime == "application/octet-stream" {
+		mime = ImmichMimeForType("", "")
+	}
+	return data, mime, nil
+}
+
 func ImmichMimeForType(assetType, filename string) string {
 	lower := strings.ToLower(filename)
 	switch {

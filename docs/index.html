@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ 7e04eab</title>
+<title>Aegis — Code Walkthrough @ f3dc036</title>
 <meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>7e04eab</span>
-    <span class="version-meta">feat/issue-124-tailscale-api-setup · 2026-10-14 · Merge origin/main into feat/issue-124-tailscale-api-setup · generated 2026-10-15 02:21 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>f3dc036</span>
+    <span class="version-meta">feat/issue-20-bluesky-photo-share-poc · 2026-10-17 · feat: Bluesky own posts/replies as messages; Bluesky contacts (issue #20) · generated 2026-10-17 14:28 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,9 +306,9 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">32,586</div><div class="l">source LOC (no tests)</div></div>
-    <div class="stat"><div class="v">90</div><div class="l">Go source files</div></div>
-    <div class="stat"><div class="v">11</div><div class="l">service connectors</div></div>
+    <div class="stat"><div class="v">33,995</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">93</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">12</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">10</div><div class="l">library kinds</div></div>
   </div>
 </header>
@@ -404,7 +404,7 @@
       <text x="515" y="258" fill="#8b949e" text-anchor="middle" font-size="11">connectors map[string]ServiceConnector</text>
       <text x="515" y="280" fill="#8b949e" text-anchor="middle" font-size="11">playlists, tracks, albums, artists, contacts, photos, events, messages, transactions, places</text>
       <text x="515" y="308" fill="#8b949e" text-anchor="middle" font-size="11">entity links · metrics · cache</text>
-      <text x="515" y="336" fill="#8b949e" text-anchor="middle" font-size="11">registered: spotify, youtube-music, amazon-music, google-photos, google, immich, google-calendar, google-gmail, ynab, owntracks, sample-calendar</text>
+      <text x="515" y="336" fill="#8b949e" text-anchor="middle" font-size="11">registered: spotify, youtube-music, amazon-music, google-photos, google, immich, google-calendar, google-gmail, ynab, owntracks, bluesky, sample-calendar</text>
 
       <rect x="700" y="40" width="170" height="36" rx="8" fill="#0d2818" stroke="#1DB954" stroke-width="1.5"/>
       <text x="785" y="63" fill="#1DB954" text-anchor="middle" font-weight="600">spotify</text>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ 7e04eab</h2>
+  <h2><span class="n">13</span>File map @ f3dc036</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1255,16 +1255,16 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
     </thead>
     <tbody>
       <tr><td><code>main.go</code></td><td class="mono">5</td><td>Thin entry: core.Run()</td></tr>
-      <tr><td><code>internal/core/run.go</code></td><td class="mono">729</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
+      <tr><td><code>internal/core/run.go</code></td><td class="mono">732</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
       <tr><td><code>internal/core/handler.go</code></td><td class="mono">876</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
       <tr><td><code>internal/core/config.go</code></td><td class="mono">414</td><td>Services + shared OAuth connections, matching, reload</td></tr>
-      <tr><td><code>internal/types/models.go</code></td><td class="mono">779</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
+      <tr><td><code>internal/types/models.go</code></td><td class="mono">835</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
       <tr><td><code>internal/types/merge.go</code></td><td class="mono">716</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>internal/types/kind.go</code></td><td class="mono">60</td><td>LibraryKind data (instructions, keywords, cache key)</td></tr>
       <tr><td><code>internal/types/policy.go</code></td><td class="mono">635</td><td>Access levels, Permissions map, TypePolicy (#148)</td></tr>
       <tr><td><code>internal/types/pathclass.go</code></td><td class="mono">165</td><td>Proxy path → data-type classification table</td></tr>
       <tr><td><code>internal/types/capabilities.go</code></td><td class="mono">160</td><td>ServiceCapabilities / Operation shapes + filtering</td></tr>
-      <tr><td><code>internal/types/providers.go</code></td><td class="mono">136</td><td>Provider interfaces + ErrUnauthorized + service-name helpers</td></tr>
+      <tr><td><code>internal/types/providers.go</code></td><td class="mono">182</td><td>Provider interfaces + ErrUnauthorized + service-name helpers</td></tr>
       <tr><td><code>internal/types/udt.go</code></td><td class="mono">559</td><td>User-defined type schema, neutral item, merge (#15)</td></tr>
       <tr><td><code>internal/types/optin.go</code></td><td class="mono">20</td><td>Opt-in data-type marks for UDTs / places (#15, #142)</td></tr>
       <tr><td><code>internal/core/udt.go</code></td><td class="mono">415</td><td>UDT pack loader, field map, file_json/http_json fetch (#15)</td></tr>
@@ -1276,13 +1276,15 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/immich_setup.go</code></td><td class="mono">853</td><td>Immich setup wizard API + VIP Service guide (issues #39, #121, #124)</td></tr>
       <tr><td><code>internal/core/ynab_setup.go</code></td><td class="mono">312</td><td>YNAB / Quicken admin setup (issue #141)</td></tr>
       <tr><td><code>internal/connectors/amazonmusic.go</code></td><td class="mono">556</td><td>Amazon Music connector</td></tr>
+      <tr><td><code>internal/connectors/bluesky.go</code></td><td class="mono">514</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/connectors/bluesky_library.go</code></td><td class="mono">536</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/google-calendar.go</code></td><td class="mono">735</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/google-contacts.go</code></td><td class="mono">360</td><td>Google Contacts connector (service id: google)</td></tr>
       <tr><td><code>internal/connectors/google-gmail.go</code></td><td class="mono">867</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/google-photos.go</code></td><td class="mono">522</td><td>Google Photos connector (metadata only)</td></tr>
       <tr><td><code>internal/connectors/host.go</code></td><td class="mono">51</td><td>Connector Host seam (tokens, upstream base, cache) — issue #15</td></tr>
       <tr><td><code>internal/connectors/http.go</code></td><td class="mono">41</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/connectors/immich.go</code></td><td class="mono">391</td><td>Immich local/foreign canonical photo connector</td></tr>
+      <tr><td><code>internal/connectors/immich.go</code></td><td class="mono">433</td><td>Immich local/foreign canonical photo connector</td></tr>
       <tr><td><code>internal/connectors/json.go</code></td><td class="mono">16</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/owntracks.go</code></td><td class="mono">428</td><td>Supporting code</td></tr>
       <tr><td><code>internal/connectors/proxy.go</code></td><td class="mono">120</td><td>Generic service proxy + connector delegation + cache</td></tr>
@@ -1301,7 +1303,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/canonical.go</code></td><td class="mono">316</td><td>Canonical-source stamping and write-policy notices</td></tr>
       <tr><td><code>internal/core/connections.go</code></td><td class="mono">133</td><td>Connection ↔ service surface resolution helpers</td></tr>
       <tr><td><code>internal/core/contacts.go</code></td><td class="mono">194</td><td>Contact identity + thin library handler</td></tr>
-      <tr><td><code>internal/core/copy_ledger.go</code></td><td class="mono">523</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/copy_ledger.go</code></td><td class="mono">555</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/copy_ledger_http.go</code></td><td class="mono">52</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/copy_ledger_stamp.go</code></td><td class="mono">53</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/datadir.go</code></td><td class="mono">242</td><td>Supporting code</td></tr>
@@ -1333,6 +1335,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/permissions.go</code></td><td class="mono">157</td><td>Server-side permission clamp + per-request checks</td></tr>
       <tr><td><code>internal/core/permissions_overlay.go</code></td><td class="mono">193</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/photos.go</code></td><td class="mono">176</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
+      <tr><td><code>internal/core/photos_share.go</code></td><td class="mono">180</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/places.go</code></td><td class="mono">562</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/proxy.go</code></td><td class="mono">241</td><td>Generic service proxy + connector delegation + cache</td></tr>
       <tr><td><code>internal/core/quicken.go</code></td><td class="mono">764</td><td>Supporting code</td></tr>
@@ -1366,8 +1369,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>7e04eab</code></strong>
-    (feat/issue-124-tailscale-api-setup · 2026-10-14 · Merge origin/main into feat/issue-124-tailscale-api-setup).
+    <code>f3dc036</code></strong>
+    (feat/issue-20-bluesky-photo-share-poc · 2026-10-17 · feat: Bluesky own posts/replies as messages; Bluesky contacts (issue #20)).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1398,12 +1401,12 @@ python3 docs/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>7e04eab</strong>
+  Generated for <strong>f3dc036</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 90 files · 32,586 LOC · 11 connectors · 10 library kinds
-  · 2026-10-15 02:21 UTC
+  · 93 files · 33,995 LOC · 12 connectors · 10 library kinds
+  · 2026-10-17 14:28 UTC
 </footer>
 
 </div>
