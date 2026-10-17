@@ -880,9 +880,10 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 	for _, want := range []string{
 		// Shared help above filter (not repeated per card)
 		`id="agent-data-access-help"`,
-		"Data access by accessor",
-		`id="accessor-matrix-panel"`,
-		"loadAccessorMatrix",
+		"Data access by type",
+		`id="type-policy-panel"`,
+		"typeOtherAccessorsHTML",
+		"type-access-row",
 		"Available",
 		"Editable",
 		"data-perm-key",

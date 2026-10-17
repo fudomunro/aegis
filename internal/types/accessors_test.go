@@ -21,9 +21,9 @@ func TestOverviewDataTypes_PrefersLibraryOrderThenExtras(t *testing.T) {
 func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	dataTypes := []string{"tracks", "places", "events"}
 	got := AgentOverviewLevels(TypePolicies{
-		"events":  {Default: AccessFreeBusy},
-		"places":  {Default: AccessCity},
-		"tracks":  {Default: AccessRead},
+		"events": {Default: AccessFreeBusy},
+		"places": {Default: AccessCity},
+		"tracks": {Default: AccessRead},
 	}, dataTypes)
 	if got["tracks"] != AccessRead {
 		t.Fatalf("tracks = %q, want read", got["tracks"])
@@ -35,7 +35,6 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 		t.Fatalf("events = %q, want freebusy", got["events"])
 	}
 
-	// Unset normal types fall open to default access; places stay none.
 	got = AgentOverviewLevels(TypePolicies{}, dataTypes)
 	if got["tracks"] != DefaultAccessType {
 		t.Fatalf("unset tracks = %q, want %q", got["tracks"], DefaultAccessType)
@@ -45,57 +44,129 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	}
 }
 
-func TestAppOverviewLevels_FailClosed(t *testing.T) {
+func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 	dataTypes := []string{"tracks", "places", "events"}
-	got := AppOverviewLevels(nil, dataTypes)
+	levels, explicit := AppOverviewLevels(nil, dataTypes)
 	for _, dt := range dataTypes {
-		if got[dt] != AccessNone {
-			t.Fatalf("nil scopes %s = %q, want none", dt, got[dt])
+		if levels[dt] != AccessNone {
+			t.Fatalf("nil scopes %s = %q, want none", dt, levels[dt])
+		}
+		if explicit[dt] {
+			t.Fatalf("nil scopes should not mark %s explicit", dt)
 		}
 	}
 
-	got = AppOverviewLevels(Permissions{
+	levels, explicit = AppOverviewLevels(Permissions{
 		PermissionDefaultKey: AccessNone,
 		"events":             AccessFreeBusy,
 		"places":             AccessPrecise,
 		"tracks":             AccessRead,
 	}, dataTypes)
-	if got["events"] != AccessFreeBusy {
-		t.Fatalf("events = %q, want freebusy", got["events"])
+	if levels["events"] != AccessFreeBusy {
+		t.Fatalf("events = %q, want freebusy", levels["events"])
 	}
-	if got["places"] != AccessPrecise {
-		t.Fatalf("places = %q, want precise", got["places"])
+	if levels["places"] != AccessPrecise {
+		t.Fatalf("places = %q, want precise", levels["places"])
 	}
-	if got["tracks"] != AccessRead {
-		t.Fatalf("tracks = %q, want read", got["tracks"])
+	if !explicit["events"] || !explicit["places"] || !explicit["tracks"] {
+		t.Fatalf("explicit = %v", explicit)
 	}
 
-	// default does not open opt-in places when unnamed.
-	got = AppOverviewLevels(Permissions{
+	levels, _ = AppOverviewLevels(Permissions{
 		PermissionDefaultKey: AccessRead,
 	}, dataTypes)
-	if got["tracks"] != AccessRead {
-		t.Fatalf("tracks via default = %q, want read", got["tracks"])
+	if levels["tracks"] != AccessRead {
+		t.Fatalf("tracks via default = %q, want read", levels["tracks"])
 	}
-	if got["places"] != AccessNone {
-		t.Fatalf("places via default = %q, want none", got["places"])
+	if levels["places"] != AccessNone {
+		t.Fatalf("places via default = %q, want none", levels["places"])
 	}
 }
 
-func TestAccessorSortedLevels_SkipsDefault(t *testing.T) {
-	a := Accessor{Levels: map[string]string{
-		"tracks":             AccessRead,
-		"photos":             AccessRead,
-		PermissionDefaultKey: AccessNone,
-	}}
-	got := a.SortedLevels()
-	if len(got) != 2 || got[0] != "photos" || got[1] != "tracks" {
-		t.Fatalf("sorted = %v", got)
+func TestAccessorRelevantTo(t *testing.T) {
+	agent := Accessor{
+		Kind:   AccessorAgent,
+		Levels: map[string]string{"tracks": AccessRead, "places": AccessNone},
 	}
-	if a.AccessorLevel("tracks") != AccessRead {
-		t.Fatalf("AccessorLevel(tracks) = %q", a.AccessorLevel("tracks"))
+	if !agent.RelevantTo("tracks") || !agent.RelevantTo("places") {
+		t.Fatal("agent should be relevant to every data type")
 	}
-	if a.AccessorLevel("missing") != "" {
-		t.Fatalf("missing level = %q, want empty", a.AccessorLevel("missing"))
+
+	app := Accessor{
+		Kind:     AccessorApp,
+		Levels:   map[string]string{"tracks": AccessNone, "events": AccessFreeBusy, "photos": AccessNone},
+		Explicit: map[string]bool{"tracks": true, "events": true},
+	}
+	// Explicit none is still relevant (operator named the type).
+	if !app.RelevantTo("tracks") {
+		t.Fatal("app should be relevant when type is explicit even if none")
+	}
+	if !app.RelevantTo("events") {
+		t.Fatal("app should be relevant for non-none level")
+	}
+	// Unnamed, none — not relevant.
+	if app.RelevantTo("photos") {
+		t.Fatal("app should not be relevant for unnamed none type")
+	}
+
+	sync := Accessor{
+		Kind:     AccessorSync,
+		Levels:   map[string]string{"messages": AccessRead, "tracks": AccessNone},
+		Explicit: map[string]bool{"messages": true},
+	}
+	if !sync.RelevantTo("messages") {
+		t.Fatal("sync should be relevant for its stored type")
+	}
+	if sync.RelevantTo("tracks") {
+		t.Fatal("sync should not be relevant for unrelated type")
 	}
 }
+
+func TestBuildTypeAccess_OnlyRelevantOthers(t *testing.T) {
+	dataTypes := []string{"tracks", "messages", "places"}
+	accessors := []Accessor{
+		{
+			ID:     agentAccessorForTest,
+			Kind:   AccessorAgent,
+			Label:  "LLM agents",
+			Levels: map[string]string{"tracks": AccessRead, "messages": AccessRead, "places": AccessNone},
+		},
+		{
+			ID:       "app:eco",
+			Kind:     AccessorApp,
+			Label:    "Eco",
+			Levels:   map[string]string{"tracks": AccessNone, "messages": AccessNone, "places": AccessNone},
+			Explicit: map[string]bool{"tracks": true},
+		},
+		{
+			ID:     "sync:mail",
+			Kind:   AccessorSync,
+			Label:  "Mail",
+			Levels: map[string]string{"tracks": AccessNone, "messages": AccessRead, "places": AccessNone},
+		},
+	}
+	rows := BuildTypeAccess(dataTypes, accessors)
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3", len(rows))
+	}
+	if rows[0].ID != "tracks" || rows[0].AgentLevel != AccessRead {
+		t.Fatalf("tracks row = %+v", rows[0])
+	}
+	if len(rows[0].Accessors) != 1 || rows[0].Accessors[0].ID != "app:eco" {
+		t.Fatalf("tracks accessors = %+v", rows[0].Accessors)
+	}
+	if len(rows[1].Accessors) != 1 || rows[1].Accessors[0].ID != "sync:mail" {
+		t.Fatalf("messages accessors = %+v", rows[1].Accessors)
+	}
+	if rows[1].AgentLevel != AccessRead {
+		t.Fatalf("messages agent = %q", rows[1].AgentLevel)
+	}
+	if len(rows[2].Accessors) != 0 {
+		t.Fatalf("places should have no other accessors: %+v", rows[2].Accessors)
+	}
+	if rows[2].AgentLevel != AccessNone {
+		t.Fatalf("places agent = %q", rows[2].AgentLevel)
+	}
+}
+
+const agentAccessorForTest = "agent"
