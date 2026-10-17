@@ -184,6 +184,7 @@ def extract_connectors() -> list[str]:
         "GoogleGmailServiceID": "google-gmail",
         "YNABServiceID": "ynab",
         "OwnTracksServiceID": "owntracks",
+        "BlueskyServiceID": "bluesky",
         "SampleCalendarServiceID": "sample-calendar",
     }
     for const, value in const_map.items():
