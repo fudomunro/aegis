@@ -26,18 +26,39 @@ const (
 )
 
 type blueskyFeedView struct {
-	Cursor string `json:"cursor"`
-	Feed   []struct {
-		Post blueskyPostView `json:"post"`
-	} `json:"feed"`
+	Cursor string            `json:"cursor"`
+	Feed   []blueskyFeedItem `json:"feed"`
+}
+
+// blueskyFeedItem is one author-feed row. Reason is set for reposts
+// (app.bsky.feed.defs#reasonRepost) wrapping someone else's post.
+type blueskyFeedItem struct {
+	Post            blueskyPostView `json:"post"`
+	Reason          json.RawMessage `json:"reason"`
+	ReasonIndexedAt string          `json:"reasonIndexedAt"`
 }
 
 type blueskyPostView struct {
 	URI    string `json:"uri"`
 	CID    string `json:"cid"`
+	Author struct {
+		DID    string `json:"did"`
+		Handle string `json:"handle"`
+	} `json:"author"`
 	Record struct {
+		Type      string `json:"$type"`
 		Text      string `json:"text"`
 		CreatedAt string `json:"createdAt"`
+		Reply     *struct {
+			Parent struct {
+				URI string `json:"uri"`
+				CID string `json:"cid"`
+			} `json:"parent"`
+			Root struct {
+				URI string `json:"uri"`
+				CID string `json:"cid"`
+			} `json:"root"`
+		} `json:"reply"`
 	} `json:"record"`
 	// Embed may be the raw record embed (image.ref.$link) or the hydrated
 	// view form (app.bsky.embed.images#view with thumb/fullsize CDN URLs).
@@ -130,26 +151,6 @@ func didFromBlobURLs(fullsize, thumb, postURI string) string {
 		}
 	}
 	return didFromPostURI(postURI)
-}
-
-type blueskyNotificationList struct {
-	Cursor        string                `json:"cursor"`
-	Notifications []blueskyNotification `json:"notifications"`
-}
-
-type blueskyNotification struct {
-	URI        string `json:"uri"`
-	CID        string `json:"cid"`
-	Reason     string `json:"reason"`
-	ReasonSubj string `json:"reasonSubject"`
-	IsRead     bool   `json:"isRead"`
-	IndexedAt  string `json:"indexedAt"`
-	Author     struct {
-		DID         string `json:"did"`
-		Handle      string `json:"handle"`
-		DisplayName string `json:"displayName"`
-	} `json:"author"`
-	Record json.RawMessage `json:"record"`
 }
 
 // ListUserPhotos implements types.PhotoProvider. It lists the user's own
@@ -292,10 +293,16 @@ func mimeExt(mime string) string {
 	}
 }
 
-// ListMessages implements types.MessageProvider. It maps Bluesky
-// notifications (likes, replies, mentions, follows) into neutral messages so
-// /v1/library/messages can include in-network activity.
+// blueskyOwnPostsMaxPages bounds message listing so a long history cannot
+// turn into an unbounded walk of the author feed.
+const blueskyOwnPostsMaxPages = 25
+
+// ListMessages implements types.MessageProvider. It lists only the user's
+// own Bluesky writing — original posts and replies they authored — and
+// intentionally skips reposts, likes, follows, and other non-authored
+// activity.
 func (c *BlueskyConnector) ListMessages(ctx context.Context) ([]types.Message, bool, error) {
+	logger := slog.With("service", BlueskyServiceID)
 	sess, err := c.createSession(ctx)
 	if err != nil {
 		return nil, false, err
@@ -304,121 +311,232 @@ func (c *BlueskyConnector) ListMessages(ctx context.Context) ([]types.Message, b
 	var all []types.Message
 	truncated := false
 	cursor := ""
+	for page := 0; page < blueskyOwnPostsMaxPages; page++ {
+		q := url.Values{}
+		q.Set("actor", sess.Handle)
+		q.Set("limit", strconv.Itoa(blueskyLibraryCap))
+		// Prefer posts + replies; still filter reposts client-side.
+		q.Set("filter", "posts_with_replies")
+		if cursor != "" {
+			q.Set("cursor", cursor)
+		}
+		data, err := c.authedGet(ctx, sess.AccessJwt, "/xrpc/app.bsky.feed.getAuthorFeed", q)
+		if err != nil {
+			// Partial results are better than failing the whole provider
+			// when the PDS/appview briefly 502s mid-pagination.
+			if len(all) > 0 {
+				logger.Warn("bluesky author feed page failed; keeping partial", "error", err, "count", len(all))
+				return all, true, nil
+			}
+			return nil, false, err
+		}
+		var feed blueskyFeedView
+		if err := json.Unmarshal(data, &feed); err != nil {
+			if len(all) > 0 {
+				return all, true, nil
+			}
+			return nil, false, fmt.Errorf("decode bluesky author feed: %w", err)
+		}
+		for _, item := range feed.Feed {
+			if msg, ok := c.neutralOwnPost(item, sess); ok {
+				all = append(all, msg)
+			}
+		}
+		if feed.Cursor == "" {
+			break
+		}
+		if page == blueskyOwnPostsMaxPages-1 {
+			truncated = true
+		}
+		cursor = feed.Cursor
+	}
+	logger.Debug("listed bluesky own posts/replies", "count", len(all), "truncated", truncated)
+	return all, truncated, nil
+}
+
+// neutralOwnPost maps one author-feed item to a Message only when the user
+// wrote it (original post or reply). Reposts and other people's content are
+// skipped.
+func (c *BlueskyConnector) neutralOwnPost(item blueskyFeedItem, sess blueskySession) (types.Message, bool) {
+	// reasonRepost (and similar) wraps someone else's post — not our writing.
+	if item.Reason != nil {
+		return types.Message{}, false
+	}
+	post := item.Post
+	authorHandle := post.Author.Handle
+	authorDID := post.Author.DID
+	if authorHandle != sess.Handle && authorDID != sess.DID {
+		return types.Message{}, false
+	}
+
+	recordType := post.Record.Type
+	if recordType != "" && recordType != "app.bsky.feed.post" {
+		return types.Message{}, false
+	}
+
+	text := strings.TrimSpace(post.Record.Text)
+	isReply := post.Record.Reply != nil
+	kind := "post"
+	subject := subjectFromPostText(text, "Bluesky post")
+	if isReply {
+		kind = "reply"
+		subject = subjectFromPostText(text, "Bluesky reply")
+	}
+
+	sentAt := types.NormalizePhotoTakenAt(post.Record.CreatedAt)
+	if sentAt == "" {
+		sentAt = types.NormalizePhotoTakenAt(item.ReasonIndexedAt)
+	}
+	rkey := rkeyFromATURI(post.URI)
+	web := blueskyPostURL(sess.Handle, post.URI)
+
+	self := types.NewContact(BlueskyServiceID, BlueskyServiceName, sess.DID, sess.Handle, nil, nil)
+	self.Handles = []string{sess.Handle}
+
+	src := types.MessageSource{
+		Service:     BlueskyServiceID,
+		ServiceName: BlueskyServiceName,
+		ID:          post.URI,
+		URL:         web,
+		Mailbox:     kind,
+		Canonical:   true,
+		Extra: map[string]any{
+			"rkey":     rkey,
+			"post_cid": post.CID,
+			"kind":     kind,
+			"post_uri": post.URI,
+		},
+	}
+	if isReply && post.Record.Reply != nil {
+		src.ThreadID = post.Record.Reply.Parent.URI
+		src.Extra["reply_parent_uri"] = post.Record.Reply.Parent.URI
+		src.Extra["reply_root_uri"] = post.Record.Reply.Root.URI
+	}
+
+	msg := types.Message{
+		Channel:    types.MessageChannelSocial,
+		Subject:    subject,
+		Snippet:    text,
+		Body:       text,
+		From:       &self,
+		SentAt:     sentAt,
+		ReceivedAt: sentAt,
+		// Our own writing — outbound from the library's point of view.
+		Direction: "outbound",
+		Read:      true,
+		ThreadID:  src.ThreadID,
+		EntityID:  post.URI,
+		Labels:    []string{kind, "bluesky", "authored"},
+		Sources:   []types.MessageSource{src},
+		Extra: map[string]any{
+			"kind": kind,
+		},
+	}
+	return msg, true
+}
+
+func subjectFromPostText(text, fallback string) string {
+	t := strings.TrimSpace(text)
+	if t == "" {
+		return fallback
+	}
+	// First line, capped so list views stay readable.
+	if i := strings.IndexAny(t, "\r\n"); i > 0 {
+		t = t[:i]
+	}
+	t = strings.TrimSpace(t)
+	if len(t) > 80 {
+		t = t[:77] + "…"
+	}
+	return t
+}
+
+// ListUserContacts implements types.ContactProvider. It maps the user's
+// Bluesky following list into neutral contacts (handle + display name + DID).
+func (c *BlueskyConnector) ListUserContacts(ctx context.Context) ([]types.Contact, bool, error) {
+	logger := slog.With("service", BlueskyServiceID)
+	sess, err := c.createSession(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+
+	var all []types.Contact
+	truncated := false
+	cursor := ""
 	for page := 0; page < LibraryPageCap; page++ {
 		q := url.Values{}
+		q.Set("actor", sess.Handle)
 		q.Set("limit", strconv.Itoa(blueskyLibraryCap))
 		if cursor != "" {
 			q.Set("cursor", cursor)
 		}
-		data, err := c.authedGet(ctx, sess.AccessJwt, "/xrpc/app.bsky.notification.listNotifications", q)
+		data, err := c.authedGet(ctx, sess.AccessJwt, "/xrpc/app.bsky.graph.getFollows", q)
 		if err != nil {
 			return nil, false, err
 		}
-		var list blueskyNotificationList
+		var list blueskyFollowList
 		if err := json.Unmarshal(data, &list); err != nil {
-			return nil, false, fmt.Errorf("decode bluesky notifications: %w", err)
+			return nil, false, fmt.Errorf("decode bluesky follows: %w", err)
 		}
-		for _, n := range list.Notifications {
-			all = append(all, c.neutralMessage(n, sess.Handle))
+		for _, f := range list.Follows {
+			if ct := c.neutralContact(f); ct.Name != "" || len(ct.Handles) > 0 {
+				all = append(all, ct)
+			}
 		}
 		if list.Cursor == "" {
-			return all, truncated, nil
+			break
 		}
 		if page == LibraryPageCap-1 {
 			truncated = true
 		}
 		cursor = list.Cursor
 	}
+	logger.Debug("listed bluesky contacts", "count", len(all), "truncated", truncated)
 	return all, truncated, nil
 }
 
-func (c *BlueskyConnector) neutralMessage(n blueskyNotification, selfHandle string) types.Message {
-	subject := blueskyNotificationSubject(n.Reason)
-	snippet := strings.TrimSpace(string(n.Record))
-	// Record is a generic JSON blob; pull text out for a readable snippet.
-	if strings.HasPrefix(snippet, "{") {
-		var rec struct {
-			Text string `json:"text"`
-		}
-		if err := json.Unmarshal(n.Record, &rec); err == nil && strings.TrimSpace(rec.Text) != "" {
-			snippet = strings.TrimSpace(rec.Text)
-		} else {
-			snippet = subject
-		}
-	}
-	if snippet == "" {
-		snippet = subject
-	}
-
-	fromName := n.Author.DisplayName
-	if fromName == "" {
-		fromName = n.Author.Handle
-	}
-	from := types.NewContact(BlueskyServiceID, BlueskyServiceName, n.Author.DID, fromName, nil, nil)
-	from.Handles = []string{n.Author.Handle}
-
-	sentAt := types.NormalizePhotoTakenAt(n.IndexedAt)
-	src := types.MessageSource{
-		Service:     BlueskyServiceID,
-		ServiceName: BlueskyServiceName,
-		ID:          n.URI,
-		ThreadID:    n.ReasonSubj,
-		URL:         blueskyPostURL(n.Author.Handle, n.URI),
-		Canonical:   true,
-		Extra: map[string]any{
-			"reason":         n.Reason,
-			"notification":   true,
-			"reason_subject": n.ReasonSubj,
-		},
-	}
-
-	msg := types.Message{
-		Channel:    types.MessageChannelSocial,
-		Subject:    subject,
-		Snippet:    snippet,
-		From:       &from,
-		SentAt:     sentAt,
-		ReceivedAt: sentAt,
-		Direction:  "inbound",
-		Read:       n.IsRead,
-		ThreadID:   n.ReasonSubj,
-		EntityID:   n.URI,
-		Labels:     []string{n.Reason, "bluesky"},
-		Sources:    []types.MessageSource{src},
-		Extra: map[string]any{
-			"self_handle": selfHandle,
-			"reason":      n.Reason,
-		},
-	}
-	return msg
+type blueskyFollowList struct {
+	Cursor  string           `json:"cursor"`
+	Follows []blueskyProfile `json:"follows"`
 }
 
-func blueskyNotificationSubject(reason string) string {
-	switch strings.ToLower(strings.TrimSpace(reason)) {
-	case "like":
-		return "Liked your post"
-	case "like-via-repost":
-		return "Liked your repost"
-	case "repost":
-		return "Reposted your post"
-	case "repost-via-repost":
-		return "Reposted your repost"
-	case "follow":
-		return "Started following you"
-	case "mention":
-		return "Mentioned you"
-	case "reply":
-		return "Replied to your post"
-	case "quote":
-		return "Quoted your post"
-	case "starterpack-joined":
-		return "Joined via your starter pack"
-	default:
-		if reason == "" {
-			return "Bluesky notification"
-		}
-		return "Bluesky " + reason
+type blueskyProfile struct {
+	DID         string `json:"did"`
+	Handle      string `json:"handle"`
+	DisplayName string `json:"displayName"`
+	Description string `json:"description"`
+	Avatar      string `json:"avatar"`
+}
+
+func (c *BlueskyConnector) neutralContact(f blueskyProfile) types.Contact {
+	name := strings.TrimSpace(f.DisplayName)
+	if name == "" {
+		name = strings.TrimSpace(f.Handle)
 	}
+	ct := types.NewContact(BlueskyServiceID, BlueskyServiceName, f.DID, name, nil, nil)
+	if h := strings.TrimSpace(f.Handle); h != "" {
+		ct.Handles = []string{h}
+	}
+	src := types.ContactSource{
+		Service:     BlueskyServiceID,
+		ServiceName: BlueskyServiceName,
+		ID:          f.DID,
+		Name:        name,
+		Canonical:   true,
+		Extra: map[string]any{
+			"handle":      f.Handle,
+			"did":         f.DID,
+			"profile_url": "https://bsky.app/profile/" + url.PathEscape(f.Handle),
+		},
+	}
+	if f.Avatar != "" {
+		src.Extra["avatar"] = f.Avatar
+	}
+	ct.Sources = []types.ContactSource{src}
+	if d := strings.TrimSpace(f.Description); d != "" {
+		ct.Extra = map[string]any{"description": d}
+	}
+	return ct
 }
 
 // authedGet calls a PDS xrpc endpoint with the session JWT.

@@ -1412,10 +1412,13 @@ The connector also **syncs library metadata** (bytes stay on Bluesky):
 
 - `GET /v1/library/photos` includes the user's Bluesky image posts
   (`sources[].blob_url` is the Aegis `getBlob` proxy — not a permanent CDN link).
-- `GET /v1/library/messages` includes Bluesky **notifications** (likes,
-  replies, mentions, follows) as `channel: "social"` messages.
+- `GET /v1/library/messages` includes **only the user's own posts and
+  replies** (`channel: "social"`, `direction: "outbound"`). Reposts, likes,
+  follows, and other people's content are excluded.
+- `GET /v1/library/contacts` includes the user's Bluesky **following list**
+  as contacts (handle + display name + DID).
 - Proxy reads: `GET /v1/services/bluesky/xrpc/com.atproto.sync.getBlob`,
-  `app.bsky.notification.listNotifications`, `app.bsky.feed.getAuthorFeed`.
+  `app.bsky.feed.getAuthorFeed`, `app.bsky.graph.getFollows`.
 
 #### Immich (local / foreign canonical)
 
@@ -1634,21 +1637,44 @@ Event content stays on Google Calendar.
 
 ### Messages as a data type
 
-`Message` is Aegis's neutral representation of a message — email first,
-with reserved channel values for SMS/WhatsApp when a named OAuth-capable
-connector exists. Service identity lives in `sources[]`, same as playlists,
-contacts, photos, and calendar events. **Aegis does not store mailboxes or
-message bodies as the home copy** — the authoritative content stays on a
-non-Aegis service marked `canonical` (issue #16). Library listings carry
-subject/snippet metadata; agents fetch full body through the service proxy.
+`Message` is Aegis's neutral representation of a **text communication
+between people** — either written by the user or written to the user by
+another person. Typical sources are email (Gmail), SMS/WhatsApp when a named
+connector exists, and social posts/replies the user authored or that form a
+conversation with them.
+
+**What is a message**
+
+- Person-to-person correspondence: email, chat/SMS, replies addressed to the user, and (for social) writing the user themselves posted.
+- One logical conversation may have several `sources[]` when the same item exists on more than one service.
+
+**What is not a message**
+
+- App or service **notifications** (likes, follows, shipping updates, marketing blasts, system alerts, digest mail).
+- Automated receipts and transactional mail that nobody "wrote" to the user as a person.
+
+Today some Gmail/Google Takeout mail still matches that notification shape
+(newsletters, alerts, receipts). Connectors should prefer real correspondence
+where they can tell the difference; do not add new notification-like items to
+this type. Longer term, operators should be able to reclassify notification
+items under a dedicated **Notifications** data type (not implemented yet)
+rather than growing `messages`.
+
+Service identity lives in `sources[]`, same as playlists, contacts, photos,
+and calendar events. **Aegis does not store mailboxes or message bodies as
+the home copy** — the authoritative content stays on a non-Aegis service
+marked `canonical` (issue #16). Library listings carry subject/snippet
+metadata; agents fetch full body through the service proxy.
 Initial provider: **Gmail**
-([issue #60](https://github.com/fudomunro/aegis/issues/60)).
+([issue #60](https://github.com/fudomunro/aegis/issues/60)); social posts and
+replies via **Bluesky** (`channel: "social"`, `direction: "outbound"` for
+authored items).
 
 Neutral message fields (user-facing):
 
 | Field | Description |
 |-------|-------------|
-| `channel` | `email`, `sms`, or `whatsapp` |
+| `channel` | `email`, `sms`, `whatsapp`, or `social` |
 | `subject` | Email subject or chat topic |
 | `snippet` | Short service-supplied body preview |
 | `body` | Full body when a detail proxy call includes it (usually empty in library lists) |

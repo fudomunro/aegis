@@ -122,7 +122,7 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Bluesky is referenced.
 func (c *BlueskyConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves Bluesky (sharing photos, their feed images, or notifications), you MUST use Aegis at %s instead of calling Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
+	return fmt.Sprintf(`When the user's request involves Bluesky (sharing photos, their feed images, their posts, or their contacts), you MUST use Aegis at %s instead of calling Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
 
 Share photos (proof of concept for photo ownership claims):
 1. Resolve a photo via GET %s/v1/library/photos (or ask for source_service + source_id).
@@ -131,17 +131,18 @@ Share photos (proof of concept for photo ownership claims):
 
 Library sync (metadata only; bytes stay on Bluesky):
 - GET %s/v1/library/photos — includes Bluesky image posts from the user's feed.
-- GET %s/v1/library/messages — includes Bluesky notifications (likes/replies/mentions/follows).
+- GET %s/v1/library/messages — only the user's own posts and replies (not reposts or likes/follows).
+- GET %s/v1/library/contacts — the user's Bluesky following list (handles).
 - Image bytes: use sources[].blob_url (Aegis proxy getBlob); do not scrape cdn.bsky.app directly.
 
 Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC (issue #20) — content hash + public post — not a cryptographic proof.
 
 Always include the full Aegis base URL in your requests.
-%s`, root, root, root, root, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, root, root, root, types.PhotoSourceDiscipline())
 }
 
 // HandleProxy serves read-only Bluesky xrpc paths that agents need for
-// library detail (blob download, notifications). Mutating xrpc remains
+// library detail (blob download, author feed, follows). Mutating xrpc remains
 // reserved for the orchestrated share endpoint.
 func (c *BlueskyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", BlueskyServiceID, "method", r.Method, "path", remainingPath)
@@ -150,9 +151,6 @@ func (c *BlueskyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	switch {
 	case r.Method == http.MethodGet && (path == "/xrpc/com.atproto.sync.getBlob" || strings.HasPrefix(path, "/xrpc/com.atproto.sync.getBlob")):
 		c.handleGetBlob(w, r, logger)
-		return
-	case r.Method == http.MethodGet && strings.HasPrefix(path, "/xrpc/app.bsky.notification.listNotifications"):
-		c.handleListNotificationsProxy(w, r, logger)
 		return
 	case r.Method == http.MethodGet && strings.HasPrefix(path, "/xrpc/app.bsky.feed.getAuthorFeed"):
 		c.handleAuthorFeedProxy(w, r, logger)
@@ -217,10 +215,6 @@ func (c *BlueskyConnector) handleGetBlob(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusOK)
 	io.Copy(w, resp.Body)
 	logger.Debug("served bluesky blob", "cid", cid, "did", did)
-}
-
-func (c *BlueskyConnector) handleListNotificationsProxy(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {
-	c.handleXRPCGet(w, r, "/xrpc/app.bsky.notification.listNotifications", logger)
 }
 
 func (c *BlueskyConnector) handleAuthorFeedProxy(w http.ResponseWriter, r *http.Request, logger *slog.Logger) {

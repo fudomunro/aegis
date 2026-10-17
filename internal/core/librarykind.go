@@ -251,9 +251,9 @@ var libraryKinds = []types.LibraryKind{
 		Path:            "/v1/library/messages",
 		PermType:        "messages",
 		Label:           "messages",
-		Usage:           "emails, messages, inbox, mail, or recent correspondence",
-		Summary:         "the user's mail collection from every message source in one neutral list (channel, subject, snippet, from/to/cc as Contact identities, sent_at, direction, read, entity_id, sources[]). Sources include live Gmail and the local archive (Gmail sync + Google Takeout).",
-		SyncRule:        "Gmail and Google Takeout are sources of one mail collection, synchronized on RFC Message-ID (match=message_id); otherwise same subject + from + sent_at (match=subject_from_time). Message bodies stay on the source service. SMS/WhatsApp connectors are not implemented yet.",
+		Usage:           "emails, messages, inbox, mail, or recent correspondence between people (not app notifications)",
+		Summary:         "the user's mail collection from every message source in one neutral list (channel, subject, snippet, from/to/cc as Contact identities, sent_at, direction, read, entity_id, sources[]). Sources include live Gmail and the local archive (Gmail sync + Google Takeout). Messages are person-to-person text — not app/service notifications.",
+		SyncRule:        "Gmail and Google Takeout are sources of one mail collection, synchronized on RFC Message-ID (match=message_id); otherwise same subject + from + sent_at (match=subject_from_time). Message bodies stay on the source service. Messages are person-to-person text (sent by or to the user) — app/service notifications are out of scope (future Notifications type). SMS/WhatsApp connectors are not implemented yet. Bluesky contributes the user's own posts and replies only.",
 		ExampleQuestion: "what emails have I received recently?",
 		Keywords: []string{
 			"my email", "my emails", "my mail", "my inbox",
