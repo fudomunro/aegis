@@ -85,16 +85,34 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		t.Fatalf("tracks agent = %q, want read", tracks.AgentLevel)
 	}
 	// Eco named tracks (even as none) — relevant. Mail sync is not.
-	if len(tracks.Accessors) != 1 || tracks.Accessors[0].ID != "app:eco-demo" {
-		t.Fatalf("tracks accessors = %+v", tracks.Accessors)
-	}
-	if tracks.Accessors[0].Level != types.AccessNone {
-		t.Fatalf("eco tracks = %q, want none", tracks.Accessors[0].Level)
-	}
+	// Spotify is a LikedTrackProvider, so it appears as a service peer.
+	var sawEco, sawSpotify, sawSync bool
 	for _, acc := range tracks.Accessors {
-		if acc.Kind == types.AccessorSync {
-			t.Fatalf("tracks should not list sync accessors: %+v", acc)
+		switch acc.ID {
+		case "app:eco-demo":
+			sawEco = true
+			if acc.Level != types.AccessNone {
+				t.Fatalf("eco tracks = %q, want none", acc.Level)
+			}
+		case "service:spotify":
+			sawSpotify = true
+			if acc.Kind != types.AccessorService {
+				t.Fatalf("spotify kind = %q", acc.Kind)
+			}
+		default:
+			if acc.Kind == types.AccessorSync {
+				sawSync = true
+			}
 		}
+	}
+	if !sawEco {
+		t.Fatalf("tracks accessors = %+v, want eco-demo", tracks.Accessors)
+	}
+	if !sawSpotify {
+		t.Fatalf("tracks accessors = %+v, want service:spotify", tracks.Accessors)
+	}
+	if sawSync {
+		t.Fatalf("tracks should not list sync accessors: %+v", tracks.Accessors)
 	}
 
 	events, ok := byID["events"]
@@ -215,4 +233,84 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d, want 405", w.Code)
 	}
+}
+
+func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "aegis.json")
+	if err := writeFile(cfgPath, `{"services":[
+		{"id":"spotify","name":"Spotify","action":"inject"},
+		{"id":"youtube-music","name":"YouTube Music","action":"inject"},
+		{"id":"player-only","name":"Player Only","action":"inject"}
+	]}`); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
+	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
+	// Proxy-only capability surface must not create a playlists row.
+	srv.connectors["player-only"] = stubConnector{
+		caps: types.ServiceCapabilities{DataTypes: []types.DataTypeCapability{
+			{Name: "player"},
+			{Name: "search"},
+		}},
+	}
+
+	overview := srv.permissionsOverview()
+	var playlists *types.TypeAccess
+	for i := range overview.Types {
+		if overview.Types[i].ID == "playlists" {
+			playlists = &overview.Types[i]
+			break
+		}
+	}
+	if playlists == nil {
+		t.Fatal("missing playlists row")
+	}
+
+	services := map[string]types.TypeAccessor{}
+	for _, acc := range playlists.Accessors {
+		if acc.Kind == types.AccessorService {
+			services[acc.ID] = acc
+		}
+	}
+	spotify, ok := services["service:spotify"]
+	if !ok {
+		t.Fatalf("playlists services = %+v, want spotify", playlists.Accessors)
+	}
+	if spotify.Label != "Spotify" || spotify.Level != types.AccessRead {
+		t.Fatalf("spotify = %+v", spotify)
+	}
+	yt, ok := services["service:youtube-music"]
+	if !ok {
+		t.Fatalf("playlists services = %+v, want youtube-music", playlists.Accessors)
+	}
+	if yt.Label != "YouTube Music" {
+		t.Fatalf("youtube = %+v", yt)
+	}
+	if _, ok := services["service:player-only"]; ok {
+		t.Fatal("player-only must not appear under playlists")
+	}
+
+	// Player-only stays off every library type row.
+	for _, row := range overview.Types {
+		for _, acc := range row.Accessors {
+			if acc.ID == "service:player-only" {
+				t.Fatalf("player-only under %s: %+v", row.ID, acc)
+			}
+		}
+	}
+}
+
+type stubConnector struct {
+	caps types.ServiceCapabilities
+}
+
+func (s stubConnector) Capabilities() types.ServiceCapabilities { return s.caps }
+func (s stubConnector) SystemInstructions(string) string        { return "" }
+func (s stubConnector) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }

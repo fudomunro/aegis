@@ -321,6 +321,7 @@ appear as additional accessor rows.
 | `agent` | type-owned policy (`type_policies` / `permissions.json` `types`) | editable — admin “Data type policies” / `PUT /v1/admin/type-policies` |
 | `app` | app `scopes` on the third-party record (fail closed) | read-only (edit via `PATCH /v1/admin/apps/{id}`); shown when the type is named or the level is not `none` |
 | `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for types the pipeline stores |
+| `service` | configured connector that syncs that library type (e.g. Spotify, YouTube Music under `playlists`) | read-only for now |
 
 Primary (aegis.json `type_policies` or permissions.json `types`, or admin “Data type policies”):
 

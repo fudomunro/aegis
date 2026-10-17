@@ -3,6 +3,7 @@ package core
 import (
 	"net/http"
 	"sort"
+	"strings"
 
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -143,6 +144,43 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		})
 	}
 
+	// Services Aegis syncs this data with (issue #160). Read-only rows so
+	// operators can see Spotify / YouTube Music under playlists, etc.
+	// Capability and provider interfaces decide relevance per type.
+	for _, svc := range s.config.ServiceSnapshots() {
+		if svc.Action == "block" {
+			continue
+		}
+		conn, ok := s.connectors[svc.ID]
+		if !ok || conn == nil {
+			continue
+		}
+		provided := serviceProvidedTypes(conn)
+		if len(provided) == 0 {
+			continue
+		}
+		levels := make(map[string]string, len(provided))
+		explicit := make(map[string]bool, len(provided))
+		for _, dt := range provided {
+			levels[dt] = types.AccessRead
+			explicit[dt] = true
+		}
+		name := svc.Name
+		if name == "" {
+			name = svc.ID
+		}
+		accessors = append(accessors, types.Accessor{
+			ID:     "service:" + svc.ID,
+			Kind:   types.AccessorService,
+			Label:  name,
+			Detail: "Service Aegis syncs with for this data type (read-only here).",
+			Levels: levels,
+			Explicit: explicit,
+			// Service permission maps are edited on the service card.
+			Editable: false,
+		})
+	}
+
 	// Fill non-agent missing levels with none so BuildTypeAccess can read
 	// a concrete level; relevance still uses Explicit / non-none checks.
 	for i := range accessors {
@@ -163,6 +201,73 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		DataTypes: dataTypes,
 		Types:     types.BuildTypeAccess(dataTypes, accessors),
 	}
+}
+
+// serviceProvidedTypes lists library/permission keys a connector actually
+// syncs (issue #160): unified-library provider interfaces first. Capability
+// names are ignored except for those same library kinds, so proxy-only
+// surfaces (player, search) do not invent service rows under a type.
+func serviceProvidedTypes(conn any) []string {
+	// Library kinds Aegis merges across services (permission keys).
+	libraryTypes := map[string]bool{
+		"playlists": true, "tracks": true, "albums": true, "artists": true,
+		"contacts": true, "photos": true, "events": true, "messages": true,
+		"transactions": true, "places": true,
+	}
+	seen := map[string]bool{}
+	var out []string
+	add := func(name string) {
+		name = strings.TrimSpace(name)
+		if name == "" || name == types.PermissionDefaultKey || seen[name] {
+			return
+		}
+		seen[name] = true
+		out = append(out, name)
+	}
+
+	if _, ok := conn.(types.PlaylistProvider); ok {
+		add("playlists")
+	}
+	if _, ok := conn.(types.LikedTrackProvider); ok {
+		add("tracks")
+	}
+	if _, ok := conn.(types.AlbumProvider); ok {
+		add("albums")
+	}
+	if _, ok := conn.(types.ArtistProvider); ok {
+		add("artists")
+	}
+	if _, ok := conn.(types.ContactProvider); ok {
+		add("contacts")
+	}
+	if _, ok := conn.(types.PhotoProvider); ok {
+		add("photos")
+	}
+	if _, ok := conn.(types.CalendarEventProvider); ok {
+		add("events")
+	}
+	if _, ok := conn.(types.MessageProvider); ok {
+		add("messages")
+	}
+	if _, ok := conn.(types.TransactionProvider); ok {
+		add("transactions")
+	}
+	if _, ok := conn.(types.PlaceVisitProvider); ok {
+		add("places")
+	}
+
+	// Advertised capability names, limited to library kinds (issue #160).
+	type named interface{ Capabilities() types.ServiceCapabilities }
+	if c, ok := conn.(named); ok {
+		for _, dt := range c.Capabilities().DataTypes {
+			if libraryTypes[dt.Name] {
+				add(dt.Name)
+			}
+		}
+	}
+
+	sort.Strings(out)
+	return out
 }
 
 // HandleAdminPermissionsOverview returns the type-centric permissions
