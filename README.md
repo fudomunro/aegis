@@ -2261,7 +2261,7 @@ aegis/
   web/ → internal/core/web/  Admin SPA + brand assets (//go:embed)
   SECURITY.md                Tailnet auth model, ACLs, operational guidance
   aegis.example.json         Example configuration
-  docs/index.html            Code walkthrough (regenerated artifact)
+  experiments/index.html     Code walkthrough (experimental; regenerate via experiments/generate_walkthrough.py)
   docs/adding-data-types.md  Guide: defining a new library data type (issue #92)
 ```
 
