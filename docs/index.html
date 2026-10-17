@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ f3dc036</title>
+<title>Aegis — Code Walkthrough @ 2b83aa7</title>
 <meta name="generator" content="docs/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>f3dc036</span>
-    <span class="version-meta">feat/issue-20-bluesky-photo-share-poc · 2026-10-17 · feat: Bluesky own posts/replies as messages; Bluesky contacts (issue #20) · generated 2026-10-17 14:28 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>2b83aa7</span>
+    <span class="version-meta">feat/permissions-accessors · 2026-10-17 · feat: list sync services as read-only type accessors (#160) · generated 2026-10-17 16:36 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,8 +306,8 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">33,995</div><div class="l">source LOC (no tests)</div></div>
-    <div class="stat"><div class="v">93</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">34,535</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">95</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">12</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">10</div><div class="l">library kinds</div></div>
   </div>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ f3dc036</h2>
+  <h2><span class="n">13</span>File map @ 2b83aa7</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1255,7 +1255,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
     </thead>
     <tbody>
       <tr><td><code>main.go</code></td><td class="mono">5</td><td>Thin entry: core.Run()</td></tr>
-      <tr><td><code>internal/core/run.go</code></td><td class="mono">732</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
+      <tr><td><code>internal/core/run.go</code></td><td class="mono">734</td><td>Flags, env, Server wiring, connector registration, HTTP routes</td></tr>
       <tr><td><code>internal/core/handler.go</code></td><td class="mono">876</td><td>Server, AuthMiddleware, ServiceConnector, pre-request hook</td></tr>
       <tr><td><code>internal/core/config.go</code></td><td class="mono">414</td><td>Services + shared OAuth connections, matching, reload</td></tr>
       <tr><td><code>internal/types/models.go</code></td><td class="mono">835</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
@@ -1334,6 +1334,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/oauth.go</code></td><td class="mono">276</td><td>Login, callback, code exchange, token refresh, revoke</td></tr>
       <tr><td><code>internal/core/permissions.go</code></td><td class="mono">157</td><td>Server-side permission clamp + per-request checks</td></tr>
       <tr><td><code>internal/core/permissions_overlay.go</code></td><td class="mono">193</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/permissions_overview.go</code></td><td class="mono">269</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/photos.go</code></td><td class="mono">176</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
       <tr><td><code>internal/core/photos_share.go</code></td><td class="mono">180</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/places.go</code></td><td class="mono">562</td><td>Supporting code</td></tr>
@@ -1345,6 +1346,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/timeline.go</code></td><td class="mono">693</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/tokens.go</code></td><td class="mono">518</td><td>AES-256-GCM token store (PBKDF2), keyed by connection ID</td></tr>
       <tr><td><code>internal/core/transactions.go</code></td><td class="mono">666</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/types/accessors.go</code></td><td class="mono">269</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/builders.go</code></td><td class="mono">249</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/contact_builders.go</code></td><td class="mono">160</td><td>Supporting code</td></tr>
     </tbody>
@@ -1369,8 +1371,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>f3dc036</code></strong>
-    (feat/issue-20-bluesky-photo-share-poc · 2026-10-17 · feat: Bluesky own posts/replies as messages; Bluesky contacts (issue #20)).
+    <code>2b83aa7</code></strong>
+    (feat/permissions-accessors · 2026-10-17 · feat: list sync services as read-only type accessors (#160)).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1401,12 +1403,12 @@ python3 docs/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>f3dc036</strong>
+  Generated for <strong>2b83aa7</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 93 files · 33,995 LOC · 12 connectors · 10 library kinds
-  · 2026-10-17 14:28 UTC
+  · 95 files · 34,535 LOC · 12 connectors · 10 library kinds
+  · 2026-10-17 16:36 UTC
 </footer>
 
 </div>
