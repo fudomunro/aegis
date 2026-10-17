@@ -348,6 +348,7 @@ func Run() {
 	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, quickenStore)
 	// Location history (issue #142): OwnTracks live + local Google Timeline import.
 	srv.connectors[connectors.OwnTracksServiceID] = connectors.NewOwnTracksConnector(srv)
+	srv.connectors[connectors.BlueskyServiceID] = connectors.NewBlueskyConnector(srv)
 	srv.connectors[timelineServiceID] = NewTimelineConnector(timelineStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
@@ -383,6 +384,8 @@ func Run() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
 	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
+	// Photo share / ownership-claim PoC (issue #20).
+	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
 	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(withBodyLimit(maxMailBodyBytes, srv.handleMailRoutes)))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))

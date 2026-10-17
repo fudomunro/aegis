@@ -69,6 +69,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/artists` — unified followed/top artists across all connected services
 - `GET /v1/library/contacts` — unified contacts across all contact-capable services
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
+- `POST /v1/library/photos/share` — publish one photo to Bluesky and return a PoC ownership claim (sha256 + public post; issue #20)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service)
@@ -1355,7 +1356,69 @@ until the user has picked once). Metadata only — Aegis still never downloads
 or stores image bytes; `blob_url` values expire in about an hour.
 
 Ownership / provenance proofs for photos are intentionally deferred:
-[issue #20](https://github.com/fudomunro/aegis/issues/20).
+[issue #20](https://github.com/fudomunro/aegis/issues/20). A **Bluesky share
+PoC** is available so a published photo carries a lightweight claim (content
+hash + public post locator) — see [Photo share to Bluesky](#photo-share-to-bluesky-issue-20-poc).
+
+#### Photo share to Bluesky (issue #20 PoC)
+
+```
+POST /v1/library/photos/share
+Authorization: Bearer <api-key>
+Content-Type: application/json
+
+{
+  "source_service": "immich",
+  "source_id": "asset-uuid",
+  "caption": "optional post text",
+  "alt": "optional image alt text"
+}
+```
+
+Aegis fetches the original bytes from the canonical photo source **for this
+request only** (nothing is cached or stored), hashes them, uploads the image
+to Bluesky, and creates an `app.bsky.feed.post` with an images embed. Response:
+
+```json
+{
+  "target_service": "bluesky",
+  "source_service": "immich",
+  "source_id": "asset-uuid",
+  "post_uri": "at://did:plc:…/app.bsky.feed.post/…",
+  "post_url": "https://bsky.app/profile/you.bsky.social/post/…",
+  "claim": {
+    "type": "sha256+public-post",
+    "sha256": "…",
+    "mime_type": "image/jpeg",
+    "byte_size": 123456,
+    "target_service": "bluesky",
+    "post_uri": "at://…",
+    "note": "PoC ownership claim for issue #20 …"
+  }
+}
+```
+
+The share is also recorded in the copy ledger (`provenance: "share"`), so
+`GET /v1/library/copies` and `sources[].copy` can surface the breadcrumb.
+
+**Limits (PoC):** Bluesky image embeds cap at 1 MB. The claim is a content
+hash plus a public post locator — not a cryptographic proof (no signature or
+trusted timestamp). Auth is a Bluesky **app password** + handle in service
+headers (`X-Bluesky-Handle`, `X-Bluesky-App-Password`); Aegis owns the
+credential and exchanges it for a session. Permissions: source needs
+`photos` read, target needs `photos` write.
+
+The connector also **syncs library metadata** (bytes stay on Bluesky):
+
+- `GET /v1/library/photos` includes the user's Bluesky image posts
+  (`sources[].blob_url` is the Aegis `getBlob` proxy — not a permanent CDN link).
+- `GET /v1/library/messages` includes **only the user's own posts and
+  replies** (`channel: "social"`, `direction: "outbound"`). Reposts, likes,
+  follows, and other people's content are excluded.
+- `GET /v1/library/contacts` includes the user's Bluesky **following list**
+  as contacts (handle + display name + DID).
+- Proxy reads: `GET /v1/services/bluesky/xrpc/com.atproto.sync.getBlob`,
+  `app.bsky.feed.getAuthorFeed`, `app.bsky.graph.getFollows`.
 
 #### Immich (local / foreign canonical)
 
@@ -1574,21 +1637,44 @@ Event content stays on Google Calendar.
 
 ### Messages as a data type
 
-`Message` is Aegis's neutral representation of a message — email first,
-with reserved channel values for SMS/WhatsApp when a named OAuth-capable
-connector exists. Service identity lives in `sources[]`, same as playlists,
-contacts, photos, and calendar events. **Aegis does not store mailboxes or
-message bodies as the home copy** — the authoritative content stays on a
-non-Aegis service marked `canonical` (issue #16). Library listings carry
-subject/snippet metadata; agents fetch full body through the service proxy.
+`Message` is Aegis's neutral representation of a **text communication
+between people** — either written by the user or written to the user by
+another person. Typical sources are email (Gmail), SMS/WhatsApp when a named
+connector exists, and social posts/replies the user authored or that form a
+conversation with them.
+
+**What is a message**
+
+- Person-to-person correspondence: email, chat/SMS, replies addressed to the user, and (for social) writing the user themselves posted.
+- One logical conversation may have several `sources[]` when the same item exists on more than one service.
+
+**What is not a message**
+
+- App or service **notifications** (likes, follows, shipping updates, marketing blasts, system alerts, digest mail).
+- Automated receipts and transactional mail that nobody "wrote" to the user as a person.
+
+Today some Gmail/Google Takeout mail still matches that notification shape
+(newsletters, alerts, receipts). Connectors should prefer real correspondence
+where they can tell the difference; do not add new notification-like items to
+this type. Longer term, operators should be able to reclassify notification
+items under a dedicated **Notifications** data type (not implemented yet)
+rather than growing `messages`.
+
+Service identity lives in `sources[]`, same as playlists, contacts, photos,
+and calendar events. **Aegis does not store mailboxes or message bodies as
+the home copy** — the authoritative content stays on a non-Aegis service
+marked `canonical` (issue #16). Library listings carry subject/snippet
+metadata; agents fetch full body through the service proxy.
 Initial provider: **Gmail**
-([issue #60](https://github.com/fudomunro/aegis/issues/60)).
+([issue #60](https://github.com/fudomunro/aegis/issues/60)); social posts and
+replies via **Bluesky** (`channel: "social"`, `direction: "outbound"` for
+authored items).
 
 Neutral message fields (user-facing):
 
 | Field | Description |
 |-------|-------------|
-| `channel` | `email`, `sms`, or `whatsapp` |
+| `channel` | `email`, `sms`, `whatsapp`, or `social` |
 | `subject` | Email subject or chat topic |
 | `snippet` | Short service-supplied body preview |
 | `body` | Full body when a detail proxy call includes it (usually empty in library lists) |

@@ -271,6 +271,52 @@ type PhotoList struct {
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
+// PhotoShareClaim is the PoC ownership/provenance claim produced when a
+// photo is published to a share target (issue #20). It is intentionally
+// lightweight: a content hash of the shared bytes plus a public post
+// locator. It is not a cryptographic proof and does not yet carry a
+// signature or trusted timestamp.
+// https://github.com/fudomunro/aegis/issues/20
+type PhotoShareClaim struct {
+	// Type names the claim scheme. PoC value: "sha256+public-post".
+	Type string `json:"type"`
+	// SHA256 is the lowercase hex digest of the shared image bytes.
+	SHA256 string `json:"sha256"`
+	// MimeType of the shared bytes.
+	MimeType string `json:"mime_type,omitempty"`
+	// ByteSize of the shared payload.
+	ByteSize int `json:"byte_size"`
+	// SourceService / SourceID identify the Aegis photo being claimed.
+	SourceService string `json:"source_service,omitempty"`
+	SourceID      string `json:"source_id,omitempty"`
+	// TargetService is where the photo was published (e.g. "bluesky").
+	TargetService string `json:"target_service"`
+	// PostURI / PostURL locate the public share.
+	PostURI string `json:"post_uri,omitempty"`
+	PostURL string `json:"post_url,omitempty"`
+	// SharedAt is the publish timestamp in RFC3339.
+	SharedAt string `json:"shared_at,omitempty"`
+	// Note explains the PoC limits for agents and humans.
+	Note string `json:"note,omitempty"`
+}
+
+// PhotoShareResponse is the agent-facing result of POST /v1/library/photos/share.
+type PhotoShareResponse struct {
+	// TargetService is the share destination connector ID.
+	TargetService string `json:"target_service"`
+	// SourceService / SourceID echo the shared photo identity.
+	SourceService string `json:"source_service"`
+	SourceID      string `json:"source_id"`
+	// PostURI / PostURL / PostID locate the published share.
+	PostURI string `json:"post_uri,omitempty"`
+	PostURL string `json:"post_url,omitempty"`
+	PostID  string `json:"post_id,omitempty"`
+	// DryRun is true when the share was planned but not published.
+	DryRun bool `json:"dry_run,omitempty"`
+	// Claim is the ownership/provenance PoC (issue #20). Nil on dry-run.
+	Claim *PhotoShareClaim `json:"claim,omitempty"`
+}
+
 // CalendarEvent is a user-facing calendar entry (meeting, appointment,
 // all-day block). Service identity lives in Sources. Aegis does not own
 // calendar content — the authoritative copy stays on a non-Aegis service
@@ -382,22 +428,34 @@ type FreeBusyList struct {
 
 // MessageChannel values for the neutral message type. Email is the first
 // named-service path (Gmail); SMS/WhatsApp remain reserved for connectors
-// that can authenticate a real user history (issue #60).
+// that can authenticate a real user history (issue #60). Social covers
+// person-to-person writing on social networks (the user's own posts/replies
+// and replies addressed to them) — not app or service notifications.
 const (
 	MessageChannelEmail    = "email"
 	MessageChannelSMS      = "sms"
 	MessageChannelWhatsApp = "whatsapp"
+	MessageChannelSocial   = "social"
 )
 
-// Message is a user-facing message (email, and later SMS/WhatsApp when a
-// named connector exists). Service identity lives in Sources. Aegis does
-// not store message bodies as the home copy — the authoritative content stays
-// on a non-Aegis service marked Canonical (issue #16). Library listings
-// carry subject/snippet metadata; full body is only included when an agent
-// fetches detail through the service proxy.
+// Message is a user-facing message: a text communication between people,
+// either written by the user or written to the user by another person.
+// Typical sources are email (Gmail), SMS/WhatsApp (when connected), and
+// social posts/replies the user authored or received as conversation.
+//
+// Messages are not app or service notifications (likes, shipping updates,
+// marketing blasts, system alerts). Those are out of scope for this type;
+// when a Notifications data type lands, operators can reclassify
+// notification-shaped mail/social activity there instead.
+//
+// Service identity lives in Sources. Aegis does not store message bodies as
+// the home copy — the authoritative content stays on a non-Aegis service
+// marked Canonical (issue #16). Library listings carry subject/snippet
+// metadata; full body is only included when an agent fetches detail through
+// the service proxy.
 // https://github.com/fudomunro/aegis/issues/60
 type Message struct {
-	// Channel is the transport: "email", "sms", or "whatsapp".
+	// Channel is the transport: "email", "sms", "whatsapp", or "social".
 	Channel string `json:"channel,omitempty"`
 	// Subject is the email subject or chat topic, when present.
 	Subject string `json:"subject,omitempty"`

@@ -36,6 +36,9 @@ const (
 	CopyProvenanceTakeout  = "takeout"
 	CopyProvenanceUser     = "user"
 	CopyProvenanceObserved = "observed"
+	// CopyProvenanceShare marks a copy created by an explicit share/publish
+	// (photo ownership-claim PoC, issue #20).
+	CopyProvenanceShare = "share"
 
 	// Copy status values. "unknown" is the default until a check runs.
 	CopyStatusUnknown = "unknown"
@@ -503,6 +506,36 @@ func mirrorEntityKey(kind, sourceService, sourceID string) string {
 		return "liked:" + sourceService
 	}
 	return kind + ":" + sourceService + ":" + sourceID
+}
+
+// recordPhotoShareCopy persists a successful photo share as a durable copy
+// (issue #20 PoC). The row is the provenance breadcrumb: content hash plus
+// the public post locator. Errors are logged by the caller and never fail
+// the share — the post already exists upstream.
+func (s *Server) recordPhotoShareCopy(sourceService, sourceID, targetService, postID, postURI, postURL, sha256, note string) {
+	if s == nil || s.copies == nil {
+		return
+	}
+	entity := "photos:" + strings.TrimSpace(sourceService) + ":" + strings.TrimSpace(sourceID)
+	_, err := s.copies.Upsert(CopyRecord{
+		Kind:          "photos",
+		EntityKey:     entity,
+		SourceService: sourceService,
+		SourceID:      sourceID,
+		Service:       targetService,
+		ExternalID:    postID,
+		Role:          CopyRoleMirror,
+		SyncMode:      copySyncModeForKind("photos"),
+		Provenance:    CopyProvenanceShare,
+		Status:        CopyStatusInSync,
+		Note:          note,
+		Version: CopyVersion{
+			ExternalID:  postURI,
+			ContentHash: sha256,
+			Name:        postURL,
+		},
+	})
+	_ = err // fail-open: ledger is best-effort
 }
 
 // recordTakeoutSnapshot stores/refreshes the optimistic snapshot row for a
