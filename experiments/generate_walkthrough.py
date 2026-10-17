@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""Regenerate docs/index.html from walkthrough.template.html + live tree facts.
+"""Regenerate experiments/index.html from walkthrough.template.html + live tree facts.
 
-Usage (from repo root or docs/):
-    python3 docs/generate_walkthrough.py          # rewrite docs/index.html
-    python3 docs/generate_walkthrough.py --check  # exit 1 if stale (CI)
+Usage (from repo root or experiments/):
+    python3 experiments/generate_walkthrough.py          # rewrite experiments/index.html
+    python3 experiments/generate_walkthrough.py --check  # optional local staleness check
+
+The walkthrough lives under experiments/ so the CI docs-freshness job does not
+treat it as a gated product doc (issue #160 follow-up).
 """
 
 from __future__ import annotations
@@ -16,7 +19,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
-DOCS = REPO / "docs"
+DOCS = REPO / "experiments"
 TEMPLATE = DOCS / "walkthrough.template.html"
 OUTPUT = DOCS / "index.html"
 
@@ -336,7 +339,7 @@ def is_ancestor_or_equal(stamp: str, head: str) -> bool:
 
 
 def check() -> int:
-    """Fail when docs/index.html does not match the current tree / HEAD history."""
+    """Fail when experiments/index.html does not match the current tree / HEAD history."""
     if not OUTPUT.exists():
         print(f"missing {OUTPUT.relative_to(REPO)}; run generate first", file=sys.stderr)
         return 1
@@ -350,8 +353,8 @@ def check() -> int:
     actual = OUTPUT.read_text(encoding="utf-8")
     if normalize_for_compare(expected) != normalize_for_compare(actual):
         print(
-            "docs/index.html is stale relative to the current tree.\n"
-            "Run: python3 docs/generate_walkthrough.py",
+            "experiments/index.html is stale relative to the current tree.\n"
+            "Run: python3 experiments/generate_walkthrough.py",
             file=sys.stderr,
         )
         return 1
@@ -360,21 +363,21 @@ def check() -> int:
     head = run_git("rev-parse", "HEAD")
     head_short = run_git("rev-parse", "--short", "HEAD")
     if stamp == head_short or stamp == head:
-        print(f"docs/index.html is current (stamped {stamp})")
+        print(f"experiments/index.html is current (stamped {stamp})")
         return 0
     if is_ancestor_or_equal(stamp, "HEAD"):
         # Merge commits move HEAD without changing tree facts; the stamp may
         # name a parent that still describes this exact source tree.
         print(
-            f"docs/index.html tree facts match HEAD; "
+            f"experiments/index.html tree facts match HEAD; "
             f"stamped {stamp} is an ancestor of {head_short}"
         )
         return 0
 
     print(
-        f"docs/index.html is stamped {stamp!r}, which is not HEAD ({head_short}) "
+        f"experiments/index.html is stamped {stamp!r}, which is not HEAD ({head_short}) "
         f"or an ancestor of HEAD.\n"
-        "Run: python3 docs/generate_walkthrough.py",
+        "Run: python3 experiments/generate_walkthrough.py",
         file=sys.stderr,
     )
     return 1
@@ -385,7 +388,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="verify docs/index.html is current; do not write",
+        help="verify experiments/index.html is current; do not write",
     )
     args = parser.parse_args(argv)
 
