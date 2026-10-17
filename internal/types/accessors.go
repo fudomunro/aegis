@@ -17,6 +17,10 @@ const (
 	// AccessorSync is an Aegis-internal sync pipeline that copies or
 	// archives data (mail archive, copy ledger, timeline import, …).
 	AccessorSync AccessorKind = "sync"
+	// AccessorService is a configured connector service Aegis syncs with
+	// for a data type (e.g. Spotify / YouTube Music under playlists).
+	// Read-only in the permissions editor for now (issue #160).
+	AccessorService AccessorKind = "service"
 	// AccessorUser is reserved for multi-user principals (issue #149).
 	AccessorUser AccessorKind = "user"
 )
@@ -87,7 +91,12 @@ func (a Accessor) RelevantTo(dataType string) bool {
 			return true
 		}
 		return a.AccessorLevel(dataType) != "" && a.AccessorLevel(dataType) != AccessNone
-	case AccessorSync:
+	case AccessorSync, AccessorService:
+		// Sync pipelines and service peers only appear for types they
+		// actually touch (issue #160).
+		if a.Explicit[dataType] {
+			return true
+		}
 		level := a.AccessorLevel(dataType)
 		return level != "" && level != AccessNone
 	default:
@@ -155,8 +164,21 @@ func BuildTypeAccess(dataTypes []string, accessors []Accessor) []TypeAccess {
 			})
 		}
 		sort.SliceStable(row.Accessors, func(i, j int) bool {
-			if row.Accessors[i].Kind != row.Accessors[j].Kind {
-				return row.Accessors[i].Kind < row.Accessors[j].Kind
+			// Apps and sync first, then service peers, then anything else.
+			rank := func(k AccessorKind) int {
+				switch k {
+				case AccessorApp:
+					return 0
+				case AccessorSync:
+					return 1
+				case AccessorService:
+					return 2
+				default:
+					return 3
+				}
+			}
+			if rank(row.Accessors[i].Kind) != rank(row.Accessors[j].Kind) {
+				return rank(row.Accessors[i].Kind) < rank(row.Accessors[j].Kind)
 			}
 			return row.Accessors[i].Label < row.Accessors[j].Label
 		})

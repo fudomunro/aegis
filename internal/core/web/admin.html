@@ -327,6 +327,7 @@
   .accessor-kind.agent { background: rgba(88,166,255,0.15); color: var(--accent); }
   .accessor-kind.app { background: rgba(210,153,34,0.15); color: var(--orange); }
   .accessor-kind.sync { background: rgba(63,185,80,0.15); color: var(--green); }
+  .accessor-kind.service { background: rgba(163,113,247,0.15); color: #a371f7; }
   .accessor-kind.user { background: rgba(88,166,255,0.15); color: var(--accent); }
   .accessor-name { font-weight: 600; color: var(--text); }
   .accessor-level {
@@ -2212,7 +2213,7 @@ job.read</pre>
   }
 
   function accessorKindBadge(kind) {
-    const label = { agent: "Agent", app: "App", sync: "Sync", user: "User" }[kind] || kind;
+    const label = { agent: "Agent", app: "App", sync: "Sync", service: "Service", user: "User" }[kind] || kind;
     return '<span class="accessor-kind ' + escapeHtml(kind) + '">' + escapeHtml(label) + "</span>";
   }
 
