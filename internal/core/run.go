@@ -478,6 +478,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminMailImport)(w, r)
 	case strings.HasPrefix(path, "library/"):
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
+	case path == "permissions":
+		s.AuthMiddleware(s.HandleAdminPermissionsOverview)(w, r)
 	case path == "type-policies":
 		s.AuthMiddleware(s.HandleAdminTypePolicies)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):

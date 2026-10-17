@@ -96,6 +96,8 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`"Reconnect"`,
 		// Shared instructions above filter; form stays on each card
 		`id="agent-data-access-help"`,
+		`id="accessor-matrix-panel"`,
+		"loadAccessorMatrix",
 		"Changes save immediately",
 		"never add capabilities",
 		"renderPermEditor(svc)",
