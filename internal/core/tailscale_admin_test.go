@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // mockTailscaleAdmin is a tiny fake of api.tailscale.com/api/v2 for Immich
@@ -138,9 +139,22 @@ func tailscaleTestServer(t *testing.T, mock *mockTailscaleAdmin) (*Server, *Conf
 	prevBase := tailscaleAdminAPIBase
 	ts := httptest.NewServer(mock.handler())
 	tailscaleAdminAPIBase = ts.URL + "/api/v2"
+	// Offline Immich /server/ping so setup probes never dial a real VIP.
+	immichTS := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.Contains(r.URL.Path, "ping") {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"pong":true,"immich":true}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	prevHTTP := aegisHTTPClient
+	aegisHTTPClient = &http.Client{Timeout: 2 * time.Second}
 	t.Cleanup(func() {
 		tailscaleAdminAPIBase = prevBase
+		aegisHTTPClient = prevHTTP
 		ts.Close()
+		immichTS.Close()
 	})
 
 	dir := t.TempDir()
@@ -155,7 +169,13 @@ func tailscaleTestServer(t *testing.T, mock *mockTailscaleAdmin) (*Server, *Conf
 	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json")); err != nil {
 		t.Fatal(err)
 	}
-	srv := testServerWithBase(cfg, "https://aegis.heron-census.ts.net")
+	if err := cfg.SetServiceConnection("immich", serviceConnectionEntry{
+		Endpoint: immichTS.URL,
+		Headers:  map[string]string{"X-API-Key": "test"},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.ts.net")
 	return srv, cfg
 }
 

@@ -23,9 +23,11 @@ func TestBlueskyListUserPhotos(t *testing.T) {
 				"feed": []any{
 					// Raw record embed with image.ref.$link.
 					map[string]any{"post": map[string]any{
-						"uri": "at://did:plc:alice/app.bsky.feed.post/img1",
-						"cid": "bafy-post",
+						"uri":    "at://did:plc:alice/app.bsky.feed.post/img1",
+						"cid":    "bafy-post",
+						"author": map[string]any{"did": "did:plc:alice", "handle": "alice.bsky.social"},
 						"record": map[string]any{
+							"$type":     "app.bsky.feed.post",
 							"text":      "beach day",
 							"createdAt": "2024-07-04T18:30:00.000Z",
 						},
@@ -53,9 +55,11 @@ func TestBlueskyListUserPhotos(t *testing.T) {
 					}},
 					// Hydrated view embed (CDN URLs carry the blob CID).
 					map[string]any{"post": map[string]any{
-						"uri": "at://did:plc:alice/app.bsky.feed.post/img3",
-						"cid": "bafy-post3",
+						"uri":    "at://did:plc:alice/app.bsky.feed.post/img3",
+						"cid":    "bafy-post3",
+						"author": map[string]any{"did": "did:plc:alice", "handle": "alice.bsky.social"},
 						"record": map[string]any{
+							"$type":     "app.bsky.feed.post",
 							"text":      "view form",
 							"createdAt": "2024-07-05T10:00:00.000Z",
 						},
@@ -77,7 +81,8 @@ func TestBlueskyListUserPhotos(t *testing.T) {
 					// Text-only post must be skipped.
 					map[string]any{"post": map[string]any{
 						"uri":    "at://did:plc:alice/app.bsky.feed.post/text1",
-						"record": map[string]any{"text": "hello", "createdAt": "2024-01-01T00:00:00Z"},
+						"author": map[string]any{"did": "did:plc:alice", "handle": "alice.bsky.social"},
+						"record": map[string]any{"$type": "app.bsky.feed.post", "text": "hello", "createdAt": "2024-01-01T00:00:00Z"},
 					}},
 				},
 			})
@@ -132,36 +137,57 @@ func TestBlueskyListUserPhotos(t *testing.T) {
 	}
 }
 
-func TestBlueskyListMessages(t *testing.T) {
+func TestBlueskyListMessages_OnlyOwnPostsAndReplies(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.URL.Path == "/xrpc/com.atproto.server.createSession":
 			json.NewEncoder(w).Encode(map[string]any{
 				"accessJwt": "jwt", "did": "did:plc:alice", "handle": "alice.bsky.social",
 			})
-		case r.URL.Path == "/xrpc/app.bsky.notification.listNotifications":
+		case r.URL.Path == "/xrpc/app.bsky.feed.getAuthorFeed":
 			json.NewEncoder(w).Encode(map[string]any{
-				"notifications": []any{
-					map[string]any{
-						"uri":       "at://did:plc:bob/app.bsky.feed.like/1",
-						"reason":    "like",
-						"isRead":    false,
-						"indexedAt": "2024-08-01T12:00:00.000Z",
-						"author": map[string]any{
-							"did": "did:plc:bob", "handle": "bob.bsky.social", "displayName": "Bob",
+				"feed": []any{
+					// Own original post.
+					map[string]any{"post": map[string]any{
+						"uri":    "at://did:plc:alice/app.bsky.feed.post/p1",
+						"cid":    "bafy-p1",
+						"author": map[string]any{"did": "did:plc:alice", "handle": "alice.bsky.social"},
+						"record": map[string]any{
+							"$type":     "app.bsky.feed.post",
+							"text":      "hello world\nsecond line",
+							"createdAt": "2024-08-01T12:00:00.000Z",
 						},
-						"record": map[string]any{"$type": "app.bsky.feed.like"},
-					},
-					map[string]any{
-						"uri":       "at://did:plc:carol/app.bsky.feed.post/reply1",
-						"reason":    "reply",
-						"isRead":    true,
-						"indexedAt": "2024-08-02T12:00:00.000Z",
-						"author": map[string]any{
-							"did": "did:plc:carol", "handle": "carol.bsky.social",
+					}},
+					// Own reply.
+					map[string]any{"post": map[string]any{
+						"uri":    "at://did:plc:alice/app.bsky.feed.post/p2",
+						"cid":    "bafy-p2",
+						"author": map[string]any{"did": "did:plc:alice", "handle": "alice.bsky.social"},
+						"record": map[string]any{
+							"$type":     "app.bsky.feed.post",
+							"text":      "nice point",
+							"createdAt": "2024-08-02T12:00:00.000Z",
+							"reply": map[string]any{
+								"parent": map[string]any{"uri": "at://did:plc:bob/app.bsky.feed.post/x", "cid": "bafy-x"},
+								"root":   map[string]any{"uri": "at://did:plc:bob/app.bsky.feed.post/x", "cid": "bafy-x"},
+							},
 						},
-						"record": map[string]any{"text": "nice shot!"},
+					}},
+					// Repost of someone else — must be skipped (reasonRepost).
+					map[string]any{
+						"reason": map[string]any{"$type": "app.bsky.feed.defs#reasonRepost"},
+						"post": map[string]any{
+							"uri":    "at://did:plc:bob/app.bsky.feed.post/other",
+							"author": map[string]any{"did": "did:plc:bob", "handle": "bob.bsky.social"},
+							"record": map[string]any{"$type": "app.bsky.feed.post", "text": "other voice"},
+						},
 					},
+					// Someone else's post without reason — must be skipped.
+					map[string]any{"post": map[string]any{
+						"uri":    "at://did:plc:carol/app.bsky.feed.post/c1",
+						"author": map[string]any{"did": "did:plc:carol", "handle": "carol.bsky.social"},
+						"record": map[string]any{"$type": "app.bsky.feed.post", "text": "not mine"},
+					}},
 				},
 			})
 		default:
@@ -175,26 +201,91 @@ func TestBlueskyListMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
 	}
-	if truncated || len(msgs) != 2 {
-		t.Fatalf("msgs = %d truncated=%v", len(msgs), truncated)
+	if truncated {
+		t.Fatal("unexpected truncation")
 	}
-	if msgs[0].Channel != types.MessageChannelSocial {
-		t.Fatalf("channel = %q", msgs[0].Channel)
+	if len(msgs) != 2 {
+		t.Fatalf("msgs = %d: %+v", len(msgs), msgs)
 	}
-	if msgs[0].Subject != "Liked your post" {
+	if msgs[0].Channel != types.MessageChannelSocial || msgs[0].Direction != "outbound" {
+		t.Fatalf("msg0 = %+v", msgs[0])
+	}
+	if msgs[0].Subject != "hello world" {
 		t.Fatalf("subject = %q", msgs[0].Subject)
 	}
-	if msgs[0].From == nil || msgs[0].From.Handles[0] != "bob.bsky.social" {
-		t.Fatalf("from = %+v", msgs[0].From)
+	if msgs[0].Body != "hello world\nsecond line" {
+		t.Fatalf("body = %q", msgs[0].Body)
 	}
-	if msgs[0].Read {
-		t.Fatal("like should be unread")
+	if !containsLabel(msgs[0].Labels, "post") || containsLabel(msgs[0].Labels, "reply") {
+		t.Fatalf("labels = %v", msgs[0].Labels)
 	}
-	if msgs[1].Subject != "Replied to your post" || msgs[1].Snippet != "nice shot!" {
+	if msgs[1].Subject != "nice point" || !containsLabel(msgs[1].Labels, "reply") {
 		t.Fatalf("reply = %+v", msgs[1])
 	}
-	if !msgs[1].Read {
-		t.Fatal("reply should be read")
+	if msgs[1].ThreadID != "at://did:plc:bob/app.bsky.feed.post/x" {
+		t.Fatalf("thread = %q", msgs[1].ThreadID)
+	}
+	for _, m := range msgs {
+		if m.From == nil || m.From.Handles[0] != "alice.bsky.social" {
+			t.Fatalf("from = %+v", m.From)
+		}
+	}
+}
+
+func containsLabel(labels []string, want string) bool {
+	for _, l := range labels {
+		if l == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestBlueskyListUserContacts(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/xrpc/com.atproto.server.createSession":
+			json.NewEncoder(w).Encode(map[string]any{
+				"accessJwt": "jwt", "did": "did:plc:alice", "handle": "alice.bsky.social",
+			})
+		case r.URL.Path == "/xrpc/app.bsky.graph.getFollows":
+			json.NewEncoder(w).Encode(map[string]any{
+				"follows": []any{
+					map[string]any{
+						"did": "did:plc:bob", "handle": "bob.bsky.social", "displayName": "Bob",
+						"description": "writes code",
+					},
+					map[string]any{
+						"did": "did:plc:carol", "handle": "carol.bsky.social",
+					},
+				},
+			})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer ts.Close()
+
+	conn := NewBlueskyConnector(newBlueskyHost(t, ts.URL))
+	contacts, truncated, err := conn.ListUserContacts(context.Background())
+	if err != nil {
+		t.Fatalf("ListUserContacts: %v", err)
+	}
+	if truncated || len(contacts) != 2 {
+		t.Fatalf("contacts = %d truncated=%v", len(contacts), truncated)
+	}
+	if contacts[0].Name != "Bob" || contacts[0].Handles[0] != "bob.bsky.social" {
+		t.Fatalf("bob = %+v", contacts[0])
+	}
+	if contacts[0].Sources[0].Service != BlueskyServiceID || contacts[0].Sources[0].ID != "did:plc:bob" {
+		t.Fatalf("bob source = %+v", contacts[0].Sources[0])
+	}
+	if contacts[0].Extra["description"] != "writes code" {
+		t.Fatalf("bob extra = %+v", contacts[0].Extra)
+	}
+	// Display name falls back to handle.
+	if contacts[1].Name != "carol.bsky.social" {
+		t.Fatalf("carol = %+v", contacts[1])
 	}
 }
 
@@ -238,17 +329,15 @@ func TestBlueskyHandleProxy_GetBlob(t *testing.T) {
 	}
 }
 
-func TestBlueskyNeutralMessage_Subjects(t *testing.T) {
-	if got := blueskyNotificationSubject("follow"); got != "Started following you" {
-		t.Fatalf("follow = %q", got)
+func TestSubjectFromPostText(t *testing.T) {
+	if got := subjectFromPostText("  hello world\nmore", "fb"); got != "hello world" {
+		t.Fatalf("got %q", got)
 	}
-	if got := blueskyNotificationSubject("mention"); got != "Mentioned you" {
-		t.Fatalf("mention = %q", got)
+	if got := subjectFromPostText("", "fb"); got != "fb" {
+		t.Fatalf("empty got %q", got)
 	}
-	if got := blueskyNotificationSubject("weird"); got != "Bluesky weird" {
-		t.Fatalf("weird = %q", got)
-	}
-	if got := blueskyNotificationSubject(""); got != "Bluesky notification" {
-		t.Fatalf("empty = %q", got)
+	long := strings.Repeat("x", 100)
+	if got := subjectFromPostText(long, "fb"); len(got) != 80 {
+		t.Fatalf("len = %d", len(got))
 	}
 }

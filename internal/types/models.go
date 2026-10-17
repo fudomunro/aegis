@@ -429,7 +429,8 @@ type FreeBusyList struct {
 // MessageChannel values for the neutral message type. Email is the first
 // named-service path (Gmail); SMS/WhatsApp remain reserved for connectors
 // that can authenticate a real user history (issue #60). Social covers
-// in-network activity (Bluesky notifications/replies) delivered as messages.
+// person-to-person writing on social networks (the user's own posts/replies
+// and replies addressed to them) — not app or service notifications.
 const (
 	MessageChannelEmail    = "email"
 	MessageChannelSMS      = "sms"
@@ -437,15 +438,24 @@ const (
 	MessageChannelSocial   = "social"
 )
 
-// Message is a user-facing message (email, and later SMS/WhatsApp when a
-// named connector exists). Service identity lives in Sources. Aegis does
-// not store message bodies as the home copy — the authoritative content stays
-// on a non-Aegis service marked Canonical (issue #16). Library listings
-// carry subject/snippet metadata; full body is only included when an agent
-// fetches detail through the service proxy.
+// Message is a user-facing message: a text communication between people,
+// either written by the user or written to the user by another person.
+// Typical sources are email (Gmail), SMS/WhatsApp (when connected), and
+// social posts/replies the user authored or received as conversation.
+//
+// Messages are not app or service notifications (likes, shipping updates,
+// marketing blasts, system alerts). Those are out of scope for this type;
+// when a Notifications data type lands, operators can reclassify
+// notification-shaped mail/social activity there instead.
+//
+// Service identity lives in Sources. Aegis does not store message bodies as
+// the home copy — the authoritative content stays on a non-Aegis service
+// marked Canonical (issue #16). Library listings carry subject/snippet
+// metadata; full body is only included when an agent fetches detail through
+// the service proxy.
 // https://github.com/fudomunro/aegis/issues/60
 type Message struct {
-	// Channel is the transport: "email", "sms", or "whatsapp".
+	// Channel is the transport: "email", "sms", "whatsapp", or "social".
 	Channel string `json:"channel,omitempty"`
 	// Subject is the email subject or chat topic, when present.
 	Subject string `json:"subject,omitempty"`
