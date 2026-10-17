@@ -33,6 +33,8 @@ func Run() {
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
 	timelinePath := flag.String("timeline-store", "", "path to local Google Timeline import store (default: <data-dir>/timeline.db; empty disables)")
 	importTimeline := flag.String("import-timeline", "", "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit (issue #142)")
+	signalPath := flag.String("signal-store", "", "path to local Signal import store (default: <data-dir>/signal.db; empty disables)")
+	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit (issue #168)")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
@@ -63,6 +65,8 @@ func Run() {
 		QuickenSet:     setFlags["quicken-store"],
 		Timeline:       *timelinePath,
 		TimelineSet:    setFlags["timeline-store"],
+		Signal:         *signalPath,
+		SignalSet:      setFlags["signal-store"],
 		AuditLog:       *auditLogPath,
 		AuditLogSet:    setFlags["audit-log"],
 		LogFile:        *logFile,
@@ -102,6 +106,7 @@ func Run() {
 		"mail_archive", paths.MailArchive,
 		"quicken_store", paths.Quicken,
 		"timeline_store", paths.Timeline,
+		"signal_store", paths.Signal,
 		"audit_log", paths.AuditLog,
 		"log_file", paths.LogFile,
 	)
@@ -122,6 +127,10 @@ func Run() {
 	}
 	if strings.TrimSpace(*importTimeline) != "" {
 		code := runImportTimelineCLI(paths.Timeline, *importTimeline)
+		os.Exit(code)
+	}
+	if strings.TrimSpace(*importSignal) != "" {
+		code := runImportSignalCLI(paths.Signal, *importSignal)
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*tokenNewPass) != "" {
@@ -273,6 +282,29 @@ func Run() {
 		slog.Info("timeline store disabled")
 	}
 
+	signalStore, err := OpenSignalStore(paths.Signal)
+	if err != nil {
+		slog.Error("failed to open signal store", "path", paths.Signal, "error", err)
+		os.Exit(1)
+	}
+	if signalStore != nil {
+		defer signalStore.Close()
+		slog.Info("signal store ready", "path", signalStore.Path())
+		// File-based import source. Contacts + messages from a local export.
+		cfg.EnsureService(Service{
+			ID:          signalServiceID,
+			Name:        signalServiceName,
+			Action:      "inject",
+			Description: "Locally imported Signal contacts and messages (Advanced → Signal import).",
+			Permissions: types.Permissions{
+				"contacts": types.AccessRead,
+				"messages": types.AccessRead,
+			},
+		})
+	} else {
+		slog.Info("signal store disabled")
+	}
+
 	auditLog, err := OpenAuditLog(paths.AuditLog, *auditRetentionDays)
 	if err != nil {
 		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
@@ -306,6 +338,7 @@ func Run() {
 		mail:          mailArchive,
 		quicken:       quickenStore,
 		timeline:      timelineStore,
+		signal:        signalStore,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
 		audit:         auditLog,
 		prom:          NewPromMetrics(),
@@ -350,6 +383,8 @@ func Run() {
 	srv.connectors[connectors.OwnTracksServiceID] = connectors.NewOwnTracksConnector(srv)
 	srv.connectors[connectors.BlueskyServiceID] = connectors.NewBlueskyConnector(srv)
 	srv.connectors[timelineServiceID] = NewTimelineConnector(timelineStore)
+	// Signal contacts + messages (issue #168): local file-based import only.
+	srv.connectors[signalServiceID] = NewSignalConnector(signalStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
@@ -494,6 +529,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminQuicken)(w, r)
 	case path == "timeline" || strings.HasPrefix(path, "timeline/"):
 		s.AuthMiddleware(s.HandleAdminTimeline)(w, r)
+	case path == "signal" || strings.HasPrefix(path, "signal/"):
+		s.AuthMiddleware(s.HandleAdminSignal)(w, r)
 	case path == "udt" || strings.HasPrefix(path, "udt/"):
 		s.AuthMiddleware(s.HandleAdminUDT)(w, r)
 	default:
@@ -682,6 +719,47 @@ func runImportTimelineCLI(storePath, importPath string) int {
 		"done", res.Done,
 	)
 	if res.Errors > 0 && res.Stored == 0 {
+		return 1
+	}
+	return 0
+}
+
+// runImportSignalCLI imports a Signal export file or directory into the local
+// store, then exits (issue #168).
+func runImportSignalCLI(storePath, importPath string) int {
+	storePath = strings.TrimSpace(storePath)
+	if storePath == "" {
+		slog.Error("signal store path is required for -import-signal")
+		return 1
+	}
+	store, err := OpenSignalStore(storePath)
+	if err != nil {
+		slog.Error("failed to open signal store", "path", storePath, "error", err)
+		return 1
+	}
+	if store == nil {
+		slog.Error("signal store disabled — set -signal-store")
+		return 1
+	}
+	defer store.Close()
+	res, err := ImportSignalPath(store, importPath)
+	if err != nil {
+		slog.Error("signal import failed", "path", importPath, "error", err)
+		return 1
+	}
+	slog.Info("signal import finished",
+		"path", importPath,
+		"format", res.Format,
+		"contacts_scanned", res.ContactsScanned,
+		"contacts_stored", res.ContactsStored,
+		"contacts_skipped", res.ContactsSkipped,
+		"messages_scanned", res.MessagesScanned,
+		"messages_stored", res.MessagesStored,
+		"messages_skipped", res.MessagesSkipped,
+		"errors", res.Errors,
+		"done", res.Done,
+	)
+	if res.Errors > 0 && res.ContactsStored == 0 && res.MessagesStored == 0 {
 		return 1
 	}
 	return 0

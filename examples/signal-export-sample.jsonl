@@ -1,0 +1,6 @@
+{"type":"contact","id":"alice","name":"Alice Nguyen","phones":["+15551234567"]}
+{"type":"contact","id":"bob","name":"Bob Okonkwo","phones":["+15550002222"]}
+{"type":"message","id":"m1","body":"Are we still on for Thursday?","sent_at":"2024-03-07T15:04:05Z","direction":"inbound","thread_id":"alice","from":{"name":"Alice Nguyen","phones":["+15551234567"]},"to":[{"name":"Me"}],"read":true}
+{"type":"message","id":"m2","body":"Yes — 7pm at the usual place.","sent_at":"2024-03-07T15:06:12Z","direction":"outbound","from_me":true,"thread_id":"alice","to":[{"name":"Alice Nguyen","phones":["+15551234567"]}],"read":true}
+{"type":"message","id":"m3","body":"Sounds good. See you then.","sent_at":"2024-03-07T15:07:40Z","direction":"inbound","thread_id":"alice","from":{"name":"Alice Nguyen","phones":["+15551234567"]},"read":true}
+{"type":"message","id":"m4","body":"Can you send the address?","sent_at":"2024-03-08T09:12:00Z","direction":"inbound","thread_id":"bob","from":{"name":"Bob Okonkwo","phones":["+15550002222"]},"read":true}
