@@ -640,6 +640,7 @@
         <a href="#section-mail-archive">Mail archive</a>
         <a href="#section-takeout">Google Takeout</a>
         <a href="#section-quicken">Quicken import</a>
+        <a href="#section-signal">Signal import</a>
         <a href="#section-user-types">User-defined types</a>
         <a href="#section-copies">Copy ledger</a>
         <a href="#section-cache">Cache</a>
@@ -778,6 +779,27 @@
       </div>
       <div id="quicken-result" class="meta"></div>
       <div id="quicken-hints" class="meta" style="margin-top:0.35rem"></div>
+
+      <h2 class="section-heading" id="section-signal">Signal import (read-only)</h2>
+      <div class="help-box">
+        <h3>Signal contacts and chats</h3>
+        <p>Signal has no public message API. Export on your device, decrypt if needed, then import the result here so agents can answer questions about Signal conversations. Text metadata only — attachments and media are never stored. Re-import skips rows already present.</p>
+        <p><strong>How to produce an export</strong></p>
+        <ul>
+          <li><strong>Android:</strong> Signal → Settings → Chats → Chat backups → Create backup (remember the passphrase). Decrypt with <code>signalbackup-tools</code> to a plaintext <code>database.sqlite</code>, then import that file.</li>
+          <li><strong>Desktop:</strong> copy the Signal data directory’s <code>sql/db.sqlite</code> after decrypting it, or use a community exporter that writes JSONL.</li>
+          <li><strong>JSONL:</strong> one JSON object per line with <code>"type":"contact"</code> or <code>"type":"message"</code> (also accepts a <code>{"contacts":[],"messages":[]}</code> bundle).</li>
+        </ul>
+      </div>
+      <div class="toolbar">
+        <div class="grow">
+          <input type="text" id="signal-path" placeholder="/path/to/signal-export (JSONL/JSON or plaintext .db)" aria-label="Signal export path" style="width:100%">
+        </div>
+        <button class="btn btn-primary" id="signal-import" type="button">Import</button>
+        <button class="btn" id="signal-refresh" type="button">Refresh</button>
+      </div>
+      <div id="signal-result" class="meta"></div>
+      <div id="signal-hints" class="meta" style="margin-top:0.35rem"></div>
 
       <h2 class="section-heading" id="section-user-types">User-defined types (local files)</h2>
       <div class="help-box">
@@ -4070,6 +4092,59 @@ function selectTab(name, opts) {
   $("quicken-refresh").addEventListener("click", () => loadQuickenStatus());
   loadYNABStatus();
   loadQuickenStatus();
+
+  // --- Signal import (issue #168) ---
+  async function loadSignalStatus() {
+    const result = $("signal-result");
+    const hints = $("signal-hints");
+    if (!result) return;
+    try {
+      const st = await api("/v1/admin/signal/status");
+      result.innerHTML = st.enabled
+        ? '<div class="meta">Store: <code>' + escapeHtml(st.path || "") + "</code> · " +
+          (st.contacts || 0) + " contact(s) · " + (st.messages || 0) + " message(s)</div>"
+        : '<div class="error-box">Signal store disabled — restart with <code>-signal-store</code>.</div>';
+      if (hints) hints.innerHTML = (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load Signal status") + "</div>";
+    }
+  }
+
+  async function runSignalImport() {
+    const path = ($("signal-path").value || "").trim();
+    if (!path) {
+      $("signal-result").innerHTML = '<div class="error-box">Enter a Signal export file or directory first.</div>';
+      return;
+    }
+    const btn = $("signal-import");
+    if (btn) btn.disabled = true;
+    $("signal-result").textContent = "Importing…";
+    try {
+      const res = await api("/v1/admin/signal/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path }),
+      });
+      const r = (res && res.result) || {};
+      $("signal-result").innerHTML =
+        '<div class="meta">Import finished: contacts stored ' + (r.contacts_stored || 0) +
+        " / skipped " + (r.contacts_skipped || 0) +
+        " · messages stored " + (r.messages_stored || 0) +
+        " / skipped " + (r.messages_skipped || 0) +
+        " · errors " + (r.errors || 0) + "</div>";
+      await loadSignalStatus();
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      else $("signal-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "import failed") + "</div>";
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  $("signal-import").addEventListener("click", () => runSignalImport());
+  $("signal-refresh").addEventListener("click", () => loadSignalStatus());
+  loadSignalStatus();
 
   // --- User-defined type local files (issue #15) ---
   let udtBrowseTarget = null; // {kindId, sourceId} or {kindId, extraId}

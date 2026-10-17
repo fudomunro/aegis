@@ -21,6 +21,7 @@ const (
 	defaultMailArchiveName = "mail-archive.db"
 	defaultQuickenName     = "quicken.db"
 	defaultTimelineName    = "timeline.db"
+	defaultSignalName      = "signal.db"
 	defaultAuditLogName    = "audit_log.db"
 	defaultLogFileName     = "aegis.log"
 	dataDirLogsSubdir      = "logs"
@@ -51,6 +52,9 @@ type DataPaths struct {
 	// Timeline is the SQLite Google Timeline import store path (issue #142).
 	// Empty disables the local Timeline source.
 	Timeline string
+	// Signal is the SQLite Signal import store path (issue #168).
+	// Empty disables the local Signal source.
+	Signal string
 	// AuditLog is the SQLite access-audit path (issue #105). Empty disables it.
 	AuditLog string
 	// LogFile is the optional process log path. Empty logs to stderr only.
@@ -77,6 +81,8 @@ type StatePathOverrides struct {
 	QuickenSet     bool
 	Timeline       string
 	TimelineSet    bool
+	Signal         string
+	SignalSet      bool
 	AuditLog       string
 	AuditLogSet    bool
 	LogFile        string
@@ -204,6 +210,15 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.Timeline = ""
 	default:
 		paths.Timeline = expandUserPath(ov.Timeline)
+	}
+	// Signal import store: omitted → default under data dir; explicitly empty → disabled.
+	switch {
+	case !ov.SignalSet:
+		paths.Signal = filepath.Join(dir, defaultSignalName)
+	case strings.TrimSpace(ov.Signal) == "":
+		paths.Signal = ""
+	default:
+		paths.Signal = expandUserPath(ov.Signal)
 	}
 	// Audit log: omitted → default under data dir; explicitly empty → disabled.
 	switch {
