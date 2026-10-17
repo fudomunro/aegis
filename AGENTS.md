@@ -82,7 +82,7 @@ Agent → Aegis proxy / library / admin → provider APIs
 | Connectors | `spotify.go`, `youtube.go`, `amazonmusic.go`, `google-*.go`, `immich.go` | Register in `main.go` `srv.connectors` |
 | Location history (places) | `places.go`, `timeline.go`, `owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
-| Docs walkthrough | `docs/index.html` | Regenerated artifact; stamp with current commit |
+| Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
 
 ### Extension points agents must use
 
@@ -167,7 +167,7 @@ Observed pattern across sessions (and the reason this file exists):
    canonical/mirror semantics must stay accurate when behavior changes.
 7. **User prefers Go** for this service (aligns with Tailscale stack). Do not
    introduce another runtime for Aegis itself.
-8. **`learn.md` still applies to docs/index.html:** walkthrough page should
+8. **`learn.md` still applies to `experiments/index.html`:** walkthrough page should
    mark the **current code version** (commit) when regenerated.
 
 ## Commands
