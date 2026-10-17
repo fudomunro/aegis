@@ -309,17 +309,18 @@ restrict what the type policy allows.
 
 **Accessors (issue #160).** Data is not only reached by agents. Aegis also
 runs sync pipelines (mail archive, copy ledger, timeline/quicken import) and
-third-party apps hold scoped tokens. The admin **Accessors** matrix and
-`GET /v1/admin/permissions` show, for every accessor class, what each is
-*allowed* to access. The map on Home answers the other half of confidence:
+third-party apps hold scoped tokens. The permissions editor is **type-centric**:
+each data type shows the agent level (editable) plus only the other accessors
+that apply to that type (read-only). `GET /v1/admin/permissions` returns that
+same model. The map on Home answers the other half of confidence:
 what each has *actually* accessed. Multi-user principals (issue #149) will
 appear as additional accessor rows.
 
-| Accessor kind | Where levels come from | Editable |
-|---------------|------------------------|----------|
-| `agent` | type-owned policy (`type_policies` / `permissions.json` `types`) | admin “Data type policies” / `PUT /v1/admin/type-policies` |
-| `app` | app `scopes` on the third-party record (fail closed) | `PATCH /v1/admin/apps/{id}` |
-| `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | no — informational |
+| Accessor kind | Where levels come from | In the type editor |
+|---------------|------------------------|--------------------|
+| `agent` | type-owned policy (`type_policies` / `permissions.json` `types`) | editable — admin “Data type policies” / `PUT /v1/admin/type-policies` |
+| `app` | app `scopes` on the third-party record (fail closed) | read-only (edit via `PATCH /v1/admin/apps/{id}`); shown when the type is named or the level is not `none` |
+| `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for types the pipeline stores |
 
 Primary (aegis.json `type_policies` or permissions.json `types`, or admin “Data type policies”):
 
@@ -2072,7 +2073,7 @@ POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSO
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Home access)
-GET /v1/admin/permissions    — holistic accessor × data-type matrix (issue #160; agents, apps, sync)
+GET /v1/admin/permissions    — type-centric permissions editor model (issue #160): agent level + relevant apps/sync per data type
 GET /v1/admin/type-policies  — type-owned agent policy map (primary, issue #148)
 PUT /v1/admin/type-policies  — replace type policies {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
 GET /v1/admin/services/{id}/permissions  — service override map + effective_permissions + available/writable types
@@ -2126,10 +2127,11 @@ hook health, unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
-On the **Services** tab, shared **Data access by accessor** instructions and
-the **Accessors** matrix (issue #160) sit above the filter — one row per
-accessor (LLM agents, third-party apps, sync pipelines) showing what each is
-allowed to use. Agent form controls (Available / Off always; **Editable** only
+On the **Services** tab, shared **Data access by type** instructions sit above
+the filter. The type-policy editor lists each data type with its **agent**
+level (editable) and any other accessors that apply to that type (third-party
+apps, sync pipelines) as read-only chips — only when relevant to the type
+(issue #160). Agent form controls (Available / Off always; **Editable** only
 when agents can truly
 change that data through Aegis — not mirror backups or picker sessions).
 Each service card keeps its own live permissions form under the title; every

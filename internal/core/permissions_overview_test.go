@@ -11,7 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-func TestPermissionsOverview_AgentsAppsAndSync(t *testing.T) {
+func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
 	if err := writeFile(cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`); err != nil {
@@ -37,6 +37,8 @@ func TestPermissionsOverview_AgentsAppsAndSync(t *testing.T) {
 		Name: "Event Coordinator",
 		Scopes: types.Permissions{
 			"events": types.AccessFreeBusy,
+			// Explicit none still counts as relevant for the editor.
+			"tracks": types.AccessNone,
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -44,7 +46,7 @@ func TestPermissionsOverview_AgentsAppsAndSync(t *testing.T) {
 	if _, _, err := apps.Create(AppCreateRequest{
 		ID:     "disabled-app",
 		Name:   "Disabled App",
-		Scopes: types.Permissions{"tracks": types.AccessRead},
+		Scopes: types.Permissions{"photos": types.AccessRead},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -66,76 +68,90 @@ func TestPermissionsOverview_AgentsAppsAndSync(t *testing.T) {
 	srv.copies = copies
 
 	overview := srv.permissionsOverview()
-
-	if len(overview.DataTypes) == 0 {
-		t.Fatal("expected data types")
-	}
-	found := map[string]types.Accessor{}
-	for _, a := range overview.Accessors {
-		found[a.ID] = a
+	if len(overview.DataTypes) == 0 || len(overview.Types) == 0 {
+		t.Fatalf("overview = %+v", overview)
 	}
 
-	agent, ok := found[agentAccessorID]
+	byID := map[string]types.TypeAccess{}
+	for _, row := range overview.Types {
+		byID[row.ID] = row
+	}
+
+	tracks, ok := byID["tracks"]
 	if !ok {
-		t.Fatalf("missing agent accessor: %+v", found)
+		t.Fatalf("missing tracks row: %+v", overview.Types)
 	}
-	if agent.Kind != types.AccessorAgent || !agent.Editable {
-		t.Fatalf("agent = %+v", agent)
+	if tracks.AgentLevel != types.AccessRead {
+		t.Fatalf("tracks agent = %q, want read", tracks.AgentLevel)
 	}
-	if agent.Levels["tracks"] != types.AccessRead {
-		t.Fatalf("agent tracks = %q, want read", agent.Levels["tracks"])
+	// Eco named tracks (even as none) — relevant. Mail sync is not.
+	if len(tracks.Accessors) != 1 || tracks.Accessors[0].ID != "app:eco-demo" {
+		t.Fatalf("tracks accessors = %+v", tracks.Accessors)
 	}
-	if agent.Levels["events"] != types.AccessFreeBusy {
-		t.Fatalf("agent events = %q, want freebusy", agent.Levels["events"])
+	if tracks.Accessors[0].Level != types.AccessNone {
+		t.Fatalf("eco tracks = %q, want none", tracks.Accessors[0].Level)
 	}
-	if agent.Levels["places"] != types.AccessCity {
-		t.Fatalf("agent places = %q, want city", agent.Levels["places"])
+	for _, acc := range tracks.Accessors {
+		if acc.Kind == types.AccessorSync {
+			t.Fatalf("tracks should not list sync accessors: %+v", acc)
+		}
 	}
 
-	app, ok := found["app:eco-demo"]
+	events, ok := byID["events"]
 	if !ok {
-		t.Fatalf("missing app accessor: %+v", found)
+		t.Fatal("missing events row")
 	}
-	if app.Kind != types.AccessorApp || app.Disabled {
-		t.Fatalf("app = %+v", app)
+	if events.AgentLevel != types.AccessFreeBusy {
+		t.Fatalf("events agent = %q", events.AgentLevel)
 	}
-	if app.Levels["events"] != types.AccessFreeBusy {
-		t.Fatalf("app events = %q, want freebusy", app.Levels["events"])
+	if len(events.Accessors) != 1 || events.Accessors[0].ID != "app:eco-demo" {
+		t.Fatalf("events accessors = %+v", events.Accessors)
 	}
-	if app.Levels["tracks"] != types.AccessNone {
-		t.Fatalf("app tracks = %q, want none", app.Levels["tracks"])
-	}
-	if app.Levels["places"] != types.AccessNone {
-		t.Fatalf("app places = %q, want none (opt-in unnamed)", app.Levels["places"])
+	if events.Accessors[0].Level != types.AccessFreeBusy {
+		t.Fatalf("eco events = %q", events.Accessors[0].Level)
 	}
 
-	disabledApp, ok := found["app:disabled-app"]
+	messages, ok := byID["messages"]
 	if !ok {
-		t.Fatal("missing disabled app")
+		t.Fatal("missing messages row")
 	}
-	if !disabledApp.Disabled {
-		t.Fatal("disabled app should be marked disabled")
+	foundMail := false
+	for _, acc := range messages.Accessors {
+		if acc.ID == syncMailID {
+			foundMail = true
+			if acc.Kind != types.AccessorSync || acc.Level != types.AccessRead {
+				t.Fatalf("mail row = %+v", acc)
+			}
+		}
+		if acc.ID == "app:eco-demo" {
+			t.Fatal("eco should not appear under messages")
+		}
+	}
+	if !foundMail {
+		t.Fatalf("messages accessors = %+v, want mail archive", messages.Accessors)
 	}
 
-	mailRow, ok := found[syncMailID]
+	places, ok := byID["places"]
 	if !ok {
-		t.Fatalf("missing mail sync accessor: %+v", found)
+		t.Fatal("missing places row")
 	}
-	if mailRow.Kind != types.AccessorSync {
-		t.Fatalf("mail kind = %q", mailRow.Kind)
+	if places.AgentLevel != types.AccessCity {
+		t.Fatalf("places agent = %q", places.AgentLevel)
 	}
-	if mailRow.Levels["messages"] != types.AccessRead {
-		t.Fatalf("mail messages = %q, want read", mailRow.Levels["messages"])
-	}
-	if mailRow.Levels["tracks"] != types.AccessNone {
-		t.Fatalf("mail tracks = %q, want none", mailRow.Levels["tracks"])
+	// Disabled app named photos only — not places. Timeline not mounted.
+	if len(places.Accessors) != 0 {
+		t.Fatalf("places accessors = %+v, want none", places.Accessors)
 	}
 
-	if _, ok := found[syncCopyID]; !ok {
-		t.Fatalf("missing copy-ledger accessor: %+v", found)
+	photos, ok := byID["photos"]
+	if !ok {
+		t.Fatal("missing photos row")
 	}
-	if _, ok := found[syncTimelineID]; ok {
-		t.Fatal("timeline should be absent when store is not mounted")
+	if len(photos.Accessors) != 1 || photos.Accessors[0].ID != "app:disabled-app" {
+		t.Fatalf("photos accessors = %+v", photos.Accessors)
+	}
+	if !photos.Accessors[0].Disabled {
+		t.Fatal("disabled app should stay marked disabled")
 	}
 }
 
@@ -152,7 +168,6 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
-	// Unauthenticated.
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/permissions", nil)
 	w := httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -172,28 +187,27 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(overview.DataTypes) == 0 || len(overview.Accessors) == 0 {
+	if len(overview.DataTypes) == 0 || len(overview.Types) == 0 {
 		t.Fatalf("overview = %+v", overview)
 	}
-	// Place is opt-in and stays off for agents when unnamed.
-	sawAgent := false
-	for _, a := range overview.Accessors {
-		if a.ID != agentAccessorID {
-			continue
+	sawAgentLevel := false
+	for _, row := range overview.Types {
+		if row.ID == "places" {
+			if row.AgentLevel != types.AccessNone {
+				t.Fatalf("agent places = %q, want none", row.AgentLevel)
+			}
 		}
-		sawAgent = true
-		if a.Levels["places"] != types.AccessNone {
-			t.Fatalf("agent places = %q, want none", a.Levels["places"])
-		}
-		if a.Levels["tracks"] != types.DefaultAccessType {
-			t.Fatalf("agent tracks = %q, want %q", a.Levels["tracks"], types.DefaultAccessType)
+		if row.ID == "tracks" {
+			if row.AgentLevel != types.DefaultAccessType {
+				t.Fatalf("agent tracks = %q, want %q", row.AgentLevel, types.DefaultAccessType)
+			}
+			sawAgentLevel = true
 		}
 	}
-	if !sawAgent {
-		t.Fatal("missing agent accessor")
+	if !sawAgentLevel {
+		t.Fatal("missing tracks row")
 	}
 
-	// POST is rejected.
 	req = httptest.NewRequest(http.MethodPost, "/v1/admin/permissions", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()

@@ -36,6 +36,9 @@ type Accessor struct {
 	// keys mean the kind-specific default (agents: DefaultAccessType /
 	// opt-in none; apps: none).
 	Levels map[string]string `json:"levels"`
+	// Explicit marks data-type keys the operator named on the record
+	// (app scope key, sync pipeline type). Used to decide relevance.
+	Explicit map[string]bool `json:"explicit,omitempty"`
 	// Editable is true when the admin UI may change Levels.
 	Editable bool `json:"editable"`
 	// Disabled blocks the accessor without dropping its stored levels.
@@ -66,15 +69,100 @@ func (a Accessor) AccessorLevel(dataType string) string {
 	return NormalizeAccess(a.Levels[dataType])
 }
 
-// PermissionsOverview is the holistic accessor × data-type matrix
-// (issue #160). Admin permissions editing renders this so operators can see
-// agents, apps, and sync pipelines side by side.
+// RelevantTo reports whether this accessor should appear under a data-type
+// row in the permissions editor (issue #160).
+//
+// Agents are always relevant (they own the editable policy). Apps appear
+// when they name the type or their effective level is not "none". Sync
+// pipelines appear only for the types they actually store.
+func (a Accessor) RelevantTo(dataType string) bool {
+	if dataType == "" || dataType == PermissionDefaultKey {
+		return false
+	}
+	switch a.Kind {
+	case AccessorAgent, AccessorUser:
+		return true
+	case AccessorApp:
+		if a.Explicit[dataType] {
+			return true
+		}
+		return a.AccessorLevel(dataType) != "" && a.AccessorLevel(dataType) != AccessNone
+	case AccessorSync:
+		level := a.AccessorLevel(dataType)
+		return level != "" && level != AccessNone
+	default:
+		return false
+	}
+}
+
+// TypeAccessor is one non-agent accessor row under a data type (issue #160).
+// The agent policy itself stays the editable control on that type.
+type TypeAccessor struct {
+	ID       string       `json:"id"`
+	Kind     AccessorKind `json:"kind"`
+	Label    string       `json:"label"`
+	Detail   string       `json:"detail,omitempty"`
+	Level    string       `json:"level"`
+	Disabled bool         `json:"disabled,omitempty"`
+}
+
+// TypeAccess is the permissions-editor row for one data type: the agent
+// level (editable in the admin form) plus only the other accessors that
+// are relevant to this type (read-only there).
+type TypeAccess struct {
+	ID         string         `json:"id"`
+	Label      string         `json:"label"`
+	AgentLevel string         `json:"agent_level"`
+	Accessors  []TypeAccessor `json:"accessors"`
+}
+
+// PermissionsOverview is the type-centric permissions-editor model
+// (issue #160). One entry per data type with its agent policy level and
+// the non-agent accessors that actually apply to that type.
 type PermissionsOverview struct {
-	// DataTypes lists every permission key the matrix should show
-	// (library kinds plus any explicit keys on stored policies).
+	// DataTypes lists every permission key in stable order.
 	DataTypes []string `json:"data_types"`
-	// Accessors is every principal that can reach data through Aegis.
-	Accessors []Accessor `json:"accessors"`
+	// Types is one row per data type, ready for the admin editor.
+	Types []TypeAccess `json:"types"`
+}
+
+// BuildTypeAccess assembles type-centric rows from accessors. Agent levels
+// come from the agent accessor; other accessors are included only when
+// RelevantTo is true (issue #160).
+func BuildTypeAccess(dataTypes []string, accessors []Accessor) []TypeAccess {
+	out := make([]TypeAccess, 0, len(dataTypes))
+	for _, dataType := range dataTypes {
+		if dataType == "" || dataType == PermissionDefaultKey {
+			continue
+		}
+		row := TypeAccess{ID: dataType}
+		for _, acc := range accessors {
+			level := acc.AccessorLevel(dataType)
+			if acc.Kind == AccessorAgent {
+				row.AgentLevel = level
+				continue
+			}
+			if !acc.RelevantTo(dataType) {
+				continue
+			}
+			row.Accessors = append(row.Accessors, TypeAccessor{
+				ID:       acc.ID,
+				Kind:     acc.Kind,
+				Label:    acc.Label,
+				Detail:   acc.Detail,
+				Level:    level,
+				Disabled: acc.Disabled,
+			})
+		}
+		sort.SliceStable(row.Accessors, func(i, j int) bool {
+			if row.Accessors[i].Kind != row.Accessors[j].Kind {
+				return row.Accessors[i].Kind < row.Accessors[j].Kind
+			}
+			return row.Accessors[i].Label < row.Accessors[j].Label
+		})
+		out = append(out, row)
+	}
+	return out
 }
 
 // OverviewDataTypes unions the preferred order (library kind IDs) with any
@@ -131,24 +219,30 @@ func ExtraPolicyKeys(policies TypePolicies) []string {
 }
 
 // AgentOverviewLevels materializes the type-owned agent policy into a
-// flat data-type → level map for the permissions matrix. Opt-in types
-// (places) stay "none" unless the policy names them explicitly.
+// flat data-type → level map. Opt-in types (places) stay "none" unless
+// the policy names them explicitly.
 func AgentOverviewLevels(policies TypePolicies, dataTypes []string) map[string]string {
 	out := make(map[string]string, len(dataTypes))
 	for _, dataType := range dataTypes {
 		level := policies.Access(dataType, "")
-		// TypePolicies.Access already applies opt-in none and default-read
-		// when the type has no policy entry.
 		out[dataType] = NormalizeAccess(level)
 	}
 	return out
 }
 
-// AppOverviewLevels materializes app scopes for the matrix. Apps fail
-// closed: unspecified types are none, matching Create's default=none rule.
-// Opt-in types (places) stay none unless the scope map names them.
-func AppOverviewLevels(scopes Permissions, dataTypes []string) map[string]string {
-	out := make(map[string]string, len(dataTypes))
+// AppOverviewLevels materializes app scopes. Apps fail closed: unspecified
+// types are none, matching Create's default=none rule. Opt-in types
+// (places) stay none unless the scope map names them. Explicit keys are
+// reported so the editor can treat a deliberate "none" as relevant.
+func AppOverviewLevels(scopes Permissions, dataTypes []string) (levels map[string]string, explicit map[string]bool) {
+	levels = make(map[string]string, len(dataTypes))
+	explicit = make(map[string]bool, len(scopes))
+	for k := range scopes {
+		if k == "" || k == PermissionDefaultKey {
+			continue
+		}
+		explicit[k] = true
+	}
 	for _, dataType := range dataTypes {
 		level := AccessNone
 		if scopes != nil {
@@ -163,7 +257,7 @@ func AppOverviewLevels(scopes Permissions, dataTypes []string) map[string]string
 		if level == "" {
 			level = AccessNone
 		}
-		out[dataType] = level
+		levels[dataType] = level
 	}
-	return out
+	return levels, explicit
 }
