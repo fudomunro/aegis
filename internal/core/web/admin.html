@@ -300,6 +300,49 @@
   .perm-editor h4 { font-size: 0.9rem; margin-bottom: 0.35rem; }
   .perm-help { margin-bottom: 0.65rem; }
   .perm-list { margin-bottom: 0.25rem; }
+  .type-access-row {
+    margin: 0 0 0.85rem; padding: 0.55rem 0.65rem 0.35rem;
+    border: 1px solid var(--border); border-radius: 8px; background: var(--surface2);
+  }
+  .type-access-head {
+    display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 180px);
+    gap: 0.65rem; align-items: center;
+  }
+  .type-access-others {
+    display: flex; flex-wrap: wrap; gap: 0.35rem 0.65rem;
+    margin: 0.45rem 0 0.35rem; padding-top: 0.4rem;
+    border-top: 1px solid var(--border);
+  }
+  .type-access-others:empty { display: none; }
+  .type-access-chip {
+    display: inline-flex; align-items: center; gap: 0.35rem;
+    font-size: 0.78rem; color: var(--dim); line-height: 1.3;
+  }
+  .type-access-chip .accessor-name { font-size: 0.78rem; font-weight: 600; }
+  .accessor-kind {
+    display: inline-block; padding: 0.1rem 0.45rem; border-radius: 999px;
+    font-size: 0.68rem; font-weight: 650; letter-spacing: 0.02em;
+    background: var(--surface2); color: var(--dim); margin-right: 0.15rem;
+  }
+  .accessor-kind.agent { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .accessor-kind.app { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .accessor-kind.sync { background: rgba(63,185,80,0.15); color: var(--green); }
+  .accessor-kind.service { background: rgba(163,113,247,0.15); color: #a371f7; }
+  .accessor-kind.user { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .accessor-name { font-weight: 600; color: var(--text); }
+  .accessor-level {
+    display: inline-block; padding: 0.12rem 0.5rem; border-radius: 999px;
+    font-size: 0.72rem; font-weight: 650;
+  }
+  .accessor-level.none { background: var(--surface2); color: var(--dim); }
+  .accessor-level.read { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .accessor-level.write { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .accessor-level.read-write { background: rgba(63,185,80,0.15); color: var(--green); }
+  .accessor-level.freebusy,
+  .accessor-level.summary,
+  .accessor-level.city,
+  .accessor-level.precise { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .accessor-disabled { opacity: 0.55; }
   .perm-row {
     display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 180px);
     gap: 0.65rem; align-items: center; margin-bottom: 0.4rem;
@@ -427,19 +470,21 @@
       <div id="services-help" class="help-box" hidden></div>
 
       <div id="agent-data-access-help" class="help-box">
-        <h3>Agent data access</h3>
-        <p>Permissions live with <strong>data types</strong> (issue #148). Set a type default below — it applies to every connected service. Use each service card’s form only to <em>tighten</em> further (a per-service override can never grant more than the type default). Available = read · Free/busy only = calendar availability without titles/attendees · Totals only = category/month sums · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
+        <h3>Data access by type</h3>
+        <p>Each <strong>data type</strong> lists the accessors that apply to it (issue #160): the <strong>agent</strong> level you edit here, plus any third-party apps or Aegis sync pipelines that already reach that type (read-only). The map on Home shows what each accessor has actually accessed. Agent policy is type-owned (issue #148): set a type default below — it applies to every connected service. Use each service card’s form only to <em>tighten</em> further (a per-service override can never grant more than the type default). Available = read · Free/busy only = calendar availability without titles/attendees · Totals only = category/month sums · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
       </div>
 
       <div class="help-box" id="type-policy-panel">
         <div class="card-header" style="margin:0">
           <h3 style="margin:0">Data type policies</h3>
           <div class="grow"></div>
+          <button class="btn" id="accessor-matrix-reload" type="button">Refresh</button>
           <button class="btn btn-primary" id="type-policy-save" type="button">Save type policies</button>
         </div>
         <p class="meta" style="margin:0.55rem 0 0.35rem">
           Primary agent-access policy, owned by each data type. Optional per-service overrides live on the service cards and can only tighten these defaults.
           <code>places</code> stays off until you name it (city / read / precise).
+          Other accessors shown under a type are read-only here — edit app scopes with <code>/v1/admin/apps</code>. Multi-user principals (issue #149) will appear when they land.
         </p>
         <div id="type-policy-list" class="perm-list"></div>
         <div class="perm-status" id="type-policy-status"></div>
@@ -2149,14 +2194,55 @@ job.read</pre>
     }
   }
 
-  // Type-owned policy editor (issue #148). Primary map: type default +
-  // optional per-provider tighten-only overrides.
+  // Type-owned policy editor (issue #148) merged with the accessor matrix
+  // (issue #160): one block per data type. Agent level is editable; other
+  // accessors (apps, sync) are listed read-only and only when relevant.
+  function accessorLevelBadge(level) {
+    const v = normalizeAccess(level);
+    const label = {
+      none: "Off",
+      freebusy: "Free/busy",
+      summary: "Totals",
+      city: "City",
+      precise: "Precise",
+      read: "Available",
+      write: "Write",
+      "read-write": "Editable",
+    }[v] || v;
+    return '<span class="accessor-level ' + escapeHtml(v) + '">' + escapeHtml(label) + "</span>";
+  }
+
+  function accessorKindBadge(kind) {
+    const label = { agent: "Agent", app: "App", sync: "Sync", service: "Service", user: "User" }[kind] || kind;
+    return '<span class="accessor-kind ' + escapeHtml(kind) + '">' + escapeHtml(label) + "</span>";
+  }
+
+  function typeOtherAccessorsHTML(accessors) {
+    const items = (accessors || []).map((acc) => {
+      const title = acc.detail ? ' title="' + escapeHtml(acc.detail) + '"' : "";
+      return '<span class="type-access-chip' + (acc.disabled ? " accessor-disabled" : "") + '"' + title + ">" +
+        accessorKindBadge(acc.kind || "app") +
+        '<span class="accessor-name">' + escapeHtml(acc.label || acc.id) + "</span>" +
+        (acc.disabled ? ' <span class="badge badge-red">Disabled</span>' : "") +
+        accessorLevelBadge(acc.level == null ? "none" : acc.level) +
+        "</span>";
+    }).join("");
+    return items ? '<div class="type-access-others" aria-label="Other accessors">' + items + "</div>" : "";
+  }
+
   async function loadTypePolicies() {
     const root = $("type-policy-list");
     if (!root) return;
     try {
-      const data = await api("/v1/admin/type-policies");
-      const types = data.types || {};
+      const [policyData, overview] = await Promise.all([
+        api("/v1/admin/type-policies"),
+        api("/v1/admin/permissions"),
+      ]);
+      const types = policyData.types || {};
+      const othersByKey = {};
+      (overview.types || []).forEach((row) => {
+        othersByKey[row.id] = row.accessors || [];
+      });
       root.innerHTML = LIBRARY_DATA_TYPES.map((key) => {
         const policy = types[key] || {};
         const level = policy.default != null && policy.default !== "" ? policy.default : (key === "places" ? "none" : "read-write");
@@ -2172,12 +2258,16 @@ job.read</pre>
             ).join("") +
             "</select></div>"
         ).join("");
-        return '<div class="perm-row">' +
-          '<label for="type-policy-' + escapeHtml(key) + '">' +
-          dataTypeIconHTML(key) +
-          '<span class="perm-type-label">' + escapeHtml(dataTypeLabel(key)) + "</span></label>" +
-          accessSelect(key, level, allowWrite).replace("<select ", '<select id="type-policy-' + escapeHtml(key) + '" data-type-policy-default="' + escapeHtml(key) + '" ') +
-          "</div>" + providerRows;
+        return '<div class="type-access-row" data-type-access="' + escapeHtml(key) + '">' +
+          '<div class="type-access-head">' +
+            '<label for="type-policy-' + escapeHtml(key) + '">' +
+            dataTypeIconHTML(key) +
+            '<span class="perm-type-label">' + escapeHtml(dataTypeLabel(key)) + "</span></label>" +
+            accessSelect(key, level, allowWrite).replace("<select ", '<select id="type-policy-' + escapeHtml(key) + '" data-type-policy-default="' + escapeHtml(key) + '" ') +
+          "</div>" +
+          typeOtherAccessorsHTML(othersByKey[key]) +
+          providerRows +
+          "</div>";
       }).join("");
     } catch (err) {
       if (err.status === 401) {
@@ -2241,6 +2331,7 @@ job.read</pre>
         showGlobalError(err.message || "Failed to save type policies");
       }
     }
+    loadTypePolicies();
   }
 
   function showAuthGate(show) {
@@ -3786,10 +3877,12 @@ function selectTab(name, opts) {
     apiKey = $("api-key-input").value.trim();
     if (apiKey) sessionStorage.setItem(KEY_STORAGE, apiKey);
     loadSummary();
+    loadTypePolicies();
   });
 
   $("service-filter").addEventListener("input", (e) => renderServices(e.target.value));
   $("type-policy-save").addEventListener("click", () => saveTypePolicies());
+  $("accessor-matrix-reload").addEventListener("click", () => loadTypePolicies());
   $("library-filter").addEventListener("input", () => {
     libraryPage = 1;
     if (libraryDataByKind[libraryKind]) renderLibrary(libraryDataByKind[libraryKind]);
