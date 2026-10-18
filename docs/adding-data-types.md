@@ -380,8 +380,10 @@ A type is invisible until permissions and path classification know it.
    - Empty `[]Operation{}` means "type recognized, not implemented" — Amazon
      Music does this. That is valid.
    - Do not advertise methods the connector cannot serve.
-   - Permission filtering (`FilterCapabilities`) drops denied types/ops; it
-     never **adds** capability.
+   - Capabilities are admin/connector metadata for available/writable types
+     and path classification (issue #119). They are **not** an agent
+     discovery API — permissions further constrain what agents may call via
+     the content/ingest proxy and library; they never **add** capability.
 
 3. **Service proxy**  
    Prefer `runConnectorProxy` / `doUpstreamRequest` / `aegisHTTPClient`. Read

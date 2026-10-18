@@ -109,7 +109,7 @@ func TestAllowsMethod_Levels(t *testing.T) {
 	}
 }
 
-func TestFilterCapabilities_Known(t *testing.T) {
+func TestCapabilityHelpers(t *testing.T) {
 	caps := ServiceCapabilities{DataTypes: []DataTypeCapability{
 		{Name: "tracks", Operations: []Operation{
 			{Name: "list", Method: "GET"},
@@ -117,13 +117,6 @@ func TestFilterCapabilities_Known(t *testing.T) {
 		}},
 		{Name: "playlists", Operations: []Operation{{Name: "list", Method: "GET"}}},
 	}}
-	filtered := FilterCapabilities(caps, Permissions{"tracks": AccessRead, "playlists": AccessNone})
-	if len(filtered.DataTypes) != 1 || filtered.DataTypes[0].Name != "tracks" {
-		t.Fatalf("filtered = %+v", filtered)
-	}
-	if len(filtered.DataTypes[0].Operations) != 1 {
-		t.Fatalf("ops = %+v", filtered.DataTypes[0].Operations)
-	}
 	if !DataTypeKnown(caps, "tracks") || DataTypeKnown(caps, "nope") {
 		t.Fatal("DataTypeKnown")
 	}

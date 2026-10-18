@@ -54,9 +54,10 @@ These belong in a design spike **after** the type layer exists.
 **type-level** policy with optional provider / attribute filters. Service-level
 filtering becomes the minority case.
 
-**What stays.** Enforcement on proxy, library, capabilities output, and
-pre-request injection. Access levels (`none` / `read` / `write` / redaction
-levels) stay. Fail-open and clamp-writes stay.
+**What stays.** Enforcement on the content/ingest proxy, library, and
+pre-request injection. Capabilities stay admin/connector metadata (issue
+#119), not agent discovery. Access levels (`none` / `read` / `write` /
+redaction levels) stay. Fail-open and clamp-writes stay.
 
 **Why it belongs on the type layer.** A type (or UDT schema) is what knows
 which fields are sensitive (places city/precise, freebusy, summary). A provider

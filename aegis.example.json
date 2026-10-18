@@ -78,7 +78,7 @@
       "action": "inject",
       "endpoint": "https://api.spotify.com/v1",
       "cache_ttl": "10m",
-      "description": "Proxies Spotify API calls through Aegis for caching and auditing",
+      "description": "Lists Spotify playlists, liked tracks, albums, and artists into /v1/library/*. Full playlist items via content transport /v1/services/spotify/playlists/{id}/items.",
       "canonical_for": [
         "playlists",
         "tracks"
@@ -109,7 +109,7 @@
       "permissions": {
         "default": "read"
       },
-      "description": "Proxies YouTube Music API calls through Aegis (shares the Google connection)"
+      "description": "Lists YouTube Music playlists and liked videos into /v1/library/*. Playlist items via content transport. Shares the Google connection."
     },
     {
       "id": "amazon-music",
@@ -120,7 +120,7 @@
       "action": "inject",
       "endpoint": "https://api.amazonmusic.com/v1",
       "cache_ttl": "15m",
-      "description": "Proxies Amazon Music API calls through Aegis",
+      "description": "Lists Amazon Music playlists into /v1/library/playlists. Full playlist items via content transport.",
       "connection": "amazon"
     },
     {

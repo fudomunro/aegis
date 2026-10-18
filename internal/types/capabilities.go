@@ -44,35 +44,6 @@ type ResponseSpec struct {
 	Fields      []string `json:"fields,omitempty"` // top-level field names in the response
 }
 
-// FilterCapabilities removes operations the permission map does not allow.
-// Data types set to "none" are dropped entirely; other types keep only
-// operations whose HTTP method is permitted.
-func FilterCapabilities(caps ServiceCapabilities, p Permissions) ServiceCapabilities {
-	if p == nil {
-		return caps
-	}
-	out := ServiceCapabilities{DataTypes: make([]DataTypeCapability, 0, len(caps.DataTypes))}
-	for _, dt := range caps.DataTypes {
-		level := p.For(dt.Name)
-		if level == AccessNone {
-			continue
-		}
-		ops := make([]Operation, 0, len(dt.Operations))
-		for _, op := range dt.Operations {
-			method := op.Method
-			if method == "" {
-				method = http.MethodGet
-			}
-			if AllowsMethod(level, method) {
-				ops = append(ops, op)
-			}
-		}
-		dt.Operations = ops
-		out.DataTypes = append(out.DataTypes, dt)
-	}
-	return out
-}
-
 // IsMutatingMethod reports whether the HTTP method changes data.
 func IsMutatingMethod(method string) bool {
 	switch strings.ToUpper(strings.TrimSpace(method)) {
