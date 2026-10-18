@@ -72,17 +72,17 @@ Agent → Aegis library / content transport / admin → provider APIs
 
 | Area | Where | Notes |
 |------|-------|-------|
-| Entry, flags, routes, connector registration | `main.go` | Wrap nearly every route in `AuthMiddleware` |
+| Entry, flags, routes, connector registration | `internal/core/run.go` (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
 | Data directory + state path layout | `datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `permissions_overlay.go` | `permissions.json` v2: `types` (primary TypePolicy) + `services` (tighten-only migration overrides); admin saves never rewrite aegis.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
-| Generic/shared content transport | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
+| Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
 | Tokens / OAuth / CSRF | `tokens.go`, `oauth.go`, `statestore.go`, `connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
-| Neutral models + library | `internal/types` (models/merge/kind), `library.go`, `librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline stays in main until core extract |
+| Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
 | Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
-| Connectors | `spotify.go`, `youtube.go`, `amazonmusic.go`, `google-*.go`, `immich.go` | Register in `main.go` `srv.connectors` |
+| Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; core-owned `signal.go`, `quicken.go`, `timeline.go` | Register in `internal/core/run.go` `srv.connectors` |
 | Location history (places) | `places.go`, `timeline.go`, `owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
@@ -234,9 +234,10 @@ over the hostile-input parsers, and `go build -o aegis .`.
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
 - **Permissions are data, not comments.** Type-level `TypePolicy` (owned by
   `internal/types`) plus optional provider/attribute filters must stay
-  enforced on proxy, library, capabilities output, and pre-request injection.
-  Service `permissions` maps are migration overrides that can only tighten
-  the type default (issue #148).
+  enforced on the content/ingest proxy, library, and pre-request injection.
+  Capabilities are admin/connector metadata (issue #119) — not agent
+  discovery. Service `permissions` maps are migration overrides that can only
+  tighten the type default (issue #148).
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `aegisHTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
@@ -291,7 +292,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 |------|------------|
 | New library data type / kind | `docs/adding-data-types.md` (checklist), then `librarykind.go` |
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
-| Proxy + cache + token injection | `proxy.go`, `connector_proxy.go`, `httpclient.go` |
+| Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
 | Admin permission writes | `permissions_overlay.go`, `config.go` `SetTypePolicies` / `SetServicePermissions`, README “Data permissions” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
