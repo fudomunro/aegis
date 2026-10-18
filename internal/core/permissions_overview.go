@@ -14,6 +14,7 @@ const (
 	syncCopyID     = "sync:copy-ledger"
 	syncTimelineID = "sync:timeline"
 	syncQuickenID  = "sync:quicken"
+	syncSignalID   = "sync:signal"
 )
 
 // agentAccessorID is the primary LLM-agent row (type-owned policy).
@@ -143,6 +144,19 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			Explicit: map[string]bool{"transactions": true},
 		})
 	}
+	if s.signal != nil {
+		accessors = append(accessors, types.Accessor{
+			ID:     syncSignalID,
+			Kind:   types.AccessorSync,
+			Label:  "Signal import",
+			Detail: "File-based Signal export ingest into the local contacts/messages store. Attachments are never stored.",
+			Levels: map[string]string{
+				"contacts": types.AccessRead,
+				"messages": types.AccessRead,
+			},
+			Explicit: map[string]bool{"contacts": true, "messages": true},
+		})
+	}
 
 	// Services Aegis syncs this data with (issue #160). Read-only rows so
 	// operators can see Spotify / YouTube Music under playlists, etc.
@@ -170,11 +184,11 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			name = svc.ID
 		}
 		accessors = append(accessors, types.Accessor{
-			ID:     "service:" + svc.ID,
-			Kind:   types.AccessorService,
-			Label:  name,
-			Detail: "Service Aegis syncs with for this data type (read-only here).",
-			Levels: levels,
+			ID:       "service:" + svc.ID,
+			Kind:     types.AccessorService,
+			Label:    name,
+			Detail:   "Service Aegis syncs with for this data type (read-only here).",
+			Levels:   levels,
 			Explicit: explicit,
 			// Service permission maps are edited on the service card.
 			Editable: false,
@@ -257,7 +271,9 @@ func serviceProvidedTypes(conn any) []string {
 	}
 
 	// Advertised capability names, limited to library kinds (issue #160).
-	type named interface{ Capabilities() types.ServiceCapabilities }
+	type named interface {
+		Capabilities() types.ServiceCapabilities
+	}
 	if c, ok := conn.(named); ok {
 		for _, dt := range c.Capabilities().DataTypes {
 			if libraryTypes[dt.Name] {

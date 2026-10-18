@@ -436,6 +436,7 @@ const (
 	MessageChannelSMS      = "sms"
 	MessageChannelWhatsApp = "whatsapp"
 	MessageChannelSocial   = "social"
+	MessageChannelSignal   = "signal"
 )
 
 // Message is a user-facing message: a text communication between people,
