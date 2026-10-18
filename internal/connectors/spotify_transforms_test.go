@@ -379,3 +379,21 @@ func TestSpotify_NeutralPlaylistMissingExternalURL(t *testing.T) {
 		t.Fatalf("url = %q", p.Sources[0].URL)
 	}
 }
+
+func TestSpotifyTransformArtist(t *testing.T) {
+	conn := &SpotifyConnector{}
+	out := conn.TransformArtist(map[string]any{
+		"name": "Miles Davis",
+		"genres": []any{"jazz"},
+		"followers": map[string]any{"total": 12},
+		"popularity": 80,
+		"id": "artist-1",
+		"uri": "spotify:artist:artist-1",
+	})
+	if out["name"] != "Miles Davis" || out["id"] != "artist-1" {
+		t.Fatalf("out = %+v", out)
+	}
+	if out["followers"] != 12 {
+		t.Fatalf("followers = %v", out["followers"])
+	}
+}
