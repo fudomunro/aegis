@@ -212,7 +212,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
   "action": "inject",
   "endpoint": "https://api.spotify.com/v1",
   "cache_ttl": "10m",
-  "description": "Proxies Spotify API calls",
+  "description": "Lists Spotify playlists and liked tracks into /v1/library/*",
   "connection": "spotify",
   "oauth_scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
 }

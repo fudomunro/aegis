@@ -240,39 +240,6 @@ func TestAccessForDataType(t *testing.T) {
 	}
 }
 
-func TestFilterCapabilities(t *testing.T) {
-	caps := types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
-			{Name: "playlists", Operations: []types.Operation{
-				{Name: "read_list", Method: "GET", Path: "/me/playlists"},
-				{Name: "create", Method: "POST", Path: "/me/playlists"},
-			}},
-			{Name: "player", Operations: []types.Operation{
-				{Name: "read_state", Method: "GET", Path: "/me/player"},
-			}},
-		},
-	}
-
-	filtered := types.FilterCapabilities(caps, types.Permissions{
-		"playlists": types.AccessRead,
-		"player":    types.AccessNone,
-	})
-	if len(filtered.DataTypes) != 1 {
-		t.Fatalf("got %d data types, want 1", len(filtered.DataTypes))
-	}
-	if filtered.DataTypes[0].Name != "playlists" {
-		t.Fatalf("got %q, want playlists", filtered.DataTypes[0].Name)
-	}
-	if len(filtered.DataTypes[0].Operations) != 1 || filtered.DataTypes[0].Operations[0].Method != "GET" {
-		t.Fatalf("playlists ops = %+v, want only GET", filtered.DataTypes[0].Operations)
-	}
-
-	unfiltered := types.FilterCapabilities(caps, nil)
-	if len(unfiltered.DataTypes) != 2 {
-		t.Fatalf("nil perms should keep both types, got %d", len(unfiltered.DataTypes))
-	}
-}
-
 func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
@@ -301,13 +268,6 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 	w = httptest.NewRecorder()
 	if !srv.AllowDataPermission(w, req, svc, "/me/playlists") {
 		t.Fatal("expected GET playlists allowed")
-	}
-
-	// Capabilities always allowed (filtered separately).
-	req = httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
-	w = httptest.NewRecorder()
-	if !srv.AllowDataPermission(w, req, svc, "/capabilities") {
-		t.Fatal("capabilities should always be allowed")
 	}
 }
 

@@ -160,9 +160,10 @@ tight on shared tailnets.
 Authentication answers “who may call Aegis.” Per-service `permissions` in
 `aegis.json` answer “what may an authorized agent do with each data type”
 (for example deny `player` or limit `playlists` to `read`). Denials are enforced
-on the proxy and library endpoints with 403, and capabilities are filtered so
-agents only discover allowed operations. Omitting `permissions` preserves
-unrestricted access for authorized callers.
+on the content/ingest proxy and library endpoints with 403. Agent discovery is
+via pre-request instructions and connector `SystemInstructions` (issue #119) —
+not a capabilities listing API. Omitting `permissions` preserves unrestricted
+access for authorized callers.
 
 ### Third-party app tokens (issue #131)
 
