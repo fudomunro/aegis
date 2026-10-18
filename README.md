@@ -75,7 +75,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service); also imported Signal chats (issue #168)
 - `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
 - `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
-- `GET /v1/library/{user-defined}` — schema-pack kinds under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in type policy before agents can read it. See [User-defined types](#user-defined-types-issue-15).
+- `GET /v1/library/{user-defined}` — user-defined types under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in type policy before agents can read it. See [User-defined types](#user-defined-types-issue-15).
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
@@ -98,11 +98,17 @@ Aegis starts with these endpoints:
 
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 
+Vocabulary for this manual (service vs connector vs connection, data type vs
+library kind, type policy, canonical home, content transport, LLM agent vs
+coding agent) is defined in [`docs/glossary.md`](docs/glossary.md).
+
 ## User-defined types (issue #15)
 
-Bring your own library kind with a **schema pack** (JSON) under
-`<data-dir>/user-types/` (or `AEGIS_USER_TYPES_DIR`). Packs become real
-`GET /v1/library/{id}` endpoints on the same aggregate pipeline as built-ins.
+Bring your own library kind with a **user-defined type** (JSON schema pack)
+under `<data-dir>/user-types/` (or `AEGIS_USER_TYPES_DIR`). A user-defined type
+becomes a real `GET /v1/library/{id}` endpoint on the same aggregate pipeline
+as built-ins. Prefer “user-defined type” in product English (see
+[`docs/glossary.md`](docs/glossary.md)); “schema pack” is the on-disk format.
 
 ```text
 user-types/
@@ -300,6 +306,11 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 - `https://your-aegis/v1/auth/google/callback`
 
 ### Data permissions
+
+Prefer the glossary terms here: **type policy** owns agent access per **data
+type**; a service **permissions map** can only tighten that default; **access
+levels** are the `none`/`freebusy`/`summary`/`city`/`precise`/`read`/`write`/
+`read-write` tokens. See [`docs/glossary.md`](docs/glossary.md).
 
 Permissions live with **data types**, not service providers (issue #148). The
 primary model is a per-type policy: a type-level default plus optional

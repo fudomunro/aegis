@@ -95,6 +95,8 @@ the most weight in product language.
 
 These clusters share a job or share words in ways that will confuse a wider
 audience. Tracked in follow-up issue [#174](https://github.com/fudomunro/aegis/issues/174).
+Preferred English for each cluster is in [`glossary.md`](glossary.md); use that
+glossary in new prose and surface copy.
 
 ### 2.1 “Service” vs “connector” vs “connection”
 
@@ -257,7 +259,7 @@ After the overlap call-outs above, the stable concepts.
 
 ---
 
-## Companion document
+## Companion documents
 
-Audience and communication-surface mapping lives in
-[`docs/audience-map.md`](audience-map.md).
+- Audience and communication-surface mapping: [`audience-map.md`](audience-map.md)
+- Preferred English for overlapping names: [`glossary.md`](glossary.md) (issue #174)
