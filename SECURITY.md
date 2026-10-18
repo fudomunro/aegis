@@ -4,6 +4,8 @@ Aegis holds OAuth tokens for music services and exposes user data (playlists,
 library, search) to LLM agents. This document describes the recommended access
 model when Aegis runs in a [Tailscale](https://tailscale.com) tailnet — the
 same identity layer [Aperture](https://tailscale.com/docs/aperture) uses.
+Product vocabulary (type policy, access levels, LLM agent) is in
+[`docs/glossary.md`](docs/glossary.md).
 
 ## Trust model
 
@@ -201,3 +203,4 @@ clients.
 - [Tags](https://tailscale.com/kb/1068/tags)
 - [Tailscale Serve](https://tailscale.com/kb/1312/serve) (identity headers)
 - [tsnet](https://github.com/tailscale/tailscale/tree/main/tsnet) (embed Tailscale in Go; optional alternative to system `tailscaled`)
+- [Concept glossary](docs/glossary.md) (service/connector/connection, type policy, LLM agent vs coding agent)

@@ -2,8 +2,13 @@
 
 Instructions for coding agents working in this repository. Read this before
 touching code, config, or docs. `README.md` holds the full product/API surface;
-`SECURITY.md` holds the tailnet trust model. This file is about how work
-actually happens here and which product rules must not drift.
+`SECURITY.md` holds the tailnet trust model. Canonical English for product
+concepts is in [`docs/glossary.md`](docs/glossary.md) (issue #174). This file is
+about how work actually happens here and which product rules must not drift.
+
+Note on the word *agent*: product docs mean the **LLM agent** that calls
+`/v1/library/*`; this file and `AGENTS.md` mean the **coding agent** or
+maintainer editing the repo. Prefer those labels over a bare “agent”.
 
 ## What this project is
 
@@ -302,6 +307,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Auth model / ACLs | `SECURITY.md`, `identity.go` |
 | Product/API docs | `README.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
+| Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
 
 ## Open direction (do not assume closed)
 
