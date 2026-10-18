@@ -18,17 +18,20 @@ func TestSpotifyConnector_SystemInstructions(t *testing.T) {
 
 	instructions := conn.SystemInstructions("https://aegis.example.com")
 
-	if !strings.Contains(instructions, "/v1/services/spotify") {
-		t.Fatal("instructions missing proxy base URL")
+	if !strings.Contains(instructions, "/v1/library/playlists") {
+		t.Fatal("instructions missing library playlists")
 	}
-	if !strings.Contains(instructions, "GET /me") {
-		t.Fatal("instructions missing /me endpoint")
+	if !strings.Contains(instructions, "/v1/library/tracks") {
+		t.Fatal("instructions missing library tracks")
 	}
-	if !strings.Contains(instructions, "GET /me/playlists") {
-		t.Fatal("instructions missing /me/playlists endpoint")
+	if !strings.Contains(instructions, "/v1/services/spotify/playlists/{id}") {
+		t.Fatal("instructions missing playlist content path")
 	}
-	if !strings.Contains(instructions, "GET /search") {
-		t.Fatal("instructions missing /search endpoint")
+	if strings.Contains(instructions, "GET /me/player") {
+		t.Fatal("instructions must not advertise playback control (issue #119)")
+	}
+	if strings.Contains(instructions, "GET /search") {
+		t.Fatal("instructions must not advertise catalog search (issue #119)")
 	}
 }
 
@@ -307,7 +310,7 @@ func TestSpotifyConnector_HandleProxy_NoToken(t *testing.T) {
 		"spotify": connectors.NewSpotifyConnector(srv),
 	}
 
-	req := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
@@ -327,10 +330,8 @@ func TestSpotifyConnector_HandleProxy_WithMockSpotify(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
-		case "/v1/me":
-			io.WriteString(w, `{"id":"alice","display_name":"Alice","email":"alice@example.com","followers":{"total":10}}`)
-		case "/v1/me/playlists":
-			io.WriteString(w, `{"items":[{"id":"pl1","name":"Jazz","tracks":{"total":5},"uri":"spotify:playlist:pl1"}],"total":1}`)
+		case "/v1/playlists/pl1":
+			io.WriteString(w, `{"id":"pl1","name":"Jazz","tracks":{"total":5,"items":[{"track":{"id":"t1","name":"So What","artists":[{"name":"Miles Davis"}]}}]},"uri":"spotify:playlist:pl1"}`)
 		default:
 			w.WriteHeader(http.StatusNotFound)
 		}
@@ -354,8 +355,8 @@ func TestSpotifyConnector_HandleProxy_WithMockSpotify(t *testing.T) {
 		"spotify": connectors.NewSpotifyConnector(srv),
 	}
 
-	// Test /me — should be transformed.
-	req := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	// Playlist content path — allowed under issue #119.
+	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
@@ -369,21 +370,15 @@ func TestSpotifyConnector_HandleProxy_WithMockSpotify(t *testing.T) {
 	var result map[string]any
 	json.NewDecoder(w.Body).Decode(&result)
 
-	if result["id"] != "alice" {
-		t.Fatalf("id = %v", result["id"])
-	}
-	if result["display_name"] != "Alice" {
-		t.Fatalf("display_name = %v", result["display_name"])
-	}
-	if _, ok := result["email"]; ok {
-		t.Fatal("email should be stripped from transformed response")
+	if result["id"] != "pl1" && result["name"] != "Jazz" {
+		t.Fatalf("playlist transform missing fields: %v", result)
 	}
 }
 
 func TestSpotifyConnector_HandleProxy_PassthroughForUnknownPaths(t *testing.T) {
 	mockSpotify := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"id":"artist1","name":"Miles Davis","genres":["jazz"]}`)
+		io.WriteString(w, `{"id":"pl1","name":"Jazz Mix","description":"night","tracks":{"total":2,"items":[]}}`)
 	}))
 	defer mockSpotify.Close()
 
@@ -397,15 +392,15 @@ func TestSpotifyConnector_HandleProxy_PassthroughForUnknownPaths(t *testing.T) {
 		AccessToken: "mock-token",
 		Expiry:      futureTime(),
 	})
-	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": connectors.NewSpotifyConnector(srv),
-	}
+	conn := connectors.NewSpotifyConnector(srv)
 
-	req := httptest.NewRequest("GET", "/v1/services/spotify/artists/artist1", nil)
+	// Connector-level call (content path detail). The HTTP edge blocks
+	// non-content paths before HandleProxy (issue #119).
+	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	conn.HandleProxy(w, req, "/playlists/pl1")
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200", w.Code)
@@ -414,7 +409,7 @@ func TestSpotifyConnector_HandleProxy_PassthroughForUnknownPaths(t *testing.T) {
 	var result map[string]any
 	json.NewDecoder(w.Body).Decode(&result)
 
-	if result["name"] != "Miles Davis" {
+	if result["name"] != "Jazz Mix" {
 		t.Fatalf("name = %v", result["name"])
 	}
 }

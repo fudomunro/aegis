@@ -1,6 +1,6 @@
 # Aegis
 
-A service proxy for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), mediates access through local proxy endpoints, and enforces rules with OAuth-based authentication and caching.
+A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), serves the user's data from a type-centric library, and enforces permissions with OAuth-based authentication.
 
 > Looking for the pitch rather than the manual? The marketing site lives in
 > [`site/`](site/) (issue #129).
@@ -9,13 +9,13 @@ A service proxy for [Tailscale Aperture](https://tailscale.com/docs/aperture) th
 
 Aegis runs as two components:
 
-1. **Pre-request hook** — Aperture calls Aegis before forwarding requests to LLM providers. Aegis detects service references in the user's message and injects instructions telling the agent to use Aegis's proxy endpoints instead of external APIs.
+1. **Pre-request hook** — Aperture calls Aegis before forwarding requests to LLM providers. Aegis detects service references in the user's message and injects instructions telling the agent to use Aegis's unified library (`/v1/library/{kind}`) instead of external APIs.
 
-2. **Service proxy** — Agents call `GET/POST /v1/services/{id}/...` instead of hitting external APIs directly. Aegis adds OAuth tokens, forwards to the real service, caches responses, and returns the data.
+2. **Unified library + content transport** — Agents call `GET /v1/library/{kind}` for the user's data (playlists, tracks, photos, messages, …). Service provenance lives in each item's `sources[]` for sync and backup. A narrow `/v1/services/{id}/...` transport remains only for content the library cannot store (photo bytes, full message bodies, playlist items) and local export import (issue #119).
 
 ```
-Agent → Aperture → Aegis (hook: inject proxy URL) → LLM
-Agent → Aegis (proxy) → Spotify API / YouTube Music API / ...
+Agent → Aperture → Aegis (hook: inject library URLs) → LLM
+Agent → Aegis (/v1/library, content transport) → provider APIs
 ```
 
 ## Prerequisites
@@ -83,7 +83,7 @@ Aegis starts with these endpoints:
 - `GET /v1/mail/status` — archive size and sync cursor
 - `POST /v1/mail/sync` — ingest a bounded batch of mail into the archive (resumable)
 - `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
-- `GET/POST /v1/services/{id}/...` — service proxy
+- `GET/POST /v1/services/{id}/...` — content/ingest transport only (photo bytes, full message bodies, playlist items, local import); other service paths return 404 — use `/v1/library/{kind}` (issue #119)
 - `GET /healthz` — liveness probe (unauthenticated; no secrets)
 - `GET /readyz` — readiness probe (config + token store loaded; unauthenticated)
 - `GET /metrics` — Prometheus text metrics (auth required; hook outcomes, cache hit/miss, upstream latency, permission denials)
@@ -431,8 +431,7 @@ exists for that key):
   is treated as read when saved from the admin UI (proxy still allows mutating
   methods the connector implements if the config already has write and you do
   not re-save). Enable write explicitly when a real agent write op appears.
-- Enforcement is on the service proxy, the unified library endpoint, and the
-  `/capabilities` response (denied types/operations are hidden from agents).
+- Enforcement is on the content/ingest transport, the unified library endpoint, and connector metadata (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
 - Admin API: `GET/PUT /v1/admin/type-policies` is the primary editor;
   `GET/PUT /v1/admin/services/{id}/permissions` remains the secondary
@@ -971,9 +970,9 @@ Aegis has **two** callers, and they authenticate differently:
 | Leg | Who calls Aegis | How they authenticate |
 |-----|--------------------|------------------------|
 | **Hook** | Aperture (`POST /v1/pre-request`) | Usually the shared API key in the Aperture hook config (`"apikey"`). In `tailnet` mode Aperture must also present tailnet identity (Serve headers / WhoIs). |
-| **Agent data** | The LLM agent (`/v1/library/playlists`, `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: API key if `auth-mode` is `auto` or `api-key`. |
+| **Agent data** | The LLM agent (`/v1/library/playlists`, content transport under `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: API key if `auth-mode` is `auto` or `api-key`. |
 
-Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Aegis attaches those when proxying. With `-auth-mode tailnet` and no API key, agents on the tailnet call Aegis without a shared secret.
+Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Aegis attaches those when fetching user data. With `-auth-mode tailnet` and no API key, agents on the tailnet call Aegis without a shared secret.
 
 After wiring the hook, confirm it with [`GET /v1/admin/hook-health`](docs/configuring-aperture.md#verify-with-hook-health) — it flags leftover Guardian names, wrong URLs, and missing `send` fields.
 
@@ -1102,7 +1101,7 @@ Linked playlists merge even when names differ (`match: "link"`). Links persist i
 
 Tracked in [issue #4](https://github.com/fudomunro/aegis/issues/4).
 
-Service-level playlist endpoints (`GET /v1/services/{id}/me/playlists`) return the same neutral shape for a single service (one `sources[]` entry). Per-service `by_service` status values: `ok`, `unauthorized`, `error`, `skipped`.
+Service-level playlist lists (`GET /v1/services/{id}/me/playlists`) are **not** agent API (issue #119). Per-service status values in library `by_service` remain: `ok`, `unauthorized`, `error`, `skipped`.
 
 ### Library source overview (issue #162)
 
@@ -1133,7 +1132,7 @@ Aegis aims to surface a user’s **full** library, not a prefix. Two layers matt
 | **Google Photos full library** | Library API reads require Google app verification; unverified apps get 403. Aegis uses the Picker API instead — only the user’s last selection. | Empty library until a pick; system instructions tell agents to run the picker flow. Not a `truncated` flag — the library is intentionally a selection, not a full dump. |
 | **YouTube Music albums** | No public saved-albums API. | `/v1/library/albums` simply has no YouTube source. |
 | **Amazon Music** | No public developer REST API; playlist pagination may return an unfollowed `nextToken`. | When `nextToken` is present and not followed, `truncated` is set rather than claiming completeness. |
-| **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via the service proxy for a specific playlist. |
+| **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via content transport `GET /v1/services/{id}/playlists/{playlistId}/items`. |
 | **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — [issue #4](https://github.com/fudomunro/aegis/issues/4). |
 
 **Always check `truncated` before answering “is this everything?”** Library system instructions tell agents to do the same. Admin Library badges turn orange and say `truncated` when a service hit its page cap.
@@ -1504,14 +1503,14 @@ as the `photos` permission.
 
 ```
 GET /v1/library/photos
-POST /v1/services/immich/search/metadata
-GET  /v1/services/immich/assets/{id}/original
+GET  /v1/services/immich/assets/{id}/original   # content transport only
 GET  /v1/services/immich/assets/{id}/thumbnail
 ```
 
-This is the reference pattern for other local/foreign stores: configure
-`endpoint` + static `headers`, implement a library provider, mark
-`canonical_for`, and never cache content bytes in Aegis.
+Asset search (`POST /search/metadata`) is not agent API — use
+`/v1/library/photos`. This is the reference pattern for other local/foreign
+stores: configure `endpoint` + static `headers`, implement a library provider,
+mark `canonical_for`, and never cache content bytes in Aegis.
 
 **Photo source discipline (issue #125):** pre-request injection for photo
 questions always includes `/v1/library/photos` and a hard rule to use only
@@ -1640,18 +1639,17 @@ calls may pass explicit `timeMin` / `timeMax`. Free/busy-only calendars are
 skipped. A failure on one calendar is logged and skipped (fail-open) so other
 calendars still appear.
 
-Agent-facing proxy paths return neutral shapes:
+Agent data is the unified library (issue #119). Calendar list/proxy paths are
+not agent API.
 
 ```
-GET /v1/services/google-calendar/me/events
-GET /v1/services/google-calendar/me/calendars
-GET /v1/services/google-calendar/calendars/{calendarId}/events
-GET /v1/services/google-calendar/events/{id}
+GET /v1/library/events
+GET /v1/library/freebusy
 ```
 
 This phase is **read-only**. Capabilities do not advertise agent write ops
 (create/update/delete events), so the admin permissions form will not offer
-Editable for `events` and proxy mutations stay blocked
+Editable for `events` and mutations stay blocked
 ([issue #61](https://github.com/fudomunro/aegis/issues/61)).
 Event content stays on Google Calendar.
 
@@ -1753,18 +1751,19 @@ The connector lists messages via `GET /users/me/messages` (default query
 calls; remaining upstream items set `truncated`. Individual message fetch
 failures are logged and skipped (fail-open).
 
-Agent-facing proxy paths return neutral shapes:
+Agent data is the unified library; content transport serves full bodies only
+(issue #119):
 
 ```
-GET /v1/services/google-gmail/me/messages
+GET /v1/library/messages
 GET /v1/services/google-gmail/messages/{id}          # ?format=full includes decoded body
-GET /v1/services/google-gmail/me/threads
 GET /v1/services/google-gmail/threads/{id}
 ```
 
+Message lists (`/me/messages`) are not agent API — use the library.
 This phase is **read-only**. Capabilities do not advertise agent write ops
 (send/delete), so the admin permissions form will not offer Editable for
-`messages` and proxy mutations stay blocked
+`messages` and mutations stay blocked
 ([issue #61](https://github.com/fudomunro/aegis/issues/61)).
 Message bodies stay on Gmail as the **canonical** home copy.
 
@@ -1870,10 +1869,13 @@ Or use **Advanced → Signal import** (`/v1/admin/signal/import`).
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/services/signal/contacts` | Imported Signal contacts |
-| `GET /v1/services/signal/messages` | Imported Signal messages |
+| `GET /v1/library/messages` | Imported Signal chats (source service `signal`) |
+| `GET /v1/library/contacts` | Imported Signal contacts |
 | `GET /v1/services/signal/import/status` | Contact + message counts |
 | `POST /v1/services/signal/import` | `{"path": "/path/to/export"}` |
+
+Signal list paths under `/v1/services/signal/messages` / `contacts` are not
+agent API (issue #119) — use the library.
 
 Accepted inputs: `.jsonl` / `.ndjson`, `.json` (bundle or array), and
 plaintext `.db` / `.sqlite` dumps in either Signal **Desktop** schema
@@ -1974,13 +1976,13 @@ parent + split category names become `category[]` (YNAB's placeholder
 amount is not redistributed. `import_id` becomes `entity_id` when present.
 Read-only — no budget mutations are advertised.
 
-Agent-facing proxy paths:
+Agent data is the unified library (issue #119):
 
 ```
-GET /v1/services/ynab/budgets
-GET /v1/services/ynab/budgets/{budget_id}/accounts
-GET /v1/services/ynab/budgets/{budget_id}/transactions
+GET /v1/library/transactions
 ```
+
+YNAB budget/account/transaction proxy paths are not agent API.
 
 #### Quicken files (QIF / QFX / OFX)
 
@@ -1997,9 +1999,12 @@ store media).
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/services/quicken/transactions` | Neutral transactions from the import store |
+| `GET /v1/library/transactions` | Neutral transactions from the import store (source `quicken`) |
 | `GET /v1/services/quicken/import/status` | Row count |
 | `POST /v1/services/quicken/import` | `{"path": "/path/to/file-or-dir"}` |
+
+Quicken list paths under `/v1/services/quicken/transactions` are not agent API
+(issue #119) — use the library.
 
 Re-import skips rows already stored (by FITID / stable hash). CLI:
 
@@ -2078,17 +2083,26 @@ evening visit with a fireworks photo taken during it — see
 `TestPhotosPlacesJoinDemo`. Aegis does not store photo bytes; the join is
 metadata only.
 
-### Service proxy
+### Content & ingest transport (`/v1/services/{id}/...`)
 
 ```
 GET/POST /v1/services/{service_id}/{path}
 Authorization: Bearer <api-key>   # or tailnet identity in auto/tailnet mode
 ```
 
-Forwards to the configured upstream endpoint with OAuth tokens. Callers authenticate to Aegis; they do not need the upstream service’s OAuth tokens.
-- `X-Aegis-Cache: hit` or `miss` in response headers
-- GET responses cached per-service
-- POST requests forwarded without caching
+After issue #119 this is **not** a general service API. Library (`/v1/library/{kind}`) is the only data surface. `/v1/services` stays open only for user-data content the library cannot include or for ingesting a local export:
+
+| Allowed | Why |
+|---------|-----|
+| `/assets/{id}/original`, `/assets/{id}/thumbnail`, Bluesky `getBlob` | Photo/asset bytes (Aegis does not store media) |
+| `/messages/{id}`, `/threads/{id}` | Full message bodies (library lists carry snippets) |
+| `/playlists/{id}`, `/playlists/{id}/items` | Playlist items (library entries carry `track_count` only) |
+| `/picker/*` | Google Photos user pick → library |
+| `/import`, `/import/status` | Local export ingest (Signal, Quicken) |
+
+Provider-shaped lists (`/me/...`), playback, catalog search, profiles, capabilities, and generic OAuth pass-through return **404**. Callers authenticate to Aegis; they never see upstream OAuth tokens.
+- `X-Aegis-Cache: hit` or `miss` on connector content GETs
+- GET responses cached per-service; POST not cached
 
 ### Auth endpoints
 

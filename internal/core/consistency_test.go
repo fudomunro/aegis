@@ -58,11 +58,14 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 		if strings.Contains(instr, "all require Authorization header") {
 			t.Errorf("%s: still claims Authorization header is required", c.name)
 		}
-		if !strings.Contains(instr, "Aegis authenticates you") {
-			t.Errorf("%s: missing Aegis-authenticates wording", c.name)
+		if strings.Contains(instr, "Do not call") == false && !strings.Contains(instr, "use Aegis") {
+			t.Errorf("%s: missing library-first / do-not-call-provider wording", c.name)
 		}
 		if !strings.Contains(instr, "/v1/library/playlists") {
 			t.Errorf("%s: missing library endpoint mention", c.name)
+		}
+		if !strings.Contains(instr, "sources[]") {
+			t.Errorf("%s: missing sources provenance note", c.name)
 		}
 	}
 }
