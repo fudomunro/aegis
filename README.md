@@ -67,12 +67,12 @@ Aegis starts with these endpoints:
 - `GET /v1/library/tracks` — unified liked/saved tracks across all connected services
 - `GET /v1/library/albums` — unified saved albums across all connected services
 - `GET /v1/library/artists` — unified followed/top artists across all connected services
-- `GET /v1/library/contacts` — unified contacts across all contact-capable services
+- `GET /v1/library/contacts` — unified contacts across all contact-capable services (plus imported Signal contacts)
 - `GET /v1/library/photos` — unified photo metadata across all photo-capable services (bytes stay on the source service)
 - `POST /v1/library/photos/share` — publish one photo to Bluesky and return a PoC ownership claim (sha256 + public post; issue #20)
 - `GET /v1/library/events` — unified calendar events across all calendar-capable services
 - `GET /v1/library/freebusy` — busy intervals only (start/end/all_day) for scheduling apps; no titles or attendees (issue #128)
-- `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service)
+- `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service); also imported Signal chats (issue #168)
 - `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
 - `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
 - `GET /v1/library/{user-defined}` — schema-pack kinds under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in type policy before agents can read it. See [User-defined types](#user-defined-types-issue-15).
@@ -634,6 +634,7 @@ on first run with mode `0700` (it holds secrets).
   mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
   quicken.db              # Quicken QIF/QFX import store (issue #141; empty -quicken-store disables)
   timeline.db             # Google Timeline import store (issue #142; empty -timeline-store disables)
+  signal.db               # Signal contacts/messages import store (issue #168; empty -signal-store disables)
   audit_log.db            # durable access audit trail (issue #105; empty -audit-log disables)
   logs/aegis.log          # process log (also mirrored to stderr)
 ```
@@ -652,6 +653,7 @@ An explicit flag always wins:
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
+| `-signal-store` | `signal.db` | Empty string (explicitly set) disables the Signal import source |
 | `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
@@ -683,6 +685,8 @@ directory or keep passing the explicit path flags.
 | `-import-quicken` | | Import a QIF/QFX file or directory, then exit (issue #141) |
 | `-timeline-store` | `<data-dir>/timeline.db` | Google Timeline import store; empty disables (issue #142) |
 | `-import-timeline` | | Import a Timeline JSON file/dir or Takeout zip, then exit (issue #142) |
+| `-signal-store` | `<data-dir>/signal.db` | Signal import store; empty disables (issue #168) |
+| `-import-signal` | | Import a Signal export (JSONL/JSON or plaintext SQLite), then exit (issue #168) |
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables (issue #105) |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
@@ -1690,7 +1694,7 @@ Neutral message fields (user-facing):
 
 | Field | Description |
 |-------|-------------|
-| `channel` | `email`, `sms`, `whatsapp`, or `social` |
+| `channel` | `email`, `sms`, `whatsapp`, `social`, or `signal` |
 | `subject` | Email subject or chat topic |
 | `snippet` | Short service-supplied body preview |
 | `body` | Full body when a detail proxy call includes it (usually empty in library lists) |
@@ -1844,6 +1848,43 @@ but no connector is registered for them yet. Personal SMS history has no
 simple OAuth surface; WhatsApp consumer history is not available through a
 Aegis-compatible named API. Follow-ups can plug in connectors that
 implement `MessageProvider` without changing the library contract.
+
+#### Signal import (issue #168)
+
+Signal has no public chat API. Contacts and messages arrive as a
+**file-based import** (like mail Takeout / Quicken), not OAuth:
+
+```bash
+# Android: Settings → Chats → Chat backups → Create backup, then decrypt
+# with signalbackup-tools to a plaintext database.sqlite
+./aegis -import-signal /path/to/database.sqlite
+
+# Or a JSONL export (one object per line):
+#   {"type":"contact","id":"alice","name":"Alice","phones":["+15551234567"]}
+#   {"type":"message","id":"m1","body":"hello","sent_at":"2024-01-01T12:00:00Z",
+#    "direction":"inbound","from":{"name":"Alice","phones":["+15551234567"]}}
+./aegis -import-signal ~/Downloads/signal-export.jsonl
+```
+
+Or use **Advanced → Signal import** (`/v1/admin/signal/import`).
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /v1/services/signal/contacts` | Imported Signal contacts |
+| `GET /v1/services/signal/messages` | Imported Signal messages |
+| `GET /v1/services/signal/import/status` | Contact + message counts |
+| `POST /v1/services/signal/import` | `{"path": "/path/to/export"}` |
+
+Accepted inputs: `.jsonl` / `.ndjson`, `.json` (bundle or array), and
+plaintext `.db` / `.sqlite` dumps in either Signal **Desktop** schema
+(`conversations` + `messages`) or Android / **signalbackup-tools** schema
+(`recipient` + `message` + `thread`). Encrypted app databases are not
+supported — decrypt or export first. Re-import skips rows already stored.
+Attachments and media are never stored (text metadata only). The import
+source is service `signal` with `channel: "signal"` and feeds both
+`/v1/library/messages` and `/v1/library/contacts`.
+
+A minimal JSONL sample lives at `examples/signal-export-sample.jsonl`.
 
 ### Transactions as a data type
 
