@@ -302,13 +302,6 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 	if !srv.AllowDataPermission(w, req, svc, "/me/playlists") {
 		t.Fatal("expected GET playlists allowed")
 	}
-
-	// Capabilities always allowed (filtered separately).
-	req = httptest.NewRequest("GET", "/v1/services/spotify/capabilities", nil)
-	w = httptest.NewRecorder()
-	if !srv.AllowDataPermission(w, req, svc, "/capabilities") {
-		t.Fatal("capabilities should always be allowed")
-	}
 }
 
 func TestAllDataDenied(t *testing.T) {

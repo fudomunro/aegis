@@ -460,13 +460,17 @@ file /tmp/immich-thumb.jpg
 - Aegis logs show a proxy hit — and **no** long-term write of those bytes into
   the Aegis data directory.
 
-Also sanity-check raw Immich JSON passthrough (agent-facing Immich shape):
+Asset search is **not** agent API (issue #119). Immich `POST /search/metadata`
+is connector-internal (library listing). Confirm agents cannot reach it as a
+provider mirror:
 
 ```bash
-curl -sS -H "$AUTH" -H "Content-Type: application/json" \
-  -d '{"page":1,"size":5,"withExif":true}' \
-  "$AEGIS/v1/services/immich/search/metadata" | jq '.assets | {total, count, items: (.items|length)}'
+curl -sS -o /dev/null -w "%{http_code}\n" -H "$AUTH" -H "Content-Type: application/json" \
+  -d '{"page":1,"size":5}' \
+  "$AEGIS/v1/services/immich/search/metadata"
 ```
+
+**Pass when:** status is **404**. Use `GET /v1/library/photos` for listing.
 
 ### 3.4 Admin map / flow
 

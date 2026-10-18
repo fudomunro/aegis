@@ -95,10 +95,6 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 	if svc == nil {
 		return false
 	}
-	// Capabilities metadata is always readable; it is filtered by permission.
-	if remainingPath == "/capabilities" || remainingPath == "/capabilities/" {
-		return true
-	}
 	dataType := types.DataTypeForPath(remainingPath)
 	level := s.effectivePermissions(svc).AccessForDataType(dataType)
 	if s.connectorWriteBlocked(svc.ID, dataType, r.Method) {
