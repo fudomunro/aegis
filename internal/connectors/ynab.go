@@ -100,11 +100,11 @@ func (c *YNABConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the agent hint when YNAB is referenced.
 func (c *YNABConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	proxy := root + "/v1/services/" + YNABServiceID
-	return fmt.Sprintf(`When the user's request involves YNAB (budgets, categorized spending), you MUST use the Aegis proxy at %s instead of calling api.ynab.com directly. Aegis adds the YNAB token — never ask the user for a Personal Access Token.
+	return fmt.Sprintf(`When the user's request involves YNAB (budgets, categorized spending), use Aegis's unified data API. Do not call api.ynab.com directly and never ask the user for a Personal Access Token.
 
-For unified money questions ("did we go over on groceries?", "what did we spend on restaurants?"), prefer GET %s/v1/library/transactions which merges YNAB and any imported Quicken files. Amounts are signed decimal strings (negative = outflow). Filter with after/before/account/q. When permission is "summary", only category/month totals are available — do not request line items.
-`, proxy, root)
+GET %s/v1/library/transactions — money questions ("did we go over on groceries?", "what did we spend on restaurants?") merged with any imported Quicken files. Amounts are signed decimal strings (negative = outflow). Filter with after/before/account/q/currency. When permission is "summary", only category/month totals are available — do not request line items.
+
+sources[] records where each transaction lives for sync.`, root)
 }
 
 // HandleProxy forwards YNAB API paths through the shared connector pipeline.

@@ -122,23 +122,22 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Bluesky is referenced.
 func (c *BlueskyConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves Bluesky (sharing photos, their feed images, their posts, or their contacts), you MUST use Aegis at %s instead of calling Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
+	return fmt.Sprintf(`When the user's request involves Bluesky (sharing photos, their feed images, their posts, or their contacts), use Aegis's unified data API. Do not call Bluesky/AT Protocol directly. Aegis owns the Bluesky handle and app password — never ask the user for them.
 
 Share photos (proof of concept for photo ownership claims):
 1. Resolve a photo via GET %s/v1/library/photos (or ask for source_service + source_id).
 2. POST %s/v1/library/photos/share with {"source_service":"immich","source_id":"...","caption":"..." }.
 3. Return the post_url to the user and keep claim.sha256 / claim.post_uri as the ownership evidence.
 
-Library sync (metadata only; bytes stay on Bluesky):
-- GET %s/v1/library/photos — includes Bluesky image posts from the user's feed.
-- GET %s/v1/library/messages — only the user's own posts and replies (not reposts or likes/follows).
+Library (metadata only; bytes stay on Bluesky):
+- GET %s/v1/library/photos — Bluesky image posts from the user's feed.
+- GET %s/v1/library/messages — the user's own posts and replies (not reposts or likes/follows).
 - GET %s/v1/library/contacts — the user's Bluesky following list (handles).
-- Image bytes: use sources[].blob_url (Aegis proxy getBlob); do not scrape cdn.bsky.app directly.
+- Image bytes: use sources[].blob_url (Aegis getBlob transport); do not scrape cdn.bsky.app directly.
 
 Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC (issue #20) — content hash + public post — not a cryptographic proof.
 
-Always include the full Aegis base URL in your requests.
-%s`, root, root, root, root, root, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, root, root, types.PhotoSourceDiscipline())
 }
 
 // HandleProxy serves read-only Bluesky xrpc paths that agents need for

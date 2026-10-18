@@ -168,41 +168,20 @@ func (c *SpotifyConnector) Capabilities() types.ServiceCapabilities {
 // when Spotify is referenced. This tells the agent exactly how to use the proxy.
 func (c *SpotifyConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/spotify"
-	return fmt.Sprintf(`When the user's request involves Spotify, you MUST use the Aegis proxy at %s instead of calling Spotify directly.
+	return fmt.Sprintf(`When the user's request involves Spotify or their music library, use Aegis's unified data API. Do not call Spotify directly.
 
-For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
-GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
+GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/v1/library/tracks — liked/saved tracks (name, artists, album, sources[])
+GET %s/v1/library/albums — saved albums
+GET %s/v1/library/artists — followed artists
 
-For "liked songs" / saved tracks across every connected music service:
-GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[])
+sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 
-For saved albums and followed artists across every connected music service:
-GET %s/v1/library/albums — all saved albums in one neutral list (name, artists, sources[])
-GET %s/v1/library/artists — all followed artists in one neutral list (name, sources[])
+Only when you need full playlist contents (library entries carry track_count only):
+GET %s/v1/services/spotify/playlists/{id} — playlist with tracks
+GET %s/v1/services/spotify/playlists/{id}/items — playlist items as neutral tracks
 
-Spotify-specific endpoints (call the full proxy URL; Aegis authenticates you — do not send Spotify tokens or an API key unless your deployment uses api-key mode):
-
-GET /me — Current user profile
-GET /me/playlists — List user's playlists in neutral format (paginated, use ?limit=N&offset=N)
-GET /me/tracks — List saved/liked tracks (paginated)
-GET /me/albums — List saved albums (paginated)
-GET /me/artists — List followed artists
-GET /me/player — Current playback state
-GET /me/player/recently-played — Recently played tracks
-GET /me/top/tracks — User's top tracks (use ?time_range=short_term|medium_term|long_term)
-GET /me/top/artists — User's top artists
-GET /search?type=track,artist,album,playlist&q=QUERY — Search Spotify
-GET /tracks/{id} — Get a track by ID
-GET /artists/{id} — Get an artist by ID
-GET /artists/{id}/top-tracks — Artist's top tracks
-GET /albums/{id} — Get an album by ID
-GET /playlists/{id} — Get a playlist by ID with tracks
-
-Playlist responses use Aegis's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
-All responses are transformed to a compact, LLM-friendly format.
-Paginated endpoints return all items automatically when possible.
-Always include the full proxy base URL in your requests.`, base, root, root, root, root)
+Aegis does not expose playback control, catalog search, profiles, or other Spotify account APIs.`, root, root, root, root, root, root)
 }
 
 // HandleProxy processes a Spotify API request through the connector.

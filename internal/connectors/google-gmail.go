@@ -129,21 +129,17 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Gmail is referenced.
 func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + GoogleGmailServiceID
-	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, you MUST use the Aegis proxy at %s instead of calling Gmail API directly.
+	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, use Aegis's unified data API. Do not call Gmail API directly.
 
-For "my email" across every connected mail/message service, prefer the unified library endpoint first:
-GET %s/v1/library/messages — messages in one neutral list (subject, snippet, from/to as Contact identities, sent_at, direction, read, sources[])
+GET %s/v1/library/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
 
-Gmail-specific endpoints (call the full proxy URL; Aegis authenticates you):
-GET /me/messages — list messages (neutral Message metadata; default query newer_than:30d)
-GET /messages/{id} — one message (add ?format=full to include decoded body)
-GET /me/threads — list recent threads
-GET /threads/{id} — one thread with its messages
+sources[] records where each message lives (service + id) for sync. Library lists carry snippets only.
 
-Messages use Aegis's neutral identity matching for from/to/cc (email → phone → handle → name), so senders can be matched to /v1/library/contacts when a contact service is connected.
-Message bodies stay on Gmail — Aegis does not store mailboxes. Cross-service merges prefer RFC Message-ID.
-Always include the full proxy base URL in your requests.`, base, root)
+Only when you need a full message body:
+GET %s/v1/services/google-gmail/messages/{id} — one message; add ?format=full for the decoded body
+GET %s/v1/services/google-gmail/threads/{id} — one thread with its messages
+
+Message bodies stay on Gmail — Aegis does not store mailboxes. Cross-service merges prefer RFC Message-ID.`, root, root, root)
 }
 
 // HandleProxy processes a Gmail API request through the connector.
