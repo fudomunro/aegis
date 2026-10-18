@@ -18,17 +18,14 @@ func TestAmazonMusicConnector_SystemInstructions(t *testing.T) {
 
 	instructions := conn.SystemInstructions("https://aegis.example.com")
 
-	if !strings.Contains(instructions, "/v1/services/amazon-music") {
-		t.Fatal("instructions missing proxy base URL")
+	if !strings.Contains(instructions, "/v1/library/playlists") {
+		t.Fatal("instructions missing library playlists")
 	}
-	if !strings.Contains(instructions, "GET /me") {
-		t.Fatal("instructions missing /me endpoint")
+	if !strings.Contains(instructions, "/v1/services/amazon-music/playlists/{id}") {
+		t.Fatal("instructions missing playlist content path")
 	}
-	if !strings.Contains(instructions, "GET /search") {
-		t.Fatal("instructions missing /search endpoint")
-	}
-	if !strings.Contains(instructions, "availability may vary") {
-		t.Fatal("instructions should note API availability caveat")
+	if strings.Contains(instructions, "GET /search") {
+		t.Fatal("instructions must not advertise catalog search (issue #119)")
 	}
 }
 
@@ -268,7 +265,7 @@ func TestAmazonMusicConnector_HandleProxy_NoToken(t *testing.T) {
 		"amazon-music": connectors.NewAmazonMusicConnector(srv),
 	}
 
-	req := httptest.NewRequest("GET", "/v1/services/amazon-music/me", nil)
+	req := httptest.NewRequest("GET", "/v1/services/amazon-music/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
@@ -311,12 +308,12 @@ func TestAmazonMusicConnector_HandleProxy_WithMockAPI(t *testing.T) {
 		"amazon-music": connectors.NewAmazonMusicConnector(srv),
 	}
 
-	// Test /me — should be transformed.
+	// Connector-level /me and /search (not agent API under issue #119).
 	req := httptest.NewRequest("GET", "/v1/services/amazon-music/me", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.connectors["amazon-music"].HandleProxy(w, req, "/me")
 
 	if w.Code != http.StatusOK {
 		body := w.Body.String()
@@ -333,12 +330,12 @@ func TestAmazonMusicConnector_HandleProxy_WithMockAPI(t *testing.T) {
 		t.Fatalf("name = %v", result["name"])
 	}
 
-	// Test /search.
+	// Test /search via connector.
 	req = httptest.NewRequest("GET", "/v1/services/amazon-music/search?q=miles+davis", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.connectors["amazon-music"].HandleProxy(w, req, "/search")
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d, want 200", w.Code)
@@ -368,7 +365,7 @@ func TestAmazonMusicConnector_HandleProxy_UpstreamDown(t *testing.T) {
 		"amazon-music": connectors.NewAmazonMusicConnector(srv),
 	}
 
-	req := httptest.NewRequest("GET", "/v1/services/amazon-music/me", nil)
+	req := httptest.NewRequest("GET", "/v1/services/amazon-music/playlists/pl1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 

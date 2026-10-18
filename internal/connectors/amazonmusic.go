@@ -51,29 +51,18 @@ func (c *AmazonMusicConnector) Capabilities() types.ServiceCapabilities {
 // when Amazon Music is referenced.
 func (c *AmazonMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/amazon-music"
-	return fmt.Sprintf(`When the user's request involves Amazon Music, you MUST use the Aegis proxy at %s instead of calling Amazon Music directly.
+	return fmt.Sprintf(`When the user's request involves Amazon Music or their music library, use Aegis's unified data API. Do not call Amazon Music directly.
 
-For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
-GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
+GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/v1/library/tracks — liked/saved tracks
+GET %s/v1/library/albums — saved albums
 
-Amazon Music-specific endpoints (call the full proxy URL; Aegis authenticates you — do not send Amazon tokens or an API key unless your deployment uses api-key mode):
+sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 
-GET /me — Current user profile
-GET /me/playlists — List user's playlists in neutral format
-GET /me/library — List saved/liked tracks and albums
-GET /me/recommendations — Personalized recommendations
-GET /search?q=QUERY — Search Amazon Music catalog
-GET /playlists/{id} — Get a playlist by ID with tracks
-GET /tracks/{id} — Get track details by ID
-GET /albums/{id} — Get album details by ID
-GET /artists/{id} — Get artist details by ID
+Only when you need full playlist contents (library entries carry track_count only):
+GET %s/v1/services/amazon-music/playlists/{id} — playlist with tracks
 
-Note: Amazon Music API availability may vary. If an endpoint returns
-an error, inform the user that the feature may not be available.
-Playlist responses use Aegis's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
-All responses are transformed to a compact, LLM-friendly format.
-Always include the full proxy base URL in your requests.`, base, root)
+Aegis does not expose catalog search, recommendations, profiles, or other Amazon Music account APIs.`, root, root, root, root)
 }
 
 // HandleProxy processes an Amazon Music API request through the connector.

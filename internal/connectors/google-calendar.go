@@ -126,21 +126,13 @@ func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Google Calendar is referenced.
 func (c *GoogleCalendarConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + GoogleCalendarServiceID
-	return fmt.Sprintf(`When the user's request involves Google Calendar, their schedule, meetings, or calendar events, you MUST use the Aegis proxy at %s instead of calling Google Calendar API directly.
+	return fmt.Sprintf(`When the user's request involves Google Calendar, their schedule, meetings, or calendar events, use Aegis's unified data API. Do not call Google Calendar API directly.
 
-For "my calendar" across every connected calendar service, prefer the unified library endpoint first:
-GET %s/v1/library/events — calendar events in one neutral list (title, start_at, end_at, all_day, location, organizer, attendees, sources[])
+GET %s/v1/library/events — calendar events across every connected calendar service (title, start_at, end_at, all_day, location, organizer, attendees, sources[])
+GET %s/v1/library/freebusy — busy intervals only for scheduling (no titles or attendees)
 
-Google Calendar-specific endpoints (call the full proxy URL; Aegis authenticates you):
-GET /me/events — list calendar events (neutral CalendarEvent metadata)
-GET /me/calendars — list the user's calendars
-GET /calendars/{calendarId}/events — events for one calendar (calendarId may be "primary")
-GET /events/{id} — one event by service-local ID
-
-Calendar events use Aegis's neutral identity matching for organizer/attendees (email → phone → handle → name), so people on a meeting can be matched to /v1/library/contacts when a contact service is connected.
-Event content stays on Google Calendar — Aegis does not store calendars.
-Always include the full proxy base URL in your requests.`, base, root)
+sources[] records where each event lives for sync. Event content stays on Google Calendar — Aegis does not store calendars.
+Organizer/attendees use neutral identity matching so people on a meeting can match /v1/library/contacts.`, root, root)
 }
 
 // HandleProxy processes a Google Calendar API request through the connector.

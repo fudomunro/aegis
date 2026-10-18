@@ -12,11 +12,12 @@ It does two jobs:
 
 1. **Pre-request hook** (`POST /v1/pre-request`) — detect named services in an
    LLM request and inject instructions that point the agent at Aegis’s
-   proxy/library APIs.
-2. **Service proxy + unified library** — agents call
-   `/v1/services/{id}/...` and `/v1/library/{kind}` instead of provider APIs.
-   Aegis attaches OAuth tokens, caches, enforces permissions, and returns
-   neutral models.
+   library APIs (and, only where needed, content/ingest transport).
+2. **Unified library + content transport** — agents call
+   `/v1/library/{kind}` for user data. `/v1/services/{id}/...` is content/ingest
+   only (photo bytes, full message bodies, playlist items, local import; issue
+   #119) — not a general provider-API mirror. Aegis attaches OAuth tokens,
+   caches, enforces permissions, and returns neutral models.
 
 Module: `github.com/fudomunro/aegis`  
 Layout: **`internal/types`** (data-type layer) + **`internal/core`**
@@ -37,7 +38,9 @@ them away.
   Google Photos/Contacts, Immich, …) remain the first-class **connectors** and
   match targets; do not prioritize generic scrapers or ad-hoc type detection
   over them. When provider-shaped APIs and type-level semantics conflict,
-  prefer the type-level design.
+  prefer the type-level design. `/v1/services` is content/ingest transport
+  only (issue #119) — do not reintroduce provider list mirrors, playback,
+  catalog search, or generic OAuth pass-through as agent API.
 - **Fail-open.** Fetch failures, missing endpoints, bad payloads, and
   non-actionable match results must **pass through unchanged**. The hook
   returns `allow` on parse/log errors. Do not invent fail-closed behavior.
@@ -64,7 +67,7 @@ them away.
 
 ```
 Agent → Aperture → Aegis pre-request hook → LLM
-Agent → Aegis proxy / library / admin → provider APIs
+Agent → Aegis library / content transport / admin → provider APIs
 ```
 
 | Area | Where | Notes |
@@ -75,7 +78,7 @@ Agent → Aegis proxy / library / admin → provider APIs
 | Admin permissions overlay | `permissions_overlay.go` | `permissions.json` v2: `types` (primary TypePolicy) + `services` (tighten-only migration overrides); admin saves never rewrite aegis.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
-| Generic/shared proxy path | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request` |
+| Generic/shared content transport | `connector_proxy.go`, `proxy.go`, `httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
 | Tokens / OAuth / CSRF | `tokens.go`, `oauth.go`, `statestore.go`, `connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + library | `internal/types` (models/merge/kind), `library.go`, `librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline stays in main until core extract |
 | Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
@@ -119,7 +122,8 @@ type ServiceConnector interface {
   args (see `NewQuickenConnector`).
 - Proxy path → data-type classification is the ordered table in
   `internal/types/pathclass.go`. Do not reintroduce a `switch` or a second
-  classifier.
+  classifier. Agent-facing `/v1/services` paths must pass
+  `types.IsAgentContentPath` (issue #119).
 
 ### Local state layout (issue #74)
 

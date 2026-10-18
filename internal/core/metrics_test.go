@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -165,7 +166,7 @@ func TestAgentForRequest_APIKeyFallback(t *testing.T) {
 func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(`{"ok":true}`))
+		w.Write([]byte(`{"id":"pl1","name":"Jazz","tracks":{"total":1,"items":[]}}`))
 	}))
 	defer upstream.Close()
 
@@ -181,8 +182,15 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.tokens.Save("spotify", &OAuthToken{
+		AccessToken: "tok",
+		Expiry:      futureTime(),
+	})
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"spotify": connectors.NewSpotifyConnector(srv),
+	}
 
-	req := httptest.NewRequest("GET", "/v1/services/spotify/me/tracks", nil)
+	req := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
@@ -195,8 +203,8 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	if st.Hits != 1 {
 		t.Fatalf("spotify hits = %d, want 1", st.Hits)
 	}
-	if st.DataTypes["tracks"] != 1 {
-		t.Fatalf("data types = %v, want tracks=1", st.DataTypes)
+	if st.DataTypes["playlists"] != 1 {
+		t.Fatalf("data types = %v, want playlists=1", st.DataTypes)
 	}
 	if st.CacheMiss != 1 {
 		t.Fatalf("cache misses = %d, want 1", st.CacheMiss)
@@ -206,7 +214,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	}
 
 	// Second request should be a cache hit.
-	req2 := httptest.NewRequest("GET", "/v1/services/spotify/me/tracks", nil)
+	req2 := httptest.NewRequest("GET", "/v1/services/spotify/playlists/pl1", nil)
 	req2.Header.Set("X-Api-Key", "test-key")
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleServiceProxy)(w2, req2)

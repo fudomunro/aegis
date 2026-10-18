@@ -185,11 +185,14 @@ func TestHandlePreRequest_InjectService(t *testing.T) {
 		t.Fatalf("first message role = %q, want %q", sysMsg["role"], "system")
 	}
 	content := sysMsg["content"].(string)
-	if !strings.Contains(content, "https://aegis.example.com/v1/services/spotify") {
-		t.Fatalf("system message missing proxy URL: %q", content)
+	if !strings.Contains(content, "/v1/library/") {
+		t.Fatalf("system message missing library URL: %q", content)
 	}
 	if !strings.Contains(content, "Spotify") {
 		t.Fatalf("system message missing service name: %q", content)
+	}
+	if !strings.Contains(content, "Do not call Spotify directly") {
+		t.Fatalf("system message missing do-not-call-provider: %q", content)
 	}
 }
 
@@ -225,8 +228,11 @@ func TestHandlePreRequest_AliasMatch(t *testing.T) {
 	json.Unmarshal(resp.RequestBody, &modified)
 	sysMsg := modified["messages"].([]any)[0].(map[string]any)
 	content := sysMsg["content"].(string)
-	if !strings.Contains(content, "/v1/services/ytm") {
-		t.Fatalf("system message missing ytm proxy URL: %q", content)
+	if !strings.Contains(content, "/v1/library/") {
+		t.Fatalf("system message missing library URL: %q", content)
+	}
+	if !strings.Contains(content, "YouTube Music") {
+		t.Fatalf("system message missing ytm service name: %q", content)
 	}
 }
 
@@ -337,11 +343,14 @@ func TestHandlePreRequest_MultipleServices(t *testing.T) {
 	sysMsg := modified["messages"].([]any)[0].(map[string]any)
 	content := sysMsg["content"].(string)
 
-	if !strings.Contains(content, "/v1/services/spotify") {
-		t.Fatalf("missing spotify proxy URL: %q", content)
+	if !strings.Contains(content, "Spotify") {
+		t.Fatalf("missing spotify name: %q", content)
 	}
-	if !strings.Contains(content, "/v1/services/ytm") {
-		t.Fatalf("missing ytm proxy URL: %q", content)
+	if !strings.Contains(content, "YouTube Music") {
+		t.Fatalf("missing ytm name: %q", content)
+	}
+	if !strings.Contains(content, "/v1/library/") {
+		t.Fatalf("missing library URL: %q", content)
 	}
 }
 
@@ -684,8 +693,8 @@ func TestHandlePreRequest_AnthropicBody(t *testing.T) {
 	var modified map[string]any
 	json.Unmarshal(resp.RequestBody, &modified)
 	sys, _ := modified["system"].(string)
-	if !strings.Contains(sys, "/v1/services/spotify") {
-		t.Fatalf("anthropic system missing proxy URL: %q", sys)
+	if !strings.Contains(sys, "/v1/library/") {
+		t.Fatalf("anthropic system missing library URL: %q", sys)
 	}
 	msgs := modified["messages"].([]any)
 	if len(msgs) != 1 {
@@ -729,7 +738,7 @@ func TestHandlePreRequest_ResponsesBody(t *testing.T) {
 	items := modified["input"].([]any)
 	sys := items[0].(map[string]any)
 	content, _ := sys["content"].(string)
-	if sys["role"] != "system" || !strings.Contains(content, "/v1/services/spotify") {
+	if sys["role"] != "system" || !strings.Contains(content, "/v1/library/") {
 		t.Fatalf("input[0] = %v", sys)
 	}
 }

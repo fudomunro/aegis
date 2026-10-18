@@ -113,22 +113,21 @@ func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Google Photos is referenced.
 func (c *GooglePhotosConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + GooglePhotosServiceID
-	return fmt.Sprintf(`When the user's request involves Google Photos, you MUST use the Aegis proxy at %s instead of calling Google Photos directly.
+	return fmt.Sprintf(`When the user's request involves Google Photos, use Aegis's unified data API. Do not call Google Photos directly.
+
+GET %s/v1/library/photos — photo metadata across every connected photo service
 
 Google Photos uses the Picker API: the user must explicitly select photos once. Full library sync is not available without Google app verification.
 
-Picker flow (call the full proxy URL; Aegis authenticates you):
-1. POST /picker/sessions — create a session; return picker_uri to the user and ask them to open it
-2. GET /picker/sessions/{id} — poll until media_items_set is true (follow pollingConfig in the response when present)
-3. GET /picker/mediaItems?sessionId={id} — list the selection as neutral Photo metadata
-4. For photos across every connected photo service after a pick, also try:
-GET %s/v1/library/photos — last completed Google Photos pick plus other photo services
+Picker flow (Aegis authenticates you):
+1. POST %s/v1/services/google-photos/picker/sessions — create a session; return picker_uri to the user and ask them to open it
+2. GET %s/v1/services/google-photos/picker/sessions/{id} — poll until media_items_set is true
+3. GET %s/v1/services/google-photos/picker/mediaItems?sessionId={id} — list the selection as neutral Photo metadata
+4. GET %s/v1/library/photos — last completed pick plus other photo services
 
-Photos are metadata-only. Aegis never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour) — do not treat it as a permanent link.
-Always include the full proxy base URL in your requests.
+Photos are metadata-only. Aegis never downloads or stores image bytes. Use sources[].blob_url for the short-lived download URL (often expires in about an hour).
 
-%s`, base, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, root, root, types.PhotoSourceDiscipline())
 }
 
 // HandleProxy processes a Google Photos Picker API request through the connector.
