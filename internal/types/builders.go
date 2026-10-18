@@ -68,11 +68,12 @@ func NewPlaceVisit(service, serviceName, id string, v PlaceVisit) PlaceVisit {
 // back to local Photos libraries, Immich Docker/Postgres, or a direct :2283
 // call when the prompt is vague (issue #125).
 func PhotoSourceDiscipline() string {
-	return "Photo source discipline: obtain photo metadata and bytes only through Aegis " +
-		"(/v1/library/photos or /v1/services/...). Do not open Photos.app, " +
+	return "Photo source discipline: obtain photo metadata only through Aegis " +
+		"(/v1/library/photos) and bytes only via sources[].blob_url content transport. " +
+		"Do not open Photos.app, " +
 		"Photos Library.photoslibrary, Photo Booth, or ~/Pictures as a photo source; " +
 		"do not query Immich at :2283 or via Docker/Postgres; do not read Immich .env " +
-		"or compose files for credentials. Aegis owns photo credentials and the proxy URL."
+		"or compose files for credentials. Aegis owns photo credentials and the blob URL."
 }
 
 // NormalizePlaceVisitKind maps provider labels onto visit/trip.

@@ -41,15 +41,17 @@ func TestImmichConnector_SystemInstructions(t *testing.T) {
 	}}}, "https://aegis.example.com"))
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
-		"/v1/services/immich",
+		"/v1/services/immich/assets/{id}/original",
 		"/v1/library/photos",
-		"/search/metadata",
-		"X-API-Key",
+		"blob_url",
 		"foreign canonical",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("instructions missing %q: %s", want, instr)
 		}
+	}
+	if strings.Contains(instr, "/search/metadata") {
+		t.Fatalf("must not advertise Immich asset search (issue #119): %s", instr)
 	}
 }
 

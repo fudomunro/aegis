@@ -20,20 +20,17 @@ func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
 
 	instructions := conn.SystemInstructions("https://aegis.example.com")
 
-	if !strings.Contains(instructions, "/v1/services/youtube-music") {
-		t.Fatal("instructions missing proxy base URL")
+	if !strings.Contains(instructions, "/v1/library/playlists") {
+		t.Fatal("instructions missing library playlists")
 	}
-	if !strings.Contains(instructions, "GET /me") {
-		t.Fatal("instructions missing /me endpoint")
+	if !strings.Contains(instructions, "/v1/library/tracks") {
+		t.Fatal("instructions missing library tracks")
 	}
-	if !strings.Contains(instructions, "GET /me/playlists") {
-		t.Fatal("instructions missing /me/playlists endpoint")
+	if !strings.Contains(instructions, "/v1/services/youtube-music/playlists/{id}") {
+		t.Fatal("instructions missing playlist content path")
 	}
-	if !strings.Contains(instructions, "GET /search") {
-		t.Fatal("instructions missing /search endpoint")
-	}
-	if !strings.Contains(instructions, "GET /me/liked") {
-		t.Fatal("instructions missing /me/liked endpoint")
+	if strings.Contains(instructions, "GET /search") {
+		t.Fatal("instructions must not advertise catalog search (issue #119)")
 	}
 }
 
@@ -335,7 +332,7 @@ func TestYouTubeMusicConnector_HandleProxy_NoToken(t *testing.T) {
 		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
-	req := httptest.NewRequest("GET", "/v1/services/youtube-music/me", nil)
+	req := httptest.NewRequest("GET", "/v1/services/youtube-music/playlists/PL1", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
@@ -403,7 +400,9 @@ func TestYouTubeMusicConnector_Playlists_ReadList(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	// List paths are not agent API (issue #119); call the connector directly
+	// to verify neutral list transform + pagination still work for library use.
+	srv.connectors["youtube-music"].HandleProxy(w, req, "/me/playlists")
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want 200, body: %s", w.Code, w.Body.String())
@@ -473,7 +472,9 @@ func TestYouTubeMusicConnector_Playlists_ReadList_Cached(t *testing.T) {
 		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
-	handler := srv.AuthMiddleware(srv.HandleServiceProxy)
+	handler := func(w *httptest.ResponseRecorder, req *http.Request) {
+		srv.connectors["youtube-music"].HandleProxy(w, req, "/me/playlists")
+	}
 
 	// First request — cache miss.
 	req := httptest.NewRequest("GET", "/v1/services/youtube-music/me/playlists", nil)
@@ -707,12 +708,12 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 		"youtube-music": connectors.NewYouTubeMusicConnector(srv),
 	}
 
-	// Test /me — should be transformed.
+	// Connector-level /me and /search (not agent API under issue #119).
 	req := httptest.NewRequest("GET", "/v1/services/youtube-music/me", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.connectors["youtube-music"].HandleProxy(w, req, "/me")
 
 	if w.Code != http.StatusOK {
 		body := w.Body.String()
@@ -729,12 +730,12 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 		t.Fatalf("title = %v", result["title"])
 	}
 
-	// Test /search — should be transformed.
+	// Test /search — connector transform only.
 	req = httptest.NewRequest("GET", "/v1/services/youtube-music/search?q=miles+davis", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 
-	srv.HandleServiceProxy(w, req)
+	srv.connectors["youtube-music"].HandleProxy(w, req, "/search")
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d, want 200", w.Code)

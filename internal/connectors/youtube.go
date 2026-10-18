@@ -132,31 +132,19 @@ func (c *YouTubeMusicConnector) Capabilities() types.ServiceCapabilities {
 // when YouTube Music is referenced.
 func (c *YouTubeMusicConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/youtube-music"
-	return fmt.Sprintf(`When the user's request involves YouTube Music, you MUST use the Aegis proxy at %s instead of calling YouTube directly.
+	return fmt.Sprintf(`When the user's request involves YouTube Music or their music library, use Aegis's unified data API. Do not call YouTube directly.
 
-For "my playlists" across every connected music service (Spotify, YouTube Music, Amazon Music, …), prefer the unified library endpoint first:
-GET %s/v1/library/playlists — all user playlists in one neutral list (synced across services; service IDs live in sources[])
+GET %s/v1/library/playlists — user playlists across every connected music service (synced; service IDs live in sources[])
+GET %s/v1/library/tracks — liked/saved music tracks (YouTube likes are filtered to music-shaped videos)
+GET %s/v1/library/artists — followed artists / subscribed music channels
 
-For "liked songs" / liked music across every connected music service:
-GET %s/v1/library/tracks — all liked/saved tracks in one neutral list (name, artists, album, sources[]). YouTube likes are filtered to music-shaped videos (not every liked YouTube video).
+sources[] records where each item lives for sync/backup — prefer the library over service-specific calls.
 
-YouTube Music-specific endpoints (call the full proxy URL; Aegis authenticates you — do not send YouTube tokens or an API key unless your deployment uses api-key mode):
+Only when you need full playlist contents (library entries carry track_count only):
+GET %s/v1/services/youtube-music/playlists/{id} — playlist detail
+GET %s/v1/services/youtube-music/playlists/{id}/items — playlist items as neutral tracks
 
-GET /me — Current user's YouTube channel info
-GET /me/playlists — List user's playlists in neutral format (paginated, use ?pageToken=N)
-GET /me/liked — List liked YouTube videos as neutral tracks (paginated; proxy shows the raw liked-videos playlist — use /v1/library/tracks for music-only liked songs)
-GET /me/subscriptions — List followed artists / subscribed music channels (paginated; permission key: artists)
-GET /playlists/{id} — Get a playlist by ID
-GET /playlists/{id}/items — List items in a playlist as neutral tracks (paginated)
-GET /search?q=QUERY — Search YouTube Music (filters to music category)
-GET /videos/{id} — Get video details by ID
-GET /channels/{id} — Get channel details by ID
-
-Playlist responses use Aegis's neutral fields: name, description, owner, track_count, sources[] (service, service_name, id, url, extra).
-All responses are transformed to a compact, LLM-friendly format.
-Paginated endpoints return all items automatically when possible.
-Always include the full proxy base URL in your requests.`, base, root, root)
+Aegis does not expose channel/profile browsing, catalog search, or other YouTube account APIs.`, root, root, root, root, root)
 }
 
 // HandleProxy processes a YouTube Music API request through the connector.

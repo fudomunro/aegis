@@ -401,15 +401,18 @@ func TestGoogleGmailConnector_SystemInstructions_MentionLibrary(t *testing.T) {
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/library/messages",
-		"/me/messages",
 		"/messages/{id}",
+		"/threads/{id}",
 		"Gmail",
-		"Aegis authenticates you",
 		"Message-ID",
+		"format=full",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)
 		}
+	}
+	if strings.Contains(instr, "/me/messages") {
+		t.Fatalf("must not advertise message list proxy (issue #119):\n%s", instr)
 	}
 }
 

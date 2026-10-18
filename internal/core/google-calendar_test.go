@@ -447,10 +447,9 @@ func TestGoogleCalendarConnector_SystemInstructions_MentionLibrary(t *testing.T)
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/library/events",
-		"/me/events",
-		"/me/calendars",
+		"/v1/library/freebusy",
 		"Google Calendar",
-		"Aegis authenticates you",
+		"Do not call Google Calendar API directly",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)

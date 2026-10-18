@@ -3,7 +3,6 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -12,7 +11,10 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// HandleServiceProxy proxies requests to a configured service's upstream endpoint.
+// HandleServiceProxy is the /v1/services/{id}/{path} transport. After issue
+// #119 it is content/ingest only (photo bytes, full message bodies, playlist
+// items, local import) — not a general provider-API mirror. Library is the
+// data surface.
 // Route pattern: /v1/services/{service_id} or /v1/services/{service_id}/{path...}
 func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// Extract service ID and remaining path.
@@ -42,15 +44,23 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle /capabilities requests — return connector metadata filtered by permissions.
-	if remainingPath == "/capabilities" {
-		if connector, ok := s.connectors[serviceID]; ok {
-			caps := types.FilterCapabilities(connector.Capabilities(), s.effectivePermissions(svc))
-			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(caps)
-		} else {
-			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q has no connector", serviceID))
-		}
+	// Issue #119: /v1/services is content/ingest transport only. Library is
+	// the data surface; provider-shaped lists, playback, search, and generic
+	// pass-through are not agent API.
+	if !types.IsAgentContentPath(remainingPath) {
+		logger.Warn("service path rejected: not content/ingest", "path", remainingPath)
+		s.recordAccess(AccessEvent{
+			Agent:    agentForRequest(r),
+			Surface:  MetricSurfaceService,
+			Target:   serviceID,
+			DataType: types.DataTypeForPath(remainingPath),
+			Decision: DecisionDeny,
+			Reason:   "not_content_path",
+			Method:   r.Method,
+			Status:   http.StatusNotFound,
+		})
+		writeJSONError(w, http.StatusNotFound,
+			"service paths are content/ingest only (photo bytes, full message bodies, playlist items, local import); use /v1/library/{kind} for user data")
 		return
 	}
 
@@ -92,103 +102,17 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If a connector is registered for this service, delegate to it.
-	if connector, ok := s.connectors[serviceID]; ok {
-		connector.HandleProxy(w, r, remainingPath)
-		s.recordProxyAccess(r, serviceID, dataType, w.Header().Get("X-Aegis-Cache"))
+	// Content/ingest transport is connector-owned. There is no generic
+	// provider pass-through (issue #119) — Aegis does not mirror service APIs.
+	connector, ok := s.connectors[serviceID]
+	if !ok {
+		logger.Warn("no connector for content path")
+		writeJSONError(w, http.StatusNotFound,
+			fmt.Sprintf("service %q has no connector for content/ingest", serviceID))
 		return
 	}
-
-	if svc.Endpoint == "" {
-		logger.Warn("no upstream endpoint configured")
-		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("service %q has no upstream endpoint", serviceID))
-		return
-	}
-
-	// Build the upstream URL: service endpoint + remaining path + original query string.
-	upstreamURL := trimRightSlash(svc.Endpoint) + remainingPath
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
-	}
-
-	// For GET requests, check cache first.
-	cacheKey := serviceID + ":" + r.URL.RequestURI()
-	if r.Method == http.MethodGet {
-		if cached, ok := s.cache.Get(cacheKey); ok {
-			logger.Debug("cache hit")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Aegis-Cache", "hit")
-			io.WriteString(w, cached)
-			s.recordProxyAccess(r, serviceID, dataType, MetricCacheHit)
-			return
-		}
-	}
-
-	// Forward the request to the upstream service.
-	upstreamReq, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
-	if err != nil {
-		logger.Error("failed to create upstream request", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to create upstream request")
-		return
-	}
-
-	// Copy original headers.
-	for k, vv := range r.Header {
-		for _, v := range vv {
-			upstreamReq.Header.Add(k, v)
-		}
-	}
-
-	// Apply service-specific headers (may override originals).
-	for k, v := range svc.Headers {
-		upstreamReq.Header.Set(k, v)
-	}
-
-	// If we have a stored OAuth token for this service, use it.
-	// This overrides any static Authorization header from config.
-	if tok := s.GetValidToken(serviceID, logger); tok != "" {
-		upstreamReq.Header.Set("Authorization", "Bearer "+tok)
-	}
-
-	upstreamStart := time.Now()
-	resp, err := aegisHTTPClient.Do(upstreamReq)
-	if s.prom != nil {
-		s.prom.observeUpstream(serviceID, time.Since(upstreamStart), statusCodeOrZero(resp, err))
-	}
-	if err != nil {
-		logger.Error("upstream request failed", "error", err)
-		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("upstream request to %s failed", svc.Name))
-		return
-	}
-	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		logger.Error("failed to read upstream response", "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to read upstream response")
-		return
-	}
-
-	logger.Debug("upstream response", "status", resp.StatusCode, "bytes", len(data))
-
-	// Cache successful GET responses only — never persist error bodies.
-	if r.Method == http.MethodGet && resp.StatusCode == http.StatusOK {
-		ttl := svc.CacheTTL.Duration
-		if ttl == 0 {
-			ttl = 5 * time.Minute
-		}
-		s.cache.Set(cacheKey, string(data), ttl)
-	}
-
-	// Forward the response.
-	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
-	if ct := resp.Header.Get("Content-Type"); ct == "" {
-		w.Header().Set("Content-Type", "application/json")
-	}
-	w.Header().Set("X-Aegis-Cache", "miss")
-	w.WriteHeader(resp.StatusCode)
-	w.Write(data)
-	s.recordProxyAccess(r, serviceID, dataType, MetricCacheMiss)
+	connector.HandleProxy(w, r, remainingPath)
+	s.recordProxyAccess(r, serviceID, dataType, w.Header().Get("X-Aegis-Cache"))
 }
 
 // recordProxyAccess records a redacted service-proxy access event (issue #32).

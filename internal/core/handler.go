@@ -464,7 +464,8 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build instructions for the agent to use Aegis's proxy endpoints.
+	// Build instructions pointing agents at Aegis's data surface (issue #119).
+	// Library is primary; connector instructions only add content/ingest gaps.
 	var instructions []string
 	for _, svc := range matched {
 		if svc.Action != "inject" {
@@ -479,12 +480,11 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		if connector, ok := s.connectors[svc.ID]; ok {
 			instructions = append(instructions, connector.SystemInstructions(s.baseURL))
 		} else {
-			proxyURL := fmt.Sprintf("%s/v1/services/%s", strings.TrimRight(s.baseURL, "/"), svc.ID)
 			instruction := fmt.Sprintf(
-				"When working with %s, you MUST use the Aegis proxy endpoint at %s "+
-					"instead of calling %s directly. All requests through this proxy are "+
-					"authenticated, cached, and audited.",
-				svc.Name, proxyURL, svc.Name,
+				"When working with %s, use Aegis's unified library endpoints "+
+					"(/v1/library/{kind}) for the user's data. Do not call %s directly. "+
+					"Service provenance lives in sources[] for sync — not a separate services API.",
+				svc.Name, svc.Name,
 			)
 			instructions = append(instructions, instruction)
 		}

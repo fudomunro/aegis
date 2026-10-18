@@ -84,18 +84,11 @@ func (c *GoogleContactsConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the system message injected when Google Contacts is referenced.
 func (c *GoogleContactsConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	base := root + "/v1/services/" + GoogleContactsServiceID
-	return fmt.Sprintf(`When the user's request involves Google Contacts or their address book, you MUST use the Aegis proxy at %s instead of calling Google People API directly.
+	return fmt.Sprintf(`When the user's request involves Google Contacts or their address book, use Aegis's unified data API. Do not call Google People API directly.
 
-For "my contacts" across every connected contact service, prefer the unified library endpoint first:
-GET %s/v1/library/contacts — contacts in one neutral list (name, emails, phones, organization, sources[])
+GET %s/v1/library/contacts — contacts across every connected contact service (name, emails, phones, organization, sources[])
 
-Google Contacts-specific endpoints (call the full proxy URL; Aegis authenticates you):
-GET /me/contacts — list address-book contacts (neutral Contact metadata)
-GET /contacts/{id} — one contact (id is people/… resource name or bare ID)
-
-Contacts use Aegis's neutral identity matching (email → phone → handle → name). Photo.people[] entries are Contact values, so a person from this address book can be matched to someone listed on a photo when a connector reports them.
-Always include the full proxy base URL in your requests.`, base, root)
+sources[] records where each contact lives for sync. Contacts use neutral identity matching (email → phone → handle → name) so people can be matched to photos, messages, and events.`, root)
 }
 
 // HandleProxy processes a Google People API request through the connector.

@@ -119,22 +119,17 @@ func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the agent hint when Immich is referenced.
 func (c *ImmichConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	proxy := root + "/v1/services/" + ImmichServiceID
-	return fmt.Sprintf(`When the user's request involves Immich (self-hosted photos), you MUST use the Aegis proxy at %s instead of calling Immich directly. Aegis adds the Immich API key (X-API-Key header from config) — do not ask the user for it.
+	return fmt.Sprintf(`When the user's request involves Immich (self-hosted photos), use Aegis's unified data API. Do not call Immich directly or ask the user for an API key.
 
-Preferred unified library first:
-GET %s/v1/library/photos — all photo metadata from every connected photo service, including Immich (bytes stay on Immich).
+GET %s/v1/library/photos — photo metadata from every connected photo service, including Immich (bytes stay on Immich)
 
-Immich-specific endpoints (call the full proxy URL; Aegis authenticates you):
-POST /search/metadata — {"page":1,"size":250,"withExif":true} list assets
-GET /assets/{id}/original — download original bytes for one asset
-GET /assets/{id}/thumbnail — thumbnail bytes
-GET /albums — list albums
+Photos are metadata-only. Use sources[].blob_url to fetch bytes (Aegis attaches the Immich API key). Immich holds the authoritative copy (foreign canonical).
 
-Photos are metadata-only in the library. Use sources[].blob_url (Aegis proxy URL) to fetch bytes; Immich holds the authoritative copy (foreign canonical).
-Always include the full proxy base URL in your requests.
+Byte transport only (not a general Immich API):
+GET %s/v1/services/immich/assets/{id}/original — original bytes
+GET %s/v1/services/immich/assets/{id}/thumbnail — thumbnail bytes
 
-%s`, proxy, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, types.PhotoSourceDiscipline())
 }
 
 // HandleProxy forwards Immich API paths, attaching the configured API key.

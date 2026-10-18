@@ -268,14 +268,11 @@ func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 	if !strings.Contains(instr, "/v1/library/contacts") {
 		t.Fatalf("missing library endpoint: %s", instr)
 	}
-	if !strings.Contains(instr, "/v1/services/google") {
-		t.Fatalf("missing proxy base: %s", instr)
+	if !strings.Contains(instr, "Do not call Google People API directly") {
+		t.Fatalf("missing direct-API warning: %s", instr)
 	}
-	if !strings.Contains(instr, "Aegis authenticates you") {
-		t.Fatalf("missing authenticates wording: %s", instr)
-	}
-	if !strings.Contains(instr, "Photo.people") {
-		t.Fatalf("missing Photo.people cross-type note: %s", instr)
+	if !strings.Contains(instr, "sources[]") {
+		t.Fatalf("missing sources provenance note: %s", instr)
 	}
 }
 
