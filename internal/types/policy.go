@@ -330,8 +330,9 @@ func AllowsMethod(level, method string) bool {
 
 // TypePolicy is the agent-access policy owned by a data type (issue #148).
 // Service-level Permissions remain a minority override during migration;
-// the type default is the primary model. Enforcement still applies on
-// proxy, library, capabilities output, and pre-request injection.
+// the type default is the primary model. Enforcement applies on the
+// content/ingest proxy, library, and pre-request injection. Capabilities
+// are admin/connector metadata (issue #119) — not an agent discovery API.
 //
 // Redaction levels (freebusy, summary, city, precise) stay type-scoped:
 // ValidatePermissions rejects them on kinds that cannot enforce the
@@ -423,8 +424,8 @@ func (tp TypePolicies) Access(dataType, provider string) string {
 }
 
 // PermissionsFor materializes a service-scoped Permissions map for one
-// provider from type policies. Used so FilterCapabilities, permissionNotice,
-// and legacy helpers can keep their map shape while ownership stays type-level.
+// provider from type policies. Used so permissionNotice and legacy helpers
+// can keep their map shape while ownership stays type-level.
 func (tp TypePolicies) PermissionsFor(provider string) Permissions {
 	out := Permissions{}
 	for dataType := range tp {
@@ -519,8 +520,8 @@ func EffectiveAccess(policies TypePolicies, legacy Permissions, dataType, provid
 
 // EffectivePermissions materializes the service-scoped map for a provider:
 // type policy first, legacy service permissions tightened on top. Callers that
-// still take Permissions (FilterCapabilities, permissionNotice, host
-// ServiceInfo) should use this rather than the raw service block.
+// still take Permissions (permissionNotice, host ServiceInfo) should use this
+// rather than the raw service block.
 func EffectivePermissions(policies TypePolicies, legacy Permissions, provider string) Permissions {
 	// Collect every type the policies name plus every type the legacy map
 	// names (except "default"), so service-only keys still resolve.
