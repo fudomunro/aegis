@@ -209,4 +209,4 @@ clients.
 - [Tags](https://tailscale.com/kb/1068/tags)
 - [Tailscale Serve](https://tailscale.com/kb/1312/serve) (identity headers)
 - [tsnet](https://github.com/tailscale/tailscale/tree/main/tsnet) (embed Tailscale in Go; optional alternative to system `tailscaled`)
-- [Concept glossary](docs/glossary.md) (service/connector/connection, type policy, LLM agent vs coding agent)
+- [Concept glossary](docs/glossary.md) (service/connector/connection, data grant, LLM agent vs coding agent)

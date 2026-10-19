@@ -485,8 +485,8 @@ func legacyOverride(p Permissions, dataType string) (string, bool) {
 // (issue #148):
 //
 //  1. data grant is primary when present (default + provider tighten-only)
-//  2. legacy service permissions only tighten data grant
-//  3. when no data grant exists for the type, legacy service permissions
+//  2. service grant_limits only tighten a data grant
+//  3. when no data grant exists for the type, service grant_limits
 //     remain the authority (compat window; they can still opt in places)
 //
 // Unclassified paths must pass dataType == "" and use the Strictest view so
@@ -507,7 +507,7 @@ func EffectiveAccess(policies DataGrants, legacy Permissions, dataType, provider
 		}
 		return level
 	}
-	// No type-owned policy for this key: service permissions still decide
+	// No type-owned policy for this key: service grant_limits still decide
 	// during the migration window (they can name opt-in types explicitly).
 	if legacy != nil {
 		return legacy.For(dataType)
@@ -519,7 +519,7 @@ func EffectiveAccess(policies DataGrants, legacy Permissions, dataType, provider
 }
 
 // EffectivePermissions materializes the service-scoped map for a provider:
-// data grant first, legacy service permissions tightened on top. Callers that
+// data grant first, service grant_limits tightened on top. Callers that
 // still take Permissions (permissionNotice, host ServiceInfo) should use this
 // rather than the raw service block.
 func EffectivePermissions(policies DataGrants, legacy Permissions, provider string) Permissions {

@@ -85,7 +85,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Enforce data-type permissions before any upstream or connector work.
 	if !s.AllowDataPermission(w, r, svc, remainingPath) {
-		logger.Warn("permission denied",
+		logger.Warn("data grant denied",
 			"data_type", dataType,
 			"permission", accessLevel,
 		)

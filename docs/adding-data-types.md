@@ -214,7 +214,7 @@ appears in pre-request hints (and `TestLibraryKinds_KindRuntimeInSync` fails).
     ExampleQuestion: "what widgets do I have?",
     Keywords:        []string{"my widgets", "widget library", "widgets do i have"},
     EmptyMsg:        "no widget-capable services configured",
-    DenyMsg:         "permission denied: agent access to widgets is not allowed",
+    DenyMsg:         "denied: data grant for agent access to widgets is not allowed",
     FailMsg:         "failed to fetch widgets",
 },
 

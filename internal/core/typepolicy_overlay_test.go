@@ -43,7 +43,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 
-	// Type policy is primary: tracks default full, spotify tightens to none.
+	// Data grant is primary: tracks default full, spotify tightens to none.
 	if err := cfg.SetDataGrants(types.DataGrants{
 		"tracks": {
 			Default:   types.AccessFull,
@@ -86,7 +86,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 		t.Fatalf("data_grants.tracks = %+v", file.DataGrants["tracks"])
 	}
 
-	// Reload keeps type policy and resolves the same way.
+	// Reload keeps data grant and resolves the same way.
 	fresh, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("LoadConfig reload: %v", err)
