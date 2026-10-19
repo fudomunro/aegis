@@ -311,6 +311,56 @@
         "default": "read",
         "photos": "write"
       }
+    },
+    {
+      "id": "paperless",
+      "name": "Paperless-ngx",
+      "aliases": [
+        "paperless",
+        "paperless-ngx",
+        "documents",
+        "receipts",
+        "warranties",
+        "leases",
+        "paperwork"
+      ],
+      "action": "inject",
+      "endpoint": "http://192.168.1.10:8000/api",
+      "headers": {
+        "Authorization": "Token $ENV:PAPERLESS_API_TOKEN"
+      },
+      "cache_ttl": "5m",
+      "description": "Self-hosted Paperless-ngx documents (receipts, warranties, leases, letters). File bytes stay on Paperless (foreign/local canonical). Set canonical_for: [\"documents\"] here if Paperless is your home copy. Use documents=metadata to list titles/tags without text.",
+      "canonical_for": [
+        "documents"
+      ],
+      "grant_limits": {
+        "default": "read",
+        "documents": "read"
+      }
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "aliases": [
+        "google docs",
+        "google drive",
+        "docs",
+        "drive",
+        "google documents"
+      ],
+      "action": "inject",
+      "endpoint": "https://www.googleapis.com/drive/v3",
+      "cache_ttl": "15m",
+      "description": "Google Docs via Drive for /v1/library/documents. Content is HTML/plain-text export (markdown conversion deferred). Files stay on Drive (non-Aegis canonical). Shares the Google connection; drive.readonly covers list + export. Watch OAuth app verification limits (same class as Photos).",
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/drive.readonly"
+      ],
+      "grant_limits": {
+        "default": "read",
+        "documents": "read"
+      }
     }
   ]
 }

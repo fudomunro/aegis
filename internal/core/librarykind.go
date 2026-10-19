@@ -82,6 +82,10 @@ var kindRuntime = map[string]kindRuntimeEntry{
 		},
 		Readable: func(s *Server) bool { return s.libraryReadableFor("places") },
 	},
+	"documents": {
+		HasProviders: func(s *Server) bool { return s.hasProvider[types.DocumentProvider]() },
+		Readable:     func(s *Server) bool { return s.libraryReadableFor("documents") },
+	},
 }
 
 // kindHasProviders reports whether any connector can feed the kind.
@@ -319,6 +323,31 @@ var libraryKinds = []types.LibraryKind{
 		DenyMsg:  "denied: data grant for agent access to places is not allowed (places default to none — enable city, read, or precise)",
 		FailMsg:  "failed to fetch places",
 	},
+	{
+		ID:              "documents",
+		Path:            "/v1/library/documents",
+		PermType:        "documents",
+		Label:           "documents",
+		Usage:           "documents, receipts, warranties, leases, insurance policies, tax letters, medical letters, or paperwork",
+		Summary:         "user documents from every connected source in one neutral list (title, mime_type, created_at, modified_at, correspondent, document_type, tags[], excerpt when read is allowed, people[] as Contact identities, sources[] with blob_url on the canonical source). Document bytes stay on the source service. Full text is only at GET /v1/library/documents/{service}/{id}/text.",
+		SyncRule:        "Documents merge on durable entity_id (content checksum, then archive serial) when present; otherwise same title + created_at (match=title_created). metadata access returns titles/dates/tags only — no excerpt or text. Aegis does not store or OCR document files.",
+		ExampleQuestion: "where is my lease?",
+		Keywords: []string{
+			"my documents", "document library", "paperwork",
+			"receipt", "receipts", "warranty", "warranties",
+			"lease", "leases", "rental agreement",
+			"insurance policy", "insurance", "policy document",
+			"tax letter", "tax document", "tax form",
+			"medical letter", "medical document",
+			"invoice", "invoices", "statement", "statements",
+			"where is my", "find my document", "find my receipt",
+			"find my warranty", "find my lease", "find my policy",
+			"paperless",
+		},
+		EmptyMsg: "no document-capable services configured",
+		DenyMsg:  "denied: data grant for agent access to documents is not allowed",
+		FailMsg:  "failed to fetch documents",
+	},
 }
 
 // LibraryKindByID returns the registered kind, or nil.
@@ -449,6 +478,8 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 		"/v1/library/messages":     s.HandleLibraryMessages,
 		"/v1/library/transactions": s.HandleLibraryTransactions,
 		"/v1/library/places":       s.HandleLibraryPlaceVisits,
+		"/v1/library/documents":    s.HandleLibraryDocuments,
+		"/v1/library/documents/{service}/{id}/text": s.HandleLibraryDocumentText,
 		"/v1/library/copies":       s.HandleLibraryCopies,
 		"/v1/library/review":       s.HandleMergeReview,
 		"/v1/library/links":        s.HandleEntityLinks,
@@ -794,6 +825,10 @@ func librarySourceDisplayName(s *Server, id string) string {
 		return connectors.YNABServiceName
 	case connectors.OwnTracksServiceID:
 		return connectors.OwnTracksServiceName
+	case connectors.PaperlessServiceID:
+		return connectors.PaperlessServiceName
+	case connectors.GoogleDriveServiceID:
+		return connectors.GoogleDriveServiceName
 	}
 	if svc := s.config.GetService(id); svc != nil && svc.Name != "" {
 		return svc.Name

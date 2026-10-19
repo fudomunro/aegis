@@ -11,7 +11,7 @@ import (
 // Keep in sync with libraryKinds IDs.
 var canonicalKindIDs = []string{
 	"playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages",
-	"transactions", "places",
+	"transactions", "places", "documents",
 }
 
 func isCanonicalKindID(id string) bool {
@@ -182,6 +182,17 @@ func markMessageSourcesCanonical(items []types.Message, serviceID string) {
 	}
 }
 
+// markDocumentSourcesCanonical stamps sources from serviceID as canonical.
+func markDocumentSourcesCanonical(items []types.Document, serviceID string) {
+	for i := range items {
+		for j := range items[i].Sources {
+			if items[i].Sources[j].Service == serviceID {
+				items[i].Sources[j].Canonical = true
+			}
+		}
+	}
+}
+
 // stampPlaylistCanonical marks sources when serviceID is config-declared
 // canonical for playlists.
 func (s *Server) stampPlaylistCanonical(items []types.Playlist, serviceID string) {
@@ -233,6 +244,15 @@ func (s *Server) stampMessageCanonical(items []types.Message, serviceID string) 
 	svc := s.config.GetService(serviceID)
 	if svc != nil && svc.IsCanonicalFor("messages") {
 		markMessageSourcesCanonical(items, serviceID)
+	}
+}
+
+// stampDocumentCanonical marks sources when serviceID is config-declared
+// canonical for documents (connectors may already set Canonical).
+func (s *Server) stampDocumentCanonical(items []types.Document, serviceID string) {
+	svc := s.config.GetService(serviceID)
+	if svc != nil && svc.IsCanonicalFor("documents") {
+		markDocumentSourcesCanonical(items, serviceID)
 	}
 }
 
