@@ -384,6 +384,9 @@ func Run() {
 	srv.connectors[connectors.BlueskyServiceID] = connectors.NewBlueskyConnector(srv)
 	srv.connectors[connectors.PaperlessServiceID] = connectors.NewPaperlessConnector(srv)
 	srv.connectors[connectors.GoogleDriveServiceID] = connectors.NewGoogleDriveConnector(srv)
+	// CalDAV/CardDAV (issue #146): Nextcloud, iCloud, Fastmail contacts + calendar.
+	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
+	srv.connectors[connectors.CalDAVServiceID] = connectors.NewCalDAVConnector(srv)
 	srv.connectors[timelineServiceID] = NewTimelineConnector(timelineStore)
 	// Signal contacts + messages (issue #168): local file-based import only.
 	srv.connectors[signalServiceID] = NewSignalConnector(signalStore)

@@ -361,6 +361,60 @@
         "default": "read",
         "documents": "read"
       }
+    },
+    {
+      "id": "dav-contacts",
+      "name": "DAV Contacts",
+      "aliases": [
+        "carddav",
+        "nextcloud contacts",
+        "icloud contacts",
+        "fastmail contacts",
+        "dav contacts",
+        "address book"
+      ],
+      "action": "inject",
+      "endpoint": "https://cloud.example.com",
+      "headers": {
+        "X-DAV-Username": "$ENV:DAV_USERNAME",
+        "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
+      },
+      "cache_ttl": "5m",
+      "description": "CardDAV address book (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists contacts as neutral Contact values. Credentials are username + app-specific password (never echoed by admin/API). Set canonical_for: [\"contacts\"] if this DAV server is your home copy (and remove it from Google Contacts).",
+      "canonical_for": [
+        "contacts"
+      ],
+      "grant_limits": {
+        "default": "read",
+        "contacts": "read"
+      }
+    },
+    {
+      "id": "dav-calendar",
+      "name": "DAV Calendar",
+      "aliases": [
+        "caldav",
+        "nextcloud calendar",
+        "icloud calendar",
+        "fastmail calendar",
+        "dav calendar",
+        "ical"
+      ],
+      "action": "inject",
+      "endpoint": "https://cloud.example.com",
+      "headers": {
+        "X-DAV-Username": "$ENV:DAV_USERNAME",
+        "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
+      },
+      "cache_ttl": "5m",
+      "description": "CalDAV calendar (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists events as neutral CalendarEvent values with RRULE expansion in the requested window. Credentials are username + app-specific password. Set canonical_for: [\"events\"] if this DAV server is your home copy (and remove it from Google Calendar). Events also feed /v1/library/freebusy.",
+      "canonical_for": [
+        "events"
+      ],
+      "grant_limits": {
+        "default": "read",
+        "events": "read"
+      }
     }
   ]
 }
