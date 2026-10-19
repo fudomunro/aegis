@@ -60,8 +60,8 @@ func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) ht
 			merge: func(in []types.UserDefinedItem) []types.UserDefinedItem {
 				return types.MergeUserDefinedItems(schema, in)
 			},
-			encode: func(merged []types.UserDefinedItem, bySvc map[string]types.LibraryServiceStatus) any {
-				return types.EncodeUserDefinedList(schema, merged, bySvc)
+			encode: func(items []types.UserDefinedItem, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+				return types.EncodeUserDefinedList(schema, items, page, bySvc)
 			},
 		})
 	}

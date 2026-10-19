@@ -186,8 +186,8 @@ func (s *TimelineStore) List(f PlaceVisitFilters, limit int) ([]types.PlaceVisit
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("timeline store disabled")
 	}
-	if limit <= 0 || limit > libraryPageCap {
-		limit = libraryPageCap
+	if limit <= 0 || limit > libraryItemCap {
+		limit = libraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -619,7 +619,7 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []t
 		return nil, false, types.ErrUnauthorized
 	}
 	logger := slog.With("connector", timelineServiceID)
-	items, listErr := c.store.List(PlaceVisitFilters{}, libraryPageCap)
+	items, listErr := c.store.List(PlaceVisitFilters{}, libraryItemCap)
 	if listErr != nil {
 		logger.Error("timeline store list failed", "error", listErr)
 		return nil, false, listErr

@@ -679,21 +679,22 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 		serviceOf: transactionServiceName,
 		sortKey:   transactionIdentityKey,
 		merge:     MergeTransactions,
-		encode: func(merged []types.Transaction, bySvc map[string]types.LibraryServiceStatus) any {
-			filtered := filterTransactions(merged, filters)
-			list := types.TransactionList{
-				Transactions: filtered,
-				Total:        len(filtered),
-				Synced:       true,
-				Truncated:    anyServiceTruncated(bySvc),
-				ByService:    bySvc,
-				Summary:      buildTransactionSummary(filtered),
-			}
+		encode: func(items []types.Transaction, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			filtered := filterTransactions(items, filters)
+			// Summary covers the full filtered set, not the current page.
+			summary := buildTransactionSummary(filtered)
 			if summaryOnly {
-				list.Transactions = nil
-				list.Total = 0
+				return types.TransactionList{
+					Summary:        summary,
+					LibraryListMeta: types.MetaForPage(types.PageResult{Total: 0}, true, anyServiceTruncated(bySvc), bySvc),
+				}
 			}
-			return list
+			pageItems, pr := types.SlicePage(filtered, page)
+			return types.TransactionList{
+				Transactions:    pageItems,
+				Summary:         summary,
+				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
+			}
 		},
 		markCanonical: s.stampTransactionCanonical,
 		cacheKey:      "library:transactions" + filters.cacheKeySuffix() + "|summary:" + strconv.FormatBool(summaryOnly),

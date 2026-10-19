@@ -128,12 +128,16 @@ type MailSearchQuery struct {
 }
 
 // MailSearchResponse is the agent-facing search/list result.
+// Paging matches the library contract (issue #185): limit + opaque
+// cursor/next_cursor. offset remains accepted for admin UI callers.
 type MailSearchResponse struct {
 	Messages []types.Message `json:"messages"`
 	Total    int             `json:"total"`
 	Limit    int             `json:"limit"`
 	Offset   int             `json:"offset"`
-	Query    string          `json:"query,omitempty"`
+	// NextCursor continues the walk; omitted at the end (issue #185).
+	NextCursor string `json:"next_cursor,omitempty"`
+	Query      string `json:"query,omitempty"`
 }
 
 // MailArchiveStatus reports store health for agents and admin.
@@ -371,9 +375,10 @@ FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
 // rather than raw (service, id) copies (issue #139).
 const mailSearchMergeCap = 5000
 
-// Search runs FTS + structured filters. Limit defaults to 25 (cap 200).
-// Source rows that share an identity (RFC Message-ID, else subject+from+sent_at)
-// are merged into one Message with multi-source sources[] before pagination.
+// Search runs FTS + structured filters. Limit defaults to 25 (cap
+// types.MaxPageLimit). Source rows that share an identity (RFC Message-ID,
+// else subject+from+sent_at) are merged into one Message with multi-source
+// sources[] before pagination.
 func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	if a == nil || a.db == nil {
 		return MailSearchResponse{}, fmt.Errorf("mail archive disabled")
@@ -382,8 +387,8 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	if limit <= 0 {
 		limit = 25
 	}
-	if limit > 200 {
-		limit = 200
+	if limit > types.MaxPageLimit {
+		limit = types.MaxPageLimit
 	}
 	offset := q.Offset
 	if offset < 0 {
@@ -478,7 +483,11 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	if end > total {
 		end = total
 	}
-	return MailSearchResponse{Messages: merged[offset:end], Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+	resp := MailSearchResponse{Messages: merged[offset:end], Total: total, Limit: limit, Offset: offset, Query: fts}
+	if end < total {
+		resp.NextCursor = types.EncodeCursor(end)
+	}
+	return resp, nil
 }
 
 // sortMailMessages orders merged messages like the SQL sent_at sort, with

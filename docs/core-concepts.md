@@ -211,7 +211,8 @@ After the overlap call-outs above, the stable concepts.
 | **EntityLink** | User-confirmed cross-service identity stored in `entity_links.json`. | `entity_links.go:22` |
 | **CopyInfo / copy ledger** | Best-effort record of mirrored/backup copies (issue #76). | `copy_ledger.go`, `models.go:812` |
 | **Mirror** | Deliberate copy of a playlist/liked tracks to another service (`POST /v1/library/mirror`). | `mirror.go` |
-| **Truncated** | Response flag when a list is incomplete; agents must check before claiming completeness. | `kind.go` instructions, `librarykind.go` |
+| **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `librarykind.go` |
+| **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
 | **User-defined type (UDT)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. | `internal/types/udt.go`, `docs/user-defined-types.md` |
 | **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/types/policy.go:11`, `places.go`, `events.go` |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/types/providers.go` |

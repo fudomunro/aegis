@@ -36,7 +36,7 @@ func TestRedactCalendarEventFreeBusy_StripsContent(t *testing.T) {
 }
 
 func TestFreeBusyListFromEvents_OmitsCancelled(t *testing.T) {
-	list := freeBusyListFromEvents(freeBusyTestEvents(), nil)
+	list := freeBusyListFromEvents(freeBusyTestEvents(), types.PageRequest{Limit: types.MaxPageLimit}, nil)
 	if list.Total != 2 || len(list.Busy) != 2 {
 		t.Fatalf("total = %d busy = %+v", list.Total, list.Busy)
 	}

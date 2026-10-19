@@ -1150,6 +1150,26 @@ Aggregate library responses enrich each `by_service` entry so clients can render
 
 For messages, when the local mail archive knows both, `by_service` also includes separate `google-gmail` and `google-takeout` rows with archive inventory counts and per-source `last_synced_at`, so the overview can show Gmail and Google Takeout side by side (with Takeout nested under Gmail). The `mail-archive` fetch target remains for compatibility.
 
+### Pagination and filters (issue #185)
+
+Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-facing page window so large libraries stay inside an LLM context:
+
+| Request | Meaning |
+|---------|---------|
+| `limit` | Page size. Default **100**, max **500**. Out-of-range values clamp. |
+| `cursor` | Opaque continue token from the previous response. Omit for the first page. Invalid cursor → `400`. |
+
+| Response field | Meaning |
+|----------------|---------|
+| `total` | Full **filtered** count for this request (not the page length). |
+| `next_cursor` | Pass as the next `cursor`. **Omitted when the walk is complete.** |
+| `truncated` | Upstream page-cap incompleteness (see below) — **not** “more pages in this response.” |
+| `synced` / `by_service` | Multi-source merge flag and per-service fetch status (unchanged). |
+
+Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`q`, `tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `/v1/mail/search` accepts the same `limit` + `cursor` (and still accepts `offset` for the admin UI).
+
+Walk the full set by repeating the request with `next_cursor` until it is omitted. Do not stop at the first page and do not treat a short page as “that’s everything” when `next_cursor` is present.
+
 ### Sync completeness
 
 Aegis aims to surface a user’s **full** library, not a prefix. Two layers matter:
@@ -1192,6 +1212,7 @@ Returns the user's liked/saved tracks from every connected music service in Aegi
   ],
   "total": 1,
   "synced": true,
+  "next_cursor": "MTAw",
   "by_service": {
     "spotify": { "status": "ok", "count": 120 },
     "youtube-music": { "status": "ok", "count": 45 }
@@ -1199,7 +1220,7 @@ Returns the user's liked/saved tracks from every connected music service in Aegi
 }
 ```
 
-When any service hits its page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`.
+`total` is the full filtered count; `next_cursor` (when present) continues the page walk — see [Pagination and filters](#pagination-and-filters-issue-185). When any service hits its **upstream** page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`. That flag is independent of `next_cursor`.
 
 Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks ([#43](https://github.com/fudomunro/aegis/issues/43), [#4](https://github.com/fudomunro/aegis/issues/4)).
 
@@ -1814,7 +1835,7 @@ Optimize for Aegis/agents: search and fetch by id without paging Gmail every tur
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/mail/search` | FTS + filters: `q`, `from`, `to`, `after`, `before`, `label`, `limit`, `offset`, `sort=asc\|desc`, `include_body` |
+| `GET /v1/mail/search` | FTS + filters: `q`, `from`/`to` (addresses), `after`/`before`, `label`, `limit`, `cursor` (or `offset`), `sort=asc\|desc`, `include_body` |
 | `GET /v1/mail/messages/{service}/{id}` | Neutral `Message` with `body` from the archive |
 | `GET /v1/mail/messages/{service}/{id}/raw` | Decompressed provider payload JSON |
 | `GET /v1/mail/status` | Message counts, last sync time/error, page cursors |

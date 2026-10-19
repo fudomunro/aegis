@@ -531,7 +531,10 @@ type libraryKindSpec[T any] struct {
 	// sortKey is the identity key used after service-name grouping.
 	sortKey func(T) string
 	merge   func([]T) []T
-	encode  func(merged []T, bySvc map[string]types.LibraryServiceStatus) any
+	// encode builds the JSON response from the full filtered list plus the
+	// agent page window (issue #185). Implementations call types.SlicePage
+	// on whatever final item shape they expose (events vs freebusy blocks).
+	encode  func(items []T, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any
 	// markCanonical stamps Source.Canonical on items from a config-declared
 	// canonical_for service (issue #16). Nil skips config stamping.
 	markCanonical func(items []T, serviceID string)
@@ -556,6 +559,12 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	kind := spec.kind
 	logger := withPeerLog(slog.With("handler", "library_"+kind.ID), r)
 	agent := agentForRequest(r)
+
+	pageReq, pageErr := types.ParsePageRequest(r.URL.Query().Get("limit"), r.URL.Query().Get("cursor"))
+	if pageErr != nil {
+		writeJSONError(w, http.StatusBadRequest, pageErr.Error())
+		return
+	}
 
 	// Third-party apps are scope-limited even when service grant_limits would
 	// allow more (issue #131).
@@ -584,6 +593,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		cacheKey = spec.cacheKey
 	}
 	cacheKey += appLibraryCacheSuffix(app, kind.PermType)
+	cacheKey += pageReq.CacheSuffix()
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		logger.Debug("cache hit")
 		w.Header().Set("Content-Type", "application/json")
@@ -732,7 +742,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		spec.stampCopies(merged)
 	}
 
-	result, err := json.Marshal(spec.encode(merged, bySvc))
+	result, err := json.Marshal(spec.encode(merged, pageReq, bySvc))
 	if err != nil {
 		logger.Error("failed to marshal library "+kind.ID, "error", err)
 		writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")

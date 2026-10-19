@@ -244,8 +244,8 @@ func (s *SignalStore) ListContacts(limit int) ([]types.Contact, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("signal store disabled")
 	}
-	if limit <= 0 || limit > libraryPageCap {
-		limit = libraryPageCap
+	if limit <= 0 || limit > libraryItemCap {
+		limit = libraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -277,8 +277,8 @@ func (s *SignalStore) ListMessages(limit int) ([]types.Message, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("signal store disabled")
 	}
-	if limit <= 0 || limit > libraryPageCap {
-		limit = libraryPageCap
+	if limit <= 0 || limit > libraryItemCap {
+		limit = libraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -1087,7 +1087,7 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		}
 		writeJSON(w, map[string]any{"contacts": contacts, "messages": messages, "path": store.Path()})
 	case r.Method == http.MethodGet && (path == "messages" || path == "messages/"):
-		limit := libraryPageCap
+		limit := libraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				limit = n
@@ -1098,9 +1098,9 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 			writeJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		writeJSON(w, types.MessageList{Messages: list, Total: len(list), Synced: true})
+		writeJSON(w, types.MessageList{Messages: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodGet && (path == "contacts" || path == "contacts/" || path == "me/contacts"):
-		limit := libraryPageCap
+		limit := libraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				limit = n
@@ -1111,7 +1111,7 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 			writeJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		writeJSON(w, types.ContactList{Contacts: list, Total: len(list), Synced: true})
+		writeJSON(w, types.ContactList{Contacts: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && path == "import":
 		var req struct {
 			Path string `json:"path"`
@@ -1138,7 +1138,7 @@ func (c *SignalConnector) ListUserContacts(ctx context.Context) (contacts []type
 	if store == nil || !store.Enabled() {
 		return nil, false, types.ErrUnauthorized
 	}
-	list, err := store.ListContacts(libraryPageCap)
+	list, err := store.ListContacts(libraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1154,7 +1154,7 @@ func (c *SignalConnector) ListMessages(ctx context.Context) (messages []types.Me
 	if store == nil || !store.Enabled() {
 		return nil, false, types.ErrUnauthorized
 	}
-	list, err := store.ListMessages(libraryPageCap)
+	list, err := store.ListMessages(libraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}
