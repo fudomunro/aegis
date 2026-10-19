@@ -18,6 +18,8 @@ func UnmarkOptInDataType(dataType string) {
 }
 
 // IsOptInDataType reports whether the data-type key requires explicit enable.
+// Built-in kinds use LibraryKind.DefaultNone; user-defined kinds are marked
+// at load (issue #15 / #183).
 func IsOptInDataType(dataType string) bool {
-	return optInDefaultNone[dataType]
+	return isOptInDefaultNone(dataType)
 }

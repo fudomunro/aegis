@@ -1,8 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,6 +10,9 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -118,20 +119,20 @@ type Server struct {
 	udts *userDefinedRegistry
 }
 
-// appAllowedPrefixes are path prefixes a third-party app token may call.
-// Apps are data readers only — never admin, OAuth, proxy, or mail.
-var appAllowedPrefixes = []string{
-	"/v1/library/playlists",
-	"/v1/library/tracks",
-	"/v1/library/albums",
-	"/v1/library/artists",
-	"/v1/library/contacts",
-	"/v1/library/photos",
-	"/v1/library/events",
+// appExtraPaths are non-kind library paths a third-party app token may call
+// (freebusy is the events availability view, not a LibraryKind).
+var appExtraPaths = []string{
 	"/v1/library/freebusy",
-	"/v1/library/messages",
-	"/v1/library/transactions",
-	"/v1/library/places",
+}
+
+// appAllowedPaths returns path prefixes a third-party app token may call.
+// Derived from LibraryKind.AppReadable plus appExtraPaths (issue #183).
+// Apps are data readers only — never admin, OAuth, proxy, mail, or
+// document full-text subpaths. User-defined kinds are not app-readable.
+func appAllowedPaths() []string {
+	out := append([]string{}, appExtraPaths...)
+	out = append(out, types.AppReadableKindPaths()...)
+	return out
 }
 
 // appPathAllowed reports whether a third-party app token may access path.
@@ -141,7 +142,7 @@ func appPathAllowed(path string) bool {
 	if p == "" {
 		return false
 	}
-	for _, prefix := range appAllowedPrefixes {
+	for _, prefix := range appAllowedPaths() {
 		if p == prefix {
 			return true
 		}

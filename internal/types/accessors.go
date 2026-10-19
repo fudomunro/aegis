@@ -270,7 +270,7 @@ func AppOverviewLevels(scopes Permissions, dataTypes []string) (levels map[strin
 		if scopes != nil {
 			if v, ok := scopes[dataType]; ok {
 				level = NormalizeAccess(v)
-			} else if !optInDefaultNone[dataType] {
+			} else if !isOptInDefaultNone(dataType) {
 				if v, ok := scopes[PermissionDefaultKey]; ok {
 					level = NormalizeAccess(v)
 				}

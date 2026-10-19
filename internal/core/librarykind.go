@@ -25,8 +25,8 @@ type kindRuntimeEntry struct {
 	Readable func(s *Server) bool
 }
 
-// kindRuntime maps kind ID → visibility predicates. Keep keys in sync with
-// libraryKinds (TestLibraryKinds_KindRuntimeInSync).
+// kindRuntime maps kind ID → visibility predicates. Keys must match
+// types.BuiltinLibraryKinds (TestLibraryKinds_KindRuntimeInSync).
 var kindRuntime = map[string]kindRuntimeEntry{
 	"playlists": {
 		HasProviders: func(s *Server) bool { return s.hasProvider[types.PlaylistProvider]() },
@@ -112,252 +112,14 @@ func kindReadable(id string, s *Server) bool {
 	return rt.Readable(s)
 }
 
-// libraryKinds is the registry for every unified library dataset. Order is
-// stable and used for route registration and pre-request injection priority.
-var libraryKinds = []types.LibraryKind{
-	{
-		ID:              "playlists",
-		Path:            "/v1/library/playlists",
-		PermType:        "playlists",
-		Label:           "playlists",
-		Usage:           "playlists or their music library",
-		Summary:         "all user playlists from every connected service in one neutral list (name, description, owner, track_count, sources[])",
-		SyncRule:        "Same-named playlists are synced into one entry with multiple sources[].",
-		ExampleQuestion: "what playlists do I have?",
-		Keywords: []string{
-			"playlist", "play list", "music library", "my library", "saved playlists",
-		},
-		EmptyMsg: "no playlist-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to playlists is not allowed",
-		FailMsg:  "failed to fetch playlists",
-	},
-	{
-		ID:              "tracks",
-		Path:            "/v1/library/tracks",
-		PermType:        "tracks",
-		Label:           "liked tracks",
-		Usage:           "songs they like, saved tracks, or favorites",
-		Summary:         "all liked/saved tracks from every connected music service in one neutral list (name, artists, album, duration, entity_id, sources[])",
-		SyncRule:        "Tracks merge on durable entity_id (ISRC or MusicBrainz recording MBID) when present; otherwise same title + primary artist when durations agree (match=name).",
-		ExampleQuestion: "what songs have I liked?",
-		Keywords: []string{
-			"liked song", "liked track", "liked music",
-			"saved song", "saved track",
-			"favorite song", "favourite song", "favorite track", "favourite track",
-			"have i liked", "songs i like", "tracks i like",
-			"songs i've liked", "tracks i've liked",
-			"songs have i liked", "tracks have i liked",
-			"my likes", "my favorites", "my favourites",
-		},
-		EmptyMsg: "no liked-track-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to tracks is not allowed",
-		FailMsg:  "failed to fetch liked tracks",
-	},
-	{
-		ID:              "albums",
-		Path:            "/v1/library/albums",
-		PermType:        "albums",
-		Label:           "saved albums",
-		Usage:           "albums they saved or their album library",
-		Summary:         "all saved albums from every connected music service in one neutral list (name, artists, entity_id, sources[])",
-		SyncRule:        "Albums merge on durable entity_id (UPC or MusicBrainz release-group MBID) when present; otherwise same title + primary artist (match=name).",
-		ExampleQuestion: "what albums have I saved?",
-		Keywords: []string{
-			"saved album", "liked album", "favorite album", "favourite album",
-			"albums i've saved", "albums have i saved", "albums i saved",
-			"my albums", "album library",
-		},
-		EmptyMsg: "no album-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to albums is not allowed",
-		FailMsg:  "failed to fetch albums",
-	},
-	{
-		ID:              "artists",
-		Path:            "/v1/library/artists",
-		PermType:        "artists",
-		Label:           "followed artists",
-		Usage:           "artists they follow or favorite artists",
-		Summary:         "all followed/top artists from every connected music service in one neutral list (name, entity_id, sources[])",
-		SyncRule:        "Artists merge on durable entity_id (MusicBrainz MBID) when resolved (match=mbid); otherwise same normalized name (match=name).",
-		ExampleQuestion: "what artists do I follow?",
-		Keywords: []string{
-			"followed artist", "artists i follow", "artists do i follow",
-			"who do i follow", "do i follow", "artists i've followed",
-			"favorite artist", "favourite artist", "my artists",
-			"top artists", "artists i like",
-		},
-		EmptyMsg: "no artist-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to artists is not allowed",
-		FailMsg:  "failed to fetch artists",
-	},
-	{
-		ID:              "contacts",
-		Path:            "/v1/library/contacts",
-		PermType:        "contacts",
-		Label:           "contacts",
-		Usage:           "people, contacts, or their address book",
-		Summary:         "all user contacts from every connected service in one neutral list (name, emails, phones, handles, organization, sources[])",
-		SyncRule:        "Contacts that share an email, phone, handle, or name are synced into one entry with multiple sources[].",
-		ExampleQuestion: "who is in my contacts?",
-		Keywords: []string{
-			"my contacts", "address book", "contact list", "contacts list",
-			"who is in my contacts", "people i know",
-		},
-		EmptyMsg: "no contact-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to contacts is not allowed",
-		FailMsg:  "failed to fetch contacts",
-	},
-	{
-		ID:              "photos",
-		Path:            "/v1/library/photos",
-		PermType:        "photos",
-		Label:           "photos",
-		Usage:           "photos, pictures, or their photo library",
-		Summary:         "all user photos from every connected photo service in one neutral list (taken_at, dimensions, mime_type, filename, people[] as Contact identities, sources[] with canonical blob location). Google Photos contributes the user's last picker selection.",
-		SyncRule:        "Photos with the same content hash or the same taken_at plus dimensions are synced into one entry with multiple sources[]. people[] entries merge with the same contact identity matching used by /v1/library/contacts. Photo bytes are never stored in Aegis. Google Photos uses the Picker API: the user must pick photos once before they appear here.",
-		ExampleQuestion: "what photos do I have?",
-		Keywords: []string{
-			"my photos", "photo library", "my pictures", "picture library",
-			"photos from", "pictures from", "photos do i have",
-			"photos i have", "list my photos", "list my pictures",
-			"google photos", "camera roll",
-			// Singular / collection phrasing missed before issue #125
-			// ("oldest photo in my collection" matched nothing).
-			"photo", "picture",
-			"photo collection", "photos in my", "pictures in my",
-		},
-		EmptyMsg: "no photo-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to photos is not allowed",
-		FailMsg:  "failed to fetch photos",
-	},
-	{
-		ID:              "events",
-		Path:            "/v1/library/events",
-		PermType:        "events",
-		Label:           "calendar events",
-		Usage:           "calendar events, meetings, appointments, or their schedule",
-		Summary:         "all calendar events from every connected calendar service in one neutral list (title, description, start_at, end_at, all_day, location, status, organizer, attendees as Contact identities, sources[])",
-		SyncRule:        "Events merge on durable iCalUID when present (match=ical_uid); otherwise same title + start time + all-day flag (match=title_start). Event content stays on the source service.",
-		ExampleQuestion: "what is on my calendar?",
-		Keywords: []string{
-			"my calendar", "my schedule", "on my calendar",
-			"calendar events", "upcoming events", "upcoming meetings",
-			"what meetings", "meetings do i have", "meetings i have",
-			"appointments", "my events", "events this week",
-			"google calendar", "what's on my calendar", "whats on my calendar",
-		},
-		EmptyMsg: "no calendar-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to events is not allowed",
-		FailMsg:  "failed to fetch calendar events",
-	},
-	{
-		ID:              "messages",
-		Path:            "/v1/library/messages",
-		PermType:        "messages",
-		Label:           "messages",
-		Usage:           "emails, messages, inbox, mail, or recent correspondence between people (not app notifications)",
-		Summary:         "the user's mail collection from every message source in one neutral list (channel, subject, snippet, from/to/cc as Contact identities, sent_at, direction, read, entity_id, sources[]). Sources include live Gmail and the local archive (Gmail sync + Google Takeout). Messages are person-to-person text — not app/service notifications.",
-		SyncRule:        "Gmail and Google Takeout are sources of one mail collection, synchronized on RFC Message-ID (match=message_id); otherwise same subject + from + sent_at (match=subject_from_time). Message bodies stay on the source service. Messages are person-to-person text (sent by or to the user) — app/service notifications are out of scope (future Notifications type). SMS/WhatsApp connectors are not implemented yet. Bluesky contributes the user's own posts and replies only.",
-		ExampleQuestion: "what emails have I received recently?",
-		Keywords: []string{
-			"my email", "my emails", "my mail", "my inbox",
-			"recent email", "recent emails", "recent messages",
-			"emails have i", "emails i have", "emails i received",
-			"check my email", "check my mail", "check my inbox",
-			"messages in my inbox", "unread email", "unread emails",
-			"google mail", "gmail inbox", "correspondence",
-		},
-		EmptyMsg: "no message-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to messages is not allowed",
-		FailMsg:  "failed to fetch messages",
-	},
-	{
-		ID:              "transactions",
-		Path:            "/v1/library/transactions",
-		PermType:        "transactions",
-		Label:           "transactions",
-		Usage:           "transactions, charges, spending, bank activity, budget line items, or money history",
-		Summary:         "all financial transactions from every connected source in one neutral list (posted_at, authorized_at, amount as a signed decimal string, currency, description, merchant, category[] (multi-valued for YNAB splits), status, sources[]). Account fields never include full account numbers.",
-		SyncRule:        "Transactions merge on durable provider_id (YNAB import_id, Quicken FITID) when present; otherwise same amount + posted day + normalized merchant (match=amount_date_merchant), with an adjacent-day (±1) pass for cross-provider duplicates. No Aegis category taxonomy — provider category only.",
-		ExampleQuestion: "did we go over on groceries this month?",
-		Keywords: []string{
-			"transaction", "transactions", "my transactions",
-			"spending", "my spending", "how much did i spend",
-			"how much have i spent", "what did i spend",
-			"charge", "charges", "card charge", "bank charge",
-			"bank", "banking", "bank account", "bank activity",
-			"card", "credit card", "debit card",
-			"budget", "budgeting", "my budget",
-			"money", "expenses", "expense", "spent",
-			"groceries", "subscription", "subscriptions",
-			"ynab", "quicken", "mint",
-		},
-		EmptyMsg: "no transaction-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to transactions is not allowed",
-		FailMsg:  "failed to fetch transactions",
-	},
-	{
-		ID:              "places",
-		Path:            "/v1/library/places",
-		PermType:        "places",
-		Label:           "places",
-		Usage:           "where I was, location history, visits, trips, places I've been, travel chronology, time at a place, or residence/absence timelines",
-		Summary:         "visits and trips from every connected source in one neutral list (start_at, end_at, place{name,address,locality,country,lat,lng}, kind=visit|trip, mode for trips, confidence, sources[]). Models visit windows — not raw GPS streams. Coordinates require the precise permission.",
-		SyncRule:        "Visits merge on durable provider_id when present; otherwise same start/end window + normalized place (match=window_place). Photos can be joined to visits by taken_at inside the window.",
-		ExampleQuestion: "where was I last summer?",
-		Keywords: []string{
-			"where was i", "where was i?", "where have i been",
-			"where did i go", "where did we go", "where were we",
-			"location history", "my locations", "places i've been",
-			"places i have been", "visit", "visits", "trip", "trips",
-			"travel history", "travel chronology", "my travel",
-			"was i out of town", "out of town", "was i away",
-			"when was i in", "when did i visit", "when did we visit",
-			"how long was i in", "how long did we stay",
-			"timeline", "google timeline", "maps timeline",
-			"owntracks", "dawarich", "significant locations",
-			"residence", "absence timeline", "when was i home",
-			"which beach was that", "where was that photo taken",
-		},
-		EmptyMsg: "no places-capable services configured (enable places permissions and connect OwnTracks or import a Google Timeline export)",
-		DenyMsg:  "denied: data grant for agent access to places is not allowed (places default to none — enable city, read, or precise)",
-		FailMsg:  "failed to fetch places",
-	},
-	{
-		ID:              "documents",
-		Path:            "/v1/library/documents",
-		PermType:        "documents",
-		Label:           "documents",
-		Usage:           "documents, receipts, warranties, leases, insurance policies, tax letters, medical letters, or paperwork",
-		Summary:         "user documents from every connected source in one neutral list (title, mime_type, created_at, modified_at, correspondent, document_type, tags[], excerpt when read is allowed, people[] as Contact identities, sources[] with blob_url on the canonical source). Document bytes stay on the source service. Full text is only at GET /v1/library/documents/{service}/{id}/text.",
-		SyncRule:        "Documents merge on durable entity_id (content checksum, then archive serial) when present; otherwise same title + created_at (match=title_created). metadata access returns titles/dates/tags only — no excerpt or text. Aegis does not store or OCR document files.",
-		ExampleQuestion: "where is my lease?",
-		Keywords: []string{
-			"my documents", "document library", "paperwork",
-			"receipt", "receipts", "warranty", "warranties",
-			"lease", "leases", "rental agreement",
-			"insurance policy", "insurance", "policy document",
-			"tax letter", "tax document", "tax form",
-			"medical letter", "medical document",
-			"invoice", "invoices", "statement", "statements",
-			"where is my", "find my document", "find my receipt",
-			"find my warranty", "find my lease", "find my policy",
-			"paperless",
-		},
-		EmptyMsg: "no document-capable services configured",
-		DenyMsg:  "denied: data grant for agent access to documents is not allowed",
-		FailMsg:  "failed to fetch documents",
-	},
-}
+// libraryKinds is the built-in kind registry (issue #183). The slice lives
+// in internal/types so reserved ids, app-readable paths, canonical_for keys,
+// and access-level allowlists all derive from one source.
+var libraryKinds = types.BuiltinLibraryKinds
 
-// LibraryKindByID returns the registered kind, or nil.
+// LibraryKindByID returns the registered built-in kind, or nil.
 func LibraryKindByID(id string) *types.LibraryKind {
-	for i := range libraryKinds {
-		if libraryKinds[i].ID == id {
-			return &libraryKinds[i]
-		}
-	}
-	return nil
+	return types.BuiltinKindByID(id)
 }
 
 // allLibraryKinds returns built-in kinds plus any loaded user-defined kinds
@@ -467,28 +229,47 @@ func (s *Server) libraryHintsForMessage(msg string) []string {
 // are merged in when schemas are loaded.
 func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 	handlers := map[string]http.HandlerFunc{
-		"/v1/library/playlists":    s.HandleLibraryPlaylists,
-		"/v1/library/tracks":       s.HandleLibraryTracks,
-		"/v1/library/albums":       s.HandleLibraryAlbums,
-		"/v1/library/artists":      s.HandleLibraryArtists,
-		"/v1/library/contacts":     s.HandleLibraryContacts,
-		"/v1/library/photos":       s.HandleLibraryPhotos,
-		"/v1/library/events":       s.HandleLibraryEvents,
-		"/v1/library/freebusy":     s.HandleLibraryFreeBusy,
-		"/v1/library/messages":     s.HandleLibraryMessages,
-		"/v1/library/transactions": s.HandleLibraryTransactions,
-		"/v1/library/places":       s.HandleLibraryPlaceVisits,
-		"/v1/library/documents":    s.HandleLibraryDocuments,
+		"/v1/library/playlists":                     s.HandleLibraryPlaylists,
+		"/v1/library/tracks":                        s.HandleLibraryTracks,
+		"/v1/library/albums":                        s.HandleLibraryAlbums,
+		"/v1/library/artists":                       s.HandleLibraryArtists,
+		"/v1/library/contacts":                      s.HandleLibraryContacts,
+		"/v1/library/photos":                        s.HandleLibraryPhotos,
+		"/v1/library/events":                        s.HandleLibraryEvents,
+		"/v1/library/freebusy":                      s.HandleLibraryFreeBusy,
+		"/v1/library/messages":                      s.HandleLibraryMessages,
+		"/v1/library/transactions":                  s.HandleLibraryTransactions,
+		"/v1/library/places":                        s.HandleLibraryPlaceVisits,
+		"/v1/library/documents":                     s.HandleLibraryDocuments,
 		"/v1/library/documents/{service}/{id}/text": s.HandleLibraryDocumentText,
-		"/v1/library/copies":       s.HandleLibraryCopies,
-		"/v1/library/review":       s.HandleMergeReview,
-		"/v1/library/links":        s.HandleEntityLinks,
-		"/v1/library/links/":       s.HandleEntityLinks,
+		"/v1/library/copies":                        s.HandleLibraryCopies,
+		"/v1/library/review":                        s.HandleMergeReview,
+		"/v1/library/links":                         s.HandleEntityLinks,
+		"/v1/library/links/":                        s.HandleEntityLinks,
 	}
-	for path, handler := range s.udtRouteHandlers() {
+	// User-defined packs must never shadow a built-in route (issue #183).
+	// Normalize rejects reserved ids; this is the defense-in-depth check
+	// against registry/handler drift.
+	mergeUDTRoutes(handlers, s.udtRouteHandlers(), slog.Default())
+	return handlers
+}
+
+// mergeUDTRoutes copies UDT handlers into the built-in route map, refusing
+// to overwrite an existing path. Returns the skipped colliding paths.
+func mergeUDTRoutes(handlers map[string]http.HandlerFunc, udt map[string]http.HandlerFunc, logger *slog.Logger) []string {
+	var skipped []string
+	for path, handler := range udt {
+		if _, exists := handlers[path]; exists {
+			skipped = append(skipped, path)
+			if logger != nil {
+				logger.Warn("user-defined type path collides with built-in library route; skipping",
+					"path", path)
+			}
+			continue
+		}
 		handlers[path] = handler
 	}
-	return handlers
+	return skipped
 }
 
 // namedLister is one service's typed fetch for a library aggregate.
@@ -534,7 +315,7 @@ type libraryKindSpec[T any] struct {
 	// encode builds the JSON response from the full filtered list plus the
 	// agent page window (issue #185). Implementations call types.SlicePage
 	// on whatever final item shape they expose (events vs freebusy blocks).
-	encode  func(items []T, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any
+	encode func(items []T, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any
 	// markCanonical stamps Source.Canonical on items from a config-declared
 	// canonical_for service (issue #16). Nil skips config stamping.
 	markCanonical func(items []T, serviceID string)
