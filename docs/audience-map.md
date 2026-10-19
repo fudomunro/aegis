@@ -189,4 +189,4 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 4. **Capabilities vs SystemInstructions** are two product dialects (provider-shaped vs library-first). Product rules say capabilities are admin metadata — keep that boundary explicit.
 5. **Audiences with no dedicated surface:** non-admin end users, formal security-auditor threat model, machine-readable API schema for integrators.
 
-Concept-name overlaps (service/connector/connection, permissions cluster, canonical vocabulary, type/kind naming) are tracked in [`core-concepts.md`](core-concepts.md) §2 and follow-up issue [#174](https://github.com/fudomunro/aegis/issues/174). Canonical English is in [`glossary.md`](glossary.md).
+Concept-name overlaps (service/connector/connection, permissions cluster, canonical vocabulary, type/kind naming) are tracked in [`core-concepts.md`](core-concepts.md) §2 and follow-up issue [#174](https://github.com/fudomunro/aegis/issues/174). Canonical English is in [`glossary.md`](glossary.md) — product term for user allow-rules is **data grant**.

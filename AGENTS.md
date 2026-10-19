@@ -22,7 +22,7 @@ It does two jobs:
    `/v1/library/{kind}` for user data. `/v1/services/{id}/...` is content/ingest
    only (photo bytes, full message bodies, playlist items, local import; issue
    #119) — not a general provider-API mirror. Aegis attaches OAuth tokens,
-   caches, enforces permissions, and returns neutral models.
+   caches, enforces data grants, and returns neutral models.
 
 Module: `github.com/fudomunro/aegis`  
 Layout: **`internal/types`** (data-type layer) + **`internal/core`**
@@ -237,12 +237,13 @@ over the hostile-input parsers, and `go build -o aegis .`.
   `identity_source`, `path`, `error`). Default JSON in prod.
 - **Neutral models at the library boundary.** Provider quirks stay inside
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
-- **Permissions are data, not comments.** Type-level `TypePolicy` (owned by
-  `internal/types`) plus optional provider/attribute filters must stay
-  enforced on the content/ingest proxy, library, and pre-request injection.
-  Capabilities are admin/connector metadata (issue #119) — not agent
-  discovery. Service `permissions` maps are migration overrides that can only
-  tighten the type default (issue #148).
+- **Permissions are data, not comments.** **Data grants** (what the user allows
+  an LLM agent or app to use) are owned by type-level `TypePolicy`
+  (`internal/types`) plus optional provider/attribute filters and must stay
+  enforced on the content/ingest proxy, library, capabilities output, and
+  pre-request injection. Service `permissions` maps are migration overrides
+  that can only tighten the type default (issue #148). Prefer **data grant** in
+  product English (`docs/glossary.md`).
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `aegisHTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
@@ -299,10 +300,10 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
-| Admin permission writes | `permissions_overlay.go`, `config.go` `SetTypePolicies` / `SetServicePermissions`, README “Data permissions” |
+| Admin data-grant writes | `permissions_overlay.go`, `config.go` `SetTypePolicies` / `SetServicePermissions`, README “Data grants” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
 | Unified library + merge | `librarykind.go`, `internal/types/{merge,models}.go` |
-| Permissions / agent visibility | `internal/types/policy.go` (`TypePolicy` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | Type-owned policy + provider tighten-only overrides; path rules live with the type layer |
+| Data grants / agent visibility | `internal/types/policy.go` (`TypePolicy` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | Type-owned policy + provider tighten-only overrides; product English: **data grant** |
 | Admin map / flow | `flow.go`, `admin.go`, `web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `identity.go` |
 | Product/API docs | `README.md` |
