@@ -19,7 +19,7 @@ const (
 	AccessorSync AccessorKind = "sync"
 	// AccessorService is a configured connector service Aegis syncs with
 	// for a data type (e.g. Spotify / YouTube Music under playlists).
-	// Read-only in the permissions editor for now (issue #160).
+	// Read-only in the data grants editor for now (issue #160).
 	AccessorService AccessorKind = "service"
 	// AccessorUser is reserved for multi-user principals (issue #149).
 	AccessorUser AccessorKind = "user"
@@ -74,7 +74,7 @@ func (a Accessor) AccessorLevel(dataType string) string {
 }
 
 // RelevantTo reports whether this accessor should appear under a data-type
-// row in the permissions editor (issue #160).
+// row in the data grants editor (issue #160).
 //
 // Agents are always relevant (they own the editable policy). Apps appear
 // when they name the type or their effective level is not "none". Sync
@@ -225,8 +225,8 @@ func ExtraPermissionKeys(maps ...map[string]string) []string {
 	return out
 }
 
-// ExtraPolicyKeys collects data-type keys from a type-policy map.
-func ExtraPolicyKeys(policies TypePolicies) []string {
+// ExtraPolicyKeys collects data-type keys from a data-grant map.
+func ExtraPolicyKeys(policies DataGrants) []string {
 	if policies == nil {
 		return nil
 	}
@@ -243,7 +243,7 @@ func ExtraPolicyKeys(policies TypePolicies) []string {
 // AgentOverviewLevels materializes the type-owned agent policy into a
 // flat data-type → level map. Opt-in types (places) stay "none" unless
 // the policy names them explicitly.
-func AgentOverviewLevels(policies TypePolicies, dataTypes []string) map[string]string {
+func AgentOverviewLevels(policies DataGrants, dataTypes []string) map[string]string {
 	out := make(map[string]string, len(dataTypes))
 	for _, dataType := range dataTypes {
 		level := policies.Access(dataType, "")

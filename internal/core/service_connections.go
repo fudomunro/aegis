@@ -57,7 +57,7 @@ func defaultServiceConnectionsPath(configPath string) string {
 	if dir == "" {
 		return "service_connections.json"
 	}
-	// Sibling of aegis.json / permissions.json.
+	// Sibling of aegis.json / data_grants.json.
 	if i := strings.LastIndexAny(dir, `/\`); i >= 0 {
 		return dir[:i+1] + "service_connections.json"
 	}

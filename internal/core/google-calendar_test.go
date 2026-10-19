@@ -165,7 +165,7 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 		Name:        connectors.GoogleCalendarServiceName,
 		Action:      "inject",
 		Endpoint:    upstream.URL,
-		Permissions: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.tokens.Save(connectors.GoogleCalendarServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})

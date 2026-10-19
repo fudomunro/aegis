@@ -195,7 +195,7 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessNone},
+		GrantLimits: types.Permissions{"events": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

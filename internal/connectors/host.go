@@ -18,7 +18,7 @@ type ServiceInfo struct {
 	Endpoint    string
 	Headers     map[string]string
 	CacheTTL    time.Duration
-	Permissions types.Permissions
+	GrantLimits types.Permissions
 }
 
 // Host is the runtime surface connectors may use (issue #15).

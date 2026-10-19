@@ -232,19 +232,19 @@ func TestCanonicalService(t *testing.T) {
 	}
 }
 
-func TestNormalizeAccessAndTypePolicy(t *testing.T) {
+func TestNormalizeAccessAndDataGrant(t *testing.T) {
 	if NormalizeAccess("READ") != AccessRead {
 		t.Fatal("NormalizeAccess READ")
 	}
 	if NormalizeAccess("") != "" {
 		t.Fatal("empty stays empty")
 	}
-	tp := TypePolicy{Default: AccessRead, Providers: map[string]string{"spotify": AccessNone}}
+	tp := DataGrant{Default: AccessRead, Providers: map[string]string{"spotify": AccessNone}}
 	if tp.For("spotify") != AccessNone || tp.For("other") != AccessRead {
-		t.Fatalf("TypePolicy.For = %+v", tp)
+		t.Fatalf("DataGrant.For = %+v", tp)
 	}
-	if (TypePolicies{"a": {Default: AccessWrite}}).For("a").Default != AccessWrite {
-		t.Fatal("TypePolicies.For")
+	if (DataGrants{"a": {Default: AccessWrite}}).For("a").Default != AccessWrite {
+		t.Fatal("DataGrants.For")
 	}
 }
 

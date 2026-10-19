@@ -96,7 +96,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`"Reconnect"`,
 		// Shared instructions above filter; form stays on each card
 		`id="agent-data-access-help"`,
-		`id="type-policy-panel"`,
+		`id="data-grant-panel"`,
 		"typeOtherAccessorsHTML",
 		"type-access-row",
 		"Changes save immediately",

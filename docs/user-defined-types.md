@@ -2,7 +2,7 @@
 
 Status: **draft PoC** on `feat/issue-15-user-defined-types`.
 Related: restructure plan (`docs/restructure-core-types-connectors.md` Phase 6),
-type policy (#148), places opt-in pattern (#142).
+data grant (#148), places opt-in pattern (#142).
 
 This note is the Phase 6 spike: schema-as-data for bring-your-own library
 kinds, a working proof of concept, and a recommendation on where example packs
@@ -115,7 +115,7 @@ Product rules that stay true for UDTs:
 1. **Service identity lives in `sources[]`** — never top-level.
 2. **Fail-open** — one bad source degrades `by_service`; the list still returns.
 3. **Aegis does not store media** — only the mapped metadata.
-4. **Permissions are data** — UDTs are opt-in until type policy enables them.
+4. **Permissions are data** — UDTs are opt-in until data grant enables them.
 5. **Coverage floor** — schema load / map / merge are unit-tested in this PR.
 
 ---
@@ -156,7 +156,7 @@ do not invent a second proxy path.
 - Every UDT id is marked **opt-in** (`types.MarkOptInDataType`) so a new pack
   is never agent-visible by accident.
 - **Packs cannot self-enable.** `default_access` is informational only; type
-  policy must name the kind (admin UI / `PUT /v1/admin/type-policies`).
+  policy must name the kind (admin UI / `PUT /v1/admin/data-grants`).
 - `id` must match `^[a-z][a-z0-9-]*$` and must not collide with built-in data
   types or `/v1/library` reserved segments (`links`, `review`, `copies`, …).
   `perm_type` is always the id; `path` is always `/v1/library/{id}`.
@@ -275,7 +275,7 @@ permissions**; users own **their types and sources**.
 |------|------------|
 | Schema id collides with built-in kind | Loader skips and logs (already implemented). |
 | Hostile / huge JSON feed | Item cap (`maxUserDefinedItems`), 4 MiB body limit, fail-open. |
-| UDT becomes a parallel permissions path | Uses the same `TypePolicy` + `AllowsMethod` enforcement. |
+| UDT becomes a parallel permissions path | Uses the same `DataGrant` + `AllowsMethod` enforcement. |
 | Name-only merge over-merges | Entity id preferred; name key is schema-declared fields only. |
 | Pack authors leak secrets in `headers` | Docs say non-secret headers only; later lint in content-repo CI. |
 
@@ -286,5 +286,5 @@ permissions**; users own **their types and sources**.
 1. Agree schema v1 (fields table above) and the own-repo extraction trigger.
 2. Admin: author packs in the UI (currently select files only), enable/disable kinds.
 3. Hot-reload of schema packs (file selection already hot-applies).
-4. Sensitive-field redaction hooks on the type policy attributes (#148).
+4. Sensitive-field redaction hooks on the data grant attributes (#148).
 5. Optional second pack (e.g. `garden-plants`) to stress multi-field identity.

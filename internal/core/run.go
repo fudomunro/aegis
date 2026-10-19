@@ -27,7 +27,7 @@ func Run() {
 	tokenPath := flag.String("token-file", "", "path to encrypted token storage (default: <data-dir>/tokens.json)")
 	linkPath := flag.String("link-file", "", "path to user-confirmed entity links (default: <data-dir>/entity_links.json)")
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
-	permissionsPath := flag.String("permissions-file", "", "path to admin permissions overlay (default: <data-dir>/permissions.json; admin saves write here instead of aegis.json)")
+	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
@@ -54,7 +54,7 @@ func Run() {
 	paths, err := ResolveStatePaths(StatePathOverrides{
 		Dir:            *dataDirFlag,
 		Config:         *configPath,
-		Permissions:    *permissionsPath,
+		DataGrants:     *dataGrantsPath,
 		Tokens:         *tokenPath,
 		Links:          *linkPath,
 		CopyLedger:     *copyLedgerPath,
@@ -100,7 +100,7 @@ func Run() {
 		"path", paths.Dir,
 		"config", paths.Config,
 		"tokens", paths.Tokens,
-		"permissions", paths.Permissions,
+		"data_grants", paths.DataGrants,
 		"links", paths.Links,
 		"copy_ledger", paths.CopyLedger,
 		"mail_archive", paths.MailArchive,
@@ -194,11 +194,11 @@ func Run() {
 		slog.Error("failed to load config", "path", paths.Config, "error", err)
 		os.Exit(1)
 	}
-	if err := cfg.InitPermissionsStore(paths.Permissions); err != nil {
-		slog.Error("failed to load permissions overlay", "path", paths.Permissions, "error", err)
+	if err := cfg.InitDataGrantsStore(paths.DataGrants); err != nil {
+		slog.Error("failed to load data grants overlay", "path", paths.DataGrants, "error", err)
 		os.Exit(1)
 	}
-	slog.Info("config loaded", "path", paths.Config, "services", cfg.ServiceCount(), "permissions_file", paths.Permissions)
+	slog.Info("config loaded", "path", paths.Config, "services", cfg.ServiceCount(), "data_grants_file", paths.DataGrants)
 
 	tokens, err := NewTokenStore(paths.Tokens, *tokenPass)
 	if err != nil {
@@ -255,7 +255,7 @@ func Run() {
 			Name:        quickenServiceName,
 			Action:      "inject",
 			Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
-			Permissions: types.Permissions{"transactions": types.AccessRead},
+			GrantLimits: types.Permissions{"transactions": types.AccessRead},
 		})
 	} else {
 		slog.Info("quicken store disabled")
@@ -276,7 +276,7 @@ func Run() {
 			Name:        timelineServiceName,
 			Action:      "inject",
 			Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
-			Permissions: types.Permissions{"places": types.AccessRead},
+			GrantLimits: types.Permissions{"places": types.AccessRead},
 		})
 	} else {
 		slog.Info("timeline store disabled")
@@ -296,7 +296,7 @@ func Run() {
 			Name:        signalServiceName,
 			Action:      "inject",
 			Description: "Locally imported Signal contacts and messages (Advanced → Signal import).",
-			Permissions: types.Permissions{
+			GrantLimits: types.Permissions{
 				"contacts": types.AccessRead,
 				"messages": types.AccessRead,
 			},
@@ -515,10 +515,10 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case path == "permissions":
 		s.AuthMiddleware(s.HandleAdminPermissionsOverview)(w, r)
-	case path == "type-policies":
-		s.AuthMiddleware(s.HandleAdminTypePolicies)(w, r)
-	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
-		s.AuthMiddleware(s.HandleAdminServicePermissions)(w, r)
+	case path == "data-grants":
+		s.AuthMiddleware(s.HandleAdminDataGrants)(w, r)
+	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/grant-limits"):
+		s.AuthMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
 	case path == "apps" || strings.HasPrefix(path, "apps/"):
 		s.AuthMiddleware(s.HandleAdminApps)(w, r)
 	case path == "immich" || strings.HasPrefix(path, "immich/"):

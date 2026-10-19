@@ -1,5 +1,9 @@
 # Plan: Restructure into core / data types / connectors
 
+> Historical plan (issue #15). Some names in this document predate the
+> data-grant rename (#174): `TypePolicy` is now `DataGrant`,
+> `permissions.json` is `data_grants.json`. Prefer `docs/glossary.md`.
+
 Status: **proposal** — start of work for the codebase split called for in #15,
 with #148 as the first product feature that lands on the type layer.
 

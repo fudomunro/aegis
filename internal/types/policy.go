@@ -328,7 +328,7 @@ func AllowsMethod(level, method string) bool {
 	}
 }
 
-// TypePolicy is the agent-access policy owned by a data type (issue #148).
+// DataGrant is an agent data grant owned by a data type (issue #148).
 // Service-level Permissions remain a minority override during migration;
 // the type default is the primary model. Enforcement applies on the
 // content/ingest proxy, library, and pre-request injection. Capabilities
@@ -337,7 +337,7 @@ func AllowsMethod(level, method string) bool {
 // Redaction levels (freebusy, summary, city, precise) stay type-scoped:
 // ValidatePermissions rejects them on kinds that cannot enforce the
 // reduction (see freeBusyOnlyTypes and friends).
-type TypePolicy struct {
+type DataGrant struct {
 	// Default is the access level for agents when no provider override applies.
 	// Empty means DefaultAccessType (preserves pre-permission behavior).
 	Default string `json:"default,omitempty"`
@@ -349,9 +349,9 @@ type TypePolicy struct {
 // For returns the effective access level for a provider (or the type default
 // when provider is empty / has no override). Provider overrides can only
 // tighten the type default. Opt-in types (places) stay none when Default is
-// empty — call TypePolicies.Access when the data-type key is known so opt-in
+// empty — call DataGrants.Access when the data-type key is known so opt-in
 // rules apply.
-func (tp TypePolicy) For(provider string) string {
+func (tp DataGrant) For(provider string) string {
 	level := NormalizeAccess(tp.Default)
 	if level == "" {
 		level = DefaultAccessType
@@ -370,13 +370,13 @@ func (tp TypePolicy) For(provider string) string {
 	return stricterAccess(level, ovLevel)
 }
 
-// TypePolicies maps data-type / permission keys to their agent policy.
-type TypePolicies map[string]TypePolicy
+// DataGrants maps data-type / permission keys to their agent policy.
+type DataGrants map[string]DataGrant
 
 // For returns the policy for a data type key (zero value when unset).
-func (tp TypePolicies) For(dataType string) TypePolicy {
+func (tp DataGrants) For(dataType string) DataGrant {
 	if tp == nil {
-		return TypePolicy{}
+		return DataGrant{}
 	}
 	return tp[dataType]
 }
@@ -386,7 +386,7 @@ func (tp TypePolicies) For(dataType string) TypePolicy {
 // (issue #148). Opt-in types stay none unless named explicitly — either the
 // type default or that provider's override (the Permissions "default" key
 // never enables them).
-func (tp TypePolicies) Access(dataType, provider string) string {
+func (tp DataGrants) Access(dataType, provider string) string {
 	policy := tp.For(dataType)
 	typeLevel := NormalizeAccess(policy.Default)
 	if typeLevel == "" {
@@ -424,9 +424,9 @@ func (tp TypePolicies) Access(dataType, provider string) string {
 }
 
 // PermissionsFor materializes a service-scoped Permissions map for one
-// provider from type policies. Used so permissionNotice and legacy helpers
+// provider from data grants. Used so permissionNotice and legacy helpers
 // can keep their map shape while ownership stays type-level.
-func (tp TypePolicies) PermissionsFor(provider string) Permissions {
+func (tp DataGrants) PermissionsFor(provider string) Permissions {
 	out := Permissions{}
 	for dataType := range tp {
 		out[dataType] = tp.Access(dataType, provider)
@@ -437,25 +437,25 @@ func (tp TypePolicies) PermissionsFor(provider string) Permissions {
 	return out
 }
 
-// ValidateTypePolicies checks every type policy entry (default + provider
+// ValidateDataGrants checks every data grant entry (default + provider
 // overrides) against the access vocabulary and type-scoped redaction rules.
-func ValidateTypePolicies(policies TypePolicies) error {
+func ValidateDataGrants(policies DataGrants) error {
 	for dataType, policy := range policies {
 		if dataType == "" {
-			return fmt.Errorf("type policies: empty data type key")
+			return fmt.Errorf("data grants: empty data type key")
 		}
 		// Empty default is allowed (DefaultAccessType / opt-in none).
 		if policy.Default != "" {
 			if err := ValidatePermissions(Permissions{dataType: policy.Default}); err != nil {
-				return fmt.Errorf("type policy %q: %w", dataType, err)
+				return fmt.Errorf("data grant %q: %w", dataType, err)
 			}
 		}
 		for provider, level := range policy.Providers {
 			if provider == "" {
-				return fmt.Errorf("type policy %q: empty provider key", dataType)
+				return fmt.Errorf("data grant %q: empty provider key", dataType)
 			}
 			if err := ValidatePermissions(Permissions{dataType: level}); err != nil {
-				return fmt.Errorf("type policy %q provider %q: %w", dataType, provider, err)
+				return fmt.Errorf("data grant %q provider %q: %w", dataType, provider, err)
 			}
 		}
 	}
@@ -463,7 +463,7 @@ func ValidateTypePolicies(policies TypePolicies) error {
 }
 
 // legacyOverride returns the legacy service-map opinion for a data type.
-// The second result is false when the map has no opinion (so type policy is
+// The second result is false when the map has no opinion (so data grant is
 // not tightened). Opt-in types only take an explicit key, never "default".
 func legacyOverride(p Permissions, dataType string) (string, bool) {
 	if len(p) == 0 {
@@ -484,14 +484,14 @@ func legacyOverride(p Permissions, dataType string) (string, bool) {
 // EffectiveAccess resolves agent access for a data type from a provider
 // (issue #148):
 //
-//  1. type policy is primary when present (default + provider tighten-only)
-//  2. legacy service permissions only tighten type policy
-//  3. when no type policy exists for the type, legacy service permissions
+//  1. data grant is primary when present (default + provider tighten-only)
+//  2. service grant_limits only tighten a data grant
+//  3. when no data grant exists for the type, service grant_limits
 //     remain the authority (compat window; they can still opt in places)
 //
 // Unclassified paths must pass dataType == "" and use the Strictest view so
 // unknown surface cannot inherit a wide default (issue #94).
-func EffectiveAccess(policies TypePolicies, legacy Permissions, dataType, provider string) string {
+func EffectiveAccess(policies DataGrants, legacy Permissions, dataType, provider string) string {
 	if dataType == "" {
 		level := policies.PermissionsFor(provider).Strictest()
 		if legacy != nil {
@@ -499,15 +499,15 @@ func EffectiveAccess(policies TypePolicies, legacy Permissions, dataType, provid
 		}
 		return level
 	}
-	_, hasTypePolicy := policies[dataType]
-	if hasTypePolicy {
+	_, hasDataGrant := policies[dataType]
+	if hasDataGrant {
 		level := policies.Access(dataType, provider)
 		if ov, ok := legacyOverride(legacy, dataType); ok {
 			level = stricterAccess(level, ov)
 		}
 		return level
 	}
-	// No type-owned policy for this key: service permissions still decide
+	// No type-owned policy for this key: service grant_limits still decide
 	// during the migration window (they can name opt-in types explicitly).
 	if legacy != nil {
 		return legacy.For(dataType)
@@ -519,10 +519,10 @@ func EffectiveAccess(policies TypePolicies, legacy Permissions, dataType, provid
 }
 
 // EffectivePermissions materializes the service-scoped map for a provider:
-// type policy first, legacy service permissions tightened on top. Callers that
+// data grant first, service grant_limits tightened on top. Callers that
 // still take Permissions (permissionNotice, host ServiceInfo) should use this
 // rather than the raw service block.
-func EffectivePermissions(policies TypePolicies, legacy Permissions, provider string) Permissions {
+func EffectivePermissions(policies DataGrants, legacy Permissions, provider string) Permissions {
 	// Collect every type the policies name plus every type the legacy map
 	// names (except "default"), so service-only keys still resolve.
 	keys := map[string]bool{}

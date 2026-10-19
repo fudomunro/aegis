@@ -26,8 +26,8 @@ type AdminService struct {
 	Aliases     []string `json:"aliases,omitempty"`
 	CacheTTL    string   `json:"cache_ttl"`
 	Description string   `json:"description,omitempty"`
-	// Permissions is the agent access map by data type (nil = unrestricted).
-	Permissions map[string]string `json:"permissions,omitempty"`
+	// GrantLimits is the tighten-only service map by data type (nil = unrestricted).
+	GrantLimits map[string]string `json:"grant_limits,omitempty"`
 	// AvailableDataTypes lists connector-known types the UI can edit.
 	AvailableDataTypes []string `json:"available_data_types,omitempty"`
 	// WritableDataTypes lists connector types that currently expose at least
@@ -185,7 +185,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Aliases:      svc.Aliases,
 			CacheTTL:     svc.CacheTTL.String(),
 			Description:  svc.Description,
-			Permissions:  svc.Permissions.Clone(),
+			GrantLimits:  svc.GrantLimits.Clone(),
 			CanonicalFor: svc.CanonicalFor,
 			HasOAuth:     svc.Connection != "",
 			HasAPIKey:    svc.HasStaticAPIKey(),
@@ -316,85 +316,85 @@ func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "cleared"})
 }
 
-// adminPermissionsRequest is the body for PUT service permissions.
-type adminPermissionsRequest struct {
-	// Permissions is the new map. Empty/null clears the block (unrestricted).
-	Permissions types.Permissions `json:"permissions"`
+// adminServiceLimitsRequest is the body for PUT service grant_limits.
+type adminServiceLimitsRequest struct {
+	// GrantLimits is the new map. Empty/null clears the block (unrestricted).
+	GrantLimits types.Permissions `json:"grant_limits"`
 }
 
-// adminTypePoliciesRequest is the body for PUT type policies.
-type adminTypePoliciesRequest struct {
-	// Types maps data-type / permission keys to TypePolicy (issue #148).
-	Types map[string]types.TypePolicy `json:"types"`
+// adminDataGrantsRequest is the body for PUT data grants.
+type adminDataGrantsRequest struct {
+	// DataGrants maps data-type keys to DataGrant (issue #174).
+	DataGrants map[string]types.DataGrant `json:"data_grants"`
 }
 
-// HandleAdminTypePolicies reads or writes the type-owned agent policy map.
+// HandleAdminDataGrants reads or writes the agent data-grant map.
 //
-//	GET /v1/admin/type-policies
-//	PUT /v1/admin/type-policies  {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+//	GET /v1/admin/data-grants
+//	PUT /v1/admin/data-grants   {"data_grants":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
 //
-// Type policy is primary: default plus optional per-provider overrides that
-// can only tighten. Service permission maps remain migration overrides.
-func (s *Server) HandleAdminTypePolicies(w http.ResponseWriter, r *http.Request) {
+// Data grants are primary: default plus optional per-provider overrides that
+// can only tighten. Service grant_limits remain tighten-only overrides.
+func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		policies := s.config.TypePolicies()
+		policies := s.config.DataGrants()
 		if policies == nil {
-			policies = types.TypePolicies{}
+			policies = types.DataGrants{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"version": permissionsFileVersion,
-			"types":   policies,
+			"version":     dataGrantsFileVersion,
+			"data_grants": policies,
 		})
 	case http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
-		var req adminTypePoliciesRequest
+		var req adminDataGrantsRequest
 		if len(body) > 0 {
 			if err := json.Unmarshal(body, &req); err != nil {
 				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
-		policies := req.Types
+		policies := req.DataGrants
 		if policies == nil {
-			policies = types.TypePolicies{}
+			policies = types.DataGrants{}
 		}
-		if err := s.config.SetTypePolicies(policies); err != nil {
-			withPeerLog(slog.With("handler", "admin_type_policies"), r).
-				Warn("failed to save type policies", "error", err)
+		if err := s.config.SetDataGrants(policies); err != nil {
+			withPeerLog(slog.With("handler", "admin_data_grants"), r).
+				Warn("failed to save data grants", "error", err)
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.cache.Clear()
-		withPeerLog(slog.With("handler", "admin_type_policies"), r).
-			Info("type policies updated", "types", len(policies))
-		saved := s.config.TypePolicies()
+		withPeerLog(slog.With("handler", "admin_data_grants"), r).
+			Info("data grants updated", "types", len(policies))
+		saved := s.config.DataGrants()
 		if saved == nil {
-			saved = types.TypePolicies{}
+			saved = types.DataGrants{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"version": permissionsFileVersion,
-			"types":   saved,
-			"status":  "saved",
+			"version":     dataGrantsFileVersion,
+			"data_grants": saved,
+			"status":      "saved",
 		})
 	default:
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
-// HandleAdminServicePermissions reads or writes a service's agent permission map.
+// HandleAdminServiceGrantLimits reads or writes a service's grant_limits map.
 //
-//	GET /v1/admin/services/{id}/permissions
-//	PUT /v1/admin/services/{id}/permissions  {"permissions": {"default":"read","player":"none"}}
-func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Request) {
+//	GET /v1/admin/services/{id}/grant-limits
+//	PUT /v1/admin/services/{id}/grant-limits  {"permissions": {"default":"read","player":"none"}}
+func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Request) {
 	trimmed := strings.TrimPrefix(r.URL.Path, "/v1/admin/services/")
 	trimmed = strings.Trim(trimmed, "/")
-	id := strings.TrimSuffix(trimmed, "/permissions")
+	id := strings.TrimSuffix(trimmed, "/grant-limits")
 	id = strings.Trim(id, "/")
 	if id == "" || strings.Contains(id, "/") {
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
@@ -409,7 +409,7 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 
 	switch r.Method {
 	case http.MethodGet:
-		perms := svc.Permissions.Clone()
+		perms := svc.GrantLimits.Clone()
 		if perms == nil {
 			perms = map[string]string{}
 		}
@@ -432,18 +432,18 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"service_id":            id,
-			"permissions":           perms,
-			"effective_permissions": effectiveOut,
-			"available_data_types":  types,
-			"writable_data_types":   writable,
+			"service_id":           id,
+			"grant_limits":         perms,
+			"effective_grant_limits": effectiveOut,
+			"available_data_types": types,
+			"writable_data_types":  writable,
 		})
 	case http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
-		var req adminPermissionsRequest
+		var req adminServiceLimitsRequest
 		if len(body) > 0 {
 			if err := json.Unmarshal(body, &req); err != nil {
 				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
@@ -452,7 +452,7 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 		}
 		// Permissions may only further constrain Aegis — never grant write
 		// where neither proxy ops nor mirror adapters can write that type.
-		saved := req.Permissions
+		saved := req.GrantLimits
 		if connector, ok := s.connectors[id]; ok && len(saved) > 0 {
 			caps := connector.Capabilities()
 			saved = clampPermissionsWithWritable(saved, caps, s.writableDataSet(id, caps))
@@ -466,12 +466,12 @@ func (s *Server) HandleAdminServicePermissions(w http.ResponseWriter, r *http.Re
 		// Cache may hold responses that are now denied.
 		s.cache.Clear()
 		withPeerLog(slog.With("handler", "admin_permissions"), r).
-			Info("service permissions updated", "service", id, "keys", len(req.Permissions))
+			Info("service grant limits updated", "service", id, "keys", len(req.GrantLimits))
 
 		updated := s.config.GetService(id)
 		perms := map[string]string{}
 		if updated != nil {
-			perms = updated.Permissions.Clone()
+			perms = updated.GrantLimits.Clone()
 			if perms == nil {
 				perms = map[string]string{}
 			}

@@ -67,7 +67,7 @@ func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) ht
 	}
 }
 
-// userDefinedReadable reports whether type policy allows GET on a UDT kind.
+// userDefinedReadable reports whether data grant allows GET on a UDT kind.
 func (s *Server) userDefinedReadable(permType string) bool {
 	if s == nil || s.config == nil {
 		return false
@@ -78,14 +78,14 @@ func (s *Server) userDefinedReadable(permType string) bool {
 // registerUserDefinedKinds prepares loaded UDT kinds for serving.
 //
 // Visibility is never taken from the pack: every UDT stays opt-in
-// (types.MarkOptInDataType at load) until an admin type policy names the
+// (types.MarkOptInDataType at load) until an admin data grant names the
 // kind (issue #15 review — packs must not self-enable, including
 // default_access). Schema default_access is informational only.
 func (s *Server) registerUserDefinedKinds() {
 	if s == nil || s.udts == nil {
 		return
 	}
-	// Intentionally no SeedTypePolicy: default_access cannot grant access.
+	// Intentionally no SeedDataGrant: default_access cannot grant access.
 	// Re-applying after Config.Reload is unnecessary because nothing is seeded.
 }
 

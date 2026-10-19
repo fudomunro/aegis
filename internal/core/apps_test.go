@@ -129,7 +129,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessRead},
+		GrantLimits: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -182,7 +182,7 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessRead},
+		GrantLimits: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -222,7 +222,7 @@ func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessRead},
+		GrantLimits: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store

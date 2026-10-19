@@ -13,7 +13,7 @@ const (
 	dataDirAppName         = "Aegis"
 	dataDirName            = "aegis"
 	defaultConfigName      = "aegis.json"
-	defaultPermissionsName = "permissions.json"
+	defaultDataGrantsName   = "data_grants.json"
 	defaultTokensName      = "tokens.json"
 	defaultAppsName        = "apps.json"
 	defaultLinksName       = "entity_links.json"
@@ -34,8 +34,8 @@ type DataPaths struct {
 	Dir string
 	// Config is the bootstrap rules file (aegis.json).
 	Config string
-	// Permissions is the admin permissions overlay (non-secret).
-	Permissions string
+	// DataGrants is the admin data-grant overlay (data_grants.json, non-secret).
+	DataGrants string
 	// Tokens is the encrypted OAuth token store.
 	Tokens string
 	// Apps is the third-party application registry (issue #131).
@@ -70,7 +70,7 @@ type DataPaths struct {
 type StatePathOverrides struct {
 	Dir            string
 	Config         string
-	Permissions    string
+	DataGrants     string
 	Tokens         string
 	Links          string
 	CopyLedger     string
@@ -169,7 +169,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	paths := DataPaths{
 		Dir:         dir,
 		Config:      resolveUnderDataDir(ov.Config, dir, defaultConfigName),
-		Permissions: resolveUnderDataDir(ov.Permissions, dir, defaultPermissionsName),
+		DataGrants:  resolveUnderDataDir(ov.DataGrants, dir, defaultDataGrantsName),
 		Tokens:      resolveUnderDataDir(ov.Tokens, dir, defaultTokensName),
 		Apps:        filepath.Join(dir, defaultAppsName),
 		Links:       resolveUnderDataDir(ov.Links, dir, defaultLinksName),

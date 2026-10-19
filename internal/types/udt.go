@@ -56,7 +56,7 @@ type UserDefinedTypeSchema struct {
 	Sources []UserDefinedSourceSpec `json:"sources,omitempty"`
 	// DefaultAccess is informational only (admin UI display). UDTs are always
 	// opt-in — a pack cannot grant agent access (issue #15 review). Enable a
-	// kind via type policy / permissions admin, never via the schema file.
+	// kind via data grants admin, never via the schema file.
 	DefaultAccess string `json:"default_access,omitempty"`
 }
 
@@ -281,7 +281,7 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 		s.EmptyMsg = "no " + s.ID + " sources configured"
 	}
 	if s.DenyMsg == "" {
-		s.DenyMsg = "permission denied: agent access to " + s.ID + " is not allowed"
+		s.DenyMsg = "denied: data grant for agent access to " + s.ID + " is not allowed"
 	}
 	if s.FailMsg == "" {
 		s.FailMsg = "failed to fetch " + s.ID
@@ -292,7 +292,7 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 		s.DefaultAccess = NormalizeAccess(s.DefaultAccess)
 	}
 	// Packs cannot enable themselves. Surface the requested level for admin
-	// display only; enforcement always starts at none until type policy
+	// display only; enforcement always starts at none until a data grant
 	// names this key (issue #15 review).
 	if s.DefaultAccess == "" {
 		s.DefaultAccess = AccessNone

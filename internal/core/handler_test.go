@@ -852,7 +852,7 @@ func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"default": types.AccessRead, "player": types.AccessNone, "recommendations": types.AccessNone},
+				GrantLimits: types.Permissions{"default": types.AccessRead, "player": types.AccessNone, "recommendations": types.AccessNone},
 			},
 		},
 	}
@@ -887,7 +887,7 @@ func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 	msgs := modified["messages"].([]any)
 	sys := msgs[0].(map[string]any)
 	content := sys["content"].(string)
-	if !strings.Contains(content, "Access policy:") {
+	if !strings.Contains(content, "Data grants:") {
 		t.Fatalf("system message missing access policy notice:\n%s", content)
 	}
 	if !strings.Contains(content, "player") || !strings.Contains(content, "recommendations") {

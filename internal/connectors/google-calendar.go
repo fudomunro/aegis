@@ -278,7 +278,7 @@ func (c *GoogleCalendarConnector) EventsFreeBusyOnly() bool {
 	if svc == nil {
 		return false
 	}
-	return types.IsFreeBusyAccess(svc.Permissions.For("events"))
+	return types.IsFreeBusyAccess(svc.GrantLimits.For("events"))
 }
 
 func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {

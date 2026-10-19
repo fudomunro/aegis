@@ -26,7 +26,7 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 				Endpoint:     ts.URL,
 				Headers:      map[string]string{"X-API-Key": "test-immich-key"},
 				CanonicalFor: []string{"photos"},
-				Permissions:  types.Permissions{"default": types.AccessRead, "photos": types.AccessRead},
+				GrantLimits: types.Permissions{"default": types.AccessRead, "photos": types.AccessRead},
 			},
 		},
 	}

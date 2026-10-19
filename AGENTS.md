@@ -2,8 +2,13 @@
 
 Instructions for coding agents working in this repository. Read this before
 touching code, config, or docs. `README.md` holds the full product/API surface;
-`SECURITY.md` holds the tailnet trust model. This file is about how work
-actually happens here and which product rules must not drift.
+`SECURITY.md` holds the tailnet trust model. Canonical English for product
+concepts is in [`docs/glossary.md`](docs/glossary.md) (issue #174). This file is
+about how work actually happens here and which product rules must not drift.
+
+Note on the word *agent*: product docs mean the **LLM agent** that calls
+`/v1/library/*`; this file and `AGENTS.md` mean the **coding agent** or
+maintainer editing the repo. Prefer those labels over a bare “agent”.
 
 ## What this project is
 
@@ -17,7 +22,7 @@ It does two jobs:
    `/v1/library/{kind}` for user data. `/v1/services/{id}/...` is content/ingest
    only (photo bytes, full message bodies, playlist items, local import; issue
    #119) — not a general provider-API mirror. Aegis attaches OAuth tokens,
-   caches, enforces permissions, and returns neutral models.
+   caches, enforces data grants, and returns neutral models.
 
 Module: `github.com/fudomunro/aegis`  
 Layout: **`internal/types`** (data-type layer) + **`internal/core`**
@@ -56,7 +61,7 @@ them away.
   the floor when the suite grows; do **not** lower it to land untested write
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
-  `entity_links.json`, `permissions.json`, `service_connections.json`,
+  `entity_links.json`, `data_grants.json`, `service_connections.json`,
   `user_types.json`, `.aegis-token-pass`, or live binaries. Example config only via
   `aegis.example.json`. Prefer the OS data directory (issue #74) over the git
   worktree for runtime state.
@@ -75,7 +80,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Entry, flags, routes, connector registration | `internal/core/run.go` (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
 | Data directory + state path layout | `datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
-| Admin permissions overlay | `permissions_overlay.go` | `permissions.json` v2: `types` (primary TypePolicy) + `services` (tighten-only migration overrides); admin saves never rewrite aegis.json |
+| Admin permissions overlay | `permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
@@ -136,7 +141,7 @@ All mutable local state defaults under one data directory (override with
 | Linux | `$XDG_DATA_HOME/aegis` or `~/.local/share/aegis` |
 
 ```
-<data-dir>/aegis.json, permissions.json, apps.json, entity_links.json, tokens.json,
+<data-dir>/aegis.json, data_grants.json, apps.json, entity_links.json, tokens.json,
 user_types.json, user-types/, copy_ledger.db, mail-archive.db, logs/aegis.log
 ```
 
@@ -232,12 +237,13 @@ over the hostile-input parsers, and `go build -o aegis .`.
   `identity_source`, `path`, `error`). Default JSON in prod.
 - **Neutral models at the library boundary.** Provider quirks stay inside
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
-- **Permissions are data, not comments.** Type-level `TypePolicy` (owned by
-  `internal/types`) plus optional provider/attribute filters must stay
-  enforced on the content/ingest proxy, library, and pre-request injection.
-  Capabilities are admin/connector metadata (issue #119) — not agent
-  discovery. Service `permissions` maps are migration overrides that can only
-  tighten the type default (issue #148).
+- **Permissions are data, not comments.** **Data grants** (what the user allows
+  an LLM agent or app to use) are owned by type-level `DataGrant`
+  (`internal/types`) plus optional provider/attribute filters and must stay
+  enforced on the content/ingest proxy, library, capabilities output, and
+  pre-request injection. Service `permissions` maps are migration overrides
+  that can only tighten the type default (issue #148). Prefer **data grant** in
+  product English (`docs/glossary.md`).
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `aegisHTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
@@ -279,7 +285,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | `http.DefaultClient` / `http.PostForm` without timeout | `aegisHTTPClient` + context |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
-| Service permissions dual-path treated as equal owners | Type policy is primary; service maps only tighten until the compat window ends |
+| Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
 | Large admin HTML pasted back into `admin.go` | Keep `web/admin.html` embed |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
@@ -294,14 +300,15 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
-| Admin permission writes | `permissions_overlay.go`, `config.go` `SetTypePolicies` / `SetServicePermissions`, README “Data permissions” |
+| Admin data-grant writes | `permissions_overlay.go`, `config.go` `SetDataGrants` / `SetServicePermissions`, README “Data grants” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
 | Unified library + merge | `librarykind.go`, `internal/types/{merge,models}.go` |
-| Permissions / agent visibility | `internal/types/policy.go` (`TypePolicy` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | Type-owned policy + provider tighten-only overrides; path rules live with the type layer |
+| Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
 | Admin map / flow | `flow.go`, `admin.go`, `web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `identity.go` |
 | Product/API docs | `README.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
+| Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
 
 ## Open direction (do not assume closed)
 

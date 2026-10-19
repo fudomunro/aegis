@@ -221,7 +221,7 @@ func TestDuration_MarshalJSON(t *testing.T) {
 func TestGetService_ReturnsSnapshot(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Permissions: types.Permissions{"player": types.AccessNone}},
+			{ID: "spotify", Name: "Spotify", GrantLimits: types.Permissions{"player": types.AccessNone}},
 		},
 	}
 
@@ -231,14 +231,14 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 	}
 	// Mutating the snapshot must not touch the live store.
 	svc.Endpoint = "https://mutated.example"
-	svc.Permissions["player"] = types.AccessFull
+	svc.GrantLimits["player"] = types.AccessFull
 
 	live := cfg.GetService("spotify")
 	if live.Endpoint != "" {
 		t.Fatalf("Endpoint leaked to store: %q", live.Endpoint)
 	}
-	if live.Permissions.For("player") != types.AccessNone {
-		t.Fatalf("Permissions mutated via snapshot: %q", live.Permissions.For("player"))
+	if live.GrantLimits.For("player") != types.AccessNone {
+		t.Fatalf("Permissions mutated via snapshot: %q", live.GrantLimits.For("player"))
 	}
 
 	if !cfg.updateService("spotify", func(s *Service) { s.Endpoint = "https://mock.example" }) {
@@ -257,12 +257,12 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone}},
-			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone}},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: types.Permissions{types.PermissionDefaultKey: types.AccessRead}},
 		},
 	}
-	permsPath := filepath.Join(t.TempDir(), "permissions.json")
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
+	permsPath := filepath.Join(t.TempDir(), "data_grants.json")
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -293,8 +293,8 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 				t.Error("GetService returned nil")
 				return
 			}
-			_ = svc.Permissions.AllowsRead("tracks")
-			_ = svc.Permissions.AccessForDataType("")
+			_ = svc.GrantLimits.AllowsRead("tracks")
+			_ = svc.GrantLimits.AccessForDataType("")
 			_ = svc.Endpoint
 		}
 	}()
@@ -303,7 +303,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
 			for _, svc := range cfg.ServiceSnapshots() {
-				_ = svc.Permissions.AllowsRead("tracks")
+				_ = svc.GrantLimits.AllowsRead("tracks")
 				_ = svc.IsCanonicalFor("playlists")
 			}
 			_ = srv.libraryReadableFor("tracks")
@@ -317,7 +317,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			matched := cfg.FindMatchingServices("play something on spotify")
 			for _, svc := range matched {
-				_ = svc.Permissions.For("player")
+				_ = svc.GrantLimits.For("player")
 			}
 			_ = cfg.ServiceCount()
 		}

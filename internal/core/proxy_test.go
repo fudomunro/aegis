@@ -146,7 +146,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"playlists": types.AccessNone, "default": types.AccessRead},
+				GrantLimits: types.Permissions{"playlists": types.AccessNone, "default": types.AccessRead},
 			},
 		},
 	}
@@ -171,7 +171,7 @@ func TestHandleServiceProxy_ContentPathAllowedByPermission(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "gmail", Name: "Gmail", Action: "inject",
-				Permissions: types.Permissions{"messages": types.AccessRead},
+				GrantLimits: types.Permissions{"messages": types.AccessRead},
 			},
 		},
 	}

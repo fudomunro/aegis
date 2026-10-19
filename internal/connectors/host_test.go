@@ -27,7 +27,7 @@ func newTestHost(baseURL string) *testHost {
 }
 
 func (h *testHost) setService(id, endpoint string) {
-	h.services[id] = &ServiceInfo{ID: id, Endpoint: endpoint, Permissions: types.Permissions{}}
+	h.services[id] = &ServiceInfo{ID: id, Endpoint: endpoint, GrantLimits: types.Permissions{}}
 	h.endpoints[id] = endpoint
 }
 

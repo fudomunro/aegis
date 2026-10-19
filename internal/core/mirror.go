@@ -306,7 +306,7 @@ func (s *Server) requireMirrorWritable(serviceID, kind string) error {
 		return fmt.Errorf("service %q is blocked", serviceID)
 	}
 	if !s.effectivePermissions(svc).AllowsWrite(kind) {
-		return fmt.Errorf("permission denied: agent write access to %s on %s is %q",
+		return fmt.Errorf("denied: data grant for agent write access to %s on %s is %q",
 			kind, serviceID, s.effectivePermissions(svc).For(kind))
 	}
 	return nil
@@ -322,7 +322,7 @@ func (s *Server) requireMirrorReadable(serviceID, kind string) error {
 		return fmt.Errorf("service %q is blocked", serviceID)
 	}
 	if !s.effectivePermissions(svc).AllowsRead(kind) {
-		return fmt.Errorf("permission denied: agent read access to %s on %s is %q",
+		return fmt.Errorf("denied: data grant for agent read access to %s on %s is %q",
 			kind, serviceID, s.effectivePermissions(svc).For(kind))
 	}
 	return nil

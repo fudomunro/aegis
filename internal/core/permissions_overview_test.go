@@ -21,9 +21,9 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.SeedTypePolicy("tracks", types.TypePolicy{Default: types.AccessRead})
-	cfg.SeedTypePolicy("events", types.TypePolicy{Default: types.AccessFreeBusy})
-	cfg.SeedTypePolicy("places", types.TypePolicy{Default: types.AccessCity})
+	cfg.SeedDataGrant("tracks", types.DataGrant{Default: types.AccessRead})
+	cfg.SeedDataGrant("events", types.DataGrant{Default: types.AccessFreeBusy})
+	cfg.SeedDataGrant("places", types.DataGrant{Default: types.AccessCity})
 
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
