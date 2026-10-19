@@ -57,6 +57,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Effective access** | Resolved level after data grant + service tighten | |
 | **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
+| **Admin principal** | Admin API key or allowed tailnet user login | Who may change policy (data grants, apps, UDT file selection); agent credentials are never admin (issue #181) |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
 One-line shape (also in README “Data grants”): **data grants** are the product
