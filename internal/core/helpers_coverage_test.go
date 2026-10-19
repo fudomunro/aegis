@@ -84,6 +84,8 @@ func TestLibraryRouteHandlers_Registry(t *testing.T) {
 		"/v1/library/messages",
 		"/v1/library/transactions",
 		"/v1/library/places",
+		"/v1/library/documents",
+		"/v1/library/documents/{service}/{id}/text",
 		"/v1/library/copies",
 		"/v1/library/review",
 		"/v1/library/links",

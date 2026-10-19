@@ -75,6 +75,8 @@ Aegis starts with these endpoints:
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service); also imported Signal chats (issue #168)
 - `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
 - `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
+- `GET /v1/library/documents` — documents (receipts, warranties, leases, letters) from Paperless-ngx and other sources; filters `q`/`tag`/`after`/`before` (issue #143). `metadata` access returns titles/dates/tags only; `read` adds short excerpts.
+- `GET /v1/library/documents/{service}/{id}/text` — full extracted text for one document (issue #143). Requires `documents=read`; metadata is list-only.
 - `GET /v1/library/{user-defined}` — user-defined types under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in data grant before agents can read it. See [User-defined types](#user-defined-types-issue-15).
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
@@ -309,7 +311,7 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 
 What you do to let an LLM agent or app use your data is a **data grant**: an
 allow rule on a **data type** at an **access level** (`none`, `freebusy`,
-`summary`, `city`, `precise`, `read`, `write`, `read-write`). This is the
+`summary`, `city`, `precise`, `metadata`, `read`, `write`, `read-write`). This is the
 application-layer side of Tailscale-style access — you already use a tailnet
 grant so callers can *reach* Aegis; data grants say what they may *use*.
 
@@ -381,6 +383,7 @@ exists for that key):
 | `summary` | `GET`, `HEAD` on `transactions`, but responses reduced to totals by category/month only — no line items (issue #141) |
 | `city` | `GET`, `HEAD` on `places`, reduced to locality, country, and the visit/trip time window (issue #142) |
 | `precise` | `GET`, `HEAD` on `places` with coordinates (issue #142) |
+| `metadata` | `GET`, `HEAD` on `documents`, reduced to titles, dates, tags, correspondents, and sources — no excerpt or text (issue #143) |
 | `read` | `GET`, `HEAD` |
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
@@ -425,6 +428,16 @@ exists for that key):
     `read-write` map to for reads; there is no agent write surface).
   `city` and `precise` are places-only and rejected on other keys. Import
   (Google Timeline) and live (OwnTracks) sources both honor the same ladder.
+- **`metadata` is documents-only** (issue #143). Life-admin paperwork
+  (receipts, warranties, leases, insurance, tax/medical letters) can be listed
+  without reading content. Responses keep title, mime_type, created/modified,
+  correspondent, document_type, tags[], people[], and sources[] — **no
+  excerpt and no text**. `read` (or unrestricted `write` / `read-write`) adds
+  a short excerpt on list rows. Full text is only at
+  `GET /v1/library/documents/{service}/{id}/text`, which requires `read` —
+  metadata access is list-only and cannot fetch text. The level is rejected
+  on other data types and on `default`. Per-tag allow/deny (e.g. hide
+  `medical`) is a design spike, not implemented.
 - **Unknown proxy paths** (not a mapped data type) use the **strictest**
   configured level, not a type default, so a tight type cannot be bypassed by an
   unmapped endpoint (issue #94).
@@ -458,7 +471,7 @@ exists for that key):
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
-`events`, `messages`, `transactions`, `places`. Paths that do not map to a known type fall through to the
+`events`, `messages`, `transactions`, `places`, `documents`. Paths that do not map to a known type fall through to the
 `default` level.
 
 ### Canonical sources (non-Aegis, issue #16)
@@ -481,7 +494,7 @@ Two layers set the flag:
 ```
 
 Valid kinds: `playlists`, `tracks`, `albums`, `artists`, `contacts`, `photos`,
-`events`, `messages`. At most **one** non-blocked service may claim each kind. After a library fetch,
+`events`, `messages`, `transactions`, `places`, `documents`. At most **one** non-blocked service may claim each kind. After a library fetch,
 sources from a configured home service are stamped `canonical: true`.
 
 Merge sorts canonical sources first. `CanonicalService()` (and the JSON
@@ -792,7 +805,7 @@ events-only.
 
 **What an app token can call:**
 
-- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions,places}` only
+- `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions,places,documents}` only
 - Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
 
 When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
@@ -2101,6 +2114,101 @@ evening visit with a fireworks photo taken during it — see
 `TestPhotosPlacesJoinDemo`. Aegis does not store photo bytes; the join is
 metadata only.
 
+### Documents as a data type (issue #143)
+
+`GET /v1/library/documents` returns life-admin paperwork — receipts,
+warranties, leases, insurance policies, tax letters, medical letters — as
+neutral **Document** metadata. Files stay on the source service (Paperless-ngx
+and Google Docs/Drive; Nextcloud remains a candidate). Aegis never stores
+document bytes and never runs OCR.
+
+```json
+{
+  "documents": [{
+    "title": "Apartment lease 2024",
+    "mime_type": "application/pdf",
+    "created_at": "2024-01-15T12:00:00Z",
+    "modified_at": "2024-01-16T09:00:00Z",
+    "correspondent": "Harbour Property Management",
+    "document_type": "lease",
+    "tags": ["housing", "legal"],
+    "excerpt": "This lease agreement is entered into…",
+    "people": [{"name": "Harbour Property Management"}],
+    "entity_id": "sha256:…",
+    "sources": [{
+      "service": "paperless",
+      "service_name": "Paperless-ngx",
+      "id": "11",
+      "url": "https://paperless.example.com/documents/11/details",
+      "canonical": true,
+      "blob_url": "https://paperless.example.com/api/documents/11/download"
+    }]
+  }],
+  "total": 1
+}
+```
+
+Query filters: `q`, `tag`, `after`, `before`.
+
+**Metadata vs text (issue #143).** List rows never carry full text.
+
+| Access | List | Text endpoint |
+|--------|------|---------------|
+| `metadata` | title, dates, tags, correspondent, document_type, people[], sources[] — **no excerpt** | denied |
+| `read` / `read-write` | same + short `excerpt` | `GET /v1/library/documents/{service}/{id}/text` |
+
+The text endpoint is a separate gate so `metadata` (or “read the list”) never
+implies reading content. Prefer `canonical` / `blob_url` on `sources[]` for
+the real file. Out of scope: upload/edit, Aegis-side OCR or file storage, and
+per-tag allow/deny (design spike).
+
+#### Paperless-ngx
+
+Self-hosted document store that already OCRs, tags, and classifies — a natural
+fit for the Immich audience. Configure a service named `paperless` with the
+API base (`…/api`) and a token:
+
+```json
+{
+  "id": "paperless",
+  "name": "Paperless-ngx",
+  "endpoint": "http://192.168.1.10:8000/api",
+  "headers": {"Authorization": "Token …"},
+  "canonical_for": ["documents"],
+  "grant_limits": {"documents": "read"}
+}
+```
+
+Use `documents: "metadata"` in a data grant (or `grant_limits`) to let agents
+browse titles/tags without excerpts or full text.
+
+#### Google Docs / Google Drive
+
+Google Docs are documents too. The `google-drive` connector lists native
+Google Docs (`application/vnd.google-apps.document`) via Drive `files.list`
+and pulls content with `files.export` as **HTML or plain text** — markdown
+conversion is deferred. Files stay on Drive (non-Aegis canonical).
+
+```json
+{
+  "id": "google-drive",
+  "name": "Google Drive",
+  "endpoint": "https://www.googleapis.com/drive/v3",
+  "connection": "google",
+  "oauth_scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+  "grant_limits": {"documents": "read"}
+}
+```
+
+Shares the Google connection with Contacts/Calendar/Gmail/Photos.
+`drive.readonly` covers both listing and export (a narrower content scope can
+replace it later). Watch OAuth app verification limits, same class as Photos.
+
+| What | Format |
+|------|--------|
+| `GET /v1/library/documents/{service}/{id}/text` | `text/plain` export |
+| `GET /v1/services/google-drive/files/{id}/export?mimeType=text/html` | HTML (structure-preserving intermediate for a later markdown pass) |
+
 ### Content & ingest transport (`/v1/services/{id}/...`)
 
 ```
@@ -2115,6 +2223,8 @@ After issue #119 this is **not** a general service API. Library (`/v1/library/{k
 | `/assets/{id}/original`, `/assets/{id}/thumbnail`, Bluesky `getBlob` | Photo/asset bytes (Aegis does not store media) |
 | `/messages/{id}`, `/threads/{id}` | Full message bodies (library lists carry snippets) |
 | `/playlists/{id}`, `/playlists/{id}/items` | Playlist items (library entries carry `track_count` only) |
+| `/documents/{id}/download`, `/documents/{id}/preview` | Document file bytes (library lists carry metadata + short excerpt) |
+| `/files/{id}/export` | Google Docs HTML/plain-text export (library text endpoint is plain text) |
 | `/picker/*` | Google Photos user pick → library |
 | `/import`, `/import/status` | Local export ingest (Signal, Quicken) |
 

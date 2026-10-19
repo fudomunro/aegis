@@ -37,6 +37,27 @@ func IsAgentContentPath(canonical string) bool {
 	// Playlist items (library entries carry track_count only).
 	case detailSegment(canonical, "/playlists/"):
 		return true
+	// Document file bytes / previews — library lists carry metadata + excerpt
+	// only; full text is gated on /v1/library/documents/{service}/{id}/text.
+	// Bare /documents/{id} is not content transport (it includes OCR text).
+	case strings.HasSuffix(canonical, "/download"),
+		strings.HasSuffix(canonical, "/preview"),
+		strings.HasSuffix(canonical, "/thumb"):
+		if strings.HasPrefix(canonical, "/documents/") || strings.HasPrefix(canonical, "/api/documents/") {
+			return true
+		}
+		return false
+	// Google Docs content export (HTML or plain text; markdown deferred).
+	// Bare /files and /files/{id} stay library-only (issue #143). Accept both
+	// connector-relative /files/… and agent-copied /drive/v3/files/….
+	case strings.HasSuffix(canonical, "/export") || strings.HasSuffix(canonical, "/export/"):
+		if strings.HasPrefix(canonical, "/files/") ||
+			strings.HasPrefix(canonical, "/drive/files/") ||
+			strings.HasPrefix(canonical, "/drive/v3/files/") ||
+			strings.HasPrefix(canonical, "/drive/v2/files/") {
+			return true
+		}
+		return false
 	default:
 		return false
 	}
