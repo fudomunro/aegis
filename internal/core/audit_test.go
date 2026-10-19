@@ -267,7 +267,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"playlists": types.AccessNone},
+				GrantLimits: types.Permissions{"playlists": types.AccessNone},
 			},
 		},
 	}

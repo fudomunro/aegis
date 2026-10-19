@@ -51,9 +51,9 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 |--------|-------|-------|
 | **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **data type** at an **access level** | Hero term for product English (README “Data grants”, admin UI, injection) |
 | **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
-| **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | Code alias: `TypePolicy` / `TypePolicies` |
+| **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
-| **Service grant limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | Legacy key: `permissions` |
+| **Service grant limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | |
 | **Effective access** | Resolved level after type policy + service tighten | |
 | **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from type policy |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
@@ -109,8 +109,7 @@ policy or the third-party one-time **grant code** (`aeg_grant_…`).
 
 ## Deliberate non-renames
 
-JSON prefers `data_grants` / `grant_limits` / `data_grants.json`. Legacy keys
-(`type_policies`, `permissions`, `permissions.json`, `/v1/admin/type-policies`)
-still load. Other identifiers stay stable (`canonical_for`,
-`sources[].canonical`, `perm_type`, `IsAgentContentPath`, `LibraryKind`).
-Product rules in `AGENTS.md` are unchanged by this glossary.
+JSON uses `data_grants` / `grant_limits` / `data_grants.json`. Other identifiers
+stay stable (`canonical_for`, `sources[].canonical`, `perm_type`,
+`IsAgentContentPath`, `LibraryKind`). Product rules in `AGENTS.md` are
+unchanged by this glossary.

@@ -85,7 +85,7 @@ func (s *Server) registerUserDefinedKinds() {
 	if s == nil || s.udts == nil {
 		return
 	}
-	// Intentionally no SeedTypePolicy: default_access cannot grant access.
+	// Intentionally no SeedDataGrant: default_access cannot grant access.
 	// Re-applying after Config.Reload is unnecessary because nothing is seeded.
 }
 

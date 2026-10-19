@@ -20,7 +20,7 @@ func mustWriteFile(t *testing.T, path, content string) {
 func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
+	permsPath := filepath.Join(dir, "data_grants.json")
 	initial := `{
 		"connections": {
 			"spotify": {
@@ -38,7 +38,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 				"endpoint": "https://api.spotify.com/v1",
 				"connection": "spotify",
 				"cache_ttl": "10m",
-				"permissions": {"default": "read"}
+				"grant_limits": {"default": "read"}
 			}
 		]
 	}`
@@ -52,11 +52,11 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
+		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 	// Bootstrap from aegis.json still applies when overlay is empty.
-	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != types.AccessRead {
+	if got := cfg.GetService("spotify").GrantLimits.For("tracks"); got != types.AccessRead {
 		t.Fatalf("bootstrap tracks = %q, want read", got)
 	}
 
@@ -82,7 +82,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read overlay: %v", err)
 	}
-	var ov permissionsOverlayFile
+	var ov dataGrantsOverlayFile
 	if err := json.Unmarshal(ovRaw, &ov); err != nil {
 		t.Fatalf("parse overlay: %v", err)
 	}
@@ -98,33 +98,33 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fresh.InitPermissionsStore(permsPath); err != nil {
+	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
 	svc := fresh.GetService("spotify")
 	if svc == nil {
 		t.Fatal("spotify missing after reload")
 	}
-	if svc.Permissions.For("player") != types.AccessNone || svc.Permissions.For("tracks") != types.AccessRead {
-		t.Fatalf("reloaded permissions = %+v", svc.Permissions)
+	if svc.GrantLimits.For("player") != types.AccessNone || svc.GrantLimits.For("tracks") != types.AccessRead {
+		t.Fatalf("reloaded permissions = %+v", svc.GrantLimits)
 	}
 
 	// Clear via overlay — bootstrap default must not resurface.
 	if err := cfg.SetServicePermissions("spotify", nil); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
-	if cfg.GetService("spotify").Permissions != nil {
+	if cfg.GetService("spotify").GrantLimits != nil {
 		t.Fatal("expected nil in-memory permissions after clear")
 	}
 	fresh, err = LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fresh.InitPermissionsStore(permsPath); err != nil {
+	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
-	if fresh.GetService("spotify").Permissions != nil {
-		t.Fatalf("clear must override bootstrap, got %+v", fresh.GetService("spotify").Permissions)
+	if fresh.GetService("spotify").GrantLimits != nil {
+		t.Fatalf("clear must override bootstrap, got %+v", fresh.GetService("spotify").GrantLimits)
 	}
 
 	// aegis.json still untouched after clear.
@@ -140,18 +140,18 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
+	permsPath := filepath.Join(dir, "data_grants.json")
 	mustWriteFile(t, cfgPath, `{
 		"services": [
-			{"id": "spotify", "name": "Spotify", "action": "inject", "permissions": {"player": "none"}},
-			{"id": "immich", "name": "Immich", "action": "inject", "permissions": {"photos": "read"}}
+			{"id": "spotify", "name": "Spotify", "action": "inject", "grant_limits": {"player": "none"}},
+			{"id": "immich", "name": "Immich", "action": "inject", "grant_limits": {"photos": "read"}}
 		]
 	}`)
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
 	if err := cfg.SetServicePermissions("immich", types.Permissions{"photos": types.AccessRead, "default": types.AccessNone}); err != nil {
@@ -162,18 +162,18 @@ func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fresh.InitPermissionsStore(permsPath); err != nil {
+	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatal(err)
 	}
 	// spotify not in overlay → bootstrap.
-	if got := fresh.GetService("spotify").Permissions.For("player"); got != types.AccessNone {
+	if got := fresh.GetService("spotify").GrantLimits.For("player"); got != types.AccessNone {
 		t.Fatalf("spotify player = %q, want none from bootstrap", got)
 	}
 	// immich in overlay → overlay wins.
-	if got := fresh.GetService("immich").Permissions.For("contacts"); got != types.AccessNone {
+	if got := fresh.GetService("immich").GrantLimits.For("contacts"); got != types.AccessNone {
 		t.Fatalf("immich contacts = %q, want none from overlay default", got)
 	}
-	if got := fresh.GetService("immich").Permissions.For("photos"); got != types.AccessRead {
+	if got := fresh.GetService("immich").GrantLimits.For("photos"); got != types.AccessRead {
 		t.Fatalf("immich photos = %q, want read", got)
 	}
 }
@@ -182,15 +182,15 @@ func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "does-not-exist.json")
-	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"player":"none"}}]}`)
+	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","grant_limits":{"player":"none"}}]}`)
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("missing overlay should not fail: %v", err)
 	}
-	if got := cfg.GetService("spotify").Permissions.For("player"); got != types.AccessNone {
+	if got := cfg.GetService("spotify").GrantLimits.For("player"); got != types.AccessNone {
 		t.Fatalf("player = %q, want none from bootstrap", got)
 	}
 }
@@ -198,9 +198,9 @@ func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 func TestPermissionsOverlay_InvalidLevelRejectedOnLoad(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
+	permsPath := filepath.Join(dir, "data_grants.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
-	mustWriteFile(t, permsPath, `{"version":1,"services":{"spotify":{"tracks":"maybe"}}}`)
+	mustWriteFile(t, permsPath, `{"version":3,"service_limits":{"spotify":{"tracks":"maybe"}}}`)
 	if _, err := LoadConfig(cfgPath); err == nil {
 		t.Fatal("expected invalid overlay level to fail LoadConfig")
 	}
@@ -209,31 +209,31 @@ func TestPermissionsOverlay_InvalidLevelRejectedOnLoad(t *testing.T) {
 func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
-	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"default":"read"}}]}`)
-	mustWriteFile(t, permsPath, `{"version":1,"services":{"spotify":{"default":"none"}}}`)
+	permsPath := filepath.Join(dir, "data_grants.json")
+	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","grant_limits":{"default":"read"}}]}`)
+	mustWriteFile(t, permsPath, `{"version":3,"service_limits":{"spotify":{"default":"none"}}}`)
 
 	// LoadConfig applies the sibling overlay automatically.
 	cfg, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != types.AccessNone {
+	if got := cfg.GetService("spotify").GrantLimits.For("tracks"); got != types.AccessNone {
 		t.Fatalf("overlay tracks = %q, want none", got)
 	}
 
 	// Simulate external aegis.json edit (bootstrap change), then reload.
-	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","permissions":{"default":"read","player":"read"}}]}`)
+	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject","grant_limits":{"default":"read","player":"read"}}]}`)
 	if err := cfg.Reload(); err != nil {
 		t.Fatalf("Reload: %v", err)
 	}
 	// Overlay still wins for default.
-	if got := cfg.GetService("spotify").Permissions.For("tracks"); got != types.AccessNone {
+	if got := cfg.GetService("spotify").GrantLimits.For("tracks"); got != types.AccessNone {
 		t.Fatalf("after reload tracks = %q, want none from overlay", got)
 	}
 }
 
-func TestInitPermissionsStore_EmptyPathRejected(t *testing.T) {
+func TestInitDataGrantsStore_EmptyPathRejected(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
@@ -241,7 +241,7 @@ func TestInitPermissionsStore_EmptyPathRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.InitPermissionsStore(""); err == nil {
+	if err := cfg.InitDataGrantsStore(""); err == nil {
 		t.Fatal("empty permissions overlay path must be rejected")
 	}
 }

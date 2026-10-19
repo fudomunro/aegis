@@ -226,7 +226,7 @@ func ExtraPermissionKeys(maps ...map[string]string) []string {
 }
 
 // ExtraPolicyKeys collects data-type keys from a type-policy map.
-func ExtraPolicyKeys(policies TypePolicies) []string {
+func ExtraPolicyKeys(policies DataGrants) []string {
 	if policies == nil {
 		return nil
 	}
@@ -243,7 +243,7 @@ func ExtraPolicyKeys(policies TypePolicies) []string {
 // AgentOverviewLevels materializes the type-owned agent policy into a
 // flat data-type → level map. Opt-in types (places) stay "none" unless
 // the policy names them explicitly.
-func AgentOverviewLevels(policies TypePolicies, dataTypes []string) map[string]string {
+func AgentOverviewLevels(policies DataGrants, dataTypes []string) map[string]string {
 	out := make(map[string]string, len(dataTypes))
 	for _, dataType := range dataTypes {
 		level := policies.Access(dataType, "")

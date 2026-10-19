@@ -131,7 +131,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessRead},
+		GrantLimits: types.Permissions{"events": types.AccessRead},
 	}
 	srv.config = &Config{Services: []Service{*svc}}
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}

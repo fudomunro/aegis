@@ -245,9 +245,9 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: types.Permissions{"places": types.AccessPrecise}},
+				GrantLimits: types.Permissions{"places": types.AccessPrecise}},
 			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject",
-				Permissions: types.Permissions{"places": types.AccessRead}},
+				GrantLimits: types.Permissions{"places": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -295,7 +295,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: types.Permissions{"places": types.AccessCity}},
+				GrantLimits: types.Permissions{"places": types.AccessCity}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -330,7 +330,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: types.Permissions{"places": types.AccessRead}},
+				GrantLimits: types.Permissions{"places": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -365,7 +365,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
-				Permissions: types.Permissions{"places": types.AccessPrecise}},
+				GrantLimits: types.Permissions{"places": types.AccessPrecise}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

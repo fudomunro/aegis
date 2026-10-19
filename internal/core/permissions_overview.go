@@ -35,11 +35,11 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		preferred = append(preferred, key)
 	}
 
-	policies := s.config.TypePolicies()
+	policies := s.config.DataGrants()
 	var extra []string
 	extra = append(extra, types.ExtraPolicyKeys(policies)...)
 	for _, svc := range s.config.ServiceSnapshots() {
-		extra = append(extra, types.ExtraPermissionKeys(svc.Permissions)...)
+		extra = append(extra, types.ExtraPermissionKeys(svc.GrantLimits)...)
 	}
 	if s.apps != nil {
 		for _, app := range s.apps.List() {

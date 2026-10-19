@@ -51,8 +51,8 @@ the most weight in product language.
 | Concept | Surface weight |
 |---------|----------------|
 | **Data grant** (user allows agent/app to use a data type at an access level) | product |
-| **TypePolicy** (where agent data grants live) | product + code |
-| Permissions map (service-level tighten-only) | product + code |
+| **DataGrant** (where agent data grants live) | product + code |
+| Service grant limits (tighten-only) | product + code |
 | **EffectiveAccess** | code |
 | Access levels (`none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write`) | product + code |
 | Accessor / AccessorKind (issue #160) | code + admin |
@@ -121,9 +121,9 @@ edits the repo. Same word, two audiences (see audience map §F).
 
 ### 2.3 Permissions vocabulary cluster
 
-`TypePolicy`, `Permissions`, `EffectiveAccess`, `Accessor`, `TypeAccess`,
+`DataGrant`, `Permissions`, `EffectiveAccess`, `Accessor`, `TypeAccess`,
 `PermissionsOverview`, access-level tokens, service `permissions` maps,
-`type_policies` config, and admin “Data access by type”.
+`data_grants` config, and admin “Data access by type”.
 
 **Overlap:** five Go types and two config keys all answer “who can see what”.
 Type policy is primary; service maps only tighten; Accessor is a third principal
@@ -146,7 +146,7 @@ response field, prose synonym, and method name.
 ### 2.5 Type / kind / data type / library kind / perm_type
 
 `LibraryKind`, `data type`, `kind` (URL segment), `perm_type` (permissions
-keys), `type_policies`, UDT “type”, `LibraryKind.ID`.
+keys), `data_grants`, UDT “type”, `LibraryKind.ID`.
 
 **Overlap:** the same registry entry is called four different names in product
 prose depending on surface (URL, permissions, admin UI, AGENTS).
@@ -221,8 +221,8 @@ After the overlap call-outs above, the stable concepts.
 | Concept | Definition | Key files |
 |---------|------------|-----------|
 | **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, README “Data grants”, `SECURITY.md` |
-| **TypePolicy** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/types/policy.go:340` |
-| **Permissions map** | Service-scoped `map[dataType]level` that can only tighten the type default (migration override). | `policy.go:65`, `permissions_overlay.go` |
+| **DataGrant** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/types/policy.go` |
+| **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `policy.go`, `permissions_overlay.go` |
 | **EffectiveAccess** | Resolved level for (type, provider) combining type policy + service tighten. | `policy.go:484`, `config.go:437` |
 | **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `policy.go:11-36` |
 | **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from type policy. | `internal/types/accessors.go:31` |

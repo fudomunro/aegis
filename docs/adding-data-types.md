@@ -94,7 +94,7 @@ still flat, write new code so the move is a `git mv` + package rename:
 
 | Target package | Contents | Status |
 |----------------|----------|--------|
-| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, `TypePolicy` / access levels, capability shapes, path rules | **landed** |
+| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, `DataGrant` / access levels, capability shapes, path rules | **landed** |
 | `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores | **landed** |
 | `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) | **landed** |
 

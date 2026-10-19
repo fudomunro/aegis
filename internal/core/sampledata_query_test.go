@@ -525,7 +525,7 @@ func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 
 	// Permission-denied: the only tracks service forbids agent access.
 	deniedCfg := &Config{Services: []Service{
-		{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{"tracks": types.AccessNone}},
+		{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: types.Permissions{"tracks": types.AccessNone}},
 	}}
 	srv := testServerWithBase(deniedCfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

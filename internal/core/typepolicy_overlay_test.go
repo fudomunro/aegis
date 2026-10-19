@@ -12,10 +12,10 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-func TestPermissionsOverlay_TypePoliciesPrimary(t *testing.T) {
+func TestDataGrantsOverlay_Primary(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
+	permsPath := filepath.Join(dir, "data_grants.json")
 	initial := `{
 		"services": [
 			{
@@ -23,14 +23,14 @@ func TestPermissionsOverlay_TypePoliciesPrimary(t *testing.T) {
 				"name": "Spotify",
 				"action": "inject",
 				"endpoint": "https://api.spotify.com/v1",
-				"permissions": {"tracks": "read", "player": "none"}
+				"grant_limits": {"tracks": "read", "player": "none"}
 			},
 			{
 				"id": "immich",
 				"name": "Immich",
 				"action": "inject",
 				"endpoint": "http://immich.local/api",
-				"permissions": {"places": "city"}
+				"grant_limits": {"places": "city"}
 			}
 		]
 	}`
@@ -39,12 +39,12 @@ func TestPermissionsOverlay_TypePoliciesPrimary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
+		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 
 	// Type policy is primary: tracks default full, spotify tightens to none.
-	if err := cfg.SetTypePolicies(types.TypePolicies{
+	if err := cfg.SetDataGrants(types.DataGrants{
 		"tracks": {
 			Default:   types.AccessFull,
 			Providers: map[string]string{"spotify": types.AccessNone},
@@ -54,7 +54,7 @@ func TestPermissionsOverlay_TypePoliciesPrimary(t *testing.T) {
 			Providers: map[string]string{"immich": types.AccessCity},
 		},
 	}); err != nil {
-		t.Fatalf("SetTypePolicies: %v", err)
+		t.Fatalf("SetDataGrants: %v", err)
 	}
 
 	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
@@ -91,18 +91,18 @@ func TestPermissionsOverlay_TypePoliciesPrimary(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig reload: %v", err)
 	}
-	if err := fresh.InitPermissionsStore(permsPath); err != nil {
-		t.Fatalf("InitPermissionsStore reload: %v", err)
+	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
+		t.Fatalf("InitDataGrantsStore reload: %v", err)
 	}
 	if got := fresh.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
 		t.Fatalf("reloaded spotify tracks = %q", got)
 	}
 }
 
-func TestPermissionsOverlay_LegacyServiceMapOnlyTightens(t *testing.T) {
+func TestDataGrantsOverlay_ServiceLimitsOnlyTighten(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
+	permsPath := filepath.Join(dir, "data_grants.json")
 	mustWriteFile(t, cfgPath, `{
 		"services": [
 			{"id": "spotify", "name": "Spotify", "action": "inject", "endpoint": "https://api.spotify.com/v1"}
@@ -112,13 +112,13 @@ func TestPermissionsOverlay_LegacyServiceMapOnlyTightens(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
+		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if err := cfg.SetTypePolicies(types.TypePolicies{
+	if err := cfg.SetDataGrants(types.DataGrants{
 		"tracks": {Default: types.AccessRead},
 	}); err != nil {
-		t.Fatalf("SetTypePolicies: %v", err)
+		t.Fatalf("SetDataGrants: %v", err)
 	}
 
 	// Service map cannot grant above the type default.
@@ -138,37 +138,11 @@ func TestPermissionsOverlay_LegacyServiceMapOnlyTightens(t *testing.T) {
 	}
 }
 
-func TestPermissionsOverlay_V1ServicesRemainAuthorityWithoutTypePolicy(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "permissions.json")
-	mustWriteFile(t, cfgPath, `{
-		"services": [
-			{"id": "google-timeline", "name": "Timeline", "action": "inject"}
-		]
-	}`)
-	// v1 overlay: services only.
-	mustWriteFile(t, permsPath, `{"version":1,"services":{"google-timeline":{"places":"city","tracks":"read"}}}`)
-	cfg, err := LoadConfig(cfgPath)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
-	}
-	if got := cfg.EffectiveAccess("google-timeline", "places"); got != types.AccessCity {
-		t.Fatalf("v1 places = %q", got)
-	}
-	if got := cfg.EffectiveAccess("google-timeline", "tracks"); got != types.AccessRead {
-		t.Fatalf("v1 tracks = %q", got)
-	}
-}
-
-func TestLoadConfig_TypePoliciesBootstrap(t *testing.T) {
+func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
 	mustWriteFile(t, cfgPath, `{
-		"type_policies": {
+		"data_grants": {
 			"tracks": {"default": "read", "providers": {"spotify": "none"}},
 			"places": {"default": "none", "providers": {"google-timeline": "city"}}
 		},
@@ -189,17 +163,17 @@ func TestLoadConfig_TypePoliciesBootstrap(t *testing.T) {
 	}
 
 	// Overlay types replace bootstrap when present.
-	permsPath := filepath.Join(dir, "permissions.json")
-	mustWriteFile(t, permsPath, `{"version":2,"types":{"tracks":{"default":"read-write"}},"services":{}}`)
-	if err := cfg.InitPermissionsStore(permsPath); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
+	permsPath := filepath.Join(dir, "data_grants.json")
+	mustWriteFile(t, permsPath, `{"version":3,"data_grants":{"tracks":{"default":"read-write"}},"service_limits":{}}`)
+	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
+		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessFull {
 		t.Fatalf("overlay types win = %q", got)
 	}
 }
 
-func TestHandleAdminTypePolicies(t *testing.T) {
+func TestHandleAdminDataGrants(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
 	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
@@ -208,12 +182,12 @@ func TestHandleAdminTypePolicies(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	if err := srv.config.InitPermissionsStore(filepath.Join(dir, "permissions.json")); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
+	if err := srv.config.InitDataGrantsStore(filepath.Join(dir, "data_grants.json")); err != nil {
+		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 
-	body := `{"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}`
-	req := httptest.NewRequest("PUT", "/v1/admin/type-policies", strings.NewReader(body))
+	body := `{"data_grants":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}`
+	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -221,7 +195,7 @@ func TestHandleAdminTypePolicies(t *testing.T) {
 		t.Fatalf("PUT status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	req = httptest.NewRequest("GET", "/v1/admin/type-policies", nil)
+	req = httptest.NewRequest("GET", "/v1/admin/data-grants", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -229,13 +203,13 @@ func TestHandleAdminTypePolicies(t *testing.T) {
 		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		Types map[string]types.TypePolicy `json:"types"`
+		DataGrants map[string]types.DataGrant `json:"data_grants"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.Types["tracks"].Default != types.AccessRead {
-		t.Fatalf("types.tracks = %+v", resp.Types["tracks"])
+	if resp.DataGrants["tracks"].Default != types.AccessRead {
+		t.Fatalf("data_grants.tracks = %+v", resp.DataGrants["tracks"])
 	}
 	if got := srv.config.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
 		t.Fatalf("effective = %q", got)
@@ -270,8 +244,8 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	// Overlay file is data_grants.json with v3 keys.
 	ovPath := filepath.Join(dir, "data_grants.json")
 	mustWriteFile(t, ovPath, `{"version":3,"data_grants":{"tracks":{"default":"read-write"}},"service_limits":{}}`)
-	if err := cfg.InitPermissionsStore(ovPath); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
+	if err := cfg.InitDataGrantsStore(ovPath); err != nil {
+		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessFull {
 		t.Fatalf("overlay data_grants win = %q", got)
@@ -294,39 +268,5 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	}
 	if file.Version != dataGrantsFileVersion {
 		t.Fatalf("version = %d", file.Version)
-	}
-}
-
-func TestHandleAdminDataGrants(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "aegis.json")
-	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
-	cfg, err := LoadConfig(cfgPath)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	if err := srv.config.InitPermissionsStore(filepath.Join(dir, "data_grants.json")); err != nil {
-		t.Fatalf("InitPermissionsStore: %v", err)
-	}
-
-	body := `{"data_grants":{"tracks":{"default":"read"}}}`
-	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", strings.NewReader(body))
-	req.Header.Set("X-Api-Key", "test-key")
-	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("PUT status = %d body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), `"data_grants"`) {
-		t.Fatalf("response missing data_grants: %s", w.Body.String())
-	}
-
-	req = httptest.NewRequest("GET", "/v1/admin/data-grants", nil)
-	req.Header.Set("X-Api-Key", "test-key")
-	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
 }

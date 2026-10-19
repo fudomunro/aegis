@@ -93,7 +93,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 |---------|----------|-------|
 | `slog` (JSON default) | Human ops, log pipeline, Security auditor | Fields: `service`, `login`, `identity_source`, `path`, `error`, `request_id`, … Fail-open encoded in messages. |
 | CLI flag help (`run.go`) | Human ops, Coding agent | `-data-dir`, `-import-quicken`, `-auth-mode`, empty-path disables. |
-| `aegis.json` / `permissions.json` / `user_types.json` | End user (via admin), Human ops | Data, not comments. Admin saves never rewrite `aegis.json`. |
+| `aegis.json` / `data_grants.json` / `user_types.json` | End user (via admin), Human ops | Data, not comments. Admin saves never rewrite `aegis.json`. |
 | UDT `schema.json` packs | Pack author | Field descriptions; “Always opt-in”. |
 
 ---

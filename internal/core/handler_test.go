@@ -852,7 +852,7 @@ func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"default": types.AccessRead, "player": types.AccessNone, "recommendations": types.AccessNone},
+				GrantLimits: types.Permissions{"default": types.AccessRead, "player": types.AccessNone, "recommendations": types.AccessNone},
 			},
 		},
 	}

@@ -64,8 +64,8 @@ func testPhotoShareServer(t *testing.T, sourceWrite, targetWrite bool) (*Server,
 	}
 	cfg := &Config{
 		Services: []Service{
-			{ID: "immich", Name: "Immich", Action: "inject", Permissions: srcPerms},
-			{ID: "bluesky", Name: "Bluesky", Action: "inject", Permissions: dstPerms},
+			{ID: "immich", Name: "Immich", Action: "inject", GrantLimits: srcPerms},
+			{ID: "bluesky", Name: "Bluesky", Action: "inject", GrantLimits: dstPerms},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -263,8 +263,8 @@ func TestHandlePhotoShare_UpstreamErrors(t *testing.T) {
 func TestHandlePhotoShare_UnsupportedSourceWithoutBytes(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "google-photos", Name: "Google Photos", Action: "inject", Permissions: types.Permissions{"photos": types.AccessRead}},
-			{ID: "bluesky", Name: "Bluesky", Action: "inject", Permissions: types.Permissions{"photos": types.AccessFull}},
+			{ID: "google-photos", Name: "Google Photos", Action: "inject", GrantLimits: types.Permissions{"photos": types.AccessRead}},
+			{ID: "bluesky", Name: "Bluesky", Action: "inject", GrantLimits: types.Permissions{"photos": types.AccessFull}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -322,7 +322,7 @@ func TestBlueskySharePhoto_IntegrationMock(t *testing.T) {
 				ID: "immich", Name: "Immich", Action: "inject",
 				Endpoint:    immich.URL,
 				Headers:     map[string]string{"X-API-Key": "ik"},
-				Permissions: types.Permissions{"photos": types.AccessRead},
+				GrantLimits: types.Permissions{"photos": types.AccessRead},
 			},
 			{
 				ID: "bluesky", Name: "Bluesky", Action: "inject",
@@ -331,7 +331,7 @@ func TestBlueskySharePhoto_IntegrationMock(t *testing.T) {
 					"X-Bluesky-Handle":       "alice.bsky.social",
 					"X-Bluesky-App-Password": "app-pass",
 				},
-				Permissions: types.Permissions{"photos": types.AccessFull},
+				GrantLimits: types.Permissions{"photos": types.AccessFull},
 			},
 		},
 	}

@@ -146,7 +146,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				Permissions: types.Permissions{
+				GrantLimits: types.Permissions{
 					"default": types.AccessRead,
 					"player":  types.AccessNone,
 				},
@@ -195,8 +195,8 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	if !spotify.HasOAuth || !spotify.HasSecret || !spotify.HasClientID {
 		t.Fatal("expected oauth flags set without exposing values")
 	}
-	if spotify.Permissions["player"] != types.AccessNone || spotify.Permissions["default"] != types.AccessRead {
-		t.Fatalf("permissions = %+v", spotify.Permissions)
+	if spotify.GrantLimits["player"] != types.AccessNone || spotify.GrantLimits["default"] != types.AccessRead {
+		t.Fatalf("permissions = %+v", spotify.GrantLimits)
 	}
 	if spotify.Token == nil || !spotify.Token.HasToken {
 		t.Fatal("expected token status attached")
@@ -278,7 +278,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	}
 	srv := mailTestServer(t, a)
 	// Agent messages=none must not block the operator admin panel.
-	srv.config.Services[0].Permissions = types.Permissions{"messages": "none"}
+	srv.config.Services[0].GrantLimits = types.Permissions{"messages": "none"}
 
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -391,7 +391,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	}
 
 	// In-memory updated.
-	if cfg.GetService("spotify").Permissions.For("player") != types.AccessNone {
+	if cfg.GetService("spotify").GrantLimits.For("player") != types.AccessNone {
 		t.Fatal("in-memory player permission not applied")
 	}
 
@@ -401,7 +401,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 	svc := fresh.GetService("spotify")
-	if svc == nil || svc.Permissions.For("player") != types.AccessNone || svc.Permissions.For("tracks") != types.AccessRead {
+	if svc == nil || svc.GrantLimits.For("player") != types.AccessNone || svc.GrantLimits.For("tracks") != types.AccessRead {
 		t.Fatalf("disk permissions = %+v", svc)
 	}
 
@@ -409,14 +409,14 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	if err := cfg.SetServicePermissions("spotify", nil); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
-	if cfg.GetService("spotify").Permissions != nil {
+	if cfg.GetService("spotify").GrantLimits != nil {
 		t.Fatal("expected nil permissions after clear")
 	}
 	fresh, err = LoadConfig(path)
 	if err != nil {
 		t.Fatalf("reload after clear: %v", err)
 	}
-	if fresh.GetService("spotify").Permissions != nil {
+	if fresh.GetService("spotify").GrantLimits != nil {
 		t.Fatal("expected nil permissions on disk after clear")
 	}
 
@@ -429,7 +429,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	}
 }
 
-func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
+func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	dir := t.TempDir()
 	path := dir + "/aegis.json"
 	initial := `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`
@@ -444,8 +444,8 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.cache.Set("stale", "x", time.Minute)
 
-	body := `{"permissions":{"default":"read","player":"none","playlists":"read-write"}}`
-	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/permissions", strings.NewReader(body))
+	body := `{"grant_limits":{"default":"read","player":"none","playlists":"read-write"}}`
+	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -453,23 +453,23 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if cfg.GetService("spotify").Permissions.For("player") != types.AccessNone {
+	if cfg.GetService("spotify").GrantLimits.For("player") != types.AccessNone {
 		t.Fatal("permissions not applied via admin route")
 	}
 	// Mirror adapters are not agent "Editable" — playlists write is clamped on save.
-	if got := cfg.GetService("spotify").Permissions.For("playlists"); got != types.AccessRead {
+	if got := cfg.GetService("spotify").GrantLimits.For("playlists"); got != types.AccessRead {
 		t.Fatalf("playlists permission = %q, want read (clamped; not agent-writable)", got)
 	}
 	// Search is read-only on the connector — write levels are clamped to read.
-	body = `{"permissions":{"search":"read-write","player":"none"}}`
-	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/permissions", strings.NewReader(body))
+	body = `{"grant_limits":{"search":"read-write","player":"none"}}`
+	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("clamp put status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if got := cfg.GetService("spotify").Permissions.For("search"); got != types.AccessRead {
+	if got := cfg.GetService("spotify").GrantLimits.For("search"); got != types.AccessRead {
 		t.Fatalf("search permission = %q, want read (clamped; no agent write path)", got)
 	}
 	if live, _, _ := srv.cache.Stats(); live != 0 {
@@ -477,7 +477,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	}
 
 	// GET returns current map + available/writable types.
-	req = httptest.NewRequest("GET", "/v1/admin/services/spotify/permissions", nil)
+	req = httptest.NewRequest("GET", "/v1/admin/services/spotify/grant-limits", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -486,14 +486,14 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	}
 	var got struct {
 		ServiceID          string            `json:"service_id"`
-		Permissions        map[string]string `json:"permissions"`
+		GrantLimits        map[string]string `json:"grant_limits"`
 		AvailableDataTypes []string          `json:"available_data_types"`
 		WritableDataTypes  []string          `json:"writable_data_types"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if got.ServiceID != "spotify" || got.Permissions["player"] != "none" {
+	if got.ServiceID != "spotify" || got.GrantLimits["player"] != "none" {
 		t.Fatalf("get = %+v", got)
 	}
 	if !stringSliceContains(got.AvailableDataTypes, "playlists") {
@@ -505,7 +505,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	}
 
 	// Invalid level rejected.
-	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/permissions", strings.NewReader(`{"permissions":{"tracks":"maybe"}}`))
+	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(`{"grant_limits":{"tracks":"maybe"}}`))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
@@ -514,7 +514,7 @@ func TestHandleAdminServicePermissions_PutAndGet(t *testing.T) {
 	}
 
 	// Unknown service.
-	req = httptest.NewRequest("PUT", "/v1/admin/services/nope/permissions", strings.NewReader(`{"permissions":{}}`))
+	req = httptest.NewRequest("PUT", "/v1/admin/services/nope/grant-limits", strings.NewReader(`{"grant_limits":{}}`))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
 	srv.handleAdminRoutes(w, req)
