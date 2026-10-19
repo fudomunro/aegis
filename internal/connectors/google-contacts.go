@@ -319,6 +319,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 // googlePeoplePerson is the subset of a People API person we use.
 type googlePeoplePerson struct {
 	ResourceName string `json:"resourceName"`
+	ETag         string `json:"etag"`
 	Names        []struct {
 		DisplayName string `json:"displayName"`
 		GivenName   string `json:"givenName"`

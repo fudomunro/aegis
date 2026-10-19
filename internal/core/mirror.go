@@ -27,7 +27,7 @@ const mirrorTrackCap = 200
 
 // MirrorRequest is the agent-facing body for POST /v1/library/mirror.
 type MirrorRequest struct {
-	// Kind is "playlists" or "tracks" (liked/saved tracks).
+	// Kind is "playlists", "tracks", "contacts", or "events".
 	Kind string `json:"kind"`
 	// SourceService is the service to read from. Empty uses the configured
 	// canonical home for Kind, else the first connected provider.
@@ -67,9 +67,10 @@ type MirrorResult struct {
 	Planned      int          `json:"planned"`
 	Copied       int          `json:"copied"`
 	Skipped      int          `json:"skipped"`
-	Skips        []MirrorSkip `json:"skips,omitempty"`
-	Truncated    bool         `json:"truncated,omitempty"`
-	IdentityNote string       `json:"identity_note"`
+	Skips        []MirrorSkip     `json:"skips,omitempty"`
+	Conflicts    []MirrorConflict `json:"conflicts,omitempty"`
+	Truncated    bool             `json:"truncated,omitempty"`
+	IdentityNote string           `json:"identity_note"`
 }
 
 // mirrorTrack is a neutral track used while copying between services.
@@ -125,9 +126,9 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	req.SourceID = strings.TrimSpace(req.SourceID)
 
 	switch req.Kind {
-	case MirrorKindPlaylists, MirrorKindTracks:
+	case MirrorKindPlaylists, MirrorKindTracks, MirrorKindContacts, MirrorKindEvents:
 	default:
-		writeJSONError(w, http.StatusBadRequest, `kind must be "playlists" or "tracks"`)
+		writeJSONError(w, http.StatusBadRequest, `kind must be "playlists", "tracks", "contacts", or "events"`)
 		return
 	}
 	if req.TargetService == "" {
@@ -136,6 +137,10 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Kind == MirrorKindPlaylists && req.SourceID == "" {
 		writeJSONError(w, http.StatusBadRequest, "source_id is required for kind=playlists")
+		return
+	}
+	if req.Kind == MirrorKindContacts || req.Kind == MirrorKindEvents {
+		s.handleEntityMirror(w, r, req)
 		return
 	}
 
