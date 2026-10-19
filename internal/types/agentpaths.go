@@ -48,9 +48,13 @@ func IsAgentContentPath(canonical string) bool {
 		}
 		return false
 	// Google Docs content export (HTML or plain text; markdown deferred).
-	// Bare /files and /files/{id} stay library-only (issue #143).
-	case strings.HasSuffix(canonical, "/export"):
-		if strings.HasPrefix(canonical, "/files/") || strings.HasPrefix(canonical, "/drive/files/") {
+	// Bare /files and /files/{id} stay library-only (issue #143). Accept both
+	// connector-relative /files/… and agent-copied /drive/v3/files/….
+	case strings.HasSuffix(canonical, "/export") || strings.HasSuffix(canonical, "/export/"):
+		if strings.HasPrefix(canonical, "/files/") ||
+			strings.HasPrefix(canonical, "/drive/files/") ||
+			strings.HasPrefix(canonical, "/drive/v3/files/") ||
+			strings.HasPrefix(canonical, "/drive/v2/files/") {
 			return true
 		}
 		return false

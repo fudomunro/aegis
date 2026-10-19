@@ -49,6 +49,22 @@ func (c *GoogleDriveConnector) GoogleDriveUpstreamBase() string {
 	return c.host.UpstreamBaseFor(GoogleDriveServiceID, "https://www.googleapis.com/drive/v3")
 }
 
+// normalizeDriveProxyPath collapses agent-copied Drive URLs
+// (/drive/v3/files/…) onto the connector-relative /files/… form so they hit
+// the same upstream as our blob_url.
+func normalizeDriveProxyPath(remainingPath string) string {
+	p := remainingPath
+	for _, prefix := range []string{"/drive/v3", "/drive/v2"} {
+		if p == prefix {
+			return "/"
+		}
+		if strings.HasPrefix(p, prefix+"/") {
+			return strings.TrimPrefix(p, prefix)
+		}
+	}
+	return p
+}
+
 // Capabilities returns Drive document operations reachable through the proxy.
 func (c *GoogleDriveConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
@@ -93,15 +109,17 @@ func (c *GoogleDriveConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
 	return fmt.Sprintf(`When the user's request involves Google Docs or paperwork stored in Drive, use Aegis's unified data API. Do not call the Drive API directly or ask the user for OAuth.
 
-GET %s/v1/library/documents — document metadata from every connected source (Google Docs contribute title, dates, owner). Filter with q/tag/after/before.
+GET %s/v1/library/documents — document metadata from every connected source (Google Docs contribute title, dates, owner). Filter with q/tag/after/before. Start here — do not walk Drive /files one by one.
 
-GET %s/v1/library/documents/{service}/{id}/text — full document text for one doc (plain-text export). Requires documents=read.
+GET %s/v1/library/documents/google-drive/{id}/text — full document text for one doc (plain-text export). Requires documents=read. Prefer this over raw Drive export calls when you need content.
 
-Content export is HTML or plain text via Drive files.export — not markdown yet. Files stay on Google Drive; use sources[].url / sources[].blob_url to open or export the original.`, root, root)
+Content export is HTML or plain text via Drive files.export — not markdown yet. Files stay on Google Drive; use sources[].url to open the doc. sources[].blob_url is Aegis content transport (HTML export) — do not call Drive API paths outside /v1/services/google-drive.`, root, root)
 }
 
 // HandleProxy forwards Drive API paths, attaching the Google OAuth token.
 // Export paths return the export body (HTML or plain text) as-is.
+// Accepts both /files/... (preferred) and /drive/v3/files/... (what agents
+// sometimes copy from raw Drive URLs).
 func (c *GoogleDriveConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	logger := slog.With("service", GoogleDriveServiceID, "method", r.Method, "path", remainingPath)
 	token := c.host.GetValidToken(GoogleDriveServiceID, logger)
@@ -110,6 +128,7 @@ func (c *GoogleDriveConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 			"no valid Google Drive token — authorize at /v1/auth/"+GoogleDriveServiceID+"/login")
 		return
 	}
+	remainingPath = normalizeDriveProxyPath(remainingPath)
 	if remainingPath == "" {
 		remainingPath = "/"
 	}
@@ -234,13 +253,16 @@ func (c *GoogleDriveConnector) apiGet(ctx context.Context, logger *slog.Logger, 
 
 // NeutralDocument maps one Drive file to a neutral Document.
 func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) types.Document {
+	// blob_url is the Aegis content-transport URL (Immich pattern) so agents
+	// call /v1/services/google-drive/... instead of raw Drive paths.
+	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + GoogleDriveServiceID
 	src := types.DocumentSource{
 		Service:     GoogleDriveServiceID,
 		ServiceName: GoogleDriveServiceName,
 		ID:          f.ID,
 		URL:         f.WebViewLink,
 		Canonical:   true,
-		BlobURL:     c.GoogleDriveUpstreamBase() + "/files/" + url.PathEscape(f.ID) + "/export?mimeType=" + url.QueryEscape(googleDriveHTMLExportMime),
+		BlobURL:     proxyRoot + "/files/" + url.PathEscape(f.ID) + "/export?mimeType=" + url.QueryEscape(googleDriveHTMLExportMime),
 	}
 	d := types.Document{
 		Title:      strings.TrimSpace(f.Name),

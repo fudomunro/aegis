@@ -388,13 +388,14 @@ func normalizePaperlessTime(raw string) string {
 func (c *PaperlessConnector) NeutralDocument(doc paperlessDocument, tagNames, corrNames, typeNames map[string]string) types.Document {
 	id := strconv.Itoa(doc.ID)
 	web := c.PaperlessWebBase()
+	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + PaperlessServiceID
 	src := types.DocumentSource{
 		Service:     PaperlessServiceID,
 		ServiceName: PaperlessServiceName,
 		ID:          id,
 		URL:         web + "/documents/" + id + "/details",
 		Canonical:   true,
-		BlobURL:     c.PaperlessUpstreamBase() + "/documents/" + id + "/download",
+		BlobURL:     proxyRoot + "/documents/" + id + "/download",
 		Extra:       map[string]any{},
 	}
 	if doc.Checksum != "" {

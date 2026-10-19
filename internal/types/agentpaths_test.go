@@ -24,6 +24,8 @@ func TestIsAgentContentPath(t *testing.T) {
 		"/api/documents/doc-1/download",
 		"/files/doc-1/export",
 		"/drive/files/doc-1/export",
+		"/drive/v3/files/doc-1/export",
+		"/drive/v2/files/doc-1/export",
 	}
 	for _, p := range allowed {
 		if !IsAgentContentPath(p) {
