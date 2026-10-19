@@ -472,6 +472,10 @@ func TestDataTypeForPath_Documents(t *testing.T) {
 		"/correspondents/3":       "documents",
 		"/document_types/4":       "documents",
 		"/api/tags/7":             "documents",
+		"/files":                  "documents",
+		"/files/gdoc-1":           "documents",
+		"/files/gdoc-1/export":    "documents",
+		"/drive/files/gdoc-1":     "documents",
 	}
 	for p, want := range cases {
 		if got := types.DataTypeForPath(p); got != want {

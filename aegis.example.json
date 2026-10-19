@@ -338,6 +338,29 @@
         "default": "read",
         "documents": "read"
       }
+    },
+    {
+      "id": "google-drive",
+      "name": "Google Drive",
+      "aliases": [
+        "google docs",
+        "google drive",
+        "docs",
+        "drive",
+        "google documents"
+      ],
+      "action": "inject",
+      "endpoint": "https://www.googleapis.com/drive/v3",
+      "cache_ttl": "15m",
+      "description": "Google Docs via Drive for /v1/library/documents. Content is HTML/plain-text export (markdown conversion deferred). Files stay on Drive (non-Aegis canonical). Shares the Google connection; drive.readonly covers list + export. Watch OAuth app verification limits (same class as Photos).",
+      "connection": "google",
+      "oauth_scopes": [
+        "https://www.googleapis.com/auth/drive.readonly"
+      ],
+      "grant_limits": {
+        "default": "read",
+        "documents": "read"
+      }
     }
   ]
 }
