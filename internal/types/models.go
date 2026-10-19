@@ -535,6 +535,100 @@ type MessageList struct {
 	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
 }
 
+// Document is a user-facing document: a file the user keeps for life admin —
+// receipt, warranty, lease, insurance policy, tax letter, medical letter.
+// Service identity lives in Sources. Aegis does not store document bytes or
+// run OCR — the authoritative copy stays on a non-Aegis service marked
+// Canonical (issue #16). Library listings carry metadata and a short excerpt;
+// full text is only returned by the explicit per-document text endpoint.
+// https://github.com/fudomunro/aegis/issues/143
+type Document struct {
+	// Title is the document title or original filename.
+	Title string `json:"title,omitempty"`
+	// MimeType is the media type (e.g. "application/pdf").
+	MimeType string `json:"mime_type,omitempty"`
+	// CreatedAt is the document date in RFC3339, when known.
+	CreatedAt string `json:"created_at,omitempty"`
+	// ModifiedAt is the last-modified time in RFC3339, when known.
+	ModifiedAt string `json:"modified_at,omitempty"`
+	// Correspondent is the sender/issuer (vendor, agency, landlord).
+	Correspondent string `json:"correspondent,omitempty"`
+	// DocumentType is the provider's classification (receipt, invoice, …).
+	DocumentType string `json:"document_type,omitempty"`
+	// Tags are provider tags/labels (Paperless-ngx tags).
+	Tags []string `json:"tags,omitempty"`
+	// Excerpt is a short OCR/text preview. Stripped at metadata access;
+	// full text is never included in list responses.
+	Excerpt string `json:"excerpt,omitempty"`
+	// People lists known people referenced by the document (Contact identity).
+	People []Contact `json:"people,omitempty"`
+	// EntityID is a durable cross-service id when a provider supplies one
+	// (content checksum, then archive serial). Preferred over title matching.
+	EntityID string `json:"entity_id,omitempty"`
+	// Match records cross-service identity: "checksum", "archive_serial",
+	// or "title_created". Empty on single-source documents.
+	Match string `json:"match,omitempty"`
+	// Sources lists service-local copies of this document.
+	Sources []DocumentSource `json:"sources,omitempty"`
+	// Extra holds other service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// DocumentSource is a service-specific location of a document. Bytes are
+// never stored in Aegis; Canonical/BlobURL point at the real copy.
+type DocumentSource struct {
+	// Service is the connector ID: "paperless", …
+	Service string `json:"service"`
+	// ServiceName is the human-readable label: "Paperless-ngx".
+	ServiceName string `json:"service_name,omitempty"`
+	// ID is the service-local document ID.
+	ID string `json:"id,omitempty"`
+	// URL is a deep link to the document on the service, when available.
+	URL string `json:"url,omitempty"`
+	// Canonical is true when this service holds the authoritative document
+	// bytes (issue #16). Set by connectors or config canonical_for.
+	Canonical bool `json:"canonical,omitempty"`
+	// Copy is durable copy-ledger metadata when Aegis knows this location
+	// holds a tracked copy (issue #76). Nil when untracked.
+	Copy *CopyInfo `json:"copy,omitempty"`
+	// BlobURL points at the retrievable file when bytes live outside Aegis.
+	BlobURL string `json:"blob_url,omitempty"`
+	// Extra holds additional service-specific fields.
+	Extra map[string]any `json:"extra,omitempty"`
+}
+
+// DocumentList is the neutral response for listing documents — either for a
+// single service or aggregated across document-capable services.
+type DocumentList struct {
+	Documents []Document `json:"documents"`
+	// Total is the number of documents in this response.
+	Total int `json:"total"`
+	// Synced is true when the library merged documents that shared an
+	// identity key (checksum, archive serial, or title+created).
+	Synced bool `json:"synced,omitempty"`
+	// Truncated is true when any service hit its page cap with more items
+	// still upstream.
+	Truncated bool `json:"truncated,omitempty"`
+	// ByService is set on aggregate responses only.
+	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+}
+
+// DocumentText is the full extracted text of one document (issue #143).
+// Returned only by GET /v1/library/documents/{service}/{id}/text, gated
+// separately so metadata access never implies reading content.
+type DocumentText struct {
+	// Service is the connector ID that holds the document.
+	Service string `json:"service"`
+	// ID is the service-local document ID.
+	ID string `json:"id"`
+	// Title is the document title, when known.
+	Title string `json:"title,omitempty"`
+	// Text is the full OCR/extracted text from the source service.
+	Text string `json:"text"`
+	// Truncated is true when the provider cut the text short.
+	Truncated bool `json:"truncated,omitempty"`
+}
+
 // LibraryServiceStatus reports per-service results for an aggregate call.
 // Extra Name / LastSyncedAt / Canonical / Role fields feed the library
 // source-overview header (issue #162).

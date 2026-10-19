@@ -311,6 +311,33 @@
         "default": "read",
         "photos": "write"
       }
+    },
+    {
+      "id": "paperless",
+      "name": "Paperless-ngx",
+      "aliases": [
+        "paperless",
+        "paperless-ngx",
+        "documents",
+        "receipts",
+        "warranties",
+        "leases",
+        "paperwork"
+      ],
+      "action": "inject",
+      "endpoint": "http://192.168.1.10:8000/api",
+      "headers": {
+        "Authorization": "Token $ENV:PAPERLESS_API_TOKEN"
+      },
+      "cache_ttl": "5m",
+      "description": "Self-hosted Paperless-ngx documents (receipts, warranties, leases, letters). File bytes stay on Paperless (foreign/local canonical). Set canonical_for: [\"documents\"] here if Paperless is your home copy. Use documents=metadata to list titles/tags without text.",
+      "canonical_for": [
+        "documents"
+      ],
+      "grant_limits": {
+        "default": "read",
+        "documents": "read"
+      }
     }
   ]
 }

@@ -169,6 +169,24 @@ type PlaceVisitProvider interface {
 	ListUserPlaceVisits(ctx context.Context) (visits []PlaceVisit, truncated bool, err error)
 }
 
+// DocumentProvider is implemented by connectors that can return the user's
+// documents (receipts, warranties, letters) in Aegis's neutral format
+// (issue #143). The aggregate library endpoint uses this so agents can ask
+// "where is my lease?" once and receive every connected source. Each returned
+// Document should carry one DocumentSource for that service. Aegis never
+// stores document bytes — the authoritative copy stays on the source service.
+type DocumentProvider interface {
+	// ListUserDocuments returns neutral documents (one DocumentSource each).
+	// Excerpt may carry a short OCR preview; full text is never required
+	// here. Return ErrUnauthorized when no valid token is available.
+	// truncated is true when the page cap was hit with more items still
+	// upstream.
+	ListUserDocuments(ctx context.Context) (documents []Document, truncated bool, err error)
+	// FetchDocumentText returns the full extracted text for one
+	// service-local document ID. Used only by the gated text endpoint.
+	FetchDocumentText(ctx context.Context, id string) (text string, truncated bool, err error)
+}
+
 // PlaylistServiceName returns the display name of the first source, or "".
 func PlaylistServiceName(p Playlist) string {
 	if len(p.Sources) > 0 {
@@ -197,6 +215,14 @@ func AlbumServiceName(a Album) string {
 func ArtistServiceName(a Artist) string {
 	if len(a.Sources) > 0 {
 		return a.Sources[0].ServiceName
+	}
+	return ""
+}
+
+// DocumentServiceName returns the display name of the first source, or "".
+func DocumentServiceName(d Document) string {
+	if len(d.Sources) > 0 {
+		return d.Sources[0].ServiceName
 	}
 	return ""
 }

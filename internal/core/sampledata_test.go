@@ -81,7 +81,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 			len(lib.Tracks), len(lib.Contacts), len(lib.Messages))
 	}
 	if len(lib.Playlists) == 0 || len(lib.Albums) == 0 || len(lib.Artists) == 0 ||
-		len(lib.Photos) == 0 || len(lib.Events) == 0 {
+		len(lib.Photos) == 0 || len(lib.Events) == 0 || len(lib.Documents) == 0 {
 		t.Fatal("library set must cover every neutral kind")
 	}
 
@@ -131,6 +131,25 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 	if invoice.Match != "subject_from_time" || len(invoice.Sources) != 2 {
 		t.Fatalf("invoice merge = match %q sources %d", invoice.Match, len(invoice.Sources))
+	}
+
+	// Document checksum pair merges; same-title different-date must not.
+	mergedDocs := MergeDocuments(lib.Documents)
+	leaseSources := 0
+	warrantyTitles := 0
+	for _, d := range mergedDocs {
+		if d.EntityID == "sha256:lease2024shared" {
+			leaseSources = len(d.Sources)
+		}
+		if d.Title == "Laptop warranty" {
+			warrantyTitles++
+		}
+	}
+	if leaseSources != 2 {
+		t.Fatalf("lease checksum pair should merge to 2 sources, got %d", leaseSources)
+	}
+	if warrantyTitles != 2 {
+		t.Fatalf("warranty near-miss should stay distinct, got %d", warrantyTitles)
 	}
 }
 

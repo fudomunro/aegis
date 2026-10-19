@@ -92,6 +92,16 @@ var dataTypePathRules = []dataTypePathRule{
 	{Prefix: "/api/v1/visits", DataType: "places"},
 	{Prefix: "/timeline", DataType: "places"},
 	{Prefix: "/semantic", DataType: "places"},
+	// Documents (issue #143): Paperless-ngx and similar document stores.
+	// Endpoint usually includes /api, so remaining paths start at /documents.
+	{Exact: "/me/documents", DataType: "documents"},
+	{Prefix: "/documents", DataType: "documents"},
+	{Prefix: "/api/documents", DataType: "documents"},
+	{Prefix: "/correspondents", DataType: "documents"},
+	{Prefix: "/document_types", DataType: "documents"},
+	{Prefix: "/api/correspondents", DataType: "documents"},
+	{Prefix: "/api/document_types", DataType: "documents"},
+	{Prefix: "/api/tags", DataType: "documents"},
 	{Exact: "/search", DataType: "search"},
 	{Prefix: "/channels", DataType: "channels"},
 	{Prefix: "/me/library", DataType: "library"},

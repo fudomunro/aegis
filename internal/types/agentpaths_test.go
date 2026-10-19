@@ -18,6 +18,10 @@ func TestIsAgentContentPath(t *testing.T) {
 		"/threads/t-1",
 		"/playlists/pl-1",
 		"/playlists/pl-1/items",
+		"/documents/doc-1/download",
+		"/documents/doc-1/preview",
+		"/documents/doc-1/thumb",
+		"/api/documents/doc-1/download",
 	}
 	for _, p := range allowed {
 		if !IsAgentContentPath(p) {
@@ -62,6 +66,11 @@ func TestIsAgentContentPath(t *testing.T) {
 		"/albums",
 		"/videos/v-1",
 		"/channels/c-1",
+		// Document detail includes OCR text — not content transport; use the
+		// gated library text endpoint instead (issue #143).
+		"/documents",
+		"/documents/doc-1",
+		"/api/documents/doc-1",
 	}
 	for _, p := range denied {
 		if IsAgentContentPath(p) {
