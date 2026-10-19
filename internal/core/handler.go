@@ -64,12 +64,22 @@ const (
 )
 
 type Server struct {
+	// apiKey authenticates LLM-agent / third-party callers (library reads,
+	// pre-request hook, content transport). Never admin (issue #181).
 	apiKey string
+	// adminAPIKey authenticates admin principals (curl, scripts). Distinct
+	// from apiKey so a prompt-injected agent cannot use its agent key to
+	// rewrite data grants. Optional when admin logins cover human operators.
+	adminAPIKey string
 	// authMode is AuthModeAuto, AuthModeTailnet, or AuthModeAPIKey.
 	authMode string
 	// allowedLogins, when non-empty, restricts which tailnet identities may
 	// call the API. Empty means any authenticated tailnet peer is allowed.
 	allowedLogins []string
+	// adminLogins, when non-empty, is the tailnet allowlist for admin
+	// surfaces. Empty means every allowed *user* login is admin; tagged
+	// device identities are agent-only unless listed here (issue #181).
+	adminLogins []string
 	// identity resolves Tailscale peer identity. Optional in api-key mode.
 	identity IdentityResolver
 	baseURL  string
@@ -154,6 +164,10 @@ func appPathAllowed(path string) bool {
 // A valid third-party app token is accepted in every mode and yields a scoped
 // identity (issue #131) limited to library data reads. Successful tailnet
 // identity is attached to the request context for logging.
+//
+// Auth is the agent tier (issue #181): library reads, pre-request hook, and
+// content transport. Admin credentials also pass here so operators can use
+// the library; admin *surfaces* additionally require AdminMiddleware.
 func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// App tokens are intentional third-party credentials. When present
@@ -186,18 +200,18 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				s.deny(w, r, nil, "tailnet identity required — connect through Tailscale Serve or run on a tailscaled host")
 				return
 			}
-			if !loginAllowed(id, s.allowedLogins) {
+			if !loginAllowed(id, s.allowedLogins) && !s.isAdminIdentity(id) {
 				s.deny(w, r, id, "identity not in allowed logins")
 				return
 			}
 			next(w, withPeerIdentity(r, id))
 			return
 		default: // AuthModeAuto
-			if id != nil && loginAllowed(id, s.allowedLogins) {
+			if id != nil && (loginAllowed(id, s.allowedLogins) || s.isAdminIdentity(id)) {
 				next(w, withPeerIdentity(r, id))
 				return
 			}
-			if s.apiKey != "" && s.checkAPIKey(r) {
+			if s.checkAPIKey(r) {
 				next(w, r)
 				return
 			}
@@ -206,6 +220,77 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			s.deny(w, r, nil, "unauthorized: provide a valid API key or connect from the tailnet")
+			return
+		}
+	}
+}
+
+// AdminMiddleware authenticates requests and requires an admin principal
+// (issue #181). Admin surfaces must not be reachable with an LLM-agent
+// credential: data grants only constrain callers who cannot rewrite them.
+//
+// Admin principal is:
+//   - the admin API key (-admin-api-key), or
+//   - a Tailscale user login that passes isAdminIdentity (default: allowed
+//     user logins; tagged devices need an explicit -admin-logins entry).
+//
+// Valid agent credentials receive 403; unauthenticated requests receive 401.
+// App tokens are never admin.
+func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if app := s.authenticateApp(r); app != nil {
+			s.denyStatus(w, r, nil, http.StatusForbidden, "app token not permitted on admin endpoints")
+			return
+		}
+
+		if s.checkAdminAPIKey(r) {
+			next(w, r)
+			return
+		}
+
+		id, idErr := s.resolveIdentity(r)
+
+		switch s.authMode {
+		case AuthModeAPIKey:
+			// Shared -api-key is the agent credential; only -admin-api-key
+			// may call admin routes in this mode.
+			if s.checkAgentAPIKey(r) {
+				s.denyStatus(w, r, nil, http.StatusForbidden, "admin credential required")
+				return
+			}
+			if idErr != nil {
+				slog.Warn("identity resolve failed", "error", idErr, "remote", r.RemoteAddr)
+			}
+			s.denyStatus(w, r, nil, http.StatusUnauthorized, "missing or invalid admin API key")
+			return
+		case AuthModeTailnet:
+			if id == nil {
+				if idErr != nil {
+					slog.Warn("tailnet identity resolve failed", "error", idErr, "remote", r.RemoteAddr)
+				}
+				s.denyStatus(w, r, nil, http.StatusUnauthorized, "tailnet identity required — connect through Tailscale Serve or run on a tailscaled host")
+				return
+			}
+			if !s.isAdminIdentity(id) {
+				s.denyStatus(w, r, id, http.StatusForbidden, "admin privilege required")
+				return
+			}
+			next(w, withPeerIdentity(r, id))
+			return
+		default: // AuthModeAuto
+			if id != nil && s.isAdminIdentity(id) {
+				next(w, withPeerIdentity(r, id))
+				return
+			}
+			if s.checkAgentAPIKey(r) {
+				s.denyStatus(w, r, id, http.StatusForbidden, "admin credential required")
+				return
+			}
+			if id != nil {
+				s.denyStatus(w, r, id, http.StatusForbidden, "admin privilege required")
+				return
+			}
+			s.denyStatus(w, r, nil, http.StatusUnauthorized, "unauthorized: provide a valid admin API key or connect from the tailnet as an admin")
 			return
 		}
 	}
@@ -239,19 +324,79 @@ func (s *Server) resolveIdentity(r *http.Request) (*PeerIdentity, error) {
 	return s.identity.Resolve(r.Context(), r)
 }
 
+// checkAPIKey reports whether the request carries a valid API key credential
+// (agent or admin). Admin keys also authorize agent surfaces so a sole
+// admin-api-key deployment can still read the library.
 func (s *Server) checkAPIKey(r *http.Request) bool {
+	return s.checkAgentAPIKey(r) || s.checkAdminAPIKey(r)
+}
+
+// checkAgentAPIKey reports whether the request carries the shared agent API key.
+func (s *Server) checkAgentAPIKey(r *http.Request) bool {
 	if s.apiKey == "" {
 		return false
 	}
+	return matchAPIKey(r, s.apiKey)
+}
+
+// checkAdminAPIKey reports whether the request carries the admin API key.
+// The shared agent key is never admin (issue #181).
+func (s *Server) checkAdminAPIKey(r *http.Request) bool {
+	if s.adminAPIKey == "" {
+		return false
+	}
+	return matchAPIKey(r, s.adminAPIKey)
+}
+
+func matchAPIKey(r *http.Request, key string) bool {
+	if key == "" {
+		return false
+	}
 	authz := r.Header.Get("Authorization")
-	if strings.HasPrefix(authz, "Bearer ") && constantTimeEqual(strings.TrimPrefix(authz, "Bearer "), s.apiKey) {
+	if strings.HasPrefix(authz, "Bearer ") && constantTimeEqual(strings.TrimPrefix(authz, "Bearer "), key) {
 		return true
 	}
-	return constantTimeEqual(r.Header.Get("X-Api-Key"), s.apiKey)
+	return constantTimeEqual(r.Header.Get("X-Api-Key"), key)
+}
+
+// isAdminIdentity reports whether a Tailscale peer is an admin principal
+// (issue #181). Explicit -admin-logins is the allowlist when set. Otherwise
+// any allowed *user* login is admin (browser operator on a solo tailnet);
+// tagged device identities are agent-only unless listed in -admin-logins.
+func (s *Server) isAdminIdentity(id *PeerIdentity) bool {
+	if id == nil {
+		return false
+	}
+	if len(s.adminLogins) > 0 {
+		return loginAllowed(id, s.adminLogins)
+	}
+	if !loginAllowed(id, s.allowedLogins) {
+		return false
+	}
+	return !isTagIdentity(id)
+}
+
+// isTagIdentity reports whether the peer is a tagged device (synthetic
+// tag:… login) rather than a human user login.
+func isTagIdentity(id *PeerIdentity) bool {
+	if id == nil {
+		return false
+	}
+	if strings.HasPrefix(id.LoginName, "tag:") {
+		return true
+	}
+	if len(id.Tags) > 0 && id.LoginName == strings.Join(id.Tags, ",") {
+		return true
+	}
+	return false
 }
 
 func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, reason string) {
-	attrs := []any{"remote", r.RemoteAddr, "path", r.URL.Path, "reason", reason}
+	s.denyStatus(w, r, id, http.StatusUnauthorized, reason)
+}
+
+func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIdentity, status int, reason string) {
+	attrs := []any{"remote", r.RemoteAddr, "path", r.URL.Path, "reason", reason, "status", status}
 	agent := "api-key"
 	if id != nil {
 		attrs = append(attrs, "login", id.LoginName, "identity_source", id.Source)
@@ -271,9 +416,13 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, 
 		Decision: DecisionDeny,
 		Reason:   "auth",
 		Method:   requestMethod(r),
-		Status:   http.StatusUnauthorized,
+		Status:   status,
 	})
-	writeJSONError(w, http.StatusUnauthorized, "unauthorized")
+	if status == http.StatusForbidden {
+		writeJSONError(w, status, "forbidden: admin credential required")
+		return
+	}
+	writeJSONError(w, status, "unauthorized")
 }
 
 // recordHook records a pre-request hook outcome in both the admin ring and

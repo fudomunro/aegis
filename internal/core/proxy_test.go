@@ -300,6 +300,7 @@ func TestIsAgentContentPath_EndToEndClassification(t *testing.T) {
 func testServerWithBase(cfg *Config, baseURL string) *Server {
 	return &Server{
 		apiKey:      "test-key",
+		adminAPIKey: "test-key",
 		authMode:    AuthModeAPIKey,
 		baseURL:     baseURL,
 		config:      cfg,

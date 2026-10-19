@@ -224,6 +224,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 	}}}
 	srv := &Server{
 		apiKey:      "test-key",
+		adminAPIKey: "test-key",
 		authMode:    AuthModeAPIKey,
 		config:      cfg,
 		cache:       NewCache(),

@@ -304,13 +304,16 @@ debugging outside the UI.
 
 ```bash
 export AEGIS=http://localhost:8080
-export KEY=dev-key                 # -api-key value
-export AUTH="Authorization: Bearer $KEY"
-# Also accepted: X-Api-Key: $KEY  (or a tailnet identity in auto/tailnet mode)
+export KEY=dev-key                 # -api-key value (agent)
+export ADMIN_KEY=dev-admin-key     # -admin-api-key value (admin surfaces)
+export AUTH="Authorization: Bearer $ADMIN_KEY"
+# Also accepted: X-Api-Key: $ADMIN_KEY  (or a tailnet admin login in auto/tailnet mode)
 ```
 
-Aegis auth: `Authorization: Bearer <api-key>` or `X-Api-Key`, depending on
-`-auth-mode` (see `SECURITY.md`). Tailnet identity works in `auto`/`tailnet`.
+Aegis auth: agent calls use `Authorization: Bearer <api-key>` / `X-Api-Key`
+or tailnet identity (`-auth-mode`, see `SECURITY.md`). Admin surfaces
+(`/v1/admin/*`, Immich setup) require `-admin-api-key` or a tailnet user
+login (issue #181) — the agent key alone gets **403**.
 
 ---
 
@@ -572,7 +575,7 @@ Copy this into the #39 comment (or your test log):
 - Aegis commit:
 - Immich version:
 - endpoint:
-- auth: API key / tailnet
+- auth: admin key / tailnet admin login (issue #181)
 - other photo providers:
 
 ### Checklist

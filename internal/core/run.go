@@ -18,9 +18,11 @@ import (
 func Run() {
 	addr := flag.String("addr", ":8080", "listen address")
 	baseURL := flag.String("base-url", "", "public base URL of this Aegis instance (reads AEGIS_BASE_URL env if empty)")
-	apiKey := flag.String("api-key", "", "API key for authenticating requests (reads AEGIS_API_KEY env if empty; optional in tailnet/auto modes)")
+	apiKey := flag.String("api-key", "", "API key for LLM agents / library callers (reads AEGIS_API_KEY env if empty; optional in tailnet/auto modes; never admin)")
+	adminAPIKey := flag.String("admin-api-key", "", "API key for admin surfaces (reads AEGIS_ADMIN_API_KEY env if empty; distinct from -api-key so agents cannot rewrite data grants)")
 	authMode := flag.String("auth-mode", "", "auth mode: auto, tailnet, or api-key (reads AEGIS_AUTH_MODE; default auto)")
 	allowedLogins := flag.String("allowed-logins", "", "comma-separated Tailscale logins allowed to call the API (reads AEGIS_ALLOWED_LOGINS; empty allows any tailnet identity)")
+	adminLogins := flag.String("admin-logins", "", "comma-separated Tailscale logins allowed to use admin surfaces (reads AEGIS_ADMIN_LOGINS; empty: allowed user logins are admin, tagged devices are not)")
 	tsSocket := flag.String("ts-socket", "", "path to tailscaled LocalAPI socket for WhoIs (default: auto-detect /var/run/tailscale/tailscaled.sock)")
 	dataDirFlag := flag.String("data-dir", "", "data directory for local state (reads AEGIS_DATA_DIR if empty; default: OS application data dir for Aegis)")
 	configPath := flag.String("config", "", "path to rules configuration file (default: <data-dir>/aegis.json)")
@@ -144,29 +146,24 @@ func Run() {
 	if *apiKey == "" {
 		*apiKey = os.Getenv("AEGIS_API_KEY")
 	}
+	if *adminAPIKey == "" {
+		*adminAPIKey = os.Getenv("AEGIS_ADMIN_API_KEY")
+	}
 	if *authMode == "" {
 		*authMode = os.Getenv("AEGIS_AUTH_MODE")
 	}
 	if *authMode == "" {
 		*authMode = AuthModeAuto
 	}
-	switch *authMode {
-	case AuthModeAuto, AuthModeTailnet, AuthModeAPIKey:
-	default:
-		slog.Error("invalid auth-mode", "value", *authMode, "allowed", "auto, tailnet, api-key")
-		os.Exit(1)
-	}
-
 	if *allowedLogins == "" {
 		*allowedLogins = os.Getenv("AEGIS_ALLOWED_LOGINS")
 	}
-
-	if *authMode == AuthModeAPIKey && *apiKey == "" {
-		slog.Error("api-key is required in api-key auth mode (flag or AEGIS_API_KEY env)")
-		os.Exit(1)
+	if *adminLogins == "" {
+		*adminLogins = os.Getenv("AEGIS_ADMIN_LOGINS")
 	}
-	if *authMode == AuthModeAuto && *apiKey == "" {
-		slog.Warn("no API key configured — only tailnet identity will be accepted")
+	if err := validateAuthCredentials(*authMode, *apiKey, *adminAPIKey); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
 	}
 
 	if *baseURL == "" {
@@ -320,8 +317,10 @@ func Run() {
 
 	srv := &Server{
 		apiKey:        *apiKey,
+		adminAPIKey:   *adminAPIKey,
 		authMode:      *authMode,
 		allowedLogins: parseLoginList(*allowedLogins),
+		adminLogins:   parseLoginList(*adminLogins),
 		identity:      identity,
 		baseURL:       *baseURL,
 		dataDir:       paths.Dir,
@@ -403,35 +402,42 @@ func Run() {
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
 	// Observability (issue #105). Health probes are unauthenticated so
-	// supervisors can poll cheaply; /metrics is auth-scoped like admin
+	// supervisors can poll cheaply; /metrics is admin-scoped (issue #181)
 	// because series include service ids and denial reasons.
 	mux.HandleFunc("GET /healthz", srv.HandleHealthz)
 	mux.HandleFunc("HEAD /healthz", srv.HandleHealthz)
 	mux.HandleFunc("GET /readyz", srv.HandleReadyz)
 	mux.HandleFunc("HEAD /readyz", srv.HandleReadyz)
-	mux.HandleFunc("GET /metrics", srv.AuthMiddleware(srv.HandleMetrics))
-	mux.HandleFunc("HEAD /metrics", srv.AuthMiddleware(srv.HandleMetrics))
+	mux.HandleFunc("GET /metrics", srv.AdminMiddleware(srv.HandleMetrics))
+	mux.HandleFunc("HEAD /metrics", srv.AdminMiddleware(srv.HandleMetrics))
 	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
 	// Third-party grant demo (issue #131). Consent GET + demo page are public
 	// like OAuth authorize; grant POST and token exchange have their own rules.
 	mux.HandleFunc("GET /demo/third-party", srv.HandleThirdPartyDemo)
 	mux.HandleFunc("HEAD /demo/third-party", srv.HandleThirdPartyDemo)
 	mux.HandleFunc("GET /v1/apps/authorize", srv.HandleAppAuthorize)
-	mux.HandleFunc("POST /v1/apps/authorize", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
+	// Minting an app token is admin-equivalent (issue #181).
+	mux.HandleFunc("POST /v1/apps/authorize", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
 	mux.HandleFunc("POST /v1/apps/token", withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken))
 	mux.HandleFunc("POST /v1/apps/revoke", withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
-	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
+	// Library writes are admin (issue #181); GET stays on AuthMiddleware above.
+	mux.HandleFunc("POST /v1/library/mirror", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
 	// Photo share / ownership-claim PoC (issue #20).
-	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
+	mux.HandleFunc("POST /v1/library/photos/share", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
+	mux.HandleFunc("POST /v1/library/links", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
+	mux.HandleFunc("DELETE /v1/library/links/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
 	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(withBodyLimit(maxMailBodyBytes, srv.handleMailRoutes)))
+	// Mail sync mutates the archive — admin only (issue #181).
+	mux.HandleFunc("POST /v1/mail/sync", srv.AdminMiddleware(withBodyLimit(maxMailBodyBytes, srv.HandleMailSync)))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
 	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
-	// Admin shell and JSON both require auth (issue #98): the SPA is markup
-	// only, but unauthenticated peers should not learn the API surface.
+	// Admin shell and JSON both require admin auth (issues #98, #181): the
+	// SPA is markup only, but unauthenticated peers should not learn the API
+	// surface and agent credentials must not open the admin UI.
 	// Friendly SPA routes (issue #150) are the durable URLs the client uses
 	// with history.pushState so refresh keeps the same section.
 	for _, path := range []string{
@@ -445,11 +451,11 @@ func Run() {
 		"/advanced",
 		"/advanced/{$}",
 	} {
-		mux.HandleFunc("GET "+path, srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
-		mux.HandleFunc("HEAD "+path, srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
+		mux.HandleFunc("GET "+path, srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
+		mux.HandleFunc("HEAD "+path, srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
 	}
-	mux.HandleFunc("/v1/admin", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
-	mux.HandleFunc("/v1/admin/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
+	mux.HandleFunc("/v1/admin", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
+	mux.HandleFunc("/v1/admin/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
 
 	handler := securityHeadersMiddleware(mux)
 
@@ -458,13 +464,39 @@ func Run() {
 		"base_url", *baseURL,
 		"auth_mode", *authMode,
 		"api_key_configured", *apiKey != "",
+		"admin_api_key_configured", *adminAPIKey != "",
 		"allowed_logins", len(srv.allowedLogins),
+		"admin_logins", len(srv.adminLogins),
 		"data_dir", paths.Dir,
 	)
 	if err := runHTTPServer(*addr, handler, cfg); err != nil {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// validateAuthCredentials checks auth-mode and the agent/admin key split
+// (issue #181). Returns a fatal error for unusable configs and logs warnings
+// for configs that work but weaken the admin boundary.
+func validateAuthCredentials(authMode, apiKey, adminAPIKey string) error {
+	switch authMode {
+	case AuthModeAuto, AuthModeTailnet, AuthModeAPIKey:
+	default:
+		return fmt.Errorf("invalid auth-mode %q (allowed: auto, tailnet, api-key)", authMode)
+	}
+	if authMode == AuthModeAPIKey && apiKey == "" && adminAPIKey == "" {
+		return fmt.Errorf("api-key or admin-api-key is required in api-key auth mode (flag or env)")
+	}
+	if authMode == AuthModeAuto && apiKey == "" && adminAPIKey == "" {
+		slog.Warn("no API key configured — only tailnet identity will be accepted")
+	}
+	if adminAPIKey != "" && apiKey != "" && constantTimeEqual(adminAPIKey, apiKey) {
+		slog.Warn("admin-api-key equals api-key — agent credentials can use admin surfaces; set a distinct admin-api-key (issue #181)")
+	}
+	if authMode == AuthModeAPIKey && adminAPIKey == "" {
+		slog.Warn("no admin-api-key in api-key mode — admin surfaces are unreachable; set -admin-api-key or use tailnet admin logins (issue #181)")
+	}
+	return nil
 }
 
 // buildIdentityResolver wires Serve headers always, plus WhoIs when a
@@ -490,9 +522,11 @@ func buildIdentityResolver(authMode, tsSocket string) IdentityResolver {
 	return MultiResolver{Resolvers: resolvers}
 }
 
-// handleAdminRoutes dispatches /v1/admin. Registered under AuthMiddleware
-// (issue #98): the HTML shell is markup-only with no secrets, but unauthenticated
-// peers must not learn the API surface. JSON data endpoints keep normal Aegis auth.
+// handleAdminRoutes dispatches /v1/admin. Registered under AdminMiddleware
+// (issues #98, #181): the HTML shell is markup-only with no secrets, but
+// unauthenticated peers must not learn the API surface and agent credentials
+// must not reach admin writes. Inner AdminMiddleware keeps direct handler
+// tests and future call sites honest.
 func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/")
 	path = strings.Trim(path, "/")
@@ -501,43 +535,43 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 	case path == "":
 		s.HandleAdmin(w, r)
 	case path == "summary":
-		s.AuthMiddleware(s.HandleAdminSummary)(w, r)
+		s.AdminMiddleware(s.HandleAdminSummary)(w, r)
 	case path == "flow":
-		s.AuthMiddleware(s.HandleAdminFlow)(w, r)
+		s.AdminMiddleware(s.HandleAdminFlow)(w, r)
 	case path == "cache":
-		s.AuthMiddleware(s.HandleAdminCache)(w, r)
+		s.AdminMiddleware(s.HandleAdminCache)(w, r)
 	case path == "cache/clear":
-		s.AuthMiddleware(s.HandleAdminCacheClear)(w, r)
+		s.AdminMiddleware(s.HandleAdminCacheClear)(w, r)
 	case path == "hook-health":
-		s.AuthMiddleware(s.HandleAdminHookHealth)(w, r)
+		s.AdminMiddleware(s.HandleAdminHookHealth)(w, r)
 	case path == "mail/status":
-		s.AuthMiddleware(s.HandleAdminMailStatus)(w, r)
+		s.AdminMiddleware(s.HandleAdminMailStatus)(w, r)
 	case path == "mail/sync":
-		s.AuthMiddleware(s.HandleAdminMailSync)(w, r)
+		s.AdminMiddleware(s.HandleAdminMailSync)(w, r)
 	case path == "mail/import":
-		s.AuthMiddleware(s.HandleAdminMailImport)(w, r)
+		s.AdminMiddleware(s.HandleAdminMailImport)(w, r)
 	case strings.HasPrefix(path, "library/"):
-		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
+		s.AdminMiddleware(s.HandleAdminLibrary)(w, r)
 	case path == "permissions":
-		s.AuthMiddleware(s.HandleAdminPermissionsOverview)(w, r)
+		s.AdminMiddleware(s.HandleAdminPermissionsOverview)(w, r)
 	case path == "data-grants":
-		s.AuthMiddleware(s.HandleAdminDataGrants)(w, r)
+		s.AdminMiddleware(s.HandleAdminDataGrants)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/grant-limits"):
-		s.AuthMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
+		s.AdminMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
 	case path == "apps" || strings.HasPrefix(path, "apps/"):
-		s.AuthMiddleware(s.HandleAdminApps)(w, r)
+		s.AdminMiddleware(s.HandleAdminApps)(w, r)
 	case path == "immich" || strings.HasPrefix(path, "immich/"):
-		s.AuthMiddleware(s.HandleAdminImmichSetup)(w, r)
+		s.AdminMiddleware(s.HandleAdminImmichSetup)(w, r)
 	case path == "ynab" || strings.HasPrefix(path, "ynab/"):
-		s.AuthMiddleware(s.HandleAdminYNABSetup)(w, r)
+		s.AdminMiddleware(s.HandleAdminYNABSetup)(w, r)
 	case path == "quicken" || strings.HasPrefix(path, "quicken/"):
-		s.AuthMiddleware(s.HandleAdminQuicken)(w, r)
+		s.AdminMiddleware(s.HandleAdminQuicken)(w, r)
 	case path == "timeline" || strings.HasPrefix(path, "timeline/"):
-		s.AuthMiddleware(s.HandleAdminTimeline)(w, r)
+		s.AdminMiddleware(s.HandleAdminTimeline)(w, r)
 	case path == "signal" || strings.HasPrefix(path, "signal/"):
-		s.AuthMiddleware(s.HandleAdminSignal)(w, r)
+		s.AdminMiddleware(s.HandleAdminSignal)(w, r)
 	case path == "udt" || strings.HasPrefix(path, "udt/"):
-		s.AuthMiddleware(s.HandleAdminUDT)(w, r)
+		s.AdminMiddleware(s.HandleAdminUDT)(w, r)
 	default:
 		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
@@ -806,7 +840,7 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 
 // handleAuthRoutes dispatches /v1/auth/* to the correct handler.
 // Login and callback are public (no auth) to support OAuth redirects.
-// Status and revoke require auth.
+// Status requires agent auth; revoke is admin (issue #181).
 func (s *Server) handleAuthRoutes(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/v1/auth/")
 
@@ -819,7 +853,7 @@ func (s *Server) handleAuthRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAuthStatus)(w, r)
 	default:
 		if r.Method == http.MethodDelete {
-			s.AuthMiddleware(s.HandleAuthRevoke)(w, r)
+			s.AdminMiddleware(s.HandleAuthRevoke)(w, r)
 		} else {
 			writeJSONError(w, http.StatusNotFound, "unknown auth endpoint")
 		}
