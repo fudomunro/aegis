@@ -53,8 +53,12 @@ func (k LibraryKind) Instructions(baseURL string) string {
 			"GET %s%s — %s.\n"+
 			"%s Prefer this endpoint for questions like %q so the answer includes "+
 			"every connected service.\n"+
+			"Page with limit (default 100, max 500) and cursor (opaque; response "+
+			"next_cursor continues the walk). total is the full filtered count; "+
+			"keep paging until next_cursor is omitted — do not stop at the first page.\n"+
 			"Check response.truncated (and by_service[].truncated) before claiming the list is complete; "+
-			"when true, say so and note that some items may still be missing upstream.\n"+
+			"when true, say so and note that some items may still be missing upstream. "+
+			"truncated means upstream page-cap incompleteness, not 'more pages in this response'.\n"+
 			"sources[].canonical marks the authoritative non-Aegis location for that item "+
 			"(issue #16); prefer that service for writes or mirrors.",
 		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, k.ExampleQuestion,

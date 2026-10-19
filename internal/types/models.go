@@ -191,16 +191,7 @@ type ContactSource struct {
 // single service or aggregated across all connected services.
 type ContactList struct {
 	Contacts []Contact `json:"contacts"`
-	// Total is the number of contacts in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged contacts that shared an identity
-	// key (email, phone, handle, or name) into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap (or left an
-	// unfollowed continuation) with more items still upstream.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // Photo is a user-facing photo (or video still). Service identity lives in
@@ -259,16 +250,7 @@ type PhotoSource struct {
 // service or aggregated across all connected photo-capable services.
 type PhotoList struct {
 	Photos []Photo `json:"photos"`
-	// Total is the number of photos in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged photos that shared an identity
-	// key (content hash, or taken_at + dimensions) into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream (or the Google Photos pick itself is only a selection).
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // PhotoShareClaim is the PoC ownership/provenance claim produced when a
@@ -387,16 +369,7 @@ type CalendarEventSource struct {
 // either for a single service or aggregated across calendar-capable services.
 type CalendarEventList struct {
 	Events []CalendarEvent `json:"events"`
-	// Total is the number of events in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged events that shared an identity
-	// key (iCalUID, or title + start) into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream (or left the time window incomplete).
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // FreeBusyBlock is one busy interval on the user's calendar (issue #128).
@@ -417,13 +390,7 @@ type FreeBusyBlock struct {
 // consumers (issue #128). Blocks are availability only.
 type FreeBusyList struct {
 	Busy []FreeBusyBlock `json:"busy"`
-	// Total is the number of busy blocks in this response.
-	Total int `json:"total"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream (or left the time window incomplete).
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // MessageChannel values for the neutral message type. Email is the first
@@ -523,16 +490,7 @@ type MessageSource struct {
 // single service or aggregated across message-capable services.
 type MessageList struct {
 	Messages []Message `json:"messages"`
-	// Total is the number of messages in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged messages that shared an identity
-	// key (Message-ID, or subject+from+sent_at) into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page/cap with more items
-	// still upstream.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // Document is a user-facing document: a file the user keeps for life admin —
@@ -601,16 +559,7 @@ type DocumentSource struct {
 // single service or aggregated across document-capable services.
 type DocumentList struct {
 	Documents []Document `json:"documents"`
-	// Total is the number of documents in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged documents that shared an
-	// identity key (checksum, archive serial, or title+created).
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // DocumentText is the full extracted text of one document (issue #143).
@@ -662,50 +611,26 @@ type LibraryServiceStatus struct {
 // single service or aggregated across all connected services.
 type PlaylistList struct {
 	Playlists []Playlist `json:"playlists"`
-	// Total is the number of playlists in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged same-name playlists across
-	// services into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // TrackList is the neutral response for listing liked/saved tracks — either
 // for a single service or aggregated across all connected services.
 type TrackList struct {
 	Tracks []Track `json:"tracks"`
-	// Total is the number of tracks in this response.
-	Total int `json:"total"`
-	// Synced is true when the library merged same-named tracks across
-	// services into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream. A heavy Spotify/YouTube library is the usual case.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // AlbumList is the neutral response for listing saved albums.
 type AlbumList struct {
-	Albums    []Album                         `json:"albums"`
-	Total     int                             `json:"total"`
-	Synced    bool                            `json:"synced,omitempty"`
-	Truncated bool                            `json:"truncated,omitempty"`
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	Albums []Album `json:"albums"`
+	LibraryListMeta
 }
 
 // ArtistList is the neutral response for listing followed/top artists.
 type ArtistList struct {
-	Artists   []Artist                        `json:"artists"`
-	Total     int                             `json:"total"`
-	Synced    bool                            `json:"synced,omitempty"`
-	Truncated bool                            `json:"truncated,omitempty"`
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	Artists []Artist `json:"artists"`
+	LibraryListMeta
 }
 
 // Playlist list status values used in LibraryServiceStatus.Status.
@@ -807,19 +732,11 @@ type TransactionSummary struct {
 // for a single service or aggregated across transaction-capable services.
 type TransactionList struct {
 	Transactions []Transaction `json:"transactions"`
-	// Total is the number of transactions in this response (line items).
-	Total int `json:"total"`
 	// Summary is set when the request is summary-only (issue #141) or when
-	// callers ask for rollups alongside line items.
+	// callers ask for rollups alongside line items. Built from the full
+	// filtered set, not the current page.
 	Summary *TransactionSummary `json:"summary,omitempty"`
-	// Synced is true when the library merged transactions that shared an
-	// identity key into multi-source entries.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any service hit its page cap with more items
-	// still upstream.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // Place is the location a visit or trip refers to (issue #142). Name and
@@ -876,11 +793,8 @@ type PlaceVisitSource struct {
 
 // PlaceVisitList is the neutral response for listing visits and trips.
 type PlaceVisitList struct {
-	Visits    []PlaceVisit                    `json:"visits"`
-	Total     int                             `json:"total"`
-	Synced    bool                            `json:"synced,omitempty"`
-	Truncated bool                            `json:"truncated,omitempty"`
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	Visits []PlaceVisit `json:"visits"`
+	LibraryListMeta
 }
 
 // Place kind values.

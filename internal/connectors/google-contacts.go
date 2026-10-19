@@ -179,15 +179,17 @@ func (c *GoogleContactsConnector) HandleListContacts(w http.ResponseWriter, r *h
 		contacts = []types.Contact{}
 	}
 	result := types.ContactList{
-		Contacts:  contacts,
-		Total:     len(contacts),
-		Synced:    true,
-		Truncated: truncated,
-		ByService: map[string]types.LibraryServiceStatus{
-			GoogleContactsServiceID: {
-				Status:    types.LibraryStatusOK,
-				Count:     len(contacts),
-				Truncated: truncated,
+		Contacts: contacts,
+		LibraryListMeta: types.LibraryListMeta{
+			Total:     len(contacts),
+			Synced:    true,
+			Truncated: truncated,
+			ByService: map[string]types.LibraryServiceStatus{
+				GoogleContactsServiceID: {
+					Status:    types.LibraryStatusOK,
+					Count:     len(contacts),
+					Truncated: truncated,
+				},
 			},
 		},
 	}

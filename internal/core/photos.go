@@ -181,8 +181,9 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 		serviceOf: photoServiceName,
 		sortKey:   photoIdentityKey,
 		merge:     MergePhotos,
-		encode: func(merged []types.Photo, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.PhotoList{Photos: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Photo, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.PhotoList{Photos: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 		markCanonical: s.stampPhotoCanonical,
 		stampCopies:   s.stampPhotoCopies,

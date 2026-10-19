@@ -17,7 +17,7 @@ func TestSampleCalendarEvents_NearTermBusy(t *testing.T) {
 	if len(events) < 4 {
 		t.Fatalf("events = %d", len(events))
 	}
-	list := freeBusyListFromEvents(events, nil)
+	list := freeBusyListFromEvents(events, types.PageRequest{Limit: types.MaxPageLimit}, nil)
 	if list.Total < 3 {
 		t.Fatalf("busy = %d (cancelled should drop)", list.Total)
 	}

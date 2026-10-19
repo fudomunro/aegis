@@ -22,8 +22,9 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 		merge: func(in []types.Playlist) []types.Playlist {
 			return types.MergePlaylistsSyncLinked(in, s.links.PlaylistLinkKey)
 		},
-		encode: func(merged []types.Playlist, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.PlaylistList{Playlists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Playlist, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.PlaylistList{Playlists: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 		markCanonical: s.stampPlaylistCanonical,
 		stampCopies:   s.stampPlaylistCopies,
@@ -47,8 +48,9 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 		enrich: func(ctx context.Context, s *Server, tracks []types.Track) {
 			s.resolveTrackEntities(ctx, tracks)
 		},
-		encode: func(merged []types.Track, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.TrackList{Tracks: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Track, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.TrackList{Tracks: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 		markCanonical: s.stampTrackCanonical,
 		stampCopies:   s.stampTrackCopies,
@@ -72,8 +74,9 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 		enrich: func(ctx context.Context, s *Server, albums []types.Album) {
 			s.resolveAlbumEntities(ctx, albums)
 		},
-		encode: func(merged []types.Album, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.AlbumList{Albums: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Album, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.AlbumList{Albums: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 	})
 }
@@ -95,8 +98,9 @@ func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 		enrich: func(ctx context.Context, s *Server, artists []types.Artist) {
 			s.resolveArtistEntities(ctx, artists)
 		},
-		encode: func(merged []types.Artist, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.ArtistList{Artists: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Artist, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.ArtistList{Artists: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 	})
 }

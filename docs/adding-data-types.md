@@ -141,11 +141,10 @@ type WidgetSource struct {
 }
 
 type WidgetList struct {
-    Widgets   []Widget                   `json:"widgets"`
-    Total     int                        `json:"total"`
-    Synced    bool                       `json:"synced,omitempty"`
-    Truncated bool                       `json:"truncated,omitempty"`
-    ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+    Widgets []Widget `json:"widgets"`
+    // Shared paging/status envelope (issue #185): total, synced, truncated,
+    // next_cursor, by_service.
+    LibraryListMeta
 }
 ```
 
@@ -157,7 +156,7 @@ type WidgetList struct {
 | `sources[]` carries service IDs, names, URLs | Agents need a way back to the real copy |
 | `EntityID` + `Match` record durable vs name matches | Merge review and agents can trust `isrc` more than `name` |
 | `Extra map[string]any` for provider quirks | Keeps the neutral shape stable |
-| List wrapper has `Total`, `Synced`, `Truncated`, `ByService` | Shared aggregate contract (`handleLibraryAggregate`) |
+| List wrapper embeds `LibraryListMeta` | Shared aggregate + paging contract (`handleLibraryAggregate`, issue #185) |
 | `Truncated` is a **first-class** honesty flag | Agents must not claim a list is complete when a page cap hit |
 
 People-shaped fields (photo `people[]`, event attendees, message from/to)
@@ -416,9 +415,9 @@ Extend `sampledata.go` whenever a type gains identity rules.
 Then cover them in `sampledata_query_test.go` (or a kind-specific test):
 
 - merge identity (`sources[]`, `entity_id`, `match=…`)
-- sort / filter / pagination if the type is queryable
+- sort / filter / agent paging (`limit`/`cursor`/`next_cursor`, issue #185) if the type is queryable
 - permission-denied service still appears in `by_service` as denied
-- `truncated` when a provider hits the page cap
+- `truncated` when a provider hits the upstream page cap (independent of `next_cursor`)
 
 ---
 

@@ -374,17 +374,15 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 		serviceOf: documentServiceName,
 		sortKey:   documentIdentityKey,
 		merge:     MergeDocuments,
-		encode: func(merged []types.Document, bySvc map[string]types.LibraryServiceStatus) any {
-			filtered := filterDocuments(merged, filters)
+		encode: func(items []types.Document, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			filtered := filterDocuments(items, filters)
 			if metaOnly {
 				filtered = redactDocumentsForLevel(filtered, types.AccessMetadata)
 			}
+			pageItems, pr := types.SlicePage(filtered, page)
 			return types.DocumentList{
-				Documents: filtered,
-				Total:     len(filtered),
-				Synced:    true,
-				Truncated: anyServiceTruncated(bySvc),
-				ByService: bySvc,
+				Documents:       pageItems,
+				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
 			}
 		},
 		markCanonical: s.stampDocumentCanonical,
