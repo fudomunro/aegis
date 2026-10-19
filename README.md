@@ -807,6 +807,8 @@ events-only.
 
 - `GET /v1/library/{playlists,tracks,albums,artists,contacts,photos,events,freebusy,messages,transactions,places,documents}` only
 - Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
+- Not document full-text (`…/{service}/{id}/text`) and not user-defined kinds
+  (issue #183). Built-in list paths are derived from `LibraryKind.AppReadable`.
 
 When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
 availability fields even if service permissions would allow full events (issue
