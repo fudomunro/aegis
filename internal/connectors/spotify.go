@@ -644,7 +644,7 @@ func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) types.Playl
 	if n, ok := AsInt(raw["total_fetched"]); ok {
 		total = n
 	}
-	return types.PlaylistList{Playlists: playlists, Total: total}
+	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}
 }
 
 func (c *SpotifyConnector) TransformSavedTracks(raw map[string]any) map[string]any {

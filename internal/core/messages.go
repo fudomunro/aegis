@@ -299,8 +299,9 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 		serviceOf: messageServiceName,
 		sortKey:   messageIdentityKey,
 		merge:     MergeMessages,
-		encode: func(merged []types.Message, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.MessageList{Messages: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Message, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.MessageList{Messages: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 		markCanonical: s.stampMessageCanonical,
 		stampCopies:   s.stampMessageCopies,

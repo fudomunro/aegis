@@ -827,7 +827,7 @@ func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) types.
 			total = n
 		}
 	}
-	return types.PlaylistList{Playlists: playlists, Total: total}
+	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}
 }
 
 func (c *YouTubeMusicConnector) TransformPlaylistItems(raw map[string]any) map[string]any {

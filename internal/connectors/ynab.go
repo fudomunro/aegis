@@ -160,7 +160,7 @@ func (c *YNABConnector) HandleProxy(w http.ResponseWriter, r *http.Request, rema
 				}
 				list = append(list, c.NeutralTransaction("", accounts, t))
 			}
-			result, err := json.Marshal(types.TransactionList{Transactions: list, Total: len(list), Synced: true})
+			result, err := json.Marshal(types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 			if err != nil {
 				WriteJSONError(w, http.StatusInternalServerError, "response transformation failed")
 				return

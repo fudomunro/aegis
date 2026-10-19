@@ -214,7 +214,7 @@ func TestEncodeUserDefinedList(t *testing.T) {
 		"notion-reading": {Status: LibraryStatusOK, Count: 1},
 		"broken":         {Status: LibraryStatusError, Truncated: true},
 	}
-	list := EncodeUserDefinedList(s, []UserDefinedItem{{Name: "x"}}, by)
+	list := EncodeUserDefinedList(s, []UserDefinedItem{{Name: "x"}}, PageRequest{Limit: MaxPageLimit}, by)
 	if list.Total != 1 || !list.Truncated || !list.Synced || list.SchemaID != "reading-list" {
 		t.Fatalf("list = %+v", list)
 	}

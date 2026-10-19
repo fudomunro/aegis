@@ -578,14 +578,12 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 		serviceOf: placeVisitServiceName,
 		sortKey:   placeIdentityKey,
 		merge:     MergePlaceVisits,
-		encode: func(merged []types.PlaceVisit, bySvc map[string]types.LibraryServiceStatus) any {
-			filtered := filterPlaceVisits(merged, filters)
+		encode: func(items []types.PlaceVisit, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			filtered := filterPlaceVisits(items, filters)
+			pageItems, pr := types.SlicePage(filtered, page)
 			return types.PlaceVisitList{
-				Visits:    filtered,
-				Total:     len(filtered),
-				Synced:    true,
-				Truncated: anyServiceTruncated(bySvc),
-				ByService: bySvc,
+				Visits:          pageItems,
+				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
 			}
 		},
 		markCanonical: s.stampPlaceVisitCanonical,

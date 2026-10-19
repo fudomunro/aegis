@@ -192,8 +192,9 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 		serviceOf: contactServiceName,
 		sortKey:   types.PrimaryContactKey,
 		merge:     MergeContacts,
-		encode: func(merged []types.Contact, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.ContactList{Contacts: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.Contact, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.ContactList{Contacts: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 		markCanonical: s.stampContactCanonical,
 		stampCopies:   s.stampContactCopies,
