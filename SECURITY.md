@@ -23,8 +23,10 @@ Tailscale proves *who* is connecting:
   distributed LLM API keys for tailnet clients.
 
 Aegis extends that idea: **if the peer has a Tailscale identity, allow the
-API** (optionally restricted to an allowlist). A shared API key remains available
-for external bridges and debugging.
+API** (optionally restricted to an allowlist). A shared agent API key remains
+available for external bridges and debugging; admin surfaces use a separate
+credential (issue #181) so agents cannot rewrite the policy that constrains
+them.
 
 ## Auth modes
 
@@ -39,13 +41,41 @@ Flags / env:
 ```bash
 -auth-mode auto|tailnet|api-key     # or AEGIS_AUTH_MODE
 -allowed-logins alice@example.com   # or AEGIS_ALLOWED_LOGINS
+-admin-logins alice@example.com     # or AEGIS_ADMIN_LOGINS (admin surfaces)
 -ts-socket /var/run/tailscale/tailscaled.sock  # WhoIs LocalAPI (optional)
--api-key ...                        # optional unless auth-mode=api-key
+-api-key ...                        # agent key; optional unless auth-mode=api-key
+-admin-api-key ...                  # admin key; optional when admin logins cover operators
 ```
 
 Empty `-allowed-logins` means *any* authenticated tailnet identity is allowed
 (the “everything I expose is for my tailnet” default). Set it on shared tailnets
 so a guest laptop or tagged CI runner cannot read your Spotify library.
+
+## Admin vs agent credentials (issue #181)
+
+Authentication answers *who may call Aegis*. A second tier answers *who may
+change policy*.
+
+| Principal | Credentials | May call |
+|-----------|-------------|----------|
+| **Agent** | Agent API key (`-api-key`), tagged devices, third-party app tokens, allowed tailnet logins | Library reads, pre-request hook, content transport (`/v1/services/*`), mail search/status, `GET /v1/auth/status` |
+| **Admin** | Admin API key (`-admin-api-key`) or a tailnet **user** login that passes admin rules | Everything agents can, plus `/v1/admin/*`, data-grant writes, app minting (`POST /v1/apps/authorize`), mirror / photo-share / entity-link writes, mail sync, OAuth revoke, `/metrics` |
+
+**Default on a solo tailnet:** admin = allowed user logins (your browser
+session through Tailscale Serve); agents = tagged nodes and the API key. Tagged
+identities (`tag:aperture`, `tag:ci`, …) are **not** admin unless listed in
+`-admin-logins`.
+
+**The shared `-api-key` is never admin.** Data grants only mean something if
+the party they constrain cannot rewrite them. A prompt-injected agent that
+holds the agent key gets **403** on every admin write. If you need key-based
+admin (curl, scripts), set `-admin-api-key` to a *different* secret.
+
+`-admin-logins`, when set, is the sole tailnet allowlist for admin surfaces.
+When empty, any identity that passes `-allowed-logins` and is a **user login**
+(not a tagged device) is admin.
+
+App tokens (`aeg_app_…`) are never admin, even when scopes look broad.
 
 ## How identity is resolved
 
@@ -105,10 +135,13 @@ from other LAN interfaces.
    music OAuth tokens.
 2. **Prefer `auth-mode=tailnet`** once Serve or WhoIs is working; drop the
    shared key so it cannot leak into agent transcripts or shell history.
-3. **Keep an API key** only if you need `ts-unplug` / CLI bridges or tools that
-   are not on the tailnet — and treat that key like a password.
-4. **Allowlist logins** on any tailnet that is not solo.
-5. **Tag the service** (`tag:aegis`) so ACLs survive user device churn.
+3. **Keep an agent API key** only if you need `ts-unplug` / CLI bridges or
+   tools that are not on the tailnet — and treat that key like a password.
+   Never reuse it as `-admin-api-key`.
+4. **Allowlist logins** on any tailnet that is not solo. Use `-admin-logins`
+   to keep admin on your human login when tagged agents share the tailnet.
+5. **Tag the service** (`tag:aegis`) so ACLs survive user device churn. Tag
+   agent hosts separately (`tag:aperture`) so they stay agent-only.
 6. **Device approval** in the admin console prevents unapproved machines from
    joining even with a stolen auth key.
 7. **Log identity.** Aegis logs `login` and `identity_source` on denied
@@ -127,9 +160,9 @@ from other LAN interfaces.
     Spotify/Google/Amazon). Status and revoke remain behind auth middleware.
 11. **Keep `/metrics` authenticated.** `/healthz` and `/readyz` are
     unauthenticated liveness/readiness probes with no inventory. `/metrics`
-    is auth-scoped like admin because series include service ids and denial
-    reasons (issue #105). Point Prometheus at it with an API key or from a
-    tailnet identity — do not expose it through Funnel.
+    is admin-scoped (issue #181) because series include service ids and denial
+    reasons (issue #105). Point Prometheus at it with an admin API key or from
+    a tailnet admin identity — do not expose it through Funnel.
 12. **Audit log is local state.** `<data-dir>/audit_log.db` records who
     accessed which data type and whether the call was allowed or denied
     (redacted — no tokens or bodies). Treat the file like `tokens.json`:
@@ -138,11 +171,10 @@ from other LAN interfaces.
     (`-audit-retention-days`).
 13. **User-defined type file access is admin-equivalent.**
     `GET /v1/admin/udt/browse` lists directories on the Aegis host and the
-    source/extra endpoints accept absolute local paths. Whatever file is
-    selected can then be read through `/v1/library/{udt}` by anyone who
-    passes `AuthMiddleware` (tailnet identity or API key) — the same trust
-    boundary as admin. Do not share an Aegis API key with untrusted agents.
-    Prefer `auth-mode=tailnet` and `allowed-logins` on multi-user tailnets.
+    source/extra endpoints accept absolute local paths. Those endpoints
+    require an **admin** principal (issue #181). Whatever file is selected can
+    then be read through `/v1/library/{udt}` by authorized agents — so the
+    *selection* is the dangerous step and is no longer on the agent credential.
     Schema packs must not embed secrets in `http_json` headers (rejected at
     load); use named connections / the encrypted token store.
 
@@ -196,9 +228,11 @@ clients.
 - [ ] `tailscale serve` in front **or** Aegis bound to localhost/Tailscale IP
 - [ ] `auth-mode=tailnet` (or `auto` while migrating)
 - [ ] `allowed-logins` set if the tailnet is shared
+- [ ] `admin-logins` set if tagged agent hosts share the tailnet with you
+- [ ] `admin-api-key` set (and different from `api-key`) if you admin via curl
 - [ ] `AEGIS_TOKEN_PASS` set and `tokens.json` (under the data directory) not world-readable
-- [ ] API key removed or stored outside agent-accessible paths
-- [ ] `/metrics` scrape credentials stored like any other API key; `/healthz` stays unauthenticated
+- [ ] Agent API key removed or stored outside agent-accessible paths; never reused as admin key
+- [ ] `/metrics` scrape credentials stored like any other admin API key; `/healthz` stays unauthenticated
 - [ ] `audit_log.db` retained/backed up with the data directory (default 30 days)
 
 ## References

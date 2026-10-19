@@ -48,11 +48,13 @@ cp aegis.example.json ~/Library/Application\ Support/Aegis/aegis.json
   -allowed-logins you@example.com \
   -token-pass your-encryption-passphrase
 
-# Or keep a shared API key for non-tailnet clients
+# Or keep a shared API key for non-tailnet agent clients
+# (admin surfaces need a separate -admin-api-key or a tailnet admin login)
 ./aegis \
   -addr :8080 \
   -base-url https://aegis.your-tailnet.ts.net \
-  -api-key your-secret-key \
+  -api-key your-agent-secret-key \
+  -admin-api-key your-admin-secret-key \
   -token-pass your-encryption-passphrase
 ```
 
@@ -178,7 +180,7 @@ privacy); per-agent detail stays in the admin Map and the audit log.
 Scrape example:
 
 ```bash
-curl -H "Authorization: Bearer $KEY" "$AEGIS/metrics"
+curl -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/metrics"
 ```
 
 ### Access audit log
@@ -628,9 +630,11 @@ filters.
 
 | Variable | Flag equivalent | Description |
 |----------|----------------|-------------|
-| `AEGIS_API_KEY` | `-api-key` | API key for authenticating requests (optional in `auto`/`tailnet` modes) |
+| `AEGIS_API_KEY` | `-api-key` | Agent API key for library/hook/content calls (optional in `auto`/`tailnet` modes; never admin) |
+| `AEGIS_ADMIN_API_KEY` | `-admin-api-key` | Admin API key for admin surfaces (issue #181); distinct from `AEGIS_API_KEY` |
 | `AEGIS_AUTH_MODE` | `-auth-mode` | `auto` (default), `tailnet`, or `api-key` |
 | `AEGIS_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
+| `AEGIS_ADMIN_LOGINS` | `-admin-logins` | Comma-separated Tailscale logins allowed to use admin surfaces (issue #181) |
 | `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
 | `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
@@ -701,8 +705,10 @@ directory or keep passing the explicit path flags.
 | `-addr` | `:8080` | Listen address |
 | `-base-url` | | Public base URL (required) |
 | `-auth-mode` | `auto` | `auto`, `tailnet`, or `api-key` — see [SECURITY.md](SECURITY.md) |
-| `-api-key` | | Shared API key (required only for `api-key` mode) |
+| `-api-key` | | Agent API key (library/hook/content; never admin). Required only if `auth-mode=api-key` and no admin key |
+| `-admin-api-key` | | Admin API key (issue #181). Required for key-based admin; the agent key never opens admin surfaces |
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
+| `-admin-logins` | | Optional admin allowlist (issue #181). Empty: allowed user logins are admin; tagged devices are not |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
 | `-data-dir` | OS app data dir | Local state root (see [Data directory](#data-directory-issue-74)) |
 | `-config` | `<data-dir>/aegis.json` | Bootstrap config path (services, connections, secrets) |
@@ -764,13 +770,14 @@ to the new secret before restarting the service.
 
 ### Authentication
 
-Aegis can authenticate callers three ways:
+Aegis authenticates callers in two tiers (issue #181):
 
 1. **Tailscale identity** (recommended for agents) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
-2. **API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools.
-3. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients (issue #131). See [Third-party app tokens](#third-party-app-tokens-issue-131).
+2. **Agent API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools. Never opens admin surfaces.
+3. **Admin API key** (`-admin-api-key`) — for curl/scripts that manage data grants, apps, mirror, and other admin writes.
+4. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients (issue #131). See [Third-party app tokens](#third-party-app-tokens-issue-131). Never admin.
 
-Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key. Full policy guidance lives in [SECURITY.md](SECURITY.md).
+Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key: your browser login is admin, tagged agent hosts are not. Full policy guidance lives in [SECURITY.md](SECURITY.md).
 
 API key comparison is constant-time (`crypto/subtle`). HTML and JSON responses
 carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
@@ -793,10 +800,10 @@ Authorization: Bearer aeg_app_…
 
 | Endpoint | Auth | Notes |
 |----------|------|-------|
-| `GET /v1/admin/apps` | API key / tailnet | List apps (token hints only) |
-| `POST /v1/admin/apps` | API key / tailnet | Create; returns token once |
-| `GET/PATCH/DELETE /v1/admin/apps/{id}` | API key / tailnet | Inspect, update scopes/name/disable, revoke |
-| `POST /v1/admin/apps/{id}/rotate` | API key / tailnet | New token; old one dies |
+| `GET /v1/admin/apps` | Admin | List apps (token hints only) |
+| `POST /v1/admin/apps` | Admin | Create; returns token once |
+| `GET/PATCH/DELETE /v1/admin/apps/{id}` | Admin | Inspect, update scopes/name/disable, revoke |
+| `POST /v1/admin/apps/{id}/rotate` | Admin | New token; old one dies |
 
 **Scopes** use the same access levels as [Data grants](#data-grants)
 (`none`, `freebusy`, `read`, `write`, `read-write`). Unlisted types fall back to
@@ -840,7 +847,7 @@ This build ships a working demo of that handoff:
 |-------|------|---------|
 | `GET /demo/third-party` | public | Fake scheduling app with **Continue with Aegis** |
 | `GET /v1/apps/authorize` | public | Consent page (shows app name + scopes) |
-| `POST /v1/apps/authorize` | API key / tailnet | Owner allows; returns one-time `aeg_grant_…` code (10 min) |
+| `POST /v1/apps/authorize` | Admin | Owner allows; returns one-time `aeg_grant_…` code (10 min) |
 | `POST /v1/apps/token` | code is the credential | Redeem code → `aeg_app_…` token |
 | `POST /v1/apps/revoke` | app token | Disconnect: destroys the token and disables the app until the next grant |
 
@@ -971,10 +978,11 @@ names and URL, not leftover Guardian config.
 
 ```bash
 # Live traffic diagnostics + copyable expected hooks/grants snippet
-curl -H "Authorization: Bearer $KEY" "$AEGIS/v1/admin/hook-health"
+# (admin credential: -admin-api-key or tailnet admin login)
+curl -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/hook-health"
 
 # Validate a pasted Aperture policy (or bare hooks map)
-curl -X POST -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+curl -X POST -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
   --data-binary @aperture-policy.json \
   "$AEGIS/v1/admin/hook-health/check"
 ```
@@ -998,20 +1006,21 @@ Reported issues include:
 
 ### Two-legged auth
 
-Aegis has **two** callers, and they authenticate differently:
+Aegis has **two** caller tiers (issue #181), and they authenticate differently:
 
 | Leg | Who calls Aegis | How they authenticate |
 |-----|--------------------|------------------------|
-| **Hook** | Aperture (`POST /v1/pre-request`) | Usually the shared API key in the Aperture hook config (`"apikey"`). In `tailnet` mode Aperture must also present tailnet identity (Serve headers / WhoIs). |
-| **Agent data** | The LLM agent (`/v1/library/playlists`, content transport under `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: API key if `auth-mode` is `auto` or `api-key`. |
+| **Hook** | Aperture (`POST /v1/pre-request`) | Usually the agent API key in the Aperture hook config (`"apikey"`). In `tailnet` mode Aperture must also present tailnet identity (Serve headers / WhoIs). |
+| **Agent data** | The LLM agent (`/v1/library/playlists`, content transport under `/v1/services/...`) | Preferred: Tailscale identity from the agent’s host (Serve or WhoIs). Fallback: agent API key if `auth-mode` is `auto` or `api-key`. |
+| **Admin** | Human operator (admin UI, curl) | Tailnet **user** login (default: any allowed login; tighten with `-admin-logins`) or `-admin-api-key`. Tagged devices and the agent API key are **not** admin. |
 
-Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Aegis attaches those when fetching user data. With `-auth-mode tailnet` and no API key, agents on the tailnet call Aegis without a shared secret.
+Agents do **not** need Spotify/YouTube/Amazon OAuth tokens — Aegis attaches those when fetching user data. With `-auth-mode tailnet` and no API key, agents on the tailnet call Aegis without a shared secret. Admin writes (`/v1/admin/*`, data grants, app minting, mirror, mail sync, OAuth revoke) return **403** to agent credentials so a prompt-injected agent cannot raise its own access.
 
 After wiring the hook, confirm it with [`GET /v1/admin/hook-health`](docs/configuring-aperture.md#verify-with-hook-health) — it flags leftover Guardian names, wrong URLs, and missing `send` fields.
 
 ## API Reference
 
-Protected endpoints accept **either** a valid API key (`Authorization: Bearer <key>` or `X-Api-Key`) **or** a Tailscale identity, depending on `-auth-mode` (see [SECURITY.md](SECURITY.md)).
+Protected agent endpoints accept **either** a valid agent/admin API key (`Authorization: Bearer <key>` or `X-Api-Key`) **or** a Tailscale identity, depending on `-auth-mode` (see [SECURITY.md](SECURITY.md)). Admin endpoints additionally require an **admin** principal (issue #181): `-admin-api-key` or a tailnet user login listed for admin. Agent credentials get **403** on admin writes.
 
 ### Pre-request hook
 
@@ -1855,11 +1864,11 @@ messages gate so the operator can maintain the archive even when agents are
 restricted.
 
 ```bash
-# First fill (continue until done)
-curl -X POST "$AEGIS/v1/mail/sync" -H "Authorization: Bearer $KEY" \
+# First fill (continue until done) — admin credential (issue #181)
+curl -X POST "$AEGIS/v1/mail/sync" -H "Authorization: Bearer $ADMIN_KEY" \
   -d '{"max_messages":200}'
 
-# Search history
+# Search history — agent or admin
 curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1" \
   -H "Authorization: Bearer $KEY"
 ```
@@ -1892,7 +1901,7 @@ POST /v1/admin/mail/import
 
 ```bash
 curl -X POST "$AEGIS/v1/admin/mail/import" \
-  -H "Authorization: Bearer $KEY" -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $ADMIN_KEY" -H "Content-Type: application/json" \
   -d '{"path":"/Users/you/Downloads/Takeout","max_messages":5000}'
 ```
 
