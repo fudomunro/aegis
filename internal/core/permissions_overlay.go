@@ -43,9 +43,9 @@ type dataGrantsOverlayFile struct {
 	// Present+null means cleared.
 	ServiceLimits map[string]*types.Permissions `json:"service_limits"`
 	// Types is the v2 name for DataGrants (loaded only).
-	Types map[string]types.DataGrant `json:"types"`
+	Types map[string]types.DataGrant `json:"types,omitempty"`
 	// Services is the v1/v2 name for ServiceLimits (loaded only).
-	Services map[string]*types.Permissions `json:"services"`
+	Services map[string]*types.Permissions `json:"services,omitempty"`
 }
 
 // permissionsOverlayFile is a deprecated alias for dataGrantsOverlayFile.
