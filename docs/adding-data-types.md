@@ -76,11 +76,12 @@ internal/types/models.go     Neutral item + *Source + *List
 internal/types/merge.go      Identity keys + Merge* algorithms
 internal/types/providers.go  Provider interface (WidgetProvider) + ErrUnauthorized
 internal/types/kind.go       LibraryKind data helpers (already generic)
+internal/types/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
 internal/types/pathclass.go  dataTypePathRules for the provider's proxy paths
 <kind>.go                    Thin handler + kind-specific merge glue if any
-librarykind.go               libraryKinds entry + kindRuntime predicates
+librarykind.go               kindRuntime predicates + libraryRouteHandlers
 <provider>.go                Connector: Capabilities + ListUser… + optional proxy
-canonical.go                 canonicalKindIDs + stamp*Canonical (if sources can be home)
+canonical.go                 stamp*Canonical (if sources can be home)
 copy_ledger_stamp.go         stamp*Copies (if sources can hold tracked copies)
 sampledata.go                Deterministic fixtures + deliberate merge pairs
 tests                        Merge, aggregate, permissions, sample-data query checks
@@ -194,14 +195,21 @@ type WidgetProvider interface {
 
 ---
 
-### 3. Registry entry (`librarykind.go`)
+### 3. Registry entry (`internal/types/librarykinds.go` + `librarykind.go`)
 
-Append a **data** entry to `libraryKinds` and a matching **runtime** entry to
-`kindRuntime`. Both are required: a kind with no `kindRuntime` row never
-appears in pre-request hints (and `TestLibraryKinds_KindRuntimeInSync` fails).
+Append a **data** entry to `types.BuiltinLibraryKinds` and a matching
+**runtime** entry to `kindRuntime`. Both are required: a kind with no
+`kindRuntime` row never appears in pre-request hints (and
+`TestLibraryKinds_KindRuntimeInSync` fails).
+
+The registry is the **single source** for per-kind policy (issue #183).
+Derived lists — reserved UDT ids, app-token paths, `canonical_for` keys,
+access-level allowlists — are computed from it. Do **not** copy the kind
+list into `ReservedDataTypeKeys`, `canonicalKindIDs`, `appAllowedPrefixes`,
+or `serviceProvidedTypes`.
 
 ```go
-// libraryKinds (types.LibraryKind data only — no predicates):
+// types.BuiltinLibraryKinds (data + policy flags — no runtime predicates):
 {
     ID:              "widgets",
     Path:            "/v1/library/widgets",
@@ -215,6 +223,10 @@ appears in pre-request hints (and `TestLibraryKinds_KindRuntimeInSync` fails).
     EmptyMsg:        "no widget-capable services configured",
     DenyMsg:         "denied: data grant for agent access to widgets is not allowed",
     FailMsg:         "failed to fetch widgets",
+    AppReadable:      true,  // third-party app tokens may GET the list
+    CanonicalAllowed: true,  // may appear in canonical_for
+    AllowedLevels:    nil,   // optional: []string{types.AccessSummary, …}
+    DefaultNone:      false, // true = opt-in like places (issue #142)
 },
 
 // kindRuntime (core-owned visibility predicates):
@@ -233,7 +245,11 @@ Field guidance:
 | `SyncRule` | Name the **match keys** and the `match=` values you will emit |
 | `Keywords` | Service-less questions that should inject this endpoint; include common misspellings and the service brand only if users say it as the data ("gmail inbox", "google calendar") |
 | `EmptyMsg` / `DenyMsg` / `FailMsg` | Short, agent-safe; no secrets, no stack traces |
-| `kindRuntime` row | Wire `HasProviders` to `hasProvider[P]` and `Readable` to `libraryReadableFor` — do not hand-roll; keep IDs in sync with `libraryKinds` |
+| `AppReadable` | `true` for built-in list kinds (apps are data readers). Document full-text and admin routes stay out of app scope. User-defined kinds are never app-readable by default. |
+| `CanonicalAllowed` | `true` when services can be the home copy for this kind |
+| `AllowedLevels` | Type-scoped redaction levels this kind can enforce (`AccessFreeBusy`, `AccessSummary`, `AccessCity`, `AccessPrecise`, `AccessMetadata`). Leave empty for none/read/write/read-write only. |
+| `DefaultNone` | `true` when the type stays hidden until a data grant names it (places pattern) |
+| `kindRuntime` row | Wire `HasProviders` to `hasProvider[P]` and `Readable` to `libraryReadableFor` — do not hand-roll; keep IDs in sync with `types.BuiltinLibraryKinds` |
 
 `LibraryKind.Instructions` automatically adds truncated-flag wording and the
 canonical-source hint. `libraryInstructionsFor` appends the multi-source
@@ -340,7 +356,8 @@ Every source that can be a **home** or a **tracked copy** should support:
 
 Checklist when adding a type that participates:
 
-1. Add the kind ID to `canonicalKindIDs` in `canonical.go` (config validation).
+1. Set `CanonicalAllowed: true` on the registry entry (config validation
+   derives `canonical_for` from it).
 2. Implement `stampWidgetCanonical` next to the other stamps.
 3. Implement `stampWidgetCopies` in `copy_ledger_stamp.go` using
    `s.copyInfoFor(kindID, service, id)` — missing rows stay nil (fail-open).
@@ -442,14 +459,34 @@ agents more upstream shapes.
 
 ---
 
+## What derives from the registry (issue #183)
+
+Adding one `BuiltinLibraryKinds` entry updates all of these automatically:
+
+| Derived | Source field(s) |
+|---------|-----------------|
+| UDT id reservation (`IsReservedUserDefinedID`) | kind `ID` |
+| App-token list paths (`appPathAllowed`) | `AppReadable` + `Path` (+ `appExtraPaths` for freebusy) |
+| `canonical_for` validation | `CanonicalAllowed` + `ID` |
+| Access-level allowlists (`ValidatePermissions`) | `AllowedLevels` |
+| Opt-in / default-none policy | `DefaultNone` |
+| Permissions overview library set | kind `ID` |
+
+A user-defined pack named after any built-in id is rejected at `Normalize`
+and again at route merge (`mergeUDTRoutes` refuses to shadow a built-in).
+
+App tokens may read built-in library lists (including `documents`) but not
+document full-text subpaths and not user-defined kinds (issue #183 / #131).
+
 ## Checklist (copy into the PR)
 
 **Spine**
 
 - [ ] Neutral `Widget` / `WidgetSource` / `WidgetList` in `internal/types/models.go` (sources[], Match, Extra)
 - [ ] `WidgetProvider` in `internal/types/providers.go` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
-- [ ] `libraryKinds` data entry **and** `kindRuntime` predicates (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages)
+- [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone`) **and** `kindRuntime` predicates
 - [ ] Route in `libraryRouteHandlers()`
+- [ ] `DataTypeForPath` rules use the same permission key (reserved automatically via the registry)
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
 - [ ] Identity key + `MergeWidgets` (durable ID first; record `Match`)
 - [ ] Connector implements `WidgetProvider` + `Capabilities()` data type
@@ -458,7 +495,7 @@ agents more upstream shapes.
 
 **Locations (when applicable)**
 
-- [ ] `canonicalKindIDs` includes the kind
+- [ ] `CanonicalAllowed: true` on the registry entry
 - [ ] `stamp*Canonical` + `markCanonical` wired
 - [ ] `stamp*Copies` + `stampCopies` wired (fail-open on missing ledger)
 - [ ] README copy fidelity (full vs optimistic) if the type can be mirrored

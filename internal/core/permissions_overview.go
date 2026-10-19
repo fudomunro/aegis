@@ -223,10 +223,10 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 // surfaces (player, search) do not invent service rows under a type.
 func serviceProvidedTypes(conn any) []string {
 	// Library kinds Aegis merges across services (permission keys).
-	libraryTypes := map[string]bool{
-		"playlists": true, "tracks": true, "albums": true, "artists": true,
-		"contacts": true, "photos": true, "events": true, "messages": true,
-		"transactions": true, "places": true, "documents": true,
+	// Derived from the registry (issue #183).
+	libraryTypes := map[string]bool{}
+	for _, id := range types.BuiltinKindIDs() {
+		libraryTypes[id] = true
 	}
 	seen := map[string]bool{}
 	var out []string

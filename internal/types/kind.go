@@ -31,6 +31,25 @@ type LibraryKind struct {
 	EmptyMsg string
 	DenyMsg  string
 	FailMsg  string
+
+	// AppReadable reports whether a third-party app token may GET this
+	// kind's list path (issue #131). Subpaths (full text, review) stay out
+	// of the app scope. User-defined kinds are never app-readable unless a
+	// future schema field opts in.
+	AppReadable bool
+
+	// CanonicalAllowed reports whether this kind may appear in a service's
+	// canonical_for list (issue #16).
+	CanonicalAllowed bool
+
+	// AllowedLevels lists optional access levels this type honors between
+	// none and full (freebusy, summary, city, precise, metadata). Empty
+	// means only none/read/write/read-write apply (issue #183).
+	AllowedLevels []string
+
+	// DefaultNone keeps the type hidden unless a permissions map / data
+	// grant names it explicitly (places pattern, issue #142).
+	DefaultNone bool
 }
 
 // Mentions reports whether the user message looks like a question about this
