@@ -471,12 +471,12 @@
 
       <div id="agent-data-access-help" class="help-box">
         <h3>Data access by type</h3>
-        <p>Each <strong>data type</strong> lists the accessors that apply to it (issue #160): the <strong>agent</strong> level you edit here, plus any third-party apps or Aegis sync pipelines that already reach that type (read-only). The map on Home shows what each accessor has actually accessed. Agent policy is type-owned (issue #148): set a type default below — it applies to every connected service. Use each service card’s form only to <em>tighten</em> further (a per-service override can never grant more than the type default). Available = read · Free/busy only = calendar availability without titles/attendees · Totals only = category/month sums · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>permissions.json</code> overlay (under the data directory).</p>
+        <p>Each <strong>data type</strong> lists the accessors that apply to it (issue #160): the <strong>agent</strong> level you edit here, plus any third-party apps or Aegis sync pipelines that already reach that type (read-only). The map on Home shows what each accessor has actually accessed. Agent policy is type-owned (issue #148): set a type default below — it applies to every connected service. Use each service card’s form only to <em>tighten</em> further (a per-service override can never grant more than the type default). Available = read · Free/busy only = calendar availability without titles/attendees · Totals only = category/month sums · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>data_grants.json</code> overlay (under the data directory).</p>
       </div>
 
       <div class="help-box" id="type-policy-panel">
         <div class="card-header" style="margin:0">
-          <h3 style="margin:0">Data type policies</h3>
+          <h3 style="margin:0">Data grants</h3>
           <div class="grow"></div>
           <button class="btn" id="accessor-matrix-reload" type="button">Refresh</button>
           <button class="btn btn-primary" id="type-policy-save" type="button">Save type policies</button>
@@ -2257,7 +2257,7 @@ job.read</pre>
     if (!root) return;
     try {
       const [policyData, overview] = await Promise.all([
-        api("/v1/admin/type-policies"),
+        api("/v1/admin/data-grants"),
         api("/v1/admin/permissions"),
       ]);
       const types = policyData.types || {};
@@ -2332,7 +2332,7 @@ job.read</pre>
       types[key].providers[pid] = level;
     });
     try {
-      await api("/v1/admin/type-policies", {
+      await api("/v1/admin/data-grants", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ types: types }),

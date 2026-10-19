@@ -322,16 +322,23 @@ type adminPermissionsRequest struct {
 	Permissions types.Permissions `json:"permissions"`
 }
 
-// adminTypePoliciesRequest is the body for PUT type policies.
-type adminTypePoliciesRequest struct {
-	// Types maps data-type / permission keys to TypePolicy (issue #148).
+// adminDataGrantsRequest is the body for PUT data grants (type policies).
+type adminDataGrantsRequest struct {
+	// DataGrants maps data-type keys to DataGrant (issue #174).
+	DataGrants map[string]types.DataGrant `json:"data_grants"`
+	// Types is the v2 request key (loaded only).
 	Types map[string]types.TypePolicy `json:"types"`
 }
 
-// HandleAdminTypePolicies reads or writes the type-owned agent policy map.
+// adminTypePoliciesRequest is a deprecated alias for adminDataGrantsRequest.
+type adminTypePoliciesRequest = adminDataGrantsRequest
+
+// HandleAdminTypePolicies reads or writes the agent data-grant map.
 //
-//	GET /v1/admin/type-policies
-//	PUT /v1/admin/type-policies  {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+//	GET /v1/admin/data-grants   (alias: /v1/admin/type-policies)
+//	PUT /v1/admin/data-grants   {"data_grants":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+//
+// The v2 body key "types" is still accepted.
 //
 // Type policy is primary: default plus optional per-provider overrides that
 // can only tighten. Service permission maps remain migration overrides.
@@ -344,8 +351,9 @@ func (s *Server) HandleAdminTypePolicies(w http.ResponseWriter, r *http.Request)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"version": permissionsFileVersion,
-			"types":   policies,
+			"version":     dataGrantsFileVersion,
+			"data_grants": policies,
+			"types":       policies, // v2 compat
 		})
 	case http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
@@ -359,9 +367,12 @@ func (s *Server) HandleAdminTypePolicies(w http.ResponseWriter, r *http.Request)
 				return
 			}
 		}
-		policies := req.Types
+		policies := req.DataGrants
 		if policies == nil {
-			policies = types.TypePolicies{}
+			policies = req.Types
+		}
+		if policies == nil {
+			policies = types.DataGrants{}
 		}
 		if err := s.config.SetTypePolicies(policies); err != nil {
 			withPeerLog(slog.With("handler", "admin_type_policies"), r).
@@ -378,9 +389,10 @@ func (s *Server) HandleAdminTypePolicies(w http.ResponseWriter, r *http.Request)
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"version": permissionsFileVersion,
-			"types":   saved,
-			"status":  "saved",
+			"version":     dataGrantsFileVersion,
+			"data_grants": saved,
+			"types":       saved, // v2 compat
+			"status":      "saved",
 		})
 	default:
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")

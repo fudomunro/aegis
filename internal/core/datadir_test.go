@@ -107,7 +107,8 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	}
 	checks := map[string]string{
 		"Config":      filepath.Join(dir, "aegis.json"),
-		"Permissions": filepath.Join(dir, "permissions.json"),
+		"DataGrants":  filepath.Join(dir, "data_grants.json"),
+		"Permissions": filepath.Join(dir, "data_grants.json"),
 		"Tokens":      filepath.Join(dir, "tokens.json"),
 		"Links":       filepath.Join(dir, "entity_links.json"),
 		"CopyLedger":  filepath.Join(dir, "copy_ledger.db"),
@@ -119,8 +120,11 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	if paths.Config != checks["Config"] {
 		t.Fatalf("Config = %q, want %q", paths.Config, checks["Config"])
 	}
-	if paths.Permissions != checks["Permissions"] {
-		t.Fatalf("Permissions = %q, want %q", paths.Permissions, checks["Permissions"])
+	if paths.DataGrants != checks["DataGrants"] {
+		t.Fatalf("DataGrants = %q, want %q", paths.DataGrants, checks["DataGrants"])
+	}
+	if paths.Permissions != paths.DataGrants {
+		t.Fatalf("Permissions alias = %q, want %q", paths.Permissions, paths.DataGrants)
 	}
 	if paths.Tokens != checks["Tokens"] {
 		t.Fatalf("Tokens = %q, want %q", paths.Tokens, checks["Tokens"])

@@ -51,17 +51,17 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 |--------|-------|-------|
 | **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **data type** at an **access level** | Hero term for product English (README “Data grants”, admin UI, injection) |
 | **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
-| **Type policy** | Where **agent** data grants live (`TypePolicy`, `type_policies`) — default level + optional per-provider tighten | Config/code name for the agent layer |
+| **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | Code alias: `TypePolicy` / `TypePolicies` |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
-| **Service permissions map** | Legacy/service overlay that can only **tighten** a data grant | Prefer not to say just “permissions” when you mean the type policy |
+| **Service grant limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | Legacy key: `permissions` |
 | **Effective access** | Resolved level after type policy + service tighten | |
 | **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from type policy |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
 One-line shape (also in README “Data grants”): **data grants** are the product
-idea; type policy owns agent data grants (default + per-provider floor);
-service permissions maps only tighten; app data grants scope third-party
+idea; `data_grants` owns agent data grants (default + per-provider floor);
+service `grant_limits` only tighten; app data grants scope third-party
 tokens; accessors are the principal axis.
 
 ### Tailscale alignment
@@ -109,7 +109,8 @@ policy or the third-party one-time **grant code** (`aeg_grant_…`).
 
 ## Deliberate non-renames
 
-JSON field names, Go identifiers, and URL segments stay stable even when the
-English above differs (`canonical_for`, `sources[].canonical`, `perm_type`,
-`IsAgentContentPath`, `type_policies`, `LibraryKind`). Product rules in
-`AGENTS.md` are unchanged by this glossary.
+JSON prefers `data_grants` / `grant_limits` / `data_grants.json`. Legacy keys
+(`type_policies`, `permissions`, `permissions.json`, `/v1/admin/type-policies`)
+still load. Other identifiers stay stable (`canonical_for`,
+`sources[].canonical`, `perm_type`, `IsAgentContentPath`, `LibraryKind`).
+Product rules in `AGENTS.md` are unchanged by this glossary.
