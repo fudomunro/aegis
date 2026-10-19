@@ -827,6 +827,8 @@ func librarySourceDisplayName(s *Server, id string) string {
 		return connectors.OwnTracksServiceName
 	case connectors.PaperlessServiceID:
 		return connectors.PaperlessServiceName
+	case connectors.GoogleDriveServiceID:
+		return connectors.GoogleDriveServiceName
 	}
 	if svc := s.config.GetService(id); svc != nil && svc.Name != "" {
 		return svc.Name

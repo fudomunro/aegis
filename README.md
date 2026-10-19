@@ -2119,7 +2119,7 @@ metadata only.
 `GET /v1/library/documents` returns life-admin paperwork — receipts,
 warranties, leases, insurance policies, tax letters, medical letters — as
 neutral **Document** metadata. Files stay on the source service (Paperless-ngx
-first; Google Drive / Nextcloud are candidate providers). Aegis never stores
+and Google Docs/Drive; Nextcloud remains a candidate). Aegis never stores
 document bytes and never runs OCR.
 
 ```json
@@ -2182,6 +2182,33 @@ API base (`…/api`) and a token:
 Use `documents: "metadata"` in a data grant (or `grant_limits`) to let agents
 browse titles/tags without excerpts or full text.
 
+#### Google Docs / Google Drive
+
+Google Docs are documents too. The `google-drive` connector lists native
+Google Docs (`application/vnd.google-apps.document`) via Drive `files.list`
+and pulls content with `files.export` as **HTML or plain text** — markdown
+conversion is deferred. Files stay on Drive (non-Aegis canonical).
+
+```json
+{
+  "id": "google-drive",
+  "name": "Google Drive",
+  "endpoint": "https://www.googleapis.com/drive/v3",
+  "connection": "google",
+  "oauth_scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+  "grant_limits": {"documents": "read"}
+}
+```
+
+Shares the Google connection with Contacts/Calendar/Gmail/Photos.
+`drive.readonly` covers both listing and export (a narrower content scope can
+replace it later). Watch OAuth app verification limits, same class as Photos.
+
+| What | Format |
+|------|--------|
+| `GET /v1/library/documents/{service}/{id}/text` | `text/plain` export |
+| `GET /v1/services/google-drive/files/{id}/export?mimeType=text/html` | HTML (structure-preserving intermediate for a later markdown pass) |
+
 ### Content & ingest transport (`/v1/services/{id}/...`)
 
 ```
@@ -2197,6 +2224,7 @@ After issue #119 this is **not** a general service API. Library (`/v1/library/{k
 | `/messages/{id}`, `/threads/{id}` | Full message bodies (library lists carry snippets) |
 | `/playlists/{id}`, `/playlists/{id}/items` | Playlist items (library entries carry `track_count` only) |
 | `/documents/{id}/download`, `/documents/{id}/preview` | Document file bytes (library lists carry metadata + short excerpt) |
+| `/files/{id}/export` | Google Docs HTML/plain-text export (library text endpoint is plain text) |
 | `/picker/*` | Google Photos user pick → library |
 | `/import`, `/import/status` | Local export ingest (Signal, Quicken) |
 

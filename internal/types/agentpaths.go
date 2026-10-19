@@ -47,6 +47,13 @@ func IsAgentContentPath(canonical string) bool {
 			return true
 		}
 		return false
+	// Google Docs content export (HTML or plain text; markdown deferred).
+	// Bare /files and /files/{id} stay library-only (issue #143).
+	case strings.HasSuffix(canonical, "/export"):
+		if strings.HasPrefix(canonical, "/files/") || strings.HasPrefix(canonical, "/drive/files/") {
+			return true
+		}
+		return false
 	default:
 		return false
 	}

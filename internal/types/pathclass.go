@@ -102,6 +102,9 @@ var dataTypePathRules = []dataTypePathRule{
 	{Prefix: "/api/correspondents", DataType: "documents"},
 	{Prefix: "/api/document_types", DataType: "documents"},
 	{Prefix: "/api/tags", DataType: "documents"},
+	// Google Drive / Google Docs (issue #143): Drive files.list + files.export.
+	{Prefix: "/files", DataType: "documents"},
+	{Prefix: "/drive/files", DataType: "documents"},
 	{Exact: "/search", DataType: "search"},
 	{Prefix: "/channels", DataType: "channels"},
 	{Prefix: "/me/library", DataType: "library"},
