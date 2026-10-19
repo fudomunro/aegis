@@ -40,24 +40,45 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
 | **User-defined type** | Schema pack under `user-types/` | Avoid “type pack”, “schema pack” outside the design spike |
-| **Access level** | `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | Token values in policy |
+| **Access level** | See **Data grants** | Strength of a data grant |
 | **Free/busy** | Busy intervals only (no titles/attendees) | Also `summary` (transactions), `city`/`precise` (places) |
 
 ---
 
-## Permissions and access
+## Data grants (permissions and access)
 
 | Prefer | Means | Notes |
 |--------|-------|-------|
-| **Type policy** | Primary owner of agent access per data type (`TypePolicy`, `type_policies`) | Default level + optional per-provider tighten |
-| **Service permissions map** | Legacy/service overlay that can only **tighten** the type default | Prefer not to say just “permissions” when you mean the type policy |
+| **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **data type** at an **access level** | Hero term for product English (README “Data grants”, admin UI, injection) |
+| **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
+| **Type policy** | Where **agent** data grants live (`TypePolicy`, `type_policies`) — default level + optional per-provider tighten | Config/code name for the agent layer |
+| **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
+| **Service permissions map** | Legacy/service overlay that can only **tighten** a data grant | Prefer not to say just “permissions” when you mean the type policy |
 | **Effective access** | Resolved level after type policy + service tighten | |
-| **Accessor** | Principal-level access per data type (issue #160) | Distinct axis from type policy |
-| **Auth mode** | `auto` / `tailnet` / `api-key` | |
+| **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from type policy |
+| **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
+| **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
-One-line shape (also in README “Data permissions”): type policy owns the
-default and per-provider floor; service permissions maps only tighten;
-accessors are the principal axis.
+One-line shape (also in README “Data grants”): **data grants** are the product
+idea; type policy owns agent data grants (default + per-provider floor);
+service permissions maps only tighten; app data grants scope third-party
+tokens; accessors are the principal axis.
+
+### Tailscale alignment
+
+Users already know Tailscale **grants** (`src` → `dst` + capabilities). Map them
+like this:
+
+| Tailscale | Aegis |
+|-----------|-------|
+| Grant (policy rule) | **Data grant** (product); type-policy / app scope in config |
+| Network capability (`ip`) | Tailnet grant/ACL for reaching Aegis |
+| Application capability (`app`) | **Access level** on a **data type** (`freebusy`, `read`, …) |
+| `ro` / `rw` (e.g. Taildrive) | `read` / `read-write` |
+| Deny-by-default | Unset type policy; places default `none` |
+
+Say “data grant” for what the user allows; reserve bare **grant** for Tailscale
+policy or the third-party one-time **grant code** (`aeg_grant_…`).
 
 ---
 

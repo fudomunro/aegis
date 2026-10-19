@@ -1,6 +1,6 @@
 # Aegis
 
-A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), serves the user's data from a type-centric library, and enforces permissions with OAuth-based authentication.
+A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), serves the user's data from a type-centric library, and enforces **data grants** with OAuth-based authentication.
 
 > Looking for the pitch rather than the manual? The marketing site lives in
 > [`site/`](site/) (issue #129).
@@ -99,8 +99,8 @@ Aegis starts with these endpoints:
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 
 Vocabulary for this manual (service vs connector vs connection, data type vs
-library kind, type policy, canonical home, content transport, LLM agent vs
-coding agent) is defined in [`docs/glossary.md`](docs/glossary.md).
+library kind, **data grant**, type policy, canonical home, content transport,
+LLM agent vs coding agent) is defined in [`docs/glossary.md`](docs/glossary.md).
 
 ## User-defined types (issue #15)
 
@@ -119,7 +119,7 @@ user-types/
 
 Rules that keep packs safe:
 
-- **Opt-in.** A pack cannot grant agent access. Enable the kind in type policy
+- **Opt-in.** A pack cannot create a data grant. Enable the kind in type policy
   (`PUT /v1/admin/type-policies` or the admin UI) before agents can read it.
 - **No hijacking.** `id` / `perm_type` / `path` cannot collide with built-in
   data types or routes (`path` is always `/v1/library/{id}`).
@@ -233,7 +233,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
-| `permissions` | Optional map of data type → access level for agents (migration override; can only tighten type policy — see [Data permissions](#data-permissions)) |
+| `permissions` | Optional map of data type → access level for agents (migration override; can only tighten type policy — see [Data grants](#data-grants)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis-issue-16)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
@@ -305,25 +305,32 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 - `https://your-aegis/v1/auth/google-photos/callback`
 - `https://your-aegis/v1/auth/google/callback`
 
-### Data permissions
+### Data grants
 
-Prefer the glossary terms here: **type policy** owns agent access per **data
-type**; a service **permissions map** can only tighten that default; **access
-levels** are the `none`/`freebusy`/`summary`/`city`/`precise`/`read`/`write`/
-`read-write` tokens. See [`docs/glossary.md`](docs/glossary.md).
+What you do to let an LLM agent or app use your data is a **data grant**: an
+allow rule on a **data type** at an **access level** (`none`, `freebusy`,
+`summary`, `city`, `precise`, `read`, `write`, `read-write`). This is the
+application-layer side of Tailscale-style access — you already use a tailnet
+grant so callers can *reach* Aegis; data grants say what they may *use*.
 
-Permissions live with **data types**, not service providers (issue #148). The
+Prefer the glossary terms here ([`docs/glossary.md`](docs/glossary.md)):
+**data grant** is the product idea; **type policy** is where **agent** data
+grants live; a service **permissions map** can only tighten that default;
+**app data grants** scope third-party tokens. JSON/config keys stay
+`type_policies`, `permissions`, `permissions.json`.
+
+Data grants live with **data types**, not service providers (issue #148). The
 primary model is a per-type policy: a type-level default plus optional
 per-provider overrides that can only **tighten** that default. Service
 `permissions` maps remain as migration overrides and can only further
-restrict what the type policy allows.
+restrict what a data grant allows.
 
-**Accessors (issue #160).** Data is not only reached by agents. Aegis also
+**Accessors (issue #160).** Data is not only reached by LLM agents. Aegis also
 runs sync pipelines (mail archive, copy ledger, timeline/quicken import) and
 third-party apps hold scoped tokens. The permissions editor is **type-centric**:
-each data type shows the agent level (editable) plus only the other accessors
-that apply to that type (read-only). `GET /v1/admin/permissions` returns that
-same model. The map on Home answers the other half of confidence:
+each data type shows the agent data grant (editable) plus only the other
+accessors that apply to that type (read-only). `GET /v1/admin/permissions`
+returns that same model. The map on Home answers the other half of confidence:
 what each has *actually* accessed. Multi-user principals (issue #149) will
 appear as additional accessor rows.
 
@@ -778,7 +785,7 @@ Authorization: Bearer aeg_app_…
 | `GET/PATCH/DELETE /v1/admin/apps/{id}` | API key / tailnet | Inspect, update scopes/name/disable, revoke |
 | `POST /v1/admin/apps/{id}/rotate` | API key / tailnet | New token; old one dies |
 
-**Scopes** use the same access levels as [Data permissions](#data-permissions)
+**Scopes** use the same access levels as [Data grants](#data-grants)
 (`none`, `freebusy`, `read`, `write`, `read-write`). Unlisted types fall back to
 `default`, which is forced to `none` when omitted (fail closed). `freebusy` is
 events-only.
@@ -2049,7 +2056,7 @@ not a firehose of GPS points. Query filters: `after`, `before`, `locality`,
 }
 ```
 
-**Permission ladder (default `none` — opt-in).** See [Data permissions](#data-permissions).
+**Data-grant ladder (default `none` — opt-in).** See [Data grants](#data-grants).
 Pre-request injection never advertises `places` until a service permission
 names `city`, `read`, or `precise`. Coordinates require `precise`.
 

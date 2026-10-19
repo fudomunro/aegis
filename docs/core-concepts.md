@@ -50,14 +50,15 @@ the most weight in product language.
 
 | Concept | Surface weight |
 |---------|----------------|
-| **TypePolicy** (type-owned agent access) | product + code |
+| **Data grant** (user allows agent/app to use a data type at an access level) | product |
+| **TypePolicy** (where agent data grants live) | product + code |
 | Permissions map (service-level tighten-only) | product + code |
 | **EffectiveAccess** | code |
 | Access levels (`none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write`) | product + code |
 | Accessor / AccessorKind (issue #160) | code + admin |
 | PermissionsOverview / TypeAccess | admin |
 | PeerIdentity / auth modes (`auto` / `tailnet` / `api-key`) | product + code |
-| Third-party app tokens (issue #131) | product + code |
+| Third-party app tokens + app data grants (issue #131) | product + code |
 | Audit log / access events | product + ops |
 
 ### Runtime and connectors
@@ -128,6 +129,10 @@ edits the repo. Same word, two audiences (see audience map §F).
 Type policy is primary; service maps only tighten; Accessor is a third principal
 axis. The words “permission”, “access”, and “policy” are used interchangeably
 in English.
+
+**Resolution (glossary):** the product idea is a **data grant** (user allows an
+LLM agent or app to use a data type at an access level). Type policy stores
+agent data grants; app scopes are **app data grants**.
 
 ### 2.4 Canonical vocabulary
 
@@ -215,14 +220,15 @@ After the overlap call-outs above, the stable concepts.
 
 | Concept | Definition | Key files |
 |---------|------------|-----------|
-| **TypePolicy** | Type-owned agent-access policy: `Default` level + optional per-provider tighten. Primary owner of permissions. | `internal/types/policy.go:340` |
+| **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, README “Data grants”, `SECURITY.md` |
+| **TypePolicy** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/types/policy.go:340` |
 | **Permissions map** | Service-scoped `map[dataType]level` that can only tighten the type default (migration override). | `policy.go:65`, `permissions_overlay.go` |
 | **EffectiveAccess** | Resolved level for (type, provider) combining type policy + service tighten. | `policy.go:484`, `config.go:437` |
 | **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `policy.go:11-36` |
 | **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from type policy. | `internal/types/accessors.go:31` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |
-| **App token** | Scoped third-party credential; never a provider OAuth token. | `apps.go`, `apps_grant.go` |
+| **App token** | Scoped third-party credential; never a provider OAuth token. Carries **app data grants** (`scopes`). | `apps.go`, `apps_grant.go` |
 | **Audit log** | Durable access log (`agent`, `surface`, `decision`, …) with retention cap. | `audit.go`, README “Access audit log” |
 
 ### Runtime and connectors
