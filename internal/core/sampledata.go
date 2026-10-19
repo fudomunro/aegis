@@ -42,6 +42,7 @@ type SampleLibrarySet struct {
 	Messages     []types.Message       `json:"messages"`
 	Transactions []types.Transaction   `json:"transactions"`
 	Places       []types.PlaceVisit    `json:"places"`
+	Documents    []types.Document      `json:"documents"`
 }
 
 // SampleMailCount is the default small-set size used by CI-shaped runs and the
@@ -850,6 +851,163 @@ func GenerateSampleLibrary() SampleLibrarySet {
 		Messages:     messages,
 		Transactions: transactions,
 		Places:       places,
+		Documents:    sampleDocuments(),
+	}
+}
+
+// sampleDocuments builds deterministic document fixtures (issue #143) with
+// a shared-checksum merge pair, a title+created name pair, and a near-miss
+// that must not merge.
+func sampleDocuments() []types.Document {
+	return []types.Document{
+		{
+			Title:         "Apartment lease 2024",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2024-01-15T12:00:00Z",
+			ModifiedAt:    "2024-01-16T09:00:00Z",
+			Correspondent: "Harbour Property Management",
+			DocumentType:  "lease",
+			Tags:          []string{"housing", "legal"},
+			Excerpt:       "This lease agreement is entered into by Harbour Property Management and the tenant for the unit located at 12 Example Street…",
+			EntityID:      "sha256:lease2024shared",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless",
+					ServiceName: "Paperless-ngx",
+					ID:          "doc-lease-a",
+					URL:         "https://paperless.example.com/documents/doc-lease-a/details",
+					Canonical:   true,
+					BlobURL:     "https://paperless.example.com/api/documents/doc-lease-a/download",
+					Extra:       map[string]any{"checksum": "sha256:lease2024shared"},
+				},
+			},
+		},
+		{
+			// Shared checksum → must merge with the lease above (match=checksum).
+			Title:         "Lease agreement (scan)",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2024-01-15T12:00:00Z",
+			ModifiedAt:    "2024-02-01T10:00:00Z",
+			Correspondent: "Harbour Property Management",
+			DocumentType:  "lease",
+			Tags:          []string{"housing"},
+			Excerpt:       "This lease agreement is entered into…",
+			EntityID:      "sha256:lease2024shared",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless-archive",
+					ServiceName: "Paperless archive",
+					ID:          "doc-lease-b",
+					Extra:       map[string]any{"checksum": "sha256:lease2024shared"},
+				},
+			},
+		},
+		{
+			Title:         "Laptop warranty",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2023-06-01T00:00:00Z",
+			Correspondent: "Example Electronics",
+			DocumentType:  "warranty",
+			Tags:          []string{"electronics"},
+			Excerpt:       "Limited two-year warranty covering parts and labor for the original purchaser…",
+			EntityID:      "warranty-2023-laptop",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless",
+					ServiceName: "Paperless-ngx",
+					ID:          "doc-warranty-1",
+					Canonical:   true,
+					Extra:       map[string]any{"archive_serial": "warranty-2023-laptop"},
+				},
+			},
+		},
+		{
+			// Title+created pair: no durable ID on either side → match=title_created.
+			Title:         "Renters insurance policy",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2024-03-01T00:00:00Z",
+			Correspondent: "Example Mutual Insurance",
+			DocumentType:  "insurance",
+			Tags:          []string{"insurance", "housing"},
+			Excerpt:       "Policy period March 1, 2024 through March 1, 2025. Coverage includes personal property…",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless",
+					ServiceName: "Paperless-ngx",
+					ID:          "doc-ins-1",
+					Canonical:   true,
+				},
+			},
+		},
+		{
+			Title:         "Renters insurance policy",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2024-03-01T00:00:00Z",
+			Correspondent: "Example Mutual Insurance",
+			DocumentType:  "insurance",
+			Tags:          []string{"insurance"},
+			Excerpt:       "Policy period March 1, 2024 through March 1, 2025…",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "google-drive",
+					ServiceName: "Google Drive",
+					ID:          "gdoc-ins-1",
+				},
+			},
+		},
+		{
+			// Near-miss: same title as the warranty, different date — must not merge.
+			Title:         "Laptop warranty",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2021-06-01T00:00:00Z",
+			Correspondent: "Example Electronics",
+			DocumentType:  "warranty",
+			Tags:          []string{"electronics", "expired"},
+			Excerpt:       "Limited one-year warranty for the previous laptop model…",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless",
+					ServiceName: "Paperless-ngx",
+					ID:          "doc-warranty-old",
+					Canonical:   true,
+				},
+			},
+		},
+		{
+			Title:         "Tax letter 2023",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2024-04-12T00:00:00Z",
+			Correspondent: "Example Revenue Agency",
+			DocumentType:  "tax",
+			Tags:          []string{"tax", "2023"},
+			Excerpt:       "Your 2023 assessment has been finalized. Amount due: $0.00…",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless",
+					ServiceName: "Paperless-ngx",
+					ID:          "doc-tax-2023",
+					Canonical:   true,
+				},
+			},
+		},
+		{
+			// Unicode / RTL title edge case.
+			Title:         "חשבון חשמל — חשבון חשמל רבעוני",
+			MimeType:      "application/pdf",
+			CreatedAt:     "2024-05-02T00:00:00Z",
+			Correspondent: "Example Electric",
+			DocumentType:  "bill",
+			Tags:          []string{"utilities"},
+			Excerpt:       "Quarterly electricity statement…",
+			Sources: []types.DocumentSource{
+				{
+					Service:     "paperless",
+					ServiceName: "Paperless-ngx",
+					ID:          "doc-util-1",
+					Canonical:   true,
+				},
+			},
+		},
 	}
 }
 

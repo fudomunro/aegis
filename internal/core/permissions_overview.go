@@ -226,7 +226,7 @@ func serviceProvidedTypes(conn any) []string {
 	libraryTypes := map[string]bool{
 		"playlists": true, "tracks": true, "albums": true, "artists": true,
 		"contacts": true, "photos": true, "events": true, "messages": true,
-		"transactions": true, "places": true,
+		"transactions": true, "places": true, "documents": true,
 	}
 	seen := map[string]bool{}
 	var out []string
@@ -268,6 +268,9 @@ func serviceProvidedTypes(conn any) []string {
 	}
 	if _, ok := conn.(types.PlaceVisitProvider); ok {
 		add("places")
+	}
+	if _, ok := conn.(types.DocumentProvider); ok {
+		add("documents")
 	}
 
 	// Advertised capability names, limited to library kinds (issue #160).

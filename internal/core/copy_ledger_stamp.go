@@ -59,3 +59,12 @@ func (s *Server) stampEventCopies(items []types.CalendarEvent) {
 		}
 	}
 }
+
+func (s *Server) stampDocumentCopies(items []types.Document) {
+	for i := range items {
+		for j := range items[i].Sources {
+			src := &items[i].Sources[j]
+			src.Copy = s.copyInfoFor("documents", src.Service, src.ID)
+		}
+	}
+}

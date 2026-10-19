@@ -37,6 +37,16 @@ func IsAgentContentPath(canonical string) bool {
 	// Playlist items (library entries carry track_count only).
 	case detailSegment(canonical, "/playlists/"):
 		return true
+	// Document file bytes / previews — library lists carry metadata + excerpt
+	// only; full text is gated on /v1/library/documents/{service}/{id}/text.
+	// Bare /documents/{id} is not content transport (it includes OCR text).
+	case strings.HasSuffix(canonical, "/download"),
+		strings.HasSuffix(canonical, "/preview"),
+		strings.HasSuffix(canonical, "/thumb"):
+		if strings.HasPrefix(canonical, "/documents/") || strings.HasPrefix(canonical, "/api/documents/") {
+			return true
+		}
+		return false
 	default:
 		return false
 	}

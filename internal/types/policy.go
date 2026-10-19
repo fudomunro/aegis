@@ -28,6 +28,10 @@ const (
 	// addresses, and coordinates (issue #142). Places-only. The maximum
 	// places read level; there is no agent write surface for places.
 	AccessPrecise = "precise"
+	// AccessMetadata allows safe methods on documents, but responses are
+	// reduced to titles, dates, tags, correspondents, and sources — no
+	// excerpt or full text (issue #143). Documents-only.
+	AccessMetadata = "metadata"
 	// AccessRead allows safe methods (GET, HEAD).
 	AccessRead = "read"
 	// AccessWrite allows mutating methods (POST, PUT, PATCH, DELETE).
@@ -47,6 +51,9 @@ var cityOnlyTypes = map[string]bool{"places": true}
 
 // preciseOnlyTypes lists data types that honor AccessPrecise.
 var preciseOnlyTypes = map[string]bool{"places": true}
+
+// metadataOnlyTypes lists data types that honor AccessMetadata redaction.
+var metadataOnlyTypes = map[string]bool{"documents": true}
 
 // optInDefaultNone lists data types that stay hidden unless the permissions
 // map names them explicitly.
@@ -101,7 +108,7 @@ func (p Permissions) Strictest() string {
 	if len(p) == 0 {
 		return DefaultAccessType
 	}
-	hasNone, hasFreeBusy, hasSummary, hasCity, hasPrecise, hasRead, hasWrite, hasFull := false, false, false, false, false, false, false, false
+	hasNone, hasFreeBusy, hasSummary, hasCity, hasPrecise, hasMetadata, hasRead, hasWrite, hasFull := false, false, false, false, false, false, false, false, false
 	for _, v := range p {
 		switch NormalizeAccess(v) {
 		case AccessNone:
@@ -114,6 +121,8 @@ func (p Permissions) Strictest() string {
 			hasCity = true
 		case AccessPrecise:
 			hasPrecise = true
+		case AccessMetadata:
+			hasMetadata = true
 		case AccessRead:
 			hasRead = true
 		case AccessWrite:
@@ -125,9 +134,9 @@ func (p Permissions) Strictest() string {
 	if hasNone || (hasRead && hasWrite) {
 		return AccessNone
 	}
-	// freebusy/summary/city/precise redactions are type-specific. When one is
-	// the tightest level, unknown paths cannot be redacted — deny them rather
-	// than leak detail (issue #94, #128, #141, #142).
+	// freebusy/summary/city/precise/metadata redactions are type-specific.
+	// When one is the tightest level, unknown paths cannot be redacted — deny
+	// them rather than leak detail (issue #94, #128, #141, #142, #143).
 	if hasFreeBusy && !hasRead && !hasWrite && !hasFull {
 		return AccessNone
 	}
@@ -138,6 +147,9 @@ func (p Permissions) Strictest() string {
 		return AccessNone
 	}
 	if hasPrecise && !hasRead && !hasWrite && !hasFull {
+		return AccessNone
+	}
+	if hasMetadata && !hasRead && !hasWrite && !hasFull {
 		return AccessNone
 	}
 	if hasRead {
@@ -160,6 +172,9 @@ func (p Permissions) Strictest() string {
 	}
 	if hasPrecise {
 		return AccessPrecise
+	}
+	if hasMetadata {
+		return AccessMetadata
 	}
 	return DefaultAccessType
 }
@@ -299,6 +314,8 @@ func NormalizeAccess(level string) string {
 		return AccessCity
 	case AccessPrecise, "coordinates", "coords", "gps", "exact", "full-places":
 		return AccessPrecise
+	case AccessMetadata, "meta", "metadata-only", "titles":
+		return AccessMetadata
 	case AccessRead, "ro", "readonly", "read-only":
 		return AccessRead
 	case AccessWrite, "wo", "writeonly", "write-only", "mutate":
@@ -316,7 +333,7 @@ func AllowsMethod(level, method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
 		switch level {
-		case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessRead, AccessFull:
+		case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessFull:
 			return true
 		}
 		return false
@@ -581,7 +598,7 @@ func accessRank(level string) int {
 	switch NormalizeAccess(level) {
 	case AccessNone:
 		return 0
-	case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise:
+	case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata:
 		return 1
 	case AccessRead:
 		return 2
@@ -595,17 +612,18 @@ func accessRank(level string) int {
 }
 
 // ValidatePermissions checks that every level is a known access type.
-// freebusy is events-only, summary is transactions-only, and city/precise are
-// places-only: other types cannot honor those redactions.
+// freebusy is events-only, summary is transactions-only, city/precise are
+// places-only, and metadata is documents-only: other types cannot honor
+// those redactions.
 func ValidatePermissions(p Permissions) error {
 	for k, v := range p {
 		if k == "" {
 			return fmt.Errorf("permissions: empty data type key")
 		}
 		switch NormalizeAccess(v) {
-		case AccessNone, AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessRead, AccessWrite, AccessFull:
+		case AccessNone, AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessWrite, AccessFull:
 		default:
-			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, read, write, or read-write)", k, v)
+			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, metadata, read, write, or read-write)", k, v)
 		}
 		if NormalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !freeBusyOnlyTypes[k] {
 			return fmt.Errorf("permissions[%s]: freebusy is only supported for events", k)
@@ -630,6 +648,12 @@ func ValidatePermissions(p Permissions) error {
 		}
 		if NormalizeAccess(v) == AccessPrecise && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: precise is only supported for places")
+		}
+		if NormalizeAccess(v) == AccessMetadata && k != PermissionDefaultKey && !metadataOnlyTypes[k] {
+			return fmt.Errorf("permissions[%s]: metadata is only supported for documents", k)
+		}
+		if NormalizeAccess(v) == AccessMetadata && k == PermissionDefaultKey {
+			return fmt.Errorf("permissions[default]: metadata is only supported for documents")
 		}
 	}
 	return nil
@@ -656,6 +680,28 @@ func IsCityAccess(level string) bool {
 // (coordinates included, issue #142).
 func IsPreciseAccess(level string) bool {
 	return NormalizeAccess(level) == AccessPrecise
+}
+
+// IsMetadataAccess reports whether the level is the documents metadata-only
+// view (titles/dates/tags, no text; issue #143).
+func IsMetadataAccess(level string) bool {
+	return NormalizeAccess(level) == AccessMetadata
+}
+
+// DocumentsLevelForResponse picks the redaction to apply for a documents
+// response. Metadata strips excerpt/text; read and unrestricted write/full
+// keep the short excerpt (full text stays on the gated text endpoint).
+func DocumentsLevelForResponse(level string) string {
+	switch NormalizeAccess(level) {
+	case AccessNone:
+		return AccessNone
+	case AccessMetadata:
+		return AccessMetadata
+	case AccessRead, AccessWrite, AccessFull:
+		return AccessRead
+	default:
+		return AccessNone
+	}
 }
 
 // PlacesLevelForResponse picks the redaction to apply for a places response.
