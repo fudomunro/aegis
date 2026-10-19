@@ -235,7 +235,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 				ID:          "spotify",
 				Name:        "Spotify",
 				Action:      "inject",
-				Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead},
+				GrantLimits: types.Permissions{types.PermissionDefaultKey: types.AccessRead},
 			},
 		},
 	}
@@ -268,7 +268,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 				ID:          "spotify",
 				Name:        "Spotify",
 				Action:      "inject",
-				Permissions: types.Permissions{types.PermissionDefaultKey: types.AccessRead},
+				GrantLimits: types.Permissions{types.PermissionDefaultKey: types.AccessRead},
 			},
 		},
 	}

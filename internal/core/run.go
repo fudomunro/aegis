@@ -28,7 +28,6 @@ func Run() {
 	linkPath := flag.String("link-file", "", "path to user-confirmed entity links (default: <data-dir>/entity_links.json)")
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
 	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
-	permissionsPath := flag.String("permissions-file", "", "deprecated alias for -data-grants-file")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
@@ -56,7 +55,6 @@ func Run() {
 		Dir:            *dataDirFlag,
 		Config:         *configPath,
 		DataGrants:     *dataGrantsPath,
-		Permissions:    *permissionsPath,
 		Tokens:         *tokenPath,
 		Links:          *linkPath,
 		CopyLedger:     *copyLedgerPath,
@@ -196,7 +194,7 @@ func Run() {
 		slog.Error("failed to load config", "path", paths.Config, "error", err)
 		os.Exit(1)
 	}
-	if err := cfg.InitPermissionsStore(paths.DataGrants); err != nil {
+	if err := cfg.InitDataGrantsStore(paths.DataGrants); err != nil {
 		slog.Error("failed to load data grants overlay", "path", paths.DataGrants, "error", err)
 		os.Exit(1)
 	}
@@ -257,7 +255,7 @@ func Run() {
 			Name:        quickenServiceName,
 			Action:      "inject",
 			Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
-			Permissions: types.Permissions{"transactions": types.AccessRead},
+			GrantLimits: types.Permissions{"transactions": types.AccessRead},
 		})
 	} else {
 		slog.Info("quicken store disabled")
@@ -278,7 +276,7 @@ func Run() {
 			Name:        timelineServiceName,
 			Action:      "inject",
 			Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
-			Permissions: types.Permissions{"places": types.AccessRead},
+			GrantLimits: types.Permissions{"places": types.AccessRead},
 		})
 	} else {
 		slog.Info("timeline store disabled")
@@ -298,7 +296,7 @@ func Run() {
 			Name:        signalServiceName,
 			Action:      "inject",
 			Description: "Locally imported Signal contacts and messages (Advanced → Signal import).",
-			Permissions: types.Permissions{
+			GrantLimits: types.Permissions{
 				"contacts": types.AccessRead,
 				"messages": types.AccessRead,
 			},
@@ -517,10 +515,10 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AuthMiddleware(s.HandleAdminLibrary)(w, r)
 	case path == "permissions":
 		s.AuthMiddleware(s.HandleAdminPermissionsOverview)(w, r)
-	case path == "data-grants" || path == "type-policies":
-		s.AuthMiddleware(s.HandleAdminTypePolicies)(w, r)
-	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/permissions"):
-		s.AuthMiddleware(s.HandleAdminServicePermissions)(w, r)
+	case path == "data-grants":
+		s.AuthMiddleware(s.HandleAdminDataGrants)(w, r)
+	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/grant-limits"):
+		s.AuthMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
 	case path == "apps" || strings.HasPrefix(path, "apps/"):
 		s.AuthMiddleware(s.HandleAdminApps)(w, r)
 	case path == "immich" || strings.HasPrefix(path, "immich/"):

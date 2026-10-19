@@ -94,7 +94,7 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -127,7 +127,7 @@ func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -164,7 +164,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessRead},
+		GrantLimits: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -204,7 +204,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessRead},
+		GrantLimits: types.Permissions{"events": types.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: []types.CalendarEvent{
@@ -232,7 +232,7 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		Permissions: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}

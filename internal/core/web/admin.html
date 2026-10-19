@@ -2121,7 +2121,7 @@ job.read</pre>
 
   function renderPermEditor(svc) {
     const id = svc.id;
-    const perms = svc.permissions || {};
+    const perms = svc.grant_limits || {};
     const show = corePermTypes(svc, perms);
     const writable = new Set(svc.writable_data_types || []);
 
@@ -2174,7 +2174,7 @@ job.read</pre>
     if (summary && Array.isArray(summary.services)) {
       const svc = summary.services.find((s) => s.id === serviceId);
       if (svc) {
-        svc.permissions = next;
+        svc.grant_limits = next;
         const flow = document.querySelector('[data-service-flow="' + CSS.escape(serviceId) + '"]');
         if (flow) flow.innerHTML = serviceFlowRows(svc);
       }
@@ -2192,7 +2192,7 @@ job.read</pre>
       status.className = "perm-status";
     }
     try {
-      await api("/v1/admin/services/" + encodeURIComponent(serviceId) + "/permissions", {
+      await api("/v1/admin/services/" + encodeURIComponent(serviceId) + "/grant-limits", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ permissions: permissions || {} }),
@@ -2530,7 +2530,7 @@ job.read</pre>
     }
 
     const writable = new Set(svc.writable_data_types || []);
-    const access = permSummary(svc.permissions || {}, writable);
+    const access = permSummary(svc.grant_limits || {}, writable);
     rows.push({
       label: "Agent data",
       value: escapeHtml(access) + (action === "block" ? ' <span class="flow-note">· blocked anyway</span>' : ""),
@@ -3672,7 +3672,7 @@ job.read</pre>
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code></div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/services/{id}/permissions</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/services/{id}/grant-limits</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 

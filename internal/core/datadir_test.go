@@ -108,7 +108,6 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	checks := map[string]string{
 		"Config":      filepath.Join(dir, "aegis.json"),
 		"DataGrants":  filepath.Join(dir, "data_grants.json"),
-		"Permissions": filepath.Join(dir, "data_grants.json"),
 		"Tokens":      filepath.Join(dir, "tokens.json"),
 		"Links":       filepath.Join(dir, "entity_links.json"),
 		"CopyLedger":  filepath.Join(dir, "copy_ledger.db"),
@@ -122,9 +121,6 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	}
 	if paths.DataGrants != checks["DataGrants"] {
 		t.Fatalf("DataGrants = %q, want %q", paths.DataGrants, checks["DataGrants"])
-	}
-	if paths.Permissions != paths.DataGrants {
-		t.Fatalf("Permissions alias = %q, want %q", paths.Permissions, paths.DataGrants)
 	}
 	if paths.Tokens != checks["Tokens"] {
 		t.Fatalf("Tokens = %q, want %q", paths.Tokens, checks["Tokens"])
@@ -152,7 +148,7 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 	paths, err := ResolveStatePaths(StatePathOverrides{
 		Dir:         dir,
 		Config:      filepath.Join(ext, "custom.json"),
-		Permissions: filepath.Join(ext, "perms.json"),
+		DataGrants: filepath.Join(ext, "data_grants.json"),
 		Tokens:      filepath.Join(ext, "tok.json"),
 		Links:       filepath.Join(ext, "links.json"),
 		CopyLedger:  filepath.Join(ext, "copy.db"),
@@ -168,8 +164,8 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 	if paths.Config != filepath.Join(ext, "custom.json") {
 		t.Fatalf("Config = %q", paths.Config)
 	}
-	if paths.Permissions != filepath.Join(ext, "perms.json") {
-		t.Fatalf("Permissions = %q", paths.Permissions)
+	if paths.DataGrants != filepath.Join(ext, "data_grants.json") {
+		t.Fatalf("DataGrants = %q", paths.DataGrants)
 	}
 	if paths.Tokens != filepath.Join(ext, "tok.json") {
 		t.Fatalf("Tokens = %q", paths.Tokens)

@@ -143,7 +143,7 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 		ID:          "google-photos",
 		Name:        "Google Photos",
 		Action:      "inject",
-		Permissions: types.Permissions{"photos": types.AccessNone},
+		GrantLimits: types.Permissions{"photos": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

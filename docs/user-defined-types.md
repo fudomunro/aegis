@@ -156,7 +156,7 @@ do not invent a second proxy path.
 - Every UDT id is marked **opt-in** (`types.MarkOptInDataType`) so a new pack
   is never agent-visible by accident.
 - **Packs cannot self-enable.** `default_access` is informational only; type
-  policy must name the kind (admin UI / `PUT /v1/admin/type-policies`).
+  policy must name the kind (admin UI / `PUT /v1/admin/data-grants`).
 - `id` must match `^[a-z][a-z0-9-]*$` and must not collide with built-in data
   types or `/v1/library` reserved segments (`links`, `review`, `copies`, …).
   `perm_type` is always the id; `path` is always `/v1/library/{id}`.
@@ -275,7 +275,7 @@ permissions**; users own **their types and sources**.
 |------|------------|
 | Schema id collides with built-in kind | Loader skips and logs (already implemented). |
 | Hostile / huge JSON feed | Item cap (`maxUserDefinedItems`), 4 MiB body limit, fail-open. |
-| UDT becomes a parallel permissions path | Uses the same `TypePolicy` + `AllowsMethod` enforcement. |
+| UDT becomes a parallel permissions path | Uses the same `DataGrant` + `AllowsMethod` enforcement. |
 | Name-only merge over-merges | Entity id preferred; name key is schema-declared fields only. |
 | Pack authors leak secrets in `headers` | Docs say non-secret headers only; later lint in content-repo CI. |
 

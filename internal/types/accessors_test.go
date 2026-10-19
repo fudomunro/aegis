@@ -20,7 +20,7 @@ func TestOverviewDataTypes_PrefersLibraryOrderThenExtras(t *testing.T) {
 
 func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	dataTypes := []string{"tracks", "places", "events"}
-	got := AgentOverviewLevels(TypePolicies{
+	got := AgentOverviewLevels(DataGrants{
 		"events": {Default: AccessFreeBusy},
 		"places": {Default: AccessCity},
 		"tracks": {Default: AccessRead},
@@ -35,7 +35,7 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 		t.Fatalf("events = %q, want freebusy", got["events"])
 	}
 
-	got = AgentOverviewLevels(TypePolicies{}, dataTypes)
+	got = AgentOverviewLevels(DataGrants{}, dataTypes)
 	if got["tracks"] != DefaultAccessType {
 		t.Fatalf("unset tracks = %q, want %q", got["tracks"], DefaultAccessType)
 	}

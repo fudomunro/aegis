@@ -56,7 +56,7 @@ cp aegis.example.json ~/Library/Application\ Support/Aegis/aegis.json
   -token-pass your-encryption-passphrase
 ```
 
-Path flags (`-config`, `-token-file`, `-permissions-file`, `-link-file`,
+Path flags (`-config`, `-token-file`, `-data-grants-file`, `-link-file`,
 `-mail-archive`, `-audit-log`, `-log-file`) still accept absolute or relative paths and
 override the data-dir defaults — useful for existing ops that keep files
 beside the binary.
@@ -120,7 +120,7 @@ user-types/
 Rules that keep packs safe:
 
 - **Opt-in.** A pack cannot create a data grant. Enable the kind in data grants / type policy
-  (`PUT /v1/admin/type-policies` or the admin UI) before agents can read it.
+  (`PUT /v1/admin/data-grants` or the admin UI) before agents can read it.
 - **No hijacking.** `id` / `perm_type` / `path` cannot collide with built-in
   data types or routes (`path` is always `/v1/library/{id}`).
 - **Fail-open.** A bad source becomes `by_service` status; a bad pack is
@@ -233,7 +233,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
-| `permissions` | Optional map of data type → access level for agents (migration override; can only tighten type policy — see [Data grants](#data-grants)) |
+| `grant_limits` | Optional map of data type → access level for agents (migration override; can only tighten type policy — see [Data grants](#data-grants)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis-issue-16)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
@@ -317,7 +317,7 @@ Prefer the glossary terms here ([`docs/glossary.md`](docs/glossary.md)):
 **data grant** is the product idea; **type policy** is where **agent** data
 grants live; a service **permissions map** can only tighten that default;
 **app data grants** scope third-party tokens. JSON/config keys stay
-`data_grants`, `grant_limits`, `data_grants.json` (legacy: `type_policies`, `permissions`, `permissions.json`).
+`data_grants`, `grant_limits`, `data_grants.json`.
 
 Data grants live with **data types**, not service providers (issue #148). The
 primary model is a per-type policy: a type-level default plus optional
@@ -361,11 +361,11 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 }
 ```
 
-Legacy service-scoped map (still accepted; tighten-only once a type policy
+Service grant-limits map (still accepted; tighten-only once a type policy
 exists for that key):
 
 ```json
-"permissions": {
+"grant_limits": {
   "default": "read",
   "playlists": "read",
   "tracks": "read",
@@ -435,7 +435,7 @@ exists for that key):
   unrestricted access (previous behavior).
 - **Bootstrap vs overlay (issue #71, #148).** `aegis.json` may set bootstrap
   `permissions` per service. Admin UI saves write a separate
-  `data_grants.json` overlay (flag `-data-grants-file`; legacy `-permissions-file`) schema **version 3**:
+  `data_grants.json` overlay (flag `-data-grants-file`) schema **version 3**:
   `data_grants` (primary DataGrant map) and `service_limits` (tighten-only migration
   overrides). A service present in the overlay uses those permissions; a
   present key set to `null` means unrestricted; services absent from the
@@ -451,8 +451,8 @@ exists for that key):
   not re-save). Enable write explicitly when a real agent write op appears.
 - Enforcement is on the content/ingest transport, the unified library endpoint, and connector metadata (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
-- Admin API: `GET/PUT /v1/admin/data-grants` is the primary editor (alias `type-policies`);
-  `GET/PUT /v1/admin/services/{id}/permissions` remains the secondary
+- Admin API: `GET/PUT /v1/admin/data-grants` is the primary editor;
+  `GET/PUT /v1/admin/services/{id}/grant-limits` remains the secondary
   per-service override (and still reports `effective_permissions` after
   type-policy resolution).
 
@@ -663,7 +663,6 @@ An explicit flag always wins:
 |------|---------------------------|-------|
 | `-config` | `aegis.json` | Bootstrap config (services, connections, secrets) |
 | `-data-grants-file` | `data_grants.json` | Admin data-grant overlay; |
-| `-permissions-file` | (alias) | Deprecated alias for `-data-grants-file`; `aegis.json` is never rewritten |
 | (none) | `service_connections.json` | Admin Immich/static-auth overlay (sibling of `-config`); `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage |
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
@@ -1478,7 +1477,7 @@ enough.
   "headers": { "X-API-Key": "$ENV:IMMICH_API_KEY" },
   "cache_ttl": "5m",
   "canonical_for": ["photos"],
-  "permissions": { "default": "read", "photos": "read" }
+  "grant_limits": { "default": "read", "photos": "read" }
 }
 ```
 
@@ -1984,7 +1983,7 @@ Access Token on the service (or a stored OAuth token):
   "name": "YNAB",
   "endpoint": "https://api.ynab.com/v1",
   "headers": {"Authorization": "Bearer <your-ynab-personal-access-token>"},
-  "permissions": {"transactions": "read"}
+  "grant_limits": {"transactions": "read"}
 }
 ```
 
@@ -2087,7 +2086,7 @@ Recorder:
   "name": "OwnTracks",
   "endpoint": "https://recorder.example:8083",
   "headers": {"X-API-Key": "…"},
-  "permissions": {"places": "read"}
+  "grant_limits": {"places": "read"}
 }
 ```
 
@@ -2151,8 +2150,8 @@ GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not coun
 GET /v1/admin/permissions    — type-centric permissions editor model (issue #160): agent level + relevant apps/sync per data type
 GET /v1/admin/type-policies  — type-owned agent policy map (primary, issue #148)
 PUT /v1/admin/type-policies  — replace type policies {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
-GET /v1/admin/services/{id}/permissions  — service override map + effective_permissions + available/writable types
-PUT /v1/admin/services/{id}/permissions  — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
+GET /v1/admin/services/{id}/grant-limits  — service override map + effective_permissions + available/writable types
+PUT /v1/admin/services/{id}/grant-limits  — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
 GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
 POST /v1/admin/immich/test   — probe Immich endpoint/API key (key not stored from this call)
 POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json)
@@ -2324,7 +2323,7 @@ stress data locally with `-seed-sample-stress`.
 aegis/
   main.go                    Thin entry (core.Run())
   internal/types/            Neutral models, merge/identity, LibraryKind data,
-                             TypePolicy, path rules, provider interfaces
+                             DataGrant, path rules, provider interfaces
   internal/core/             Runtime: Server, auth, config, tokens/OAuth, proxy,
                              permissions enforcement, library aggregate, admin,
                              state stores (mail, copy ledger, Quicken, Timeline),

@@ -68,14 +68,14 @@ func TestDataTypePathRules_Parity(t *testing.T) {
 	}
 }
 
-func TestTypePolicy_For(t *testing.T) {
+func TestDataGrant_For(t *testing.T) {
 	// Empty default preserves pre-permission behavior (DefaultAccessType).
-	var empty TypePolicy
+	var empty DataGrant
 	if got := empty.For("spotify"); got != DefaultAccessType {
 		t.Fatalf("empty default = %q, want %q", got, DefaultAccessType)
 	}
 
-	tp := TypePolicy{
+	tp := DataGrant{
 		Default: AccessRead,
 		Providers: map[string]string{
 			"spotify":       AccessNone,
@@ -97,11 +97,11 @@ func TestTypePolicy_For(t *testing.T) {
 }
 
 func TestTypePolicies_For(t *testing.T) {
-	var nilPolicies TypePolicies
+	var nilPolicies DataGrants
 	if got := nilPolicies.For("tracks"); got.Default != "" || len(got.Providers) != 0 {
 		t.Fatalf("nil policies = %+v", got)
 	}
-	p := TypePolicies{"places": {Default: AccessNone}}
+	p := DataGrants{"places": {Default: AccessNone}}
 	if got := p.For("places").Default; got != AccessNone {
 		t.Fatalf("places default = %q", got)
 	}

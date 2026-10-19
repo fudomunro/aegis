@@ -3,7 +3,7 @@ package types
 import "testing"
 
 func TestTypePolicies_Access_OptInProviderGrant(t *testing.T) {
-	policies := TypePolicies{
+	policies := DataGrants{
 		"places": {
 			Default:   AccessNone,
 			Providers: map[string]string{"google-timeline": AccessCity, "owntracks": AccessNone},
@@ -21,7 +21,7 @@ func TestTypePolicies_Access_OptInProviderGrant(t *testing.T) {
 }
 
 func TestTypePolicies_Access_OptInDefaultNeverLoosened(t *testing.T) {
-	policies := TypePolicies{
+	policies := DataGrants{
 		"places": {
 			Default:   AccessPrecise,
 			Providers: map[string]string{"owntracks": AccessCity, "other": AccessFull},
@@ -36,11 +36,11 @@ func TestTypePolicies_Access_OptInDefaultNeverLoosened(t *testing.T) {
 }
 
 func TestTypePolicies_Access_UnsetDefaultIsFull(t *testing.T) {
-	policies := TypePolicies{"tracks": {}}
+	policies := DataGrants{"tracks": {}}
 	if got := policies.Access("tracks", "spotify"); got != DefaultAccessType {
 		t.Fatalf("unset default = %q", got)
 	}
-	policies = TypePolicies{"tracks": {Default: AccessRead, Providers: map[string]string{"spotify": AccessNone}}}
+	policies = DataGrants{"tracks": {Default: AccessRead, Providers: map[string]string{"spotify": AccessNone}}}
 	if got := policies.Access("tracks", "spotify"); got != AccessNone {
 		t.Fatalf("tighten read→none = %q", got)
 	}
@@ -49,8 +49,8 @@ func TestTypePolicies_Access_UnsetDefaultIsFull(t *testing.T) {
 	}
 }
 
-func TestEffectiveAccess_TypePolicyPrimaryLegacyTightens(t *testing.T) {
-	policies := TypePolicies{
+func TestEffectiveAccess_DataGrantPrimaryServiceLimitsTighten(t *testing.T) {
+	policies := DataGrants{
 		"tracks": {Default: AccessFull, Providers: map[string]string{"spotify": AccessRead}},
 	}
 
@@ -77,7 +77,7 @@ func TestEffectiveAccess_TypePolicyPrimaryLegacyTightens(t *testing.T) {
 	}
 }
 
-func TestEffectiveAccess_LegacyAuthorityWithoutTypePolicy(t *testing.T) {
+func TestEffectiveAccess_ServiceLimitsWithoutDataGrant(t *testing.T) {
 	legacy := Permissions{"places": AccessCity, "tracks": AccessRead}
 	if got := EffectiveAccess(nil, legacy, "places", "google-timeline"); got != AccessCity {
 		t.Fatalf("legacy opt-in = %q", got)
@@ -100,7 +100,7 @@ func TestEffectiveAccess_LegacyAuthorityWithoutTypePolicy(t *testing.T) {
 }
 
 func TestEffectiveAccess_UnclassifiedUsesStrictest(t *testing.T) {
-	policies := TypePolicies{
+	policies := DataGrants{
 		"tracks": {Default: AccessRead},
 		"player": {Default: AccessNone},
 	}
@@ -112,14 +112,14 @@ func TestEffectiveAccess_UnclassifiedUsesStrictest(t *testing.T) {
 	if got != AccessNone {
 		t.Fatalf("legacy unclassified = %q", got)
 	}
-	got = EffectiveAccess(TypePolicies{"tracks": {Default: AccessRead}}, nil, "", "spotify")
+	got = EffectiveAccess(DataGrants{"tracks": {Default: AccessRead}}, nil, "", "spotify")
 	if got != AccessRead {
 		t.Fatalf("single read type unclassified = %q", got)
 	}
 }
 
 func TestEffectivePermissions_Materializes(t *testing.T) {
-	policies := TypePolicies{
+	policies := DataGrants{
 		"tracks": {Default: AccessFull, Providers: map[string]string{"spotify": AccessRead}},
 		"places": {Default: AccessNone, Providers: map[string]string{"spotify": AccessCity}},
 	}
@@ -136,8 +136,8 @@ func TestEffectivePermissions_Materializes(t *testing.T) {
 	}
 }
 
-func TestValidateTypePolicies(t *testing.T) {
-	if err := ValidateTypePolicies(TypePolicies{
+func TestValidateDataGrants(t *testing.T) {
+	if err := ValidateDataGrants(DataGrants{
 		"tracks":       {Default: AccessRead},
 		"places":       {Default: AccessCity, Providers: map[string]string{"a": AccessPrecise}},
 		"events":       {Default: AccessFreeBusy},
@@ -145,22 +145,22 @@ func TestValidateTypePolicies(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("valid policies: %v", err)
 	}
-	if err := ValidateTypePolicies(TypePolicies{"tracks": {Default: "maybe"}}); err == nil {
+	if err := ValidateDataGrants(DataGrants{"tracks": {Default: "maybe"}}); err == nil {
 		t.Fatal("unknown level should fail")
 	}
-	if err := ValidateTypePolicies(TypePolicies{"tracks": {Default: AccessFreeBusy}}); err == nil {
+	if err := ValidateDataGrants(DataGrants{"tracks": {Default: AccessFreeBusy}}); err == nil {
 		t.Fatal("freebusy on tracks should fail")
 	}
-	if err := ValidateTypePolicies(TypePolicies{"places": {Providers: map[string]string{"": AccessCity}}}); err == nil {
+	if err := ValidateDataGrants(DataGrants{"places": {Providers: map[string]string{"": AccessCity}}}); err == nil {
 		t.Fatal("empty provider key should fail")
 	}
-	if err := ValidateTypePolicies(TypePolicies{"places": {Providers: map[string]string{"a": AccessFreeBusy}}}); err == nil {
+	if err := ValidateDataGrants(DataGrants{"places": {Providers: map[string]string{"a": AccessFreeBusy}}}); err == nil {
 		t.Fatal("freebusy on places should fail")
 	}
 }
 
 func TestTypePolicies_PermissionsFor(t *testing.T) {
-	policies := TypePolicies{
+	policies := DataGrants{
 		"tracks": {Default: AccessRead},
 		"player": {Default: AccessNone},
 	}
@@ -168,7 +168,7 @@ func TestTypePolicies_PermissionsFor(t *testing.T) {
 	if p.For("tracks") != AccessRead || p.For("player") != AccessNone {
 		t.Fatalf("PermissionsFor = %+v", p)
 	}
-	if (TypePolicies{}).PermissionsFor("x") != nil {
+	if (DataGrants{}).PermissionsFor("x") != nil {
 		t.Fatal("empty policies should materialize nil")
 	}
 }

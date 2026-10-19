@@ -19,23 +19,20 @@ type Config struct {
 	Services    []Service             `json:"services"`
 	// DataGrantsBootstrap is the optional aegis.json agent data-grant section
 	// (issue #148 / #174). The data_grants.json overlay `data_grants` map
-	// wins when present. Legacy key `type_policies` is still accepted.
+	// wins when present.
 	DataGrantsBootstrap types.DataGrants `json:"data_grants,omitempty"`
-	// TypePoliciesBootstrap is the legacy name for DataGrantsBootstrap
-	// (`type_policies` in aegis.json). Loaded only; prefer `data_grants`.
-	TypePoliciesBootstrap types.TypePolicies `json:"type_policies,omitempty"`
 	path                  string
-	// permsPath is the admin permissions overlay file (permissions.json).
-	// Admin permission saves always write here — never aegis.json.
-	permsPath string
+	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
+	// Admin data-grant saves always write here — never aegis.json.
+	dataGrantsPath string
 	// typePolicies is the primary type-owned agent-access policy (issue #148).
 	// Enforcement resolves type default → provider override → legacy service
 	// permissions (tighten-only). See types.EffectiveAccess.
-	typePolicies types.TypePolicies
-	// permsOverlay is the loaded overlay map (service id → permissions;
+	typePolicies types.DataGrants
+	// serviceLimits is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared). Service maps are
 	// migration overrides that can only tighten type policy.
-	permsOverlay map[string]*types.Permissions
+	serviceLimits map[string]*types.Permissions
 	// svcConnPath is the admin service-connections overlay
 	// (service_connections.json). Immich/local-store setup writes here so
 	// aegis.json is never rewritten from the admin UI.
@@ -47,47 +44,13 @@ type Config struct {
 	tailscaleAdmin *tailscaleAdminEntry
 }
 
-// normalizeDataGrantNames folds legacy JSON keys (`type_policies`,
-// per-service `permissions`) into the data-grant names so one path is used
-// after load (issue #174).
-func (c *Config) normalizeDataGrantNames() {
-	if c.DataGrantsBootstrap == nil && c.TypePoliciesBootstrap != nil {
-		c.DataGrantsBootstrap = c.TypePoliciesBootstrap
-	}
-	for i := range c.Services {
-		s := &c.Services[i]
-		if s.GrantLimits == nil && s.Permissions != nil {
-			s.GrantLimits = s.Permissions
-		}
-		if s.Permissions == nil && s.GrantLimits != nil {
-			s.Permissions = s.GrantLimits
-		}
-	}
-}
-
-// effectiveDataGrantsBootstrap returns data_grants, falling back to the
-// legacy type_policies key.
-func (c *Config) effectiveDataGrantsBootstrap() types.DataGrants {
-	if c.DataGrantsBootstrap != nil {
-		return c.DataGrantsBootstrap
-	}
-	return c.TypePoliciesBootstrap
-}
-
 // defaultDataGrantsPath returns the overlay path beside a aegis.json path.
-// Prefers data_grants.json, then a legacy permissions.json if that is all
-// that exists beside the config.
 func defaultDataGrantsPath(configPath string) string {
 	dir := filepath.Dir(configPath)
 	if dir == "" {
 		dir = "."
 	}
-	return resolveDataGrantsPath("", "", dir)
-}
-
-// defaultPermissionsPath is a deprecated alias for defaultDataGrantsPath.
-func defaultPermissionsPath(configPath string) string {
-	return defaultDataGrantsPath(configPath)
+	return filepath.Join(dir, defaultDataGrantsName)
 }
 
 // Connection is a shared OAuth provider registration (issue #26). Multiple
@@ -118,9 +81,6 @@ type Service struct {
 	// (issue #174). Nil means the agent data grant applies unchanged.
 	// See permissions.go for levels and the "default" key.
 	GrantLimits types.Permissions `json:"grant_limits,omitempty"`
-	// Permissions is the legacy name for GrantLimits (`permissions` on a
-	// service). Loaded only; prefer `grant_limits`.
-	Permissions types.Permissions `json:"permissions,omitempty"`
 	// CanonicalFor lists library kinds where this service is the authoritative
 	// non-Aegis location (issue #16). At most one non-blocked service may
 	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
@@ -177,11 +137,10 @@ func LoadConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	cfg.path = path
-	cfg.permsPath = defaultPermissionsPath(path)
+	cfg.dataGrantsPath = defaultDataGrantsPath(path)
 	cfg.svcConnPath = defaultServiceConnectionsPath(path)
-	cfg.normalizeDataGrantNames()
-	cfg.typePolicies = cfg.effectiveDataGrantsBootstrap()
-	if err := cfg.applyPermissionsOverlayLocked(); err != nil {
+	cfg.typePolicies = cfg.DataGrantsBootstrap
+	if err := cfg.applyDataGrantsOverlayLocked(); err != nil {
 		return nil, err
 	}
 	if err := cfg.applyServiceConnectionsOverlayLocked(); err != nil {
@@ -209,10 +168,8 @@ func (c *Config) Reload() error {
 	c.Connections = fresh.Connections
 	c.Services = fresh.Services
 	c.DataGrantsBootstrap = fresh.DataGrantsBootstrap
-	c.TypePoliciesBootstrap = fresh.TypePoliciesBootstrap
-	c.normalizeDataGrantNames()
-	c.typePolicies = c.effectiveDataGrantsBootstrap()
-	if err := c.applyPermissionsOverlayLocked(); err != nil {
+	c.typePolicies = c.DataGrantsBootstrap
+	if err := c.applyDataGrantsOverlayLocked(); err != nil {
 		return err
 	}
 	if err := c.applyServiceConnectionsOverlayLocked(); err != nil {
@@ -230,11 +187,11 @@ func validateConfig(cfg *Config) error {
 	if err := validateCanonicalFor(services); err != nil {
 		return err
 	}
-	if err := types.ValidateDataGrants(cfg.effectiveDataGrantsBootstrap()); err != nil {
+	if err := types.ValidateDataGrants(cfg.DataGrantsBootstrap); err != nil {
 		return fmt.Errorf("data_grants: %w", err)
 	}
 	for _, svc := range services {
-		if err := types.ValidatePermissions(svc.Permissions); err != nil {
+		if err := types.ValidatePermissions(svc.GrantLimits); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)
 		}
 		if svc.Connection == "" {
@@ -263,9 +220,6 @@ func (s Service) clone() Service {
 	}
 	if s.GrantLimits != nil {
 		cp.GrantLimits = types.Permissions(s.GrantLimits.Clone())
-	}
-	if s.Permissions != nil {
-		cp.Permissions = types.Permissions(s.Permissions.Clone())
 	}
 	if s.CanonicalFor != nil {
 		cp.CanonicalFor = append([]string(nil), s.CanonicalFor...)
@@ -396,21 +350,9 @@ func (c *Config) GetConnection(id string) *Connection {
 
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
-// Always writes the permissions overlay (permissions.json) — never aegis.json.
+// Always writes the data-grant overlay (data_grants.json) — never aegis.json.
 // The map is a migration override: it can only tighten type policy, never
 // grant more than the type default (issue #148).
-// serviceGrantLimits returns the tighten-only service map (grant_limits,
-// falling back to legacy permissions).
-func serviceGrantLimits(s *Service) types.Permissions {
-	if s == nil {
-		return nil
-	}
-	if s.GrantLimits != nil {
-		return s.GrantLimits
-	}
-	return s.Permissions
-}
-
 func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
 	if err := types.ValidatePermissions(p); err != nil {
 		return err
@@ -431,61 +373,47 @@ func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
 	}
 
 	if len(p) == 0 {
-		c.Services[idx].Permissions = nil
 		c.Services[idx].GrantLimits = nil
 	} else {
-		c.Services[idx].Permissions = types.Permissions(p.Clone())
 		c.Services[idx].GrantLimits = types.Permissions(p.Clone())
 	}
-	return c.setPermissionsOverlayEntryLocked(id, p)
+	return c.setServiceLimitsEntryLocked(id, p)
 }
 
 // DataGrants returns a snapshot of the agent data-grant map.
 func (c *Config) DataGrants() types.DataGrants {
-	return c.TypePolicies()
-}
-
-// TypePolicies returns a snapshot of the type-owned agent policy map.
-// Deprecated: use DataGrants.
-func (c *Config) TypePolicies() types.TypePolicies {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	if c.typePolicies == nil {
 		return nil
 	}
-	out := make(types.TypePolicies, len(c.typePolicies))
+	out := make(types.DataGrants, len(c.typePolicies))
 	for k, v := range c.typePolicies {
-		out[k] = cloneTypePolicy(v)
+		out[k] = cloneDataGrant(v)
 	}
 	return out
 }
 
 // SetDataGrants replaces the agent data-grant map and persists the overlay.
+// An empty map clears data grants (service grant_limits remain tighten-only).
+// Provider entries can only tighten the type default.
 func (c *Config) SetDataGrants(policies types.DataGrants) error {
-	return c.SetTypePolicies(policies)
-}
-
-// SetTypePolicies replaces the type-owned policy map and persists the overlay.
-// An empty map clears type policies (legacy service permissions remain as
-// migration overrides). Provider entries can only tighten the type default.
-// Deprecated: use SetDataGrants.
-func (c *Config) SetTypePolicies(policies types.TypePolicies) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.setTypePoliciesLocked(policies)
+	return c.setDataGrantsLocked(policies)
 }
 
-// SeedTypePolicy installs a type-policy default when the key has no entry yet.
+// SeedDataGrant installs a data-grant default when the key has no entry yet.
 // Used for user-defined kinds whose schema declares default_access (issue #15).
-// Never overwrites an existing policy and never persists — admin overlay wins.
-func (c *Config) SeedTypePolicy(dataType string, policy types.TypePolicy) {
+// Never overwrites an existing grant and never persists — admin overlay wins.
+func (c *Config) SeedDataGrant(dataType string, policy types.DataGrant) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if dataType == "" {
 		return
 	}
 	if c.typePolicies == nil {
-		c.typePolicies = types.TypePolicies{}
+		c.typePolicies = types.DataGrants{}
 	}
 	if _, exists := c.typePolicies[dataType]; exists {
 		return
@@ -501,7 +429,7 @@ func (c *Config) EffectivePermissions(serviceID string) types.Permissions {
 	policies := c.typePolicies
 	var legacy types.Permissions
 	if svc := c.serviceByID(serviceID); svc != nil {
-		legacy = serviceGrantLimits(svc)
+		legacy = svc.GrantLimits
 	}
 	c.mu.RUnlock()
 	return types.EffectivePermissions(policies, legacy, serviceID)
@@ -514,7 +442,7 @@ func (c *Config) EffectiveAccess(serviceID, dataType string) string {
 	policies := c.typePolicies
 	var legacy types.Permissions
 	if svc := c.serviceByID(serviceID); svc != nil {
-		legacy = serviceGrantLimits(svc)
+		legacy = svc.GrantLimits
 	}
 	c.mu.RUnlock()
 	return types.EffectiveAccess(policies, legacy, dataType, serviceID)

@@ -184,7 +184,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 		ID:          "google-gmail",
 		Name:        "Gmail",
 		Action:      "inject",
-		Permissions: types.Permissions{"messages": types.AccessNone},
+		GrantLimits: types.Permissions{"messages": types.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

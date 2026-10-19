@@ -245,7 +245,7 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"default": types.AccessRead, "playlists": types.AccessFull},
+				GrantLimits: types.Permissions{"default": types.AccessRead, "playlists": types.AccessFull},
 			},
 		},
 	}
@@ -291,7 +291,7 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 			"id": "spotify",
 			"name": "Spotify",
 			"action": "inject",
-			"permissions": {"tracks": "maybe"}
+			"grant_limits": {"tracks": "maybe"}
 		}]
 	}`
 	if err := writeFile(path, body); err != nil {
@@ -306,7 +306,7 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 			"id": "spotify",
 			"name": "Spotify",
 			"action": "inject",
-			"permissions": {"default": "read", "playlists": "read-write"}
+			"grant_limits": {"default": "read", "playlists": "read-write"}
 		}]
 	}`
 	if err := writeFile(path, body); err != nil {
@@ -317,11 +317,11 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 		t.Fatalf("valid permissions failed: %v", err)
 	}
 	svc := cfg.GetService("spotify")
-	if svc.Permissions.For("playlists") != types.AccessFull {
-		t.Fatalf("playlists = %q", svc.Permissions.For("playlists"))
+	if svc.GrantLimits.For("playlists") != types.AccessFull {
+		t.Fatalf("playlists = %q", svc.GrantLimits.For("playlists"))
 	}
-	if svc.Permissions.For("tracks") != types.AccessRead {
-		t.Fatalf("tracks default = %q", svc.Permissions.For("tracks"))
+	if svc.GrantLimits.For("tracks") != types.AccessRead {
+		t.Fatalf("tracks default = %q", svc.GrantLimits.For("tracks"))
 	}
 }
 
@@ -373,7 +373,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 		Name: "Spotify",
 		// Legacy write grant — must not unlock proxy writes the connector
 		// does not implement (mirror write is a separate path).
-		Permissions: types.Permissions{"tracks": types.AccessFull, "playlists": types.AccessFull},
+		GrantLimits: types.Permissions{"tracks": types.AccessFull, "playlists": types.AccessFull},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)

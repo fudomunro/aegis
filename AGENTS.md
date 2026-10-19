@@ -80,7 +80,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Entry, flags, routes, connector registration | `internal/core/run.go` (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
 | Data directory + state path layout | `datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
-| Admin permissions overlay | `permissions_overlay.go` | `data_grants.json` v2: `types` (primary TypePolicy) + `services` (tighten-only migration overrides); admin saves never rewrite aegis.json |
+| Admin permissions overlay | `permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
 | Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
@@ -238,7 +238,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 - **Neutral models at the library boundary.** Provider quirks stay inside
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
 - **Permissions are data, not comments.** **Data grants** (what the user allows
-  an LLM agent or app to use) are owned by type-level `TypePolicy`
+  an LLM agent or app to use) are owned by type-level `DataGrant`
   (`internal/types`) plus optional provider/attribute filters and must stay
   enforced on the content/ingest proxy, library, capabilities output, and
   pre-request injection. Service `permissions` maps are migration overrides
@@ -300,10 +300,10 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
-| Admin data-grant writes | `permissions_overlay.go`, `config.go` `SetTypePolicies` / `SetServicePermissions`, README “Data grants”; legacy `type_policies` / `permissions` still load |
+| Admin data-grant writes | `permissions_overlay.go`, `config.go` `SetDataGrants` / `SetServicePermissions`, README “Data grants” |
 | OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
 | Unified library + merge | `librarykind.go`, `internal/types/{merge,models}.go` |
-| Data grants / agent visibility | `internal/types/policy.go` (`TypePolicy` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
+| Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
 | Admin map / flow | `flow.go`, `admin.go`, `web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `identity.go` |
 | Product/API docs | `README.md` |

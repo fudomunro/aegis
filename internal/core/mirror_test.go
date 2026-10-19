@@ -27,8 +27,8 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 	}
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: ts.URL, CanonicalFor: []string{"playlists"}, Permissions: perms},
-			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: ts.URL, Permissions: perms},
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: ts.URL, CanonicalFor: []string{"playlists"}, GrantLimits: perms},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: ts.URL, GrantLimits: perms},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

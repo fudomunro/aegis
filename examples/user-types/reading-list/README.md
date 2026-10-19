@@ -13,9 +13,9 @@ Then enable the kind (packs cannot self-enable):
 
 ```bash
 # type policy must name reading-list before agents can read it
-curl -s -X PUT https://aegis.example.ts.net/v1/admin/type-policies \
+curl -s -X PUT https://aegis.example.ts.net/v1/admin/data-grants \
   -H 'Content-Type: application/json' \
-  -d '{"types":{"reading-list":{"default":"read"}}}'
+  -d '{"data_grants":{"reading-list":{"default":"read"}}}'
 ```
 
 Then:

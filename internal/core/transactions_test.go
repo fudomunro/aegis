@@ -464,7 +464,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 
 	// Service-level summary redaction: no line items from that service, and
 	// app-level summary returns totals only.
-	cfg.Services[0].Permissions = types.Permissions{"transactions": types.AccessSummary}
+	cfg.Services[0].GrantLimits = types.Permissions{"transactions": types.AccessSummary}
 	req2 := httptest.NewRequest("GET", "/v1/library/transactions", nil)
 	w2 := httptest.NewRecorder()
 	srv.HandleLibraryTransactions(w2, req2)

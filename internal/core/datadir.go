@@ -14,7 +14,6 @@ const (
 	dataDirName            = "aegis"
 	defaultConfigName      = "aegis.json"
 	defaultDataGrantsName   = "data_grants.json"
-	defaultPermissionsName  = "permissions.json" // legacy alias for data_grants.json
 	defaultTokensName      = "tokens.json"
 	defaultAppsName        = "apps.json"
 	defaultLinksName       = "entity_links.json"
@@ -37,8 +36,6 @@ type DataPaths struct {
 	Config string
 	// DataGrants is the admin data-grant overlay (data_grants.json, non-secret).
 	DataGrants string
-	// Permissions is a deprecated alias for DataGrants.
-	Permissions string
 	// Tokens is the encrypted OAuth token store.
 	Tokens string
 	// Apps is the third-party application registry (issue #131).
@@ -74,7 +71,6 @@ type StatePathOverrides struct {
 	Dir            string
 	Config         string
 	DataGrants     string
-	Permissions    string // legacy alias for DataGrants
 	Tokens         string
 	Links          string
 	CopyLedger     string
@@ -156,28 +152,6 @@ func resolveDataDir(flagValue string) (string, error) {
 	return filepath.Clean(dir), nil
 }
 
-// resolveDataGrantsPath picks the data-grant overlay path: explicit flag,
-// then data_grants.json under the data dir, then a legacy permissions.json
-// if that is all that exists, else the data_grants.json default.
-func resolveDataGrantsPath(explicitPermissions, explicitDataGrants, dataDir string) string {
-	explicit := explicitDataGrants
-	if explicit == "" {
-		explicit = explicitPermissions
-	}
-	if explicit != "" {
-		return explicit
-	}
-	modern := filepath.Join(dataDir, defaultDataGrantsName)
-	legacy := filepath.Join(dataDir, defaultPermissionsName)
-	if _, err := os.Stat(modern); err == nil {
-		return modern
-	}
-	if _, err := os.Stat(legacy); err == nil {
-		return legacy
-	}
-	return modern
-}
-
 // resolveUnderDataDir returns explicit when set, otherwise name under dataDir.
 func resolveUnderDataDir(explicit, dataDir, name string) string {
 	if v := strings.TrimSpace(explicit); v != "" {
@@ -195,7 +169,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	paths := DataPaths{
 		Dir:         dir,
 		Config:      resolveUnderDataDir(ov.Config, dir, defaultConfigName),
-		DataGrants:  resolveDataGrantsPath(ov.Permissions, ov.DataGrants, dir),
+		DataGrants:  resolveUnderDataDir(ov.DataGrants, dir, defaultDataGrantsName),
 		Tokens:      resolveUnderDataDir(ov.Tokens, dir, defaultTokensName),
 		Apps:        filepath.Join(dir, defaultAppsName),
 		Links:       resolveUnderDataDir(ov.Links, dir, defaultLinksName),
@@ -264,7 +238,6 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	default:
 		paths.LogFile = expandUserPath(ov.LogFile)
 	}
-	paths.Permissions = paths.DataGrants
 	return paths, nil
 }
 
