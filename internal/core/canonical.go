@@ -7,20 +7,14 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// Known library kinds that may appear in a service's canonical_for list.
-// Keep in sync with libraryKinds IDs.
-var canonicalKindIDs = []string{
-	"playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages",
-	"transactions", "places", "documents",
+// canonicalKindIDs returns kinds allowed in a service's canonical_for list
+// (issue #183: derived from types.BuiltinLibraryKinds CanonicalAllowed).
+func canonicalKindIDs() []string {
+	return types.CanonicalKindIDs()
 }
 
 func isCanonicalKindID(id string) bool {
-	for _, k := range canonicalKindIDs {
-		if k == id {
-			return true
-		}
-	}
-	return false
+	return types.IsCanonicalKindID(id)
 }
 
 // IsCanonicalFor reports whether this service is the configured authoritative
@@ -278,7 +272,7 @@ func (s *Server) writePolicyNotice(svc Service) string {
 		svcName = svc.ID
 	}
 	var lines []string
-	for _, kindID := range canonicalKindIDs {
+	for _, kindID := range canonicalKindIDs() {
 		if !s.effectivePermissions(&svc).AllowsWrite(kindID) {
 			continue
 		}

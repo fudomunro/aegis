@@ -126,7 +126,7 @@ type UserDefinedSource struct {
 	// (issue #16). Stamped by config canonical_for.
 	Canonical bool `json:"canonical,omitempty"`
 	// Copy is copy-ledger metadata when tracked (issue #76). Nil when untracked.
-	Copy *CopyInfo `json:"copy,omitempty"`
+	Copy  *CopyInfo      `json:"copy,omitempty"`
 	Extra map[string]any `json:"extra,omitempty"`
 }
 
@@ -190,21 +190,40 @@ var ReservedLibraryPathIDs = map[string]bool{
 	"freebusy": true,
 }
 
-// ReservedDataTypeKeys are permission / path-classification keys owned by
-// built-in types. A UDT id (and therefore perm_type) must not collide with
-// these — MarkOptInDataType on a built-in key would hide that data (issue #15
-// review). Keep in sync with dataTypePathRules and libraryKinds IDs.
-var ReservedDataTypeKeys = map[string]bool{
-	"albums": true, "artists": true, "channels": true, "contacts": true,
-	"events": true, "library": true, "messages": true, "photos": true,
-	"places": true, "player": true, "playlists": true,
-	"recommendations": true, "search": true, "tracks": true,
-	"transactions": true, "user": true,
+// nonKindDataTypeKeys are permission / path-classification keys owned by
+// built-in proxy surfaces that are not LibraryKind entries (issue #183).
+var nonKindDataTypeKeys = map[string]bool{
+	"channels": true, "library": true, "player": true,
+	"recommendations": true, "search": true, "user": true,
+}
+
+// ReservedDataTypeKeys returns permission / path-classification keys owned
+// by built-in types: every BuiltinLibraryKinds ID plus non-kind proxy keys.
+// A UDT id (and therefore perm_type) must not collide with these —
+// MarkOptInDataType on a built-in key would hide that data (issue #15
+// review). Derived from the registry (issue #183).
+func ReservedDataTypeKeys() map[string]bool {
+	out := make(map[string]bool, len(BuiltinLibraryKinds)+len(nonKindDataTypeKeys))
+	for _, k := range BuiltinLibraryKinds {
+		out[k.ID] = true
+	}
+	for id := range nonKindDataTypeKeys {
+		out[id] = true
+	}
+	return out
+}
+
+// IsReservedDataTypeKey reports whether the key is a built-in data-type key.
+func IsReservedDataTypeKey(id string) bool {
+	if BuiltinKindByID(id) != nil {
+		return true
+	}
+	return nonKindDataTypeKeys[id]
 }
 
 // IsReservedUserDefinedID reports whether an id is owned by built-ins.
 func IsReservedUserDefinedID(id string) bool {
-	return ReservedLibraryPathIDs[id] || ReservedDataTypeKeys[id]
+	return ReservedLibraryPathIDs[id] || IsReservedDataTypeKey(id)
 }
 
 // ValidateHTTPJSONHeaders rejects credential-bearing headers in schema packs.
@@ -244,7 +263,7 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 	if !userDefinedIDPattern.MatchString(s.ID) {
 		return fmt.Errorf("schema id %q must match %s", s.ID, userDefinedIDPattern)
 	}
-	if ReservedLibraryPathIDs[s.ID] || ReservedDataTypeKeys[s.ID] {
+	if IsReservedUserDefinedID(s.ID) {
 		return fmt.Errorf("schema id %q is reserved by a built-in data type or /v1/library route", s.ID)
 	}
 	if s.Label == "" {
