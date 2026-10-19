@@ -197,8 +197,8 @@ func (s *QuickenStore) List(f TransactionFilters, limit int) ([]types.Transactio
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("quicken store disabled")
 	}
-	if limit <= 0 || limit > libraryPageCap {
-		limit = libraryPageCap
+	if limit <= 0 || limit > libraryItemCap {
+		limit = libraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -743,7 +743,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 		writeJSON(w, map[string]any{"count": n, "path": store.Path()})
 	case r.Method == http.MethodGet && (remainingPath == "/transactions" || remainingPath == "transactions" || remainingPath == "" || remainingPath == "/"):
 		filters := ParseTransactionFilters(r)
-		limit := libraryPageCap
+		limit := libraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				limit = n
@@ -754,7 +754,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 			writeJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		writeJSON(w, types.TransactionList{Transactions: list, Total: len(list), Synced: true})
+		writeJSON(w, types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && (remainingPath == "/import" || remainingPath == "import"):
 		var req struct {
 			Path string `json:"path"`
@@ -781,7 +781,7 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 	if store == nil || !store.Enabled() {
 		return nil, false, nil
 	}
-	list, err := store.List(TransactionFilters{}, libraryPageCap)
+	list, err := store.List(TransactionFilters{}, libraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}

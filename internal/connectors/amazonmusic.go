@@ -309,7 +309,7 @@ func (c *AmazonMusicConnector) TransformPlaylistList(raw map[string]any) types.P
 	if n, ok := AsInt(c.TotalCount(raw)); ok {
 		total = n
 	}
-	return types.PlaylistList{Playlists: playlists, Total: total}
+	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}
 }
 
 func (c *AmazonMusicConnector) TransformLibrary(raw map[string]any) map[string]any {

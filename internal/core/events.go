@@ -229,7 +229,7 @@ func freeBusyBlockFromEvent(e types.CalendarEvent) types.FreeBusyBlock {
 // freeBusyListFromEvents builds the share-friendly busy list (issue #128).
 // Cancelled events are omitted; overlapping blocks are left as-is so callers
 // can see every busy interval the provider reported.
-func freeBusyListFromEvents(events []types.CalendarEvent, bySvc map[string]types.LibraryServiceStatus) types.FreeBusyList {
+func freeBusyListFromEvents(events []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) types.FreeBusyList {
 	busy := make([]types.FreeBusyBlock, 0, len(events))
 	for _, e := range events {
 		if !calendarEventIsBusy(e) {
@@ -237,11 +237,12 @@ func freeBusyListFromEvents(events []types.CalendarEvent, bySvc map[string]types
 		}
 		busy = append(busy, freeBusyBlockFromEvent(e))
 	}
+	// Page the busy blocks (not the source events) so cursors walk the
+	// scheduling view (issue #185).
+	pageItems, pr := types.SlicePage(busy, page)
 	return types.FreeBusyList{
-		Busy:      busy,
-		Total:     len(busy),
-		Truncated: anyServiceTruncated(bySvc),
-		ByService: bySvc,
+		Busy:            pageItems,
+		LibraryListMeta: types.MetaForPage(pr, false, anyServiceTruncated(bySvc), bySvc),
 	}
 }
 
@@ -290,8 +291,9 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 		serviceOf: calendarEventServiceName,
 		sortKey:   calendarEventIdentityKey,
 		merge:     MergeCalendarEvents,
-		encode: func(merged []types.CalendarEvent, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.CalendarEventList{Events: merged, Total: len(merged), Synced: true, Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
+		encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			pageItems, pr := types.SlicePage(items, page)
+			return types.CalendarEventList{Events: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
 		markCanonical: s.stampCalendarEventCanonical,
 		stampCopies:   s.stampEventCopies,
@@ -310,8 +312,8 @@ func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
 		serviceOf: calendarEventServiceName,
 		sortKey:   calendarEventIdentityKey,
 		merge:     MergeCalendarEvents,
-		encode: func(merged []types.CalendarEvent, bySvc map[string]types.LibraryServiceStatus) any {
-			return freeBusyListFromEvents(merged, bySvc)
+		encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			return freeBusyListFromEvents(items, page, bySvc)
 		},
 		markCanonical: s.stampCalendarEventCanonical,
 		stampCopies:   s.stampEventCopies,

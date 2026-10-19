@@ -1,13 +1,14 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // mailPermType is the permission key for the local mail archive surface.
@@ -74,8 +75,10 @@ func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 
 // HandleMailSearch runs FTS + filters: GET /v1/mail/search
 //
-// Query params: q, from, to, after, before, label (repeatable), limit, offset,
+// Query params: q, from, to (addresses), after, before (time bounds),
+// label (repeatable), limit, cursor (preferred) or offset (admin UI),
 // sort (asc|desc, default desc), include_body (1 to fill Message.body).
+// from/to are sender/recipient addresses only — not time filters (issue #185).
 func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -97,7 +100,15 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 			limit = n
 		}
 	}
-	if v := strings.TrimSpace(q.Get("offset")); v != "" {
+	// Prefer opaque cursor (library contract); keep offset for admin UI.
+	if v := strings.TrimSpace(q.Get("cursor")); v != "" {
+		n, err := types.DecodeCursor(v)
+		if err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		offset = n
+	} else if v := strings.TrimSpace(q.Get("offset")); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
 			offset = n
 		}

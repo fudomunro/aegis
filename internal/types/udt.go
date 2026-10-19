@@ -152,20 +152,13 @@ type UserDefinedItem struct {
 // The items key is the kind ID so agents see e.g. "reading-list": [...].
 // Encode via UserDefinedItemList once the kind ID is known.
 type UserDefinedList struct {
-	// Items is the merged neutral list.
+	// Items is the merged neutral list (current page).
 	Items []UserDefinedItem `json:"items"`
-	// Total is len(Items).
-	Total int `json:"total"`
 	// SchemaID echoes the kind id that produced this list.
 	SchemaID string `json:"schema_id"`
 	// Fields describes the declared field shape (for agent self-description).
 	Fields map[string]UserDefinedField `json:"fields,omitempty"`
-	// Synced is true when multi-source merge ran.
-	Synced bool `json:"synced,omitempty"`
-	// Truncated is true when any source hit its item cap.
-	Truncated bool `json:"truncated,omitempty"`
-	// ByService is set on aggregate responses only.
-	ByService map[string]LibraryServiceStatus `json:"by_service,omitempty"`
+	LibraryListMeta
 }
 
 // Match methods for UserDefinedItem.
@@ -559,7 +552,7 @@ func MergeUserDefinedItems(schema UserDefinedTypeSchema, in []UserDefinedItem) [
 }
 
 // EncodeUserDefinedList builds the neutral list envelope for a schema.
-func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem, bySvc map[string]LibraryServiceStatus) UserDefinedList {
+func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem, page PageRequest, bySvc map[string]LibraryServiceStatus) UserDefinedList {
 	truncated := false
 	for _, st := range bySvc {
 		if st.Truncated {
@@ -567,14 +560,12 @@ func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem
 			break
 		}
 	}
+	pageItems, pr := SlicePage(items, page)
 	return UserDefinedList{
-		Items:     items,
-		Total:     len(items),
-		SchemaID:  schema.ID,
-		Fields:    schema.Fields,
-		Synced:    true,
-		Truncated: truncated,
-		ByService: bySvc,
+		Items:           pageItems,
+		SchemaID:        schema.ID,
+		Fields:          schema.Fields,
+		LibraryListMeta: MetaForPage(pr, true, truncated, bySvc),
 	}
 }
 

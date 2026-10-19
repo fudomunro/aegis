@@ -12,6 +12,11 @@ import (
 // Google page size 100. Exceeding it sets truncated=true on the response.
 const libraryPageCap = 200
 
+// libraryItemCap is the max rows a local store listing (Signal, Quicken,
+// Timeline) returns in one call. Distinct from libraryPageCap — that is an
+// upstream page-loop valve, not a product slice (issue #185).
+const libraryItemCap = 500
+
 // aegisHTTPClient bounds upstream calls so a hung service cannot stall a
 // library aggregate for the full request-context lifetime.
 var aegisHTTPClient = &http.Client{Timeout: 30 * time.Second}
