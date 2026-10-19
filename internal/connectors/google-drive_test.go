@@ -72,8 +72,8 @@ func TestGoogleDriveListUserDocuments_MapsGoogleDocs(t *testing.T) {
 	if len(d.Sources) != 1 || !d.Sources[0].Canonical {
 		t.Fatalf("sources = %+v", d.Sources)
 	}
-	if !strings.Contains(d.Sources[0].BlobURL, "/files/file-1/export") {
-		t.Fatalf("blob_url = %q", d.Sources[0].BlobURL)
+	if !strings.Contains(d.Sources[0].BlobURL, "/v1/services/google-drive/files/file-1/export") {
+		t.Fatalf("blob_url should be Aegis content transport, got %q", d.Sources[0].BlobURL)
 	}
 	if !strings.Contains(d.Sources[0].BlobURL, "html") {
 		t.Fatalf("blob_url should export HTML for later markdown: %q", d.Sources[0].BlobURL)
@@ -151,6 +151,43 @@ func TestGoogleDriveNoToken(t *testing.T) {
 	_, _, err := c.ListUserDocuments(context.Background())
 	if err != types.ErrUnauthorized {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
+	}
+}
+
+func TestGoogleDriveNormalizeProxyPath(t *testing.T) {
+	cases := map[string]string{
+		"/files/abc/export":            "/files/abc/export",
+		"/drive/v3/files/abc/export":   "/files/abc/export",
+		"/drive/v2/files/abc":          "/files/abc",
+		"/drive/v3":                    "/",
+		"/other":                       "/other",
+	}
+	for in, want := range cases {
+		if got := normalizeDriveProxyPath(in); got != want {
+			t.Fatalf("normalizeDriveProxyPath(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestGoogleDriveHandleProxy_AcceptsDriveV3ExportPath(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/files/doc-1/export", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("<p>ok</p>"))
+	})
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+
+	h := newTestHostWithService(GoogleDriveServiceID, srv.URL, "https://aegis.example.com")
+	h.setToken(GoogleDriveServiceID, "tok-1")
+	c := NewGoogleDriveConnector(h)
+	req := httptest.NewRequest("GET", "/v1/services/google-drive/drive/v3/files/doc-1/export", nil)
+	w := httptest.NewRecorder()
+	c.HandleProxy(w, req, "/drive/v3/files/doc-1/export")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	if w.Body.String() != "<p>ok</p>" {
+		t.Fatalf("body = %q", w.Body.String())
 	}
 }
 
