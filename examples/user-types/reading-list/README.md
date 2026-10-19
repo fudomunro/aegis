@@ -12,7 +12,7 @@ at a tree that contains it) and restart:
 Then enable the kind (packs cannot self-enable):
 
 ```bash
-# type policy must name reading-list before agents can read it
+# data grant must name reading-list before agents can read it
 curl -s -X PUT https://aegis.example.ts.net/v1/admin/data-grants \
   -H 'Content-Type: application/json' \
   -d '{"data_grants":{"reading-list":{"default":"read"}}}'

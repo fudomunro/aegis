@@ -54,7 +54,7 @@ func TestEffectiveAccess_DataGrantPrimaryServiceLimitsTighten(t *testing.T) {
 		"tracks": {Default: AccessFull, Providers: map[string]string{"spotify": AccessRead}},
 	}
 
-	// Spotify's legacy map can only tighten the resolved type policy.
+	// Spotify's legacy map can only tighten the resolved data grant.
 	spotifyLegacy := Permissions{"tracks": AccessNone, "player": AccessNone}
 	if got := EffectiveAccess(policies, spotifyLegacy, "tracks", "spotify"); got != AccessNone {
 		t.Fatalf("legacy tighten = %q", got)

@@ -123,15 +123,15 @@ edits the repo. Same word, two audiences (see audience map §F).
 
 `DataGrant`, `Permissions`, `EffectiveAccess`, `Accessor`, `TypeAccess`,
 `PermissionsOverview`, access-level tokens, service `permissions` maps,
-`data_grants` config, and admin “Data access by type”.
+`data_grants` config, and admin “Data grants by type”.
 
 **Overlap:** five Go types and two config keys all answer “who can see what”.
-Type policy is primary; service maps only tighten; Accessor is a third principal
+Data grant is primary; service maps only tighten; Accessor is a third principal
 axis. The words “permission”, “access”, and “policy” are used interchangeably
 in English.
 
 **Resolution (glossary):** the product idea is a **data grant** (user allows an
-LLM agent or app to use a data type at an access level). Type policy stores
+LLM agent or app to use a data type at an access level). Data grant stores
 agent data grants; app scopes are **app data grants**.
 
 ### 2.4 Canonical vocabulary
@@ -223,9 +223,9 @@ After the overlap call-outs above, the stable concepts.
 | **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, README “Data grants”, `SECURITY.md` |
 | **DataGrant** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/types/policy.go` |
 | **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `policy.go`, `permissions_overlay.go` |
-| **EffectiveAccess** | Resolved level for (type, provider) combining type policy + service tighten. | `policy.go:484`, `config.go:437` |
+| **EffectiveAccess** | Resolved level for (type, provider) combining data grant + service tighten. | `policy.go:484`, `config.go:437` |
 | **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `policy.go:11-36` |
-| **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from type policy. | `internal/types/accessors.go:31` |
+| **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from data grant. | `internal/types/accessors.go:31` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |
 | **App token** | Scoped third-party credential; never a provider OAuth token. Carries **app data grants** (`scopes`). | `apps.go`, `apps_grant.go` |

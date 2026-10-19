@@ -244,7 +244,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
 	srv.registerUserDefinedKinds()
-	// Packs cannot self-enable; an admin type policy must name the kind.
+	// Packs cannot self-enable; an admin data grant must name the kind.
 	srv.config.SeedDataGrant("reading-list", types.DataGrant{Default: types.AccessRead})
 
 	schema, _ := reg.Get("reading-list")

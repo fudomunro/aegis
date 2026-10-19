@@ -75,8 +75,8 @@ func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool 
 	return !types.DataTypeHasWriteOp(caps, dataType)
 }
 
-// effectivePermissions resolves agent access for a service from type policy
-// plus legacy service permissions (tighten-only). Type policy is primary
+// effectivePermissions resolves agent access for a service from data grants
+// plus legacy service permissions (tighten-only). Data grant is primary
 // (issue #148); the service map remains a migration override.
 func (s *Server) effectivePermissions(svc *Service) types.Permissions {
 	if svc == nil || s == nil || s.config == nil {
@@ -103,7 +103,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 			label = "this data"
 		}
 		writeJSONError(w, http.StatusForbidden, fmt.Sprintf(
-			"permission denied: %s does not support write access to %s (method %s)",
+			"denied: %s does not support write access to %s (method %s)",
 			svc.Name, label, r.Method,
 		))
 		return false
@@ -116,7 +116,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		label = "this data"
 	}
 	writeJSONError(w, http.StatusForbidden, fmt.Sprintf(
-		"permission denied: agent access to %s on %s is %q (method %s)",
+		"denied: data grant for agent access to %s on %s is %q (method %s)",
 		label, svc.Name, level, r.Method,
 	))
 	return false
@@ -138,7 +138,7 @@ func permissionNotice(p types.Permissions) string {
 	if len(parts) == 0 {
 		return ""
 	}
-	return "Access policy: " + strings.Join(parts, ". ") + "."
+	return "Data grants: " + strings.Join(parts, ". ") + "."
 }
 
 // allDataDenied reports whether every listed data type (and the default)

@@ -54,8 +54,8 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
 | **Service grant limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | |
-| **Effective access** | Resolved level after type policy + service tighten | |
-| **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from type policy |
+| **Effective access** | Resolved level after data grant + service tighten | |
+| **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
@@ -71,11 +71,11 @@ like this:
 
 | Tailscale | Aegis |
 |-----------|-------|
-| Grant (policy rule) | **Data grant** (product); type-policy / app scope in config |
+| Grant (policy rule) | **Data grant** (product); data-grant / app scope in config |
 | Network capability (`ip`) | Tailnet grant/ACL for reaching Aegis |
 | Application capability (`app`) | **Access level** on a **data type** (`freebusy`, `read`, …) |
 | `ro` / `rw` (e.g. Taildrive) | `read` / `read-write` |
-| Deny-by-default | Unset type policy; places default `none` |
+| Deny-by-default | Unset data grant; places default `none` |
 
 Say “data grant” for what the user allows; reserve bare **grant** for Tailscale
 policy or the third-party one-time **grant code** (`aeg_grant_…`).

@@ -31,7 +31,7 @@ type Config struct {
 	typePolicies types.DataGrants
 	// serviceLimits is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared). Service maps are
-	// migration overrides that can only tighten type policy.
+	// migration overrides that can only tighten data grant.
 	serviceLimits map[string]*types.Permissions
 	// svcConnPath is the admin service-connections overlay
 	// (service_connections.json). Immich/local-store setup writes here so
@@ -351,7 +351,7 @@ func (c *Config) GetConnection(id string) *Connection {
 // SetServicePermissions validates and persists agent permissions for a service.
 // An empty/nil map clears the permissions block (unrestricted access).
 // Always writes the data-grant overlay (data_grants.json) — never aegis.json.
-// The map is a migration override: it can only tighten type policy, never
+// The map is a migration override: it can only tighten data grant, never
 // grant more than the type default (issue #148).
 func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
 	if err := types.ValidatePermissions(p); err != nil {
@@ -422,7 +422,7 @@ func (c *Config) SeedDataGrant(dataType string, policy types.DataGrant) {
 }
 
 // EffectivePermissions returns the resolved service-scoped permission map
-// for a provider: type policy first, then legacy service permissions tightened
+// for a provider: data grant first, then service grant_limits tightened
 // on top (issue #148).
 func (c *Config) EffectivePermissions(serviceID string) types.Permissions {
 	c.mu.RLock()

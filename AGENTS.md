@@ -285,7 +285,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | `http.DefaultClient` / `http.PostForm` without timeout | `aegisHTTPClient` + context |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
-| Service permissions dual-path treated as equal owners | Type policy is primary; service maps only tighten until the compat window ends |
+| Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
 | Large admin HTML pasted back into `admin.go` | Keep `web/admin.html` embed |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |

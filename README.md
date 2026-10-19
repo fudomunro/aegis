@@ -75,7 +75,7 @@ Aegis starts with these endpoints:
 - `GET /v1/library/messages` — the user's mail collection from live services plus the local archive (Gmail + Google Takeout), merged on Message-ID (bodies stay on the source service); also imported Signal chats (issue #168)
 - `GET /v1/library/transactions` — unified financial transactions (YNAB + imported Quicken files); signed decimal amounts, filters `after`/`before`/`account`/`q`/`currency` (issue #141)
 - `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
-- `GET /v1/library/{user-defined}` — user-defined types under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in type policy before agents can read it. See [User-defined types](#user-defined-types-issue-15).
+- `GET /v1/library/{user-defined}` — user-defined types under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in data grant before agents can read it. See [User-defined types](#user-defined-types-issue-15).
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
@@ -99,7 +99,7 @@ Aegis starts with these endpoints:
 See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
 
 Vocabulary for this manual (service vs connector vs connection, data type vs
-library kind, **data grant**, type policy, canonical home, content transport,
+library kind, **data grant**, data grant, canonical home, content transport,
 LLM agent vs coding agent) is defined in [`docs/glossary.md`](docs/glossary.md).
 
 ## User-defined types (issue #15)
@@ -119,7 +119,7 @@ user-types/
 
 Rules that keep packs safe:
 
-- **Opt-in.** A pack cannot create a data grant. Enable the kind in data grants / type policy
+- **Opt-in.** A pack cannot create a data grant. Enable the kind in data grants / data grant
   (`PUT /v1/admin/data-grants` or the admin UI) before agents can read it.
 - **No hijacking.** `id` / `perm_type` / `path` cannot collide with built-in
   data types or routes (`path` is always `/v1/library/{id}`).
@@ -130,7 +130,7 @@ Rules that keep packs safe:
 
 ```bash
 export AEGIS_USER_TYPES_DIR=$PWD/examples/user-types   # or copy into <data-dir>/user-types/
-# enable after load (type policy), then:
+# enable after load (data grant), then:
 curl -s https://aegis.example.ts.net/v1/library/reading-list | jq .
 ```
 
@@ -233,7 +233,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
-| `grant_limits` | Optional map of data type → access level for agents (migration override; can only tighten type policy — see [Data grants](#data-grants)) |
+| `grant_limits` | Optional map of data type → access level for agents (migration override; can only tighten data grant — see [Data grants](#data-grants)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis-issue-16)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
@@ -314,20 +314,20 @@ application-layer side of Tailscale-style access — you already use a tailnet
 grant so callers can *reach* Aegis; data grants say what they may *use*.
 
 Prefer the glossary terms here ([`docs/glossary.md`](docs/glossary.md)):
-**data grant** is the product idea; **type policy** is where **agent** data
+**data grant** is the product idea; **data grant** is where **agent** data
 grants live; a service **permissions map** can only tighten that default;
 **app data grants** scope third-party tokens. JSON/config keys stay
 `data_grants`, `grant_limits`, `data_grants.json`.
 
 Data grants live with **data types**, not service providers (issue #148). The
-primary model is a per-type policy: a type-level default plus optional
+primary model is a per-data grant: a type-level default plus optional
 per-provider overrides that can only **tighten** that default. Service
 `permissions` maps remain as migration overrides and can only further
 restrict what a data grant allows.
 
 **Accessors (issue #160).** Data is not only reached by LLM agents. Aegis also
 runs sync pipelines (mail archive, copy ledger, timeline/quicken import) and
-third-party apps hold scoped tokens. The permissions editor is **type-centric**:
+third-party apps hold scoped tokens. The data grants editor is **type-centric**:
 each data type shows the agent data grant (editable) plus only the other
 accessors that apply to that type (read-only). `GET /v1/admin/permissions`
 returns that same model. The map on Home answers the other half of confidence:
@@ -341,7 +341,7 @@ appear as additional accessor rows.
 | `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for types the pipeline stores |
 | `service` | configured connector that syncs that library type (e.g. Spotify, YouTube Music under `playlists`) | read-only for now |
 
-Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data type policies”):
+Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data data grants”):
 
 ```json
 "types": {
@@ -361,7 +361,7 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 }
 ```
 
-Service grant-limits map (still accepted; tighten-only once a type policy
+Service grant-limits map (still accepted; tighten-only once a data grant
 exists for that key):
 
 ```json
@@ -392,12 +392,12 @@ exists for that key):
 2. **Provider override** — `types[type].providers[service_id]`, which can
    only tighten the type default (e.g. `read` → `none`, `precise` → `city`).
 3. **Legacy service `permissions`** — during the migration window these are
-   provider overrides and can only tighten. When **no type policy exists** for
+   provider overrides and can only tighten. When **no data grant exists** for
    a key, the service map remains authoritative (so existing configs and
    places opt-in keep working).
 
 - The reserved key `default` in a service map applies to data types not listed —
-  **except `places`**, which is opt-in (see below). Type policy has no cross-type
+  **except `places`**, which is opt-in (see below). Data grant has no cross-type
   `default` key: each type owns its own default.
 - **`freebusy` is events-only** (issue #128). Scheduling apps can see when you
   are busy without reading titles, attendees, locations, or descriptions.
@@ -431,7 +431,7 @@ exists for that key):
 - Proxy paths are **canonicalized before classification**. Duplicate slashes
   (including `%2f`) collapse to the real type; `.` / `..` segments are rejected
   with `400`. Classification and upstream routing always see the same path.
-- If neither type policy nor service `permissions` is set, agents keep
+- If neither data grant nor service `permissions` is set, agents keep
   unrestricted access (previous behavior).
 - **Bootstrap vs overlay (issue #71, #148).** `aegis.json` may set bootstrap
   `permissions` per service. Admin UI saves write a separate
@@ -454,7 +454,7 @@ exists for that key):
 - Admin API: `GET/PUT /v1/admin/data-grants` is the primary editor;
   `GET/PUT /v1/admin/services/{id}/grant-limits` remains the secondary
   per-service override (and still reports `effective_permissions` after
-  type-policy resolution).
+  data-grant resolution).
 
 Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
@@ -2147,9 +2147,9 @@ POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSO
 GET /v1/admin/cache        — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/library/{kind}  — admin Library tab preview (issue #62; not counted as agent Home access)
-GET /v1/admin/permissions    — type-centric permissions editor model (issue #160): agent level + relevant apps/sync per data type
-GET /v1/admin/type-policies  — type-owned agent policy map (primary, issue #148)
-PUT /v1/admin/type-policies  — replace type policies {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+GET /v1/admin/permissions    — type-centric data grants editor model (issue #160): agent level + relevant apps/sync per data type
+GET /v1/admin/data-grants  — agent data-grant map (primary, issue #148)
+PUT /v1/admin/data-grants  — replace data grants {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
 GET /v1/admin/services/{id}/grant-limits  — service override map + effective_permissions + available/writable types
 PUT /v1/admin/services/{id}/grant-limits  — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
 GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
@@ -2201,8 +2201,8 @@ hook health, unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
-On the **Services** tab, shared **Data access by type** instructions sit above
-the filter. The type-policy editor lists each data type with its **agent**
+On the **Services** tab, shared **Data grants by type** instructions sit above
+the filter. The data-grant editor lists each data type with its **agent**
 level (editable) and any other accessors that apply to that type (third-party
 apps, sync pipelines) as read-only chips — only when relevant to the type
 (issue #160). Agent form controls (Available / Off always; **Editable** only

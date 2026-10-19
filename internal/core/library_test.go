@@ -324,7 +324,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "permission denied") {
+	if !strings.Contains(w.Body.String(), "denied: data grant") {
 		t.Fatalf("body = %s", w.Body.String())
 	}
 }

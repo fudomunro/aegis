@@ -144,7 +144,7 @@ func (c *Config) applyDataGrantsOverlayLocked() error {
 // setServiceLimitsEntryLocked updates the in-memory overlay entry for a
 // service and persists the overlay file. Empty/nil p is stored as explicit
 // clear (JSON null) so bootstrap permissions do not resurface on reload.
-// Service maps are migration overrides — they only tighten type policy.
+// Service maps are migration overrides — they only tighten data grant.
 // Caller must hold c.mu.
 func (c *Config) setServiceLimitsEntryLocked(id string, p types.Permissions) error {
 	if c.serviceLimits == nil {
