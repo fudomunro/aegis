@@ -39,7 +39,7 @@
       ]
     }
   },
-  "type_policies": {
+  "data_grants": {
     "tracks": {
       "default": "read",
       "providers": {
@@ -84,7 +84,7 @@
         "tracks"
       ],
       "connection": "spotify",
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "playlists": "read",
         "tracks": "read",
@@ -106,7 +106,7 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/youtube.readonly"
       ],
-      "permissions": {
+      "grant_limits": {
         "default": "read"
       },
       "description": "Lists YouTube Music playlists and liked videos into /v1/library/*. Playlist items via content transport. Shares the Google connection."
@@ -150,7 +150,7 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"
       ],
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "photos": "read"
       }
@@ -175,7 +175,7 @@
       },
       "cache_ttl": "5m",
       "description": "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical). Set canonical_for: [\"photos\"] here if Immich is your home copy (and remove it from google-photos).",
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "photos": "read"
       }
@@ -199,7 +199,7 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/contacts.readonly"
       ],
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "contacts": "read"
       }
@@ -223,7 +223,7 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/calendar.readonly"
       ],
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "events": "read"
       }
@@ -248,7 +248,7 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/gmail.readonly"
       ],
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "messages": "read"
       }
@@ -268,7 +268,7 @@
       },
       "cache_ttl": "5m",
       "description": "Live YNAB budget transactions for /v1/library/transactions. Prefer a Personal Access Token in headers (Aegis owns the secret). Amounts map from milliunits to signed decimal strings.",
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "transactions": "read"
       }
@@ -285,7 +285,7 @@
       ],
       "action": "inject",
       "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only \u2014 statements/PDFs are never stored.",
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "transactions": "read"
       }
@@ -307,7 +307,7 @@
       },
       "cache_ttl": "5m",
       "description": "Share photos to Bluesky as public image posts (ownership-claim PoC, issue #20). Aegis stores no photo bytes; it fetches from the canonical photo service, posts a copy, and returns a sha256 + post_uri claim. Image embeds cap at 1MB. Use an app password, not your main password.",
-      "permissions": {
+      "grant_limits": {
         "default": "read",
         "photos": "write"
       }

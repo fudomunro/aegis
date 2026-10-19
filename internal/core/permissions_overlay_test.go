@@ -86,11 +86,11 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if err := json.Unmarshal(ovRaw, &ov); err != nil {
 		t.Fatalf("parse overlay: %v", err)
 	}
-	if ov.Version != permissionsFileVersion {
+	if ov.Version != dataGrantsFileVersion {
 		t.Fatalf("overlay version = %d", ov.Version)
 	}
-	if ov.Services["spotify"] == nil || (*ov.Services["spotify"])["player"] != types.AccessNone {
-		t.Fatalf("overlay spotify = %+v", ov.Services["spotify"])
+	if ov.ServiceLimits["spotify"] == nil || (*ov.ServiceLimits["spotify"])["player"] != types.AccessNone {
+		t.Fatalf("overlay spotify = %+v", ov.ServiceLimits["spotify"])
 	}
 
 	// Fresh load: bootstrap + overlay.

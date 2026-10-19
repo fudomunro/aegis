@@ -70,20 +70,20 @@ func TestPermissionsOverlay_TypePoliciesPrimary(t *testing.T) {
 		t.Fatalf("spotify places = %q, want none", got)
 	}
 
-	// Persisted as v2 with types as primary.
+	// Persisted as v3 data_grants.
 	raw, err := os.ReadFile(permsPath)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var file permissionsOverlayFile
+	var file dataGrantsOverlayFile
 	if err := json.Unmarshal(raw, &file); err != nil {
 		t.Fatal(err)
 	}
-	if file.Version != permissionsFileVersion {
+	if file.Version != dataGrantsFileVersion {
 		t.Fatalf("version = %d", file.Version)
 	}
-	if file.Types["tracks"].Default != types.AccessFull {
-		t.Fatalf("types.tracks = %+v", file.Types["tracks"])
+	if file.DataGrants["tracks"].Default != types.AccessFull {
+		t.Fatalf("data_grants.tracks = %+v", file.DataGrants["tracks"])
 	}
 
 	// Reload keeps type policy and resolves the same way.
@@ -239,5 +239,94 @@ func TestHandleAdminTypePolicies(t *testing.T) {
 	}
 	if got := srv.config.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
 		t.Fatalf("effective = %q", got)
+	}
+}
+
+func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "aegis.json")
+	mustWriteFile(t, cfgPath, `{
+		"data_grants": {
+			"tracks": {"default": "read", "providers": {"spotify": "none"}},
+			"places": {"default": "none", "providers": {"google-timeline": "city"}}
+		},
+		"services": [
+			{"id": "spotify", "name": "Spotify", "action": "inject"},
+			{"id": "google-timeline", "name": "Timeline", "action": "inject",
+			 "grant_limits": {"places": "city"}}
+		]
+	}`)
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+		t.Fatalf("bootstrap data_grants provider tighten = %q", got)
+	}
+	if got := cfg.EffectiveAccess("google-timeline", "places"); got != types.AccessCity {
+		t.Fatalf("bootstrap grant_limits places = %q", got)
+	}
+
+	// Overlay file is data_grants.json with v3 keys.
+	ovPath := filepath.Join(dir, "data_grants.json")
+	mustWriteFile(t, ovPath, `{"version":3,"data_grants":{"tracks":{"default":"read-write"}},"service_limits":{}}`)
+	if err := cfg.InitPermissionsStore(ovPath); err != nil {
+		t.Fatalf("InitPermissionsStore: %v", err)
+	}
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessFull {
+		t.Fatalf("overlay data_grants win = %q", got)
+	}
+
+	// Saves write v3 keys only.
+	if err := cfg.SetDataGrants(types.DataGrants{"tracks": {Default: types.AccessRead}}); err != nil {
+		t.Fatalf("SetDataGrants: %v", err)
+	}
+	raw, err := os.ReadFile(ovPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var file dataGrantsOverlayFile
+	if err := json.Unmarshal(raw, &file); err != nil {
+		t.Fatal(err)
+	}
+	if file.DataGrants["tracks"].Default != types.AccessRead {
+		t.Fatalf("saved data_grants = %+v", file.DataGrants)
+	}
+	if file.Version != dataGrantsFileVersion {
+		t.Fatalf("version = %d", file.Version)
+	}
+}
+
+func TestHandleAdminDataGrants(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "aegis.json")
+	mustWriteFile(t, cfgPath, `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`)
+	cfg, err := LoadConfig(cfgPath)
+	if err != nil {
+		t.Fatalf("LoadConfig: %v", err)
+	}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	if err := srv.config.InitPermissionsStore(filepath.Join(dir, "data_grants.json")); err != nil {
+		t.Fatalf("InitPermissionsStore: %v", err)
+	}
+
+	body := `{"data_grants":{"tracks":{"default":"read"}}}`
+	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", strings.NewReader(body))
+	req.Header.Set("X-Api-Key", "test-key")
+	w := httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), `"data_grants"`) {
+		t.Fatalf("response missing data_grants: %s", w.Body.String())
+	}
+
+	req = httptest.NewRequest("GET", "/v1/admin/data-grants", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
 }

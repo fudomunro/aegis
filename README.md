@@ -119,7 +119,7 @@ user-types/
 
 Rules that keep packs safe:
 
-- **Opt-in.** A pack cannot create a data grant. Enable the kind in type policy
+- **Opt-in.** A pack cannot create a data grant. Enable the kind in data grants / type policy
   (`PUT /v1/admin/type-policies` or the admin UI) before agents can read it.
 - **No hijacking.** `id` / `perm_type` / `path` cannot collide with built-in
   data types or routes (`path` is always `/v1/library/{id}`).
@@ -317,7 +317,7 @@ Prefer the glossary terms here ([`docs/glossary.md`](docs/glossary.md)):
 **data grant** is the product idea; **type policy** is where **agent** data
 grants live; a service **permissions map** can only tighten that default;
 **app data grants** scope third-party tokens. JSON/config keys stay
-`type_policies`, `permissions`, `permissions.json`.
+`data_grants`, `grant_limits`, `data_grants.json` (legacy: `type_policies`, `permissions`, `permissions.json`).
 
 Data grants live with **data types**, not service providers (issue #148). The
 primary model is a per-type policy: a type-level default plus optional
@@ -336,12 +336,12 @@ appear as additional accessor rows.
 
 | Accessor kind | Where levels come from | In the type editor |
 |---------------|------------------------|--------------------|
-| `agent` | type-owned policy (`type_policies` / `permissions.json` `types`) | editable — admin “Data type policies” / `PUT /v1/admin/type-policies` |
+| `agent` | type-owned policy (`data_grants` / `data_grants.json`) | editable — admin “Data grants” / `PUT /v1/admin/data-grants` |
 | `app` | app `scopes` on the third-party record (fail closed) | read-only (edit via `PATCH /v1/admin/apps/{id}`); shown when the type is named or the level is not `none` |
 | `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for types the pipeline stores |
 | `service` | configured connector that syncs that library type (e.g. Spotify, YouTube Music under `playlists`) | read-only for now |
 
-Primary (aegis.json `type_policies` or permissions.json `types`, or admin “Data type policies”):
+Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data type policies”):
 
 ```json
 "types": {
@@ -435,8 +435,8 @@ exists for that key):
   unrestricted access (previous behavior).
 - **Bootstrap vs overlay (issue #71, #148).** `aegis.json` may set bootstrap
   `permissions` per service. Admin UI saves write a separate
-  `permissions.json` overlay (flag `-permissions-file`) schema **version 2**:
-  `types` (primary TypePolicy map) and `services` (tighten-only migration
+  `data_grants.json` overlay (flag `-data-grants-file`; legacy `-permissions-file`) schema **version 3**:
+  `data_grants` (primary DataGrant map) and `service_limits` (tighten-only migration
   overrides). A service present in the overlay uses those permissions; a
   present key set to `null` means unrestricted; services absent from the
   overlay keep the bootstrap map from `aegis.json`. Version 1 files
@@ -451,7 +451,7 @@ exists for that key):
   not re-save). Enable write explicitly when a real agent write op appears.
 - Enforcement is on the content/ingest transport, the unified library endpoint, and connector metadata (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
-- Admin API: `GET/PUT /v1/admin/type-policies` is the primary editor;
+- Admin API: `GET/PUT /v1/admin/data-grants` is the primary editor (alias `type-policies`);
   `GET/PUT /v1/admin/services/{id}/permissions` remains the secondary
   per-service override (and still reports `effective_permissions` after
   type-policy resolution).
@@ -640,7 +640,7 @@ on first run with mode `0700` (it holds secrets).
 ```
 <data-dir>/
   aegis.json              # bootstrap config (OAuth clients live here)
-  permissions.json        # admin permissions overlay (non-secret)
+  data_grants.json        # admin data-grant overlay (non-secret)
   apps.json               # third-party app registry (0600; token hashes only)
   service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (0600; may hold API keys)
   user_types.json         # admin UDT local-file selection overlay (issue #15)
@@ -662,7 +662,8 @@ An explicit flag always wins:
 | Flag | Default under `-data-dir` | Notes |
 |------|---------------------------|-------|
 | `-config` | `aegis.json` | Bootstrap config (services, connections, secrets) |
-| `-permissions-file` | `permissions.json` | Admin overlay; `aegis.json` is never rewritten |
+| `-data-grants-file` | `data_grants.json` | Admin data-grant overlay; |
+| `-permissions-file` | (alias) | Deprecated alias for `-data-grants-file`; `aegis.json` is never rewritten |
 | (none) | `service_connections.json` | Admin Immich/static-auth overlay (sibling of `-config`); `aegis.json` is never rewritten |
 | `-token-file` | `tokens.json` | Encrypted token storage |
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
@@ -693,7 +694,7 @@ directory or keep passing the explicit path flags.
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
 | `-data-dir` | OS app data dir | Local state root (see [Data directory](#data-directory-issue-74)) |
 | `-config` | `<data-dir>/aegis.json` | Bootstrap config path (services, connections, secrets) |
-| `-permissions-file` | `<data-dir>/permissions.json` | Admin permissions overlay (non-secret). All permission saves write here; `aegis.json` is never rewritten |
+| `-data-grants-file` | `<data-dir>/data_grants.json` | Admin data-grant overlay (non-secret). All data-grant saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `<data-dir>/tokens.json` | Encrypted token storage path |
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
 | `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables (issue #76) |
@@ -2151,7 +2152,7 @@ GET /v1/admin/permissions    — type-centric permissions editor model (issue #1
 GET /v1/admin/type-policies  — type-owned agent policy map (primary, issue #148)
 PUT /v1/admin/type-policies  — replace type policies {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
 GET /v1/admin/services/{id}/permissions  — service override map + effective_permissions + available/writable types
-PUT /v1/admin/services/{id}/permissions  — replace the service override (tighten-only vs type policy; writes permissions.json overlay, not aegis.json)
+PUT /v1/admin/services/{id}/permissions  — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
 GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
 POST /v1/admin/immich/test   — probe Immich endpoint/API key (key not stored from this call)
 POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json)
@@ -2209,7 +2210,7 @@ apps, sync pipelines) as read-only chips — only when relevant to the type
 when agents can truly
 change that data through Aegis — not mirror backups or picker sessions).
 Each service card keeps its own live permissions form under the title; every
-change saves immediately to `permissions.json` (the admin overlay). Bootstrap
+change saves immediately to `data_grants.json` (the admin overlay). Bootstrap
 defaults remain in `aegis.json`; the overlay wins for any service the admin
 UI has saved. Keys not shown in the form are preserved on save. Data-type rows
 use the Home map icons.
