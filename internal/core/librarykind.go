@@ -124,7 +124,7 @@ var libraryKinds = []types.LibraryKind{
 			"playlist", "play list", "music library", "my library", "saved playlists",
 		},
 		EmptyMsg: "no playlist-capable services configured",
-		DenyMsg:  "permission denied: agent access to playlists is not allowed",
+		DenyMsg:  "denied: data grant for agent access to playlists is not allowed",
 		FailMsg:  "failed to fetch playlists",
 	},
 	{
@@ -146,7 +146,7 @@ var libraryKinds = []types.LibraryKind{
 			"my likes", "my favorites", "my favourites",
 		},
 		EmptyMsg: "no liked-track-capable services configured",
-		DenyMsg:  "permission denied: agent access to tracks is not allowed",
+		DenyMsg:  "denied: data grant for agent access to tracks is not allowed",
 		FailMsg:  "failed to fetch liked tracks",
 	},
 	{
@@ -164,7 +164,7 @@ var libraryKinds = []types.LibraryKind{
 			"my albums", "album library",
 		},
 		EmptyMsg: "no album-capable services configured",
-		DenyMsg:  "permission denied: agent access to albums is not allowed",
+		DenyMsg:  "denied: data grant for agent access to albums is not allowed",
 		FailMsg:  "failed to fetch albums",
 	},
 	{
@@ -183,7 +183,7 @@ var libraryKinds = []types.LibraryKind{
 			"top artists", "artists i like",
 		},
 		EmptyMsg: "no artist-capable services configured",
-		DenyMsg:  "permission denied: agent access to artists is not allowed",
+		DenyMsg:  "denied: data grant for agent access to artists is not allowed",
 		FailMsg:  "failed to fetch artists",
 	},
 	{
@@ -200,7 +200,7 @@ var libraryKinds = []types.LibraryKind{
 			"who is in my contacts", "people i know",
 		},
 		EmptyMsg: "no contact-capable services configured",
-		DenyMsg:  "permission denied: agent access to contacts is not allowed",
+		DenyMsg:  "denied: data grant for agent access to contacts is not allowed",
 		FailMsg:  "failed to fetch contacts",
 	},
 	{
@@ -223,7 +223,7 @@ var libraryKinds = []types.LibraryKind{
 			"photo collection", "photos in my", "pictures in my",
 		},
 		EmptyMsg: "no photo-capable services configured",
-		DenyMsg:  "permission denied: agent access to photos is not allowed",
+		DenyMsg:  "denied: data grant for agent access to photos is not allowed",
 		FailMsg:  "failed to fetch photos",
 	},
 	{
@@ -243,7 +243,7 @@ var libraryKinds = []types.LibraryKind{
 			"google calendar", "what's on my calendar", "whats on my calendar",
 		},
 		EmptyMsg: "no calendar-capable services configured",
-		DenyMsg:  "permission denied: agent access to events is not allowed",
+		DenyMsg:  "denied: data grant for agent access to events is not allowed",
 		FailMsg:  "failed to fetch calendar events",
 	},
 	{
@@ -264,7 +264,7 @@ var libraryKinds = []types.LibraryKind{
 			"google mail", "gmail inbox", "correspondence",
 		},
 		EmptyMsg: "no message-capable services configured",
-		DenyMsg:  "permission denied: agent access to messages is not allowed",
+		DenyMsg:  "denied: data grant for agent access to messages is not allowed",
 		FailMsg:  "failed to fetch messages",
 	},
 	{
@@ -289,7 +289,7 @@ var libraryKinds = []types.LibraryKind{
 			"ynab", "quicken", "mint",
 		},
 		EmptyMsg: "no transaction-capable services configured",
-		DenyMsg:  "permission denied: agent access to transactions is not allowed",
+		DenyMsg:  "denied: data grant for agent access to transactions is not allowed",
 		FailMsg:  "failed to fetch transactions",
 	},
 	{
@@ -316,7 +316,7 @@ var libraryKinds = []types.LibraryKind{
 			"which beach was that", "where was that photo taken",
 		},
 		EmptyMsg: "no places-capable services configured (enable places permissions and connect OwnTracks or import a Google Timeline export)",
-		DenyMsg:  "permission denied: agent access to places is not allowed (places defaults to none — enable city, read, or precise in service permissions)",
+		DenyMsg:  "denied: data grant for agent access to places is not allowed (places default to none — enable city, read, or precise)",
 		FailMsg:  "failed to fetch places",
 	},
 }
@@ -526,7 +526,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	logger := withPeerLog(slog.With("handler", "library_"+kind.ID), r)
 	agent := agentForRequest(r)
 
-	// Third-party apps are scope-limited even when service permissions would
+	// Third-party apps are scope-limited even when service grant_limits would
 	// allow more (issue #131).
 	app := AppIdentityFrom(r)
 	if app != nil && !appAllowsLibrary(app, kind.PermType, r.Method) {
@@ -544,7 +544,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Status:   http.StatusForbidden,
 		})
 		writeJSONError(w, http.StatusForbidden,
-			fmt.Sprintf("permission denied: app access to %s is %q", kind.ID, app.Scopes.For(kind.PermType)))
+			fmt.Sprintf("denied: app data grant for %s is %q", kind.ID, app.Scopes.For(kind.PermType)))
 		return
 	}
 

@@ -42,7 +42,7 @@ func flowTestServer() *Server {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				Permissions: types.Permissions{
+				GrantLimits: types.Permissions{
 					types.PermissionDefaultKey: types.AccessRead,
 					"player":                   types.AccessNone,
 				},

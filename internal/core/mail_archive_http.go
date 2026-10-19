@@ -57,7 +57,7 @@ func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.mailReadable() {
-		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -82,7 +82,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.mailReadable() {
-		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -133,7 +133,7 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 		return
 	}
 	if !s.mailReadable() {
-		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -192,7 +192,7 @@ func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.mailReadable() {
-		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	s.handleMailSyncRequest(w, r, true)
@@ -284,7 +284,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	}
 	// Admin sync is operator-owned; only the agent surface honors messages=read.
 	if requireAgentMessagesRead && !s.effectivePermissions(svc).AllowsRead(mailPermType) {
-		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 
@@ -324,7 +324,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	// Takeout is not a live service in aegis.json; agent reads still need
 	// messages permission on some configured message-capable service.
 	if requireAgentMessagesRead && !s.mailReadable() {
-		writeJSONError(w, http.StatusForbidden, "permission denied: agent access to messages is not allowed")
+		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	if strings.TrimSpace(req.Path) != "" {

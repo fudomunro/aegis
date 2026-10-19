@@ -154,7 +154,7 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDe
 		reg.byID[schema.ID] = schema
 		reg.schemaDir[schema.ID] = schemaDir
 		reg.byPath[schema.Path] = schema.ID
-		// UDTs are opt-in until type policy / permissions name them (places).
+		// UDTs are opt-in until data grant / permissions name them (places).
 		types.MarkOptInDataType(schema.PermType)
 		loaded = append(loaded, schema)
 		if logger != nil {

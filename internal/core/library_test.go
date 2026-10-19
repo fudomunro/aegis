@@ -305,7 +305,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"playlists": types.AccessNone},
+				GrantLimits: types.Permissions{"playlists": types.AccessNone},
 			},
 		},
 	}
@@ -324,7 +324,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "permission denied") {
+	if !strings.Contains(w.Body.String(), "denied: data grant") {
 		t.Fatalf("body = %s", w.Body.String())
 	}
 }
@@ -335,7 +335,7 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 			{
 				ID: "youtube-music", Name: "YouTube Music", Action: "inject",
-				Permissions: types.Permissions{"playlists": types.AccessNone},
+				GrantLimits: types.Permissions{"playlists": types.AccessNone},
 			},
 		},
 	}
@@ -508,7 +508,7 @@ func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				Permissions: types.Permissions{"tracks": types.AccessNone},
+				GrantLimits: types.Permissions{"tracks": types.AccessNone},
 			},
 		},
 	}
@@ -857,7 +857,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Permissions: types.Permissions{"albums": types.AccessNone}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: types.Permissions{"albums": types.AccessNone}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

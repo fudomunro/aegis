@@ -4,6 +4,8 @@ Aegis holds OAuth tokens for music services and exposes user data (playlists,
 library, search) to LLM agents. This document describes the recommended access
 model when Aegis runs in a [Tailscale](https://tailscale.com) tailnet — the
 same identity layer [Aperture](https://tailscale.com/docs/aperture) uses.
+Product vocabulary (data grant, access levels, LLM agent) is in
+[`docs/glossary.md`](docs/glossary.md).
 
 ## Trust model
 
@@ -155,15 +157,21 @@ If you need per-user libraries later, store tokens keyed by Tailscale login and
 select the store from `PeerIdentityFrom(r)`. Until then, keep the allowlist
 tight on shared tailnets.
 
-### Data-type permissions
+### Data grants (data-type permissions)
 
-Authentication answers “who may call Aegis.” Per-service `permissions` in
-`aegis.json` answer “what may an authorized agent do with each data type”
-(for example deny `player` or limit `playlists` to `read`). Denials are enforced
-on the content/ingest proxy and library endpoints with 403. Agent discovery is
-via pre-request instructions and connector `SystemInstructions` (issue #119) —
-not a capabilities listing API. Omitting `permissions` preserves unrestricted
-access for authorized callers.
+Authentication answers “who may call Aegis.” A **data grant** answers “what may
+an authorized LLM agent or app do with each data type” — for example deny
+`player` or limit `playlists` to `read`. This is the app-capability layer
+alongside Tailscale **grants** (who can reach Aegis); see
+[`docs/glossary.md`](docs/glossary.md).
+
+Agent data grants live in `data_grants` (aegis.json or `data_grants.json`);
+service `grant_limits` only tighten. Denials are enforced on the
+content/ingest proxy and library endpoints with 403. Agent discovery is via
+pre-request instructions and connector `SystemInstructions` (issue #119) — not
+a capabilities listing API. Omitting a data grant (or `permissions`) preserves
+unrestricted access for authorized callers unless a type defaults closed
+(places default to `none`).
 
 ### Third-party app tokens (issue #131)
 
@@ -171,8 +179,8 @@ Non-agent clients use a **separate app token** (`aeg_app_…`) registered in the
 admin API. App tokens:
 
 - Are scope-limited to library **read** endpoints (not admin, proxy, OAuth, or mail).
-- Use the same access levels as service permissions, including `freebusy` for events.
-- Never grant more than service permissions allow (AND of both layers).
+- Carry **app data grants** (`scopes`) using the same access levels, including `freebusy` for events.
+- Never grant more than agent data grants / service permissions allow (AND of both layers).
 - Are stored as SHA-256 hashes in `apps.json` (0600); plaintext is shown once.
 
 An app token is still only useful if the third party can **reach** Aegis. Keep
@@ -201,3 +209,4 @@ clients.
 - [Tags](https://tailscale.com/kb/1068/tags)
 - [Tailscale Serve](https://tailscale.com/kb/1312/serve) (identity headers)
 - [tsnet](https://github.com/tailscale/tailscale/tree/main/tsnet) (embed Tailscale in Go; optional alternative to system `tailscaled`)
+- [Concept glossary](docs/glossary.md) (service/connector/connection, data grant, LLM agent vs coding agent)

@@ -35,11 +35,11 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		preferred = append(preferred, key)
 	}
 
-	policies := s.config.TypePolicies()
+	policies := s.config.DataGrants()
 	var extra []string
 	extra = append(extra, types.ExtraPolicyKeys(policies)...)
 	for _, svc := range s.config.ServiceSnapshots() {
-		extra = append(extra, types.ExtraPermissionKeys(svc.Permissions)...)
+		extra = append(extra, types.ExtraPermissionKeys(svc.GrantLimits)...)
 	}
 	if s.apps != nil {
 		for _, app := range s.apps.List() {
@@ -55,9 +55,9 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		ID:     agentAccessorID,
 		Kind:   types.AccessorAgent,
 		Label:  "LLM agents",
-		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. Type policy is primary; per-service forms only tighten.",
+		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. Data grants are primary; per-service forms only tighten.",
 		Levels: types.AgentOverviewLevels(policies, dataTypes),
-		// Edited via the type-policy form in the permissions editor.
+		// Edited via the data-grant form in the data grants editor.
 		Editable: true,
 	})
 
@@ -190,7 +190,7 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			Detail:   "Service Aegis syncs with for this data type (read-only here).",
 			Levels:   levels,
 			Explicit: explicit,
-			// Service permission maps are edited on the service card.
+			// Service grant_limits are edited on the service card.
 			Editable: false,
 		})
 	}

@@ -220,7 +220,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		ID:          connectors.GoogleGmailServiceID,
 		Name:        connectors.GoogleGmailServiceName,
 		Action:      "inject",
-		Permissions: types.Permissions{"messages": "read"},
+		GrantLimits: types.Permissions{"messages": "read"},
 	}}}
 	srv := &Server{
 		apiKey:      "test-key",
@@ -364,7 +364,7 @@ func TestMailHTTPDisabledAndDenied(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv = mailTestServer(t, a)
-	srv.config.Services[0].Permissions = types.Permissions{"messages": "none"}
+	srv.config.Services[0].GrantLimits = types.Permissions{"messages": "none"}
 	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/status", "")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("denied code = %d", w.Code)
@@ -384,7 +384,7 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 		ID:          "dummy",
 		Name:        "Dummy",
 		Action:      "inject",
-		Permissions: types.Permissions{"messages": "read"},
+		GrantLimits: types.Permissions{"messages": "read"},
 	})
 	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"dummy","reset_cursor":true}`)
 	if w.Code != http.StatusNotImplemented {
