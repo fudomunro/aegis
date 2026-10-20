@@ -5,6 +5,12 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Security
+
+- CI secret scan (gitleaks) over the full tree and history, with an allowlist
+  for operator snippets and test fakes. `public_hygiene_test.go` fails the
+  Test job if private host/path/email patterns reappear in the worktree.
+
 ### Documentation
 
 - Refresh the marketing site (`site/`) for current product language (data

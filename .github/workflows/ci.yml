@@ -130,3 +130,30 @@ jobs:
         with:
           args: --no-progress --offline --include-fragments --verbose './**/*.md'
           fail: true
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # History scan catches secrets that were committed then deleted.
+          fetch-depth: 0
+
+      # Generic credential patterns (API keys, tokens, private keys).
+      # Project-specific identity leaks are covered by
+      # internal/core/public_hygiene_test.go in the Test job.
+      # Pin matches a released gitleaks binary; bump deliberately.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp gitleaks
+          sudo install -m 755 /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
+
+      - name: Gitleaks
+        run: gitleaks detect --source . --redact --no-banner --verbose
