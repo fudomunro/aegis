@@ -239,7 +239,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		DryRun:       req.DryRun,
 		Planned:      len(tracks),
 		Truncated:    truncated,
-		IdentityNote: "Cross-service track matching is name-based (issue #4). Skipped items need manual review before treating this as a complete backup.",
+		IdentityNote: "Cross-service track matching is name-based. Skipped items need manual review before treating this as a complete backup.",
 	}
 
 	if req.DryRun {

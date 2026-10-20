@@ -148,7 +148,7 @@ func TestHandleLibraryMirror_DryRunDoesNotWrite(t *testing.T) {
 	if writes.Load() != 0 {
 		t.Fatalf("dry-run performed %d writes", writes.Load())
 	}
-	if res.IdentityNote == "" || !strings.Contains(res.IdentityNote, "issue #4") {
+	if res.IdentityNote == "" || !strings.Contains(res.IdentityNote, "name-based") {
 		t.Fatalf("missing identity note: %q", res.IdentityNote)
 	}
 }

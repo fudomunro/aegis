@@ -164,7 +164,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		PostURI:       result.PostURI,
 		PostURL:       result.PostURL,
 		SharedAt:      sharedAt,
-		Note: "PoC ownership claim for issue #20: content hash of the shared bytes plus a " +
+		Note: "PoC ownership claim: content hash of the shared bytes plus a " +
 			"public post locator. Not a cryptographic proof (no signature or trusted timestamp).",
 	}
 	s.recordPhotoShareCopy(
