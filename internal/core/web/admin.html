@@ -471,7 +471,7 @@
 
       <div id="agent-data-access-help" class="help-box">
         <h3>Data grants by type</h3>
-        <p>Each <strong>data type</strong> lists the accessors that apply to it (issue #160): the <strong>agent</strong> level you edit here, plus any third-party apps or Aegis sync pipelines that already reach that type (read-only). The map on Home shows what each accessor has actually accessed. Agent policy is type-owned (issue #148): set a type default below — it applies to every connected service. Use each service card’s form only to <em>tighten</em> further (a per-service override can never grant more than the type default). Available = read · Free/busy only = calendar availability without titles/attendees · Totals only = category/month sums · Off = hidden. Editable appears only when agents can actually change that data through Aegis (not mirror backups or photo picker sessions). Permissions only narrow connector access — they never add capabilities. Changes save immediately to the <code>data_grants.json</code> overlay (under the data directory).</p>
+        <p>Each data type’s <strong>data grant</strong> sets the agent access level; <strong>service limits</strong> on a service card can only tighten it. Saves to <code>data_grants.json</code>. <a href="https://github.com/fudomunro/aegis/blob/main/README.md#data-grants" target="_blank" rel="noopener noreferrer">Learn more</a></p>
       </div>
 
       <div class="help-box" id="data-grant-panel">
@@ -482,9 +482,9 @@
           <button class="btn btn-primary" id="data-grant-save" type="button">Save data grants</button>
         </div>
         <p class="meta" style="margin:0.55rem 0 0.35rem">
-          Primary agent-access policy, owned by each data type. Optional per-service overrides live on the service cards and can only tighten these defaults.
+          Type-owned agent access. <strong>Service limits</strong> on a service card can only tighten these defaults.
           <code>places</code> stays off until you name it (city / read / precise).
-          Other accessors shown under a type are read-only here — edit app scopes with <code>/v1/admin/apps</code>. Multi-user principals (issue #149) will appear when they land.
+          Other accessors under a type are read-only — edit app scopes with <code>/v1/admin/apps</code>.
         </p>
         <div id="data-grant-list" class="perm-list"></div>
         <div class="perm-status" id="data-grant-status"></div>
@@ -2137,6 +2137,8 @@ job.read</pre>
     // Form stays on the card; instructions live once above the filter (#69).
     return '<div class="perm-editor perm-live" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
+      "<h4>Service limits</h4>" +
+      '<p class="meta" style="margin:0 0 0.45rem">Tighten-only overrides of the data grant — never more than the type default.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
         : '<p class="meta">No core data types for this service.</p>') +
@@ -2211,7 +2213,7 @@ job.read</pre>
         status.textContent = err.message || "Failed to save";
         status.className = "perm-status err";
       } else {
-        showGlobalError(err.message || "Failed to save permissions");
+        showGlobalError(err.message || "Failed to save service limits");
       }
     }
   }
@@ -2532,7 +2534,7 @@ job.read</pre>
     const writable = new Set(svc.writable_data_types || []);
     const access = permSummary(svc.grant_limits || {}, writable);
     rows.push({
-      label: "Agent data",
+      label: "Service limits",
       value: escapeHtml(access) + (action === "block" ? ' <span class="flow-note">· blocked anyway</span>' : ""),
     });
 
