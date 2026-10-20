@@ -53,7 +53,7 @@ the shared word “agent”.
 | Architecture plan | `docs/restructure-core-types-connectors.md` | Coding agent | Historical; phases marked done. |
 | Example config | `aegis.example.json` | End user, Developer integrator | Self-describing `description` fields. |
 | Site README | `site/README.md` | Maintainer of marketing copy | Claim-sync guardrails. |
-| Walkthrough brief | `learn.md` | Coding agent | Regenerate walkthrough with commit stamp. |
+| Walkthrough brief | `experiments/learn.md` | Coding agent | Regenerate walkthrough with commit stamp. |
 | CI workflow | `.github/workflows/ci.yml` | Developer, Coding agent, CI | 80% floor, staticcheck, fuzz. |
 
 ### API language
@@ -81,7 +81,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 |-------|--------|----------|----------------|
 | LibraryKind instructions | `internal/types/kind.go`, `librarykind.go` | Runtime LLM agent | Imperative tool-use guide; `truncated`, `sources[].canonical`. |
 | Connector SystemInstructions | each connector (`spotify.go`, `immich.go`, …) | Runtime LLM agent | Negative constraints (“Do not call X”, “never ask for credentials”). |
-| Generic fallback | `handler.go` | Runtime LLM agent | Library-first, not a services API. |
+| Generic fallback | `internal/core/handler.go` | Runtime LLM agent | Library-first, not a services API. |
 | Permission notices | `core/permissions.go` | Runtime LLM agent | Denied types; freebusy-only “never request titles…”. |
 | Write policy | `core/canonical.go` | Runtime LLM agent | Canonical home first; no auto-mirror. |
 | Mail archive hints | `core/mail_archive_http.go` | Runtime LLM agent | Endpoint cookbook + sort recipes. |
@@ -139,7 +139,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 **Gaps:** fail-open rationale is still scattered (AGENTS, kind docs) rather than linked from SECURITY.
 
 ### F. Coding agent / repo maintainer
-**Surfaces:** AGENTS.md, `docs/*`, `learn.md` + walkthrough generator, CI workflow, sparse “why” comments.
+**Surfaces:** AGENTS.md, `docs/*`, `experiments/learn.md` + walkthrough generator, CI workflow, sparse “why” comments.
 
 **Gaps:** naming collision with runtime “agents”; historical restructure plan can misread as current state.
 
