@@ -45,7 +45,7 @@ const GoogleGmailServiceName = "Gmail"
 const (
 	googleGmailDefaultQuery   = "newer_than:30d"
 	googleGmailListPageSize   = 25
-	GoogleGmailLibraryCap     = 50
+	GoogleGmailLibraryCap     = 150
 	googleGmailMetadataFormat = "metadata"
 )
 

@@ -280,6 +280,7 @@ func TestLibraryMessagesInstructions_MentionEndpoint(t *testing.T) {
 		"/v1/library/messages",
 		"messages",
 		"canonical",
+		"/v1/mail/search",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)
