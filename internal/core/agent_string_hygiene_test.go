@@ -21,7 +21,7 @@ var agentStringForbidden = []string{
 	"foreign canonical",
 	"ingest transport",
 	"type pack",
-	"schema pack",
+	// "schema pack" is the allowed on-disk artifact name; prefer "user-defined type" in prose.
 }
 
 // Operator CLI flags from run.go. Agents ask the operator; they do not run flags.

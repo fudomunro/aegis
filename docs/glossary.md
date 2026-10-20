@@ -27,7 +27,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 
 | Prefer | Means | Notes |
 |--------|-------|-------|
-| **Data type** | One library dataset in admin/permissions language (playlists, tracks, photos, …) | Also `perm_type` in schema packs; prefer “data type” in English |
+| **Data type** | One library dataset in admin/permissions language (playlists, tracks, photos, …) | Also `perm_type` in schema files; prefer “data type” in English |
 | **Library kind** | The registry entry / URL kind for that dataset (`/v1/library/{kind}`) | Code: `LibraryKind`. URL segment: `kind` |
 | **Neutral model** | Provider-agnostic response shape (`Playlist`, `Track`, `Contact`, …) with `sources[]` | Provider quirks stay in connectors |
 | **Unified library** | `/v1/library/{kind}` aggregates across services | |
@@ -39,7 +39,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Copy ledger** | Durable record of mirrored/backup copies | |
 | **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
-| **User-defined type** | Schema pack under `user-types/` | Avoid “type pack”, “schema pack” outside the design spike |
+| **User-defined type** | Schema pack under `user-types/` | Prefer “user-defined type” for the concept; **schema pack** is the on-disk artifact (file/dir). Avoid “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
 | **Free/busy** | Busy intervals only (no titles/attendees) | Also `summary` (transactions), `city`/`precise` (places) |
 
