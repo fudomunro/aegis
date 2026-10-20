@@ -35,5 +35,5 @@ or stores image bytes; `blob_url` values expire in about an hour.
 Ownership / provenance proofs for photos are intentionally deferred:
 [](https://github.com/fudomunro/aegis/issues/20). A **Bluesky share
 PoC** is available so a published photo carries a lightweight claim (content
-hash + public post locator) — see [Photo share to Bluesky](#photo-share-to-bluesky).
+hash + public post locator) — see [Photo share to Bluesky](bluesky.md).
 

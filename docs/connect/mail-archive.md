@@ -42,7 +42,7 @@ curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1
 ```
 
 `mail-archive.db` is local state (like `tokens.json`) and lives under the
-[data directory](configuration.md) — do not commit it.
+[data directory](../configuration.md) — do not commit it.
 
 #### Google Takeout (read-only sync location)
 

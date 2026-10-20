@@ -257,16 +257,26 @@ func TestMarkdownLocalLinks_Resolve(t *testing.T) {
 		"README.md",
 		"SECURITY.md",
 		"AGENTS.md",
+		"CHANGELOG.md",
 	}
-	entries, err := os.ReadDir(filepath.Join(root, "docs"))
-	if err != nil {
-		t.Fatalf("read docs/: %v", err)
-	}
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".md") {
-			files = append(files, filepath.Join("docs", e.Name()))
+	var walkDocs func(relDir string)
+	walkDocs = func(relDir string) {
+		entries, err := os.ReadDir(filepath.Join(root, relDir))
+		if err != nil {
+			t.Fatalf("read %s: %v", relDir, err)
+		}
+		for _, e := range entries {
+			rel := filepath.Join(relDir, e.Name())
+			if e.IsDir() {
+				walkDocs(rel)
+				continue
+			}
+			if strings.HasSuffix(e.Name(), ".md") {
+				files = append(files, rel)
+			}
 		}
 	}
+	walkDocs("docs")
 
 	anchorCache := map[string]map[string]bool{}
 	anchorsFor := func(rel string) map[string]bool {

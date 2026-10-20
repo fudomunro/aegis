@@ -8,5 +8,5 @@
  - `https://your-aegis/v1/auth/google/callback`
 4. Enable the APIs you need (YouTube Data API v3, People API, Photos Picker API)
 5. Put the **same** client ID/secret in the shared `connections.google` block
- (see [Provider connections](configuration.md))
+ (see [Provider connections](../configuration.md))
 
