@@ -414,6 +414,16 @@ func TestMailArchiveHints(t *testing.T) {
 	if hints := srv.mailArchiveHints("play some jazz"); len(hints) != 0 {
 		t.Fatalf("unexpected hints: %v", hints)
 	}
+	// Finding a specific message should get search-first guidance.
+	for _, msg := range []string{
+		"find my email about the invoice",
+		"where is the mail from last week?",
+		"look up the email about baptism",
+	} {
+		if hints := srv.mailArchiveHints(msg); len(hints) == 0 {
+			t.Fatalf("expected archive hints for %q", msg)
+		}
+	}
 	srv.mail = nil
 	if hints := srv.mailArchiveHints("search my email archive"); len(hints) != 0 {
 		t.Fatalf("disabled archive should not hint: %v", hints)

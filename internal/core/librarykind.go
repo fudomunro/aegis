@@ -162,6 +162,11 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 	if name := s.canonicalServiceName(kindID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the canonical home.", k.Label, name)
 	}
+	if kindID == "messages" {
+		text += " Prefer /v1/mail/search (FTS + from/to/after/before) to find specific mail; " +
+			"library lists are capped and newest-first. Fetch one message at " +
+			"/v1/services/{sources[].service}/messages/{sources[].id} or /v1/mail/messages/{service}/{id}."
+	}
 	if kindID == "photos" {
 		text += "\n" + types.PhotoSourceDiscipline()
 	}
