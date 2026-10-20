@@ -53,7 +53,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
-| **Service grant limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | |
+| **Service limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | Admin UI label; also “service limits” in prose |
 | **Effective access** | Resolved level after data grant + service tighten | |
 | **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
@@ -62,8 +62,8 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 
 One-line shape (also in README “Data grants”): **data grants** are the product
 idea; `data_grants` owns agent data grants (default + per-provider floor);
-service `grant_limits` only tighten; app data grants scope third-party
-tokens; accessors are the principal axis.
+**Service limits** (`grant_limits`) only tighten; app data grants scope
+third-party tokens; accessors are the principal axis.
 
 ### Tailscale alignment
 

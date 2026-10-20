@@ -1,6 +1,6 @@
 # Aegis
 
-A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music), serves the user's data from a type-centric library, and enforces **data grants** with OAuth-based authentication.
+A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music, Google Photos/Contacts/Calendar/Gmail/Drive, Immich, Paperless-ngx, YNAB, Quicken, OwnTracks, Signal, Timeline, Bluesky, CalDAV/CardDAV), serves the user's data from a type-centric library, and enforces **data grants** with OAuth-based authentication.
 
 > Looking for the pitch rather than the manual? The marketing site lives in
 > [`site/`](site/) (issue #129).
@@ -22,7 +22,7 @@ Agent → Aegis (/v1/library, content transport) → provider APIs
 
 - **Go 1.27.1** (matches `go.mod`)
 - **Tailscale** with an [Aperture gateway](https://tailscale.com/docs/aperture/get-started) configured
-- **OAuth app credentials** for each service you want to connect (see [Setup](#setup))
+- **OAuth app credentials** for each service you want to connect (see [Connecting Services](#connecting-services))
 
 ## Quick Start
 
@@ -36,7 +36,7 @@ go build -o aegis .
 #   macOS:   ~/Library/Application Support/Aegis/
 #   Linux:   ${XDG_DATA_HOME:-~/.local/share}/aegis/
 # Override anytime with -data-dir /path or AEGIS_DATA_DIR.
-mkdir -p ~/Library/Application Support/Aegis   # or the Linux path above
+mkdir -p ~/Library/Application\ Support/Aegis   # or the Linux path above
 cp aegis.example.json ~/Library/Application\ Support/Aegis/aegis.json
 # Edit aegis.json with your OAuth client IDs and secrets
 
@@ -100,10 +100,10 @@ Aegis starts with these endpoints:
 - `PUT/DELETE /v1/admin/udt/kinds/{id}/sources/{sid}` — select/clear local JSON files for a schema source
 - `POST/DELETE /v1/admin/udt/kinds/{id}/extra[/{extraId}]` — attach/remove an extra local file feed
 
-See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off.
+See [SECURITY.md](SECURITY.md) for the Tailscale identity model, recommended ACLs, and why Funnel should stay off. The structured asset/threat/residual-risk model for auditors is in [`docs/threat-model.md`](docs/threat-model.md).
 
 Vocabulary for this manual (service vs connector vs connection, data type vs
-library kind, **data grant**, data grant, canonical home, content transport,
+library kind, **data grant**, data grants map, canonical home, content transport,
 LLM agent vs coding agent) is defined in [`docs/glossary.md`](docs/glossary.md).
 
 ## User-defined types (issue #15)
@@ -318,8 +318,8 @@ application-layer side of Tailscale-style access — you already use a tailnet
 grant so callers can *reach* Aegis; data grants say what they may *use*.
 
 Prefer the glossary terms here ([`docs/glossary.md`](docs/glossary.md)):
-**data grant** is the product idea; **data grant** is where **agent** data
-grants live; a service **permissions map** can only tighten that default;
+**data grant** is the product idea; **data grants map** is where **agent** data
+grants live; **Service limits** can only tighten that default;
 **app data grants** scope third-party tokens. JSON/config keys stay
 `data_grants`, `grant_limits`, `data_grants.json`.
 
@@ -345,7 +345,7 @@ appear as additional accessor rows.
 | `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for types the pipeline stores |
 | `service` | configured connector that syncs that library type (e.g. Spotify, YouTube Music under `playlists`) | read-only for now |
 
-Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data data grants”):
+Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data grants”):
 
 ```json
 "types": {
@@ -365,7 +365,7 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 }
 ```
 
-Service grant-limits map (still accepted; tighten-only once a data grant
+Service limits (still accepted; tighten-only once a data grant
 exists for that key):
 
 ```json
@@ -912,7 +912,7 @@ Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference). Prefer `"$ENV:…"` for `client_secret` so the file stays shareable — see [Provider connections](#provider-connections).
 3. Start Aegis and visit `https://your-aegis/` (or `/services`)
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
-5. All secrets at rest are encrypted under `-token-pass` (OAuth tokens and static service-connection credentials, issue #184) and OAuth tokens auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101) to rotate the passphrase.
+5. All secrets at rest are encrypted under `-token-pass` (OAuth tokens and static service-connection credentials, issue #184) and OAuth tokens auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101--184) to rotate the passphrase.
 
 If no services are connected yet, the Services tab shows extra help describing the OAuth flow.
 
@@ -944,7 +944,7 @@ Spotify scopes (see `aegis.example.json`):
    - `https://your-aegis/v1/auth/google/callback`
 4. Enable the APIs you need (YouTube Data API v3, People API, Photos Picker API)
 5. Put the **same** client ID/secret in the shared `connections.google` block
-   (see [Provider connections](#provider-connections-issue-26))
+   (see [Provider connections](#provider-connections))
 
 ### Amazon Music (Login with Amazon)
 
@@ -2546,6 +2546,10 @@ aegis/
                              implementing ServiceConnector + *Provider via Host
   web/ → internal/core/web/  Admin SPA + brand assets (//go:embed)
   SECURITY.md                Tailnet auth model, ACLs, operational guidance
+  docs/threat-model.md       Assets, actors, threats, residual risks (auditors)
+  docs/glossary.md           Canonical product vocabulary
+  docs/caldav-carddav.md     Nextcloud/iCloud/Fastmail CalDAV & CardDAV setup
+  docs/configuring-aperture.md  Aperture operator guide
   aegis.example.json         Example configuration
   experiments/index.html     Code walkthrough (experimental; regenerate via experiments/generate_walkthrough.py)
   docs/adding-data-types.md  Guide: defining a new library data type (issue #92)
