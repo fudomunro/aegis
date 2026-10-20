@@ -67,6 +67,10 @@ them away.
   worktree for runtime state.
 - **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
   service. See `SECURITY.md`.
+- **No issue numbers in user-facing copy.** GitHub issue refs stay in code
+  comments and maintainer docs only — never README headings, admin UI visible
+  text, or LLM-agent strings. Enforced by `internal/core/docs_hygiene_test.go`
+  and `agent_string_hygiene_test.go`. History belongs in `CHANGELOG.md`.
 
 ## Architecture map
 
