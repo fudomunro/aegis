@@ -173,6 +173,15 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
+	if mid, aid, ok := GmailAttachmentPath(remainingPath); ok {
+		if r.Method != http.MethodGet {
+			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		c.HandleGetAttachment(w, r, token, mid, aid)
+		return
+	}
+
 	if id, ok := GmailBareIDFromProxyPath(remainingPath, "messages"); ok {
 		if r.Method != http.MethodGet {
 			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -220,12 +229,111 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 // GmailBareIDFromProxyPath extracts an id from /messages/{id}, /me/messages/{id},
 // /threads/{id}, or /me/threads/{id}.
+// validGmailBareID reports whether id looks like a Gmail message/thread id.
+// Identifiers from other services must never be forwarded to the Gmail API.
+func validGmailBareID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	if strings.ContainsAny(id, "/\\ \t\r\n") {
+		return false
+	}
+	if strings.Contains(id, ":") {
+		return false
+	}
+	for _, r := range id {
+		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+func isGmailInvalidIDError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Invalid id value") || strings.Contains(msg, "invalidArgument")
+}
+
+const gmailQuotaMarker = "Quota exceeded"
+
+func isGmailQuotaError(err error) bool {
+	return err != nil && strings.Contains(err.Error(), gmailQuotaMarker)
+}
+
+// GmailAttachmentPath parses messages/{mid}/attachments/{aid}.
+func GmailAttachmentPath(remainingPath string) (messageID, attachmentID string, ok bool) {
+	p := strings.Trim(remainingPath, "/")
+	p = strings.TrimPrefix(p, "me/")
+	if !strings.HasPrefix(p, "messages/") {
+		return "", "", false
+	}
+	parts := strings.Split(strings.TrimPrefix(p, "messages/"), "/")
+	if len(parts) != 3 || parts[1] != "attachments" {
+		return "", "", false
+	}
+	messageID, attachmentID = parts[0], parts[2]
+	if !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
+		return "", "", false
+	}
+	return messageID, attachmentID, true
+}
+
+// HandleGetAttachment fetches one MIME attachment via the Gmail attachments API.
+func (c *GoogleGmailConnector) HandleGetAttachment(w http.ResponseWriter, r *http.Request, token, messageID, attachmentID string) {
+	if !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
+		WriteJSONError(w, http.StatusNotFound, "not a Gmail attachment id")
+		return
+	}
+	upstreamURL := c.GoogleGmailUpstreamBase() + "/users/me/messages/" + url.PathEscape(messageID) +
+		"/attachments/" + url.PathEscape(attachmentID)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
+	if err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := HTTPClient.Do(req)
+	if err != nil {
+		slog.Warn("gmail get attachment failed", "error", err)
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch attachment from Gmail")
+		return
+	}
+	defer resp.Body.Close()
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		WriteJSONError(w, http.StatusBadGateway, "failed to read attachment from Gmail")
+		return
+	}
+	if resp.StatusCode == http.StatusNotFound {
+		WriteJSONError(w, http.StatusNotFound, "attachment not found on Gmail")
+		return
+	}
+	if resp.StatusCode == http.StatusTooManyRequests || isGmailQuotaError(fmt.Errorf("%s", data)) {
+		WriteJSONError(w, http.StatusTooManyRequests, "Gmail quota exceeded — retry shortly")
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		slog.Warn("gmail get attachment bad status", "status", resp.StatusCode)
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch attachment from Gmail")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(data)
+}
+
 func GmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 	p := remainingPath
 	for _, prefix := range []string{"/me/" + kind + "/", "/" + kind + "/"} {
 		if strings.HasPrefix(p, prefix) {
-			id := strings.Trim(strings.TrimPrefix(p, prefix), "/")
-			return id, id != ""
+			rest := strings.Trim(strings.TrimPrefix(p, prefix), "/")
+			if rest == "" || strings.Contains(rest, "/") {
+				return "", false
+			}
+			return rest, true
 		}
 	}
 	return "", false
@@ -391,8 +499,24 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 	if format == "" {
 		format = googleGmailMetadataFormat
 	}
+	if !validGmailBareID(id) {
+		slog.Warn("gmail get message rejected non-gmail id", "id", id)
+		WriteJSONError(w, http.StatusNotFound,
+			"not a Gmail message id — use sources[].service and sources[].id from the library list")
+		return
+	}
 	raw, err := c.FetchGmailMessage(r.Context(), token, id, format)
 	if err != nil {
+		if isGmailInvalidIDError(err) {
+			WriteJSONError(w, http.StatusNotFound,
+				"message not found on Gmail — check sources[].service and sources[].id")
+			return
+		}
+		if isGmailQuotaError(err) {
+			WriteJSONError(w, http.StatusTooManyRequests,
+				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
+			return
+		}
 		slog.Warn("gmail get message failed", "id", id, "error", err)
 		WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
 		return
@@ -774,6 +898,21 @@ func GmailReadFromLabels(labels []string) bool {
 }
 
 // MapGoogleGmailMessage converts a Gmail message into the neutral shape.
+// GmailAttachmentSummaries lists MIME parts that have an attachmentId so
+// agents can fetch binaries at /messages/{id}/attachments/{attachmentId}.
+func GmailAttachmentSummaries(raw GoogleGmailMessage) []map[string]string {
+	if raw.Payload == nil {
+		return nil
+	}
+	var out []map[string]string
+	if id := strings.TrimSpace(raw.Payload.Body.AttachmentID); id != "" {
+		out = append(out, map[string]string{"id": id})
+	}
+	// Part attachment ids are not in the flattened struct; body.data-only
+	// parts are inline and need no fetch.
+	return out
+}
+
 func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message {
 	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
 	toList := MapGmailAddressHeader(GmailHeaderValue(raw, "To"))
@@ -809,6 +948,9 @@ func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message 
 	}
 	if raw.Snippet != "" {
 		extra["snippet"] = raw.Snippet
+	}
+	if atts := GmailAttachmentSummaries(raw); len(atts) > 0 {
+		extra["attachments"] = atts
 	}
 	if len(extra) > 0 {
 		src.Extra = extra
