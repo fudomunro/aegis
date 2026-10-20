@@ -123,7 +123,7 @@ func (c *ImmichConnector) SystemInstructions(baseURL string) string {
 
 GET %s/v1/library/photos — photo metadata from every connected photo service, including Immich (bytes stay on Immich)
 
-Photos are metadata-only. Use sources[].blob_url to fetch bytes (Aegis attaches the Immich API key). Immich holds the authoritative copy (foreign canonical).
+Photos are metadata-only. Use sources[].blob_url to fetch bytes (Aegis attaches the Immich API key). Immich holds the authoritative copy (canonical home).
 
 Byte transport only (not a general Immich API):
 GET %s/v1/services/immich/assets/{id}/original — original bytes

@@ -297,7 +297,7 @@ func (s *Server) writePolicyNotice(svc Service) string {
 	if len(lines) == 0 {
 		return ""
 	}
-	return "Write policy (issue #16):\n" + strings.Join(lines, "\n")
+	return "Write policy:\n" + strings.Join(lines, "\n")
 }
 
 // writePolicyNotices builds write-policy text for every matched inject service.

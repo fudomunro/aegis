@@ -237,7 +237,7 @@ func TestLibraryInstructions_MentionCanonical(t *testing.T) {
 	if !strings.Contains(instr, "canonical") {
 		t.Fatalf("instructions should mention canonical: %s", instr)
 	}
-	if !strings.Contains(instr, "Spotify") || !strings.Contains(instr, "home copy") {
+	if !strings.Contains(instr, "Spotify") || !strings.Contains(instr, "canonical home") {
 		t.Fatalf("instructions should name configured home service: %s", instr)
 	}
 }

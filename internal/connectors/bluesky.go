@@ -60,7 +60,7 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 		DataTypes: []types.DataTypeCapability{
 			{
 				Name:        "photos",
-				Description: "Share photos to Bluesky as public image posts, and list the user's Bluesky image posts (ownership-claim PoC, issue #20). Photo bytes stay on the PDS/CDN; Aegis does not store media.",
+				Description: "Share photos to Bluesky as public image posts, and list the user's Bluesky image posts (ownership-claim PoC). Photo bytes stay on the PDS/CDN; Aegis does not store media.",
 				Operations: []types.Operation{
 					{
 						Name:        "share_photo",
@@ -135,7 +135,7 @@ Library (metadata only; bytes stay on Bluesky):
 - GET %s/v1/library/contacts — the user's Bluesky following list (handles).
 - Image bytes: use sources[].blob_url (Aegis getBlob transport); do not scrape cdn.bsky.app directly.
 
-Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC (issue #20) — content hash + public post — not a cryptographic proof.
+Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC — content hash + public post — not a cryptographic proof.
 
 %s`, root, root, root, root, root, types.PhotoSourceDiscipline())
 }
