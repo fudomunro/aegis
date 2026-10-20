@@ -77,6 +77,31 @@ When empty, any identity that passes `-allowed-logins` and is a **user login**
 
 App tokens (`aeg_app_…`) are never admin, even when scopes look broad.
 
+## CSRF / origin protection on writes (issue #182)
+
+Tailnet identity is **ambient**: Tailscale Serve attaches identity headers on
+every request from your device, which behaves like a cookie. A hostile page in
+the same browser could otherwise auto-submit a write.
+
+On every non-GET/HEAD route behind `AuthMiddleware` / `AdminMiddleware`:
+
+1. **Same-origin required for ambient identity.** The request must carry
+   `Origin` matching `-base-url`, or `Sec-Fetch-Site: same-origin`. Missing or
+   cross-site `Origin` → **403**.
+2. **API key and app token writes skip the Origin check.** Browsers do not
+   attach those credentials automatically, so they are not CSRF-ambient.
+   Non-browser agents and curl should use API keys for writes.
+3. **JSON write surfaces require `Content-Type: application/json`.** Cross-site
+   `text/plain` and form POSTs are CORS “simple requests” (no preflight) and
+   are rejected. Content transport (`/v1/services/*`) keeps free-form media
+   types. Bodyless POSTs (cache clear, rotate) may omit Content-Type.
+4. **Consent form CSRF token.** `GET /v1/apps/authorize` renders a single-use
+   token; form-encoded `POST /v1/apps/authorize` must echo it. JSON grant
+   POSTs rely on Origin + Content-Type.
+
+The admin SPA and consent page send same-origin `fetch` with
+`Content-Type: application/json`, so they are unaffected.
+
 ## How identity is resolved
 
 Aegis tries, in order:

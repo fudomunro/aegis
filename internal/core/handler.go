@@ -124,6 +124,8 @@ type Server struct {
 	apps *AppStore
 	// grants holds short-lived consent codes from the authorize page.
 	grants *GrantStore
+	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
+	csrfTokens *StateStore
 	// udts holds user-defined type schemas loaded from the user-types
 	// directory (issue #15). May be nil when none are configured.
 	udts *userDefinedRegistry
@@ -169,6 +171,9 @@ func appPathAllowed(path string) bool {
 // content transport. Admin credentials also pass here so operators can use
 // the library; admin *surfaces* additionally require AdminMiddleware.
 func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	// csrfGuard runs after auth so it can distinguish ambient tailnet
+	// identity from explicit API-key / app-token credentials (issue #182).
+	next = s.csrfGuard(next)
 	return func(w http.ResponseWriter, r *http.Request) {
 		// App tokens are intentional third-party credentials. When present
 		// and valid, they win so scopes cannot be bypassed by a concurrent
@@ -178,7 +183,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				s.deny(w, r, nil, "app token not permitted on this endpoint")
 				return
 			}
-			next(w, withAppIdentity(r, app))
+			next(w, withAuthKind(withAppIdentity(r, app), authKindApp))
 			return
 		}
 
@@ -190,7 +195,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				s.deny(w, r, nil, "missing or invalid API key")
 				return
 			}
-			next(w, r)
+			next(w, withAuthKind(r, authKindAPIKey))
 			return
 		case AuthModeTailnet:
 			if id == nil {
@@ -204,15 +209,15 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				s.deny(w, r, id, "identity not in allowed logins")
 				return
 			}
-			next(w, withPeerIdentity(r, id))
+			next(w, withAuthKind(withPeerIdentity(r, id), authKindTailnet))
 			return
 		default: // AuthModeAuto
 			if id != nil && (loginAllowed(id, s.allowedLogins) || s.isAdminIdentity(id)) {
-				next(w, withPeerIdentity(r, id))
+				next(w, withAuthKind(withPeerIdentity(r, id), authKindTailnet))
 				return
 			}
 			if s.checkAPIKey(r) {
-				next(w, r)
+				next(w, withAuthKind(r, authKindAPIKey))
 				return
 			}
 			if id != nil {
@@ -237,6 +242,9 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // Valid agent credentials receive 403; unauthenticated requests receive 401.
 // App tokens are never admin.
 func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	// csrfGuard runs after auth so it can distinguish ambient tailnet
+	// identity from explicit admin API-key credentials (issue #182).
+	next = s.csrfGuard(next)
 	return func(w http.ResponseWriter, r *http.Request) {
 		if app := s.authenticateApp(r); app != nil {
 			s.denyStatus(w, r, nil, http.StatusForbidden, "app token not permitted on admin endpoints")
@@ -244,7 +252,7 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		}
 
 		if s.checkAdminAPIKey(r) {
-			next(w, r)
+			next(w, withAuthKind(r, authKindAPIKey))
 			return
 		}
 
@@ -275,11 +283,11 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				s.denyStatus(w, r, id, http.StatusForbidden, "admin privilege required")
 				return
 			}
-			next(w, withPeerIdentity(r, id))
+			next(w, withAuthKind(withPeerIdentity(r, id), authKindTailnet))
 			return
 		default: // AuthModeAuto
 			if id != nil && s.isAdminIdentity(id) {
-				next(w, withPeerIdentity(r, id))
+				next(w, withAuthKind(withPeerIdentity(r, id), authKindTailnet))
 				return
 			}
 			if s.checkAgentAPIKey(r) {

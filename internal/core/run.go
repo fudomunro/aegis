@@ -342,6 +342,7 @@ func Run() {
 		links:         links,
 		apps:          apps,
 		grants:        NewGrantStore(),
+		csrfTokens:    NewStateStore(),
 		copies:        copies,
 		mail:          mailArchive,
 		quicken:       quickenStore,

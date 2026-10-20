@@ -311,6 +311,8 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 		prom:        NewPromMetrics(),
+		csrfTokens:  NewStateStore(),
+		grants:      NewGrantStore(),
 	}
 }
 

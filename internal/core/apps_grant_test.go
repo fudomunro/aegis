@@ -47,11 +47,16 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("authorize get: %d", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "Aegis") {
-		t.Fatalf("consent page missing branding: %s", w.Body.String()[:200])
+	body := w.Body.String()
+	if !strings.Contains(body, "Aegis") {
+		t.Fatalf("consent page missing branding: %s", body[:200])
+	}
+	csrf := extractCSRFToken(t, body)
+	if csrf == "" {
+		t.Fatal("consent page missing CSRF token")
 	}
 
-	// POST grant requires auth.
+	// Form POST without CSRF is rejected (issue #182).
 	form := url.Values{
 		"client_id":    {"eco-demo"},
 		"name":         {"Event Coordinator"},
@@ -62,12 +67,24 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/apps/authorize",
 		strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("form grant without CSRF: %d %s", w.Code, w.Body.String())
+	}
+
+	// POST grant requires auth.
+	req = httptest.NewRequest("POST", "/v1/apps/authorize",
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleAppAuthorize)(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauthenticated grant: %d %s", w.Code, w.Body.String())
 	}
 
+	form.Set("csrf_token", csrf)
 	req = httptest.NewRequest("POST", "/v1/apps/authorize",
 		strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
