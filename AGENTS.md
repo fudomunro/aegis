@@ -61,7 +61,7 @@ them away.
   the floor when the suite grows; do **not** lower it to land untested write
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
-  `entity_links.json`, `data_grants.json`, `service_connections.json`,
+  `entity_links.json`, `data_grants.json`, `apps.json`, `service_connections.json`,
   `user_types.json`, `.aegis-token-pass`, or live binaries. Example config only via
   `aegis.example.json`. Prefer the OS data directory (issue #74) over the git
   worktree for runtime state.
@@ -78,18 +78,18 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Area | Where | Notes |
 |------|-------|-------|
 | Entry, flags, routes, connector registration | `internal/core/run.go` (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
-| Data directory + state path layout | `datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
-| Config + matching | `config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
-| Admin permissions overlay | `permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
-| Pre-request injection | `handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
-| ServiceConnector interface | `handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
+| Data directory + state path layout | `internal/core/datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
+| Config + matching | `internal/core/config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
+| Admin permissions overlay | `internal/core/permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
+| Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
+| ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
-| Tokens / OAuth / CSRF | `tokens.go`, `oauth.go`, `statestore.go`, `connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
-| Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
+| Tokens / OAuth / CSRF | `internal/core/tokens.go`, `internal/core/oauth.go`, `internal/core/statestore.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
+| Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
 | Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; core-owned `signal.go`, `quicken.go`, `timeline.go` | Register in `internal/core/run.go` `srv.connectors` |
-| Location history (places) | `places.go`, `timeline.go`, `owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
-| Admin UI | `web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
+| Location history (places) | `internal/core/places.go`, `internal/core/timeline.go`, `internal/connectors/owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
+| Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
 
 ### Extension points agents must use
@@ -142,7 +142,8 @@ All mutable local state defaults under one data directory (override with
 
 ```
 <data-dir>/aegis.json, data_grants.json, apps.json, entity_links.json, tokens.json,
-user_types.json, user-types/, copy_ledger.db, mail-archive.db, logs/aegis.log
+user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-archive.db,
+quicken.db, timeline.db, signal.db, audit_log.db, logs/aegis.log
 ```
 
 Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
@@ -176,7 +177,7 @@ Observed pattern across sessions (and the reason this file exists):
    canonical/mirror semantics must stay accurate when behavior changes.
 7. **User prefers Go** for this service (aligns with Tailscale stack). Do not
    introduce another runtime for Aegis itself.
-8. **`learn.md` still applies to `experiments/index.html`:** walkthrough page should
+8. **`experiments/learn.md` still applies to `experiments/index.html`:** walkthrough page should
    mark the **current code version** (commit) when regenerated.
 
 ## Commands
@@ -286,7 +287,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
-| Large admin HTML pasted back into `admin.go` | Keep `web/admin.html` embed |
+| Large admin HTML pasted back into `admin.go` | Keep `internal/core/web/admin.html` embed |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `libraryPageCap`, singleflight |
@@ -297,15 +298,15 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Task | Start here |
 |------|------------|
 | New library data type / kind | `docs/adding-data-types.md` (checklist), then `librarykind.go` |
-| Hook behavior / system instructions | `handler.go`, connector `SystemInstructions` |
+| Hook behavior / system instructions | `internal/core/handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
-| Config schema / service matching | `config.go`, `aegis.example.json`, README “Configuration” |
-| Admin data-grant writes | `permissions_overlay.go`, `config.go` `SetDataGrants` / `SetServicePermissions`, README “Data grants” |
-| OAuth / connections / refresh | `oauth.go`, `connections.go`, `tokens.go` |
-| Unified library + merge | `librarykind.go`, `internal/types/{merge,models}.go` |
-| Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `permissions_overlay.go`, `core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
-| Admin map / flow | `flow.go`, `admin.go`, `web/admin.html` |
-| Auth model / ACLs | `SECURITY.md`, `identity.go` |
+| Config schema / service matching | `internal/core/config.go`, `aegis.example.json`, README “Configuration” |
+| Admin data-grant writes | `internal/core/permissions_overlay.go`, `internal/core/config.go` `SetDataGrants` / `SetServicePermissions`, README “Data grants” |
+| OAuth / connections / refresh | `internal/core/oauth.go`, `internal/core/connections.go`, `internal/core/tokens.go` |
+| Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
+| Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
+| Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
+| Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
 | Product/API docs | `README.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
