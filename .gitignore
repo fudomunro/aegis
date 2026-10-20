@@ -1,22 +1,26 @@
 # Binaries
 aegis
-aperture-guardian
-guardian
 *.exe
 
-# Local live-test state (issue #1)
+# Local live-test / runtime state (never commit; prefer OS data dir)
+# See AGENTS.md "Secrets stay out of git" and "Local state layout".
 aegis.json
-guardian.json
 tokens.json
 entity_links.json
-permissions.json
+data_grants.json
+apps.json
+service_connections.json
 user_types.json
+user-types/
+copy_ledger.db
 mail-archive.db
 mail-archive.db-*
+quicken.db
+timeline.db
+signal.db
+audit_log.db
 .aegis-token-pass
-.guardian-token-pass
-aegis.log
-guardian.log
+logs/
 *.log
 coverage.out
 
