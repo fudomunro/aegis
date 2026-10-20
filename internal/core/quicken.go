@@ -722,7 +722,7 @@ func (c *QuickenConnector) Capabilities() types.ServiceCapabilities {
 // SystemInstructions returns the agent hint when Quicken is referenced.
 func (c *QuickenConnector) SystemInstructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
-	return fmt.Sprintf(`When the user's request involves Quicken files or historical bank exports, use Aegis. Imported QIF/QFX line items are available through GET %s/v1/library/transactions (source service "quicken") merged with live budget data. Statements and PDFs are never stored — metadata only. Ask the user to import files with the -import-quicken flag or admin import if the history is missing.
+	return fmt.Sprintf(`When the user's request involves Quicken files or historical bank exports, use Aegis. Imported QIF/QFX line items are available through GET %s/v1/library/transactions (source service "quicken") merged with live budget data. Statements and PDFs are never stored — metadata only. If the history is missing, ask the operator to import files (Advanced → Quicken import).
 `, root)
 }
 

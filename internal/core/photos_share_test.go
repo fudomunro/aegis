@@ -141,7 +141,7 @@ func TestHandlePhotoShare_HappyPathClaim(t *testing.T) {
 	if resp.Claim.TargetService != "bluesky" || resp.Claim.SourceService != "immich" {
 		t.Fatalf("claim identity = %+v", resp.Claim)
 	}
-	if !strings.Contains(resp.Claim.Note, "issue #20") {
+	if !strings.Contains(resp.Claim.Note, "PoC ownership claim") {
 		t.Fatalf("claim note = %q", resp.Claim.Note)
 	}
 

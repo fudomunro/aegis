@@ -44,7 +44,7 @@ func TestImmichConnector_SystemInstructions(t *testing.T) {
 		"/v1/services/immich/assets/{id}/original",
 		"/v1/library/photos",
 		"blob_url",
-		"foreign canonical",
+		"canonical home",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("instructions missing %q: %s", want, instr)
