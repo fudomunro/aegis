@@ -75,4 +75,4 @@ You should see neutral playlist objects with `sources[]` provenance. Vocabulary 
 
 ## License
 
-Private repository — internal use only.
+[BSD 3-Clause](LICENSE). Same family of license Tailscale uses for much of its open source work.

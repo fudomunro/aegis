@@ -84,7 +84,7 @@ type ImmichTailnetGuide struct {
 	// DisplayName is the admin-console label for the service.
 	DisplayName string `json:"display_name"`
 	// TailnetDNS is the MagicDNS suffix when derivable from -base-url
-	// (e.g. heron-census.ts.net).
+	// (e.g. your-tailnet.ts.net).
 	TailnetDNS string `json:"tailnet_dns,omitempty"`
 	// SuggestedEndpoint is the Immich API base once the service is hosted.
 	SuggestedEndpoint string `json:"suggested_endpoint,omitempty"`
@@ -253,7 +253,7 @@ func immichConfigSnippet(endpoint, baseURL string) string {
 }
 
 // tailnetDNSFromBaseURL extracts the MagicDNS suffix from Aegis's public URL
-// (https://aegis.heron-census.ts.net → heron-census.ts.net). Empty when the
+// (https://aegis.your-tailnet.ts.net → your-tailnet.ts.net). Empty when the
 // base URL is not a ts.net name.
 func tailnetDNSFromBaseURL(baseURL string) string {
 	u, err := url.Parse(strings.TrimSpace(baseURL))

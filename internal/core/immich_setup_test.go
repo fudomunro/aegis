@@ -542,8 +542,8 @@ func TestTailnetDNSFromBaseURL(t *testing.T) {
 	cases := []struct {
 		in, want string
 	}{
-		{"https://aegis.heron-census.ts.net", "heron-census.ts.net"},
-		{"https://aegis.heron-census.ts.net/", "heron-census.ts.net"},
+		{"https://aegis.example.ts.net", "example.ts.net"},
+		{"https://aegis.example.ts.net/", "example.ts.net"},
 		{"http://localhost:8080", ""},
 		{"https://aegis.example.com", ""},
 		{"", ""},
@@ -556,17 +556,17 @@ func TestTailnetDNSFromBaseURL(t *testing.T) {
 }
 
 func TestImmichTailnetGuide_VIPService(t *testing.T) {
-	g := immichTailnetGuide("https://aegis.heron-census.ts.net", "")
+	g := immichTailnetGuide("https://aegis.example.ts.net", "")
 	if g == nil {
 		t.Fatal("guide is nil")
 	}
 	if g.ServiceName != "svc:immich" {
 		t.Fatalf("service name = %q", g.ServiceName)
 	}
-	if g.TailnetDNS != "heron-census.ts.net" {
+	if g.TailnetDNS != "example.ts.net" {
 		t.Fatalf("tailnet dns = %q", g.TailnetDNS)
 	}
-	if g.SuggestedEndpoint != "https://immich.heron-census.ts.net/api" {
+	if g.SuggestedEndpoint != "https://immich.example.ts.net/api" {
 		t.Fatalf("suggested endpoint = %q", g.SuggestedEndpoint)
 	}
 	if !strings.Contains(g.Why, "VIP") || strings.Contains(strings.ToLower(g.Why), "funnel") && !strings.Contains(g.Why, "never Funnel") {
@@ -592,7 +592,7 @@ func TestImmichTailnetGuide_VIPService(t *testing.T) {
 		"tailscale serve --service svc:immich",
 		"/device/$DEVICE_ID/tags",
 		"/approved",
-		"https://immich.heron-census.ts.net/api",
+		"https://immich.example.ts.net/api",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("steps missing %q in:\n%s", want, joined)
@@ -602,14 +602,14 @@ func TestImmichTailnetGuide_VIPService(t *testing.T) {
 		t.Fatalf("commands block incomplete: %q", g.Commands)
 	}
 	// Configured endpoint wins as the connect target once set.
-	g2 := immichTailnetGuide("https://aegis.heron-census.ts.net", "http://photos.home.ts.net:2283/api")
+	g2 := immichTailnetGuide("https://aegis.example.ts.net", "http://photos.home.ts.net:2283/api")
 	if g2.SuggestedEndpoint != "http://photos.home.ts.net:2283/api" {
 		t.Fatalf("configured endpoint ignored: %q", g2.SuggestedEndpoint)
 	}
 }
 
 func TestImmichSuggestedEndpoint(t *testing.T) {
-	if got := immichSuggestedEndpoint("heron-census.ts.net"); got != "https://immich.heron-census.ts.net/api" {
+	if got := immichSuggestedEndpoint("example.ts.net"); got != "https://immich.example.ts.net/api" {
 		t.Fatalf("got %q", got)
 	}
 	if got := immichSuggestedEndpoint(""); got != "http://photos.home.ts.net:2283/api" {
@@ -618,7 +618,7 @@ func TestImmichSuggestedEndpoint(t *testing.T) {
 }
 
 func TestImmichSetupStatus_IncludesTailnetGuide(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://aegis.heron-census.ts.net")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.ts.net")
 	status := srv.immichSetupStatus(context.Background(), false)
 	if status.Tailnet == nil {
 		t.Fatal("expected tailnet guide")
@@ -626,7 +626,7 @@ func TestImmichSetupStatus_IncludesTailnetGuide(t *testing.T) {
 	if status.Tailnet.ServiceName != "svc:immich" {
 		t.Fatalf("service = %q", status.Tailnet.ServiceName)
 	}
-	if status.Snippet == "" || !strings.Contains(status.Snippet, "immich.heron-census.ts.net") {
+	if status.Snippet == "" || !strings.Contains(status.Snippet, "immich.example.ts.net") {
 		t.Fatalf("snippet should use VIP endpoint: %q", status.Snippet)
 	}
 }
