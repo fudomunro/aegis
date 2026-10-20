@@ -5,6 +5,13 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Fixed
+
+- Pre-request hook no longer intercepts software-development messages that
+  mention service names as identifiers (issue #205). Built-in development
+  detection (code fences, source file paths, Aegis repo markers) plus optional
+  `hook.skip_patterns` regexes skip matching and allow the request unchanged.
+
 ### Security
 
 - CI secret scan (gitleaks) over the full tree and history, with an allowlist

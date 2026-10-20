@@ -32,6 +32,44 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](../aegis.example
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
 
+### Pre-request matching skips
+
+The pre-request hook matches service names and library questions as
+case-insensitive substrings of Aperture's `user_message`. That is correct for
+consumer questions ("play jazz on Spotify") but wrong for software development
+that mentions those names as identifiers (connectors, tests, docs). Aegis must
+not redirect agents that are developing Aegis itself — or any other codebase —
+when matching language shows up as code.
+
+Matching is skipped (request allowed unchanged) when the user message looks
+like development work:
+
+- fenced code blocks (```)
+- path-like tokens ending in a source/build extension (`.go`, `.ts`, `.py`, …)
+- Aegis repo identifiers (`AGENTS.md`, `internal/core`, `LibraryKind`,
+  `go.mod`, …)
+
+Operators can widen the net with `hook.skip_patterns`. Each entry is a
+**case-insensitive regular expression**; if any matches the user message, all
+service and library matching is skipped:
+
+```json
+{
+  "hook": {
+    "skip_patterns": ["my-other-repo", "feat/issue-", "worktree"]
+  }
+}
+```
+
+Invalid patterns fail config load (same as a bad service section). Skip is
+fail-open to Aperture: the hook still returns `{"action":"allow"}`. Hook-health
+observations record `action: "skip"` with `skip_reason` (`development` or
+`skip_pattern`) so you can see when this fires.
+
+Heuristics stay conservative on purpose — ordinary product questions do not
+hit them. If a real request is still intercepted during development work, add
+a `skip_patterns` entry rather than weakening consumer matching.
+
 ### Provider connections
 
 Every OAuth-enabled service must reference a top-level **connection** so

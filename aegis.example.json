@@ -39,6 +39,13 @@
       ]
     }
   },
+  "hook": {
+    "skip_patterns": [
+      "my-other-repo",
+      "feat/issue-",
+      "worktree"
+    ]
+  },
   "data_grants": {
     "tracks": {
       "default": "read",
@@ -284,7 +291,7 @@
         "bank export"
       ],
       "action": "inject",
-      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only \u2014 statements/PDFs are never stored.",
+      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only — statements/PDFs are never stored.",
       "grant_limits": {
         "default": "read",
         "transactions": "read"
