@@ -499,7 +499,7 @@
           <button class="btn" id="immich-check" type="button">Run checks</button>
         </div>
         <p class="meta" style="margin:0.55rem 0 0.35rem">
-          Self-hosted photo library as the home copy for photos. Bytes stay on Immich.
+          Self-hosted photo library as the canonical home for photos. Bytes stay on Immich.
           <a href="https://docs.immich.app/overview/quick-start/" target="_blank" rel="noopener noreferrer">Immich docs</a>
           · <code>docs/immich-live-testing.md</code>
         </p>
@@ -2878,7 +2878,7 @@ job.read</pre>
     const cls = st.role === "canonical" ? "source-role source-role-canonical" : "source-role source-role-mirror";
     const title = st.role === "canonical"
       ? "Authoritative non-Aegis home for this type (issue #16)"
-      : "Mirror / non-home copy";
+      : "Mirror copy (not canonical)";
     return '<span class="' + cls + '" title="' + escapeHtml(title) + '">' + escapeHtml(st.role) + "</span>";
   }
 
