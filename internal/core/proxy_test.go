@@ -305,7 +305,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		baseURL:     baseURL,
 		config:      cfg,
 		cache:       NewCache(),
-		tokens:      &TokenStore{Tokens: make(map[string]*OAuthToken)},
+		tokens:      &TokenStore{Tokens: make(map[string]*OAuthToken), Secrets: make(map[string]string)},
 		oauthStates: NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
