@@ -9,11 +9,15 @@ import (
 )
 
 // serviceConnectionsFileVersion is the on-disk schema for service_connections.json.
-const serviceConnectionsFileVersion = 1
+// Version 2 never writes secret values: static credentials live in the
+// encrypted token store under -token-pass (issue #184).
+const serviceConnectionsFileVersion = 2
 
 // serviceConnectionEntry is an admin-saved connection surface for a service
 // that authenticates with static headers (Immich and other local/foreign
-// stores). Secrets live here — file mode 0600. Never echoed back by admin APIs.
+// stores). Header values are held in memory from the encrypted token store
+// (issue #184) and are never echoed back by admin APIs. Legacy plaintext
+// files may still carry Headers; they are migrated on load.
 type serviceConnectionEntry struct {
 	Endpoint     string            `json:"endpoint,omitempty"`
 	Headers      map[string]string `json:"headers,omitempty"`
@@ -40,7 +44,9 @@ type serviceConnectionsFile struct {
 }
 
 // tailscaleAdminEntry is the operator-held Tailscale Admin API credential
-// (issue #124). Secrets live here — file mode 0600. Never echoed back.
+// (issue #124). APIKey is held in memory from the encrypted token store
+// (issue #184) and never echoed back. Legacy plaintext files may still
+// carry api_key; it is migrated on load.
 type tailscaleAdminEntry struct {
 	// APIKey is a tskey-api-… access token (or OAuth access token).
 	APIKey string `json:"api_key,omitempty"`
@@ -85,6 +91,8 @@ func loadServiceConnections(path string) (*serviceConnectionsFile, error) {
 	if ov.Services == nil {
 		ov.Services = map[string]serviceConnectionEntry{}
 	}
+	// Resolve $ENV: indirection for in-memory use. Migration encrypts the
+	// resolved values into the token store and strips the plaintext file.
 	resolveServiceConnectionSecrets(ov.Services)
 	if ov.Tailscale != nil && ov.Tailscale.APIKey != "" {
 		ov.Tailscale.APIKey = resolveSecret("service_connections.tailscale.api_key", ov.Tailscale.APIKey)
@@ -92,24 +100,36 @@ func loadServiceConnections(path string) (*serviceConnectionsFile, error) {
 	return ov, nil
 }
 
+// stripServiceConnectionSecrets removes secret values from an overlay
+// snapshot so the on-disk file never writes them (issue #184).
+func stripServiceConnectionSecrets(ov *serviceConnectionsFile) *serviceConnectionsFile {
+	out := &serviceConnectionsFile{
+		Version:  serviceConnectionsFileVersion,
+		Services: map[string]serviceConnectionEntry{},
+	}
+	for id, entry := range ov.Services {
+		entry.Headers = nil
+		out.Services[id] = entry
+	}
+	if ov.Tailscale != nil {
+		ts := *ov.Tailscale
+		ts.APIKey = ""
+		out.Tailscale = &ts
+	}
+	return out
+}
+
 func saveServiceConnections(path string, ov *serviceConnectionsFile) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("service connections overlay has no path; cannot save")
 	}
-	out := serviceConnectionsFile{
-		Version:   serviceConnectionsFileVersion,
-		Services:  ov.Services,
-		Tailscale: ov.Tailscale,
-	}
-	if out.Services == nil {
-		out.Services = map[string]serviceConnectionEntry{}
-	}
+	out := stripServiceConnectionSecrets(ov)
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
 		return err
 	}
 	data = append(data, '\n')
-	// 0600 — may contain Immich API keys and similar static credentials.
+	// 0600 — file is non-secret after #184, but stays tight as local state.
 	if err := atomicWriteFile(path, data, 0o600); err != nil {
 		return err
 	}
@@ -117,25 +137,34 @@ func saveServiceConnections(path string, ov *serviceConnectionsFile) error {
 	return nil
 }
 
-// InitServiceConnectionsStore sets the overlay path and applies any existing
-// entries onto bootstrap services. Production startup passes the data-dir
-// default next to aegis.json.
-func (c *Config) InitServiceConnectionsStore(path string) error {
+// InitServiceConnectionsStore sets the overlay path, attaches the encrypted
+// secret store, migrates any legacy plaintext credentials into it, and
+// applies existing entries onto bootstrap services. Production startup passes
+// the data-dir default next to aegis.json and the TokenStore unlocked with
+// -token-pass (issue #184).
+func (c *Config) InitServiceConnectionsStore(path string, secrets *TokenStore) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.svcConnPath = path
-	return c.applyServiceConnectionsOverlayLocked()
+	c.secrets = secrets
+	if err := c.applyServiceConnectionsOverlayLocked(); err != nil {
+		return err
+	}
+	return c.migratePlaintextServiceSecretsLocked()
 }
 
 // applyServiceConnectionsOverlayLocked reloads admin-saved connection settings.
 // Overlay entries that claim canonical kinds take ownership — those kinds are
 // stripped from bootstrap services so aegis.json + overlay stay single-owner.
+// Static credentials come from the encrypted token store when attached;
+// legacy plaintext values remain in memory only until migration.
 // Caller must hold c.mu.
 func (c *Config) applyServiceConnectionsOverlayLocked() error {
 	ov, err := loadServiceConnections(c.svcConnPath)
 	if err != nil {
 		return err
 	}
+	c.hydrateServiceConnectionSecretsLocked(ov)
 	c.svcConnOverlay = ov.Services
 	c.tailscaleAdmin = ov.Tailscale
 	for id, entry := range ov.Services {
@@ -164,6 +193,117 @@ func (c *Config) applyServiceConnectionsOverlayLocked() error {
 		}
 	}
 	return validateCanonicalFor(c.Services)
+}
+
+// hydrateServiceConnectionSecretsLocked fills header maps and the Tailscale
+// API key from the encrypted token store. Legacy plaintext values already on
+// the entry are kept in memory so migration can move them.
+// Caller must hold c.mu.
+func (c *Config) hydrateServiceConnectionSecretsLocked(ov *serviceConnectionsFile) {
+	if c.secrets == nil {
+		return
+	}
+	for id, entry := range ov.Services {
+		if len(entry.Headers) > 0 {
+			continue
+		}
+		if h := c.loadServiceHeadersLocked(id); len(h) > 0 {
+			entry.Headers = h
+			ov.Services[id] = entry
+		}
+	}
+	if ov.Tailscale != nil && ov.Tailscale.APIKey == "" {
+		ov.Tailscale.APIKey = c.secrets.GetSecret(TailscaleAPIKeySecretKey())
+	}
+}
+
+// loadServiceHeadersLocked reads a service's static headers from the
+// encrypted token store. Caller must hold c.mu.
+func (c *Config) loadServiceHeadersLocked(id string) map[string]string {
+	if c.secrets == nil {
+		return nil
+	}
+	raw := c.secrets.GetSecret(ServiceHeadersSecretKey(id))
+	if raw == "" {
+		return nil
+	}
+	var headers map[string]string
+	if err := json.Unmarshal([]byte(raw), &headers); err != nil {
+		slog.Warn("failed to parse stored service headers", "service", id, "error", err)
+		return nil
+	}
+	return headers
+}
+
+// saveServiceHeadersLocked writes a service's static headers into the
+// encrypted token store (never into service_connections.json).
+// Caller must hold c.mu.
+func (c *Config) saveServiceHeadersLocked(id string, headers map[string]string) error {
+	key := ServiceHeadersSecretKey(id)
+	if len(headers) == 0 {
+		if c.secrets == nil {
+			return nil
+		}
+		return c.secrets.DeleteSecret(key)
+	}
+	if c.secrets == nil {
+		return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
+	}
+	raw, err := json.Marshal(headers)
+	if err != nil {
+		return err
+	}
+	return c.secrets.SetSecret(key, string(raw))
+}
+
+// migratePlaintextServiceSecretsLocked moves legacy plaintext credentials
+// from service_connections.json into the encrypted token store, then rewrites
+// the overlay without secrets. Logged once per migration.
+// Caller must hold c.mu.
+func (c *Config) migratePlaintextServiceSecretsLocked() error {
+	if c.secrets == nil {
+		return nil
+	}
+	ov, err := loadServiceConnections(c.svcConnPath)
+	if err != nil {
+		return err
+	}
+	migrated := 0
+	for id, entry := range ov.Services {
+		if len(entry.Headers) == 0 {
+			continue
+		}
+		headers := cloneHeaderMap(entry.Headers)
+		for k, v := range headers {
+			headers[k] = resolveSecret("service_connections."+id+".headers."+k, v)
+		}
+		if err := c.saveServiceHeadersLocked(id, headers); err != nil {
+			return fmt.Errorf("migrating headers for %s: %w", id, err)
+		}
+		migrated++
+		entry.Headers = nil
+		ov.Services[id] = entry
+	}
+	if ov.Tailscale != nil && strings.TrimSpace(ov.Tailscale.APIKey) != "" {
+		key := resolveSecret("service_connections.tailscale.api_key", ov.Tailscale.APIKey)
+		if err := c.secrets.SetSecret(TailscaleAPIKeySecretKey(), key); err != nil {
+			return fmt.Errorf("migrating tailscale api key: %w", err)
+		}
+		migrated++
+		ov.Tailscale.APIKey = ""
+	}
+	if migrated == 0 {
+		return nil
+	}
+	if err := saveServiceConnections(c.svcConnPath, ov); err != nil {
+		return fmt.Errorf("rewriting service connections after secret migration: %w", err)
+	}
+	slog.Info("migrated plaintext service-connection credentials into encrypted token store",
+		"path", c.svcConnPath,
+		"credentials", migrated,
+	)
+	// Reload so in-memory overlay matches the stripped file + secret store.
+	return c.applyServiceConnectionsOverlayLocked()
 }
 
 // applyServiceConnectionEntryLocked upserts one overlay entry onto Services.
@@ -292,6 +432,9 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 		merged.Aliases = append([]string(nil), entry.Aliases...)
 	}
 	if entry.Headers != nil {
+		if c.secrets == nil {
+			return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
+		}
 		if merged.Headers == nil {
 			merged.Headers = map[string]string{}
 		}
@@ -334,6 +477,9 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 
 	// Drop photo library cache so the next list reflects the new home copy.
 	if err := validateCanonicalFor(c.Services); err != nil {
+		return err
+	}
+	if err := c.saveServiceHeadersLocked(id, merged.Headers); err != nil {
 		return err
 	}
 	if err := saveServiceConnections(c.svcConnPath, &serviceConnectionsFile{
@@ -427,6 +573,14 @@ func (c *Config) SetTailscaleAdmin(entry tailscaleAdminEntry) error {
 	}
 	c.tailscaleAdmin = &merged
 
+	if c.secrets == nil && merged.APIKey != "" {
+		return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
+	}
+	if c.secrets != nil {
+		if err := c.secrets.SetSecret(TailscaleAPIKeySecretKey(), merged.APIKey); err != nil {
+			return err
+		}
+	}
 	if err := saveServiceConnections(c.svcConnPath, &serviceConnectionsFile{
 		Version:   serviceConnectionsFileVersion,
 		Services:  c.svcConnOverlay,

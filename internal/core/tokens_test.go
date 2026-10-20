@@ -18,6 +18,17 @@ func newTestTokenStore(path, passphrase string) (*TokenStore, error) {
 	return newTokenStore(path, passphrase, 1_000)
 }
 
+// mustSecretStore returns a TokenStore suitable for InitServiceConnectionsStore
+// tests. Use a real path when the test reloads secrets from disk (issue #184).
+func mustSecretStore(t *testing.T, path string) *TokenStore {
+	t.Helper()
+	ts, err := newTestTokenStore(path, "test-pass")
+	if err != nil {
+		t.Fatalf("newTestTokenStore(%q): %v", path, err)
+	}
+	return ts
+}
+
 func TestTokenStore_SaveAndGet(t *testing.T) {
 	dir := t.TempDir()
 	ts, err := newTokenStore(filepath.Join(dir, "tokens.json"), "test-passphrase", 1_000)

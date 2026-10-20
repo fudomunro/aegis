@@ -247,7 +247,8 @@ func TestInitServiceConnectionsStore_ResolvesHeaderSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.InitServiceConnectionsStore(svcConnPath); err != nil {
+	secrets := mustSecretStore(t, filepath.Join(dir, "tokens.json"))
+	if err := cfg.InitServiceConnectionsStore(svcConnPath, secrets); err != nil {
 		t.Fatal(err)
 	}
 	svc := cfg.GetService("immich")
