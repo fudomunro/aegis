@@ -11,6 +11,10 @@ site/
   favicon.svg  copy of web/favicon.svg
 ```
 
+Live site: <https://fudomunro.github.io/aegis/> (GitHub Pages from this
+directory, deployed by [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)
+on every `main` change under `site/`).
+
 Preview locally:
 
 ```bash
