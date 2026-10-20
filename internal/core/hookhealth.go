@@ -34,12 +34,14 @@ type HookHealth struct {
 type HookObservation struct {
 	At             time.Time `json:"at"`
 	Host           string    `json:"host,omitempty"`
-	Action         string    `json:"action"` // allow, modify, block, auth_fail, parse_fail
+	Action         string    `json:"action"` // allow, modify, block, skip, auth_fail, parse_fail
 	HasUserMessage bool      `json:"has_user_message"`
 	HasRequestBody bool      `json:"has_request_body"`
 	Model          string    `json:"model,omitempty"`
 	Provider       string    `json:"provider,omitempty"`
 	Login          string    `json:"login,omitempty"`
+	// SkipReason is set when Action is skip (development or skip_pattern).
+	SkipReason string `json:"skip_reason,omitempty"`
 	// BodyShape is the LLM request wire shape used for instruction injection
 	// (chat, anthropic, responses, unknown). Empty when no request_body.
 	BodyShape string `json:"body_shape,omitempty"`

@@ -21,7 +21,11 @@ type Config struct {
 	// (issue #148 / #174). The data_grants.json overlay `data_grants` map
 	// wins when present.
 	DataGrantsBootstrap types.DataGrants `json:"data_grants,omitempty"`
-	path                string
+	// Hook configures pre-request matching skips (issue #205). See hook_skip.go.
+	Hook HookConfig `json:"hook,omitempty"`
+	// hookSkip holds compiled Hook.SkipPatterns (not serialized).
+	hookSkip hookSkip
+	path     string
 	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
 	// Admin data-grant saves always write here — never aegis.json.
 	dataGrantsPath string
@@ -172,6 +176,8 @@ func (c *Config) Reload() error {
 	c.Connections = fresh.Connections
 	c.Services = fresh.Services
 	c.DataGrantsBootstrap = fresh.DataGrantsBootstrap
+	c.Hook = fresh.Hook
+	c.hookSkip = fresh.hookSkip
 	c.typePolicies = c.DataGrantsBootstrap
 	if err := c.applyDataGrantsOverlayLocked(); err != nil {
 		return err
@@ -194,6 +200,11 @@ func validateConfig(cfg *Config) error {
 	if err := types.ValidateDataGrants(cfg.DataGrantsBootstrap); err != nil {
 		return fmt.Errorf("data_grants: %w", err)
 	}
+	skip, err := compileHookSkip(cfg.Hook)
+	if err != nil {
+		return err
+	}
+	cfg.hookSkip = skip
 	for _, svc := range services {
 		if err := types.ValidatePermissions(svc.GrantLimits); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)

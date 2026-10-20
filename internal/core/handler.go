@@ -39,6 +39,10 @@ const (
 	ActionAllow  = "allow"
 	ActionBlock  = "block"
 	ActionModify = "modify"
+	// ActionSkip is a hook-health observation only (not sent to Aperture):
+	// matching was skipped because the message looked like development work
+	// or hit a configured skip pattern (issue #205). Aperture always sees allow.
+	ActionSkip = "skip"
 )
 
 type GuardrailResponse struct {
@@ -584,6 +588,17 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	)
 	logger = withPeerLog(logger, r)
 	warnIdentityMismatch(logger, payload.Metadata.LoginName, r)
+
+	// Skip matching for development work (issue #205). Coding agents that
+	// mention service names as identifiers must not be redirected to the
+	// library surface. Fail-open: the request passes through unchanged.
+	if reason := s.config.shouldSkipMatching(payload.UserMessage); reason != "" {
+		logger.Debug("skipping pre-request matching", "reason", reason)
+		obs.Action = ActionSkip
+		obs.SkipReason = reason
+		writeGuardrailResponse(w, GuardrailResponse{Action: ActionAllow})
+		return
+	}
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 
