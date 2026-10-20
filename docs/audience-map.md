@@ -1,8 +1,8 @@
 # Audience map — where Aegis speaks to whom
 
-Inventory for issue #167. Every communication surface (UI, docs, API language,
-agent injection, logs, config) mapped to the audiences it serves, plus a
-reverse index by audience.
+Living map of every communication surface (UI, docs, API language, agent
+injection, logs, config) to the audiences it serves, plus a reverse index by
+audience. Update this when a surface is added or its register changes.
 
 Companion: [`core-concepts.md`](core-concepts.md).
 
@@ -35,7 +35,7 @@ the shared word “agent”.
 | Connect demo | `internal/core/web/third_party_demo.html` (`/demo/third-party`) | End user, Developer integrator | Free/busy story; “minimal consent”. |
 | Marketing site | `site/index.html` (+ `style.css`, `site.js`) | Prospective adopter | Metaphor-heavy (jellyfish). Not served by the binary; claims must match README/SECURITY. |
 | Code walkthrough | `experiments/index.html` (+ generator) | Developer integrator, Coding agent | Stamped with commit hash. |
-| Brand assets | `web/` embeds (`logo.svg`, favicon) | Any browser | Jellyfish mark (#87). |
+| Brand assets | `internal/core/web/` embeds (`logo.svg`, favicon) | Any browser | Jellyfish mark (#87). |
 
 ### Documentation
 
@@ -47,6 +47,7 @@ the shared word “agent”.
 | Extension guide | `docs/adding-data-types.md` | Developer integrator, Coding agent | New library types checklist. |
 | Aperture ops guide | `docs/configuring-aperture.md` | Human ops | Hooks, grants, Guardian migration. |
 | Immich runbook | `docs/immich-live-testing.md` | Human ops, QA | Live checklist; product contract callouts. |
+| CalDAV/CardDAV guide | `docs/caldav-carddav.md` | Human ops, End user | Nextcloud / iCloud app-specific passwords; mirror + freebusy. |
 | UDT design spike | `docs/user-defined-types.md`, `examples/user-types/` | Developer integrator, Pack author | Schema pack format. |
 | Architecture plan | `docs/restructure-core-types-connectors.md` | Coding agent | Historical; phases marked done. |
 | Example config | `aegis.example.json` | End user, Developer integrator | Self-describing `description` fields. |
@@ -81,7 +82,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | Connector SystemInstructions | each connector (`spotify.go`, `immich.go`, …) | Runtime LLM agent | Negative constraints (“Do not call X”, “never ask for credentials”). |
 | Generic fallback | `handler.go` | Runtime LLM agent | Library-first, not a services API. |
 | Permission notices | `core/permissions.go` | Runtime LLM agent | Denied types; freebusy-only “never request titles…”. |
-| Write policy | `core/canonical.go` | Runtime LLM agent | Canonical home first; no auto-mirror. Includes **issue numbers**. |
+| Write policy | `core/canonical.go` | Runtime LLM agent | Canonical home first; no auto-mirror. |
 | Mail archive hints | `core/mail_archive_http.go` | Runtime LLM agent | Endpoint cookbook + sort recipes. |
 | Photo source discipline | `internal/types/builders.go` | Runtime LLM agent (as security policy) | No Photos.app / Immich env / raw CDN. |
 | UDT hints | `core/udt_handlers.go` | Runtime LLM agent + pack author | Schema field list. |
@@ -92,8 +93,9 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | Surface | Audience | Notes |
 |---------|----------|-------|
 | `slog` (JSON default) | Human ops, log pipeline, Security auditor | Fields: `service`, `login`, `identity_source`, `path`, `error`, `request_id`, … Fail-open encoded in messages. |
-| CLI flag help (`run.go`) | Human ops, Coding agent | `-data-dir`, `-import-quicken`, `-auth-mode`, empty-path disables. |
+| CLI flag help (`run.go`) | Human ops, Coding agent | `-data-dir`, `-import-quicken`, `-auth-mode`, `-admin-api-key`, `-admin-logins`, empty-path disables. |
 | `aegis.json` / `data_grants.json` / `user_types.json` | End user (via admin), Human ops | Data, not comments. Admin saves never rewrite `aegis.json`. |
+| Encrypted secrets (`tokens.json`, static service credentials) | Human ops | AES-256-GCM under `-token-pass`; presence flags only in admin/API. |
 | UDT `schema.json` packs | Pack author | Field descriptions; “Always opt-in”. |
 
 ---
@@ -103,9 +105,9 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 ### A. Runtime LLM agent
 **Surfaces:** pre-request injection suite (library instructions, SystemInstructions, permission / write-policy / mail / photo notices), `/v1/library/*` + content + mail APIs (response shapes and error strings), guardrail `block` message.
 
-**Strengths:** richest product voice; neutral schema; actionable errors.
+**Strengths:** richest product voice; neutral schema; actionable errors; injection strings stay free of issue numbers and CLI flags.
 
-**Gaps:** issue numbers in agent text (`#16`, `#20`, `#77`, `#128`); Quicken/Signal/Timeline instructions mix “ask the operator” and CLI/admin tab names; no single in-runtime agent API doc.
+**Gaps:** no single in-runtime agent API doc (OpenAPI is step-4 follow-up).
 
 ### B. End user (tailnet admin)
 **Surfaces:** admin.html (Home/Services/Library/Advanced + Immich wizard), app authorize, OAuth login pages, README Quick Start + Connecting Services, `aegis.example.json`, marketing `site/`.
@@ -115,11 +117,11 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 **Gaps:** no non-admin household UI; admin often ops-heavy; UDT product surface still design-level (#15) while the site markets it.
 
 ### C. Human ops / troubleshooter
-**Surfaces:** README ops sections (flags, cache, data dir), `docs/configuring-aperture.md`, hook-health `fix` strings, slog, `/healthz` `/readyz` `/metrics`, admin Advanced, Immich runbook, import CLI flags.
+**Surfaces:** README ops sections (flags, cache, data dir), `docs/configuring-aperture.md`, `docs/caldav-carddav.md`, hook-health `fix` strings, slog, `/healthz` `/readyz` `/metrics`, admin Advanced, Immich runbook, import CLI flags, admin credentials (`-admin-api-key`, `-admin-logins`).
 
-**Strengths:** hook-health fix text and Immich wizard are strong.
+**Strengths:** hook-health fix text and Immich wizard are strong; SECURITY covers admin vs agent credentials, CSRF/Origin, and encrypted static secrets.
 
-**Gaps:** some import ops only exist in injected agent strings; Guardian→Aegis migration only in hook-health + Aperture doc.
+**Gaps:** Guardian→Aegis migration only in hook-health + Aperture doc.
 
 ### D. Developer integrator
 **Surfaces:** README API Reference, `docs/adding-data-types.md`, walkthrough `experiments/index.html`, app token docs, `third_party_demo.html`, example schema packs.
@@ -129,9 +131,9 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 **Gaps:** no machine-readable API schema (OpenAPI); app-developer path thinner than agent path.
 
 ### E. Security auditor
-**Surfaces:** SECURITY.md, README auth/permissions/audit/metrics, audit log schema, admin redaction guarantees, PhotoSourceDiscipline, site claims.
+**Surfaces:** SECURITY.md (auth tiers, CSRF/Origin, encrypted secrets), README auth/permissions/audit/metrics, audit log schema, admin redaction guarantees, PhotoSourceDiscipline, site claims.
 
-**Strengths:** token handling and tailnet model are explicit.
+**Strengths:** token handling, admin vs agent credentials, and tailnet model are explicit.
 
 **Gaps:** no formal threat-model / data-flow doc; fail-open rationale scattered (AGENTS, kind docs) rather than in SECURITY.
 
@@ -156,7 +158,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 
 | Surface | Mixed how | Risk |
 |---------|-----------|------|
-| SystemInstructions | LLM agent + sometimes operator + issue IDs | Wrong register for pure model consumption |
+| SystemInstructions | LLM agent + sometimes operator + admin tab names | Wrong register for pure model consumption |
 | Library/content error strings | Agent + ops + auditor | Generally good; product-rule prose in 403/404 can confuse |
 | README | Setup + API contract + ops + security | Different readers must hunt |
 | admin.html | Homelab wizard + security claims + ops diagnostics + issue numbers | Cognitive load; Immich install is almost a product |
@@ -170,9 +172,9 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 
 | Audience | Well served by | Weak / missing |
 |----------|----------------|----------------|
-| Runtime LLM agent | Injection suite, library errors, neutral schema | Issue-number leakage; ops-directed import text |
+| Runtime LLM agent | Injection suite, library errors, neutral schema | No dedicated agent API doc |
 | End user (admin) | admin.html, README setup, example config | Non-admin users; wizard/ops blend |
-| Human ops | hook-health, logs, metrics, runbooks, flags | Import ops only in agent strings / Advanced tab |
+| Human ops | hook-health, logs, metrics, runbooks, flags | Import ops live under Advanced / operator CLI |
 | Developer integrator | README API, walkthrough, adding-data-types | No OpenAPI; thin app-dev docs |
 | Security auditor | SECURITY.md, audit, redaction, admin Map | No formal threat model |
 | Coding agent | AGENTS.md + docs + CI | Name collision with runtime “agents” |
@@ -184,7 +186,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 ## 5. Consistency notes for cleanup
 
 1. **Shared lexicon is healthy:** `/v1/library/{kind}`, `sources[]`, `canonical`, `truncated`, `freebusy`, “Aegis owns OAuth”, “does not store media”, “fail-open”, “content/ingest only”.
-2. **Agent injection is the richest product voice** and the least consistent register (ops tickets, CLI flags, issue numbers leak in).
+2. **Agent injection is the richest product voice** and needs register discipline (keep ops tickets, CLI flags, and issue numbers out).
 3. **Ops diagnosis quality** lives in hook-health `fix` strings and the Immich wizard, not in slog alone.
 4. **Capabilities vs SystemInstructions** are two product dialects (provider-shaped vs library-first). Product rules say capabilities are admin metadata — keep that boundary explicit.
 5. **Audiences with no dedicated surface:** non-admin end users, formal security-auditor threat model, machine-readable API schema for integrators.
