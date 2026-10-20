@@ -166,7 +166,8 @@ func tailscaleTestServer(t *testing.T, mock *mockTailscaleAdmin) (*Server, *Conf
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json")); err != nil {
+	secrets := mustSecretStore(t, filepath.Join(dir, "tokens.json"))
+	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json"), secrets); err != nil {
 		t.Fatal(err)
 	}
 	if err := cfg.SetServiceConnection("immich", serviceConnectionEntry{
@@ -212,7 +213,7 @@ func TestTailscaleAdminKey_PersistPresenceOnly(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := fresh.InitServiceConnectionsStore(filepath.Join(filepath.Dir(cfg.path), "service_connections.json")); err != nil {
+	if err := fresh.InitServiceConnectionsStore(filepath.Join(filepath.Dir(cfg.path), "service_connections.json"), mustSecretStore(t, filepath.Join(filepath.Dir(cfg.path), "tokens.json"))); err != nil {
 		t.Fatal(err)
 	}
 	if fresh.TailscaleAdminAPIKey() != "tskey-api-secret" {

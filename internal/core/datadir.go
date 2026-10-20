@@ -10,21 +10,22 @@ import (
 
 // Default file names under the data directory (issue #74).
 const (
-	dataDirAppName         = "Aegis"
-	dataDirName            = "aegis"
-	defaultConfigName      = "aegis.json"
+	dataDirAppName          = "Aegis"
+	dataDirName             = "aegis"
+	defaultConfigName       = "aegis.json"
 	defaultDataGrantsName   = "data_grants.json"
-	defaultTokensName      = "tokens.json"
-	defaultAppsName        = "apps.json"
-	defaultLinksName       = "entity_links.json"
-	defaultCopyLedgerName  = "copy_ledger.db"
-	defaultMailArchiveName = "mail-archive.db"
-	defaultQuickenName     = "quicken.db"
-	defaultTimelineName    = "timeline.db"
-	defaultSignalName      = "signal.db"
-	defaultAuditLogName    = "audit_log.db"
-	defaultLogFileName     = "aegis.log"
-	dataDirLogsSubdir      = "logs"
+	defaultTokensName       = "tokens.json"
+	defaultServiceConnsName = "service_connections.json"
+	defaultAppsName         = "apps.json"
+	defaultLinksName        = "entity_links.json"
+	defaultCopyLedgerName   = "copy_ledger.db"
+	defaultMailArchiveName  = "mail-archive.db"
+	defaultQuickenName      = "quicken.db"
+	defaultTimelineName     = "timeline.db"
+	defaultSignalName       = "signal.db"
+	defaultAuditLogName     = "audit_log.db"
+	defaultLogFileName      = "aegis.log"
+	dataDirLogsSubdir       = "logs"
 )
 
 // DataPaths is the resolved local state layout for one Aegis process.
@@ -36,8 +37,11 @@ type DataPaths struct {
 	Config string
 	// DataGrants is the admin data-grant overlay (data_grants.json, non-secret).
 	DataGrants string
-	// Tokens is the encrypted OAuth token store.
+	// Tokens is the encrypted OAuth token + static-credential store (issue #184).
 	Tokens string
+	// ServiceConnections is the admin service-connections overlay
+	// (service_connections.json). Secrets live in Tokens, not here.
+	ServiceConnections string
 	// Apps is the third-party application registry (issue #131).
 	Apps string
 	// Links is the entity-link store (playlists).
@@ -68,25 +72,26 @@ type DataPaths struct {
 // which distinguishes an omitted -mail-archive (default under data dir)
 // from an explicitly empty one (disable /v1/mail).
 type StatePathOverrides struct {
-	Dir            string
-	Config         string
-	DataGrants     string
-	Tokens         string
-	Links          string
-	CopyLedger     string
-	CopyLedgerSet  bool
-	MailArchive    string
-	MailArchiveSet bool
-	Quicken        string
-	QuickenSet     bool
-	Timeline       string
-	TimelineSet    bool
-	Signal         string
-	SignalSet      bool
-	AuditLog       string
-	AuditLogSet    bool
-	LogFile        string
-	LogFileSet     bool
+	Dir                string
+	Config             string
+	DataGrants         string
+	Tokens             string
+	ServiceConnections string
+	Links              string
+	CopyLedger         string
+	CopyLedgerSet      bool
+	MailArchive        string
+	MailArchiveSet     bool
+	Quicken            string
+	QuickenSet         bool
+	Timeline           string
+	TimelineSet        bool
+	Signal             string
+	SignalSet          bool
+	AuditLog           string
+	AuditLogSet        bool
+	LogFile            string
+	LogFileSet         bool
 }
 
 // defaultDataDir returns the per-OS application data location for Aegis.
@@ -167,13 +172,14 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		return DataPaths{}, err
 	}
 	paths := DataPaths{
-		Dir:         dir,
-		Config:      resolveUnderDataDir(ov.Config, dir, defaultConfigName),
-		DataGrants:  resolveUnderDataDir(ov.DataGrants, dir, defaultDataGrantsName),
-		Tokens:      resolveUnderDataDir(ov.Tokens, dir, defaultTokensName),
-		Apps:        filepath.Join(dir, defaultAppsName),
-		Links:       resolveUnderDataDir(ov.Links, dir, defaultLinksName),
-		LogsDir:     filepath.Join(dir, dataDirLogsSubdir),
+		Dir:                dir,
+		Config:             resolveUnderDataDir(ov.Config, dir, defaultConfigName),
+		DataGrants:         resolveUnderDataDir(ov.DataGrants, dir, defaultDataGrantsName),
+		Tokens:             resolveUnderDataDir(ov.Tokens, dir, defaultTokensName),
+		ServiceConnections: resolveUnderDataDir(ov.ServiceConnections, dir, defaultServiceConnsName),
+		Apps:               filepath.Join(dir, defaultAppsName),
+		Links:              resolveUnderDataDir(ov.Links, dir, defaultLinksName),
+		LogsDir:            filepath.Join(dir, dataDirLogsSubdir),
 	}
 	// Copy ledger: omitted → default under data dir; explicitly empty → disabled.
 	switch {

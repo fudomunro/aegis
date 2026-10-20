@@ -30,6 +30,7 @@ func Run() {
 	linkPath := flag.String("link-file", "", "path to user-confirmed entity links (default: <data-dir>/entity_links.json)")
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
 	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
+	serviceConnsPath := flag.String("service-connections-file", "", "path to admin service-connections overlay (default: <data-dir>/service_connections.json; secrets live in the encrypted token store)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
@@ -54,25 +55,26 @@ func Run() {
 
 	setFlags := visitedFlags()
 	paths, err := ResolveStatePaths(StatePathOverrides{
-		Dir:            *dataDirFlag,
-		Config:         *configPath,
-		DataGrants:     *dataGrantsPath,
-		Tokens:         *tokenPath,
-		Links:          *linkPath,
-		CopyLedger:     *copyLedgerPath,
-		CopyLedgerSet:  setFlags["copy-ledger"],
-		MailArchive:    *mailArchivePath,
-		MailArchiveSet: setFlags["mail-archive"],
-		Quicken:        *quickenPath,
-		QuickenSet:     setFlags["quicken-store"],
-		Timeline:       *timelinePath,
-		TimelineSet:    setFlags["timeline-store"],
-		Signal:         *signalPath,
-		SignalSet:      setFlags["signal-store"],
-		AuditLog:       *auditLogPath,
-		AuditLogSet:    setFlags["audit-log"],
-		LogFile:        *logFile,
-		LogFileSet:     setFlags["log-file"],
+		Dir:                *dataDirFlag,
+		Config:             *configPath,
+		DataGrants:         *dataGrantsPath,
+		Tokens:             *tokenPath,
+		ServiceConnections: *serviceConnsPath,
+		Links:              *linkPath,
+		CopyLedger:         *copyLedgerPath,
+		CopyLedgerSet:      setFlags["copy-ledger"],
+		MailArchive:        *mailArchivePath,
+		MailArchiveSet:     setFlags["mail-archive"],
+		Quicken:            *quickenPath,
+		QuickenSet:         setFlags["quicken-store"],
+		Timeline:           *timelinePath,
+		TimelineSet:        setFlags["timeline-store"],
+		Signal:             *signalPath,
+		SignalSet:          setFlags["signal-store"],
+		AuditLog:           *auditLogPath,
+		AuditLogSet:        setFlags["audit-log"],
+		LogFile:            *logFile,
+		LogFileSet:         setFlags["log-file"],
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "aegis: resolving data directory: %v\n", err)
@@ -103,6 +105,7 @@ func Run() {
 		"config", paths.Config,
 		"tokens", paths.Tokens,
 		"data_grants", paths.DataGrants,
+		"service_connections", paths.ServiceConnections,
 		"links", paths.Links,
 		"copy_ledger", paths.CopyLedger,
 		"mail_archive", paths.MailArchive,
@@ -200,6 +203,12 @@ func Run() {
 	tokens, err := NewTokenStore(paths.Tokens, *tokenPass)
 	if err != nil {
 		slog.Error("failed to load token store", "path", paths.Tokens, "error", err)
+		os.Exit(1)
+	}
+	// Static credentials from service_connections migrate into the encrypted
+	// token store (issue #184). Wrong -token-pass already refused above.
+	if err := cfg.InitServiceConnectionsStore(paths.ServiceConnections, tokens); err != nil {
+		slog.Error("failed to load service connections overlay", "path", paths.ServiceConnections, "error", err)
 		os.Exit(1)
 	}
 
@@ -833,6 +842,7 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 	slog.Info("token store rekeyed",
 		"path", path,
 		"services", len(ts.Tokens),
+		"secrets", len(ts.Secrets),
 		"iterations", ts.kdfIterations,
 	)
 	return 0

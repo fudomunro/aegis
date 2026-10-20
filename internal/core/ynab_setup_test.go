@@ -18,7 +18,8 @@ func TestAdminYNABSetup_StatusAndConfig(t *testing.T) {
 		Services: []Service{{ID: "ynab", Name: "YNAB", Action: "inject", Endpoint: "https://api.ynab.com/v1"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	if err := srv.config.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json")); err != nil {
+	srv.tokens = mustSecretStore(t, filepath.Join(dir, "tokens.json"))
+	if err := srv.config.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json"), srv.tokens); err != nil {
 		t.Fatal(err)
 	}
 
@@ -53,13 +54,24 @@ func TestAdminYNABSetup_StatusAndConfig(t *testing.T) {
 	if strings.Contains(w2.Body.String(), "test-pat") {
 		t.Fatalf("token leaked in response: %s", w2.Body.String())
 	}
-	// Overlay file must hold the secret (0600).
+	// Static credentials live in the encrypted token store (issue #184),
+	// never in plaintext service_connections.json.
 	raw, err := os.ReadFile(filepath.Join(dir, "service_connections.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "test-pat") {
-		t.Fatal("token not persisted to service_connections.json")
+	if strings.Contains(string(raw), "test-pat") {
+		t.Fatal("token must not be written in plaintext to service_connections.json")
+	}
+	if srv.tokens.GetSecret(ServiceHeadersSecretKey("ynab")) == "" {
+		t.Fatal("token not persisted to encrypted token store")
+	}
+	var hdrs map[string]string
+	if err := json.Unmarshal([]byte(srv.tokens.GetSecret(ServiceHeadersSecretKey("ynab"))), &hdrs); err != nil {
+		t.Fatal(err)
+	}
+	if hdrs["Authorization"] != "Bearer test-pat" {
+		t.Fatalf("stored headers = %+v", hdrs)
 	}
 
 	req3 := httptest.NewRequest("POST", "/v1/admin/ynab/test", nil)

@@ -147,11 +147,15 @@ from other LAN interfaces.
 7. **Log identity.** Aegis logs `login` and `identity_source` on denied
    requests and attaches tailnet identity to library/proxy logs. Pre-request
    also warns when Aperture’s `login_name` does not match the Tailscale peer.
-8. **Encrypt tokens at rest** (`-token-pass` / `AEGIS_TOKEN_PASS`) as today —
-   tailnet auth does not replace disk encryption of `tokens.json` (under the
-   [data directory](README.md#data-directory-issue-74), mode 0700/0600).
+8. **All secrets at rest are encrypted under `-token-pass`** (issue #184).
+   OAuth tokens **and** static service-connection credentials (Immich/YNAB
+   API keys, Tailscale Admin API key) live in `tokens.json` under the same
+   AES-256-GCM / PBKDF2 master key. `service_connections.json` holds only
+   non-secret overlay fields. Tailnet auth does not replace disk encryption.
    PBKDF2 parameters are recorded in the file; rotate the passphrase with
    `-token-new-pass` (see [Token encryption](README.md#token-encryption-issue-101)).
+   Wrong `-token-pass` refuses to start and never overwrites the store
+   (issue #100).
 9. **Keep OAuth client secrets out of `aegis.json`** with
    `"$ENV:NAME"` / `"${NAME}"` indirection (issue #102) so bootstrap config can
    be shared without leaking mintable credentials. Literal secrets still work
