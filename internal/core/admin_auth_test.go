@@ -55,6 +55,12 @@ func adminRequest(method, path, key, body string) *http.Request {
 		req.Header.Set("Authorization", "Bearer "+key)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	// Same-origin browser write (issue #182). Cross-site cases set their own
+	// Origin explicitly.
+	if !isSafeMethod(method) {
+		req.Header.Set("Origin", "https://aegis.example.com")
+		req.Header.Set("Sec-Fetch-Site", "same-origin")
+	}
 	return req
 }
 

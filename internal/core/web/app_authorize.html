@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="csrf-token" content="{{CSRF_TOKEN}}" />
   <title>Authorize data access · Aegis</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <style>
@@ -234,6 +235,8 @@
         errEl.textContent = msg;
       }
 
+      var csrfToken = (document.querySelector('meta[name="csrf-token"]') || {}).content || "";
+
       document.getElementById("deny").addEventListener("click", function () {
         var target = redirectUri + (redirectUri.indexOf("?") >= 0 ? "&" : "?") +
           "error=access_denied" + (state ? "&state=" + encodeURIComponent(state) : "");
@@ -247,12 +250,14 @@
           name: name,
           scopes: scopes || "events:freebusy",
           redirect_uri: redirectUri,
-          state: state
+          state: state,
+          csrf_token: csrfToken
         };
         fetch("/v1/apps/authorize", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
+            "X-CSRF-Token": csrfToken,
             "Authorization": sessionStorage.getItem("aegis_demo_key")
               ? "Bearer " + sessionStorage.getItem("aegis_demo_key")
               : undefined
@@ -274,6 +279,7 @@
               method: "POST",
               headers: {
                 "Content-Type": "application/json",
+                "X-CSRF-Token": csrfToken,
                 "Authorization": "Bearer " + key.trim()
               },
               body: JSON.stringify(body),

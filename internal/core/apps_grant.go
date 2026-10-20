@@ -217,7 +217,12 @@ func (s *Server) HandleAppAuthorize(w http.ResponseWriter, r *http.Request) {
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
-		fmt.Fprint(w, appAuthorizeHTML)
+		token, err := s.issueCSRFToken()
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to issue CSRF token")
+			return
+		}
+		fmt.Fprint(w, strings.Replace(appAuthorizeHTML, csrfTokenPlaceholder, token, 1))
 	case http.MethodPost:
 		s.handleAppAuthorizeGrant(w, r)
 	default:
@@ -253,6 +258,11 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		q = r.Form
+		// Form posts are CSRF-prone (simple request, no preflight). The
+		// consent page carries a per-render token (issue #182).
+		if !s.requireFormCSRF(w, r, q) {
+			return
+		}
 	}
 	req, entries, err := parseAuthorizeQuery(q)
 	if err != nil {

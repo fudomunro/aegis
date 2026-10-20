@@ -794,7 +794,13 @@ Default mode is `auto` (identity if present, else API key). For a solo tailnet, 
 
 API key comparison is constant-time (`crypto/subtle`). HTML and JSON responses
 carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, a restrictive
-CSP, and `Referrer-Policy: no-referrer` (issue #98).
+CSP, and `Referrer-Policy: no-referrer` (issue #98). State-changing requests
+authenticated by **ambient tailnet identity** must be same-origin (`Origin` or
+`Sec-Fetch-Site: same-origin` matching `-base-url`); JSON write surfaces
+require `Content-Type: application/json`; the third-party consent form carries
+a per-render CSRF token (issue #182). API-key and app-token writes are not
+browser-ambient and skip the Origin check. See
+[SECURITY.md](SECURITY.md#csrf--origin-protection-on-writes-issue-182).
 
 ### Third-party app tokens (issue #131)
 
