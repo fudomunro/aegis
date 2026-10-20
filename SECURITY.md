@@ -179,7 +179,7 @@ from other LAN interfaces.
    AES-256-GCM / PBKDF2 master key. `service_connections.json` holds only
    non-secret overlay fields. Tailnet auth does not replace disk encryption.
    PBKDF2 parameters are recorded in the file; rotate the passphrase with
-   `-token-new-pass` (see [Token encryption](README.md#token-encryption-issue-101)).
+   `-token-new-pass` (see [Token encryption](README.md#token-encryption-issue-101--184)).
    Wrong `-token-pass` refuses to start and never overwrites the store
    (issue #100).
 9. **Keep OAuth client secrets out of `aegis.json`** with
