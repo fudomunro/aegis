@@ -241,7 +241,7 @@ Aegis does **not** replace those apps and never ingests photo bytes into its own
 | **One canonical owner per kind** | At most one non-blocked service may claim `canonical_for: ["photos"]`. |
 | **Fail-open** | A broken Immich must not take down the whole photo library or the pre-request hook. |
 
-Related product docs: [README — Immich](../README.md#immich-local--foreign-canonical),
+Related product docs: [README — Immich](../README.md#immich-local--external-canonical),
 [Adding a data type](adding-data-types.md). Implementation: `immich.go`, `photos.go`.
 
 ---

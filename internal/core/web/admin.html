@@ -542,7 +542,7 @@
             </p>
           </div>
           <div id="immich-checks" class="card" style="padding:0.65rem 0.85rem; margin-bottom:0.55rem">
-            <div class="empty">Run checks after saving to verify the issue #39 checklist.</div>
+            <div class="empty">Run checks after saving to verify the checklist.</div>
           </div>
           <details id="immich-snippet-wrap">
             <summary class="meta" style="cursor:pointer">Prefer aegis.json? Show bootstrap snippet</summary>
@@ -804,7 +804,7 @@
       <h2 class="section-heading" id="section-user-types">User-defined types (local files)</h2>
       <div class="help-box">
         <h3>Select local JSON files for your types</h3>
-        <p>User-defined types load schema packs from the <code>user-types</code> directory (issue #15). Use this panel to pick the local export files that feed each <code>file_json</code> source, or add an extra file. Selections save to <code>user_types.json</code> — schema packs are never rewritten. Agents read the result at <code>/v1/library/&lt;kind&gt;</code>.</p>
+        <p>User-defined types load schema packs from the <code>user-types</code> directory. Use this panel to pick the local export files that feed each <code>file_json</code> source, or add an extra file. Selections save to <code>user_types.json</code> — schema packs are never rewritten. Agents read the result at <code>/v1/library/&lt;kind&gt;</code>.</p>
       </div>
       <div id="udt-status" class="meta">Loading…</div>
       <div id="udt-kinds" style="margin-top:0.75rem"></div>
@@ -823,7 +823,7 @@
       <h2 class="section-heading" id="section-copies">Copy ledger</h2>
       <div class="help-box">
         <h3>Where copies exist</h3>
-        <p>Durable memory of known copies and freshness (issue #76). Library cards also show per-item copy badges; this panel is the full ledger. Missing rows never hide library content (fail-open).</p>
+        <p>Durable memory of known copies and freshness. Library cards also show per-item copy badges; this panel is the full ledger. Missing rows never hide library content (fail-open).</p>
       </div>
       <div class="toolbar">
         <div class="copy-filter kind-switch" role="group" aria-label="Copy ledger status filter" id="copies-panel-filter">
@@ -931,7 +931,7 @@ docker compose ps   # wait until immich_server is healthy (30–90s)
               <div class="grow"></div>
               <button class="btn" id="copy-immich-env" type="button">Copy .env</button>
             </div>
-            <pre id="immich-starter-env" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"># Aegis starter Immich .env (issue #121) — first install, no edits required
+            <pre id="immich-starter-env" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"># Aegis starter Immich .env — first install, no edits required
 # File MUST be named .env (not example.env) next to docker-compose.yml
 
 # Photos/videos library directory (relative path is fine; needs free space)
@@ -1144,7 +1144,7 @@ job.read</pre>
             <span class="meta" id="wiz-immich-status">…</span>
           </div>
           <div id="wiz-immich-checks" class="card" style="padding:0.65rem 0.85rem">
-            <div class="empty">Run checks to see the issue #39 checklist.</div>
+            <div class="empty">Run checks to see the checklist.</div>
           </div>
           <div class="card" style="padding:0.65rem 0.85rem; margin-top:0.55rem">
             <div style="display:flex; gap:0.55rem; align-items:flex-start">
@@ -2581,7 +2581,7 @@ job.read</pre>
         : '<div class="meta">No OAuth configuration — add a <code>connection</code> in aegis.json to open agent data flow.</div>';
 
       const canonicalBadge = (svc.canonical_for && svc.canonical_for.length)
-        ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Aegis location for these types (issue #16)">canonical: ' +
+        ? '<div class="meta"><span class="badge badge-blue" title="Authoritative non-Aegis location for these types">canonical: ' +
           escapeHtml(svc.canonical_for.join(", ")) + "</span></div>"
         : "";
 
@@ -2877,7 +2877,7 @@ job.read</pre>
     if (!st || !st.role) return "";
     const cls = st.role === "canonical" ? "source-role source-role-canonical" : "source-role source-role-mirror";
     const title = st.role === "canonical"
-      ? "Authoritative non-Aegis home for this type (issue #16)"
+      ? "Authoritative non-Aegis home for this type"
       : "Mirror copy (not canonical)";
     return '<span class="' + cls + '" title="' + escapeHtml(title) + '">' + escapeHtml(st.role) + "</span>";
   }
@@ -4481,7 +4481,7 @@ function selectTab(name, opts) {
   // --- Immich setup guide (issues #39, #121) ---
   function checksHTML(checks) {
     if (!checks || !checks.length) {
-      return '<div class="empty">Run checks after saving to verify the issue #39 checklist.</div>';
+      return '<div class="empty">Run checks after saving to verify the checklist.</div>';
     }
     return checks.map((c) => {
       const icon = c.ok ? "✓" : "✗";

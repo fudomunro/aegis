@@ -116,3 +116,17 @@ jobs:
 
       - name: Build
         run: go build -o aegis .
+
+  docs:
+    name: Docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Local file + fragment check (catches heading-rename breakage).
+      # External URLs are skipped offline so CI stays deterministic.
+      - name: Markdown links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --offline --include-fragments --verbose './**/*.md'
+          fail: true
