@@ -230,7 +230,7 @@ After the overlap call-outs above, the stable concepts.
 
 | Concept | Definition | Key files |
 |---------|------------|-----------|
-| **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, README “Data grants”, `SECURITY.md` |
+| **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
 | **DataGrant** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/types/policy.go` |
 | **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `policy.go`, `permissions_overlay.go` |
 | **EffectiveAccess** | Resolved level for (type, provider) combining data grant + service tighten. | `policy.go:484`, `config.go:437` |
