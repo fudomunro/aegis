@@ -36,7 +36,8 @@ func TestServiceConnectionsOverlay_PersistAndReload(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	svcConnPath := filepath.Join(dir, "service_connections.json")
-	if err := cfg.InitServiceConnectionsStore(svcConnPath); err != nil {
+	secrets := mustSecretStore(t, filepath.Join(dir, "tokens.json"))
+	if err := cfg.InitServiceConnectionsStore(svcConnPath, secrets); err != nil {
 		t.Fatalf("InitServiceConnectionsStore: %v", err)
 	}
 
@@ -70,11 +71,25 @@ func TestServiceConnectionsOverlay_PersistAndReload(t *testing.T) {
 		}
 	}
 
-	// Reload from disk keeps the overlay and does not echo secrets via snapshots
-	// more than the in-memory service already carries for auth.
+	// Overlay file must not contain the API key (issue #184).
+	raw, err := os.ReadFile(svcConnPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "secret-key") {
+		t.Fatal("service_connections.json must not contain plaintext credentials")
+	}
+	if !secrets.HasSecret(ServiceHeadersSecretKey("immich")) {
+		t.Fatal("expected encrypted header secret in token store")
+	}
+
+	// Reload from disk keeps the overlay; secrets come from the token store.
 	fresh, err := LoadConfig(cfgPath)
 	if err != nil {
 		t.Fatalf("LoadConfig reload: %v", err)
+	}
+	if err := fresh.InitServiceConnectionsStore(svcConnPath, mustSecretStore(t, filepath.Join(dir, "tokens.json"))); err != nil {
+		t.Fatalf("reload InitServiceConnectionsStore: %v", err)
 	}
 	immich := fresh.GetService("immich")
 	if immich == nil {
@@ -104,7 +119,7 @@ func TestSetServiceConnection_ClearCanonical(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json")); err != nil {
+	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json"), mustSecretStore(t, filepath.Join(dir, "tokens.json"))); err != nil {
 		t.Fatal(err)
 	}
 	if err := cfg.SetServiceConnection("immich", serviceConnectionEntry{
@@ -178,7 +193,7 @@ func TestHandleAdminImmichSetup_StatusAndConfig(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json")); err != nil {
+	if err := cfg.InitServiceConnectionsStore(filepath.Join(dir, "service_connections.json"), mustSecretStore(t, filepath.Join(dir, "tokens.json"))); err != nil {
 		t.Fatal(err)
 	}
 

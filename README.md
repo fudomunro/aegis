@@ -659,11 +659,11 @@ on first run with mode `0700` (it holds secrets).
   aegis.json              # bootstrap config (OAuth clients live here)
   data_grants.json        # admin data-grant overlay (non-secret)
   apps.json               # third-party app registry (0600; token hashes only)
-  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (0600; may hold API keys)
+  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (non-secret fields; secrets in tokens.json)
   user_types.json         # admin UDT local-file selection overlay (issue #15)
   user-types/             # user-defined type schema packs (issue #15)
   entity_links.json       # confirmed playlist/entity links
-  tokens.json             # encrypted OAuth tokens (0600)
+  tokens.json             # encrypted OAuth tokens + static credentials (0600; issue #184)
   copy_ledger.db          # SQLite copy ledger (issue #76; empty -copy-ledger disables)
   mail-archive.db         # SQLite+FTS mail archive (omit -mail-archive to disable)
   quicken.db              # Quicken QIF/QFX import store (issue #141; empty -quicken-store disables)
@@ -680,8 +680,8 @@ An explicit flag always wins:
 |------|---------------------------|-------|
 | `-config` | `aegis.json` | Bootstrap config (services, connections, secrets) |
 | `-data-grants-file` | `data_grants.json` | Admin data-grant overlay; |
-| (none) | `service_connections.json` | Admin Immich/static-auth overlay (sibling of `-config`); `aegis.json` is never rewritten |
-| `-token-file` | `tokens.json` | Encrypted token storage |
+| `-service-connections-file` | `service_connections.json` | Admin Immich/static-auth overlay; secrets live in the encrypted token store (issue #184) |
+| `-token-file` | `tokens.json` | Encrypted token + static-credential storage |
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
@@ -713,7 +713,8 @@ directory or keep passing the explicit path flags.
 | `-data-dir` | OS app data dir | Local state root (see [Data directory](#data-directory-issue-74)) |
 | `-config` | `<data-dir>/aegis.json` | Bootstrap config path (services, connections, secrets) |
 | `-data-grants-file` | `<data-dir>/data_grants.json` | Admin data-grant overlay (non-secret). All data-grant saves write here; `aegis.json` is never rewritten |
-| `-token-file` | `<data-dir>/tokens.json` | Encrypted token storage path |
+| `-token-file` | `<data-dir>/tokens.json` | Encrypted token + static-credential storage path |
+| `-service-connections-file` | `<data-dir>/service_connections.json` | Admin service-connections overlay path (non-secret fields; secrets in the token store) |
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
 | `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables (issue #76) |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
@@ -727,12 +728,17 @@ directory or keep passing the explicit path flags.
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
-| `-token-pass` | | Token encryption passphrase (required). Wrong passphrase refuses to start and never overwrites `tokens.json` (issue #100) |
-| `-token-new-pass` | | One-shot: re-encrypt `tokens.json` under this passphrase and exit (issue #101) |
+| `-token-pass` | | Secret-encryption passphrase (required). Covers OAuth tokens **and** static service-connection credentials (issue #184). Wrong passphrase refuses to start and never overwrites `tokens.json` (issue #100) |
+| `-token-new-pass` | | One-shot: re-encrypt `tokens.json` (tokens + static secrets) under this passphrase and exit (issue #101 / #184) |
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
 
-### Token encryption (issue #101)
+### Token encryption (issue #101 / #184)
+
+**All secrets at rest are encrypted under `-token-pass`.** That includes
+OAuth tokens **and** static service-connection credentials (Immich/YNAB
+headers, Tailscale Admin API key). `service_connections.json` keeps only
+non-secret overlay fields (endpoint, canonical claims, tailnet host metadata).
 
 `tokens.json` is sealed with AES-256-GCM under a PBKDF2-HMAC-SHA256 master
 key. The file records its own KDF parameters so costs can be raised later
@@ -740,16 +746,22 @@ without breaking existing stores.
 
 | Field | Meaning |
 |-------|---------|
-| `version` | `2` is current; `1` (legacy) still loads |
+| `version` | `3` is current; `2` and `1` (legacy) still load |
 | `kdf` | `pbkdf2-sha256` |
 | `iterations` | PBKDF2 cost for the master key (new files: 600 000, OWASP guidance) |
 | `salt` | Master salt (base64) |
 | `key_check` | Wrong-passphrase detector sealed under the master key |
 | `tokens.<id>.salt` | Per-entry salt (base64); entry key = HKDF(master, salt) |
-| `tokens.<id>.data` | AES-GCM ciphertext of the token JSON |
+| `tokens.<id>.data` | AES-GCM ciphertext of the OAuth token JSON |
+| `secrets.<key>.data` | AES-GCM ciphertext of a static credential (issue #184) |
+
+**Migration (issue #184):** on first startup after upgrade, plaintext
+credentials found in `service_connections.json` are moved into `tokens.json`,
+the overlay is rewritten without secrets, and Aegis logs one
+`migrated plaintext service-connection credentials` line.
 
 **Legacy files (version 1)** — string ciphertexts, implicit 100 000 iterations,
-no per-entry salts — still load. The next write migrates them to the version 2
+no per-entry salts — still load. The next write migrates them to the current
 layout (same master cost until you rekey).
 
 **Rotating the passphrase / raising KDF cost:**
@@ -757,7 +769,8 @@ layout (same master cost until you rekey).
 ```bash
 # Stop Aegis first, then re-encrypt under the new passphrase.
 # -token-pass is the current secret; -token-new-pass is the new one.
-# Rekey always writes version 2 with a fresh master salt and the current
+# Rekey covers OAuth tokens and static credentials in one shot.
+# Rekey always writes the current format with a fresh master salt and the
 # default iteration count (never lowers a harder existing cost).
 AEGIS_TOKEN_PASS='old-secret' \
   ./aegis -token-new-pass 'new-secret' \
@@ -893,7 +906,7 @@ Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference). Prefer `"$ENV:…"` for `client_secret` so the file stays shareable — see [Provider connections](#provider-connections).
 3. Start Aegis and visit `https://your-aegis/` (or `/services`)
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
-5. Tokens are stored encrypted on disk and auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101) to rotate the passphrase.
+5. All secrets at rest are encrypted under `-token-pass` (OAuth tokens and static service-connection credentials, issue #184) and OAuth tokens auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101) to rotate the passphrase.
 
 If no services are connected yet, the Services tab shows extra help describing the OAuth flow.
 
@@ -1536,8 +1549,8 @@ Serve is tailnet-only; never Funnel.
 
 **Tailscale Admin API automation (optional).** Paste a Tailscale access token
 (Keys page; scopes `services` + `devices:core`) in the same wizard step. Aegis
-stores it in `service_connections.json` (`tailscale.api_key`, mode 0600; never
-echoed back), **checks each walkthrough step** against `api.tailscale.com`, and
+stores it in the encrypted token store (`-token-pass`; presence-only in admin
+APIs, never echoed back), **checks each walkthrough step** against `api.tailscale.com`, and
 offers a **Fix** action only for steps that still need work:
 
 | Step | Check | Auto-fix |
@@ -2348,9 +2361,9 @@ GET /v1/admin/services/{id}/grant-limits  — service override map + effective_p
 PUT /v1/admin/services/{id}/grant-limits  — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
 GET /v1/admin/immich/setup   — Immich connection status + issue #39 checks
 POST /v1/admin/immich/test   — probe Immich endpoint/API key (key not stored from this call)
-POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json)
+POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json + encrypted token store)
 POST /v1/admin/immich/check  — re-run the live acceptance checklist
-POST /v1/admin/immich/tailnet/config — save Tailscale Admin API key/host (service_connections.json; key never echoed)
+POST /v1/admin/immich/tailnet/config — save Tailscale Admin API key/host (encrypted token store; key never echoed)
 POST /v1/admin/immich/tailnet/check  — live-check VIP Service setup steps (issue #124)
 POST /v1/admin/immich/tailnet/apply  — fix only the named steps that still need work
 ```

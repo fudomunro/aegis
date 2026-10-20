@@ -13,15 +13,20 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
 	"golang.org/x/crypto/pbkdf2"
 )
 
-// TokenStore manages encrypted OAuth tokens at rest.
+// TokenStore manages encrypted OAuth tokens and static credentials at rest.
+// All secrets are sealed under the same master key derived from -token-pass
+// (issue #184), so -token-new-pass rekey covers both OAuth tokens and
+// service-connection static credentials.
 type TokenStore struct {
-	// mu protects Tokens / salt / key / path / loadUnsafe. Do not hold it during disk I/O.
+	// mu protects Tokens / Secrets / salt / key / path / loadUnsafe.
+	// Do not hold it during disk I/O.
 	mu sync.RWMutex
 	// persistMu serializes whole-store encrypt+write so concurrent Save/Delete
 	// cannot interleave stale snapshots onto disk.
@@ -39,6 +44,9 @@ type TokenStore struct {
 	// we failed to read (issue #100).
 	loadUnsafe bool
 	Tokens     map[string]*OAuthToken `json:"tokens"`
+	// Secrets holds static credentials (Immich/YNAB/Tailscale Admin API keys
+	// and similar) keyed by namespaced secret id. Encrypted like Tokens.
+	Secrets map[string]string `json:"secrets,omitempty"`
 }
 
 // OAuthToken holds the credentials for a single service.
@@ -95,10 +103,12 @@ func (t tokensByService) MarshalJSON() ([]byte, error) {
 //
 //	version 1 (legacy): file-level salt, implicit PBKDF2 iterations (100k),
 //	                    tokens are map[string]string sealed under the master key.
-//	version 2 (current): explicit kdf + iterations, file-level salt, per-entry
-//	                     salts with HKDF-derived entry keys.
+//	version 2: explicit kdf + iterations, file-level salt, per-entry
+//	           salts with HKDF-derived entry keys.
+//	version 3 (current): same as v2 plus a secrets map for static credentials
+//	                     from service_connections (issue #184).
 //
-// Both load; every write is version 2 (issue #101).
+// All load; every write is version 3 (issue #101 / #184).
 type tokenFile struct {
 	Version    int    `json:"version"`
 	KDF        string `json:"kdf,omitempty"`
@@ -109,11 +119,13 @@ type tokenFile struct {
 	// Empty on legacy files written before this field existed.
 	KeyCheck string          `json:"key_check,omitempty"`
 	Tokens   tokensByService `json:"tokens"`
+	Secrets  tokensByService `json:"secrets,omitempty"`
 }
 
 const (
 	tokenVersionV1 = 1
-	tokenVersion   = 2
+	tokenVersionV2 = 2
+	tokenVersion   = 3
 	// pbkdf2IterLegacy is the implicit cost of version 1 files.
 	pbkdf2IterLegacy = 100_000
 	// pbkdf2IterDefault is current OWASP guidance for PBKDF2-HMAC-SHA256.
@@ -125,7 +137,25 @@ const (
 	// keyCheckPlaintext is sealed under the derived key on every write and
 	// verified on load. It is not a secret — only a wrong-key detector.
 	keyCheckPlaintext = "aegis-token-key-check-v1"
+
+	// Static-credential secret keys (issue #184). Namespaced so they cannot
+	// collide with OAuth service connection IDs.
+	secretKeyServiceHeadersPrefix = "static:service:"
+	secretKeyServiceHeadersSuffix = ":headers"
+	secretKeyTailscaleAPIKey      = "static:tailscale:api_key"
 )
+
+// ServiceHeadersSecretKey is the TokenStore secret id for a service's static
+// HTTP headers (JSON object of header name → value).
+func ServiceHeadersSecretKey(serviceID string) string {
+	return secretKeyServiceHeadersPrefix + serviceID + secretKeyServiceHeadersSuffix
+}
+
+// TailscaleAPIKeySecretKey is the TokenStore secret id for the Tailscale
+// Admin API key.
+func TailscaleAPIKeySecretKey() string {
+	return secretKeyTailscaleAPIKey
+}
 
 // errPassphrase is returned when the token file exists but the supplied
 // passphrase cannot unlock it. Callers must not persist over the file.
@@ -217,10 +247,22 @@ func newTokenStore(path, passphrase string, preferredIterations int) (*TokenStor
 		ts.Tokens[svcID] = &tok
 	}
 
+	ts.Secrets = make(map[string]string, len(tf.Secrets))
+	for key, entry := range tf.Secrets {
+		decrypted, err := ts.decryptEntry(entry)
+		if err != nil {
+			decryptFailures++
+			slog.Warn("failed to decrypt secret, skipping", "secret", key, "error", err)
+			continue
+		}
+		ts.Secrets[key] = string(decrypted)
+	}
+
 	// Legacy file, no key check, and every entry failed to decrypt:
 	// almost certainly the wrong passphrase. Refuse rather than look empty.
-	if tf.KeyCheck == "" && len(tf.Tokens) > 0 && decryptFailures == len(tf.Tokens) {
-		slog.Error("all tokens failed to decrypt", "path", path, "services", len(tf.Tokens))
+	totalOnDisk := len(tf.Tokens) + len(tf.Secrets)
+	if tf.KeyCheck == "" && totalOnDisk > 0 && decryptFailures == totalOnDisk {
+		slog.Error("all token-store entries failed to decrypt", "path", path, "entries", totalOnDisk)
 		return nil, errPassphrase
 	}
 
@@ -232,13 +274,15 @@ func newTokenStore(path, passphrase string, preferredIterations int) (*TokenStor
 			"path", path,
 			"decrypt_failures", decryptFailures,
 			"parse_failures", parseFailures,
-			"loaded", len(ts.Tokens),
-			"on_disk", len(tf.Tokens))
+			"loaded_tokens", len(ts.Tokens),
+			"loaded_secrets", len(ts.Secrets),
+			"on_disk", totalOnDisk)
 	}
 
 	slog.Info("loaded token store",
 		"path", path,
 		"services", len(ts.Tokens),
+		"secrets", len(ts.Secrets),
 		"version", tf.Version,
 		"kdf", kdfPBKDF2SHA256,
 		"iterations", ts.kdfIterations,
@@ -259,7 +303,7 @@ func fileKDFIterations(tf tokenFile) (int, error) {
 			return 0, fmt.Errorf("unsupported token kdf %q", tf.KDF)
 		}
 		return pbkdf2IterLegacy, nil
-	case tokenVersion:
+	case tokenVersionV2, tokenVersion:
 		if tf.KDF != "" && tf.KDF != kdfPBKDF2SHA256 {
 			return 0, fmt.Errorf("unsupported token kdf %q", tf.KDF)
 		}
@@ -319,6 +363,68 @@ func (ts *TokenStore) Delete(serviceID string) error {
 	ts.mu.Unlock()
 
 	return ts.persist()
+}
+
+// GetSecret returns a copy of a static credential, or "" when unset.
+func (ts *TokenStore) GetSecret(key string) string {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	if ts.Secrets == nil {
+		return ""
+	}
+	return ts.Secrets[key]
+}
+
+// HasSecret reports whether a static credential is stored (presence only).
+func (ts *TokenStore) HasSecret(key string) bool {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	_, ok := ts.Secrets[key]
+	return ok
+}
+
+// SetSecret stores a static credential under the encrypted token store
+// (issue #184). An empty value deletes the key.
+func (ts *TokenStore) SetSecret(key, value string) error {
+	if strings.TrimSpace(key) == "" {
+		return fmt.Errorf("secret key is required")
+	}
+	if err := ts.ensurePersistable(); err != nil {
+		return err
+	}
+	ts.mu.Lock()
+	if ts.Secrets == nil {
+		ts.Secrets = make(map[string]string)
+	}
+	if value == "" {
+		delete(ts.Secrets, key)
+	} else {
+		ts.Secrets[key] = value
+	}
+	ts.mu.Unlock()
+	return ts.persist()
+}
+
+// DeleteSecret removes a static credential from the encrypted store.
+func (ts *TokenStore) DeleteSecret(key string) error {
+	if err := ts.ensurePersistable(); err != nil {
+		return err
+	}
+	ts.mu.Lock()
+	delete(ts.Secrets, key)
+	ts.mu.Unlock()
+	return ts.persist()
+}
+
+// SecretKeys returns secret ids currently stored (for migration logging).
+func (ts *TokenStore) SecretKeys() []string {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	out := make([]string, 0, len(ts.Secrets))
+	for k := range ts.Secrets {
+		out = append(out, k)
+	}
+	return out
 }
 
 // ChangePassphrase re-encrypts every token under next with a fresh master salt
@@ -440,6 +546,10 @@ func (ts *TokenStore) persist() error {
 		}
 		plains = append(plains, plainTok{id: svcID, data: plain})
 	}
+	secretPlains := make([]plainTok, 0, len(ts.Secrets))
+	for key, val := range ts.Secrets {
+		secretPlains = append(secretPlains, plainTok{id: key, data: []byte(val)})
+	}
 	key := ts.key
 	iterations := ts.kdfIterations
 	ts.mu.RUnlock()
@@ -462,6 +572,16 @@ func (ts *TokenStore) persist() error {
 			return fmt.Errorf("encrypting token for %s: %w", p.id, err)
 		}
 		tf.Tokens[p.id] = entry
+	}
+	if len(secretPlains) > 0 {
+		tf.Secrets = make(tokensByService, len(secretPlains))
+		for _, p := range secretPlains {
+			entry, err := encryptEntry(key, p.data)
+			if err != nil {
+				return fmt.Errorf("encrypting secret %s: %w", p.id, err)
+			}
+			tf.Secrets[p.id] = entry
+		}
 	}
 
 	data, err := json.MarshalIndent(tf, "", "  ")

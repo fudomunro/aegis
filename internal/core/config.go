@@ -21,7 +21,7 @@ type Config struct {
 	// (issue #148 / #174). The data_grants.json overlay `data_grants` map
 	// wins when present.
 	DataGrantsBootstrap types.DataGrants `json:"data_grants,omitempty"`
-	path                  string
+	path                string
 	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
 	// Admin data-grant saves always write here — never aegis.json.
 	dataGrantsPath string
@@ -42,6 +42,10 @@ type Config struct {
 	// tailscaleAdmin holds the optional Tailscale Admin API credential used
 	// for Immich VIP Service setup checks/fixes (issue #124).
 	tailscaleAdmin *tailscaleAdminEntry
+	// secrets is the encrypted token store used for static credentials from
+	// the service-connections overlay (issue #184). Attached at startup via
+	// InitServiceConnectionsStore alongside -token-pass.
+	secrets *TokenStore
 }
 
 // defaultDataGrantsPath returns the overlay path beside a aegis.json path.
