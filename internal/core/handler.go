@@ -202,6 +202,20 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 			next(w, withAuthKind(r, authKindAPIKey))
 			return
 		case AuthModeTailnet:
+			// Prefer explicit API key when supplied so webhook clients that
+			// also arrive via Serve are classified as non-ambient (CSRF-exempt).
+			if s.checkAPIKey(r) {
+				if id != nil {
+					if !loginAllowed(id, s.allowedLogins) && !s.isAdminIdentity(id) {
+						s.deny(w, r, id, "identity not in allowed logins")
+						return
+					}
+					next(w, withAuthKind(withPeerIdentity(r, id), authKindAPIKey))
+					return
+				}
+				next(w, withAuthKind(r, authKindAPIKey))
+				return
+			}
 			if id == nil {
 				if idErr != nil {
 					slog.Warn("tailnet identity resolve failed", "error", idErr, "remote", r.RemoteAddr)

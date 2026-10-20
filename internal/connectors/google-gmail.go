@@ -133,7 +133,7 @@ func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 
 GET %s/v1/library/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
 
-sources[] records where each message lives (service + id) for sync. Library lists carry snippets only.
+sources[] records where each message lives (service + id) for sync. Fetch each message at /v1/services/{sources[].service}/messages/{sources[].id} — never send one service's id to another. Library lists carry snippets only.
 
 Only when you need a full message body:
 GET %s/v1/services/google-gmail/messages/{id} — one message; add ?format=full for the decoded body
@@ -224,11 +224,39 @@ func GmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 	p := remainingPath
 	for _, prefix := range []string{"/me/" + kind + "/", "/" + kind + "/"} {
 		if strings.HasPrefix(p, prefix) {
-			id := strings.Trim(strings.TrimPrefix(p, prefix), "/")
-			return id, id != ""
+			rest := strings.Trim(strings.TrimPrefix(p, prefix), "/")
+			// Only a single path segment is a bare id. Extra segments
+			// (/attachments and similar) are not message GETs — do not
+			// forward the joined path as a fake id.
+			if rest == "" || strings.Contains(rest, "/") {
+				return "", false
+			}
+			return rest, true
 		}
 	}
 	return "", false
+}
+
+// validGmailBareID reports whether id looks like a Gmail message/thread id.
+// Identifiers from other services (AT-URIs, paths) must never be forwarded
+// to the Gmail API — they produce confusing upstream 400s.
+func validGmailBareID(id string) bool {
+	if id == "" || len(id) > 128 {
+		return false
+	}
+	if strings.ContainsAny(id, "/\\ \t\r\n") {
+		return false
+	}
+	if strings.Contains(id, ":") {
+		return false
+	}
+	for _, r := range id {
+		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_'
+		if !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http.Request) {
@@ -391,8 +419,21 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 	if format == "" {
 		format = googleGmailMetadataFormat
 	}
+	if !validGmailBareID(id) {
+		// Wrong-service id (or a concatenated path). Do not call Gmail.
+		slog.Warn("gmail get message rejected non-gmail id", "id", id)
+		WriteJSONError(w, http.StatusNotFound,
+			"not a Gmail message id — use sources[].service and sources[].id from the library list")
+		return
+	}
 	raw, err := c.FetchGmailMessage(r.Context(), token, id, format)
 	if err != nil {
+		if isGmailInvalidIDError(err) {
+			slog.Warn("gmail get message unknown id", "id", id)
+			WriteJSONError(w, http.StatusNotFound,
+				"message not found on Gmail — check sources[].service and sources[].id")
+			return
+		}
 		slog.Warn("gmail get message failed", "id", id, "error", err)
 		WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
 		return
@@ -834,6 +875,20 @@ func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message 
 		msg.Body = GmailDecodeBody(raw)
 	}
 	return msg
+}
+
+// isGmailInvalidIDError reports whether Gmail rejected the id itself
+// (wrong service id, bad path), as opposed to a transient upstream failure.
+func isGmailInvalidIDError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "Invalid id value") ||
+		strings.Contains(msg, "invalidArgument") ||
+		strings.Contains(msg, "Not Found") ||
+		strings.Contains(msg, "404")
+
 }
 
 func GmailMessageURL(id string) string {
