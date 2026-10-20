@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -67,8 +68,8 @@ func markdownHeadings(t *testing.T, path string) []string {
 func TestReadmeHeadings_NoIssueRefsOrAvoidTerms(t *testing.T) {
 	path := filepath.Join(repoRoot(t), "README.md")
 	heads := markdownHeadings(t, path)
-	if len(heads) < 20 {
-		t.Fatalf("expected a substantial README, got %d headings", len(heads))
+	if len(heads) < 4 {
+		t.Fatalf("expected a real README, got %d headings", len(heads))
 	}
 	var failures []string
 	for _, h := range heads {
@@ -84,6 +85,55 @@ func TestReadmeHeadings_NoIssueRefsOrAvoidTerms(t *testing.T) {
 	}
 	if len(failures) > 0 {
 		t.Fatalf("README headings must stay issue-free and glossary-clean:\n%s",
+			strings.Join(failures, "\n"))
+	}
+}
+
+// User-facing reference docs must not cite issues either (history is CHANGELOG).
+func TestUserFacingDocs_NoIssueRefs(t *testing.T) {
+	root := repoRoot(t)
+	files := []string{
+		"README.md",
+		filepath.Join("docs", "api.md"),
+		filepath.Join("docs", "configuration.md"),
+		filepath.Join("docs", "observability.md"),
+	}
+	connectDir := filepath.Join(root, "docs", "connect")
+	entries, err := os.ReadDir(connectDir)
+	if err != nil {
+		t.Fatalf("read docs/connect: %v", err)
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".md") {
+			files = append(files, filepath.Join("docs", "connect", e.Name()))
+		}
+	}
+	var failures []string
+	for _, rel := range files {
+		raw, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		// Skip fenced code samples; prose must stay clean.
+		var body []string
+		inFence := false
+		for _, line := range strings.Split(string(raw), "\n") {
+			if strings.HasPrefix(strings.TrimSpace(line), "```") {
+				inFence = !inFence
+				continue
+			}
+			if !inFence {
+				body = append(body, line)
+			}
+		}
+		for i, line := range body {
+			if issueRefRe.MatchString(line) {
+				failures = append(failures, fmt.Sprintf("%s:%d: %s", rel, i+1, truncateForTest(line, 120)))
+			}
+		}
+	}
+	if len(failures) > 0 {
+		t.Fatalf("user-facing docs must not cite issues (use CHANGELOG.md):\n%s",
 			strings.Join(failures, "\n"))
 	}
 }
@@ -207,16 +257,26 @@ func TestMarkdownLocalLinks_Resolve(t *testing.T) {
 		"README.md",
 		"SECURITY.md",
 		"AGENTS.md",
+		"CHANGELOG.md",
 	}
-	entries, err := os.ReadDir(filepath.Join(root, "docs"))
-	if err != nil {
-		t.Fatalf("read docs/: %v", err)
-	}
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".md") {
-			files = append(files, filepath.Join("docs", e.Name()))
+	var walkDocs func(relDir string)
+	walkDocs = func(relDir string) {
+		entries, err := os.ReadDir(filepath.Join(root, relDir))
+		if err != nil {
+			t.Fatalf("read %s: %v", relDir, err)
+		}
+		for _, e := range entries {
+			rel := filepath.Join(relDir, e.Name())
+			if e.IsDir() {
+				walkDocs(rel)
+				continue
+			}
+			if strings.HasSuffix(e.Name(), ".md") {
+				files = append(files, rel)
+			}
 		}
 	}
+	walkDocs("docs")
 
 	anchorCache := map[string]map[string]bool{}
 	anchorsFor := func(rel string) map[string]bool {

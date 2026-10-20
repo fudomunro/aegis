@@ -49,7 +49,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 
 | Prefer | Means | Notes |
 |--------|-------|-------|
-| **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **data type** at an **access level** | Hero term for product English (README “Data grants”, admin UI, injection) |
+| **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **data type** at an **access level** | Hero term for product English (`docs/configuration.md` “Data grants”, admin UI, injection) |
 | **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
@@ -60,7 +60,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Admin principal** | Admin API key or allowed tailnet user login | Who may change policy (data grants, apps, UDT file selection); agent credentials are never admin (issue #181) |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
-One-line shape (also in README “Data grants”): **data grants** are the product
+One-line shape (also in `docs/configuration.md` “Data grants”): **data grants** are the product
 idea; `data_grants` owns agent data grants (default + per-provider floor);
 **Service limits** (`grant_limits`) only tighten; app data grants scope
 third-party tokens; accessors are the principal axis.

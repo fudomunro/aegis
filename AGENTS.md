@@ -177,8 +177,10 @@ Observed pattern across sessions (and the reason this file exists):
    concrete file/behavior bullets.
 5. **Tests are part of the feature, not a follow-up.** Coverage-gap PRs are
    welcome, but new write paths without tests will fail the floor.
-6. **README is the product contract.** Config fields, endpoints, scopes, and
-   canonical/mirror semantics must stay accurate when behavior changes.
+6. **README is the entry point; `docs/` is the product contract.** Config
+   fields, endpoints, scopes, and canonical/mirror semantics live in
+   `docs/api.md` / `docs/configuration.md` / `docs/connect/` and must stay
+   accurate when behavior changes.
 7. **User prefers Go** for this service (aligns with Tailscale stack). Do not
    introduce another runtime for Aegis itself.
 8. **`experiments/learn.md` still applies to `experiments/index.html`:** walkthrough page should
@@ -305,13 +307,13 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Hook behavior / system instructions | `internal/core/handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `internal/core/config.go`, `aegis.example.json`, README “Configuration” |
-| Admin data-grant writes | `internal/core/permissions_overlay.go`, `internal/core/config.go` `SetDataGrants` / `SetServicePermissions`, README “Data grants” |
+| Admin data-grant writes | `internal/core/permissions_overlay.go`, `internal/core/config.go` `SetDataGrants` / `SetServicePermissions`, `docs/configuration.md` “Data grants” |
 | OAuth / connections / refresh | `internal/core/oauth.go`, `internal/core/connections.go`, `internal/core/tokens.go` |
 | Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
 | Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
 | Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
-| Product/API docs | `README.md` |
+| Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
 
