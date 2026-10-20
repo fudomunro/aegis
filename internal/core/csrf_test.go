@@ -475,3 +475,76 @@ func (f fakeIdentity) Resolve(_ context.Context, _ *http.Request) (*PeerIdentity
 }
 
 var _ IdentityResolver = fakeIdentity{}
+
+
+func TestCSRFGuard_HookPathSkipsOriginCheck(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.authMode = AuthModeTailnet
+	srv.identity = fakeIdentity{login: "user@example.com"}
+
+	inner := func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, map[string]string{"status": "ok"})
+	}
+
+	// Aperture webhook: Serve identity, JSON body, no browser Origin.
+	req := httptest.NewRequest("POST", "/v1/pre-request",
+		strings.NewReader(`{"metadata":{"login_name":"user@example.com"},"user_message":"hello"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "100.64.0.2:5555"
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(inner)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("hook without origin: %d %s", w.Code, w.Body.String())
+	}
+
+	// Admin writes stay CSRF-guarded under the same identity.
+	req = httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
+	w = httptest.NewRecorder()
+	srv.AdminMiddleware(inner)(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("admin without origin must stay forbidden, got %d", w.Code)
+	}
+}
+
+func TestCSRFGuard_TailnetWithAPIKeySkipsOriginCheck(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.authMode = AuthModeTailnet
+	srv.identity = fakeIdentity{login: "user@example.com"}
+
+	inner := func(w http.ResponseWriter, r *http.Request) {
+		if kind := authKindFrom(r); kind != authKindAPIKey {
+			t.Errorf("auth kind = %q, want api-key", kind)
+		}
+		writeJSON(w, map[string]string{"status": "ok"})
+	}
+
+	req := httptest.NewRequest("POST", "/v1/pre-request",
+		strings.NewReader(`{"user_message":"hello"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer test-key")
+	req.RemoteAddr = "100.64.0.2:5556"
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(inner)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("hook with api key: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestIsHookPath(t *testing.T) {
+	cases := []struct {
+		path string
+		want bool
+	}{
+		{"/v1/pre-request", true},
+		{"/v1/pre-request/", true},
+		{"/v1/admin/mail/sync", false},
+		{"/v1/library/messages", false},
+		{"/v1/services/google-gmail/messages/abc", false},
+	}
+	for _, c := range cases {
+		r := httptest.NewRequest("POST", c.path, nil)
+		if got := isHookPath(r); got != c.want {
+			t.Errorf("isHookPath(%q) = %v, want %v", c.path, got, c.want)
+		}
+	}
+}

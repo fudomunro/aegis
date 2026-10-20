@@ -144,7 +144,10 @@ func (s *Server) csrfGuard(next http.HandlerFunc) http.HandlerFunc {
 		kind := authKindFrom(r)
 		// Explicit credentials are not ambient — browsers do not attach them
 		// automatically on a cross-site form POST.
-		if kind != authKindAPIKey && kind != authKindApp {
+		// The Aperture pre-request hook is a server-to-server webhook, not a
+		// browser write: Serve identity (or an API key) is expected, and the
+		// call never carries a page Origin. CSRF would brick every hook.
+		if kind != authKindAPIKey && kind != authKindApp && !isHookPath(r) {
 			if !s.sameOriginRequest(r) {
 				s.denyStatus(w, r, PeerIdentityFrom(r), http.StatusForbidden,
 					"cross-origin write rejected")
@@ -156,6 +159,16 @@ func (s *Server) csrfGuard(next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
+}
+
+// isHookPath reports whether this is the Aperture pre-request webhook route.
+// Content-transport and admin routes stay CSRF-guarded.
+func isHookPath(r *http.Request) bool {
+	if r == nil || r.URL == nil {
+		return false
+	}
+	p := r.URL.Path
+	return p == hookPath || strings.HasPrefix(p, hookPath+"/")
 }
 
 // issueCSRFToken mints a single-use token for the consent page render.
