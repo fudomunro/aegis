@@ -663,7 +663,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 				Kind: req.Kind, Source: srcRef, DryRun: true, Planned: planned,
 				Target:       MirrorRef{Service: req.TargetService, Name: targetName},
 				Truncated:    truncated,
-				IdentityNote: "Event matching prefers iCal UID, then title + start. Conflicts are reported and never overwritten. Mirrored events feed /v1/library/freebusy (issue #128).",
+				IdentityNote: "Event matching prefers iCal UID, then title + start. Conflicts are reported and never overwritten. Mirrored events feed /v1/library/freebusy.",
 			})
 			return
 		}

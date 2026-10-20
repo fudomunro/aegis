@@ -50,7 +50,7 @@ func (c *SampleCalendarConnector) Capabilities() types.ServiceCapabilities {
 }
 
 func (c *SampleCalendarConnector) SystemInstructions(baseURL string) string {
-	return "Sample Calendar is synthetic fixture data (issue #77). Use Aegis library endpoints for events/freebusy; there is no upstream provider."
+	return "Sample Calendar is synthetic fixture data. Use Aegis library endpoints for events/freebusy; there is no upstream provider."
 }
 
 func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {

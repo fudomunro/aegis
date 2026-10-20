@@ -157,10 +157,10 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 	text := k.Instructions(s.baseURL)
 	if kindID == "events" {
 		root := strings.TrimRight(s.baseURL, "/")
-		text += fmt.Sprintf(" For scheduling or availability-only questions use GET %s/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees (issue #128).", root)
+		text += fmt.Sprintf(" For scheduling or availability-only questions use GET %s/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.", root)
 	}
 	if name := s.canonicalServiceName(kindID); name != "" {
-		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the home copy.", k.Label, name)
+		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the canonical home.", k.Label, name)
 	}
 	if kindID == "photos" {
 		text += "\n" + types.PhotoSourceDiscipline()

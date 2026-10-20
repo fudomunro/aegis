@@ -193,7 +193,7 @@ func TestBlueskyCapabilitiesAndInstructions(t *testing.T) {
 		t.Fatalf("messages op = %+v", caps.DataTypes[1].Operations[0])
 	}
 	instr := conn.SystemInstructions("https://aegis.example.com")
-	if !strings.Contains(instr, "/v1/library/photos/share") || !strings.Contains(instr, "issue #20") {
+	if !strings.Contains(instr, "/v1/library/photos/share") || !strings.Contains(instr, "ownership") {
 		t.Fatalf("instructions = %s", instr)
 	}
 	if !strings.Contains(instr, "/v1/library/messages") || !strings.Contains(instr, "getBlob") {
