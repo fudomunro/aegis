@@ -14,7 +14,7 @@ func TestHookHealth_RecordAndSnapshot(t *testing.T) {
 	h := NewHookHealth(4)
 	h.Record(HookObservation{
 		At:             time.Now(),
-		Host:           "guardian.heron-census.ts.net",
+		Host:           "guardian.example.ts.net",
 		Action:         ActionModify,
 		HasUserMessage: true,
 		HasRequestBody: true,
@@ -22,9 +22,9 @@ func TestHookHealth_RecordAndSnapshot(t *testing.T) {
 		Provider:       "p",
 		Login:          "u@example.com",
 	})
-	h.Record(HookObservation{Action: "auth_fail", Host: "aegis.heron-census.ts.net"})
+	h.Record(HookObservation{Action: "auth_fail", Host: "aegis.example.ts.net"})
 
-	rep := h.Snapshot("https://aegis.heron-census.ts.net")
+	rep := h.Snapshot("https://aegis.example.ts.net")
 	if rep.Status != "error" {
 		t.Fatalf("status = %q, want error (stale host + auth failures)", rep.Status)
 	}
@@ -43,7 +43,7 @@ func TestHookHealth_RecordAndSnapshot(t *testing.T) {
 			t.Fatalf("missing issue %q in %+v", want, rep.Issues)
 		}
 	}
-	if rep.ExpectedURL != "https://aegis.heron-census.ts.net/v1/pre-request" {
+	if rep.ExpectedURL != "https://aegis.example.ts.net/v1/pre-request" {
 		t.Fatalf("expected_url = %q", rep.ExpectedURL)
 	}
 	if len(rep.ExpectedHookConfig) == 0 {
@@ -81,11 +81,11 @@ func TestHookHealth_MissingPayloadFields(t *testing.T) {
 }
 
 func TestCheckApertureConfig_LegacyGuardian(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://aegis.heron-census.ts.net")
+	srv := testServerWithBase(&Config{}, "https://aegis.example.ts.net")
 	raw := []byte(`{
 	  "hooks": {
 	    "guardian": {
-	      "url": "https://guardian.heron-census.ts.net/v1/pre-request",
+	      "url": "https://guardian.example.ts.net/v1/pre-request",
 	      "apikey": "k",
 	      "timeout": "5s"
 	    }
@@ -283,10 +283,10 @@ func TestHostMatchesBase(t *testing.T) {
 }
 
 func TestIsStaleHookHost(t *testing.T) {
-	if !isStaleHookHost("Guardian.heron-census.ts.net") {
+	if !isStaleHookHost("Guardian.example.ts.net") {
 		t.Fatal("guardian host is stale")
 	}
-	if isStaleHookHost("aegis.heron-census.ts.net") {
+	if isStaleHookHost("aegis.example.ts.net") {
 		t.Fatal("aegis host is not stale")
 	}
 }

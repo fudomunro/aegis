@@ -236,7 +236,7 @@ drops; fail-open and connector product rules unchanged; no UDT feature work
 until the layer exists; README/AGENTS.md updated when layout or policy ownership
 changes.
 
-Worktrees: `/Users/alec/Work/aegis-<slug>`, branches `refactor/…` then
+Worktrees: `../aegis-<slug>`, branches `refactor/…` then
 `feat/…`. PR bodies start with `## Summary` and name `#15` / `#148`.
 
 ### Phase 0 — Align docs and issue (no code)
