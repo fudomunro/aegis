@@ -5,7 +5,8 @@ library, search) to LLM agents. This document describes the recommended access
 model when Aegis runs in a [Tailscale](https://tailscale.com) tailnet — the
 same identity layer [Aperture](https://tailscale.com/docs/aperture) uses.
 Product vocabulary (data grant, access levels, LLM agent) is in
-[`docs/glossary.md`](docs/glossary.md).
+[`docs/glossary.md`](docs/glossary.md). The structured asset/threat/residual-risk
+model for auditors is in [`docs/threat-model.md`](docs/threat-model.md).
 
 ## Trust model
 
@@ -273,3 +274,4 @@ clients.
 - [Tailscale Serve](https://tailscale.com/kb/1312/serve) (identity headers)
 - [tsnet](https://github.com/tailscale/tailscale/tree/main/tsnet) (embed Tailscale in Go; optional alternative to system `tailscaled`)
 - [Concept glossary](docs/glossary.md) (service/connector/connection, data grant, LLM agent vs coding agent)
+- [Threat model](docs/threat-model.md) (assets, actors, threats, residual risks)
