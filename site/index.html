@@ -40,6 +40,7 @@
     <li><a href="#anatomy">Why a jellyfish</a></li>
     <li><a href="#dive">The dive</a></li>
     <li><a href="#currents">How it works</a></li>
+    <li><a href="#faq">F.A.Q.</a></li>
     <li><a href="https://github.com/fudomunro/aegis">GitHub →</a></li>
   </ul>
 </nav>
@@ -107,9 +108,12 @@
       <div class="trait">
         <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M23 3 9 23h10l-3 14 15-21H21z"/></svg>
         <h3>A precise sting</h3>
-        <p>Per-type permissions (<code>none</code>, <code>freebusy</code>, <code>read</code>,
-          <code>write</code>) are enforced on every request. Reach too far and the answer is
-          a polite <b>403</b>.</p>
+        <p><b>Data grants</b> set an access level per data type —
+          <code>none</code>, <code>freebusy</code>, <code>summary</code>,
+          <code>city</code>, <code>precise</code>, <code>metadata</code>,
+          <code>read</code>, <code>write</code>. Reach too far and the answer is
+          a polite <b>403</b>. Service limits can only tighten a grant, never
+          widen it.</p>
       </div>
       <div class="trait">
         <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-dasharray="3 4" aria-hidden="true"><circle cx="20" cy="20" r="14"/></svg>
@@ -196,7 +200,7 @@ PUT …/spotify/me/player  <span class="no">403 · none</span></div>
           never why. Flip the toggle off and the token is destroyed.
         </p>
         <ul class="chips">
-          <li>permissions: events → freebusy</li>
+          <li>app data grant: events → freebusy</li>
           <li>GET /v1/library/freebusy</li>
           <li>Bearer aeg_app_…</li>
           <li>POST /v1/apps/revoke</li>
@@ -285,7 +289,7 @@ GET /v1/library/events  <span class="ok">200 · 2 inboxes</span></div>
           The budget sheet. The medication log. The SQLite file where you track every
           houseplant. With user-defined types you'd describe your own data to Aegis and decide
           what agents get to see: some columns readable, some veiled, nothing writable unless
-          you say so. Same permissions, same Map, same sting.
+          you say so. Same data grants, same Map, same sting.
         </p>
         <ul class="chips">
           <li>user-defined types</li>
@@ -329,14 +333,14 @@ GET /v1/library/events  <span class="ok">200 · 2 inboxes</span></div>
         <div class="flow"><span>Agent</span><b>→</b><span>Aperture</span><b>→</b><span class="a">Aegis hook</span><b>→</b><span>LLM</span></div>
         <p>Before a prompt reaches the model, Aegis spots the services you mentioned
           (“my Spotify”, “photos from June”, “my calendar”) and tells the agent where
-          the safe door is: Aegis's own endpoints, with the permissions you set.</p>
+          the safe door is: Aegis's own endpoints, with the data grants you set.</p>
       </div>
       <div class="current">
         <h3>The proxy current</h3>
         <div class="flow"><span>Agent</span><b>→</b><span class="a">Aegis library</span><b>→</b><span>Spotify · Immich · Gmail · …</span></div>
         <p>The agent calls <code>/v1/library/*</code> and gets back plain playlists, tracks,
           photos, events, and messages, merged across every connected service. Aegis attaches
-          the tokens, caches only successful answers, and enforces every sting.</p>
+          the tokens, caches only successful answers, and enforces every data grant.</p>
       </div>
     </div>
     <div class="vows">
@@ -344,6 +348,112 @@ GET /v1/library/events  <span class="ok">200 · 2 inboxes</span></div>
       <div class="vow"><b>Aegis owns OAuth</b><span>One encrypted token per connection, refreshed automatically. Agents never see it.</span></div>
       <div class="vow"><b>Media stays home</b><span>The original stays with the source service. Aegis only handles metadata.</span></div>
       <div class="vow"><b>Tailnet only</b><span>No public Funnel. Only your own devices and people can reach it.</span></div>
+    </div>
+  </section>
+
+  <section id="faq" class="faq reveal">
+    <span class="kicker">F.A.Q.</span>
+    <h2>Questions people actually ask</h2>
+    <p class="lede">
+      Candid answers, including the ones that don't make Aegis look magical.
+      Product vocabulary lives in the
+      <a href="https://github.com/fudomunro/aegis/blob/main/docs/glossary.md">glossary</a>.
+    </p>
+
+    <div class="faq-list">
+      <details class="faq-item" open>
+        <summary>Why should I trust Aegis with my data?</summary>
+        <p>You shouldn't. You should audit the code yourself, or at least ask your
+          agent to do it, before you connect Aegis to any sensitive information.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Won't service providers change their APIs and break syncing, making Aegis unstable?</summary>
+        <p>Yes, but we think agentic development can automatically fix that syncing
+          in some really cool ways, at a relatively small cost.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Does Aegis keep copies of my photos, music, or mail?</summary>
+        <p>Not your media. Photos, tracks and documents stay on the service they came
+          from; Aegis fetches them when asked and caches successful reads for a short
+          time. Some data does get stored locally if you choose to: the mail archive
+          (for search), and imports from files you hand it (Takeout, Signal, Quicken,
+          Timeline). All of it lives in one data directory you control.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Do I need Tailscale and Aperture to use it?</summary>
+        <p>Aperture is what lets Aegis step into your LLM requests automatically.
+          Without it, you can still call the library API directly. Tailscale is the
+          security boundary. An API-key mode exists for testing, but Aegis holds keys
+          to your accounts, so we don't recommend running it outside a tailnet, and
+          you should never expose it publicly with Funnel.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Can my agent see my passwords or OAuth tokens?</summary>
+        <p>No. Aegis does the OAuth flow itself and attaches tokens on the server
+          side. Agents never receive them and should never ask you to authorize
+          anything. OAuth tokens and API keys are encrypted on disk under your
+          <code>-token-pass</code>. Admin screens only show whether a credential is
+          present and when it expires.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>What can an agent actually see, and how do I limit it?</summary>
+        <p>Only what you allow with <b>data grants</b>, which you set per data type
+          (playlists, contacts, places, …) on the admin page. Sensitive types start
+          off: location history defaults to <code>none</code>, and user-defined types
+          are always opt-in. Per-service limits can only narrow a grant, never widen
+          it. Agent credentials also can't open admin pages, so an agent can't grant
+          itself more access.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Can Aegis change or delete my data?</summary>
+        <p>Almost everything is read-only. Writes are rare and explicit: copying a
+          playlist or liked tracks to another service as a backup, or publishing a
+          photo you pick to Bluesky. Aegis never syncs changes back automatically,
+          and it doesn't delete anything at the source.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>What happens when a service (or Aegis) is down?</summary>
+        <p>Aegis fails open. If it can't reach a service or understand a response,
+          your LLM request goes through unchanged and the agent simply gets less
+          help. A broken connector should never block you from talking to your model.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>Which services are supported, and can I add my own?</summary>
+        <p>Today: Spotify, YouTube Music, Amazon Music, Google (Photos, Contacts,
+          Calendar, Gmail, Drive), Immich, YNAB, Paperless-ngx, OwnTracks and Bluesky,
+          plus file imports from Google Takeout, Google Timeline, Signal and Quicken.
+          For your own data, a <b>user-defined type</b> (a small JSON schema pack)
+          turns a local file or JSON endpoint into a library type without writing
+          code. New named services are Go connectors, and that's work your agent can
+          help with.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>How do I see what my agents have accessed?</summary>
+        <p>The admin Home tab shows which agents touched which data types recently.
+          A local audit log records every access, allowed or denied, without tokens or
+          message bodies, and keeps 30 days by default. Prometheus metrics are
+          available at <code>/metrics</code>.</p>
+      </details>
+
+      <details class="faq-item">
+        <summary>How do I back up, move, or wipe Aegis?</summary>
+        <p>Everything lives in one data directory
+          (<code>~/Library/Application Support/Aegis</code> on macOS,
+          <code>~/.local/share/aegis</code> on Linux). Copy it to back up or move.
+          Delete it to wipe. To cut off a service, revoke it from the admin page and
+          also remove Aegis's access in that provider's account settings. Keep
+          <code>-token-pass</code> safe: without it, encrypted credentials can't be
+          recovered and you'll need to reconnect each service.</p>
+      </details>
     </div>
   </section>
 

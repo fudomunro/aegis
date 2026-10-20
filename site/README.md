@@ -1,11 +1,11 @@
-# Aegis marketing site (issue #129)
+# Aegis marketing site (issue #129, refreshed in #196)
 
 A static, dependency-free page that explains what Aegis is and why you'd want it.
 It plays up the jellyfish mark from `web/logo.svg` (issue #87).
 
 ```
 site/
-  index.html   page markup + inline jellyfish SVG
+  index.html   page markup + inline jellyfish SVG + F.A.Q.
   style.css    deep-sea theme, animations (respects prefers-reduced-motion)
   site.js      marine snow, scroll reveals, cursor-tracking jellyfish eyes
   favicon.svg  copy of web/favicon.svg
@@ -17,6 +17,14 @@ Preview locally:
 python3 -m http.server -d site 8000   # then open http://localhost:8000
 ```
 
+## Product language
+
+Prefer the glossary terms from [`docs/glossary.md`](../docs/glossary.md):
+**data grant**, **access level**, **app data grant**, **service limits**,
+**data type**, **user-defined type**. Do not put older “permissions” product
+English back into visible copy. Issue numbers are fine on this page only where
+they point at open design work (for example #15 for user-defined types).
+
 ## The four use cases
 
 The page is limited to four scenarios. They are ordered as a "dive" from shallow
@@ -24,14 +32,19 @@ to deep:
 
 | Zone | Use case | Status | Product surface |
 |------|----------|--------|-----------------|
-| Sunlight | Anniversary "Wrapped" with photos from the same weeks | Works today | `/v1/library/tracks`, `/v1/library/photos`, `player: none` |
-| Twilight | Free/busy calendar for a scheduling app | Works today | `freebusy` permission (#128), `/v1/library/freebusy`, app tokens (#131) |
+| Sunlight | Anniversary "Wrapped" with photos from the same weeks | Works today | `/v1/library/tracks`, `/v1/library/photos`, player data grant `none` |
+| Twilight | Free/busy calendar for a scheduling app | Works today | app data grant `events:freebusy` (#128, #131), `/v1/library/freebusy` |
 | Midnight | Timeline across inboxes and calendar | Works today | `/v1/mail/search` archive, `/v1/library/events` |
 | Abyss | Spreadsheet / database opened column by column | Exploring (#15) | Concept only, labelled as such on the page |
+
+The **F.A.Q.** section carries the candid product Q&A (from issue #177):
+trust, storage, Tailscale/Aperture, OAuth tokens, data grants, writes, fail-open,
+supported services, audit visibility, and backup/wipe.
 
 All names, dates, and data in the demo panels are made up. Keep it that way:
 don't paste real research output (mail, calendar, travel) into the site.
 
-If you change a product claim on the page (endpoints, permission levels,
-fail-open, tailnet-only), check it against `README.md` and `SECURITY.md`.
-The site is not served by the Aegis binary and is not part of `go:embed`.
+If you change a product claim on the page (endpoints, data grants, access levels,
+fail-open, tailnet-only), check it against `README.md`, `docs/configuration.md`,
+and `SECURITY.md`. The site is not served by the Aegis binary and is not part of
+`go:embed`.
