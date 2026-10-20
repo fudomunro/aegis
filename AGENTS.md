@@ -170,7 +170,7 @@ Observed pattern across sessions (and the reason this file exists):
    - `test/…` coverage-only
    - `docs/…` documentation
 3. **Git worktree per branch.** Main worktree stays on `main`; feature work
-   runs in sibling dirs like `/Users/alec/Work/aegis-<slug>`.
+   runs in sibling dirs like `../aegis-<slug>`.
    Do not mutate `main` in place for feature work.
 4. **PR before merge.** Merge commits are the normal landing path
    (`Merge pull request #N from …`). Body starts with `## Summary` and lists

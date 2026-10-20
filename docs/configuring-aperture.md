@@ -32,7 +32,7 @@ Add a hook endpoint and a grant that fires `pre_request` for the traffic you car
   "hooks": {
     "aegis": {
       // Public URL of your Aegis instance + the hook path
-      "url": "https://aegis.heron-census.ts.net/v1/pre-request",
+      "url": "https://aegis.your-tailnet.ts.net/v1/pre-request",
       // Required when Aegis -auth-mode is auto or api-key.
       // Omit only if Aegis runs with -auth-mode tailnet and Aperture
       // reaches it with Tailscale identity (Serve / WhoIs).
@@ -86,7 +86,7 @@ You can put the `hooks` object and the `grants` entry into your existing Apertur
 Aperture stores one HUJSON document. To edit it from a script (or from Aegis tooling):
 
 ```bash
-APERTURE=https://aperture.heron-census.ts.net   # your gateway
+APERTURE=https://aperture.your-tailnet.ts.net   # your gateway
 
 # 1. Fetch current config + hash
 curl -sS "$APERTURE/api/config" > /tmp/aperture-config.json
