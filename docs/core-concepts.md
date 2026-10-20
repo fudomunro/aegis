@@ -1,9 +1,11 @@
 # Core concepts of Aegis
 
-Inventory for issue #167. Concepts are the domain nouns that define what Aegis
-is — product rules, API objects, and the main runtime abstractions. After the
-initial listing, overlapping / colliding vocabulary is called out for a cleanup
-issue; the remaining concepts are then defined with file references.
+Living inventory of the domain nouns that define what Aegis is — product
+rules, API objects, and the main runtime abstractions. Keep this current as
+auth, connectors, and library kinds land; preferred English for overlapping
+names is in [`glossary.md`](glossary.md). After the initial listing,
+overlapping / colliding vocabulary is called out for cleanup; the remaining
+concepts are then defined with file references.
 
 Audience: developers, coding agents, and anyone reviewing the product surface
 before a wider launch.
@@ -58,6 +60,7 @@ the most weight in product language.
 | Accessor / AccessorKind (issue #160) | code + admin |
 | PermissionsOverview / TypeAccess | admin |
 | PeerIdentity / auth modes (`auto` / `tailnet` / `api-key`) | product + code |
+| **Admin principal** (admin API key / allowed admin logins) | product + code |
 | Third-party app tokens + app data grants (issue #131) | product + code |
 | Audit log / access events | product + ops |
 
@@ -71,6 +74,8 @@ the most weight in product language.
 | Service definition (`services[]`, action inject/block) | product + code |
 | **Host** (connector seam) | code |
 | Token store / OAuth token / refresh | code + product |
+| Encrypted static credentials (service headers under `-token-pass`) | product + ops |
+| CalDAV / CardDAV adapters | product + code |
 | Content transport (`/v1/services/{id}/…`) | product |
 | IsAgentContentPath / path classification | code |
 | **SystemInstructions** / pre-request injection | product (agent-facing) |
@@ -82,6 +87,7 @@ the most weight in product language.
 | Concept | Surface weight |
 |---------|----------------|
 | **Pre-request hook** / GuardrailResponse (`allow`/`block`/`modify`) | product |
+| CSRF / Origin protection on state-changing routes | product + ops |
 | Hook health / body shape | product + ops |
 | Cache (GET 200 only) | code + ops |
 | Metrics / health probes | ops |
@@ -176,8 +182,11 @@ provider rows into one neutral item.
 
 ### 2.9 UDT naming
 
-User-defined types, UDT, type packs, schema packs, `user-types/` directory,
+User-defined types, UDT, schema packs (`user-types/` directory),
 `user_types.json` overlay, `UserDefinedTypeSchema`.
+
+**Resolution (glossary):** the product concept is **user-defined type**;
+**schema pack** is the on-disk artifact name. Avoid **type pack**.
 
 ---
 
@@ -213,7 +222,7 @@ After the overlap call-outs above, the stable concepts.
 | **Mirror** | Deliberate copy of a playlist/liked tracks to another service (`POST /v1/library/mirror`). | `mirror.go` |
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `librarykind.go` |
 | **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
-| **User-defined type (UDT)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. | `internal/types/udt.go`, `docs/user-defined-types.md` |
+| **User-defined type (UDT)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined type”; the file/directory is a schema pack. | `internal/types/udt.go`, `docs/user-defined-types.md` |
 | **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/types/policy.go:11`, `places.go`, `events.go` |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/types/providers.go` |
 
@@ -229,6 +238,8 @@ After the overlap call-outs above, the stable concepts.
 | **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from data grant. | `internal/types/accessors.go:31` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |
+| **Admin principal** | Who may change policy: admin API key (`-admin-api-key`) or allowed tailnet login (`-admin-logins`). Agent credentials are never admin. | `SECURITY.md`, `handler.go`, `identity.go` |
+| **CSRF / Origin protection** | State-changing browser routes require same-origin `Origin` / `Sec-Fetch-Site` (plus a single-use consent CSRF token on app authorize). API-key and app-token writes skip the Origin check. | `SECURITY.md`, `handler.go`, `csrf` state store |
 | **App token** | Scoped third-party credential; never a provider OAuth token. Carries **app data grants** (`scopes`). | `apps.go`, `apps_grant.go` |
 | **Audit log** | Durable access log (`agent`, `surface`, `decision`, …) with retention cap. | `audit.go`, README “Access audit log” |
 
@@ -241,6 +252,8 @@ After the overlap call-outs above, the stable concepts.
 | **Named service** | Config row in `services[]` with id, name, action (`inject`/`block`), endpoint, aliases, `canonical_for`. | `config.go`, `aegis.example.json` |
 | **Connection** | OAuth credential entry referenced by services (`connection` + `oauth_scopes`). | `connections.go` |
 | **TokenStore** | Encrypted-at-rest OAuth tokens (AES-256-GCM + PBKDF2), refresh singleflight. | `tokens.go:23` |
+| **Encrypted static credentials** | Non-OAuth secrets (e.g. Immich/YNAB API keys) stored under the same `-token-pass` master key; admin API exposes presence only. | `service_connections.go`, `tokens.go`, `SECURITY.md` |
+| **CalDAV / CardDAV** | Named-service adapters for calendars/contacts (Nextcloud, iCloud app-specific passwords). Mirrored events feed freebusy. | `internal/connectors/{caldav,carddav,dav,ical,vcard}.go`, `docs/caldav-carddav.md` |
 | **SystemInstructions** | English block injected into the LLM request telling the agent how to use Aegis. | each connector `SystemInstructions`, `librarykind.go` |
 | **Capabilities / Operation** | Structured metadata of what a connector can do (admin/connector, not agent discovery). | `internal/types/capabilities.go` |
 | **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/types/agentpaths.go:13` |
@@ -269,4 +282,6 @@ After the overlap call-outs above, the stable concepts.
 ## Companion documents
 
 - Audience and communication-surface mapping: [`audience-map.md`](audience-map.md)
-- Preferred English for overlapping names: [`glossary.md`](glossary.md) (issue #174)
+- Preferred English for overlapping names: [`glossary.md`](glossary.md)
+- CalDAV/CardDAV setup: [`caldav-carddav.md`](caldav-carddav.md)
+- User-defined types: [`user-defined-types.md`](user-defined-types.md)
