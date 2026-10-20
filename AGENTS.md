@@ -280,6 +280,9 @@ over the hostile-input parsers, and `go build -o aegis .`.
 - Write-path tests (mirror adapters, merge review, picker errors, canonical
   stamps) are first-class — they were the recent coverage floor work.
 - Do not add `t.Skip` for convenience. Remove obsolete tests or fix them.
+- **Public hygiene:** `public_hygiene_test.go` rejects private host/path/email
+  patterns (use `your-tailnet.ts.net` / `example.com` placeholders). CI also
+  runs gitleaks (`.gitleaks.toml` allowlists only non-secret placeholders).
 
 ## Pitfalls that keep recurring
 

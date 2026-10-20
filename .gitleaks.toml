@@ -1,0 +1,16 @@
+title = "Aegis gitleaks config"
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Operator snippets and unit-test fakes that are not live credentials"
+regexes = [
+  '''\$TS_API_KEY''',
+  '''\$ENV:''',
+  '''\$\{[A-Z0-9_]+\}''',
+  '''YOUR_[A-Z0-9_]+''',
+  '''tskey-api-(plain|test|never|round-trip|secret)''',
+  '''<AEGIS_API_KEY''',
+  '''Bearer \$[A-Z_]+''',
+]
