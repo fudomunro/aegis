@@ -43,6 +43,7 @@ the shared word “agent”.
 |---------|------|-----------|-------|
 | Product manual | `README.md` | End user, Developer integrator, Human ops, (Security auditor) | Huge mixed contract + how-to + API reference. |
 | Trust model | `SECURITY.md` | Security auditor, Human ops | Tailnet boundary, auth modes, redaction. |
+| Threat model | `docs/threat-model.md` | Security auditor | Assets, actors, threats/mitigations, residual risks. |
 | Coding-agent handbook | `AGENTS.md` | Coding agent, Maintainer | Non-negotiable product rules. |
 | Extension guide | `docs/adding-data-types.md` | Developer integrator, Coding agent | New library types checklist. |
 | Aperture ops guide | `docs/configuring-aperture.md` | Human ops | Hooks, grants, Guardian migration. |
@@ -133,9 +134,9 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 ### E. Security auditor
 **Surfaces:** SECURITY.md (auth tiers, CSRF/Origin, encrypted secrets), README auth/permissions/audit/metrics, audit log schema, admin redaction guarantees, PhotoSourceDiscipline, site claims.
 
-**Strengths:** token handling, admin vs agent credentials, and tailnet model are explicit.
+**Strengths:** token handling, admin vs agent credentials, and tailnet model are explicit; structured threat model in `docs/threat-model.md`.
 
-**Gaps:** no formal threat-model / data-flow doc; fail-open rationale scattered (AGENTS, kind docs) rather than in SECURITY.
+**Gaps:** fail-open rationale is still scattered (AGENTS, kind docs) rather than linked from SECURITY.
 
 ### F. Coding agent / repo maintainer
 **Surfaces:** AGENTS.md, `docs/*`, `learn.md` + walkthrough generator, CI workflow, sparse “why” comments.
@@ -176,7 +177,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | End user (admin) | admin.html, README setup, example config | Non-admin users; wizard/ops blend |
 | Human ops | hook-health, logs, metrics, runbooks, flags | Import ops live under Advanced / operator CLI |
 | Developer integrator | README API, walkthrough, adding-data-types | No OpenAPI; thin app-dev docs |
-| Security auditor | SECURITY.md, audit, redaction, admin Map | No formal threat model |
+| Security auditor | SECURITY.md, threat model, audit, redaction, admin Map | Fail-open rationale scattered |
 | Coding agent | AGENTS.md + docs + CI | Name collision with runtime “agents” |
 | Third-party app user | consent HTML + freebusy demos | Lifecycle / revoke UX |
 | Prospective adopter | site/ | Not linked from product; manual claim-sync |
@@ -189,6 +190,6 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 2. **Agent injection is the richest product voice** and needs register discipline (keep ops tickets, CLI flags, and issue numbers out).
 3. **Ops diagnosis quality** lives in hook-health `fix` strings and the Immich wizard, not in slog alone.
 4. **Capabilities vs SystemInstructions** are two product dialects (provider-shaped vs library-first). Product rules say capabilities are admin metadata — keep that boundary explicit.
-5. **Audiences with no dedicated surface:** non-admin end users, formal security-auditor threat model, machine-readable API schema for integrators.
+5. **Audiences with no dedicated surface:** non-admin end users; machine-readable API schema for integrators (OpenAPI still open).
 
 Concept-name overlaps (service/connector/connection, permissions cluster, canonical vocabulary, type/kind naming) are tracked in [`core-concepts.md`](core-concepts.md) §2 and follow-up issue [#174](https://github.com/fudomunro/aegis/issues/174). Canonical English is in [`glossary.md`](glossary.md) — product term for user allow-rules is **data grant**.

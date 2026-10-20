@@ -283,5 +283,6 @@ After the overlap call-outs above, the stable concepts.
 
 - Audience and communication-surface mapping: [`audience-map.md`](audience-map.md)
 - Preferred English for overlapping names: [`glossary.md`](glossary.md)
+- Threat model for auditors: [`threat-model.md`](threat-model.md)
 - CalDAV/CardDAV setup: [`caldav-carddav.md`](caldav-carddav.md)
 - User-defined types: [`user-defined-types.md`](user-defined-types.md)
