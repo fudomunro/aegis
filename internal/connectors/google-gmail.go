@@ -45,7 +45,7 @@ const GoogleGmailServiceName = "Gmail"
 const (
 	googleGmailDefaultQuery   = "newer_than:30d"
 	googleGmailListPageSize   = 25
-	GoogleGmailLibraryCap     = 50
+	GoogleGmailLibraryCap     = 150
 	googleGmailMetadataFormat = "metadata"
 )
 
@@ -133,7 +133,7 @@ func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 
 GET %s/v1/library/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
 
-sources[] records where each message lives (service + id) for sync. Library lists carry snippets only.
+sources[] records where each message lives (service + id) for sync. Fetch each message at /v1/services/{sources[].service}/messages/{sources[].id} — never send one service's id to another. Library lists carry snippets only.
 
 Only when you need a full message body:
 GET %s/v1/services/google-gmail/messages/{id} — one message; add ?format=full for the decoded body
@@ -255,7 +255,10 @@ func isGmailInvalidIDError(err error) bool {
 		return false
 	}
 	msg := err.Error()
-	return strings.Contains(msg, "Invalid id value") || strings.Contains(msg, "invalidArgument")
+	return strings.Contains(msg, "Invalid id value") ||
+		strings.Contains(msg, "invalidArgument") ||
+		strings.Contains(msg, "Not Found") ||
+		strings.Contains(msg, "404")
 }
 
 const gmailQuotaMarker = "Quota exceeded"
@@ -330,6 +333,9 @@ func GmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 	for _, prefix := range []string{"/me/" + kind + "/", "/" + kind + "/"} {
 		if strings.HasPrefix(p, prefix) {
 			rest := strings.Trim(strings.TrimPrefix(p, prefix), "/")
+			// Only a single path segment is a bare id. Extra segments
+			// (/attachments and similar) are not message GETs — do not
+			// forward the joined path as a fake id.
 			if rest == "" || strings.Contains(rest, "/") {
 				return "", false
 			}
@@ -500,6 +506,7 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 		format = googleGmailMetadataFormat
 	}
 	if !validGmailBareID(id) {
+		// Wrong-service id (or a concatenated path). Do not call Gmail.
 		slog.Warn("gmail get message rejected non-gmail id", "id", id)
 		WriteJSONError(w, http.StatusNotFound,
 			"not a Gmail message id — use sources[].service and sources[].id from the library list")
@@ -508,6 +515,7 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 	raw, err := c.FetchGmailMessage(r.Context(), token, id, format)
 	if err != nil {
 		if isGmailInvalidIDError(err) {
+			slog.Warn("gmail get message unknown id", "id", id)
 			WriteJSONError(w, http.StatusNotFound,
 				"message not found on Gmail — check sources[].service and sources[].id")
 			return

@@ -458,6 +458,13 @@ func mentionsMailArchive(msg string) bool {
 		"oldest message", "oldest email", "oldest mail", "earliest message",
 		"earliest email", "first message", "first email", "first mail",
 		"oldest available", "earliest available",
+		// Finding a specific message is a search, not a list browse.
+		"find my email", "find my mail", "find the email", "find the mail",
+		"find an email", "find a mail", "find this email", "find this mail",
+		"where is the email", "where is the mail", "where's the email",
+		"search for email", "search for mail", "search email for", "search mail for",
+		"look up email", "look up mail", "look up the email", "look up the mail",
+		"email about", "mail about", "message about",
 	} {
 		if strings.Contains(m, k) {
 			return true
