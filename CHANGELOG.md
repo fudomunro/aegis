@@ -7,6 +7,9 @@ issue numbers; this file is where that context lives.
 
 ### Documentation
 
+- Refresh the marketing site (`site/`) for current product language (data
+  grants, access levels, service limits) and add the F.A.Q. from issue #177
+  (#196).
 - Split the monolithic README into an entry point plus reference docs
   (`docs/api.md`, `docs/configuration.md`, `docs/connect/*`, `docs/observability.md`,
   `docs/development.md`).
