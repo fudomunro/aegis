@@ -79,14 +79,14 @@ Aegis starts with these endpoints:
 - `GET /v1/library/places` — location history as visits and trips (Google Timeline import + OwnTracks); filters `after`/`before`/`locality`/`kind` (issue #142). **Defaults to `none`** — enable `city`, `read`, or `precise` to let agents query it.
 - `GET /v1/library/documents` — documents (receipts, warranties, leases, letters) from Paperless-ngx and other sources; filters `q`/`tag`/`after`/`before` (issue #143). `metadata` access returns titles/dates/tags only; `read` adds short excerpts.
 - `GET /v1/library/documents/{service}/{id}/text` — full extracted text for one document (issue #143). Requires `documents=read`; metadata is list-only.
-- `GET /v1/library/{user-defined}` — user-defined types under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in data grant before agents can read it. See [User-defined types](#user-defined-types-issue-15).
+- `GET /v1/library/{user-defined}` — user-defined types under `<data-dir>/user-types/` or `AEGIS_USER_TYPES_DIR` (issue #15). **Always opt-in** — enable the kind in data grant before agents can read it. See [User-defined types](#user-defined-types).
 - `GET /v1/library/copies` — durable copy ledger: where copies exist, sync mode, freshness (issue #76)
 - `GET /v1/mail/search` — search the local compressed mail archive (FTS + from/to/date filters)
 - `GET /v1/mail/messages/{service}/{id}` — one archived message (body included)
 - `GET /v1/mail/messages/{service}/{id}/raw` — decompressed provider payload JSON
 - `GET /v1/mail/status` — archive size and sync cursor
 - `POST /v1/mail/sync` — ingest a bounded batch of mail into the archive (resumable)
-- `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync-issue-16-phase-3))
+- `POST /v1/library/mirror` — copy a playlist or liked-tracks list from one service to another (canonical backup; see [Mirror / backup sync](#mirror--backup-sync))
 - `GET/POST /v1/services/{id}/...` — content/ingest transport only (photo bytes, full message bodies, playlist items, local import); other service paths return 404 — use `/v1/library/{kind}` (issue #119)
 - `GET /healthz` — liveness probe (unauthenticated; no secrets)
 - `GET /readyz` — readiness probe (config + token store loaded; unauthenticated)
@@ -106,7 +106,7 @@ Vocabulary for this manual (service vs connector vs connection, data type vs
 library kind, **data grant**, data grants map, canonical home, content transport,
 LLM agent vs coding agent) is defined in [`docs/glossary.md`](docs/glossary.md).
 
-## User-defined types (issue #15)
+## User-defined types
 
 Bring your own library kind with a **user-defined type** (JSON schema pack)
 under `<data-dir>/user-types/` (or `AEGIS_USER_TYPES_DIR`). A user-defined type
@@ -140,7 +140,7 @@ curl -s https://aegis.example.ts.net/v1/library/reading-list | jq .
 
 See `docs/user-defined-types.md` for the schema format and `examples/user-types/` for a portable pack.
 
-## Observability (issue #105)
+## Observability
 
 Aegis exposes cheap probes, Prometheus metrics, and a durable access audit
 trail so you can see who reached which data — including denials — after a
@@ -238,7 +238,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](aegis.example.js
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
 | `grant_limits` | Optional map of data type → access level for agents (migration override; can only tighten data grant — see [Data grants](#data-grants)) |
-| `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis-issue-16)) |
+| `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](#canonical-sources-non-aegis)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
 
@@ -476,7 +476,7 @@ Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `events`, `messages`, `transactions`, `places`, `documents`. Paths that do not map to a known type fall through to the
 `default` level.
 
-### Canonical sources (non-Aegis, issue #16)
+### Canonical sources (non-Aegis)
 
 Aegis does **not** store library content. The authoritative copy for each
 item lives on a service outside Aegis. That location is marked
@@ -517,10 +517,10 @@ Library instructions always include the multi-source mutation rule: write to
 `sources[].canonical` first, then ask the user before updating other copies.
 Aegis still does **not** route or mirror writes automatically — agents call
 the service proxy for whichever service they choose. Use
-[POST /v1/library/mirror](#mirror--backup-sync-issue-16-phase-3) for a
+[POST /v1/library/mirror](#mirror--backup-sync) for a
 deliberate copy to a secondary service.
 
-#### Mirror / backup sync (issue #16, phase 3)
+#### Mirror / backup sync
 
 To keep a **backup** of a playlist or liked-tracks list on another service:
 
@@ -561,11 +561,11 @@ source. Aegis stores no media; it reads source metadata and writes through
 the target's API using the stored OAuth token.
 
 Immich is supported as a **local/foreign canonical photo source** (see
-[Immich](#immich-local--foreign-canonical)). Additional foreign-DB /
+[Immich](#immich-local--external-canonical)). Additional foreign-DB /
 professional-data connectors remain follow-up work on
 [issue #16](https://github.com/fudomunro/aegis/issues/16).
 
-### Copy ledger (issue #76)
+### Copy ledger
 
 `sources[]` is **live inventory** (what each provider returns right now).
 The copy ledger is Aegis’s **durable memory** of where copies exist and which
@@ -638,9 +638,9 @@ filters.
 | `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
 | `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
-| `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](#data-directory-issue-74)) |
+| `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](#data-directory)) |
 
-### Data directory (issue #74)
+### Data directory
 
 Aegis keeps **all local state** under one data directory so backups, migration,
 and wipe are one folder — not whatever directory the binary happened to start in.
@@ -710,7 +710,7 @@ directory or keep passing the explicit path flags.
 | `-allowed-logins` | | Optional allowlist of Tailscale logins |
 | `-admin-logins` | | Optional admin allowlist (issue #181). Empty: allowed user logins are admin; tagged devices are not |
 | `-ts-socket` | auto-detect | tailscaled LocalAPI socket for WhoIs |
-| `-data-dir` | OS app data dir | Local state root (see [Data directory](#data-directory-issue-74)) |
+| `-data-dir` | OS app data dir | Local state root (see [Data directory](#data-directory)) |
 | `-config` | `<data-dir>/aegis.json` | Bootstrap config path (services, connections, secrets) |
 | `-data-grants-file` | `<data-dir>/data_grants.json` | Admin data-grant overlay (non-secret). All data-grant saves write here; `aegis.json` is never rewritten |
 | `-token-file` | `<data-dir>/tokens.json` | Encrypted token + static-credential storage path |
@@ -733,7 +733,7 @@ directory or keep passing the explicit path flags.
 | `-log-level` | `info` | `debug`, `info`, `warn`, `error` |
 | `-log-format` | `json` | `json` or `text` |
 
-### Token encryption (issue #101 / #184)
+### Token encryption
 
 **All secrets at rest are encrypted under `-token-pass`.** That includes
 OAuth tokens **and** static service-connection credentials (Immich/YNAB
@@ -788,7 +788,7 @@ Aegis authenticates callers in two tiers (issue #181):
 1. **Tailscale identity** (recommended for agents) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
 2. **Agent API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools. Never opens admin surfaces.
 3. **Admin API key** (`-admin-api-key`) — for curl/scripts that manage data grants, apps, mirror, and other admin writes.
-4. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients (issue #131). See [Third-party app tokens](#third-party-app-tokens-issue-131). Never admin.
+4. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients (issue #131). See [Third-party app tokens](#third-party-app-tokens). Never admin.
 
 Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key: your browser login is admin, tagged agent hosts are not. Full policy guidance lives in [SECURITY.md](SECURITY.md).
 
@@ -802,7 +802,7 @@ a per-render CSRF token (issue #182). API-key and app-token writes are not
 browser-ambient and skip the Origin check. See
 [SECURITY.md](SECURITY.md#csrf--origin-protection-on-writes-issue-182).
 
-### Third-party app tokens (issue #131)
+### Third-party app tokens
 
 Non-agent clients (for example a hosted scheduling service) can read library
 data with a **scoped app token** instead of the shared API key. Apps are
@@ -886,7 +886,7 @@ will prompt for an API key once and keep it in `sessionStorage` for the tab.
 
 
 
-### HTTP server operations (issues #96–#97)
+### HTTP server operations
 
 Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 
@@ -912,7 +912,7 @@ Aegis runs an explicit `http.Server` (not `ListenAndServe` defaults):
 2. Add the client ID and secret to your `aegis.json` (`connections` + service `connection` reference). Prefer `"$ENV:…"` for `client_secret` so the file stays shareable — see [Provider connections](#provider-connections).
 3. Start Aegis and visit `https://your-aegis/` (or `/services`)
 4. Open the **Services** tab and click **Connect** for each service — you'll be redirected to authorize
-5. All secrets at rest are encrypted under `-token-pass` (OAuth tokens and static service-connection credentials, issue #184) and OAuth tokens auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption-issue-101--184) to rotate the passphrase.
+5. All secrets at rest are encrypted under `-token-pass` (OAuth tokens and static service-connection credentials, issue #184) and OAuth tokens auto-refresh when expired. A wrong `-token-pass` refuses to start (so a typo cannot wipe `tokens.json`); if some entries cannot be decrypted, Aegis refuses to rewrite the file until that is fixed. KDF parameters are recorded in the file; see [Token encryption](#token-encryption) to rotate the passphrase.
 
 If no services are connected yet, the Services tab shows extra help describing the OAuth flow.
 
@@ -1149,7 +1149,7 @@ POST   /v1/library/links   {"kind":"playlist","sources":[{"service":"spotify","i
 DELETE /v1/library/links/{id}
 ```
 
-Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` under the [data directory](#data-directory-issue-74) (`-link-file` overrides).
+Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` under the [data directory](#data-directory) (`-link-file` overrides).
 
 **Merge review:** `GET /v1/library/review` lists multi-source entities joined by **name only** (no shared ISRC/UPC/MBID/link) so they can be checked or explicitly linked.
 
@@ -1164,7 +1164,7 @@ Tracked in [issue #4](https://github.com/fudomunro/aegis/issues/4).
 
 Service-level playlist lists (`GET /v1/services/{id}/me/playlists`) are **not** agent API (issue #119). Per-service status values in library `by_service` remain: `ok`, `unauthorized`, `error`, `skipped`.
 
-### Library source overview (issue #162)
+### Library source overview
 
 Aggregate library responses enrich each `by_service` entry so clients can render a **source overview** — relative-sized boxes for every source of that data type (admin Library does this at the top of each kind):
 
@@ -1180,7 +1180,7 @@ Aggregate library responses enrich each `by_service` entry so clients can render
 
 For messages, when the local mail archive knows both, `by_service` also includes separate `google-gmail` and `google-takeout` rows with archive inventory counts and per-source `last_synced_at`, so the overview can show Gmail and Google Takeout side by side (with Takeout nested under Gmail). The `mail-archive` fetch target remains for compatibility.
 
-### Pagination and filters (issue #185)
+### Pagination and filters
 
 Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-facing page window so large libraries stay inside an LLM context:
 
@@ -1250,7 +1250,7 @@ Returns the user's liked/saved tracks from every connected music service in Aegi
 }
 ```
 
-`total` is the full filtered count; `next_cursor` (when present) continues the page walk — see [Pagination and filters](#pagination-and-filters-issue-185). When any service hits its **upstream** page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`. That flag is independent of `next_cursor`.
+`total` is the full filtered count; `next_cursor` (when present) continues the page walk — see [Pagination and filters](#pagination-and-filters). When any service hits its **upstream** page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`. That flag is independent of `next_cursor`.
 
 Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks ([#43](https://github.com/fudomunro/aegis/issues/43), [#4](https://github.com/fudomunro/aegis/issues/4)).
 
@@ -1361,7 +1361,7 @@ Service identity lives in `sources[]`, same as playlists and contacts.
 
 **Aegis never stores photo bytes.** The authoritative copy stays on a
 non-Aegis service marked `canonical` (see
-[Canonical sources](#canonical-sources-non-aegis-issue-16) /
+[Canonical sources](#canonical-sources-non-aegis) /
 [issue #16](https://github.com/fudomunro/aegis/issues/16)).
 `blob_url` points at the retrievable image when the source exposes one; Google
 Photos `baseUrl` values expire in about an hour, so agents must not treat them
@@ -1459,9 +1459,9 @@ or stores image bytes; `blob_url` values expire in about an hour.
 Ownership / provenance proofs for photos are intentionally deferred:
 [issue #20](https://github.com/fudomunro/aegis/issues/20). A **Bluesky share
 PoC** is available so a published photo carries a lightweight claim (content
-hash + public post locator) — see [Photo share to Bluesky](#photo-share-to-bluesky-issue-20-poc).
+hash + public post locator) — see [Photo share to Bluesky](#photo-share-to-bluesky).
 
-#### Photo share to Bluesky (issue #20 PoC)
+#### Photo share to Bluesky
 
 ```
 POST /v1/library/photos/share
@@ -1521,7 +1521,7 @@ The connector also **syncs library metadata** (bytes stay on Bluesky):
 - Proxy reads: `GET /v1/services/bluesky/xrpc/com.atproto.sync.getBlob`,
   `app.bsky.feed.getAuthorFeed`, `app.bsky.graph.getFollows`.
 
-#### Immich (local / foreign canonical)
+#### Immich (local / external canonical)
 
 Immich is a self-hosted photo library (open-source “Google Photos on your own
 hardware”; quick start at `https://docs.immich.app/overview/quick-start/` —
@@ -1893,7 +1893,7 @@ curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1
 ```
 
 `mail-archive.db` is local state (like `tokens.json`) and lives under the
-[data directory](#data-directory-issue-74) — do not commit it.
+[data directory](#data-directory) — do not commit it.
 
 ##### Google Takeout (read-only sync location)
 
@@ -1930,7 +1930,7 @@ simple OAuth surface; WhatsApp consumer history is not available through a
 Aegis-compatible named API. Follow-ups can plug in connectors that
 implement `MessageProvider` without changing the library contract.
 
-#### Signal import (issue #168)
+#### Signal import
 
 Signal has no public chat API. Contacts and messages arrive as a
 **file-based import** (like mail Takeout / Quicken), not OAuth:
@@ -2100,7 +2100,7 @@ has it (or when the same export is imported twice under different filenames).
 **Plaid / SimpleFIN / Actual Budget:** not registered yet. The
 `TransactionProvider` interface is the plug-in point (issue #141).
 
-### Location history (places, issue #142)
+### Location history (places)
 
 `GET /v1/library/places` returns **visits and trips** (time windows + place),
 not a firehose of GPS points. Query filters: `after`, `before`, `locality`,
@@ -2165,7 +2165,7 @@ evening visit with a fireworks photo taken during it — see
 `TestPhotosPlacesJoinDemo`. Aegis does not store photo bytes; the join is
 metadata only.
 
-### Documents as a data type (issue #143)
+### Documents as a data type
 
 `GET /v1/library/documents` returns life-admin paperwork — receipts,
 warranties, leases, insurance policies, tax letters, medical letters — as
@@ -2312,7 +2312,7 @@ replace it later). Watch OAuth app verification limits, same class as Photos.
 | `GET /v1/library/documents/{service}/{id}/text` | `text/plain` export |
 | `GET /v1/services/google-drive/files/{id}/export?mimeType=text/html` | HTML (structure-preserving intermediate for a later markdown pass) |
 
-### Content & ingest transport (`/v1/services/{id}/...`)
+### Content transport (`/v1/services/{id}/...`)
 
 ```
 GET/POST /v1/services/{service_id}/{path}
@@ -2480,7 +2480,7 @@ CI fails if statement coverage drops below the floor in `.github/workflows/ci.ym
 (currently 80%). Raise the floor when the suite grows; do not lower it to land a
 change that only adds untested write paths.
 
-### Sample data (issue #77)
+### Sample data
 
 Synthetic fixtures cover every neutral library kind plus the mail archive so
 search, sort, filters, merge, and agent-facing endpoints can be exercised
