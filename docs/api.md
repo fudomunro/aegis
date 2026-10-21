@@ -632,10 +632,11 @@ metadata only.
 ## Documents as a data type
 
 `GET /v1/library/documents` returns life-admin paperwork — receipts,
-warranties, leases, insurance policies, tax letters, medical letters — as
-neutral **Document** metadata. Files stay on the source service (Paperless-ngx
-and Google Docs/Drive; Nextcloud remains a candidate). Aegis never stores
-document bytes and never runs OCR.
+warranties, leases, insurance policies, tax letters, medical letters, and
+mail attachments — as neutral **Document** metadata. Files stay on the source
+service (Paperless-ngx, Google Docs/Drive, and Gmail attachments on the same
+`google-gmail` source as the parent message; Nextcloud remains a candidate).
+Aegis never stores document bytes and never runs OCR.
 
 ```json
 {
@@ -690,6 +691,7 @@ After this is **not** a general service API. Library (`/v1/library/{kind}`) is t
 |---------|-----|
 | `/assets/{id}/original`, `/assets/{id}/thumbnail`, Bluesky `getBlob` | Photo/asset bytes (Aegis does not store media) |
 | `/messages/{id}`, `/threads/{id}` | Full message bodies (library lists carry snippets) |
+| `/messages/{id}/attachments`, `/messages/{id}/attachments/{attachmentId}` | Mail attachment metadata and bytes (library documents carry title/mime only) |
 | `/playlists/{id}`, `/playlists/{id}/items` | Playlist items (library entries carry `track_count` only) |
 | `/documents/{id}/download`, `/documents/{id}/preview` | Document file bytes (library lists carry metadata + short excerpt) |
 | `/files/{id}/export` | Google Docs HTML/plain-text export (library text endpoint is plain text) |

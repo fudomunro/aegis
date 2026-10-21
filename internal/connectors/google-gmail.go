@@ -93,6 +93,33 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 						},
 					},
 					{
+						Name:        "list_attachments",
+						Description: "List MIME attachments on one message (id, filename, mime_type, size)",
+						Method:      "GET",
+						Path:        "/messages/{id}/attachments",
+						Parameters: []types.Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Service-local message ID", Required: true},
+						},
+						Response: types.ResponseSpec{
+							Description: "Attachment summaries for the message; fetch bytes at /messages/{id}/attachments/{attachmentId}",
+							Fields:      []string{"message_id", "attachments", "total"},
+						},
+					},
+					{
+						Name:        "get_attachment",
+						Description: "Fetch one attachment (Gmail attachment JSON: size + base64url data)",
+						Method:      "GET",
+						Path:        "/messages/{id}/attachments/{attachmentId}",
+						Parameters: []types.Parameter{
+							{Name: "id", In: "path", Type: "string", Description: "Service-local message ID", Required: true},
+							{Name: "attachmentId", In: "path", Type: "string", Description: "Attachment id from list_attachments or message extra.attachments", Required: true},
+						},
+						Response: types.ResponseSpec{
+							Description: "Attachment payload from Gmail",
+							Fields:      []string{"size", "data", "attachmentId"},
+						},
+					},
+					{
 						Name:        "list_threads",
 						Description: "List recent threads (id + snippet)",
 						Method:      "GET",
@@ -132,14 +159,20 @@ func (c *GoogleGmailConnector) SystemInstructions(baseURL string) string {
 	return fmt.Sprintf(`When the user's request involves Gmail, email, their inbox, or recent messages, use Aegis's unified data API. Do not call Gmail API directly.
 
 GET %s/v1/library/messages — the user's mail across connected services (subject, snippet, from/to, sent_at, direction, sources[])
+GET %s/v1/library/documents — attachments and life-admin files from mail and other sources (title, mime_type, correspondent, sources[])
 
-sources[] records where each message lives (service + id) for sync. Fetch each message at /v1/services/{sources[].service}/messages/{sources[].id} — never send one service's id to another. Library lists carry snippets only.
+sources[] records where each item lives (service + id) for sync. Fetch each message at /v1/services/{sources[].service}/messages/{sources[].id} — never send one service's id to another. Library lists carry snippets only.
 
 Only when you need a full message body:
 GET %s/v1/services/google-gmail/messages/{id} — one message; add ?format=full for the decoded body
 GET %s/v1/services/google-gmail/threads/{id} — one thread with its messages
 
-Message bodies stay on Gmail — Aegis does not store mailboxes. Cross-service merges prefer RFC Message-ID.`, root, root, root)
+Attachments (certificates, PDFs, photos):
+GET %s/v1/services/google-gmail/messages/{id}/attachments — list attachment ids, filenames, and mime types
+GET %s/v1/services/google-gmail/messages/{id}/attachments/{attachmentId} — one attachment payload
+Documents from mail use the same google-gmail source; sources[].blob_url points at the attachment bytes. Aegis does not store mailboxes or file bytes.
+
+Message bodies stay on Gmail — Aegis does not store mailboxes. Cross-service merges prefer RFC Message-ID.`, root, root, root, root, root, root)
 }
 
 // HandleProxy processes a Gmail API request through the connector.
@@ -173,9 +206,13 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	if mid, aid, ok := GmailAttachmentPath(remainingPath); ok {
+	if mid, aid, ok := matchGmailAttachmentRoute(remainingPath); ok {
 		if r.Method != http.MethodGet {
 			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		if aid == "" {
+			c.HandleListAttachments(w, r, token, mid)
 			return
 		}
 		c.HandleGetAttachment(w, r, token, mid, aid)
@@ -229,8 +266,9 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 // GmailBareIDFromProxyPath extracts an id from /messages/{id}, /me/messages/{id},
 // /threads/{id}, or /me/threads/{id}.
-// validGmailBareID reports whether id looks like a Gmail message/thread id.
+// validGmailBareID reports whether id looks like a Gmail message/thread/attachment id.
 // Identifiers from other services must never be forwarded to the Gmail API.
+// Attachment ids may contain '.' (e.g. "0.1"); path-traversal segments are rejected.
 func validGmailBareID(id string) bool {
 	if id == "" || len(id) > 128 {
 		return false
@@ -241,8 +279,11 @@ func validGmailBareID(id string) bool {
 	if strings.Contains(id, ":") {
 		return false
 	}
+	if id == "." || id == ".." || strings.Contains(id, "..") {
+		return false
+	}
 	for _, r := range id {
-		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_'
+		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_' || r == '.'
 		if !ok {
 			return false
 		}
@@ -267,22 +308,103 @@ func isGmailQuotaError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), gmailQuotaMarker)
 }
 
-// GmailAttachmentPath parses messages/{mid}/attachments/{aid}.
-func GmailAttachmentPath(remainingPath string) (messageID, attachmentID string, ok bool) {
+// matchGmailAttachmentRoute reports whether remainingPath is the attachments
+// subresource of a message. attachmentID is empty for the list form
+// (messages/{mid}/attachments). IDs are raw path segments and may be foreign.
+func matchGmailAttachmentRoute(remainingPath string) (messageID, attachmentID string, ok bool) {
 	p := strings.Trim(remainingPath, "/")
 	p = strings.TrimPrefix(p, "me/")
 	if !strings.HasPrefix(p, "messages/") {
 		return "", "", false
 	}
 	parts := strings.Split(strings.TrimPrefix(p, "messages/"), "/")
-	if len(parts) != 3 || parts[1] != "attachments" {
+	if len(parts) == 2 && parts[1] == "attachments" {
+		return parts[0], "", true
+	}
+	if len(parts) == 3 && parts[1] == "attachments" {
+		return parts[0], parts[2], true
+	}
+	return "", "", false
+}
+
+// GmailAttachmentPath parses messages/{mid}/attachments/{aid}.
+func GmailAttachmentPath(remainingPath string) (messageID, attachmentID string, ok bool) {
+	messageID, attachmentID, ok = matchGmailAttachmentRoute(remainingPath)
+	if !ok || attachmentID == "" {
 		return "", "", false
 	}
-	messageID, attachmentID = parts[0], parts[2]
 	if !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
 		return "", "", false
 	}
 	return messageID, attachmentID, true
+}
+
+// GmailAttachmentListPath parses messages/{mid}/attachments (list form).
+// The message id is returned even when it is not a Gmail id so the caller can
+// 404 with a sources hint instead of generic pass-through.
+func GmailAttachmentListPath(remainingPath string) (messageID string, ok bool) {
+	messageID, attachmentID, ok := matchGmailAttachmentRoute(remainingPath)
+	if !ok || attachmentID != "" {
+		return "", false
+	}
+	return messageID, true
+}
+
+// GmailAttachmentDocumentID joins message and attachment ids into a path-safe
+// library document id (the text route is a single path segment).
+func GmailAttachmentDocumentID(messageID, attachmentID string) string {
+	return messageID + "~" + attachmentID
+}
+
+// SplitGmailAttachmentDocumentID splits a composite document id.
+func SplitGmailAttachmentDocumentID(id string) (messageID, attachmentID string, ok bool) {
+	messageID, attachmentID, ok = strings.Cut(id, "~")
+	if !ok || messageID == "" || attachmentID == "" {
+		return "", "", false
+	}
+	return messageID, attachmentID, true
+}
+
+// HandleListAttachments returns attachment metadata for one message.
+// Gmail has no attachments.list — summaries come from the full message payload.
+func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *http.Request, token, messageID string) {
+	if !validGmailBareID(messageID) {
+		slog.Warn("gmail list attachments rejected non-gmail id", "id", messageID)
+		WriteJSONError(w, http.StatusNotFound,
+			"not a Gmail message id — use sources[].service and sources[].id from the library list")
+		return
+	}
+	raw, err := c.FetchGmailMessage(r.Context(), token, messageID, "full")
+	if err != nil {
+		if isGmailInvalidIDError(err) {
+			WriteJSONError(w, http.StatusNotFound,
+				"message not found on Gmail — check sources[].service and sources[].id")
+			return
+		}
+		if isGmailQuotaError(err) {
+			WriteJSONError(w, http.StatusTooManyRequests,
+				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
+			return
+		}
+		slog.Warn("gmail list attachments failed", "id", messageID, "error", err)
+		WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
+		return
+	}
+	atts := GmailAttachmentSummaries(raw)
+	if atts == nil {
+		atts = []GmailAttachmentSummary{}
+	}
+	out, err := json.Marshal(map[string]any{
+		"message_id":  raw.ID,
+		"attachments": atts,
+		"total":       len(atts),
+	})
+	if err != nil {
+		WriteJSONError(w, http.StatusInternalServerError, "failed to encode attachments")
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(out)
 }
 
 // HandleGetAttachment fetches one MIME attachment via the Gmail attachments API.
@@ -756,32 +878,34 @@ type googleGmailThread struct {
 	Messages []GoogleGmailMessage `json:"messages"`
 }
 
+type gmailMessageHeader struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
+type gmailMessageBody struct {
+	Data         string `json:"data"`
+	AttachmentID string `json:"attachmentId"`
+	Size         int    `json:"size"`
+}
+
+// gmailMessagePart is Gmail's MessagePart; payload is also a MessagePart so
+// nested multiparts (multipart/mixed wrapping multipart/alternative) stay walkable.
+type gmailMessagePart struct {
+	MimeType string               `json:"mimeType"`
+	Filename string               `json:"filename"`
+	Body     gmailMessageBody     `json:"body"`
+	Headers  []gmailMessageHeader `json:"headers"`
+	Parts    []gmailMessagePart   `json:"parts"`
+}
+
 type GoogleGmailMessage struct {
-	ID           string   `json:"id"`
-	ThreadID     string   `json:"threadId"`
-	LabelIDs     []string `json:"labelIds"`
-	Snippet      string   `json:"snippet"`
-	InternalDate string   `json:"internalDate"`
-	Payload      *struct {
-		Headers []struct {
-			Name  string `json:"name"`
-			Value string `json:"value"`
-		} `json:"headers"`
-		Body struct {
-			Data         string `json:"data"`
-			AttachmentID string `json:"attachmentId"`
-		} `json:"body"`
-		Parts []struct {
-			MimeType string `json:"mimeType"`
-			Body     struct {
-				Data string `json:"data"`
-			} `json:"body"`
-			Headers []struct {
-				Name  string `json:"name"`
-				Value string `json:"value"`
-			} `json:"headers"`
-		} `json:"parts"`
-	} `json:"payload"`
+	ID           string            `json:"id"`
+	ThreadID     string            `json:"threadId"`
+	LabelIDs     []string          `json:"labelIds"`
+	Snippet      string            `json:"snippet"`
+	InternalDate string            `json:"internalDate"`
+	Payload      *gmailMessagePart `json:"payload"`
 }
 
 func GmailMetadataHeaders() []string {
@@ -905,22 +1029,108 @@ func GmailReadFromLabels(labels []string) bool {
 	return true
 }
 
-// MapGoogleGmailMessage converts a Gmail message into the neutral shape.
-// GmailAttachmentSummaries lists MIME parts that have an attachmentId so
-// agents can fetch binaries at /messages/{id}/attachments/{attachmentId}.
-func GmailAttachmentSummaries(raw GoogleGmailMessage) []map[string]string {
+// GmailAttachmentSummary is one MIME attachment on a message.
+type GmailAttachmentSummary struct {
+	ID       string `json:"id"`
+	Filename string `json:"filename,omitempty"`
+	MimeType string `json:"mime_type,omitempty"`
+	Size     int    `json:"size,omitempty"`
+}
+
+// GmailAttachmentSummaries walks the MIME tree for parts that need a separate
+// attachment fetch (body.attachmentId). Nested multiparts are included so
+// typical multipart/mixed + multipart/alternative mail is fully listed.
+func GmailAttachmentSummaries(raw GoogleGmailMessage) []GmailAttachmentSummary {
 	if raw.Payload == nil {
 		return nil
 	}
-	var out []map[string]string
-	if id := strings.TrimSpace(raw.Payload.Body.AttachmentID); id != "" {
-		out = append(out, map[string]string{"id": id})
+	var out []GmailAttachmentSummary
+	var walk func(part gmailMessagePart)
+	walk = func(part gmailMessagePart) {
+		if id := strings.TrimSpace(part.Body.AttachmentID); id != "" {
+			out = append(out, GmailAttachmentSummary{
+				ID:       id,
+				Filename: gmailPartFilename(part),
+				MimeType: strings.TrimSpace(part.MimeType),
+				Size:     part.Body.Size,
+			})
+		}
+		for _, child := range part.Parts {
+			walk(child)
+		}
 	}
-	// Part attachment ids are not in the flattened struct; body.data-only
-	// parts are inline and need no fetch.
+	walk(*raw.Payload)
 	return out
 }
 
+func gmailPartFilename(part gmailMessagePart) string {
+	if fn := strings.TrimSpace(part.Filename); fn != "" {
+		return fn
+	}
+	for _, h := range part.Headers {
+		if !strings.EqualFold(h.Name, "Content-Disposition") && !strings.EqualFold(h.Name, "Content-Type") {
+			continue
+		}
+		if _, params, err := mime.ParseMediaType(h.Value); err == nil {
+			if fn := strings.TrimSpace(params["filename"]); fn != "" {
+				return fn
+			}
+			if fn := strings.TrimSpace(params["name"]); fn != "" {
+				return fn
+			}
+		}
+	}
+	return ""
+}
+
+// NeutralAttachmentDocument maps one attachment to the neutral Document shape
+// used by /v1/library/documents. Source is google-gmail (same connector as the
+// parent message); bytes stay on Gmail via sources[].blob_url.
+func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage, att GmailAttachmentSummary) types.Document {
+	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + GoogleGmailServiceID
+	docID := GmailAttachmentDocumentID(raw.ID, att.ID)
+	src := types.DocumentSource{
+		Service:     GoogleGmailServiceID,
+		ServiceName: GoogleGmailServiceName,
+		ID:          docID,
+		URL:         GmailMessageURL(raw.ID),
+		Canonical:   true,
+		BlobURL:     proxyRoot + "/messages/" + url.PathEscape(raw.ID) + "/attachments/" + url.PathEscape(att.ID),
+	}
+	title := att.Filename
+	if title == "" {
+		title = strings.TrimSpace(GmailHeaderValue(raw, "Subject"))
+	}
+	if title == "" {
+		title = att.ID
+	}
+	sentAt := GmailInternalDateRFC3339(raw.InternalDate)
+	if sentAt == "" {
+		sentAt = GmailHeaderDateRFC3339(GmailHeaderValue(raw, "Date"))
+	}
+	d := types.Document{
+		Title:        title,
+		MimeType:     att.MimeType,
+		CreatedAt:    sentAt,
+		DocumentType: "email-attachment",
+		Excerpt:      strings.TrimSpace(raw.Snippet),
+		EntityID:     docID,
+		Sources:      []types.DocumentSource{src},
+	}
+	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
+	if len(fromList) > 0 {
+		f := fromList[0]
+		if f.Name != "" {
+			d.Correspondent = f.Name
+		} else if len(f.Emails) > 0 {
+			d.Correspondent = f.Emails[0]
+		}
+		d.People = []types.Contact{f}
+	}
+	return d
+}
+
+// MapGoogleGmailMessage converts a Gmail message into the neutral shape.
 func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message {
 	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
 	toList := MapGmailAddressHeader(GmailHeaderValue(raw, "To"))
@@ -1063,6 +1273,124 @@ func ParseIntLoose(s string) (int, error) {
 		return 0, err
 	}
 	return n, nil
+}
+
+// ListUserDocuments implements DocumentProvider. Each MIME attachment on
+// recent mail becomes a neutral Document whose source is google-gmail — the
+// same connector as the parent message — so case-file evidence stays linked.
+func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.Document, bool, error) {
+	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
+	if token == "" {
+		return nil, false, types.ErrUnauthorized
+	}
+	var out []types.Document
+	truncated := false
+	pageToken := ""
+	hydrated := 0
+	for page := 0; page < LibraryPageCap; page++ {
+		values := url.Values{}
+		values.Set("maxResults", fmt.Sprint(googleGmailListPageSize))
+		values.Set("q", googleGmailDefaultQuery)
+		if pageToken != "" {
+			values.Set("pageToken", pageToken)
+		}
+		listURL := c.GoogleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+		if err != nil {
+			return out, truncated, err
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := HTTPClient.Do(req)
+		if err != nil {
+			return out, truncated, err
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return out, truncated, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			return out, truncated, GmailListHTTPError("messages list", resp.StatusCode, data)
+		}
+		var raw GoogleGmailMessageList
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return out, truncated, err
+		}
+		for _, item := range raw.Messages {
+			if item.ID == "" {
+				continue
+			}
+			if hydrated >= GoogleGmailLibraryCap {
+				truncated = true
+				break
+			}
+			msg, err := c.FetchGmailMessage(ctx, token, item.ID, googleGmailMetadataFormat)
+			if err != nil {
+				// Fail-open per message: one unreadable item must not empty the list.
+				slog.Warn("gmail message fetch for attachments failed", "id", item.ID, "error", err)
+				continue
+			}
+			for _, att := range GmailAttachmentSummaries(msg) {
+				out = append(out, c.NeutralAttachmentDocument(msg, att))
+			}
+			hydrated++
+		}
+		if truncated {
+			break
+		}
+		pageToken = raw.NextPageToken
+		if pageToken == "" {
+			break
+		}
+		if hydrated >= GoogleGmailLibraryCap || (page == LibraryPageCap-1 && pageToken != "") {
+			truncated = true
+		}
+	}
+	return out, truncated, nil
+}
+
+// FetchDocumentText implements DocumentProvider. Binary attachments have no
+// extractable text without OCR (which Aegis does not run) — those return an
+// empty string. Inline or fetched text attachments are decoded when present.
+func (c *GoogleGmailConnector) FetchDocumentText(ctx context.Context, id string) (string, bool, error) {
+	messageID, attachmentID, ok := SplitGmailAttachmentDocumentID(id)
+	if !ok || !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
+		return "", false, fmt.Errorf("not a Gmail attachment document id")
+	}
+	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
+	if token == "" {
+		return "", false, types.ErrUnauthorized
+	}
+	raw, err := c.FetchGmailMessage(ctx, token, messageID, "full")
+	if err != nil {
+		return "", false, err
+	}
+	if text, found := gmailAttachmentInlineText(raw, attachmentID); found {
+		return text, false, nil
+	}
+	return "", false, nil
+}
+
+func gmailAttachmentInlineText(raw GoogleGmailMessage, attachmentID string) (string, bool) {
+	if raw.Payload == nil {
+		return "", false
+	}
+	var walk func(part gmailMessagePart) (string, bool)
+	walk = func(part gmailMessagePart) (string, bool) {
+		if strings.TrimSpace(part.Body.AttachmentID) == attachmentID {
+			if data := strings.TrimSpace(part.Body.Data); data != "" {
+				return GmailBase64Decode(data), true
+			}
+			return "", true
+		}
+		for _, child := range part.Parts {
+			if text, found := walk(child); found {
+				return text, true
+			}
+		}
+		return "", false
+	}
+	return walk(*raw.Payload)
 }
 
 // Host returns the runtime host for mail-archive sync (package main).
