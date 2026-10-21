@@ -1,6 +1,9 @@
 package connectors
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestValidGmailBareID(t *testing.T) {
 	cases := []struct {
@@ -21,6 +24,32 @@ func TestValidGmailBareID(t *testing.T) {
 		if got := validGmailBareID(tc.id); got != tc.want {
 			t.Errorf("validGmailBareID(%q) = %v, want %v", tc.id, got, tc.want)
 		}
+	}
+}
+
+func TestValidGmailAttachmentID_LongOpaqueIDs(t *testing.T) {
+	// Real Gmail attachment ids are opaque and routinely exceed 400 chars.
+	long := strings.Repeat("A", 426)
+	if !validGmailAttachmentID(long) {
+		t.Fatal("426-char attachment id must be accepted")
+	}
+	if !validGmailAttachmentID("0.1") {
+		t.Fatal("short dotted attachment id must be accepted")
+	}
+	if !validGmailAttachmentID("abc+def==") {
+		t.Fatal("base64 padding/plus must be accepted on attachment ids")
+	}
+	if validGmailAttachmentID("at:/did:plc:x") {
+		t.Fatal("foreign id must be rejected")
+	}
+	if validGmailAttachmentID("..") {
+		t.Fatal("path traversal must be rejected")
+	}
+	if validGmailAttachmentID(strings.Repeat("A", 2049)) {
+		t.Fatal("over-length attachment id must be rejected")
+	}
+	if validGmailBareID(long) {
+		t.Fatal("message ids still cap at 128")
 	}
 }
 

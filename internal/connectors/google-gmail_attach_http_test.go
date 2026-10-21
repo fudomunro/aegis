@@ -307,6 +307,117 @@ func TestListUserDocuments_FromMessageAttachments(t *testing.T) {
 	}
 }
 
+func TestHandleGetAttachment_LongID(t *testing.T) {
+	longID := strings.Repeat("A", 426)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.HasSuffix(r.URL.Path, "/attachments/"+longID) {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"size":12,"data":"aGVsbG8=","attachmentId":"` + longID + `"}`))
+	}))
+	defer ts.Close()
+	c := NewGoogleGmailConnector(newGmailHost(t, ts.URL))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/x", nil)
+	c.HandleGetAttachment(w, req, "test-token", "msg123", longID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestHandleProxy_AttachmentRoute_LongID(t *testing.T) {
+	longID := strings.Repeat("B", 426)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{"size":1,"data":"aGk="}`))
+	}))
+	defer ts.Close()
+	c := NewGoogleGmailConnector(newGmailHost(t, ts.URL))
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/v1/services/google-gmail/messages/msg1/attachments/"+longID, nil)
+	c.HandleProxy(w, req, "/messages/msg1/attachments/"+longID)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestListUserDocuments_KeepsPartialOnLaterError(t *testing.T) {
+	var calls int
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		switch {
+		case r.URL.Path == "/users/me/messages" && calls == 1:
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"messages":[{"id":"m1","threadId":"t1"},{"id":"m2","threadId":"t2"}],"nextPageToken":"p2"}`))
+		case r.URL.Path == "/users/me/messages/m1":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{
+				"id": "m1",
+				"payload": {
+					"parts": [{"mimeType": "application/pdf", "filename": "keep.pdf", "body": {"attachmentId": "att1"}}]
+				}
+			}`))
+		case r.URL.Path == "/users/me/messages/m2":
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"id": "m2", "payload": {"parts": []}}`))
+		case r.URL.Path == "/users/me/messages":
+			// Second list page fails (quota / transient).
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`{"error":{"message":"Quota exceeded for quota metric 'Total Query Cost'"}}`))
+		default:
+			t.Errorf("unexpected path %q", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer ts.Close()
+	c := NewGoogleGmailConnector(newGmailHost(t, ts.URL))
+	docs, truncated, err := c.ListUserDocuments(context.Background())
+	if err != nil {
+		t.Fatalf("partial results must fail-open, got err=%v", err)
+	}
+	if !truncated {
+		t.Fatal("expected truncated=true after upstream error")
+	}
+	if len(docs) != 1 || docs[0].Title != "keep.pdf" {
+		t.Fatalf("docs = %+v", docs)
+	}
+}
+
+func TestListUserDocuments_FirstPageErrorStillFails(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.Write([]byte(`{"error":{"message":"Quota exceeded for quota metric 'Total Query Cost'"}}`))
+	}))
+	defer ts.Close()
+	c := NewGoogleGmailConnector(newGmailHost(t, ts.URL))
+	_, _, err := c.ListUserDocuments(context.Background())
+	if err == nil {
+		t.Fatal("cold-start list failure should still surface an error")
+	}
+}
+
+func TestFetchDocumentText_LongAttachmentID(t *testing.T) {
+	longID := strings.Repeat("C", 426)
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(`{
+			"id": "m1",
+			"payload": {
+				"parts": [
+					{"mimeType": "text/plain", "body": {"attachmentId": "` + longID + `", "data": "aGVsbG8="}}
+				]
+			}
+		}`))
+	}))
+	defer ts.Close()
+	c := NewGoogleGmailConnector(newGmailHost(t, ts.URL))
+	text, _, err := c.FetchDocumentText(context.Background(), "m1~"+longID)
+	if err != nil || text != "hello" {
+		t.Fatalf("text = %q err=%v", text, err)
+	}
+}
+
 func TestFetchDocumentText_InlineAndBinary(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
