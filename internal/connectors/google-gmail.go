@@ -33,6 +33,11 @@ func NewGoogleGmailConnector(host Host) *GoogleGmailConnector {
 	return &GoogleGmailConnector{host: host}
 }
 
+var (
+	_ types.MessageProvider  = (*GoogleGmailConnector)(nil)
+	_ types.DocumentProvider = (*GoogleGmailConnector)(nil)
+)
+
 // GoogleGmailServiceID is the connector/service ID used in config, tokens,
 // sources[], and admin. Documented name is "Gmail".
 const GoogleGmailServiceID = "google-gmail"
@@ -266,13 +271,30 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 // GmailBareIDFromProxyPath extracts an id from /messages/{id}, /me/messages/{id},
 // /threads/{id}, or /me/threads/{id}.
-// validGmailBareID reports whether id looks like a Gmail message/thread/attachment id.
+// Gmail id length bounds. Message/thread ids are short hex-like strings.
+// Attachment ids are opaque and regularly exceed 400 characters (issue #207).
+const (
+	gmailMaxMessageIDLen    = 128
+	gmailMaxAttachmentIDLen = 2048
+)
+
+// validGmailBareID reports whether id looks like a Gmail message/thread id.
 // Identifiers from other services must never be forwarded to the Gmail API.
-// Attachment ids may contain '.' (e.g. "0.1"); path-traversal segments are rejected.
 func validGmailBareID(id string) bool {
-	if id == "" || len(id) > 128 {
-		return false
-	}
+	return validGmailIDLen(id, gmailMaxMessageIDLen) && gmailIDCharset(id, false)
+}
+
+// validGmailAttachmentID accepts the longer opaque ids Gmail assigns to MIME
+// parts (often 400+ chars, may include base64 '=' padding).
+func validGmailAttachmentID(id string) bool {
+	return validGmailIDLen(id, gmailMaxAttachmentIDLen) && gmailIDCharset(id, true)
+}
+
+func validGmailIDLen(id string, max int) bool {
+	return id != "" && len(id) <= max
+}
+
+func gmailIDCharset(id string, attachment bool) bool {
 	if strings.ContainsAny(id, "/\\ \t\r\n") {
 		return false
 	}
@@ -283,7 +305,12 @@ func validGmailBareID(id string) bool {
 		return false
 	}
 	for _, r := range id {
-		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || r == '-' || r == '_' || r == '.'
+		ok := (r >= '0' && r <= '9') || (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') ||
+			r == '-' || r == '_' || r == '.'
+		// Attachment ids are opaque base64/base64url and often exceed 400 chars.
+		if attachment && (r == '=' || r == '+') {
+			ok = true
+		}
 		if !ok {
 			return false
 		}
@@ -333,7 +360,7 @@ func GmailAttachmentPath(remainingPath string) (messageID, attachmentID string, 
 	if !ok || attachmentID == "" {
 		return "", "", false
 	}
-	if !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
+	if !validGmailBareID(messageID) || !validGmailAttachmentID(attachmentID) {
 		return "", "", false
 	}
 	return messageID, attachmentID, true
@@ -409,7 +436,7 @@ func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *h
 
 // HandleGetAttachment fetches one MIME attachment via the Gmail attachments API.
 func (c *GoogleGmailConnector) HandleGetAttachment(w http.ResponseWriter, r *http.Request, token, messageID, attachmentID string) {
-	if !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
+	if !validGmailBareID(messageID) || !validGmailAttachmentID(attachmentID) {
 		WriteJSONError(w, http.StatusNotFound, "not a Gmail attachment id")
 		return
 	}
@@ -1278,6 +1305,8 @@ func ParseIntLoose(s string) (int, error) {
 // ListUserDocuments implements DocumentProvider. Each MIME attachment on
 // recent mail becomes a neutral Document whose source is google-gmail — the
 // same connector as the parent message — so case-file evidence stays linked.
+// Transient upstream errors keep partial results (fail-open) so one bad page
+// does not report "failed to fetch documents" and drop every PDF already found.
 func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.Document, bool, error) {
 	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
@@ -1297,24 +1326,24 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 		listURL := c.GoogleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
 		if err != nil {
-			return out, truncated, err
+			return gmailDocumentsResult(out, truncated, hydrated, err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 		resp, err := HTTPClient.Do(req)
 		if err != nil {
-			return out, truncated, err
+			return gmailDocumentsResult(out, truncated, hydrated, err)
 		}
 		data, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
-			return out, truncated, err
+			return gmailDocumentsResult(out, truncated, hydrated, err)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return out, truncated, GmailListHTTPError("messages list", resp.StatusCode, data)
+			return gmailDocumentsResult(out, truncated, hydrated, GmailListHTTPError("messages list", resp.StatusCode, data))
 		}
 		var raw GoogleGmailMessageList
 		if err := json.Unmarshal(data, &raw); err != nil {
-			return out, truncated, err
+			return gmailDocumentsResult(out, truncated, hydrated, err)
 		}
 		for _, item := range raw.Messages {
 			if item.ID == "" {
@@ -1324,10 +1353,13 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 				truncated = true
 				break
 			}
-			msg, err := c.FetchGmailMessage(ctx, token, item.ID, googleGmailMetadataFormat)
+			// format=full matches the content-transport attachment list, which
+			// is what surfaces part-level attachmentIds for real MIME mail.
+			msg, err := c.FetchGmailMessage(ctx, token, item.ID, "full")
 			if err != nil {
 				// Fail-open per message: one unreadable item must not empty the list.
 				slog.Warn("gmail message fetch for attachments failed", "id", item.ID, "error", err)
+				hydrated++
 				continue
 			}
 			for _, att := range GmailAttachmentSummaries(msg) {
@@ -1349,12 +1381,26 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 	return out, truncated, nil
 }
 
+// gmailDocumentsResult keeps attachments already collected when a later page
+// fails. The library aggregate drops items whenever err != nil, so partial
+// success must report a clean truncated list instead of FailMsg.
+func gmailDocumentsResult(out []types.Document, truncated bool, hydrated int, err error) ([]types.Document, bool, error) {
+	if err == nil {
+		return out, truncated, nil
+	}
+	if len(out) > 0 || hydrated > 0 {
+		slog.Warn("gmail documents list degraded; keeping partial results", "count", len(out), "hydrated", hydrated, "error", err)
+		return out, true, nil
+	}
+	return out, truncated, err
+}
+
 // FetchDocumentText implements DocumentProvider. Binary attachments have no
 // extractable text without OCR (which Aegis does not run) — those return an
 // empty string. Inline or fetched text attachments are decoded when present.
 func (c *GoogleGmailConnector) FetchDocumentText(ctx context.Context, id string) (string, bool, error) {
 	messageID, attachmentID, ok := SplitGmailAttachmentDocumentID(id)
-	if !ok || !validGmailBareID(messageID) || !validGmailBareID(attachmentID) {
+	if !ok || !validGmailBareID(messageID) || !validGmailAttachmentID(attachmentID) {
 		return "", false, fmt.Errorf("not a Gmail attachment document id")
 	}
 	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
