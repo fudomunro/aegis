@@ -17,13 +17,22 @@ The connector lists messages via `GET /users/me/messages` (default query
 calls; remaining upstream items set `truncated`. Individual message fetch
 failures are logged and skipped (fail-open).
 
-Agent data is the unified library; content transport serves full bodies only:
+Agent data is the unified library; content transport serves full bodies and
+attachment bytes:
 
 ```
 GET /v1/library/messages
+GET /v1/library/documents          # mail attachments as documents (same google-gmail source)
 GET /v1/services/google-gmail/messages/{id} # ?format=full includes decoded body
+GET /v1/services/google-gmail/messages/{id}/attachments
+GET /v1/services/google-gmail/messages/{id}/attachments/{attachmentId}
 GET /v1/services/google-gmail/threads/{id}
 ```
+
+Attachment listing returns id, filename, mime_type, and size for each MIME
+part that needs a fetch. Bytes stay on Gmail (`sources[].blob_url`); Aegis
+does not store file bytes or run OCR. Binary attachments have no extracted
+text at `/v1/library/documents/{service}/{id}/text`.
 
 Message lists (`/me/messages`) are not agent API — use the library.
 This phase is **read-only**. Capabilities do not advertise agent write ops
