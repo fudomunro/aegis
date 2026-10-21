@@ -27,8 +27,8 @@ func TestHandleGetAttachment_Success(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"size":      12,
-			"data":      "aGVsbG8gd29ybGQ=",
+			"size":         12,
+			"data":         "aGVsbG8gd29ybGQ=",
 			"attachmentId": "att456",
 		})
 	}))
