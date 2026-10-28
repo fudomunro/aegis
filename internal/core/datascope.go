@@ -3,7 +3,6 @@ package core
 import (
 	"context"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -38,7 +37,9 @@ type DataScope struct {
 	// ReadOnly rejects mutating agent methods for this principal (demo).
 	ReadOnly bool `json:"read_only,omitempty"`
 	// Grants optionally tighten type-level agent access for this principal.
-	// They never grant more than the default policy allows.
+	// Reserved for multi-user follow-on (issue #149): loaded and validated
+	// but not yet applied in permission enforcement. Do not assume they
+	// restrict access until enforcement lands.
 	Grants types.DataGrants `json:"grants,omitempty"`
 	// Disabled blocks authentication without deleting the record.
 	Disabled bool `json:"disabled,omitempty"`
@@ -104,6 +105,9 @@ func (s *DataScopeStore) reload() error {
 		if sc.APIKey == "" {
 			return fmt.Errorf("data_scopes: scope %q missing api_key", sc.ID)
 		}
+		if err := types.ValidateDataGrants(sc.Grants); err != nil {
+			return fmt.Errorf("data_scopes: scope %q grants: %w", sc.ID, err)
+		}
 		sum := sha256.Sum256([]byte(sc.APIKey))
 		sc.APIKeyHash = hex.EncodeToString(sum[:])
 		if len(sc.APIKey) >= 8 {
@@ -113,6 +117,9 @@ func (s *DataScopeStore) reload() error {
 		stored := sc
 		if _, ok := byID[stored.ID]; ok {
 			return fmt.Errorf("data_scopes: duplicate scope id %q", stored.ID)
+		}
+		if _, ok := byHash[stored.APIKeyHash]; ok {
+			return fmt.Errorf("data_scopes: duplicate api_key for scope %q", stored.ID)
 		}
 		byID[stored.ID] = &stored
 		byHash[stored.APIKeyHash] = &stored
@@ -125,8 +132,8 @@ func (s *DataScopeStore) reload() error {
 }
 
 // FindByAPIKey resolves a presented agent credential to its scope.
-// Comparison is constant-time on the digest. Returns nil when unknown,
-// disabled, or the key is empty.
+// The presented key is hashed then looked up directly. Returns nil when
+// unknown, disabled, or the key is empty.
 func (s *DataScopeStore) FindByAPIKey(key string) *DataScope {
 	if s == nil || key == "" {
 		return nil
@@ -135,12 +142,11 @@ func (s *DataScopeStore) FindByAPIKey(key string) *DataScope {
 	hash := hex.EncodeToString(sum[:])
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, sc := range s.byHash {
-		if subtle.ConstantTimeCompare([]byte(sc.APIKeyHash), []byte(hash)) == 1 && !sc.Disabled {
-			return sc
-		}
+	sc := s.byHash[hash]
+	if sc == nil || sc.Disabled {
+		return nil
 	}
-	return nil
+	return sc
 }
 
 // Get returns a scope by id, or nil.

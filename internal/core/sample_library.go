@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -134,3 +135,36 @@ func (c *SampleLibraryConnector) ListUserPlaceVisits(context.Context) ([]types.P
 func (c *SampleLibraryConnector) ListUserDocuments(context.Context) ([]types.Document, bool, error) {
 	return c.set.Documents, false, nil
 }
+
+// FetchDocumentText implements DocumentProvider for the gated text endpoint.
+// Sample documents are metadata-only; return a short synthetic excerpt.
+func (c *SampleLibraryConnector) FetchDocumentText(_ context.Context, id string) (string, bool, error) {
+	for _, d := range c.set.Documents {
+		for _, src := range d.Sources {
+			if src.ID == id {
+				if d.Excerpt != "" {
+					return d.Excerpt, false, nil
+				}
+				return "Synthetic sample document (" + c.dataset + "): " + d.Title, false, nil
+			}
+		}
+	}
+	return "", false, fmt.Errorf("document %q not found", id)
+}
+
+// Compile-time checks: missing provider methods silently drop the connector
+// from library fan-out (type assert fails) — catch that at build time.
+var (
+	_ types.PlaylistProvider      = (*SampleLibraryConnector)(nil)
+	_ types.LikedTrackProvider    = (*SampleLibraryConnector)(nil)
+	_ types.AlbumProvider         = (*SampleLibraryConnector)(nil)
+	_ types.ArtistProvider        = (*SampleLibraryConnector)(nil)
+	_ types.ContactProvider       = (*SampleLibraryConnector)(nil)
+	_ types.PhotoProvider         = (*SampleLibraryConnector)(nil)
+	_ types.CalendarEventProvider = (*SampleLibraryConnector)(nil)
+	_ types.MessageProvider       = (*SampleLibraryConnector)(nil)
+	_ types.TransactionProvider   = (*SampleLibraryConnector)(nil)
+	_ types.PlaceVisitProvider    = (*SampleLibraryConnector)(nil)
+	_ types.DocumentProvider      = (*SampleLibraryConnector)(nil)
+	_ connectors.ServiceConnector = (*SampleLibraryConnector)(nil)
+)

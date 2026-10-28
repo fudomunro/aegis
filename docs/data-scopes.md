@@ -78,13 +78,14 @@ can move to per-user connector state without changing the principal model.
 
 ## Grants
 
-`DataScope.grants` uses the existing type-level `types.DataGrants`. They
-**tighten** what the default policy already allows (same rule as service
-`grant_limits`). Scope grants are in addition to service data grants:
+`DataScope.grants` uses the existing type-level `types.DataGrants` and is
+validated on load. **Not yet enforced** in this release — reserved for the
+multi-user follow-on so principals can tighten type access. Until enforcement
+lands, do not assume scope grants restrict reads. `read_only` is enforced.
 
-- default policy (type `DataGrant`) sets the ceiling;
-- scope grants can only narrow it for that principal;
-- service `grant_limits` still apply per connector.
+When enforced they will **tighten** what the default policy already allows
+(same rule as service `grant_limits`): default policy sets the ceiling; scope
+grants can only narrow it for that principal.
 
 Demo scopes typically set `read_only: true` and leave grants empty (full
 read of *their* dataset).
@@ -96,9 +97,12 @@ For scopes A and B with datasets `a` and `b`:
 1. GET `/v1/library/*` with A’s key never returns rows sourced only from `b`.
 2. `/v1/mail/search` and `/v1/library/messages` with A’s key never return `b` rows.
 3. A cache fill under A is never served to B.
-4. Services bound to `b` are invisible to A (no 403 oracle).
+4. Services bound to `b` are invisible to A (no 403 oracle) — including
+   `/v1/services/{id}/...`, `/v1/library/documents/{service}/{id}/text`, and
+   pre-request matching/blocking.
 5. Default scope (empty dataset) keeps today’s “see everything” behavior.
 6. `read_only` scopes cannot invoke mutating agent routes.
+7. Data-scope keys never authenticate admin routes.
 
 ## Non-goals (this note)
 

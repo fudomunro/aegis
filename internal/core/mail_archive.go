@@ -251,7 +251,6 @@ CREATE INDEX IF NOT EXISTS mail_messages_sent ON mail_messages(sent_at);
 CREATE INDEX IF NOT EXISTS mail_messages_thread ON mail_messages(service, thread_id);
 CREATE INDEX IF NOT EXISTS mail_messages_from ON mail_messages(from_email);
 CREATE INDEX IF NOT EXISTS mail_messages_message_id ON mail_messages(message_id);
-CREATE INDEX IF NOT EXISTS mail_messages_dataset ON mail_messages(dataset);
 CREATE VIRTUAL TABLE IF NOT EXISTS mail_fts USING fts5(
   subject,
   from_email,
@@ -267,9 +266,15 @@ CREATE TABLE IF NOT EXISTS mail_meta (
 		return fmt.Errorf("mail archive schema: %w", err)
 	}
 	// Older archives predate dataset partitioning (docs/data-scopes.md).
+	// The dataset index must come after the column exists — CREATE TABLE
+	// IF NOT EXISTS is a no-op on old DBs, and indexing a missing column
+	// aborts the schema script before ALTER could run.
 	if _, err := a.db.Exec(`ALTER TABLE mail_messages ADD COLUMN dataset TEXT NOT NULL DEFAULT ''`); err != nil &&
 		!strings.Contains(err.Error(), "duplicate column") {
 		return fmt.Errorf("mail archive dataset column: %w", err)
+	}
+	if _, err := a.db.Exec(`CREATE INDEX IF NOT EXISTS mail_messages_dataset ON mail_messages(dataset)`); err != nil {
+		return fmt.Errorf("mail archive dataset index: %w", err)
 	}
 	return nil
 }

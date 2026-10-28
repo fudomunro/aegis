@@ -272,7 +272,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 //     user logins; tagged devices need an explicit -admin-logins entry).
 //
 // Valid agent credentials receive 403; unauthenticated requests receive 401.
-// App tokens are never admin.
+// App tokens are never admin. Data-scope keys are never admin.
 func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	// csrfGuard runs after auth so it can distinguish ambient tailnet
 	// identity from explicit admin API-key credentials (issue #182).
@@ -280,6 +280,13 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if app := s.authenticateApp(r); app != nil {
 			s.denyStatus(w, r, nil, http.StatusForbidden, "app token not permitted on admin endpoints")
+			return
+		}
+		// Data-scope keys are agent-tier only (docs/data-scopes.md). Reject
+		// before tailnet-admin fallback so a scope key on an admin peer is
+		// still not an admin principal.
+		if sc := s.authenticateScope(r); sc != nil {
+			s.denyStatus(w, r, nil, http.StatusForbidden, "admin credential required")
 			return
 		}
 
@@ -429,7 +436,7 @@ func (s *Server) allowScopeMethod(w http.ResponseWriter, r *http.Request, sc *Da
 	if p := r.URL.Path; p == hookPath || strings.HasPrefix(p, "/v1/pre-request") {
 		return true
 	}
-	s.deny(w, r, nil, "data scope "+sc.ID+" is read-only")
+	s.denyStatus(w, r, nil, http.StatusForbidden, "data scope "+sc.ID+" is read-only")
 	return false
 }
 
@@ -663,6 +670,17 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	matched := s.config.FindMatchingServices(payload.UserMessage)
+	// Data-scope isolation: never match (or block on) services outside this
+	// principal's dataset partition (docs/data-scopes.md).
+	if scope := DataScopeFrom(r); scope != nil {
+		visible := make([]Service, 0, len(matched))
+		for i := range matched {
+			if serviceVisibleToScope(&matched[i], scope) {
+				visible = append(visible, matched[i])
+			}
+		}
+		matched = visible
+	}
 
 	// Surface matching unified library endpoints alongside service proxy hints.
 	// Issue #125: photo questions that named a service still need /v1/library/photos

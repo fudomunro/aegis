@@ -428,6 +428,11 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	level := types.DefaultAccessType
 	svc := s.config.GetService(serviceID)
 	if svc != nil {
+		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
+		if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
+			writeJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
+			return
+		}
 		level = s.effectivePermissions(svc).For(kind.PermType)
 	} else if app != nil {
 		level = app.Scopes.For(kind.PermType)

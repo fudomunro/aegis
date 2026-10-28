@@ -1,6 +1,7 @@
 package core
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	_ "modernc.org/sqlite"
 )
 
 func writeDataScopes(t *testing.T, scopes []DataScope) string {
@@ -186,7 +188,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	req := httptest.NewRequest(http.MethodPost, "/v1/mail/sync", nil)
 	req.Header.Set("X-Api-Key", "YOUR_DEMO_KEY")
 	h(w, req)
-	if w.Code != http.StatusUnauthorized {
+	if w.Code != http.StatusForbidden {
 		t.Fatalf("write status = %d", w.Code)
 	}
 
@@ -307,4 +309,160 @@ func callMailSearch(t *testing.T, srv *Server, key string) string {
 		t.Fatalf("mail search %s status=%d body=%s", key, w.Code, w.Body.String())
 	}
 	return w.Body.String()
+}
+
+func TestAdminMiddleware_RejectsScopeKeys(t *testing.T) {
+	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
+		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
+	}))
+	if err != nil {
+		t.Fatalf("scopes: %v", err)
+	}
+	srv := &Server{
+		authMode:    AuthModeTailnet,
+		scopes:      scopes,
+		adminAPIKey: "YOUR_ADMIN_KEY",
+		config:      &Config{},
+		cache:       NewCache(),
+	}
+	called := false
+	h := srv.AdminMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+	w := httptest.NewRecorder()
+	req := scopeRequest("YOUR_SHIRE_KEY", "/v1/admin/summary")
+	h(w, req)
+	if called || w.Code != http.StatusForbidden {
+		t.Fatalf("scope key on admin: called=%v status=%d", called, w.Code)
+	}
+}
+
+func TestServiceProxy_HidesForeignDataset(t *testing.T) {
+	srv := twoScopeServer(t)
+	// Foreign service path must 404, not leak via 403/existence.
+	w := httptest.NewRecorder()
+	req := scopeRequest("YOUR_SHIRE_KEY", "/v1/services/sample-library-gondor/messages/x")
+	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("foreign proxy status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestLibraryDocumentText_HidesForeignDataset(t *testing.T) {
+	srv := twoScopeServer(t)
+	// Own-dataset documents are reachable; foreign ids 404.
+	shireDocs := GenerateSampleLibraryFor("shire").Documents
+	if len(shireDocs) == 0 || len(shireDocs[0].Sources) == 0 {
+		t.Fatal("need sample documents")
+	}
+	ownID := shireDocs[0].Sources[0].ID
+	w := httptest.NewRecorder()
+	req := scopeRequest("YOUR_SHIRE_KEY", "/v1/library/documents/sample-library-shire/"+ownID+"/text")
+	srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("service", "sample-library-shire")
+		r.SetPathValue("id", ownID)
+		srv.HandleLibraryDocumentText(w, r)
+	})(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("own document text status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	req = scopeRequest("YOUR_SHIRE_KEY", "/v1/library/documents/sample-library-gondor/"+ownID+"/text")
+	srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		r.SetPathValue("service", "sample-library-gondor")
+		r.SetPathValue("id", ownID)
+		srv.HandleLibraryDocumentText(w, r)
+	})(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("foreign document text status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestPreRequest_FiltersForeignDatasetMatches(t *testing.T) {
+	srv := twoScopeServer(t)
+	srv.config.Services[0].Name = "Sample Shire Library"
+	srv.config.Services[0].Aliases = []string{"shire library"}
+	srv.config.Services[1].Name = "Sample Gondor Library"
+	srv.config.Services[1].Aliases = []string{"gondor library"}
+	srv.config.Services[1].Action = "block"
+
+	payload := `{"user_message":"tell me about the gondor library","request_body":{}}`
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/pre-request", strings.NewReader(payload))
+	req.Header.Set("X-Api-Key", "YOUR_SHIRE_KEY")
+	srv.AuthMiddleware(srv.HandlePreRequest)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("pre-request status = %d body=%s", w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if strings.Contains(body, "block") && strings.Contains(strings.ToLower(body), "gondor") {
+		t.Fatalf("foreign blocked service leaked into pre-request: %s", body)
+	}
+}
+
+func TestNewDataScopeStore_DuplicateAPIKey(t *testing.T) {
+	path := writeDataScopes(t, []DataScope{
+		{ID: "a", Dataset: "a", APIKey: "YOUR_SHARED_KEY"},
+		{ID: "b", Dataset: "b", APIKey: "YOUR_SHARED_KEY"},
+	})
+	if _, err := NewDataScopeStore(path); err == nil {
+		t.Fatal("duplicate api_key must fail load")
+	}
+}
+
+func TestMailArchive_MigratesLegacySchema(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "mail.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	legacy := `
+CREATE TABLE mail_messages (
+  id INTEGER PRIMARY KEY,
+  service TEXT NOT NULL,
+  service_msg_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL DEFAULT '',
+  message_id TEXT NOT NULL DEFAULT '',
+  mailbox TEXT NOT NULL DEFAULT '',
+  labels_json TEXT NOT NULL DEFAULT '[]',
+  subject TEXT NOT NULL DEFAULT '',
+  snippet TEXT NOT NULL DEFAULT '',
+  from_name TEXT NOT NULL DEFAULT '',
+  from_email TEXT NOT NULL DEFAULT '',
+  to_json TEXT NOT NULL DEFAULT '[]',
+  cc_json TEXT NOT NULL DEFAULT '[]',
+  sent_at TEXT NOT NULL DEFAULT '',
+  received_at TEXT NOT NULL DEFAULT '',
+  direction TEXT NOT NULL DEFAULT '',
+  is_read INTEGER NOT NULL DEFAULT 1,
+  body_text TEXT NOT NULL DEFAULT '',
+  payload_gzip BLOB,
+  updated_at TEXT NOT NULL DEFAULT '',
+  UNIQUE(service, service_msg_id)
+);
+CREATE VIRTUAL TABLE mail_fts USING fts5(subject, from_email, participants, body_text);
+CREATE TABLE mail_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+`
+	if _, err := db.Exec(legacy); err != nil {
+		t.Fatalf("legacy schema: %v", err)
+	}
+	db.Close()
+
+	archive, err := OpenMailArchive(path)
+	if err != nil {
+		t.Fatalf("migrate open: %v", err)
+	}
+	defer archive.Close()
+	if err := archive.Upsert(MailArchiveRecord{
+		Service: "google-gmail", ID: "m1", Subject: "hello", Dataset: "shire",
+	}); err != nil {
+		t.Fatalf("upsert after migrate: %v", err)
+	}
+	msgs, _, err := archive.ListMessagesForLibrary(10, "shire")
+	if err != nil || len(msgs) != 1 {
+		t.Fatalf("dataset rows after migrate: %d err=%v", len(msgs), err)
+	}
 }
