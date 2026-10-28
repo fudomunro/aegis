@@ -46,6 +46,7 @@ func Run() {
 	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
 	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
 	seedLotR := flag.Bool("seed-lotr", false, "write Lord of the Rings demo dataset packs (shire + gondor) under the data directory, then exit (issue #217)")
+	demoMode := flag.Bool("demo", false, "demo mode: api-key + data scopes only, sample:// fixtures only, read-only surface (issue #217; AEGIS_DEMO=1)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	tokenNewPass := flag.String("token-new-pass", "", "if set, re-encrypt the token file under this passphrase (with current KDF parameters) and exit")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
@@ -163,6 +164,13 @@ func Run() {
 	if *authMode == "" {
 		*authMode = AuthModeAuto
 	}
+	if resolveDemoMode(*demoMode) {
+		*demoMode = true
+		// Demo hosts are key-auth only (issue #217). Tailnet identity is
+		// irrelevant for a public synthetic instance.
+		*authMode = AuthModeAPIKey
+		slog.Info("demo mode enabled", "profile", "api-key + data scopes, synthetic only, read-only")
+	}
 	if *allowedLogins == "" {
 		*allowedLogins = os.Getenv("AEGIS_ALLOWED_LOGINS")
 	}
@@ -236,6 +244,14 @@ func Run() {
 	}
 	if n := len(scopes.All()); n > 0 {
 		slog.Info("data scopes loaded", "count", n, "path", paths.DataScopes)
+	}
+	if *demoMode {
+		if err := validateDemoConfig(cfg, scopes); err != nil {
+			slog.Error(err.Error())
+			os.Exit(1)
+		}
+		scopes.ForceReadOnlyAll()
+		slog.Info("demo mode: all data scopes forced read-only")
 	}
 
 	copies, err := OpenCopyLedger(paths.CopyLedger)
@@ -356,6 +372,7 @@ func Run() {
 		links:         links,
 		apps:          apps,
 		scopes:        scopes,
+		demoMode:      *demoMode,
 		grants:        NewGrantStore(),
 		csrfTokens:    NewStateStore(),
 		copies:        copies,
@@ -497,6 +514,10 @@ func Run() {
 	mux.HandleFunc("/v1/admin/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
 
 	handler := securityHeadersMiddleware(mux)
+	// Demo lockdown is the outermost gate: synthetic + read-only profile
+	// (issue #217) refuses mutations and OAuth regardless of which wrapper
+	// a route uses.
+	handler = srv.demoLockdown(handler)
 
 	slog.Info("starting server",
 		"addr", *addr,
