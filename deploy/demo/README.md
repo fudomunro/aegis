@@ -5,155 +5,108 @@ marketing agent kit. Not the product deployment model: the real Aegis stays on
 your tailnet (see `SECURITY.md`).
 
 ```
-Internet → Caddy (TLS) → aegis-demo (:8090, -demo, sample:// only)
-                └→ static site (GitHub Pages) ← agent kit + demo-config.js
+Internet → nginx :8443 (self-signed IP TLS) → aegis-demo 127.0.0.1:8090
+                └→ static agent kit (GitHub Pages) ← paste base URL + key
 ```
 
-## 0. Prerequisites
+This profile matches the shared Ubuntu droplet that already hosts the
+experiments / unified-designs sites (nginx + systemd). Do **not** open 8090
+publicly and do **not** use Tailscale Funnel.
 
-| Item | Notes |
-|------|--------|
-| VM | 1 vCPU / 1 GB is enough (e.g. DigitalOcean droplet, Ubuntu 22.04+) |
-| DNS | `demo.example.com` → droplet IPv4 |
-| Go | Build on the droplet or ship a linux/arm64-or-amd64 binary |
-| Ports | 80/443 public; 8090 **localhost only** |
+## Layout on the VM
 
-Do **not** open 8090 publicly and do **not** use Tailscale Funnel.
+| Path | Purpose |
+|------|---------|
+| `/opt/aegis-demo/aegis` | linux/amd64 binary (`-demo` capable) |
+| `/etc/aegis-demo/aegis.json` | sample:// library services + datasets |
+| `/etc/aegis-demo/env` | `AEGIS_TOKEN_PASS`, `AEGIS_ADMIN_API_KEY` (0600) |
+| `/var/lib/aegis-demo/data_scopes.json` | persona API keys (0640) — **under the data dir** |
+| `/var/lib/aegis-demo/data_grants.json` | places/documents/messages read |
+| `/var/lib/aegis-demo/mail-archive.db` | seeded LotR mail |
+| `/etc/systemd/system/aegis-demo.service` | unit |
+| `/etc/nginx/sites-available/aegis-demo` | :8443 reverse proxy |
+| `/etc/ssl/aegis-demo/` | self-signed cert for the droplet IP |
+| `/usr/local/sbin/aegis-demo-reset` | re-seed synthetic data |
+| `/etc/cron.d/aegis-demo-reset` | nightly reset (04:17) |
 
-## 1. One-time on the VM
+## One-time (already done on 138.197.8.215)
 
 ```bash
-sudo useradd --system --home /var/lib/aegis-demo --shell /usr/sbin/nologin aegis-demo
-sudo mkdir -p /var/lib/aegis-demo /opt/aegis-demo /etc/aegis-demo
-sudo chown -R aegis-demo:aegis-demo /var/lib/aegis-demo
+# build from a workstation
+GOOS=linux GOARCH=amd64 go build -ldflags='-s -w' -o aegis .
+scp aegis root@<host>:/root/aegis-demo-stage/
+
+# on the VM
+useradd --system --home /var/lib/aegis-demo --shell /usr/sbin/nologin aegis-demo
+install -m 755 aegis /opt/aegis-demo/aegis
+install -m 640 -o aegis-demo -g aegis-demo aegis.json /etc/aegis-demo/aegis.json
+install -m 600 -o root -g root env /etc/aegis-demo/env
+install -m 640 -o aegis-demo -g aegis-demo data_scopes.json /var/lib/aegis-demo/data_scopes.json
+install -m 640 -o aegis-demo -g aegis-demo data_grants.json /var/lib/aegis-demo/data_grants.json
+
+openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
+  -keyout /etc/ssl/aegis-demo/privkey.pem \
+  -out /etc/ssl/aegis-demo/fullchain.pem \
+  -subj "/CN=<droplet-ip>" -addext "subjectAltName=IP:<droplet-ip>"
+
+sudo -u aegis-demo /opt/aegis-demo/aegis -data-dir /var/lib/aegis-demo -seed-lotr
+install -m 644 aegis-demo.service /etc/systemd/system/ && systemctl daemon-reload
+systemctl enable --now aegis-demo
+install -m 644 aegis-demo.nginx /etc/nginx/sites-available/aegis-demo
+ln -sfn /etc/nginx/sites-available/aegis-demo /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
 ```
 
-Install the binary (from a release build or copy):
+## Smoke test
 
 ```bash
-sudo install -m 755 aegis /opt/aegis-demo/aegis
+curl -sk https://<droplet-ip>:8443/healthz
+curl -sk -H "X-Api-Key: <shire key>" \
+  "https://<droplet-ip>:8443/v1/mail/search?sort=asc&limit=1"
+# expect: The party will be on the twenty-second (2023-04-12)
 ```
 
-Or build on the VM:
+Clients must accept a self-signed cert (`curl -k`, or browser proceed).
+That is expected for the IP-only alpha profile.
+
+## Reset
 
 ```bash
-sudo apt-get install -y golang git
-git clone https://github.com/fudomunro/aegis /opt/aegis-demo/src
-cd /opt/aegis-demo/src && go build -o /opt/aegis-demo/aegis .
+/usr/local/sbin/aegis-demo-reset
+# cron: /etc/cron.d/aegis-demo-reset → 17 4 * * *
 ```
 
-## 2. Config
+## Alpha tester handoff
 
-Copy the examples and generate keys:
+Send **privately** (do not commit keys):
 
-```bash
-sudo install -m 640 -o aegis-demo -g aegis-demo \
-  deploy/demo/aegis.demo.json /etc/aegis-demo/aegis.json
-sudo install -m 640 -o aegis-demo -g aegis-demo \
-  deploy/demo/data_scopes.example.json /etc/aegis-demo/data_scopes.json
-sudo install -m 640 -o aegis-demo -g aegis-demo \
-  deploy/demo/data_grants.json /var/lib/aegis-demo/data_grants.json
-```
+1. Agent kit: https://fudomunro.github.io/aegis/demo.html
+2. Base URL: `https://138.197.8.215:8443` (self-signed — use `curl -k` / accept cert)
+3. One persona key (start with shire)
+4. Smoke-test curl
+5. Needs an agent with **Bash/`curl`** (Claude Code / Cursor / Codex)
 
-Edit `data_scopes.json`:
+Leave `site/demo-config.js` placeholders until you are ready for a public
+launch; the kit page has fields the tester can paste into.
 
-- Set `api_key` for each persona. For **alpha only**, use long random values
-  (`openssl rand -hex 24`) and send them to the tester out of band.
-- Leave `read_only: true` (demo mode forces this anyway).
+## When a hostname exists
 
-Token passphrase (not for secrets you care about; demo has no OAuth tokens):
+1. Point DNS A → droplet.
+2. Certbot for that name on 443 (same proxy_pass).
+3. Update `-base-url` in the unit and `site/demo-config.js`.
+4. Drop the self-signed :8443 vhost.
 
-```bash
-echo 'AEGIS_TOKEN_PASS=change-me-demo' | sudo tee /etc/aegis-demo/env
-sudo chmod 600 /etc/aegis-demo/env
-```
-
-## 3. Seed LotR data
-
-```bash
-sudo -u aegis-demo /opt/aegis-demo/aegis \
-  -data-dir /var/lib/aegis-demo \
-  -seed-lotr
-```
-
-## 4. systemd
-
-```bash
-sudo cp deploy/demo/aegis-demo.service /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now aegis-demo
-sudo systemctl status aegis-demo
-curl -sS http://127.0.0.1:8090/healthz
-```
-
-## 5. Caddy (TLS)
-
-```bash
-sudo apt-get install -y caddy
-sudo cp deploy/demo/Caddyfile /etc/caddy/Caddyfile
-# edit demo.example.com
-sudo systemctl reload caddy
-curl -sS https://demo.example.com/healthz
-```
-
-Smoke test with a persona key:
-
-```bash
-curl -sS -H "X-Api-Key: $SHIRE_KEY" \
-  "https://demo.example.com/v1/mail/search?sort=asc&limit=1"
-```
-
-Expect *The party will be on the twenty-second* (2023-04-12).
-
-## 6. Agent kit URL
-
-On the marketing site (`site/demo-config.js` on `main`):
-
-- `baseUrl`: `https://demo.example.com`
-- `shire` / `gondor` keys: same as `data_scopes.json` **only if** you are
-  ready for the keys to be public. For alpha, leave placeholders and email
-  the kit + keys to the tester (they can paste into the page fields).
-
-Deploy the site via GitHub Pages (`site/` on `main`).
-
-## 7. Reset job
-
-Synthetic data only; a cron job re-seeds so experiments stay clean:
-
-```bash
-sudo cp deploy/demo/reset-demo.sh /usr/local/sbin/aegis-demo-reset
-sudo chmod 755 /usr/local/sbin/aegis-demo-reset
-# nightly at 04:17 local
-echo '17 4 * * * root /usr/local/sbin/aegis-demo-reset' | sudo tee /etc/cron.d/aegis-demo-reset
-```
-
-`reset-demo.sh` stops the unit, wipes the data dir, re-seeds, starts the unit.
-
-## 8. Alpha tester handoff
-
-Send:
-
-1. Agent kit URL (`https://fudomunro.github.io/aegis/demo.html` or your fork).
-2. Base URL (`https://demo.example.com`).
-3. One persona key (shire **or** gondor first — isolation is a second exercise).
-4. The one-liner smoke test.
-5. Note: needs an agent with **Bash/`curl`** (Claude Code / Cursor / Codex).
-
-Suggested first prompt (already in the kit): *What is the earliest message in
-my mail?*
-
-## 9. Ops notes
+## Ops
 
 | Topic | Practice |
 |-------|----------|
-| Logs | `journalctl -u aegis-demo -f` |
+| Logs | `journalctl -u aegis-demo -f` or `/var/lib/aegis-demo/logs/aegis.log` |
 | Restart | `systemctl restart aegis-demo` |
-| Rotate a key | edit `data_scopes.json`, `systemctl restart` |
-| Telemetry | `/metrics` needs the **admin** key; do not put that in the kit |
-| Backups | none — demo state is disposable |
-| Abuse | Caddy rate limits optional; keys are read-only + synthetic |
+| Rotate a key | edit `/var/lib/aegis-demo/data_scopes.json`, restart |
+| Admin API | key in `/etc/aegis-demo/env` — never in the kit |
+| Backups | none — disposable synthetic state |
 
-## 10. What this is not
+## What this is not
 
 - Not a multi-tenant SaaS threat model (`docs/threat-model.md`).
 - Not a place for real mail, music tokens, or personal photos.

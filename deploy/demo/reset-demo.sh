@@ -14,7 +14,7 @@ fi
 
 systemctl stop "$UNIT"
 
-# Keep logs and config-on-disk out of the wipe: only mutable demo state.
+# Keep logs and config out of the wipe: only mutable demo state.
 rm -rf "$DATA_DIR"/mail-archive.db* \
        "$DATA_DIR"/copy_ledger.db* \
        "$DATA_DIR"/quicken.db* \
