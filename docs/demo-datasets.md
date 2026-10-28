@@ -22,9 +22,9 @@ Deep, Minas Tirith, Isengard.
 ### Seed locally
 
 ```bash
-./aegis -seed-lotr -data-dir /tmp/aegis-demo
-# writes <data-dir>/sample/lotr/{shire,gondor}-library.json
-# and loads both partitions into <data-dir>/mail-archive.db
+./aegis -seed-demo-datasets -data-dir /tmp/aegis-demo
+# or -seed-lotr (same); writes <data-dir>/sample/datasets/{shire,gondor,lincoln}-library.json
+# and loads each partition into <data-dir>/mail-archive.db
 ```
 
 Wire the partitions in `aegis.json`:
@@ -99,13 +99,45 @@ question is answerable from the pack alone.
 | Show photos from Minas Tirith. | Shire key: empty / 404. |
 | Call `/v1/services/sample-library-{other}/…` | 404 (invisible partition). |
 
+## Abraham Lincoln pack
+
+One partition (`lincoln`) for a historical desk, 1861–1865. Event dates follow
+the record (inaugurations, Antietam, Emancipation, Gettysburg, Appomattox,
+Ford’s Theatre). Correspondence is mostly **original text** in a
+mid-19th-century register; a few short public-domain closing lines (Gettysburg,
+Second Inaugural) appear where they are the point of the query. Mail uses
+`lincoln.example`.
+
+| Kind | Highlights |
+|------|------------|
+| Contacts | Lincoln, Mary Todd, Seward, Stanton, Grant, Sherman, Douglass, Nicolay/Hay (+ Grant merge pair) |
+| Events | Full second-term timeline including City Point and Richmond |
+| Places | Springfield→Washington journey, Gettysburg, City Point, Richmond, Executive Mansion |
+| Documents | Reconstruction memorandum; Gettysburg / Second Inaugural closings |
+| Mail | Seward on diplomacy, Stanton telegraphs, Grant appointments, family note, Appomattox news |
+
+**Lincoln key prompts**
+
+| Prompt | Surfaces |
+|--------|----------|
+| What did I tell Grant after Vicksburg? | mail 1863-07-13 |
+| What is on my calendar in November 1863? | Gettysburg event |
+| Where did I travel in March 1865? | places City Point |
+| Find the closing line of the Gettysburg remarks. | documents text |
+| Who wrote to me about Antietam? | mail from Stanton |
+
+**Isolation:** shire/gondor keys must return nothing for `Appomattox` or
+`Grant named general-in-chief`.
+
 ## Content rules
 
 - No copyrighted prose, lyrics, or illustration files in git.
 - Photo entries are **metadata only** (captions + `example` blob URLs) until
   the demo host supplies licensed art.
-- Keep invented emails on `example.com` / `middle-earth.example`.
-- Merge demos (Strider ↔ Aragorn phone) stay inside one partition.
+- Keep invented emails on `example.com` / `middle-earth.example` / `lincoln.example`.
+- Merge demos (Strider ↔ Aragorn phone; Grant ↔ Captain Grant) stay inside one partition.
+- Historical packs: factual event dates; letters original unless clearly
+  public-domain fragments (US works published before 1929).
 
 ## Related
 

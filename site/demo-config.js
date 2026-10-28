@@ -16,5 +16,11 @@ window.AEGIS_DEMO = {
       blurb: "Council, Hornburg, Pelennor, coronation — the wider war.",
       key: "YOUR_GONDOR_KEY",
     },
+    lincoln: {
+      id: "lincoln",
+      label: "Abraham Lincoln",
+      blurb: "Presidential desk, 1861–1865: inaugurations, Gettysburg, Appomattox.",
+      key: "YOUR_LINCOLN_KEY",
+    },
   },
 };

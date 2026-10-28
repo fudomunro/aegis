@@ -45,7 +45,8 @@ func Run() {
 	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit (issue #77)")
 	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
 	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
-	seedLotR := flag.Bool("seed-lotr", false, "write Lord of the Rings demo dataset packs (shire + gondor) under the data directory, then exit (issue #217)")
+	seedLotR := flag.Bool("seed-lotr", false, "write named demo dataset packs (shire, gondor, lincoln) under the data directory, then exit (issue #217)")
+	seedDemoDatasets := flag.Bool("seed-demo-datasets", false, "same as -seed-lotr: write all named demo dataset packs")
 	demoMode := flag.Bool("demo", false, "demo mode: api-key + data scopes only, sample:// fixtures only, read-only surface (issue #217; AEGIS_DEMO=1)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	tokenNewPass := flag.String("token-new-pass", "", "if set, re-encrypt the token file under this passphrase (with current KDF parameters) and exit")
@@ -124,8 +125,8 @@ func Run() {
 		code := runSeedSampleCLI(paths.Dir, paths.MailArchive, *seedSampleCount, *seedSampleStress)
 		os.Exit(code)
 	}
-	if *seedLotR {
-		code := runSeedLotRCLI(paths.Dir, paths.MailArchive)
+	if *seedLotR || *seedDemoDatasets {
+		code := runSeedDemoDatasetsCLI(paths.Dir, paths.MailArchive)
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*importTakeout) != "" {
@@ -448,7 +449,7 @@ func Run() {
 		if !IsSampleLibraryService(&Service{ID: svc.ID, Endpoint: svc.Endpoint}) {
 			continue
 		}
-		set, ok := GenerateLotRDataset(svc.Dataset)
+		set, ok := GenerateDemoDataset(svc.Dataset)
 		if !ok {
 			set = GenerateSampleLibraryFor(svc.Dataset)
 		}
@@ -677,13 +678,13 @@ func seedSampleCountOrDefault(count int, stress bool) int {
 	return count
 }
 
-// runSeedLotRCLI writes the LotR demo packs (shire + gondor) under
-// <data-dir>/sample/lotr/ and loads both partitions' mail into the archive.
-// All correspondence is original invented text (issue #217).
-func runSeedLotRCLI(dataDir, archivePath string) int {
-	outDir := filepath.Join(dataDir, "sample", "lotr")
+// runSeedDemoDatasetsCLI writes named demo packs (shire, gondor, lincoln)
+// under <data-dir>/sample/datasets/ and loads each partition's mail into the
+// archive. Content rules vary by pack; see docs/demo-datasets.md (issue #217).
+func runSeedDemoDatasetsCLI(dataDir, archivePath string) int {
+	outDir := filepath.Join(dataDir, "sample", "datasets")
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		slog.Error("failed to create lotr sample dir", "dir", outDir, "error", err)
+		slog.Error("failed to create demo dataset dir", "dir", outDir, "error", err)
 		return 1
 	}
 	archive, err := OpenMailArchive(archivePath)
@@ -694,32 +695,32 @@ func runSeedLotRCLI(dataDir, archivePath string) int {
 	if archive != nil {
 		defer archive.Close()
 	}
-	for _, dataset := range []string{LotRDatasetShire, LotRDatasetGondor} {
-		lib, ok := GenerateLotRDataset(dataset)
+	for _, dataset := range demoDatasetIDs() {
+		lib, ok := GenerateDemoDataset(dataset)
 		if !ok {
 			continue
 		}
 		libPath := filepath.Join(outDir, dataset+"-library.json")
 		if err := WriteSampleLibraryJSON(libPath, lib); err != nil {
-			slog.Error("failed to write lotr library", "path", libPath, "error", err)
+			slog.Error("failed to write demo library", "path", libPath, "error", err)
 			return 1
 		}
-		mail := GenerateLotRMail(dataset)
+		mail := GenerateDemoMail(dataset)
 		if archive != nil {
 			for _, rec := range mail.Records {
 				if err := archive.Upsert(rec); err != nil {
-					slog.Error("failed to seed lotr mail", "dataset", dataset, "error", err)
+					slog.Error("failed to seed demo mail", "dataset", dataset, "error", err)
 					return 1
 				}
 			}
 		}
-		slog.Info("lotr dataset ready (original invented text)",
+		slog.Info("demo dataset ready",
 			"dataset", dataset,
 			"mail_messages", len(mail.Records),
 			"library_json", libPath,
 		)
 	}
-	slog.Info("lotr demo packs written", "dir", outDir, "mail_archive", archivePath)
+	slog.Info("demo dataset packs written", "dir", outDir, "mail_archive", archivePath)
 	return 0
 }
 
