@@ -487,6 +487,7 @@ on first run with mode `0700` (it holds secrets).
  aegis.json # bootstrap config (OAuth clients live here)
  data_grants.json # admin data-grant overlay (non-secret)
  apps.json # third-party app registry (0600; token hashes only)
+ data_scopes.json # principal → dataset registry (0600; holds API keys)
  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (non-secret fields; secrets in tokens.json)
  user_types.json # admin UDT local-file selection overlay
  user-types/ # user-defined type schema packs
@@ -682,6 +683,38 @@ A service with `endpoint: "sample://calendar"` uses the built-in
 `sample-calendar` connector: synthetic near-term events, no OAuth.
 The third-party demo uses this so free/busy has busy blocks without a live
 Google connection. Cancelled rows are included and omitted from free/busy.
+
+### Data scopes (principal → dataset)
+
+`data_scopes.json` (0600, under the data directory) maps agent API keys to
+**data scopes**: which dataset partition that principal may read. This is the
+multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
+
+```json
+{
+  "version": 1,
+  "data_scopes": [
+    {
+      "id": "shire",
+      "name": "Shire demo",
+      "dataset": "shire",
+      "api_key": "shire-demo-key",
+      "read_only": true
+    }
+  ]
+}
+```
+
+- Each `api_key` authenticates as that scope (agent tier only — never admin).
+- `dataset` selects the partition. Services with a matching `dataset` field
+  and mail rows tagged with that dataset are visible; other partitions are
+  invisible (not 403). Empty `dataset` is the owner/default view (no filter).
+- `read_only` rejects mutating agent methods except the pre-request hook.
+- Optional `grants` tighten type-level data grants for that principal.
+
+A service with `endpoint: "sample://library"` serves synthetic library
+fixtures bound to `Service.Dataset` — useful for demos and isolation tests
+without OAuth.
 
 ### Third-party connect button (demo)
 

@@ -61,10 +61,10 @@ them away.
   the floor when the suite grows; do **not** lower it to land untested write
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
-  `entity_links.json`, `data_grants.json`, `apps.json`, `service_connections.json`,
-  `user_types.json`, `.aegis-token-pass`, or live binaries. Example config only via
-  `aegis.example.json`. Prefer the OS data directory (issue #74) over the git
-  worktree for runtime state.
+  `entity_links.json`, `data_grants.json`, `apps.json`, `data_scopes.json`,
+  `service_connections.json`, `user_types.json`, `.aegis-token-pass`, or live
+  binaries. Example config only via `aegis.example.json`. Prefer the OS data
+  directory (issue #74) over the git worktree for runtime state.
 - **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
   service. See `SECURITY.md`.
 - **No issue numbers in user-facing copy.** GitHub issue refs stay in code
@@ -85,6 +85,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Data directory + state path layout | `internal/core/datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core/config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `internal/core/permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
+| Data scopes (principal → dataset) | `internal/core/datascope.go`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. |
 | Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
@@ -145,7 +146,8 @@ All mutable local state defaults under one data directory (override with
 | Linux | `$XDG_DATA_HOME/aegis` or `~/.local/share/aegis` |
 
 ```
-<data-dir>/aegis.json, data_grants.json, apps.json, entity_links.json, tokens.json,
+<data-dir>/aegis.json, data_grants.json, apps.json, data_scopes.json,
+entity_links.json, tokens.json,
 user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-archive.db,
 quicken.db, timeline.db, signal.db, audit_log.db, logs/aegis.log
 ```

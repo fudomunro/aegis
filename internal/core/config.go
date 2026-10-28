@@ -100,6 +100,11 @@ type Service struct {
 	// When set, a shared token missing any of these degrades the surface
 	// to unauthorized rather than failing the whole connection.
 	OAuthScopes []string `json:"oauth_scopes,omitempty"`
+	// Dataset binds this service's data to one data-scope partition
+	// (docs/data-scopes.md). Empty means the service is shared (visible to
+	// every principal). Non-empty is visible only to scopes with the same
+	// dataset; the default/owner scope sees every service.
+	Dataset string `json:"dataset,omitempty"`
 }
 
 // OAuthConfig holds the OAuth2 credentials and endpoints for a service.

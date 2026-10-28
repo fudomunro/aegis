@@ -184,7 +184,7 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Contact]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Contact], []string) {
-			return collectProviders[types.Contact, types.ContactProvider](s, kind.PermType,
+			return collectProviders[types.Contact, types.ContactProvider](s, r, kind.PermType,
 				func(p types.ContactProvider) func(context.Context) ([]types.Contact, bool, error) {
 					return p.ListUserContacts
 				})

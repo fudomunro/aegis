@@ -75,6 +75,10 @@ The generator lives in `sampledata.go` (`GenerateSampleMail`,
   identity chains, and Message-ID / subject+from+time messages
 - permission-denied services and `truncated` page caps
 
+Dataset-namespaced variants (`GenerateSampleLibraryFor` / `GenerateSampleMailFor`)
+feed data-scope isolation tests (`datascope_test.go`) and `sample://library`
+fixture connectors. See [`docs/data-scopes.md`](data-scopes.md).
+
 Run the checklist alone:
 
 ```bash

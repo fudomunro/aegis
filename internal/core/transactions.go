@@ -625,8 +625,8 @@ func centsToAmount(cents int64) string {
 // transactionsProviderTargets collects providers, applying per-service and
 // app-level summary/read redaction so a summary-only surface never contributes
 // line items or account identifiers (issue #141).
-func transactionsProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[types.Transaction], []string) {
-	targets, denied := collectProviders[types.Transaction, types.TransactionProvider](s, permType,
+func transactionsProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]namedLister[types.Transaction], []string) {
+	targets, denied := collectProviders[types.Transaction, types.TransactionProvider](s, r, permType,
 		func(p types.TransactionProvider) func(context.Context) ([]types.Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
@@ -674,7 +674,7 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Transaction]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Transaction], []string) {
-			return transactionsProviderTargets(s, kind.PermType, appLevel)
+			return transactionsProviderTargets(s, r, kind.PermType, appLevel)
 		},
 		serviceOf: transactionServiceName,
 		sortKey:   transactionIdentityKey,
@@ -685,7 +685,7 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 			summary := buildTransactionSummary(filtered)
 			if summaryOnly {
 				return types.TransactionList{
-					Summary:        summary,
+					Summary:         summary,
 					LibraryListMeta: types.MetaForPage(types.PageResult{Total: 0}, true, anyServiceTruncated(bySvc), bySvc),
 				}
 			}

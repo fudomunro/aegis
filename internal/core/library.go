@@ -12,7 +12,7 @@ func (s *Server) HandleLibraryPlaylists(w http.ResponseWriter, r *http.Request) 
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Playlist]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Playlist], []string) {
-			return collectProviders[types.Playlist, types.PlaylistProvider](s, kind.PermType,
+			return collectProviders[types.Playlist, types.PlaylistProvider](s, r, kind.PermType,
 				func(p types.PlaylistProvider) func(context.Context) ([]types.Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
@@ -37,7 +37,7 @@ func (s *Server) HandleLibraryTracks(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Track]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Track], []string) {
-			return collectProviders[types.Track, types.LikedTrackProvider](s, kind.PermType,
+			return collectProviders[types.Track, types.LikedTrackProvider](s, r, kind.PermType,
 				func(p types.LikedTrackProvider) func(context.Context) ([]types.Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
@@ -63,7 +63,7 @@ func (s *Server) HandleLibraryAlbums(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Album]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Album], []string) {
-			return collectProviders[types.Album, types.AlbumProvider](s, kind.PermType,
+			return collectProviders[types.Album, types.AlbumProvider](s, r, kind.PermType,
 				func(p types.AlbumProvider) func(context.Context) ([]types.Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
@@ -87,7 +87,7 @@ func (s *Server) HandleLibraryArtists(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Artist]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Artist], []string) {
-			return collectProviders[types.Artist, types.ArtistProvider](s, kind.PermType,
+			return collectProviders[types.Artist, types.ArtistProvider](s, r, kind.PermType,
 				func(p types.ArtistProvider) func(context.Context) ([]types.Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})

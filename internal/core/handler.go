@@ -126,6 +126,9 @@ type Server struct {
 	// apps is the third-party application registry (issue #131). May be nil
 	// in tests that never exercise app tokens.
 	apps *AppStore
+	// scopes resolves data-scope API keys to principal → dataset partitions
+	// (docs/data-scopes.md). May be nil (legacy single-user).
+	scopes *DataScopeStore
 	// grants holds short-lived consent codes from the authorize page.
 	grants *GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
@@ -188,6 +191,17 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			next(w, withAuthKind(withAppIdentity(r, app), authKindApp))
+			return
+		}
+
+		// Data-scope API keys (docs/data-scopes.md): each key is one
+		// principal with a dataset partition. They are agent-tier and never
+		// admin. Prefer them over the shared -api-key when both could match.
+		if sc := s.authenticateScope(r); sc != nil {
+			if !s.allowScopeMethod(w, r, sc) {
+				return
+			}
+			next(w, withAuthKind(withDataScope(r, sc), authKindAPIKey))
 			return
 		}
 
@@ -378,11 +392,45 @@ func matchAPIKey(r *http.Request, key string) bool {
 	if key == "" {
 		return false
 	}
+	presented := presentedAPIKey(r)
+	return presented != "" && constantTimeEqual(presented, key)
+}
+
+// presentedAPIKey returns the bearer / X-Api-Key credential on the request.
+func presentedAPIKey(r *http.Request) string {
 	authz := r.Header.Get("Authorization")
-	if strings.HasPrefix(authz, "Bearer ") && constantTimeEqual(strings.TrimPrefix(authz, "Bearer "), key) {
+	if strings.HasPrefix(authz, "Bearer ") {
+		return strings.TrimSpace(strings.TrimPrefix(authz, "Bearer "))
+	}
+	return strings.TrimSpace(r.Header.Get("X-Api-Key"))
+}
+
+// authenticateScope resolves a data-scope API key to its principal scope
+// (docs/data-scopes.md). Nil when the store is missing or the key is not a
+// scope key (legacy shared agent key falls through to checkAPIKey).
+func (s *Server) authenticateScope(r *http.Request) *DataScope {
+	if s == nil || s.scopes == nil {
+		return nil
+	}
+	return s.scopes.FindByAPIKey(presentedAPIKey(r))
+}
+
+// allowScopeMethod enforces read_only scopes. Mutating agent methods are
+// rejected except the Aperture pre-request hook, which is a read-only
+// classification webhook. Writes the deny response and returns false.
+func (s *Server) allowScopeMethod(w http.ResponseWriter, r *http.Request, sc *DataScope) bool {
+	if sc == nil || !sc.ReadOnly {
 		return true
 	}
-	return constantTimeEqual(r.Header.Get("X-Api-Key"), key)
+	switch r.Method {
+	case http.MethodGet, http.MethodHead, http.MethodOptions:
+		return true
+	}
+	if p := r.URL.Path; p == hookPath || strings.HasPrefix(p, "/v1/pre-request") {
+		return true
+	}
+	s.deny(w, r, nil, "data scope "+sc.ID+" is read-only")
+	return false
 }
 
 // isAdminIdentity reports whether a Tailscale peer is an admin principal

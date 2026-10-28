@@ -249,8 +249,8 @@ func freeBusyListFromEvents(events []types.CalendarEvent, page types.PageRequest
 // eventsProviderTargets collects calendar providers, applying free/busy
 // redaction per service so a freebusy-only surface never contributes titles
 // or attendees to the aggregate (issue #128).
-func eventsProviderTargets(s *Server, permType string) ([]namedLister[types.CalendarEvent], []string) {
-	return collectProviders[types.CalendarEvent, types.CalendarEventProvider](s, permType,
+func eventsProviderTargets(s *Server, r *http.Request, permType string) ([]namedLister[types.CalendarEvent], []string) {
+	return collectProviders[types.CalendarEvent, types.CalendarEventProvider](s, r, permType,
 		func(p types.CalendarEventProvider) func(context.Context) ([]types.CalendarEvent, bool, error) {
 			return p.ListCalendarEvents
 		})
@@ -266,7 +266,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.CalendarEvent]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.CalendarEvent], []string) {
-			targets, denied := eventsProviderTargets(s, kind.PermType)
+			targets, denied := eventsProviderTargets(s, r, kind.PermType)
 			appFreeBusy := false
 			if app := AppIdentityFrom(r); app != nil {
 				appFreeBusy = types.IsFreeBusyAccess(app.Scopes.For(kind.PermType))
@@ -307,7 +307,7 @@ func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.CalendarEvent]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.CalendarEvent], []string) {
-			return eventsProviderTargets(s, kind.PermType)
+			return eventsProviderTargets(s, r, kind.PermType)
 		},
 		serviceOf: calendarEventServiceName,
 		sortKey:   calendarEventIdentityKey,

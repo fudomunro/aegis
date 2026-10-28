@@ -125,6 +125,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		Offset:   offset,
 		WithBody: withBody,
 		Sort:     q.Get("sort"),
+		Dataset:  scopeDataset(r),
 	}
 	resp, err := a.Search(search)
 	if err != nil {
@@ -162,6 +163,12 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 
 	rec, err := a.Get(service, id)
 	if err != nil {
+		writeJSONError(w, http.StatusNotFound, "message not found in mail archive")
+		return
+	}
+	// Data-scope isolation: a partitioned principal cannot fetch rows from
+	// another dataset even with a direct id (docs/data-scopes.md).
+	if ds := scopeDataset(r); ds != "" && rec.Dataset != ds {
 		writeJSONError(w, http.StatusNotFound, "message not found in mail archive")
 		return
 	}

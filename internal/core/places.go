@@ -478,8 +478,8 @@ func redactPlaceVisitsForLevel(items []types.PlaceVisit, level string) []types.P
 // placesProviderTargets collects providers, applying per-service and
 // app-level city/read/precise redaction so a city-only surface never
 // contributes place names or coordinates (issue #142).
-func placesProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[types.PlaceVisit], []string) {
-	targets, denied := collectProviders[types.PlaceVisit, types.PlaceVisitProvider](s, permType,
+func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]namedLister[types.PlaceVisit], []string) {
+	targets, denied := collectProviders[types.PlaceVisit, types.PlaceVisitProvider](s, r, permType,
 		func(p types.PlaceVisitProvider) func(context.Context) ([]types.PlaceVisit, bool, error) {
 			return p.ListUserPlaceVisits
 		})
@@ -573,7 +573,7 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.PlaceVisit]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.PlaceVisit], []string) {
-			return placesProviderTargets(s, kind.PermType, appLevel)
+			return placesProviderTargets(s, r, kind.PermType, appLevel)
 		},
 		serviceOf: placeVisitServiceName,
 		sortKey:   placeIdentityKey,
