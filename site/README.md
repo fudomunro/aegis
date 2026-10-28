@@ -5,15 +5,24 @@ It plays up the jellyfish mark from `web/logo.svg` (issue #87).
 
 ```
 site/
-  index.html   page markup + inline jellyfish SVG + F.A.Q.
-  style.css    deep-sea theme, animations (respects prefers-reduced-motion)
-  site.js      marine snow, scroll reveals, cursor-tracking jellyfish eyes
-  favicon.svg  copy of web/favicon.svg
+  index.html      page markup + inline jellyfish SVG + F.A.Q.
+  demo.html       agent kit: persona picker, pasteable brief, golden queries
+  demo-config.js  public demo base URL + persona keys (read-only synthetic only)
+  demo.js         brief builder / copy buttons for demo.html
+  demo.css        agent kit layout on top of style.css
+  style.css       deep-sea theme, animations (respects prefers-reduced-motion)
+  site.js         marine snow, scroll reveals, cursor-tracking jellyfish eyes
+  favicon.svg     copy of web/favicon.svg
 ```
 
 Live site: <https://fudomunro.github.io/aegis/> (GitHub Pages from this
 directory, deployed by [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)
 on every `main` change under `site/`).
+
+The **agent kit** (`demo.html`) is for tool-enabled agents (Bash/`curl`).
+Canonical brief text and sync rules: [`docs/agent-kit.md`](../docs/agent-kit.md).
+Credentials in `demo-config.js` must only point at a `-demo` read-only
+synthetic instance.
 
 Preview locally:
 

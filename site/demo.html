@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aegis agent kit — try the demo data</title>
+<meta name="description" content="Paste-ready agent brief and curl for the Aegis synthetic demo. Needs a tool-enabled agent with Bash.">
+<meta name="theme-color" content="#02060f">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="demo.css">
+</head>
+<body>
+
+<nav>
+  <a class="brand" href="index.html">
+    <svg width="30" height="30" viewBox="0 0 64 64" aria-hidden="true">
+      <path fill="#c9f6ff" d="M10 34c0-13.25 9.85-24 22-24s22 10.75 22 24c0 1.2-.4 2.3-1.1 3.2H11.1A4.1 4.1 0 0 1 10 34Z"/>
+      <rect x="11" y="33" width="42" height="6" rx="3" fill="#b28cff"/>
+    </svg>
+    AEGIS
+  </a>
+  <ul>
+    <li><a href="index.html">Why a jellyfish</a></li>
+    <li><a href="index.html#dive">The dive</a></li>
+    <li><a href="demo.html" aria-current="page">Agent kit</a></li>
+    <li><a href="https://github.com/fudomunro/aegis">GitHub →</a></li>
+  </ul>
+</nav>
+
+<main class="kit">
+  <span class="kicker">Agent kit</span>
+  <h1>Talk to the demo<br><em>with a real agent.</em></h1>
+  <p class="lede">
+    A read-only Aegis filled with synthetic personal data. Paste the brief below
+    into an agent that can run <code>curl</code>, then ask about the journey,
+    the war, or the mail archive.
+  </p>
+
+  <div class="banner">
+    <b>Synthetic demo — not your data.</b>
+    The public Aegis product is a <b>private tailnet service</b>. This kit is for a
+    separate, read-only demo instance. You need an agent with <b>Bash / HTTP</b>
+    (Claude Code, Cursor, Codex, or similar). Chat-only agents cannot call the API.
+  </div>
+
+  <div class="personas" role="group" aria-label="Choose a demo persona">
+    <button type="button" class="persona" data-id="shire" aria-pressed="true">Frodo’s circle</button>
+    <button type="button" class="persona" data-id="gondor" aria-pressed="false">South-kingdom</button>
+  </div>
+  <p class="lede" id="persona-blurb" style="margin-top:-6px;font-size:16px"></p>
+
+  <div class="grid2">
+    <div class="panel">
+      <h2>Connection</h2>
+      <p class="meta">Override if you are running the demo yourself. Keys here only reach the public read-only instance.</p>
+      <label class="field" for="base-url">Base URL</label>
+      <input id="base-url" type="url" spellcheck="false" autocomplete="off" placeholder="https://YOUR_DEMO_HOST">
+      <label class="field" for="api-key">API key</label>
+      <input id="api-key" type="text" spellcheck="false" autocomplete="off" placeholder="YOUR_SHIRE_KEY">
+    </div>
+    <div class="panel">
+      <h2>Smoke test</h2>
+      <p class="meta">Run this in your terminal first. You should see one message dated 2023.</p>
+      <pre class="cmd" id="smoke"></pre>
+      <div class="row">
+        <button type="button" class="copy" id="copy-smoke">Copy curl</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h2>Paste this into your agent</h2>
+    <p class="meta">
+      Put it in the system prompt, or as the first message. Include the literal
+      curl block — tool agents will run it instead of guessing.
+    </p>
+    <textarea id="brief" readonly spellcheck="false"></textarea>
+    <div class="row">
+      <button type="button" class="copy" id="copy-brief">Copy brief</button>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h2>Golden questions</h2>
+    <p class="meta">Each answer comes from the API alone. Swap keys to see isolation.</p>
+    <div class="grid2">
+      <div>
+        <h3>Frodo’s circle</h3>
+        <ul class="queries">
+          <li><b>Earliest mail?</b> — Bilbo’s party note (2023-04-12)</li>
+          <li><b>Who came with me?</b> — contacts + places</li>
+          <li><b>Gandalf before Bree</b> — mail search</li>
+          <li><b>Photos from the road</b> — library photos</li>
+          <li><b>What is on the packing list?</b> — documents</li>
+        </ul>
+      </div>
+      <div>
+        <h3>South-kingdom</h3>
+        <ul class="queries">
+          <li><b>What happened at the Hornburg?</b> — events + mail</li>
+          <li><b>Who wrote about the council?</b> — mail from Elrond</li>
+          <li><b>When was the coronation?</b> — events</li>
+          <li><b>What did the proclamation say?</b> — document text</li>
+          <li><b>Isolation:</b> “Find mail about Boromir” — one key answers, the other does not</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:16px">
+    <h2>If the agent refuses</h2>
+    <ul class="queries">
+      <li><b>“I don’t have an API key”</b> — the key never reached the tool. Re-paste the brief; keep BASE_URL and API_KEY in the same message as the curl.</li>
+      <li><b>“I can’t query localhost”</b> — chat-only browser agents cannot reach your machine. Use Claude Code / Cursor / Codex, or run curl yourself.</li>
+      <li><b>Empty answers</b> — try the smoke test. If that works, ask more specifically (dates, subjects).</li>
+    </ul>
+  </div>
+
+  <p class="footer-note">
+    This page is static. Credentials live in <code>demo-config.js</code> and are
+    meant for a <b>read-only synthetic</b> instance only — never a real Aegis
+    with your mail or music. Product docs and the private tailnet story are on
+    <a href="https://github.com/fudomunro/aegis">GitHub</a>.
+  </p>
+</main>
+
+<script src="demo-config.js"></script>
+<script src="demo.js"></script>
+</body>
+</html>
