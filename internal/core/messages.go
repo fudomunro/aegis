@@ -278,7 +278,7 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Message]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Message], []string) {
-			targets, denied := collectProviders[types.Message, types.MessageProvider](s, kind.PermType,
+			targets, denied := collectProviders[types.Message, types.MessageProvider](s, r, kind.PermType,
 				func(p types.MessageProvider) func(context.Context) ([]types.Message, bool, error) {
 					return p.ListMessages
 				})
@@ -287,10 +287,11 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 			// the archive is disabled (issue #139).
 			if s.mail != nil && s.mailReadable() {
 				archive := s.mail
+				dataset := scopeDataset(r)
 				targets = append(targets, namedLister[types.Message]{
 					id: "mail-archive",
 					list: func(context.Context) ([]types.Message, bool, error) {
-						return archive.ListMessagesForLibrary(libraryArchiveMessageCap)
+						return archive.ListMessagesForLibrary(libraryArchiveMessageCap, dataset)
 					},
 				})
 			}

@@ -324,8 +324,8 @@ func redactDocumentsForLevel(items []types.Document, level string) []types.Docum
 // documentsProviderTargets collects providers, applying per-service and
 // app-level metadata/read redaction so a metadata-only surface never
 // contributes excerpts (issue #143).
-func documentsProviderTargets(s *Server, permType string, appLevel string) ([]namedLister[types.Document], []string) {
-	targets, denied := collectProviders[types.Document, types.DocumentProvider](s, permType,
+func documentsProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]namedLister[types.Document], []string) {
+	targets, denied := collectProviders[types.Document, types.DocumentProvider](s, r, permType,
 		func(p types.DocumentProvider) func(context.Context) ([]types.Document, bool, error) {
 			return p.ListUserDocuments
 		})
@@ -369,7 +369,7 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Document]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Document], []string) {
-			return documentsProviderTargets(s, kind.PermType, appLevel)
+			return documentsProviderTargets(s, r, kind.PermType, appLevel)
 		},
 		serviceOf: documentServiceName,
 		sortKey:   documentIdentityKey,
@@ -428,6 +428,11 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	level := types.DefaultAccessType
 	svc := s.config.GetService(serviceID)
 	if svc != nil {
+		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
+		if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
+			writeJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
+			return
+		}
 		level = s.effectivePermissions(svc).For(kind.PermType)
 	} else if app != nil {
 		level = app.Scopes.For(kind.PermType)

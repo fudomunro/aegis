@@ -59,6 +59,9 @@ type MailArchiveRecord struct {
 	Read        bool
 	BodyText    string
 	PayloadGzip []byte
+	// Dataset is the data-scope partition id (docs/data-scopes.md). Empty is
+	// the owner/default partition.
+	Dataset string
 }
 
 // Message converts the row into the neutral library shape (body included when
@@ -125,6 +128,9 @@ type MailSearchQuery struct {
 	WithBody bool
 	// Sort is "desc" (default, newest first) or "asc" (oldest first).
 	Sort string
+	// Dataset, when non-empty, restricts results to one data-scope
+	// partition (docs/data-scopes.md). Empty sees every row.
+	Dataset string
 }
 
 // MailSearchResponse is the agent-facing search/list result.
@@ -237,6 +243,7 @@ CREATE TABLE IF NOT EXISTS mail_messages (
   is_read INTEGER NOT NULL DEFAULT 1,
   body_text TEXT NOT NULL DEFAULT '',
   payload_gzip BLOB,
+  dataset TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT '',
   UNIQUE(service, service_msg_id)
 );
@@ -257,6 +264,17 @@ CREATE TABLE IF NOT EXISTS mail_meta (
 `
 	if _, err := a.db.Exec(schema); err != nil {
 		return fmt.Errorf("mail archive schema: %w", err)
+	}
+	// Older archives predate dataset partitioning (docs/data-scopes.md).
+	// The dataset index must come after the column exists — CREATE TABLE
+	// IF NOT EXISTS is a no-op on old DBs, and indexing a missing column
+	// aborts the schema script before ALTER could run.
+	if _, err := a.db.Exec(`ALTER TABLE mail_messages ADD COLUMN dataset TEXT NOT NULL DEFAULT ''`); err != nil &&
+		!strings.Contains(err.Error(), "duplicate column") {
+		return fmt.Errorf("mail archive dataset column: %w", err)
+	}
+	if _, err := a.db.Exec(`CREATE INDEX IF NOT EXISTS mail_messages_dataset ON mail_messages(dataset)`); err != nil {
+		return fmt.Errorf("mail archive dataset index: %w", err)
 	}
 	return nil
 }
@@ -304,8 +322,8 @@ func (a *MailArchive) Upsert(rec MailArchiveRecord) error {
 INSERT INTO mail_messages (
   service, service_msg_id, thread_id, message_id, mailbox, labels_json,
   subject, snippet, from_name, from_email, to_json, cc_json,
-  sent_at, received_at, direction, is_read, body_text, payload_gzip, updated_at
-) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+  sent_at, received_at, direction, is_read, body_text, payload_gzip, dataset, updated_at
+) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 ON CONFLICT(service, service_msg_id) DO UPDATE SET
   thread_id=excluded.thread_id,
   message_id=excluded.message_id,
@@ -323,11 +341,12 @@ ON CONFLICT(service, service_msg_id) DO UPDATE SET
   is_read=excluded.is_read,
   body_text=excluded.body_text,
   payload_gzip=COALESCE(excluded.payload_gzip, mail_messages.payload_gzip),
+  dataset=excluded.dataset,
   updated_at=excluded.updated_at
 `, rec.Service, rec.ID, rec.ThreadID, rec.MessageID, rec.Mailbox, string(labelsJSON),
 		rec.Subject, rec.Snippet, rec.FromName, strings.ToLower(rec.FromEmail),
 		string(toJSON), string(ccJSON), rec.SentAt, rec.ReceivedAt, rec.Direction,
-		read, rec.BodyText, rec.PayloadGzip, now); err != nil {
+		read, rec.BodyText, rec.PayloadGzip, rec.Dataset, now); err != nil {
 		return err
 	}
 
@@ -356,7 +375,7 @@ func (a *MailArchive) Get(service, id string) (MailArchiveRecord, error) {
 	row := a.db.QueryRow(`
 SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
        subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text
+       sent_at, received_at, direction, is_read, body_text, dataset
 FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
 	rec, err := scanMailRecord(row, true)
 	if err != nil {
@@ -405,6 +424,10 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 
 	where := []string{"1=1"}
 	args := []any{}
+	if ds := strings.TrimSpace(q.Dataset); ds != "" {
+		where = append(where, "m.dataset = ?")
+		args = append(args, ds)
+	}
 	if q.After != "" {
 		where = append(where, "m.sent_at >= ?")
 		args = append(args, normalizeMailTimeBound(q.After, true))
@@ -435,7 +458,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	fts := strings.TrimSpace(q.Q)
 	querySQL := `SELECT m.service, m.service_msg_id, m.thread_id, m.message_id, m.mailbox, m.labels_json,
        m.subject, m.snippet, m.from_name, m.from_email, m.to_json, m.cc_json,
-       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text `
+       m.sent_at, m.received_at, m.direction, m.is_read, m.body_text, m.dataset `
 	queryArgs := args
 	if fts != "" {
 		match, _ := mailFTSMatch(fts)
@@ -473,7 +496,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	// Collapse gmail + takeout (and other) source rows into one collection entry.
 	// FTS/filters may hit only one source; pull Message-ID siblings so the
 	// user still sees every source of that message (issue #139).
-	merged := MergeMessages(a.hydrateMessageSiblings(msgs))
+	merged := MergeMessages(a.hydrateMessageSiblings(msgs, q.Dataset))
 	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
 	total := len(merged)
 	if offset >= total {
@@ -515,8 +538,9 @@ func sortMailMessages(msgs []types.Message, asc bool) {
 
 // hydrateMessageSiblings loads other source rows that share an RFC Message-ID
 // with any message already selected, so multi-source identity survives
-// filter/FTS that only matched one copy (issue #139).
-func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message) []types.Message {
+// filter/FTS that only matched one copy (issue #139). dataset, when non-empty,
+// keeps siblings inside one data-scope partition (docs/data-scopes.md).
+func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message, dataset string) []types.Message {
 	if len(msgs) == 0 {
 		return msgs
 	}
@@ -549,8 +573,12 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message) []types.Messa
 	}
 	querySQL := `SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
        subject, snippet, from_name, from_email, to_json, cc_json,
-       sent_at, received_at, direction, is_read, body_text
+       sent_at, received_at, direction, is_read, body_text, dataset
        FROM mail_messages WHERE message_id IN (` + strings.Join(placeholders, ",") + `)`
+	if dataset != "" {
+		querySQL += ` AND dataset = ?`
+		args = append(args, dataset)
+	}
 	rows, err := a.db.Query(querySQL, args...)
 	if err != nil {
 		return msgs
@@ -575,8 +603,9 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message) []types.Messa
 // ListMessagesForLibrary returns merged archive messages for /v1/library/messages
 // so Takeout and Gmail archive rows join live providers as one user collection
 // (issue #139). limit bounds the page; truncated reports that more archive
-// rows exist (full history remains /v1/mail/search).
-func (a *MailArchive) ListMessagesForLibrary(limit int) (msgs []types.Message, truncated bool, err error) {
+// rows exist (full history remains /v1/mail/search). dataset restricts the
+// data-scope partition when non-empty (docs/data-scopes.md).
+func (a *MailArchive) ListMessagesForLibrary(limit int, dataset string) (msgs []types.Message, truncated bool, err error) {
 	if a == nil || a.db == nil {
 		return nil, false, fmt.Errorf("mail archive disabled")
 	}
@@ -584,7 +613,7 @@ func (a *MailArchive) ListMessagesForLibrary(limit int) (msgs []types.Message, t
 		limit = 200
 	}
 	// Load one extra merged identity to detect truncation after merge.
-	resp, err := a.Search(MailSearchQuery{Limit: limit, WithBody: true})
+	resp, err := a.Search(MailSearchQuery{Limit: limit, WithBody: true, Dataset: dataset})
 	if err != nil {
 		return nil, false, err
 	}
@@ -831,7 +860,7 @@ func scanMailRecord(row rowScanner, withBody bool) (MailArchiveRecord, error) {
 	scanDest := []any{
 		&rec.Service, &rec.ID, &rec.ThreadID, &rec.MessageID, &rec.Mailbox, &labelsJSON,
 		&rec.Subject, &rec.Snippet, &rec.FromName, &rec.FromEmail, &toJSON, &ccJSON,
-		&rec.SentAt, &rec.ReceivedAt, &rec.Direction, &isRead, &body,
+		&rec.SentAt, &rec.ReceivedAt, &rec.Direction, &isRead, &body, &rec.Dataset,
 	}
 	if err := row.Scan(scanDest...); err != nil {
 		return MailArchiveRecord{}, err

@@ -17,6 +17,7 @@ const (
 	defaultTokensName       = "tokens.json"
 	defaultServiceConnsName = "service_connections.json"
 	defaultAppsName         = "apps.json"
+	defaultDataScopesName   = "data_scopes.json"
 	defaultLinksName        = "entity_links.json"
 	defaultCopyLedgerName   = "copy_ledger.db"
 	defaultMailArchiveName  = "mail-archive.db"
@@ -44,6 +45,9 @@ type DataPaths struct {
 	ServiceConnections string
 	// Apps is the third-party application registry (issue #131).
 	Apps string
+	// DataScopes is the principal → dataset registry (docs/data-scopes.md).
+	// Holds API keys; treat like tokens.json (never commit).
+	DataScopes string
 	// Links is the entity-link store (playlists).
 	Links string
 	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
@@ -178,6 +182,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		Tokens:             resolveUnderDataDir(ov.Tokens, dir, defaultTokensName),
 		ServiceConnections: resolveUnderDataDir(ov.ServiceConnections, dir, defaultServiceConnsName),
 		Apps:               filepath.Join(dir, defaultAppsName),
+		DataScopes:         filepath.Join(dir, defaultDataScopesName),
 		Links:              resolveUnderDataDir(ov.Links, dir, defaultLinksName),
 		LogsDir:            filepath.Join(dir, dataDirLogsSubdir),
 	}

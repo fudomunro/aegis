@@ -113,7 +113,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			trackProviders, _ := collectProviders[types.Track, types.LikedTrackProvider](s, "tracks",
+			trackProviders, _ := collectProviders[types.Track, types.LikedTrackProvider](s, r, "tracks",
 				func(p types.LikedTrackProvider) func(context.Context) ([]types.Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
@@ -140,7 +140,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			albumProviders, _ := collectProviders[types.Album, types.AlbumProvider](s, "albums",
+			albumProviders, _ := collectProviders[types.Album, types.AlbumProvider](s, r, "albums",
 				func(p types.AlbumProvider) func(context.Context) ([]types.Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
@@ -167,7 +167,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			artistProviders, _ := collectProviders[types.Artist, types.ArtistProvider](s, "artists",
+			artistProviders, _ := collectProviders[types.Artist, types.ArtistProvider](s, r, "artists",
 				func(p types.ArtistProvider) func(context.Context) ([]types.Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})
@@ -194,7 +194,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			plProviders, _ := collectProviders[types.Playlist, types.PlaylistProvider](s, "playlists",
+			plProviders, _ := collectProviders[types.Playlist, types.PlaylistProvider](s, r, "playlists",
 				func(p types.PlaylistProvider) func(context.Context) ([]types.Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})

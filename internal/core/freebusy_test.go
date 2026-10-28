@@ -236,7 +236,7 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
-	targets, denied := eventsProviderTargets(srv, "events")
+	targets, denied := eventsProviderTargets(srv, httptest.NewRequest(http.MethodGet, "/v1/library/freebusy", nil), "events")
 	if len(targets) != 1 || len(denied) != 0 {
 		t.Fatalf("targets = %d denied = %v", len(targets), denied)
 	}

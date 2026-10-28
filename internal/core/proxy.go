@@ -43,6 +43,13 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
 		return
 	}
+	// Data-scope isolation: foreign partitions look missing, never 403
+	// (docs/data-scopes.md).
+	if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
+		logger.Warn("service not found", "reason", "dataset partition")
+		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
+		return
+	}
 
 	// Issue #119: /v1/services is content/ingest transport only. Library is
 	// the data surface; provider-shaped lists, playback, search, and generic

@@ -284,15 +284,21 @@ type namedLister[T any] struct {
 }
 
 // collectProviders type-asserts each connector to P and builds fetch targets
-// that pass the permission check for permType.
+// that pass the permission check for permType. Services outside the request's
+// data-scope dataset partition are skipped silently (docs/data-scopes.md).
 func collectProviders[T any, P any](
 	s *Server,
+	r *http.Request,
 	permType string,
 	lister func(P) func(ctx context.Context) ([]T, bool, error),
 ) (targets []namedLister[T], denied []string) {
+	scope := DataScopeFrom(r)
 	for id, connector := range s.connectors {
 		svc := s.config.GetService(id)
 		if svc == nil || svc.Action == "block" {
+			continue
+		}
+		if !serviceVisibleToScope(svc, scope) {
 			continue
 		}
 		provider, ok := any(connector).(P)
@@ -379,6 +385,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		cacheKey = spec.cacheKey
 	}
 	cacheKey += appLibraryCacheSuffix(app, kind.PermType)
+	cacheKey += scopeCacheSuffix(DataScopeFrom(r))
 	cacheKey += pageReq.CacheSuffix()
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		logger.Debug("cache hit")

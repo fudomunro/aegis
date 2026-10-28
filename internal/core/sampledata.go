@@ -855,6 +855,106 @@ func GenerateSampleLibrary() SampleLibrarySet {
 	}
 }
 
+// GenerateSampleLibraryFor returns the standard fixture set with identities
+// namespaced to a data-scope dataset (docs/data-scopes.md) so two principals
+// can be told apart while merge keys (ISRC, Message-ID) stay intact inside
+// one partition. Empty dataset is the unmodified CI set.
+func GenerateSampleLibraryFor(dataset string) SampleLibrarySet {
+	set := GenerateSampleLibrary()
+	if strings.TrimSpace(dataset) == "" {
+		return set
+	}
+	tag := strings.TrimSpace(dataset)
+	suffix := " (" + tag + ")"
+	emailTag := "+" + tag
+	nsEmail := func(e string) string {
+		if e == "" || !strings.Contains(e, "@") {
+			return e
+		}
+		at := strings.Index(e, "@")
+		return e[:at] + emailTag + e[at:]
+	}
+	for i := range set.Playlists {
+		set.Playlists[i].Name += suffix
+	}
+	for i := range set.Tracks {
+		set.Tracks[i].Name += suffix
+		for j := range set.Tracks[i].Artists {
+			set.Tracks[i].Artists[j].Name += suffix
+		}
+	}
+	for i := range set.Albums {
+		set.Albums[i].Name += suffix
+	}
+	for i := range set.Artists {
+		set.Artists[i].Name += suffix
+	}
+	for i := range set.Contacts {
+		set.Contacts[i].Name += suffix
+		for j := range set.Contacts[i].Emails {
+			set.Contacts[i].Emails[j] = nsEmail(set.Contacts[i].Emails[j])
+		}
+		for j := range set.Contacts[i].Sources {
+			src := &set.Contacts[i].Sources[j]
+			src.Name += suffix
+			for k := range src.Emails {
+				src.Emails[k] = nsEmail(src.Emails[k])
+			}
+		}
+	}
+	for i := range set.Photos {
+		set.Photos[i].Caption += suffix
+	}
+	for i := range set.Events {
+		set.Events[i].Title += suffix
+	}
+	for i := range set.Messages {
+		set.Messages[i].Subject += suffix
+		if set.Messages[i].From != nil {
+			set.Messages[i].From.Name += suffix
+			for j := range set.Messages[i].From.Emails {
+				set.Messages[i].From.Emails[j] = nsEmail(set.Messages[i].From.Emails[j])
+			}
+		}
+	}
+	for i := range set.Transactions {
+		set.Transactions[i].Description += suffix
+		if set.Transactions[i].Merchant != "" {
+			set.Transactions[i].Merchant += suffix
+		}
+	}
+	for i := range set.Places {
+		set.Places[i].Place.Name += suffix
+	}
+	for i := range set.Documents {
+		set.Documents[i].Title += suffix
+		if set.Documents[i].Correspondent != "" {
+			set.Documents[i].Correspondent += suffix
+		}
+	}
+	return set
+}
+
+// GenerateSampleMailFor builds a sample mail set tagged with a data-scope
+// dataset so archive queries can partition it (docs/data-scopes.md). Row ids
+// are namespaced so two datasets can share one archive without colliding on
+// UNIQUE(service, service_msg_id).
+func GenerateSampleMailFor(dataset string, n int) SampleMailSet {
+	set := GenerateSampleMail(n)
+	ds := strings.TrimSpace(dataset)
+	if ds == "" {
+		return set
+	}
+	suffix := " (" + ds + ")"
+	for i := range set.Records {
+		set.Records[i].Dataset = ds
+		set.Records[i].ID = ds + ":" + set.Records[i].ID
+		set.Records[i].Subject += suffix
+		set.Records[i].FromName += suffix
+	}
+	return set
+}
+
 // sampleDocuments builds deterministic document fixtures (issue #143) with
 // a shared-checksum merge pair, a title+created name pair, and a near-miss
 // that must not merge.
@@ -959,15 +1059,15 @@ func sampleDocuments() []types.Document {
 		},
 		{
 			// Google Docs source (issue #143): HTML/plain-text export; markdown later.
-			Title:        "Moving checklist",
-			MimeType:     "application/vnd.google-apps.document",
-			CreatedAt:    "2024-02-01T00:00:00Z",
-			ModifiedAt:   "2024-02-10T00:00:00Z",
+			Title:         "Moving checklist",
+			MimeType:      "application/vnd.google-apps.document",
+			CreatedAt:     "2024-02-01T00:00:00Z",
+			ModifiedAt:    "2024-02-10T00:00:00Z",
 			Correspondent: "Ada Lovelace",
-			DocumentType: "google-doc",
-			Excerpt:      "Checklist for the move: utilities, forwarding address, insurance…",
-			EntityID:     "gdoc-move-1",
-			People:       []types.Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}},
+			DocumentType:  "google-doc",
+			Excerpt:       "Checklist for the move: utilities, forwarding address, insurance…",
+			EntityID:      "gdoc-move-1",
+			People:        []types.Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}},
 			Sources: []types.DocumentSource{
 				{
 					Service:     "google-drive",

@@ -173,7 +173,7 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Photo]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Photo], []string) {
-			return collectProviders[types.Photo, types.PhotoProvider](s, kind.PermType,
+			return collectProviders[types.Photo, types.PhotoProvider](s, r, kind.PermType,
 				func(p types.PhotoProvider) func(context.Context) ([]types.Photo, bool, error) {
 					return p.ListUserPhotos
 				})

@@ -13,4 +13,8 @@ regexes = [
   '''tskey-api-(plain|test|never|round-trip|secret)''',
   '''<AEGIS_API_KEY''',
   '''Bearer \$[A-Z_]+''',
+  # Data-scope unit-test fixtures (docs/data-scopes.md). Prefer YOUR_* going
+  # forward; these cover keys already in history and any *-key-1234 fakes.
+  '''[a-z]+-key-1234''',
+  '''aeg_(test|demo)_[a-z0-9_]+''',
 ]

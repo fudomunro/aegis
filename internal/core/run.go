@@ -224,6 +224,15 @@ func Run() {
 		os.Exit(1)
 	}
 
+	scopes, err := NewDataScopeStore(paths.DataScopes)
+	if err != nil {
+		slog.Error("failed to load data scopes", "path", paths.DataScopes, "error", err)
+		os.Exit(1)
+	}
+	if n := len(scopes.All()); n > 0 {
+		slog.Info("data scopes loaded", "count", n, "path", paths.DataScopes)
+	}
+
 	copies, err := OpenCopyLedger(paths.CopyLedger)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", paths.CopyLedger, "error", err)
@@ -341,6 +350,7 @@ func Run() {
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
 		apps:          apps,
+		scopes:        scopes,
 		grants:        NewGrantStore(),
 		csrfTokens:    NewStateStore(),
 		copies:        copies,
@@ -408,6 +418,15 @@ func Run() {
 		}
 	}
 	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()
+	// Synthetic library fixtures per data-scope dataset (docs/data-scopes.md).
+	// A service with endpoint sample://library serves one partition's
+	// SampleLibrarySet; Service.Dataset binds it to a principal.
+	for _, svc := range cfg.ServiceSnapshots() {
+		if !IsSampleLibraryService(&Service{ID: svc.ID, Endpoint: svc.Endpoint}) {
+			continue
+		}
+		srv.connectors[svc.ID] = NewSampleLibraryConnector(svc.ID, svc.Dataset, GenerateSampleLibraryFor(svc.Dataset))
+	}
 
 	mux := http.NewServeMux()
 	registerBrandRoutes(mux, srv)
