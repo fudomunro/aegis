@@ -1,15 +1,15 @@
-# Aegis public demo — nginx (IP TLS)
-# Alpha profile: listen on 8443 with a self-signed cert for the droplet IP.
-# When a hostname exists, replace with a Certbot vhost on 443.
+# Aegis public demo — aegis.unified-designs.com
+# Install under sites-available/, then run certbot --nginx -d aegis.unified-designs.com
+# which attaches TLS and an HTTP→HTTPS redirect.
 
 server {
-    listen 8443 ssl;
-    listen [::]:8443 ssl;
-    server_name 138.197.8.215 _;
+    listen 80;
+    listen [::]:80;
+    server_name aegis.unified-designs.com;
 
-    ssl_certificate     /etc/ssl/aegis-demo/fullchain.pem;
-    ssl_certificate_key /etc/ssl/aegis-demo/privkey.pem;
-    ssl_protocols       TLSv1.2 TLSv1.3;
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
 
     location / {
         proxy_pass http://127.0.0.1:8090;
