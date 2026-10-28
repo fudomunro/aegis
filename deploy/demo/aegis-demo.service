@@ -1,0 +1,30 @@
+[Unit]
+Description=Aegis public demo (synthetic, read-only)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=aegis-demo
+Group=aegis-demo
+EnvironmentFile=-/etc/aegis-demo/env
+ExecStart=/opt/aegis-demo/aegis \
+  -demo \
+  -addr 127.0.0.1:8090 \
+  -base-url https://demo.example.com \
+  -data-dir /var/lib/aegis-demo \
+  -config /etc/aegis-demo/aegis.json \
+  -token-pass ${AEGIS_TOKEN_PASS} \
+  -admin-api-key ${AEGIS_ADMIN_API_KEY} \
+  -log-format json \
+  -log-file /var/lib/aegis-demo/logs/aegis.log
+Restart=on-failure
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/aegis-demo
+
+[Install]
+WantedBy=multi-user.target

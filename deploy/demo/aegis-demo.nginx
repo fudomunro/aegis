@@ -1,0 +1,28 @@
+# Aegis public demo — aegis.unified-designs.com
+# Install under sites-available/, then run certbot --nginx -d aegis.unified-designs.com
+# which attaches TLS and an HTTP→HTTPS redirect.
+
+server {
+    listen 80;
+    listen [::]:80;
+    server_name aegis.unified-designs.com;
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/html;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_read_timeout 60s;
+    }
+
+    location /v1/ {
+        proxy_pass http://127.0.0.1:8090;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        add_header Cache-Control "no-store";
+    }
+}
