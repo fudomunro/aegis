@@ -22,7 +22,7 @@ on every `main` change under `site/`).
 The **agent kit** (`demo.html`) is for tool-enabled agents (Bash/`curl`).
 Canonical brief text and sync rules: [`docs/agent-kit.md`](../docs/agent-kit.md).
 Credentials in `demo-config.js` must only point at a `-demo` read-only
-synthetic instance.
+synthetic instance. Hosting runbook: [`deploy/demo/README.md`](../deploy/demo/README.md).
 
 Preview locally:
 

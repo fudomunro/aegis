@@ -1,0 +1,18 @@
+{
+  "services": [
+    {
+      "id": "sample-library-shire",
+      "name": "Sample Library (shire)",
+      "action": "inject",
+      "endpoint": "sample://library",
+      "dataset": "shire"
+    },
+    {
+      "id": "sample-library-gondor",
+      "name": "Sample Library (gondor)",
+      "action": "inject",
+      "endpoint": "sample://library",
+      "dataset": "gondor"
+    }
+  ]
+}

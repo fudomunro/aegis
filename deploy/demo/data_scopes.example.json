@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "data_scopes": [
+    {
+      "id": "shire",
+      "name": "Frodo's circle",
+      "dataset": "shire",
+      "api_key": "YOUR_SHIRE_KEY",
+      "read_only": true
+    },
+    {
+      "id": "gondor",
+      "name": "South-kingdom",
+      "dataset": "gondor",
+      "api_key": "YOUR_GONDOR_KEY",
+      "read_only": true
+    }
+  ]
+}
