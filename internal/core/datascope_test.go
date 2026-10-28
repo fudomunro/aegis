@@ -37,22 +37,22 @@ func TestNewDataScopeStore_MissingFile(t *testing.T) {
 
 func TestNewDataScopeStore_LoadAndResolve(t *testing.T) {
 	path := writeDataScopes(t, []DataScope{
-		{ID: "shire", Name: "Shire", Dataset: "shire", APIKey: "shire-key-1234", ReadOnly: true},
-		{ID: "gondor", Dataset: "gondor", APIKey: "gondor-key-1234"},
-		{ID: "off", Dataset: "x", APIKey: "off-key-1234", Disabled: true},
+		{ID: "shire", Name: "Shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", ReadOnly: true},
+		{ID: "gondor", Dataset: "gondor", APIKey: "YOUR_GONDOR_KEY"},
+		{ID: "off", Dataset: "x", APIKey: "YOUR_OFF_KEY", Disabled: true},
 	})
 	s, err := NewDataScopeStore(path)
 	if err != nil {
 		t.Fatalf("load: %v", err)
 	}
-	sc := s.FindByAPIKey("shire-key-1234")
+	sc := s.FindByAPIKey("YOUR_SHIRE_KEY")
 	if sc == nil || sc.ID != "shire" || sc.Dataset != "shire" || !sc.ReadOnly {
 		t.Fatalf("shire scope = %#v", sc)
 	}
 	if sc.APIKey != "" {
 		t.Fatalf("plaintext key retained in memory: %q", sc.APIKey)
 	}
-	if s.FindByAPIKey("off-key-1234") != nil {
+	if s.FindByAPIKey("YOUR_OFF_KEY") != nil {
 		t.Fatal("disabled scope must not authenticate")
 	}
 	if s.FindByAPIKey("wrong") != nil {
@@ -108,8 +108,8 @@ func twoScopeServer(t *testing.T) *Server {
 		{ID: "sample-library-gondor", Name: "Sample Gondor", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "gondor"},
 	}}
 	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
-		{ID: "shire", Dataset: "shire", APIKey: "shire-key-1234"},
-		{ID: "gondor", Dataset: "gondor", APIKey: "gondor-key-1234"},
+		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
+		{ID: "gondor", Dataset: "gondor", APIKey: "YOUR_GONDOR_KEY"},
 	}))
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
@@ -159,7 +159,7 @@ func TestAuthMiddleware_DataScopeKey(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 	})
 	w := httptest.NewRecorder()
-	h(w, scopeRequest("shire-key-1234", "/v1/library/contacts"))
+	h(w, scopeRequest("YOUR_SHIRE_KEY", "/v1/library/contacts"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -173,7 +173,7 @@ func TestAuthMiddleware_DataScopeKey(t *testing.T) {
 
 func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	path := writeDataScopes(t, []DataScope{
-		{ID: "demo", Dataset: "demo", APIKey: "demo-key-1234", ReadOnly: true},
+		{ID: "demo", Dataset: "demo", APIKey: "YOUR_DEMO_KEY", ReadOnly: true},
 	})
 	scopes, err := NewDataScopeStore(path)
 	if err != nil {
@@ -184,7 +184,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/v1/mail/sync", nil)
-	req.Header.Set("X-Api-Key", "demo-key-1234")
+	req.Header.Set("X-Api-Key", "YOUR_DEMO_KEY")
 	h(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("write status = %d", w.Code)
@@ -192,14 +192,14 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 
 	w = httptest.NewRecorder()
 	req = httptest.NewRequest(http.MethodPost, "/v1/pre-request", nil)
-	req.Header.Set("X-Api-Key", "demo-key-1234")
+	req.Header.Set("X-Api-Key", "YOUR_DEMO_KEY")
 	h(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("pre-request status = %d body=%s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
-	h(w, scopeRequest("demo-key-1234", "/v1/library/contacts"))
+	h(w, scopeRequest("YOUR_DEMO_KEY", "/v1/library/contacts"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("read status = %d", w.Code)
 	}
@@ -208,8 +208,8 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 func TestLibraryContacts_DatasetIsolation(t *testing.T) {
 	srv := twoScopeServer(t)
 
-	shireBody := callLibrary(t, srv, "shire-key-1234", "/v1/library/contacts")
-	gondorBody := callLibrary(t, srv, "gondor-key-1234", "/v1/library/contacts")
+	shireBody := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/v1/library/contacts")
+	gondorBody := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/v1/library/contacts")
 
 	if !strings.Contains(shireBody, "shire") {
 		t.Fatalf("shire body missing shire identities: %s", shireBody)
@@ -227,8 +227,8 @@ func TestLibraryContacts_DatasetIsolation(t *testing.T) {
 
 func TestLibraryCache_DoesNotLeakAcrossScopes(t *testing.T) {
 	srv := twoScopeServer(t)
-	first := callLibrary(t, srv, "shire-key-1234", "/v1/library/contacts")
-	second := callLibrary(t, srv, "gondor-key-1234", "/v1/library/contacts")
+	first := callLibrary(t, srv, "YOUR_SHIRE_KEY", "/v1/library/contacts")
+	second := callLibrary(t, srv, "YOUR_GONDOR_KEY", "/v1/library/contacts")
 	if strings.Contains(second, "shire") {
 		t.Fatalf("cache leak into gondor: %s", second)
 	}
@@ -240,8 +240,8 @@ func TestLibraryCache_DoesNotLeakAcrossScopes(t *testing.T) {
 func TestMailSearch_DatasetIsolation(t *testing.T) {
 	srv := twoScopeServer(t)
 
-	shire := callMailSearch(t, srv, "shire-key-1234")
-	gondor := callMailSearch(t, srv, "gondor-key-1234")
+	shire := callMailSearch(t, srv, "YOUR_SHIRE_KEY")
+	gondor := callMailSearch(t, srv, "YOUR_GONDOR_KEY")
 
 	if strings.Contains(shire, "gondor") {
 		t.Fatalf("shire mail leaked gondor: %s", shire)
@@ -257,7 +257,7 @@ func TestMailSearch_DatasetIsolation(t *testing.T) {
 func TestMailMessage_CrossDatasetHidden(t *testing.T) {
 	srv := twoScopeServer(t)
 	// Find a gondor message id via search, then fetch it with the shire key.
-	search := callMailSearch(t, srv, "gondor-key-1234")
+	search := callMailSearch(t, srv, "YOUR_GONDOR_KEY")
 	var parsed struct {
 		Messages []struct {
 			Sources []struct {
@@ -275,14 +275,14 @@ func TestMailMessage_CrossDatasetHidden(t *testing.T) {
 	src := parsed.Messages[0].Sources[0]
 
 	w := httptest.NewRecorder()
-	req := scopeRequest("shire-key-1234", "/v1/mail/messages/"+src.Service+"/"+src.ID)
+	req := scopeRequest("YOUR_SHIRE_KEY", "/v1/mail/messages/"+src.Service+"/"+src.ID)
 	srv.AuthMiddleware(srv.handleMailRoutes)(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("cross-dataset fetch status = %d body=%s", w.Code, w.Body.String())
 	}
 
 	w = httptest.NewRecorder()
-	req = scopeRequest("gondor-key-1234", "/v1/mail/messages/"+src.Service+"/"+src.ID)
+	req = scopeRequest("YOUR_GONDOR_KEY", "/v1/mail/messages/"+src.Service+"/"+src.ID)
 	srv.AuthMiddleware(srv.handleMailRoutes)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("own-dataset fetch status = %d body=%s", w.Code, w.Body.String())

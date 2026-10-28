@@ -113,6 +113,10 @@ For scopes A and B with datasets `a` and `b`:
 |------|----------|
 | `<data-dir>/data_scopes.json` | Scope records (0600). Holds `api_key` material — never commit. |
 
+Unit tests and docs must use allowlisted placeholder keys (`YOUR_*`,
+`aeg_test_*` / `aeg_demo_*`, or `*-key-1234`), never realistic secrets —
+gitleaks runs on history (`.gitleaks.toml`).
+
 `data_scopes.json` is in the same class as `apps.json` / `tokens.json`:
 local secret-bearing state, not a git file.
 

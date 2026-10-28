@@ -698,7 +698,7 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
       "id": "shire",
       "name": "Shire demo",
       "dataset": "shire",
-      "api_key": "shire-demo-key",
+      "api_key": "YOUR_SHIRE_API_KEY",
       "read_only": true
     }
   ]
