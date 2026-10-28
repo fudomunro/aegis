@@ -1,6 +1,7 @@
 // Public demo instance config for site/demo.html.
-// baseUrl is the live read-only synthetic Aegis. Persona keys are filled in
-// per launch (alpha keys are shared out of band and not committed).
+// baseUrl and persona keys are the public read-only synthetic demo.
+// Keys are intentionally literal YOUR_* placeholders (gitleaks allowlisted).
+// They only authorize a -demo instance — never a personal Aegis.
 window.AEGIS_DEMO = {
   baseUrl: "https://aegis.unified-designs.com",
   personas: {
