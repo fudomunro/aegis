@@ -38,7 +38,6 @@ func lincolnContact(id, name string, emails, phones []string) types.Contact {
 }
 
 func lincolnLibrary() SampleLibrarySet {
-	const svc = "google-contacts"
 	contacts := []types.Contact{
 		lincolnContact("c-lincoln", "Abraham Lincoln", []string{"lincoln@lincoln.example"}, nil),
 		lincolnContact("c-mary", "Mary Todd Lincoln", []string{"mary@lincoln.example"}, []string{"+12170001"}),
