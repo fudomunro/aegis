@@ -79,6 +79,10 @@ Dataset-namespaced variants (`GenerateSampleLibraryFor` / `GenerateSampleMailFor
 feed data-scope isolation tests (`datascope_test.go`) and `sample://library`
 fixture connectors. See [`docs/data-scopes.md`](data-scopes.md).
 
+LotR demo packs (`dataset_lotr.go`, `-seed-lotr`) provide two themed
+partitions (`shire` / `gondor`) for the public demo — see
+[`docs/demo-datasets.md`](demo-datasets.md).
+
 Run the checklist alone:
 
 ```bash

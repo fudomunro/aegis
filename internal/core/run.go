@@ -45,6 +45,7 @@ func Run() {
 	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit (issue #77)")
 	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
 	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
+	seedLotR := flag.Bool("seed-lotr", false, "write Lord of the Rings demo dataset packs (shire + gondor) under the data directory, then exit (issue #217)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	tokenNewPass := flag.String("token-new-pass", "", "if set, re-encrypt the token file under this passphrase (with current KDF parameters) and exit")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
@@ -120,6 +121,10 @@ func Run() {
 	// OAuth, base URL, or a listening server.
 	if *seedSample {
 		code := runSeedSampleCLI(paths.Dir, paths.MailArchive, *seedSampleCount, *seedSampleStress)
+		os.Exit(code)
+	}
+	if *seedLotR {
+		code := runSeedLotRCLI(paths.Dir, paths.MailArchive)
 		os.Exit(code)
 	}
 	if strings.TrimSpace(*importTakeout) != "" {
@@ -420,12 +425,17 @@ func Run() {
 	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()
 	// Synthetic library fixtures per data-scope dataset (docs/data-scopes.md).
 	// A service with endpoint sample://library serves one partition's
-	// SampleLibrarySet; Service.Dataset binds it to a principal.
+	// SampleLibrarySet; Service.Dataset binds it to a principal. Named LotR
+	// demo packs (issue #217) win over the generic namespaced sample set.
 	for _, svc := range cfg.ServiceSnapshots() {
 		if !IsSampleLibraryService(&Service{ID: svc.ID, Endpoint: svc.Endpoint}) {
 			continue
 		}
-		srv.connectors[svc.ID] = NewSampleLibraryConnector(svc.ID, svc.Dataset, GenerateSampleLibraryFor(svc.Dataset))
+		set, ok := GenerateLotRDataset(svc.Dataset)
+		if !ok {
+			set = GenerateSampleLibraryFor(svc.Dataset)
+		}
+		srv.connectors[svc.ID] = NewSampleLibraryConnector(svc.ID, svc.Dataset, set)
 	}
 
 	mux := http.NewServeMux()
@@ -644,6 +654,52 @@ func seedSampleCountOrDefault(count int, stress bool) int {
 		return SampleMailCount
 	}
 	return count
+}
+
+// runSeedLotRCLI writes the LotR demo packs (shire + gondor) under
+// <data-dir>/sample/lotr/ and loads both partitions' mail into the archive.
+// All correspondence is original invented text (issue #217).
+func runSeedLotRCLI(dataDir, archivePath string) int {
+	outDir := filepath.Join(dataDir, "sample", "lotr")
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		slog.Error("failed to create lotr sample dir", "dir", outDir, "error", err)
+		return 1
+	}
+	archive, err := OpenMailArchive(archivePath)
+	if err != nil {
+		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
+		return 1
+	}
+	if archive != nil {
+		defer archive.Close()
+	}
+	for _, dataset := range []string{LotRDatasetShire, LotRDatasetGondor} {
+		lib, ok := GenerateLotRDataset(dataset)
+		if !ok {
+			continue
+		}
+		libPath := filepath.Join(outDir, dataset+"-library.json")
+		if err := WriteSampleLibraryJSON(libPath, lib); err != nil {
+			slog.Error("failed to write lotr library", "path", libPath, "error", err)
+			return 1
+		}
+		mail := GenerateLotRMail(dataset)
+		if archive != nil {
+			for _, rec := range mail.Records {
+				if err := archive.Upsert(rec); err != nil {
+					slog.Error("failed to seed lotr mail", "dataset", dataset, "error", err)
+					return 1
+				}
+			}
+		}
+		slog.Info("lotr dataset ready (original invented text)",
+			"dataset", dataset,
+			"mail_messages", len(mail.Records),
+			"library_json", libPath,
+		)
+	}
+	slog.Info("lotr demo packs written", "dir", outDir, "mail_archive", archivePath)
+	return 0
 }
 
 // runImportTakeoutCLI syncs a read-only Takeout export into the mail archive
