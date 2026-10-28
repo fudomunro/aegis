@@ -1,8 +1,9 @@
 // Public demo instance config for site/demo.html.
-// Replace baseUrl and keys when the demo host is live. These credentials are
-// intentionally public: they only reach a read-only synthetic instance.
+// baseUrl and persona keys are the public read-only synthetic demo.
+// Keys are intentionally literal YOUR_* placeholders (gitleaks allowlisted).
+// They only authorize a -demo instance — never a personal Aegis.
 window.AEGIS_DEMO = {
-  baseUrl: "https://YOUR_DEMO_HOST",
+  baseUrl: "https://aegis.unified-designs.com",
   personas: {
     shire: {
       id: "shire",
@@ -15,6 +16,12 @@ window.AEGIS_DEMO = {
       label: "South-kingdom",
       blurb: "Council, Hornburg, Pelennor, coronation — the wider war.",
       key: "YOUR_GONDOR_KEY",
+    },
+    lincoln: {
+      id: "lincoln",
+      label: "Abraham Lincoln",
+      blurb: "Presidential desk, 1861–1865: inaugurations, Gettysburg, Appomattox.",
+      key: "YOUR_LINCOLN_KEY",
     },
   },
 };
