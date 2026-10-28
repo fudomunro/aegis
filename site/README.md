@@ -54,8 +54,10 @@ The **F.A.Q.** section carries the candid product Q&A (from issue #177):
 trust, storage, Tailscale/Aperture, OAuth tokens, data grants, writes, fail-open,
 supported services, audit visibility, and backup/wipe.
 
-All names, dates, and data in the demo panels are made up. Keep it that way:
-don't paste real research output (mail, calendar, travel) into the site.
+All names, dates, and data in the demo panels come from the synthetic LotR /
+Lincoln demo datasets (`docs/demo-datasets.md`). Keep it that way: don't paste
+real research output (mail, calendar, travel) into the site. Examples should
+stay answerable from the live demo at `https://aegis.unified-designs.com`.
 
 If you change a product claim on the page (endpoints, data grants, access levels,
 fail-open, tailnet-only), check it against `README.md`, `docs/configuration.md`,
