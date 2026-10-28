@@ -716,6 +716,25 @@ A service with `endpoint: "sample://library"` serves synthetic library
 fixtures bound to `Service.Dataset` — useful for demos and isolation tests
 without OAuth.
 
+### Demo mode (public synthetic instance)
+
+`-demo` (or `AEGIS_DEMO=1`) is a deployment profile for a public demo host:
+
+- Forces `auth-mode=api-key` (scope keys + admin key only).
+- Requires `data_scopes.json` with at least one principal.
+- Forces every data scope `read_only`.
+- Allows only `sample://…` fixture services (live providers are refused at startup).
+- Refuses mutating routes and OAuth (`/v1/auth/*`, except `/v1/auth/status`).
+- `/v1/pre-request` stays allowed (classification is read-only).
+
+```bash
+./aegis -demo -seed-lotr -data-dir /var/lib/aegis-demo
+# then run with the same -demo flag and data_scopes.json in place
+```
+
+Demo mode is not a second product: it is Aegis with the synthetic/read-only
+guardrails the public instance must not bypass.
+
 ### Third-party connect button (demo)
 
 This also covers the “Aegis icon on a third-party site” grant UX.

@@ -129,6 +129,9 @@ type Server struct {
 	// scopes resolves data-scope API keys to principal → dataset partitions
 	// (docs/data-scopes.md). May be nil (legacy single-user).
 	scopes *DataScopeStore
+	// demoMode locks the instance to synthetic fixtures and a read-only
+	// surface (issue #217). See demo.go.
+	demoMode bool
 	// grants holds short-lived consent codes from the authorize page.
 	grants *GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
