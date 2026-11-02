@@ -1,0 +1,40 @@
+{
+  "service": "spotify",
+  "signature": "spotify/me-tracks-null-track-item",
+  "captured_at": "2026-02-10T12:00:00Z",
+  "notes": "Saved-tracks pages with a removed local file (track: null) between two playable items. Regression: ListUserLikedTracks must skip null items and follow next. Scrubbed synthetic capture.",
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/me/tracks?limit=50",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"href\":\"https://api.spotify.com/v1/me/tracks?limit=50\",\"items\":[{\"added_at\":\"2026-01-01T00:00:00Z\",\"track\":{\"album\":{\"album_type\":\"album\",\"id\":\"al1\",\"name\":\"Fixture Album\",\"external_urls\":{\"spotify\":\"https://open.spotify.com/album/al1\"}},\"artists\":[{\"id\":\"ar1\",\"name\":\"Fixture Artist\",\"external_urls\":{\"spotify\":\"https://open.spotify.com/artist/ar1\"}}],\"duration_ms\":200000,\"explicit\":false,\"external_ids\":{\"isrc\":\"usfak1234567\"},\"external_urls\":{\"spotify\":\"https://open.spotify.com/track/t1\"},\"id\":\"t1\",\"is_local\":false,\"name\":\"Fixture Track One\",\"popularity\":10,\"track_number\":1,\"uri\":\"spotify:track:t1\"}},{\"added_at\":\"2026-01-02T00:00:00Z\",\"track\":null}],\"limit\":50,\"next\":\"https://api.spotify.com/v1/me/tracks?offset=50&limit=50\",\"offset\":0,\"previous\":null,\"total\":3}"
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/me/tracks?offset=50&limit=50",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"href\":\"https://api.spotify.com/v1/me/tracks?offset=50&limit=50\",\"items\":[{\"added_at\":\"2026-01-03T00:00:00Z\",\"track\":{\"album\":{\"album_type\":\"album\",\"id\":\"al1\",\"name\":\"Fixture Album\",\"external_urls\":{\"spotify\":\"https://open.spotify.com/album/al1\"}},\"artists\":[{\"id\":\"ar1\",\"name\":\"Fixture Artist\",\"external_urls\":{\"spotify\":\"https://open.spotify.com/artist/ar1\"}}],\"duration_ms\":180000,\"explicit\":false,\"external_ids\":{\"isrc\":\"usfak7654321\"},\"external_urls\":{\"spotify\":\"https://open.spotify.com/track/t3\"},\"id\":\"t3\",\"is_local\":false,\"name\":\"Fixture Track Three\",\"popularity\":20,\"track_number\":3,\"uri\":\"spotify:track:t3\"}}],\"limit\":50,\"next\":null,\"offset\":50,\"previous\":\"https://api.spotify.com/v1/me/tracks?offset=0&limit=50\",\"total\":3}"
+      }
+    }
+  ]
+}

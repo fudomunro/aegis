@@ -46,6 +46,30 @@ Scrape example:
 curl -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/metrics"
 ```
 
+### Maintenance signals
+
+Sync-maintenance observation bundles (`docs/sync-maintenance.md`). Same admin
+scope as `/metrics` — the bundle names services and failure modes and must
+not reach agent credentials.
+
+| Endpoint | Method | Meaning |
+|----------|--------|---------|
+| `GET /v1/admin/maintenance/signals` | GET | Current signal bundle (JSON) |
+| `POST /v1/admin/maintenance/signals` | POST | Capture: write the bundle under `<data-dir>/maintenance/`, return its path |
+
+The bundle is self-contained: build stamp (`version`, `commit`, hostname),
+sync-queue rollups (`counts`, `by_kind`, `by_job_type`), up to 20 recent
+failed jobs with scrubbed error text, and the per-kind copy freshness
+rollup. Failure text is redacted (emails, credentials) and truncated before
+it leaves the process; bundles never include request/response bodies,
+library contents, tokens, or agent identities. Files land as `signals-<UTC>.json`
+(0600); the scheduled scanner that reads them may rotate old files.
+
+```bash
+# Capture a bundle to <data-dir>/maintenance/
+curl -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals"
+```
+
 ### Access audit log
 
 Durable, append-only record of allowed and denied data access. Stored in

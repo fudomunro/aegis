@@ -739,6 +739,8 @@ GET /v1/admin/summary — redacted services, token status, cache stats
 GET /v1/admin/flow — data-flow topology (nodes, edges, libraries) + per-agent access detail
 GET /v1/admin/hook-health — Aperture hook health + expected config snippet
 POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
+GET /v1/admin/maintenance/signals — sync-maintenance signal bundle: build stamp, sync-queue rollups, recent failures (scrubbed), copy freshness
+POST /v1/admin/maintenance/signals — capture the bundle as <data-dir>/maintenance/signals-<UTC>.json (0600) and return its path
 GET /v1/admin/cache — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/sync — sync job queue rollup + recent jobs (state, attempts, progress, next run), copy freshness per kind, and recurring schedules
