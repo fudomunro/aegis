@@ -7,6 +7,21 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Maintenance scanner: clustered sync-failure tickets (issue #86, phase 2).**
+  `POST /v1/admin/maintenance/scan` reads the captured signal bundles and
+  clusters failures by normalized signature (service, job type, error class,
+  and an error shape with ids, URLs, and status codes collapsed). Recurrent
+  signatures — two or more distinct bundles — open structured tickets under
+  `<data-dir>/maintenance/tickets/`; freshness findings (stale/missing
+  copies) ticket straight from the latest bundle, since the rollup is state
+  rather than an event stream. One-off flake stays a metric. Tickets carry
+  the phase-3 input contract: `repro_state` (`needs-fixture` → `ready`),
+  observations with version stamps, and triage slots (fixture, red test,
+  expected/actual) that rescans never clobber. `GET
+  /v1/admin/maintenance/tickets` lists them. Trigger is a local scheduled
+  job (cron against the admin endpoint) for now; the scanner reads only
+  bundle paths so it can move to cloud compute later.
+
 - **Sync maintenance phase 1: signal bundles and repro fixtures (issue #86).**
   `GET /v1/admin/maintenance/signals` reports a self-contained observation
   bundle — build stamp, sync-queue rollups, up to 20 recent failed jobs with

@@ -56,6 +56,8 @@ not reach agent credentials.
 |----------|--------|---------|
 | `GET /v1/admin/maintenance/signals` | GET | Current signal bundle (JSON) |
 | `POST /v1/admin/maintenance/signals` | POST | Capture: write the bundle under `<data-dir>/maintenance/`, return its path |
+| `POST /v1/admin/maintenance/scan` | POST | Scan captured bundles; open/update structured tickets under `<data-dir>/maintenance/tickets/` |
+| `GET /v1/admin/maintenance/tickets` | GET | List sync-failure tickets (`repro_state`, observations, triage fields) |
 
 The bundle is self-contained: build stamp (`version`, `commit`, hostname),
 sync-queue rollups (`counts`, `by_kind`, `by_job_type`), up to 20 recent
@@ -68,6 +70,18 @@ library contents, tokens, or agent identities. Files land as `signals-<UTC>.json
 ```bash
 # Capture a bundle to <data-dir>/maintenance/
 curl -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals"
+```
+
+The scanner (phase 2 of `docs/sync-maintenance.md`) clusters bundle failures
+by normalized signature and tickets only recurrent evidence — two or more
+distinct bundles — while freshness findings (stale/missing copies) ticket
+from the latest bundle alone. Tickets are structured JSON files, not prose;
+rescans never clobber triage fields. A local scheduled job is the intended
+trigger for now:
+
+```cron
+0 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals" >/dev/null
+7 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/scan" >/dev/null
 ```
 
 ### Access audit log
