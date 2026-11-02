@@ -830,13 +830,13 @@
         <div class="copy-filter kind-switch" role="group" aria-label="Sync job type filter" id="sync-panel-filter">
           <button type="button" class="kind-btn" data-sync-type="" aria-pressed="true">All</button>
           <button type="button" class="kind-btn" data-sync-type="ingest" aria-pressed="false">Ingest</button>
-          <button type="button" class="kind-btn" data-sync-type="import_snapshot" aria-pressed="false">Import</button>
           <button type="button" class="kind-btn" data-sync-type="mirror" aria-pressed="false">Mirror</button>
           <button type="button" class="kind-btn" data-sync-type="freshness_check" aria-pressed="false">Freshness</button>
           <button type="button" class="kind-btn" data-sync-type="repair" aria-pressed="false">Repair</button>
         </div>
         <div class="grow"></div>
         <button class="btn" id="sync-mail-now" type="button">Sync mail now</button>
+        <button class="btn" id="sync-pause-toggle" type="button">Pause queue</button>
         <button class="btn" id="reload-sync" type="button">Refresh</button>
       </div>
       <div id="sync-summary" class="meta" style="margin-bottom:0.75rem"></div>
@@ -3510,9 +3510,14 @@ job.read</pre>
         const parts = ["queued", "running", "succeeded", "failed", "canceled", "paused"]
           .filter((k) => c[k])
           .map((k) => c[k] + " " + k);
-        summary.textContent = parts.length
+        let text = parts.length
           ? parts.join(" · ") + " · " + jobs.length + " recent jobs"
           : "No sync jobs yet.";
+        const paused = (data && data.paused) || [];
+        if (paused.length) {
+          text += " · paused: " + paused.join(", ");
+        }
+        summary.textContent = text;
       }
     }
     if (!rows.length) {
@@ -3630,6 +3635,11 @@ job.read</pre>
       renderSync(data || {});
       renderFreshness((data && data.freshness) || []);
       renderSchedules((data && data.schedules) || []);
+      const pauseBtn = $("sync-pause-toggle");
+      if (pauseBtn) {
+        const paused = (data && data.paused) || [];
+        pauseBtn.textContent = paused.indexOf("global") >= 0 ? "Resume queue" : "Pause queue";
+      }
     } catch (err) {
       if (err.status === 401) { showAuthGate(true); return; }
       if (summary) summary.textContent = "";
@@ -4191,6 +4201,26 @@ function selectTab(name, opts) {
   });
   const reloadSyncBtn = $("reload-sync");
   if (reloadSyncBtn) reloadSyncBtn.addEventListener("click", () => loadSync());
+  const syncPauseToggle = $("sync-pause-toggle");
+  if (syncPauseToggle) syncPauseToggle.addEventListener("click", async () => {
+    // The button label reflects the last loaded state; toggling either way is
+    // safe because the API is idempotent per scope.
+    const pausing = syncPauseToggle.textContent.indexOf("Pause") === 0;
+    syncPauseToggle.disabled = true;
+    try {
+      await api("/v1/admin/sync/" + (pausing ? "pause" : "resume"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      loadSync();
+    } catch (err) {
+      if (err.status === 401) { showAuthGate(true); return; }
+      alert(err.message || "Failed to update the queue pause");
+    } finally {
+      syncPauseToggle.disabled = false;
+    }
+  });
   const syncMailNowBtn = $("sync-mail-now");
   if (syncMailNowBtn) syncMailNowBtn.addEventListener("click", async () => {
     syncMailNowBtn.disabled = true;

@@ -470,6 +470,7 @@ worker, and every request-driven sync surface keeps working as before.
 |------|---------|-------------|
 | `-sync-jobs` | the `-copy-ledger` path | Sync job queue path; empty disables |
 | `-sync-workers` | `2` | Worker pool size; `0` disables the worker |
+| `-sync-service-concurrency` | `1` per service | Per-service sync concurrency caps, e.g. `spotify=1,youtube-music=2` |
 
 Each job is one bounded step — a mail page batch, an import chunk, a mirror
 batch. Long work chains through the queue rather than living in a caller
@@ -484,20 +485,59 @@ next run times, with a **Sync mail now** button that enqueues work instead of
 driving a client-side batch loop. The same surface is available as JSON:
 
 ```
-GET  /v1/admin/sync                            # queue rollup, recent jobs, copy freshness, schedules
+GET  /v1/admin/sync                            # queue rollup, recent jobs, copy freshness, schedules, paused scopes
 POST /v1/admin/sync                            # enqueue: {kind, job_type, service, payload}
 POST /v1/admin/sync/{id}/cancel                # park a queued or running job
+POST /v1/admin/sync/pause                      # hold work {"service":"spotify"}; empty service = whole queue
+POST /v1/admin/sync/resume                     # release a paused scope
 POST /v1/admin/sync/schedules/{id}/enable      # resume a paused schedule
 POST /v1/admin/sync/schedules/{id}/disable     # pause a schedule
 ```
 
-Job types today: `ingest` — mail archive page batches for Gmail, and Google
-Takeout imports (which run as `ingest` with `service: google-takeout`) — and
-`freshness_check`. `import_snapshot`, `mirror`, and `repair` are reserved for
-the next phases and have no runner yet, so posting them returns
-"no sync runner". Enqueue is idempotent on
+Job types today:
+
+| Type | What it does |
+|------|--------------|
+| `ingest` | Mail archive page batches for Gmail; Google Takeout imports run as `ingest` with `service: google-takeout` |
+| `freshness_check` | Observational copy-freshness pass (see below) |
+| `mirror` | Copies a playlist or liked-tracks list from one service to another, one source page per step |
+| `repair` | Re-places a copy that freshness marked stale or missing |
+
+`import_snapshot` is reserved for a later phase and has no runner yet, so
+posting it returns "no sync runner". Enqueue is idempotent on
 `(kind, job_type, service, entity_key)`, so a repeated request does not stack
 duplicate work.
+
+### Mirror and repair jobs
+
+`mirror` turns the one-shot `POST /v1/library/mirror` copy into queued work
+that finishes the whole list without a caller loop. Each step reads one page
+of the source and **appends to a single target playlist** — a 500-track
+playlist is one playlist on the target, not three. The source cursor and the
+target playlist id ride in the job payload, so a restart resumes exactly where
+it stopped.
+
+`repair` is the executor surface for "this backup drifted, fix it". It
+re-runs the mirror for one entity and **skips what the target already holds**
+(matched by name and artist, the same identity mirror uses across services),
+so a repair converges instead of duplicating tracks. A repair job is a `mirror`
+job with `force: true` and the target playlist id from the copy ledger row.
+
+Both write through to the target service's API using the stored OAuth token.
+Aegis still stores no media.
+
+### Pausing
+
+`POST /v1/admin/sync/pause` holds work so nothing new runs — useful when a
+provider quota is exhausted or the link is metered. An empty `service` pauses
+the whole queue; a service id pauses just that provider. Queued jobs for the
+scope move to `paused` (so the counts stay honest) and new enqueues land there
+too. `POST /v1/admin/sync/resume` puts them back in the queue. In-flight steps
+are not interrupted; cancel them individually if they must stop.
+
+Per-service concurrency is capped at one job at a time by default, so one
+provider's quota cannot starve the rest of the queue. Raise it with
+`-sync-service-concurrency` for services that tolerate more parallelism.
 
 ### Copy freshness
 

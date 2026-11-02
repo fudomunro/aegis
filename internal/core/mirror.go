@@ -60,13 +60,13 @@ type MirrorSkip struct {
 
 // MirrorResult reports what a mirror planned or executed.
 type MirrorResult struct {
-	Kind         string       `json:"kind"`
-	Source       MirrorRef    `json:"source"`
-	Target       MirrorRef    `json:"target"`
-	DryRun       bool         `json:"dry_run"`
-	Planned      int          `json:"planned"`
-	Copied       int          `json:"copied"`
-	Skipped      int          `json:"skipped"`
+	Kind         string           `json:"kind"`
+	Source       MirrorRef        `json:"source"`
+	Target       MirrorRef        `json:"target"`
+	DryRun       bool             `json:"dry_run"`
+	Planned      int              `json:"planned"`
+	Copied       int              `json:"copied"`
+	Skipped      int              `json:"skipped"`
 	Skips        []MirrorSkip     `json:"skips,omitempty"`
 	Conflicts    []MirrorConflict `json:"conflicts,omitempty"`
 	Truncated    bool             `json:"truncated,omitempty"`
@@ -253,7 +253,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	var skips []MirrorSkip
 	switch req.Kind {
 	case MirrorKindPlaylists:
-		id, url, copied, sk, err := dst.createPlaylistWithTracks(ctx, name, tracks)
+		id, url, copied, sk, err := dst.placeTracks(ctx, "", name, tracks)
 		if err != nil {
 			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
@@ -346,14 +346,27 @@ func (s *Server) defaultMirrorSource(kind string) string {
 type mirrorSource interface {
 	loadPlaylist(ctx context.Context, id string) (ref MirrorRef, tracks []mirrorTrack, truncated bool, err error)
 	loadLikedTracks(ctx context.Context) (tracks []mirrorTrack, truncated bool, err error)
+	// Cursor-paged reads for chained mirror jobs. An empty cursor starts at
+	// the beginning; next == "" means the list is exhausted. Paging this way
+	// keeps a chained job at one upstream page per step instead of
+	// re-walking the whole list each time.
+	loadPlaylistPage(ctx context.Context, id, cursor string, limit int) (ref MirrorRef, tracks []mirrorTrack, total int, next string, err error)
+	loadLikedTracksPage(ctx context.Context, cursor string, limit int) (tracks []mirrorTrack, total int, next string, err error)
 }
 
 type mirrorTarget interface {
-	createPlaylistWithTracks(ctx context.Context, name string, tracks []mirrorTrack) (id, url string, copied int, skips []MirrorSkip, err error)
+	// placeTracks appends tracks to an existing target playlist, or creates
+	// one named name when playlistID is empty. Appending is what lets a
+	// mirror chain spread across job steps without creating a playlist per
+	// batch (issue #227 phase 3).
+	placeTracks(ctx context.Context, playlistID, name string, tracks []mirrorTrack) (id, url string, copied int, skips []MirrorSkip, err error)
 	saveLikedTracks(ctx context.Context, tracks []mirrorTrack) (copied int, skips []MirrorSkip, err error)
 }
 
 func (s *Server) mirrorSourceFor(serviceID, kind string) (mirrorSource, error) {
+	if s.mirrorSourceFn != nil {
+		return s.mirrorSourceFn(serviceID, kind)
+	}
 	switch serviceID {
 	case "spotify":
 		return &spotifyMirror{s: s}, nil
@@ -364,6 +377,9 @@ func (s *Server) mirrorSourceFor(serviceID, kind string) (mirrorSource, error) {
 }
 
 func (s *Server) mirrorTargetFor(serviceID, kind string) (mirrorTarget, error) {
+	if s.mirrorTargetFn != nil {
+		return s.mirrorTargetFn(serviceID, kind)
+	}
 	switch serviceID {
 	case "spotify":
 		return &spotifyMirror{s: s}, nil

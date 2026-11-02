@@ -30,7 +30,16 @@ type SyncStatus struct {
 	Freshness []CopyFreshness `json:"freshness,omitempty"`
 	// Schedules lists the recurring job templates feeding the queue.
 	Schedules []SyncSchedule `json:"schedules,omitempty"`
-	Jobs      []SyncJob      `json:"jobs"`
+	// Paused lists active pause scopes ("global" and/or service ids).
+	Paused []string  `json:"paused,omitempty"`
+	Jobs   []SyncJob `json:"jobs"`
+}
+
+// SyncPauseRequest is the body for POST /v1/admin/sync/pause|resume.
+// An empty service pauses or resumes the whole queue.
+type SyncPauseRequest struct {
+	Service string `json:"service,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 // SyncEnqueueRequest is the POST /v1/admin/sync body.
@@ -80,10 +89,74 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 	if s.syncSchedules != nil {
 		status.Schedules = s.syncSchedules.List()
 	}
+	if store != nil && store.Enabled() {
+		status.Paused = store.Paused()
+	}
 	if s.syncRunners != nil {
 		status.Kinds = s.syncRunners.Kinds()
 	}
 	writeJSON(w, status)
+}
+
+// HandleAdminSyncPause holds work for a scope: POST /v1/admin/sync/pause
+// Body: {"service":"spotify","reason":"quota"}; an empty service pauses the
+// whole queue. Queued work for the scope moves to `paused` and new enqueues
+// land there too. In-flight steps keep running — cancel them individually if
+// they must stop.
+func (s *Server) HandleAdminSyncPause(w http.ResponseWriter, r *http.Request) {
+	s.handleSyncPause(w, r, true)
+}
+
+// HandleAdminSyncResume re-arms a paused scope:
+// POST /v1/admin/sync/resume. Its `paused` jobs go back to `queued`.
+func (s *Server) HandleAdminSyncResume(w http.ResponseWriter, r *http.Request) {
+	s.handleSyncPause(w, r, false)
+}
+
+func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause bool) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if s.syncJobs == nil || !s.syncJobs.Enabled() {
+		writeJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
+		return
+	}
+	var req SyncPauseRequest
+	if r.Body != nil {
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			var maxErr *http.MaxBytesError
+			if errors.As(err, &maxErr) {
+				writeBodyReadError(w, err)
+				return
+			}
+			if r.ContentLength != 0 {
+				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				return
+			}
+		}
+	}
+	scope := strings.TrimSpace(req.Service)
+	if scope == "" {
+		scope = SyncPauseScopeGlobal
+	}
+	var err error
+	if pause {
+		err = s.syncJobs.Pause(scope, req.Reason)
+	} else {
+		err = s.syncJobs.Resume(scope)
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to update sync pause")
+		return
+	}
+	writeJSON(w, map[string]any{
+		"paused": s.syncJobs.Paused(),
+		"scope":  scope,
+		"counts": s.syncJobs.Counts("", ""),
+	})
 }
 
 // HandleAdminSyncSchedule toggles a recurring template:

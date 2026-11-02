@@ -128,6 +128,14 @@ type SyncWorker struct {
 	// stop a running step instead of only blocking the next claim.
 	activeMu sync.Mutex
 	active   map[string]context.CancelFunc
+
+	// serviceCaps bounds concurrent jobs per service so one provider's quota
+	// cannot starve the rest (issue #227 phase 3). Built lazily.
+	serviceCapsMu sync.Mutex
+	serviceCaps   map[string]chan struct{}
+	// serviceConcurrency is the per-service limit; zero means 1.
+	serviceConcurrency map[string]int
+	defaultConcurrency int
 }
 
 // SyncWorkerOptions configures a worker. Zero values get sane defaults.
@@ -139,6 +147,11 @@ type SyncWorkerOptions struct {
 	Prom    *PromMetrics
 	// Schedules, when set, is polled for due recurring templates.
 	Schedules *ScheduleStore
+	// ServiceConcurrency caps concurrent jobs per service id. Unlisted
+	// services use DefaultConcurrency. Both default to 1.
+	ServiceConcurrency map[string]int
+	// DefaultConcurrency is the cap for services without an entry above.
+	DefaultConcurrency int
 	// OnDone runs after a job reaches succeeded/failed/canceled.
 	OnDone func(job SyncJob, succeeded bool)
 }
@@ -158,19 +171,22 @@ func NewSyncWorker(store *JobStore, runners *RunnerRegistry, opts SyncWorkerOpti
 		opts.Logger = slog.Default()
 	}
 	return &SyncWorker{
-		store:       store,
-		runners:     runners,
-		schedules:   opts.Schedules,
-		prom:        opts.Prom,
-		logger:      opts.Logger.With("component", "sync_worker"),
-		workers:     opts.Workers,
-		poll:        opts.Poll,
-		owner:       opts.Owner,
-		onDone:      opts.OnDone,
-		kick:        make(chan struct{}, 1),
-		lastSuccess: make(map[string]time.Time),
-		active:      make(map[string]context.CancelFunc),
-		now:         func() time.Time { return time.Now().UTC() },
+		store:              store,
+		runners:            runners,
+		schedules:          opts.Schedules,
+		prom:               opts.Prom,
+		logger:             opts.Logger.With("component", "sync_worker"),
+		workers:            opts.Workers,
+		poll:               opts.Poll,
+		owner:              opts.Owner,
+		onDone:             opts.OnDone,
+		kick:               make(chan struct{}, 1),
+		lastSuccess:        make(map[string]time.Time),
+		active:             make(map[string]context.CancelFunc),
+		serviceCaps:        make(map[string]chan struct{}),
+		serviceConcurrency: opts.ServiceConcurrency,
+		defaultConcurrency: opts.DefaultConcurrency,
+		now:                func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -345,7 +361,32 @@ func (w *SyncWorker) RunOnce(ctx context.Context, owner string) bool {
 	return true
 }
 
+// acquireService blocks until this worker may run another job for the given
+// service, then returns the release func. A service with no explicit cap gets
+// one concurrent job, so two Spotify steps never overlap inside one process.
+func (w *SyncWorker) acquireService(service string) func() {
+	limit := w.defaultConcurrency
+	if limit <= 0 {
+		limit = 1
+	}
+	if n, ok := w.serviceConcurrency[strings.TrimSpace(service)]; ok && n > 0 {
+		limit = n
+	}
+	w.serviceCapsMu.Lock()
+	sem := w.serviceCaps[service]
+	if sem == nil {
+		sem = make(chan struct{}, limit)
+		w.serviceCaps[service] = sem
+	}
+	w.serviceCapsMu.Unlock()
+	sem <- struct{}{}
+	return func() { <-sem }
+}
+
 func (w *SyncWorker) runJob(ctx context.Context, job SyncJob) {
+	release := w.acquireService(job.Service)
+	defer release()
+
 	runner, ok := w.runners.For(job.Kind, job.JobType)
 	if !ok {
 		// A runner can disappear across a config change; park the job as
