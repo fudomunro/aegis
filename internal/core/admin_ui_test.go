@@ -140,6 +140,12 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		// Data directory surface (issue #74)
 		"data_dir",
 		"Data dir:",
+		// Search index surface (issue #178): status endpoint + q= chips
+		"/v1/admin/search/status",
+		"loadSearchStatus",
+		"searchBadgeFor",
+		"q-chip",
+		"Search index",
 		// Branding (issue #87): favicon + logo
 		`rel="icon"`,
 		"/favicon.ico",

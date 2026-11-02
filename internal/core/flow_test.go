@@ -134,7 +134,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	for _, n := range topo.Nodes {
 		byID[n.ID] = n
 	}
-	for _, id := range []string{"agents", "aperture", "aegis", "tokens", "cache", "svc:spotify", "svc:tidal"} {
+	for _, id := range []string{"agents", "aperture", "aegis", "tokens", "cache", "search", "svc:spotify", "svc:tidal"} {
 		if _, ok := byID[id]; !ok {
 			t.Fatalf("missing node %q", id)
 		}
@@ -165,6 +165,16 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 	}
 	if byID["cache"].Label != "Data cache" {
 		t.Fatalf("cache label = %q, want Data cache", byID["cache"].Label)
+	}
+	if byID["search"].Parent != "aegis" {
+		t.Fatalf("search parent = %q, want aegis", byID["search"].Parent)
+	}
+	if byID["search"].Label != "Search index" {
+		t.Fatalf("search label = %q, want Search index", byID["search"].Label)
+	}
+	if byID["search"].Status != "disabled" {
+		// This test server runs without a search index.
+		t.Fatalf("search status = %q, want disabled", byID["search"].Status)
 	}
 
 	// Token vault lists held connections as child nodes (issue #32 map cleanup).

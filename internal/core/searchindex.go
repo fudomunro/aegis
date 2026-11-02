@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -289,4 +290,79 @@ func ftsMatchExpr(q string) (string, []any) {
 		}
 	}
 	return strings.Join(parts, " AND "), nil
+}
+
+// CountsByKind reports indexed document counts per kind (all datasets).
+func (x *SearchIndex) CountsByKind() (map[string]int, error) {
+	if !x.Enabled() {
+		return nil, fmt.Errorf("search index disabled")
+	}
+	rows, err := x.db.Query(`SELECT kind, COUNT(*) FROM search_docs GROUP BY kind`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int{}
+	for rows.Next() {
+		var (
+			kind string
+			n    int
+		)
+		if err := rows.Scan(&kind, &n); err != nil {
+			return nil, err
+		}
+		out[kind] = n
+	}
+	return out, rows.Err()
+}
+
+// SearchIndexKindStatus describes one library kind's search posture.
+type SearchIndexKindStatus struct {
+	ID   string `json:"id"`
+	Label string `json:"label"`
+	// Searchable reports whether the kind declares a SearchSpec.
+	Searchable bool `json:"searchable"`
+	// Docs is the indexed document count (0 when never materialized).
+	Docs int `json:"docs"`
+}
+
+// SearchIndexStatus is the admin-facing search index summary.
+type SearchIndexStatus struct {
+	Enabled bool   `json:"enabled"`
+	Path    string `json:"path,omitempty"`
+	Total   int    `json:"total"`
+	Kinds   []SearchIndexKindStatus `json:"kinds"`
+}
+
+// HandleAdminSearchStatus reports search index health for the admin UI:
+// GET /v1/admin/search/status. Mirrors the mail-archive status surface.
+func (s *Server) HandleAdminSearchStatus(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	st := SearchIndexStatus{Enabled: s.search.Enabled()}
+	if st.Enabled {
+		st.Path = s.search.Path()
+	}
+	counts := map[string]int{}
+	if st.Enabled {
+		var err error
+		counts, err = s.search.CountsByKind()
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, "failed to read search index status")
+			return
+		}
+	}
+	for _, kind := range s.allLibraryKinds() {
+		n := counts[kind.ID]
+		st.Kinds = append(st.Kinds, SearchIndexKindStatus{
+			ID:         kind.ID,
+			Label:      kind.Label,
+			Searchable: kind.Search != nil,
+			Docs:       n,
+		})
+		st.Total += n
+	}
+	writeJSON(w, st)
 }

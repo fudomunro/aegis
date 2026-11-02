@@ -201,6 +201,16 @@
   .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
   .badge-gray { background: var(--surface2); color: var(--dim); }
   .badge-blue { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .kind-btn .q-chip {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0 0.4rem;
+    border-radius: 999px;
+    background: rgba(88,166,255,0.15);
+    color: var(--accent);
+    font-size: 0.68rem;
+    font-weight: 650;
+  }
   table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
   th, td { text-align: left; padding: 0.6rem 0.65rem; border-bottom: 1px solid var(--border); vertical-align: top; }
   th { color: var(--dim); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
@@ -1332,6 +1342,7 @@ job.read</pre>
     aegis: "M8 1.5 2.5 4v4.2c0 3.2 2.3 5.4 5.5 6.3 3.2-.9 5.5-3.1 5.5-6.3V4L8 1.5ZM5.5 8.2 7.2 10l3.3-3.5",
     tokens: "M9.5 1.5a4 4 0 1 0-2.7 6.9L8 9.6V11h1.5v1.5H11V14h1.5v-4.2L9.8 7.1A4 4 0 0 0 9.5 1.5Zm.2 3.2a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Z",
     cache: "M2.5 4.5 8 2l5.5 2.5L8 7 2.5 4.5ZM2.5 8 8 10.5 13.5 8M2.5 11.5 8 14l5.5-2.5",
+    search: "M7 2.5a4 4 0 1 0 0 8 4 4 0 0 0 0-8ZM10 10l3.5 3.5",
     spotify: "M3 6.2c3.4-1.2 7.2-.9 10 .9M3.8 9c2.7-.9 5.7-.7 8 .7M4.5 11.6c2-.6 4.2-.5 6 .5",
     "youtube-music": "M8 2.2a5.8 5.8 0 1 0 0 11.6A5.8 5.8 0 0 0 8 2.2Zm-1.7 3.6 4.2 2.2-4.2 2.2V5.8Z",
     "amazon-music": "M3 10.5c2.8 1.8 7.2 1.8 10 0M5 5.5v5M8 3.5v7M11 6.5v4",
@@ -1512,7 +1523,8 @@ job.read</pre>
 
     const storeGap = 10;
     const aegisTitleH = 36;
-    const aegisH = aegisTitleH + tokenBlockH + storeGap + typeBlockH + pad * 2;
+    const searchBlockH = titleH + 20;
+    const aegisH = aegisTitleH + tokenBlockH + storeGap + typeBlockH + storeGap + searchBlockH + pad * 2;
     const apertureTitleH = 28;
     const aperturePad = 12;
     const apertureH = apertureTitleH + aegisH + aperturePad * 2;
@@ -1617,6 +1629,18 @@ job.read</pre>
       rowW: innerW - pad * 2,
       rowH: typeRowH,
       gap: typeGap,
+    };
+    pos.search = {
+      x: innerX,
+      y: cacheY + typeBlockH + storeGap,
+      w: innerW,
+      h: searchBlockH,
+      id: "search",
+      label: byId.search ? byId.search.label : "Search index",
+      detail: byId.search ? byId.search.detail : "",
+      status: byId.search ? byId.search.status : "",
+      kind: "store",
+      parent: "aegis",
     };
     const typeItems = (dataTypes || []).map((dt, i) => ({
       id: dt.id,
@@ -1838,6 +1862,15 @@ job.read</pre>
       }
       parts.push("</g>");
     });
+
+    // Search index store: local FTS index behind library q= search.
+    const searchPos = pos.search;
+    if (searchPos) {
+      drawStoreShell(searchPos, "search", searchPos.status || "");
+      parts.push('<text x="' + (searchPos.x + 28) + '" y="' + (searchPos.y + titleH + 4) +
+        '" dominant-baseline="central" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' +
+        escapeHtml(searchPos.detail || "") + "</text>");
+    }
 
     // Auth / proxy-read arrows: originate at each Token vault entry and draw
     // above Aperture/Aegis fills (same treatment as data-type reads).
@@ -2941,6 +2974,54 @@ job.read</pre>
     return LIBRARY_KINDS[libraryKind] || LIBRARY_KINDS.playlists;
   }
 
+  // Search index status (/v1/admin/search/status) drives the Library tab's
+  // q= chips and per-kind indexed counts.
+  let searchIndexStatus = null;
+
+  async function loadSearchStatus() {
+    try {
+      searchIndexStatus = await api("/v1/admin/search/status");
+    } catch (e) {
+      searchIndexStatus = null;
+      return;
+    }
+    applySearchStatusChips();
+  }
+
+  function searchKindInfo(id) {
+    const kinds = (searchIndexStatus && searchIndexStatus.kinds) || [];
+    for (const k of kinds) if (k.id === id) return k;
+    return null;
+  }
+
+  function searchBadgeFor(id) {
+    const info = searchKindInfo(id);
+    if (!info || !info.searchable) return "";
+    const enabled = !searchIndexStatus || searchIndexStatus.enabled !== false;
+    const label = enabled
+      ? "q= · " + (info.docs || 0).toLocaleString() + " indexed"
+      : "q= disabled";
+    return '<span class="badge badge-blue" title="Full-text search over the kind\'s declared fields">' +
+      escapeHtml(label) + "</span>";
+  }
+
+  function applySearchStatusChips() {
+    document.querySelectorAll("[data-library-kind]").forEach((btn) => {
+      const old = btn.querySelector(".q-chip");
+      if (old) old.remove();
+      const info = searchKindInfo(btn.getAttribute("data-library-kind"));
+      if (!info || !info.searchable) return;
+      const chip = document.createElement("span");
+      chip.className = "q-chip";
+      const enabled = !searchIndexStatus || searchIndexStatus.enabled !== false;
+      chip.title = enabled
+        ? "q= search · " + (info.docs || 0).toLocaleString() + " items indexed"
+        : "q= search (index disabled)";
+      chip.textContent = enabled ? (info.docs || 0).toLocaleString() : "q=";
+      btn.appendChild(chip);
+    });
+  }
+
   function setLibraryKind(kind) {
     if (!LIBRARY_KINDS[kind]) return;
     libraryKind = kind;
@@ -3039,7 +3120,8 @@ job.read</pre>
     const kindIcon = iconHTML(FLOW_ICONS[libraryKind] || "", 14, "type-icon");
     el.hidden = false;
     el.innerHTML =
-      '<div class="source-overview-title">' + kindIcon + "Sources · " + total.toLocaleString() + " items</div>" +
+      '<div class="source-overview-title">' + kindIcon + "Sources · " + total.toLocaleString() + " items " +
+      searchBadgeFor(libraryKind) + "</div>" +
       roots.map(rowHtml).join("");
   }
 
@@ -3938,9 +4020,9 @@ job.read</pre>
       "</article>" +
       '<article class="card">' +
         '<div class="card-header"><h3>Endpoints</h3></div>' +
-        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code></div>' +
+        '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code>. Add <code>?q=…</code> to a library endpoint to full-text search it.</div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/services/{id}/grant-limits</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/search/status</code>, <code>/v1/admin/services/{id}/grant-limits</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -4140,7 +4222,10 @@ function selectTab(name, opts) {
       if (current !== path) history.pushState({ tab: name }, "", path);
     }
     if (name === "home") loadFlow();
-    if (name === "library") loadAllLibraryKinds();
+    if (name === "library") {
+      loadAllLibraryKinds();
+      loadSearchStatus();
+    }
     if (name === "advanced") {
       loadCache();
       loadMailArchive();

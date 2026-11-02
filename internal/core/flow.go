@@ -1,15 +1,15 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -249,6 +249,27 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			Parent: "aegis",
 		},
 	}
+
+	// Search index store: local FTS index behind library q= search.
+	searchNode := FlowNode{
+		ID:     "search",
+		Kind:   FlowKindStore,
+		Label:  "Search index",
+		Detail: "Local FTS index for /v1/library/{kind}?q=",
+		Parent: "aegis",
+		Status: "disabled",
+	}
+	if s.search.Enabled() {
+		searchNode.Status = "enabled"
+		if counts, err := s.search.CountsByKind(); err == nil {
+			total := 0
+			for _, n := range counts {
+				total += n
+			}
+			searchNode.Detail = fmt.Sprintf("%d docs · local FTS index for q=", total)
+		}
+	}
+	nodes = append(nodes, searchNode)
 
 	// List tokens currently held in the vault (connection id → status).
 	// Labels use connection/service display names; secrets never appear.
