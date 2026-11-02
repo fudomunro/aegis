@@ -472,6 +472,10 @@ worker, and every request-driven sync surface keeps working as before.
 | `-sync-workers` | `2` | Worker pool size; `0` disables the worker |
 | `-sync-service-concurrency` | `1` per service | Per-service sync concurrency caps, e.g. `spotify=1,youtube-music=2` |
 
+Each job holds a lease while it runs and renews it while the step is alive,
+so a long step — a mirror doing hundreds of name-based lookups — is not
+reclaimed by another worker mid-write.
+
 Each job is one bounded step — a mail page batch, an import chunk, a mirror
 batch. Long work chains through the queue rather than living in a caller
 loop, so closing a browser tab or restarting the process loses nothing: the
@@ -498,15 +502,16 @@ Job types today:
 
 | Type | What it does |
 |------|--------------|
-| `ingest` | Mail archive page batches for Gmail; Google Takeout imports run as `ingest` with `service: google-takeout` |
+| `ingest` | Live cursor paging into the mail archive (Gmail) |
+| `import_snapshot` | Snapshot import of a read-only export (Google Takeout) |
 | `freshness_check` | Observational copy-freshness pass (see below) |
 | `mirror` | Copies a playlist or liked-tracks list from one service to another, one source page per step |
 | `repair` | Re-places a copy that freshness marked stale or missing |
 
-`import_snapshot` is reserved for a later phase and has no runner yet, so
-posting it returns "no sync runner". Enqueue is idempotent on
-`(kind, job_type, service, entity_key)`, so a repeated request does not stack
-duplicate work.
+Enqueue is idempotent on `(kind, job_type, service, entity_key)`, so a
+repeated request does not stack duplicate work. `POST /v1/mail/sync` and the
+admin mail-sync routes run the same ingest implementation as the queue and
+return the same bounded result, so the two surfaces cannot drift apart.
 
 ### Mirror and repair jobs
 

@@ -614,6 +614,31 @@ WHERE id=? AND state='running' AND lease_owner=?
 	return s.GetByID(job.ID)
 }
 
+// RenewLease extends this owner's lease on a running job so a long step is
+// not reclaimed mid-write. Returns false when the lease is no longer ours —
+// the job was cancelled or reclaimed, and the step should wind down.
+func (s *JobStore) RenewLease(id, owner string, until time.Time) (bool, error) {
+	if !s.Enabled() {
+		return false, nil
+	}
+	owner = strings.TrimSpace(owner)
+	if owner == "" {
+		return false, fmt.Errorf("lease renewal requires an owner")
+	}
+	res, err := s.db.Exec(`
+UPDATE sync_jobs SET lease_until=?
+WHERE id=? AND state='running' AND lease_owner=?
+`, formatSyncTime(until.UTC()), id, owner)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return n > 0, nil
+}
+
 // Complete records a successful step. step.Done finishes the job; otherwise
 // the same row is re-armed as queued with the next payload (job chaining).
 // Returns ErrSyncJobLost when the job was canceled or reclaimed first.

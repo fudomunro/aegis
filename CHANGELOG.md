@@ -5,6 +5,21 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Changed
+
+- `POST /v1/mail/sync` and the admin mail-sync routes now run the same ingest
+  implementation as the sync queue (`doMailIngest`) instead of a parallel
+  inline copy, so the two surfaces cannot drift. The request and response
+  contract is unchanged.
+- `import_snapshot` is no longer a reserved-but-unimplemented job type: it is
+  the snapshot-import type (Google Takeout), matching the job table on issue
+  #227. `ingest` is live cursor paging (Gmail). Existing `ingest` jobs naming
+  `service: google-takeout` still run through the same code path.
+- Sync jobs renew their lease while a step is running (every third of the
+  lease window) and the step winds down if ownership is lost. A long mirror
+  step — hundreds of name-based track lookups — could previously outlast the
+  fixed lease and be reclaimed mid-write.
+
 ### Added
 
 - Mirror and repair jobs on the sync queue (issue #227, phase 3): `mirror`

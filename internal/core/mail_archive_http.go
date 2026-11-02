@@ -290,8 +290,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		req.MaxMessages = 1000
 	}
 
-	connector, ok := s.connectors[req.Service]
-	if !ok {
+	if _, ok := s.connectors[req.Service]; !ok {
 		writeJSONError(w, http.StatusNotFound, "no connector for service "+req.Service)
 		return
 	}
@@ -306,29 +305,24 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 
-	var syncer MailArchiveSyncer
-	{
-		gc, ok := connector.(*connectors.GoogleGmailConnector)
-		if ok {
-			syncer = &gmailArchiveSyncer{GoogleGmailConnector: gc, host: s}
-		}
-	}
-	if syncer == nil {
+	// Pre-flight shape of this route is its own contract: a connector that
+	// cannot sync the archive is 501, not a fail-open empty result.
+	if s.mailArchiveSyncer(req.Service) == nil {
 		writeJSONError(w, http.StatusNotImplemented, "service does not support mail archive sync")
 		return
 	}
 
-	s.mailSyncMu.Lock()
-	defer s.mailSyncMu.Unlock()
-	result, err := syncer.SyncMailArchive(r.Context(), a, MailSyncOptions{
+	// One ingest implementation, shared with the sync queue runner
+	// (issue #227): the mechanics live in doMailIngest so the route and the
+	// queue cannot drift.
+	result, _ := s.doMailIngest(r.Context(), mailIngestPayload{
+		Service:     req.Service,
 		MaxMessages: req.MaxMessages,
 		Query:       req.Query,
 		ResetCursor: req.ResetCursor,
 	})
-	if err != nil && result.Error == "" {
-		result.Error = err.Error()
-	}
-	// Fail-open: report what was stored even when the upstream call failed mid-run.
+	// Fail-open: report what was stored even when the upstream call failed
+	// mid-run. doMailIngest has already filled result.Error from the error.
 	writeMailJSON(w, result)
 }
 
@@ -371,34 +365,14 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	s.mailSyncMu.Lock()
-	defer s.mailSyncMu.Unlock()
-	max := req.MaxMessages
-	if max <= 0 {
-		max = 5000
-	}
-	if max > 20000 {
-		max = 20000
-	}
-	result, err := a.ImportTakeout(path, max)
-	if err != nil && result.Error == "" {
-		result.Error = err.Error()
-	}
-	if result.Error == "" {
-		s.recordTakeoutSnapshot(path, result.Scanned, result.Stored, result.Skipped, result.Done)
-	}
-	// Shape as a mail sync result so the admin UI can share one renderer.
-	writeMailJSON(w, MailSyncResult{
-		Service:   takeoutServiceID,
-		Listed:    result.Scanned,
-		Stored:    result.Stored,
-		Skipped:   result.Skipped,
-		Failed:    result.Failed,
-		Truncated: result.Truncated,
-		Done:      result.Done,
-		Query:     "takeout:" + path,
-		Error:     result.Error,
+	// One ingest implementation, shared with the sync queue runner
+	// (issue #227). doTakeoutIngest also stamps the optimistic snapshot.
+	result, _ := s.doMailIngest(r.Context(), mailIngestPayload{
+		Service:     takeoutServiceID,
+		MaxMessages: req.MaxMessages,
+		Query:       path,
 	})
+	writeMailJSON(w, result)
 }
 
 // HandleAdminMailImport syncs the read-only Takeout export:
