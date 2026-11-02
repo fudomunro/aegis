@@ -282,6 +282,10 @@ func (p *PromMetrics) promText() string {
 		"Seconds since process start.")
 	fmt.Fprintf(&b, "aegis_process_uptime_seconds %g\n", time.Since(p.start).Seconds())
 
+	writeMeta(&b, "aegis_build_info", "gauge",
+		"Build version and commit of the running binary (issue #86 signal attribution).")
+	fmt.Fprintf(&b, "aegis_build_info{version=%q,commit=%q} 1\n", Version, Commit)
+
 	writeMeta(&b, "aegis_hook_outcomes_total", "counter",
 		"Pre-request hook outcomes by action (allow, modify, block, auth_fail, parse_fail).")
 	for _, action := range sortedKeys(p.hookOutcomes) {

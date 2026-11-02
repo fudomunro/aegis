@@ -149,7 +149,7 @@ All mutable local state defaults under one data directory (override with
 <data-dir>/aegis.json, data_grants.json, apps.json, data_scopes.json,
 entity_links.json, tokens.json,
 user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-archive.db,
-search-index.db, quicken.db, timeline.db, signal.db, audit_log.db, logs/aegis.log
+search-index.db, quicken.db, timeline.db, signal.db, audit_log.db, maintenance/, logs/aegis.log
 ```
 
 Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
@@ -319,6 +319,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |
+| Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); signals surface in `docs/observability.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
 

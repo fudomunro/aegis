@@ -7,6 +7,23 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Sync maintenance phase 1: signal bundles and repro fixtures (issue #86).**
+  `GET /v1/admin/maintenance/signals` reports a self-contained observation
+  bundle — build stamp, sync-queue rollups, up to 20 recent failed jobs with
+  scrubbed error text, and the copy freshness rollup — and `POST` captures it
+  as a0600 `signals-<UTC>.json` under `<data-dir>/maintenance/` for the
+  scheduled scanner. `/metrics` gains `aegis_build_info{version,commit}` so a
+  failure can be attributed to the build that produced it. Connectors gain
+  repro fixtures (`internal/connectors/repro.go` + `testdata/repro/`):
+  scrubbed request/response captures that replay through `httptest` on the
+  configured-endpoint seam, with a `ReproRecorder` for live capture, a
+  scrubber that drops credential headers and redacts secrets (always applied
+  on save), and link rewriting so paginated captures replay offline. A
+  scrubbed Spotify saved-tracks capture (null `track` items + pagination)
+  ships as the first regression fixture. The long-term approach — loop
+  phases, ticket schema, fixture rules, review tiers, guardrails — is
+  documented in `docs/sync-maintenance.md`.
+
 - **Admin visibility for the library search index (issue #178 follow-up).**
   `GET /v1/admin/search/status` reports enabled/path plus each kind's
   searchable flag and indexed document count. The admin Library tab marks
