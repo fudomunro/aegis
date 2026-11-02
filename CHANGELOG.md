@@ -5,6 +5,23 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Added
+
+- **Library search (`q=`) with a pluggable per-kind index spec (issue #178).**
+  Each `LibraryKind` (and user-defined schema pack via a `search` object)
+  declares which neutral fields are searchable; a shared SQLite FTS5 index
+  (`search-index.db`, dataset-partitioned like the mail archive) answers
+  `GET /v1/library/{kind}?q=…`. The index is refreshed write-behind on every
+  library fetch and cold-starts from one live fetch on the first query. Hits
+  pass the same data-grant, app-scope, and dataset gates as the list surface,
+  and level-sensitive kinds (documents, places, transactions, events)
+  re-apply their access-level redaction to index-hydrated payloads. The mail
+  archive's `mailFTSMatch` was folded into the shared `ftsMatchExpr`, which
+  prefix-matches the final token (`rain` finds “Raining Blood”). Elasticsearch
+  was evaluated and rejected: a JVM service is the wrong weight for a
+  single-user tailnet, and the type-layer spec is the seam that keeps the
+  engine swappable.
+
 ### Fixed
 
 - `entity_links.json` was the one state store still written with plain

@@ -792,36 +792,11 @@ func mailParticipantsText(rec MailArchiveRecord) string {
 	return strings.TrimSpace(b.String())
 }
 
-// mailFTSMatch turns user text into a safe FTS5 MATCH expression: AND of
-// quoted tokens across all columns. Operator characters are stripped so agents
-// cannot inject NEAR/OR/column filters.
+// mailFTSMatch turns user text into a safe FTS5 MATCH expression. Shared
+// with the search index (issue #178): both stores must strip operator
+// characters so agents cannot inject NEAR/OR/column filters.
 func mailFTSMatch(q string) (string, []any) {
-	q = strings.TrimSpace(q)
-	if q == "" {
-		return "", nil
-	}
-	var parts []string
-	for _, t := range strings.Fields(q) {
-		cleaned := strings.Map(func(r rune) rune {
-			if r == '"' {
-				return -1
-			}
-			if r == '*' || r == '^' || r == ':' || r == '(' || r == ')' || r == '{' || r == '}' {
-				return ' '
-			}
-			return r
-		}, t)
-		for _, sub := range strings.Fields(cleaned) {
-			if sub == "" {
-				continue
-			}
-			parts = append(parts, `"`+sub+`"`)
-		}
-	}
-	if len(parts) == 0 {
-		return "", nil
-	}
-	return strings.Join(parts, " AND "), nil
+	return ftsMatchExpr(q)
 }
 
 func normalizeMailTimeBound(raw string, lower bool) string {

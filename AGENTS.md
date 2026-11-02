@@ -149,7 +149,7 @@ All mutable local state defaults under one data directory (override with
 <data-dir>/aegis.json, data_grants.json, apps.json, data_scopes.json,
 entity_links.json, tokens.json,
 user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-archive.db,
-quicken.db, timeline.db, signal.db, audit_log.db, logs/aegis.log
+search-index.db, quicken.db, timeline.db, signal.db, audit_log.db, logs/aegis.log
 ```
 
 Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;

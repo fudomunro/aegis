@@ -663,6 +663,11 @@ func transactionsProviderTargets(s *Server, r *http.Request, permType string, ap
 func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("transactions")
 	filters := ParseTransactionFilters(r)
+	if kind.Search != nil {
+		// Free-text q is owned by the search index (issue #178). after/
+		// before/account/currency stay handler-side filters.
+		filters.Q = ""
+	}
 	appLevel := ""
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
@@ -696,7 +701,48 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
 			}
 		},
+		redactSearch: func(items []types.Transaction, r *http.Request) []types.Transaction {
+			return s.searchRedactTransactions(items, r)
+		},
 		markCanonical: s.stampTransactionCanonical,
 		cacheKey:      "library:transactions" + filters.cacheKeySuffix() + "|summary:" + strconv.FormatBool(summaryOnly),
 	})
+}
+
+// searchRedactTransactions re-applies per-source summary/read redaction to
+// index-hydrated transactions (issue #178). Applying every source's level in
+// turn settles on the most restrictive one (never under-redact).
+func (s *Server) searchRedactTransactions(items []types.Transaction, r *http.Request) []types.Transaction {
+	appLevel := ""
+	if app := AppIdentityFrom(r); app != nil {
+		appLevel = app.Scopes.For("transactions")
+	}
+	out := make([]types.Transaction, 0, len(items))
+	for _, t := range items {
+		skip := false
+		for _, src := range t.Sources {
+			svc := s.config.GetService(src.Service)
+			if svc == nil {
+				continue
+			}
+			level := s.effectivePermissions(svc).For("transactions")
+			red := redactTransactionsForLevel([]types.Transaction{t}, level)
+			if len(red) == 0 {
+				skip = true
+				break
+			}
+			t = red[0]
+		}
+		if skip {
+			continue
+		}
+		switch {
+		case types.IsSummaryAccess(appLevel):
+			t = redactTransactionsForLevel([]types.Transaction{t}, types.AccessSummary)[0]
+		case appLevel != "" && types.NormalizeAccess(appLevel) == types.AccessRead:
+			t = redactTransactionsForLevel([]types.Transaction{t}, types.AccessRead)[0]
+		}
+		out = append(out, t)
+	}
+	return out
 }

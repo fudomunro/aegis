@@ -335,6 +335,11 @@ type libraryKindSpec[T any] struct {
 	stampCopies func(items []T)
 	// enrich optionally resolves durable IDs before merge (issue #4).
 	enrich func(ctx context.Context, s *Server, items []T)
+	// redactSearch re-applies access-level redaction to index-hydrated items
+	// (issue #178). Fetch-time provider redaction never sees stored payloads,
+	// so level-sensitive kinds must redact again on the search path. Nil
+	// skips (kinds without access levels).
+	redactSearch func(items []T, r *http.Request) []T
 	// cacheKey overrides kind.CacheKey() when a second endpoint shares the
 	// same dataset but a different response shape (freebusy view of events).
 	cacheKey string
@@ -355,6 +360,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	pageReq, pageErr := types.ParsePageRequest(r.URL.Query().Get("limit"), r.URL.Query().Get("cursor"))
 	if pageErr != nil {
 		writeJSONError(w, http.StatusBadRequest, pageErr.Error())
+		return
+	}
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+	if q != "" && kind.Search == nil {
+		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("%s does not support search", kind.ID))
 		return
 	}
 
@@ -380,6 +390,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	if q != "" {
+		handleLibrarySearch(s, w, r, spec, q, pageReq, agent, app)
+		return
+	}
+
 	cacheKey := kind.CacheKey()
 	if spec.cacheKey != "" {
 		cacheKey = spec.cacheKey
@@ -402,8 +417,8 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	targets, denied := spec.targets(s, r)
-	for _, id := range denied {
+	fetched := fetchLibrary(s, r, spec, logger, agent)
+	for _, id := range fetched.denied {
 		svc := s.config.GetService(id)
 		perm := ""
 		if svc != nil {
@@ -424,8 +439,8 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		})
 	}
 
-	if len(targets) == 0 {
-		if len(denied) > 0 {
+	if fetched.nTargets == 0 {
+		if len(fetched.denied) > 0 {
 			s.recordAccessFrom(r, AccessEvent{
 				Agent:    agent,
 				Surface:  MetricSurfaceLibrary,
@@ -441,6 +456,62 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		}
 		writeJSONError(w, http.StatusNotFound, kind.EmptyMsg)
 		return
+	}
+
+	merged := fetched.items
+	bySvc := fetched.bySvc
+
+	result, err := json.Marshal(spec.encode(merged, pageReq, bySvc))
+	if err != nil {
+		logger.Error("failed to marshal library "+kind.ID, "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")
+		return
+	}
+
+	// Write-behind: refresh the search index from this fetch (issue #178).
+	// Fail-open: a broken index must not fail the list response.
+	if kind.Search != nil && s.search.Enabled() {
+		if err := indexLibraryDocuments(s, spec, scopeDataset(r), merged); err != nil {
+			logger.Warn("search index update failed", "error", err)
+		}
+	}
+
+	// Cache only healthy aggregates. Freezing by_service error/unauthorized
+	// rows would keep a just-connected service looking disconnected (issue #104).
+	if !libraryAggregateDegraded(bySvc) {
+		s.cache.Set(cacheKey, string(result), 60*time.Second)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("X-Aegis-Cache", "miss")
+	w.Write(result)
+	s.recordAccessFrom(r, AccessEvent{
+		Agent:    agent,
+		Surface:  MetricSurfaceLibrary,
+		Target:   kind.ID,
+		DataType: kind.ID,
+		Cache:    MetricCacheMiss,
+	})
+}
+
+// libraryFetch is the shared provider fan-out result (issue #178): list
+// responses and search indexing both need merged items and service status.
+type libraryFetch[T any] struct {
+	items    []T
+	bySvc    map[string]types.LibraryServiceStatus
+	denied   []string
+	nTargets int
+}
+
+// fetchLibrary runs the permission-aware fan-out, merge, and post-merge
+// stamping shared by list responses and search-index materialization. It
+// does not encode or respond; callers own gates, caching, and payloads.
+func fetchLibrary[T any](s *Server, r *http.Request, spec libraryKindSpec[T], logger *slog.Logger, agent string) libraryFetch[T] {
+	kind := spec.kind
+	targets, denied := spec.targets(s, r)
+	out := libraryFetch[T]{denied: denied, nTargets: len(targets), items: []T{}}
+	if len(targets) == 0 {
+		out.bySvc = map[string]types.LibraryServiceStatus{}
+		return out
 	}
 
 	var (
@@ -530,23 +601,138 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	if merged == nil {
 		merged = []T{}
 	}
-
 	if spec.stampCopies != nil {
 		spec.stampCopies(merged)
 	}
+	out.items = merged
+	out.bySvc = bySvc
+	return out
+}
 
-	result, err := json.Marshal(spec.encode(merged, pageReq, bySvc))
-	if err != nil {
-		logger.Error("failed to marshal library "+kind.ID, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")
+// searchHitCap bounds how many index hits are loaded before grant filtering
+// and paging, mirroring the mail-search merge cap.
+const searchHitCap = 5000
+
+// handleLibrarySearch answers GET /v1/library/{kind}?q= from the search index
+// (issue #178). A cold index (nothing materialized for this kind+dataset) is
+// bootstrapped from one live fetch first, so results are correct from the
+// first query. Hits pass the same per-service read gate as the aggregate.
+func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Request, spec libraryKindSpec[T], q string, pageReq types.PageRequest, agent string, app *AppIdentity) {
+	kind := spec.kind
+	logger := withPeerLog(slog.With("handler", "library_"+kind.ID+"_search"), r)
+
+	if !s.search.Enabled() {
+		writeJSONError(w, http.StatusServiceUnavailable, "search index is disabled")
+		return
+	}
+	dataset := scopeDataset(r)
+
+	// Grant gate mirrors the aggregate: without any readable target, search
+	// has nothing legitimate to return.
+	targets, denied := spec.targets(s, r)
+	if len(targets) == 0 {
+		if len(denied) > 0 {
+			s.recordAccessFrom(r, AccessEvent{
+				Agent:    agent,
+				Surface:  MetricSurfaceLibrary,
+				Target:   kind.ID,
+				DataType: kind.ID,
+				Decision: DecisionDeny,
+				Reason:   "permission",
+				Method:   r.Method,
+				Status:   http.StatusForbidden,
+			})
+			writeJSONError(w, http.StatusForbidden, kind.DenyMsg)
+			return
+		}
+		writeJSONError(w, http.StatusNotFound, kind.EmptyMsg)
+		return
+	}
+	readable := map[string]bool{}
+	configured := map[string]bool{}
+	localSource := false
+	for _, t := range targets {
+		readable[t.id] = true
+		if s.config.GetService(t.id) == nil {
+			// Local collection sources (mail archive, imports) gate their own
+			// readability when the target is registered.
+			localSource = true
+		}
+	}
+	for _, svc := range s.config.ServiceSnapshots() {
+		configured[svc.ID] = true
+	}
+
+	cacheKey := kind.CacheKey() + "|q=" + q
+	cacheKey += appLibraryCacheSuffix(app, kind.PermType)
+	cacheKey += scopeCacheSuffix(DataScopeFrom(r))
+	cacheKey += pageReq.CacheSuffix()
+	if cached, ok := s.cache.Get(cacheKey); ok {
+		logger.Debug("search cache hit")
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Aegis-Cache", "hit")
+		w.Write([]byte(cached))
+		s.recordAccessFrom(r, AccessEvent{
+			Agent:    agent,
+			Surface:  MetricSurfaceLibrary,
+			Target:   kind.ID,
+			DataType: kind.ID,
+			Cache:    MetricCacheHit,
+		})
 		return
 	}
 
-	// Cache only healthy aggregates. Freezing by_service error/unauthorized
-	// rows would keep a just-connected service looking disconnected (issue #104).
-	if !libraryAggregateDegraded(bySvc) {
-		s.cache.Set(cacheKey, string(result), 60*time.Second)
+	n, err := s.search.Count(kind.ID, dataset)
+	if err != nil {
+		logger.Error("search index count failed", "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "search index unavailable")
+		return
 	}
+	if n == 0 {
+		// Cold index: materialize from one live fetch, then query.
+		fetched := fetchLibrary(s, r, spec, logger, agent)
+		if err := indexLibraryDocuments(s, spec, dataset, fetched.items); err != nil {
+			logger.Warn("search index bootstrap failed", "error", err)
+		}
+	}
+
+	res, err := s.search.Search(SearchIndexQuery{Kind: kind.ID, Dataset: dataset, Q: q, Limit: searchHitCap})
+	if err != nil {
+		logger.Error("search index query failed", "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "search index unavailable")
+		return
+	}
+	hits := make([]T, 0, len(res.Docs))
+	bySvc := make(map[string]types.LibraryServiceStatus)
+	for _, doc := range res.Docs {
+		if !searchHitReadable(doc.Services, readable, configured, localSource) {
+			continue
+		}
+		var item T
+		if err := json.Unmarshal(doc.Payload, &item); err != nil {
+			logger.Warn("search hit payload invalid", "item_id", doc.ItemID, "error", err)
+			continue
+		}
+		hits = append(hits, item)
+		for _, svc := range doc.Services {
+			st := bySvc[svc]
+			st.Status = types.LibraryStatusOK
+			st.Count++
+			bySvc[svc] = st
+		}
+	}
+	if spec.redactSearch != nil {
+		hits = spec.redactSearch(hits, r)
+	}
+	enrichLibraryServiceStatuses(s, kind.ID, bySvc)
+
+	result, err := json.Marshal(spec.encode(hits, pageReq, bySvc))
+	if err != nil {
+		logger.Error("failed to marshal library "+kind.ID+" search", "error", err)
+		writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" search results")
+		return
+	}
+	s.cache.Set(cacheKey, string(result), 60*time.Second)
 	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("X-Aegis-Cache", "miss")
 	w.Write(result)
@@ -557,6 +743,45 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		DataType: kind.ID,
 		Cache:    MetricCacheMiss,
 	})
+}
+
+// searchHitReadable applies the aggregate's per-service read gate to an
+// indexed hit. Every source must be readable — a merged payload can carry
+// source rows the fetch path would have dropped, so one unreadable source
+// drops the hit. Sources no configured service claims (archive/import rows)
+// stay visible while a local-source target is readable; that store already
+// passed its own readability check when the target registered.
+func searchHitReadable(services []string, readable, configured map[string]bool, localSource bool) bool {
+	if len(services) == 0 {
+		return false
+	}
+	for _, svc := range services {
+		if readable[svc] {
+			continue
+		}
+		if localSource && !configured[svc] {
+			continue
+		}
+		return false
+	}
+	return true
+}
+
+// indexLibraryDocuments flattens merged items into search documents and
+// upserts them into the search index.
+func indexLibraryDocuments[T any](s *Server, spec libraryKindSpec[T], dataset string, items []T) error {
+	if !s.search.Enabled() || spec.kind.Search == nil {
+		return nil
+	}
+	docs := make([]types.SearchDocument, 0, len(items))
+	for _, item := range items {
+		doc, err := types.BuildSearchDocument(spec.sortKey(item), item, *spec.kind.Search)
+		if err != nil {
+			return err
+		}
+		docs = append(docs, doc)
+	}
+	return s.search.Upsert(spec.kind.ID, dataset, docs)
 }
 
 // libraryAggregateDegraded reports whether any provider failed or was

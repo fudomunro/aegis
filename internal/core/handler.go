@@ -122,6 +122,8 @@ type Server struct {
 	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
+	// search is the local library search index (issue #178). May be disabled.
+	search *SearchIndex
 	// quicken is the optional local Quicken import store (issue #141).
 	quicken *QuickenStore
 	// timeline is the optional local Google Timeline import store (issue #142).

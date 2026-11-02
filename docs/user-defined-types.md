@@ -59,6 +59,10 @@ One JSON file per kind. Example: `examples/user-types/reading-list/schema.json`.
     "fields": ["title", "author"],
     "entity_id_field": "id"
   },
+  "search": {
+    "fields": ["title", "author", "status"],
+    "title_field": "title"
+  },
   "sources": [
     {
       "id": "sample-export",
@@ -83,6 +87,8 @@ One JSON file per kind. Example: `examples/user-types/reading-list/schema.json`.
 | `fields` | Declared item shape. Values land in the neutral `fields{}` object. |
 | `identity.fields` | Name-normalized merge key when no durable id. |
 | `identity.entity_id_field` | Field carrying a durable id (preferred merge key). |
+| `search.fields` | Schema fields (or `"name"`) the `q=` search index covers. Omit the whole `search` object to reject `q`. |
+| `search.title_field` | Field that titles a search hit. Defaults to `"name"`. |
 | `sources[].kind` | `file_json` (path relative to the schema file) or `http_json`. |
 | `sources[].items_path` | Dotted path to the item array ("" = document root). |
 | `sources[].field_map` | Schema field → dotted path on each source row. |

@@ -158,9 +158,24 @@ Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-faci
 | `truncated` | Upstream page-cap incompleteness (see below) — **not** “more pages in this response.” |
 | `synced` / `by_service` | Multi-source merge flag and per-service fetch status (unchanged). |
 
-Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`q`, `tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `/v1/mail/search` accepts the same `limit` + `cursor` (and still accepts `offset` for the admin UI).
+Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `/v1/mail/search` accepts the same `limit` + `cursor` (and still accepts `offset` for the admin UI).
 
 Walk the full set by repeating the request with `next_cursor` until it is omitted. Do not stop at the first page and do not treat a short page as “that’s everything” when `next_cursor` is present.
+
+### Search (`q`)
+
+Kinds that declare a search spec accept a free-text **`q`** parameter:
+
+```
+GET /v1/library/tracks?q=purple+rain
+GET /v1/library/documents?q=lease&after=2024-01-01
+```
+
+- **Matching:** case-insensitive token AND over the kind's searchable fields (title, artists, tags, …). The final token is prefix-matched (`rain` finds “Raining Blood”). Operator characters are stripped — no phrase or boolean syntax.
+- **Result shape:** the same list envelope as the bare fetch (`total`, `next_cursor`, …). Kind-specific filters (`tag`, `after`, `before`, …) combine with `q`.
+- **Freshness:** `q` reads the local search index, which is refreshed whenever the library list is fetched. The first query for a kind materializes the index from one live fetch, so results are correct from the first request; a query may not see provider changes made since the last fetch.
+- **Enforcement:** identical to the list surface — data grants, app scopes, and data-scope dataset partitions all apply to search hits. A kind without a search spec answers `q` with `400`.
+- **Storage:** the index holds neutral item metadata (enough to return hits without a refetch) under the data directory; no media bytes. `GET /v1/mail/search` remains the full-history mail surface (body text, date/send filters).
 
 ## Sync completeness
 

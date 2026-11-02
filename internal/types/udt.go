@@ -52,6 +52,9 @@ type UserDefinedTypeSchema struct {
 	Fields map[string]UserDefinedField `json:"fields"`
 	// Identity describes cross-source matching (issue #4 pattern).
 	Identity UserDefinedIdentity `json:"identity,omitempty"`
+	// Search declares which fields the search index covers (issue #178).
+	// Nil means the kind has no q= support.
+	Search *UserDefinedSearchSpec `json:"search,omitempty"`
 	// Sources lists how to fetch items for this type.
 	Sources []UserDefinedSourceSpec `json:"sources,omitempty"`
 	// DefaultAccess is informational only (admin UI display). UDTs are always
@@ -83,6 +86,17 @@ type UserDefinedIdentity struct {
 	// EntityIDField names the schema field that carries a durable ID when the
 	// source supplies one. Preferred over Fields matching.
 	EntityIDField string `json:"entity_id_field,omitempty"`
+}
+
+// UserDefinedSearchSpec is the schema-pack search declaration (issue #178).
+// Field names are schema field names (or "name" for the display name).
+type UserDefinedSearchSpec struct {
+	// Fields lists schema fields to full-text index. Required when search
+	// is declared.
+	Fields []string `json:"fields"`
+	// TitleField names the schema field that titles a search hit. Defaults
+	// to "name", then the first entry in Fields.
+	TitleField string `json:"title_field,omitempty"`
 }
 
 // UserDefinedSourceSpec is one fetch mapping for a UDT. PoC supports
@@ -343,6 +357,23 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 			return fmt.Errorf("schema %q: identity field %q is not in fields", s.ID, name)
 		}
 	}
+	if s.Search != nil {
+		if len(s.Search.Fields) == 0 {
+			return fmt.Errorf("schema %q: search.fields must not be empty", s.ID)
+		}
+		for _, name := range s.Search.Fields {
+			if name != "name" {
+				if _, ok := s.Fields[name]; !ok {
+					return fmt.Errorf("schema %q: search field %q is not in fields", s.ID, name)
+				}
+			}
+		}
+		if s.Search.TitleField != "" && s.Search.TitleField != "name" {
+			if _, ok := s.Fields[s.Search.TitleField]; !ok {
+				return fmt.Errorf("schema %q: search.title_field %q is not in fields", s.ID, s.Search.TitleField)
+			}
+		}
+	}
 	for i := range s.Sources {
 		src := &s.Sources[i]
 		if strings.TrimSpace(src.ID) == "" {
@@ -381,7 +412,7 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 // LibraryKind converts the schema into type-layer kind metadata. Runtime
 // visibility predicates stay on the core registration wrapper (issue #15).
 func (s UserDefinedTypeSchema) LibraryKind() LibraryKind {
-	return LibraryKind{
+	k := LibraryKind{
 		ID:              s.ID,
 		Path:            s.Path,
 		PermType:        s.PermType,
@@ -395,6 +426,14 @@ func (s UserDefinedTypeSchema) LibraryKind() LibraryKind {
 		DenyMsg:         s.DenyMsg,
 		FailMsg:         s.FailMsg,
 	}
+	if s.Search != nil {
+		title := s.Search.TitleField
+		if title == "" {
+			title = "name"
+		}
+		k.Search = &SearchSpec{Fields: append([]string(nil), s.Search.Fields...), TitleField: title}
+	}
+	return k
 }
 
 // UserDefinedItemName picks the display name for an item: preferred identity

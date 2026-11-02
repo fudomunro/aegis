@@ -359,6 +359,11 @@ func documentsProviderTargets(s *Server, r *http.Request, permType string, appLe
 func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("documents")
 	filters := ParseDocumentFilters(r)
+	if kind.Search != nil {
+		// Free-text q is owned by the search index (issue #178). tag/after/
+		// before stay handler-side filters over whatever produced the items.
+		filters.Q = ""
+	}
 	appLevel := ""
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
@@ -385,10 +390,50 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
 			}
 		},
+		redactSearch: func(items []types.Document, r *http.Request) []types.Document {
+			return s.searchRedactDocuments(items, r)
+		},
 		markCanonical: s.stampDocumentCanonical,
 		stampCopies:   s.stampDocumentCopies,
 		cacheKey:      "library:documents" + filters.cacheKeySuffix() + "|meta:" + boolKey(metaOnly),
 	})
+}
+
+// searchRedactDocuments re-applies per-source metadata redaction to
+// index-hydrated documents (issue #178). Redactions only remove data, so
+// applying every source's level in turn settles on the most restrictive one
+// (mixed-source hits may over-redact; never under-redact).
+func (s *Server) searchRedactDocuments(items []types.Document, r *http.Request) []types.Document {
+	appLevel := ""
+	if app := AppIdentityFrom(r); app != nil {
+		appLevel = app.Scopes.For("documents")
+	}
+	out := make([]types.Document, 0, len(items))
+	for _, d := range items {
+		skip := false
+		for _, src := range d.Sources {
+			svc := s.config.GetService(src.Service)
+			if svc == nil {
+				// Local/import sources gate their own content.
+				continue
+			}
+			level := s.effectivePermissions(svc).For("documents")
+			red := redactDocumentsForLevel([]types.Document{d}, types.DocumentsLevelForResponse(level))
+			if len(red) == 0 {
+				skip = true
+				break
+			}
+			d = red[0]
+		}
+		if skip {
+			continue
+		}
+		if types.IsMetadataAccess(appLevel) {
+			d = RedactDocumentMetadata(d)
+		}
+		out = append(out, d)
+	}
+	return out
 }
 
 func boolKey(v bool) string {
