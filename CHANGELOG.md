@@ -7,6 +7,24 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- Mirror and repair jobs on the sync queue (issue #227, phase 3): `mirror`
+  turns the one-shot `POST /v1/library/mirror` copy into queued work that
+  finishes the whole list — each step reads one source page and **appends to a
+  single target playlist**, so a 500-track playlist is one playlist on the
+  target rather than one per batch. The target adapters gained
+  `placeTracks(playlistID, name, tracks)` (create-or-append) and the source
+  adapters gained cursor-paged reads, so a chained step costs one upstream
+  page instead of re-walking the list. `repair` is the executor surface for
+  "this backup drifted, fix it": it re-runs a mirror and **skips what the
+  target already holds**, matched by name and artist — the same identity
+  mirror uses across services — so a repair converges instead of duplicating.
+- Per-service concurrency caps (`-sync-service-concurrency`, default one job
+  per service) so one provider's quota cannot starve the rest of the queue.
+- Queue pause/resume: `POST /v1/admin/sync/pause` and
+  `POST /v1/admin/sync/resume` hold work globally or per service. Queued jobs
+  for the scope move to `paused`, new enqueues land there too, and the claim
+  filter skips paused scopes. The Data sync panel shows the paused state and
+  a Pause/Resume control.
 - Copy freshness checks and sync schedules (issue #227, phase 2): a
   `freshness_check` runner that walks the copy ledger and stamps
   `status` / `last_checked_at` by comparing each copy's live version

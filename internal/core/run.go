@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/types"
@@ -32,6 +33,7 @@ func Run() {
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
 	syncJobsPath := flag.String("sync-jobs", "", "path to SQLite sync job queue (default: the copy-ledger path, so job completion and copy stamps share one transaction; empty disables the sync worker)")
 	syncWorkers := flag.Int("sync-workers", 2, "sync worker pool size (0 disables the sync worker)")
+	syncServiceConcurrency := flag.String("sync-service-concurrency", "", "per-service sync concurrency caps, e.g. spotify=1,youtube-music=2 (default 1 for every service)")
 	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
 	serviceConnsPath := flag.String("service-connections-file", "", "path to admin service-connections overlay (default: <data-dir>/service_connections.json; secrets live in the encrypted token store)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
@@ -507,13 +509,16 @@ func Run() {
 	// the request-driven sync surfaces keep working.
 	srv.syncRunners = newSyncRunnerRegistry(srv)
 	registerFreshnessRunners(srv.syncRunners, srv)
+	registerMirrorRunners(srv.syncRunners, srv)
 	if syncStore.Enabled() && *syncWorkers > 0 {
 		srv.syncWorker = NewSyncWorker(syncStore, srv.syncRunners, SyncWorkerOptions{
-			Workers:   *syncWorkers,
-			Owner:     "aegis",
-			Logger:    slog.Default(),
-			Prom:      srv.prom,
-			Schedules: scheduleStore,
+			Workers:            *syncWorkers,
+			Owner:              "aegis",
+			Logger:             slog.Default(),
+			Prom:               srv.prom,
+			Schedules:          scheduleStore,
+			ServiceConcurrency: parseServiceConcurrency(*syncServiceConcurrency),
+			DefaultConcurrency: 1,
 			// Ingest changes what /v1/library/* would return; drop cached
 			// aggregates instead of waiting out the TTL (matches Signal import).
 			OnDone: func(job SyncJob, succeeded bool) {
@@ -685,6 +690,10 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminMailImport)(w, r)
 	case path == "sync":
 		s.AdminMiddleware(s.HandleAdminSync)(w, r)
+	case path == "sync/pause":
+		s.AdminMiddleware(s.HandleAdminSyncPause)(w, r)
+	case path == "sync/resume":
+		s.AdminMiddleware(s.HandleAdminSyncResume)(w, r)
 	case strings.HasPrefix(path, "sync/schedules/"):
 		s.AdminMiddleware(s.HandleAdminSyncSchedule)(w, r)
 	case strings.HasPrefix(path, "sync/") && strings.HasSuffix(path, "/cancel"):
@@ -741,6 +750,28 @@ func runSeedSampleCLI(dataDir, archivePath string, count int, stress bool) int {
 		"library_json", libraryPath,
 	)
 	return 0
+}
+
+// parseServiceConcurrency reads "service=N,service=M" caps for the sync
+// worker. Unparseable entries are ignored so a typo cannot stop the queue.
+func parseServiceConcurrency(raw string) map[string]int {
+	out := make(map[string]int)
+	for _, part := range strings.Split(raw, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		k, v, ok := strings.Cut(part, "=")
+		if !ok {
+			continue
+		}
+		n, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil || n <= 0 {
+			continue
+		}
+		out[strings.TrimSpace(k)] = n
+	}
+	return out
 }
 
 func seedSampleCountOrDefault(count int, stress bool) int {

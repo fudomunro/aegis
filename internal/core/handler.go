@@ -116,6 +116,10 @@ type Server struct {
 	// syncSchedules holds recurring sync job templates (issue #227 phase 2).
 	// May be disabled.
 	syncSchedules *ScheduleStore
+	// mirrorSourceFn / mirrorTargetFn override the mirror adapter lookup.
+	// Nil in production; tests use them to stub a provider.
+	mirrorSourceFn func(serviceID, kind string) (mirrorSource, error)
+	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
 	// quicken is the optional local Quicken import store (issue #141).

@@ -118,6 +118,11 @@ CREATE TABLE IF NOT EXISTS sync_jobs (
 CREATE INDEX IF NOT EXISTS sync_jobs_due ON sync_jobs(state, next_run_at);
 CREATE INDEX IF NOT EXISTS sync_jobs_state ON sync_jobs(state);
 CREATE INDEX IF NOT EXISTS sync_jobs_kind ON sync_jobs(kind, job_type);
+CREATE TABLE IF NOT EXISTS sync_pause (
+  scope TEXT PRIMARY KEY,
+  reason TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
 `
 
 // SyncJob is one durable unit of data-movement work.
@@ -339,6 +344,14 @@ func (s *JobStore) Enqueue(req SyncEnqueue) (SyncJob, error) {
 	runAtS := runAt.UTC().Format(time.RFC3339Nano)
 	nowS := now.Format(time.RFC3339Nano)
 
+	// New work for a paused scope lands in `paused` rather than `queued`, so
+	// a pause holds enqueues made while it is on — not just what was queued
+	// when it was pulled.
+	initialState := SyncJobQueued
+	if s.IsPaused(req.Service) {
+		initialState = SyncJobPaused
+	}
+
 	// A terminal row is the only one that takes new payload/budget/progress;
 	// a queued row only gets pulled forward in time. RETURNING id avoids
 	// LastInsertId, which on an upsert still reports a previous insert on the
@@ -349,10 +362,10 @@ INSERT INTO sync_jobs (
   kind, job_type, service, idempotency_key, payload, state,
   attempts, max_attempts, priority, next_run_at,
   progress, started_at, created_at, updated_at
-) VALUES (?,?,?,?,?, 'queued', 0, ?, ?, ?, '{}', '', ?, ?)
+) VALUES (?,?,?,?,?, ?, 0, ?, ?, ?, '{}', '', ?, ?)
 ON CONFLICT(idempotency_key) DO UPDATE SET
   state=CASE
-    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN 'queued'
+    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN ?
     ELSE sync_jobs.state
   END,
   payload=CASE
@@ -400,7 +413,7 @@ ON CONFLICT(idempotency_key) DO UPDATE SET
 RETURNING id
 `,
 		req.Kind, req.JobType, req.Service, key, payload,
-		req.MaxAttempts, req.Priority, runAtS, nowS, nowS,
+		initialState, req.MaxAttempts, req.Priority, runAtS, nowS, nowS, initialState,
 	).Scan(&id)
 	if err != nil {
 		return SyncJob{}, err
@@ -515,8 +528,10 @@ func (s *JobStore) Claim(owner string, now time.Time) (SyncJob, bool, error) {
 	var id int64
 	err = tx.QueryRow(`
 SELECT id FROM sync_jobs
-WHERE (state = 'queued' AND next_run_at <= ?)
-   OR (state = 'running' AND lease_until <> '' AND lease_until < ?)
+WHERE ((state = 'queued' AND next_run_at <= ?)
+   OR (state = 'running' AND lease_until <> '' AND lease_until < ?))
+  AND service NOT IN (SELECT scope FROM sync_pause)
+  AND NOT EXISTS (SELECT 1 FROM sync_pause WHERE scope = 'global')
 ORDER BY priority DESC, next_run_at ASC
 LIMIT 1
 `, nowS, nowS).Scan(&id)
@@ -732,6 +747,103 @@ WHERE id=? AND state IN ('queued','running','paused')
 		return SyncJob{}, err
 	}
 	return s.GetByID(id)
+}
+
+// SyncPauseScopeGlobal is the pause key that stops the whole queue.
+const SyncPauseScopeGlobal = "global"
+
+// Pause stops new work for a scope ("global" or a service id). Queued jobs
+// for that scope move to `paused` so the count stays honest, and Enqueue
+// routes new work there too. In-flight steps are not interrupted — use
+// CancelJob for that.
+func (s *JobStore) Pause(scope, reason string) error {
+	if !s.Enabled() {
+		return nil
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = SyncPauseScopeGlobal
+	}
+	now := formatSyncTime(s.clock())
+	_, err := s.db.Exec(`
+INSERT INTO sync_pause (scope, reason, created_at) VALUES (?,?,?)
+ON CONFLICT(scope) DO UPDATE SET reason=excluded.reason, created_at=excluded.created_at
+`, scope, strings.TrimSpace(reason), now)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`
+UPDATE sync_jobs SET state='paused', updated_at=?
+WHERE state='queued' AND (? = ? OR service = ?)
+`, now, scope, SyncPauseScopeGlobal, scope)
+	return err
+}
+
+// Resume re-arms a paused scope: the pause marker is dropped and its `paused`
+// jobs go back to `queued`.
+func (s *JobStore) Resume(scope string) error {
+	if !s.Enabled() {
+		return nil
+	}
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		scope = SyncPauseScopeGlobal
+	}
+	now := formatSyncTime(s.clock())
+	if _, err := s.db.Exec(`DELETE FROM sync_pause WHERE scope=?`, scope); err != nil {
+		return err
+	}
+	// A job is still held back if the global pause is on and this was only a
+	// per-service resume.
+	globalHeld := scope != SyncPauseScopeGlobal && s.isPausedLocked(SyncPauseScopeGlobal)
+	if globalHeld {
+		return nil
+	}
+	_, err := s.db.Exec(`
+UPDATE sync_jobs SET state='queued', updated_at=?
+WHERE state='paused' AND (? = ? OR service = ?)
+`, now, scope, SyncPauseScopeGlobal, scope)
+	return err
+}
+
+// Paused lists the active pause scopes ("global" and/or service ids).
+func (s *JobStore) Paused() []string {
+	if !s.Enabled() {
+		return nil
+	}
+	rows, err := s.db.Query(`SELECT scope FROM sync_pause ORDER BY scope`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]string, 0, 2)
+	for rows.Next() {
+		var scope string
+		if err := rows.Scan(&scope); err != nil {
+			break
+		}
+		out = append(out, scope)
+	}
+	return out
+}
+
+// isPausedLocked reports whether a scope currently has a pause marker.
+func (s *JobStore) isPausedLocked(scope string) bool {
+	var n int
+	err := s.db.QueryRow(`SELECT COUNT(*) FROM sync_pause WHERE scope=?`, scope).Scan(&n)
+	return err == nil && n > 0
+}
+
+// IsPaused reports whether work for a scope (or the whole queue via
+// "global") is paused.
+func (s *JobStore) IsPaused(scope string) bool {
+	if !s.Enabled() {
+		return false
+	}
+	if s.isPausedLocked(SyncPauseScopeGlobal) {
+		return true
+	}
+	return s.isPausedLocked(strings.TrimSpace(scope))
 }
 
 // ReclaimExpired moves leased-but-stale running jobs back to queued. Runs

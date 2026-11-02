@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -100,6 +101,94 @@ func mirrorTrackFromSpotify(t map[string]any) mirrorTrack {
 	}
 }
 
+// loadPlaylistPage returns one page of a Spotify playlist's tracks starting
+// at the offset named by cursor. Only the first page also fetches the
+// playlist object, so the caller gets the ref name/URL without paying for it
+// on every step.
+func (m *spotifyMirror) loadPlaylistPage(ctx context.Context, id, cursor string, limit int) (MirrorRef, []mirrorTrack, int, string, error) {
+	ref := MirrorRef{Service: "spotify", ID: id}
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	offset := 0
+	if cursor != "" {
+		var err error
+		offset, err = strconv.Atoi(cursor)
+		if err != nil || offset < 0 {
+			return ref, nil, 0, "", fmt.Errorf("bad spotify cursor %q", cursor)
+		}
+	}
+	if offset == 0 {
+		raw, _, err := m.s.mirrorUpstream(ctx, "spotify", "GET", "/playlists/"+url.PathEscape(id), nil, nil)
+		if err != nil {
+			return ref, nil, 0, "", err
+		}
+		ref.Name, _ = raw["name"].(string)
+		if ext, ok := raw["external_urls"].(map[string]any); ok {
+			ref.URL, _ = ext["spotify"].(string)
+		}
+	}
+	q := url.Values{"limit": []string{strconv.Itoa(limit)}, "offset": []string{strconv.Itoa(offset)}}
+	raw, _, err := m.s.mirrorUpstream(ctx, "spotify", "GET",
+		"/playlists/"+url.PathEscape(id)+"/tracks", q, nil)
+	if err != nil {
+		return ref, nil, 0, "", err
+	}
+	tracks, total := spotifyItemsToTracks(raw)
+	ref.Count = total
+	next := ""
+	if offset+len(tracks) < total {
+		next = strconv.Itoa(offset + len(tracks))
+	}
+	return ref, tracks, total, next, nil
+}
+
+// loadLikedTracksPage returns one page of the user's saved tracks.
+func (m *spotifyMirror) loadLikedTracksPage(ctx context.Context, cursor string, limit int) ([]mirrorTrack, int, string, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 50
+	}
+	offset := 0
+	if cursor != "" {
+		var err error
+		offset, err = strconv.Atoi(cursor)
+		if err != nil || offset < 0 {
+			return nil, 0, "", fmt.Errorf("bad spotify cursor %q", cursor)
+		}
+	}
+	q := url.Values{"limit": []string{strconv.Itoa(limit)}, "offset": []string{strconv.Itoa(offset)}}
+	raw, _, err := m.s.mirrorUpstream(ctx, "spotify", "GET", "/me/tracks", q, nil)
+	if err != nil {
+		return nil, 0, "", err
+	}
+	tracks, total := spotifyItemsToTracks(raw)
+	next := ""
+	if offset+len(tracks) < total {
+		next = strconv.Itoa(offset + len(tracks))
+	}
+	return tracks, total, next, nil
+}
+
+// spotifyItemsToTracks flattens a Spotify paging object's items[] into
+// neutral tracks and reports the overall total.
+func spotifyItemsToTracks(raw map[string]any) ([]mirrorTrack, int) {
+	var out []mirrorTrack
+	if items, ok := raw["items"].([]any); ok {
+		for _, item := range items {
+			e, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			t, _ := e["track"].(map[string]any)
+			if t == nil {
+				continue
+			}
+			out = append(out, mirrorTrackFromSpotify(t))
+		}
+	}
+	return out, asInt(raw["total"])
+}
+
 func (m *spotifyMirror) loadLikedTracks(ctx context.Context) ([]mirrorTrack, bool, error) {
 	var out []mirrorTrack
 	nextPath := "/me/tracks"
@@ -133,29 +222,34 @@ func (m *spotifyMirror) loadLikedTracks(ctx context.Context) ([]mirrorTrack, boo
 	return out, true, nil
 }
 
-func (m *spotifyMirror) createPlaylistWithTracks(ctx context.Context, name string, tracks []mirrorTrack) (string, string, int, []MirrorSkip, error) {
-	me, _, err := m.s.mirrorUpstream(ctx, "spotify", "GET", "/me", nil, nil)
-	if err != nil {
-		return "", "", 0, nil, err
-	}
-	userID, _ := me["id"].(string)
-	if userID == "" {
-		return "", "", 0, nil, fmt.Errorf("spotify /me returned no user id")
-	}
-
-	created, _, err := m.s.mirrorUpstream(ctx, "spotify", "POST",
-		"/users/"+url.PathEscape(userID)+"/playlists", nil,
-		map[string]any{"name": name, "public": false, "description": "Copied by Aegis"})
-	if err != nil {
-		return "", "", 0, nil, err
-	}
-	playlistID, _ := created["id"].(string)
-	if playlistID == "" {
-		return "", "", 0, nil, fmt.Errorf("spotify create playlist returned no id")
-	}
+// placeTracks creates the target playlist when playlistID is empty, then
+// resolves and appends tracks in chunks. An empty playlistID is the
+// single-call mirror path; a known playlistID continues a chained job.
+func (m *spotifyMirror) placeTracks(ctx context.Context, playlistID, name string, tracks []mirrorTrack) (string, string, int, []MirrorSkip, error) {
 	link := ""
-	if ext, ok := created["external_urls"].(map[string]any); ok {
-		link, _ = ext["spotify"].(string)
+	if playlistID == "" {
+		me, _, err := m.s.mirrorUpstream(ctx, "spotify", "GET", "/me", nil, nil)
+		if err != nil {
+			return "", "", 0, nil, err
+		}
+		userID, _ := me["id"].(string)
+		if userID == "" {
+			return "", "", 0, nil, fmt.Errorf("spotify /me returned no user id")
+		}
+
+		created, _, err := m.s.mirrorUpstream(ctx, "spotify", "POST",
+			"/users/"+url.PathEscape(userID)+"/playlists", nil,
+			map[string]any{"name": name, "public": false, "description": "Copied by Aegis"})
+		if err != nil {
+			return "", "", 0, nil, err
+		}
+		playlistID, _ = created["id"].(string)
+		if playlistID == "" {
+			return "", "", 0, nil, fmt.Errorf("spotify create playlist returned no id")
+		}
+		if ext, ok := created["external_urls"].(map[string]any); ok {
+			link, _ = ext["spotify"].(string)
+		}
 	}
 
 	var uris []string

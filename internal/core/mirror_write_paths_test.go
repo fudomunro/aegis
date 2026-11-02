@@ -151,9 +151,9 @@ func TestSpotifyMirror_CreatePlaylistSearchFallbackAndSkips(t *testing.T) {
 		{Name: "Missing Song", Artists: []string{"Nobody"}},
 		{Name: "Search Error", Artists: []string{"Broken"}},
 	}
-	id, link, copied, skips, err := m.createPlaylistWithTracks(context.Background(), "Backup", tracks)
+	id, link, copied, skips, err := m.placeTracks(context.Background(), "", "Backup", tracks)
 	if err != nil {
-		t.Fatalf("createPlaylistWithTracks: %v", err)
+		t.Fatalf("placeTracks: %v", err)
 	}
 	if id != "pl-created" || link == "" {
 		t.Fatalf("id/link = %q %q", id, link)
@@ -191,7 +191,7 @@ func TestSpotifyMirror_CreatePlaylist_UpstreamErrors(t *testing.T) {
 			writeMirrorJSON(w, map[string]any{})
 		}), true)
 		m := &spotifyMirror{s: srv}
-		_, _, _, _, err := m.createPlaylistWithTracks(context.Background(), "x", nil)
+		_, _, _, _, err := m.placeTracks(context.Background(), "", "x", nil)
 		if err == nil || !strings.Contains(err.Error(), "user id") {
 			t.Fatalf("err = %v", err)
 		}
@@ -206,7 +206,7 @@ func TestSpotifyMirror_CreatePlaylist_UpstreamErrors(t *testing.T) {
 			}
 		}), true)
 		m := &spotifyMirror{s: srv}
-		_, _, _, _, err := m.createPlaylistWithTracks(context.Background(), "x", nil)
+		_, _, _, _, err := m.placeTracks(context.Background(), "", "x", nil)
 		if err == nil || !strings.Contains(err.Error(), "no id") {
 			t.Fatalf("err = %v", err)
 		}
@@ -225,7 +225,7 @@ func TestSpotifyMirror_CreatePlaylist_UpstreamErrors(t *testing.T) {
 			}
 		}), true)
 		m := &spotifyMirror{s: srv}
-		_, _, copied, _, err := m.createPlaylistWithTracks(context.Background(), "x", []mirrorTrack{
+		_, _, copied, _, err := m.placeTracks(context.Background(), "", "x", []mirrorTrack{
 			{Name: "T", SourceURI: "spotify:track:t"},
 		})
 		if err == nil {
@@ -458,7 +458,7 @@ func TestYouTubeMirror_CreatePlaylistSearchAndSkips(t *testing.T) {
 		{Name: "SearchError Song", Artists: []string{"C"}},
 		{Name: "BadShape Song", Artists: []string{"D"}},
 	}
-	id, link, copied, skips, err := m.createPlaylistWithTracks(context.Background(), "Backup", tracks)
+	id, link, copied, skips, err := m.placeTracks(context.Background(), "", "Backup", tracks)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -477,7 +477,7 @@ func TestYouTubeMirror_CreatePlaylistSearchAndSkips(t *testing.T) {
 			writeMirrorJSON(w, map[string]any{"snippet": map[string]any{"title": "x"}})
 		}), true)
 		m2 := &youtubeMirror{s: srv2}
-		_, _, _, _, err := m2.createPlaylistWithTracks(context.Background(), "x", nil)
+		_, _, _, _, err := m2.placeTracks(context.Background(), "", "x", nil)
 		if err == nil || !strings.Contains(err.Error(), "no id") {
 			t.Fatalf("err = %v", err)
 		}
@@ -495,7 +495,7 @@ func TestYouTubeMirror_CreatePlaylistSearchAndSkips(t *testing.T) {
 			}
 		}), true)
 		m2 := &youtubeMirror{s: srv2}
-		_, _, copied, _, err := m2.createPlaylistWithTracks(context.Background(), "x", []mirrorTrack{
+		_, _, copied, _, err := m2.placeTracks(context.Background(), "", "x", []mirrorTrack{
 			{Name: "T", SourceID: "v1"},
 		})
 		if err == nil {

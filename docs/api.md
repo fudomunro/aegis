@@ -729,6 +729,8 @@ POST /v1/admin/cache/clear — clear the response cache
 GET /v1/admin/sync — sync job queue rollup + recent jobs (state, attempts, progress, next run), copy freshness per kind, and recurring schedules
 POST /v1/admin/sync — enqueue a sync job {"kind":"messages","job_type":"ingest","service":"google-gmail"}
 POST /v1/admin/sync/{id}/cancel — park a queued or running sync job
+POST /v1/admin/sync/pause — hold sync work {"service":"spotify","reason":"quota"}; empty service pauses the queue
+POST /v1/admin/sync/resume — release a paused scope {"service":"spotify"}
 POST /v1/admin/sync/schedules/{id}/enable — resume a paused sync schedule
 POST /v1/admin/sync/schedules/{id}/disable — pause a sync schedule
 GET /v1/admin/library/{kind} — admin Library tab preview (; not counted as agent Home access)
