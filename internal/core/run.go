@@ -37,6 +37,7 @@ func Run() {
 	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
 	serviceConnsPath := flag.String("service-connections-file", "", "path to admin service-connections overlay (default: <data-dir>/service_connections.json; secrets live in the encrypted token store)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
+	searchIndexPath := flag.String("search-index", "", "path to local library search index (default: <data-dir>/search-index.db; empty disables q= search)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
 	timelinePath := flag.String("timeline-store", "", "path to local Google Timeline import store (default: <data-dir>/timeline.db; empty disables)")
@@ -75,6 +76,8 @@ func Run() {
 		SyncJobsSet:        setFlags["sync-jobs"],
 		MailArchive:        *mailArchivePath,
 		MailArchiveSet:     setFlags["mail-archive"],
+		SearchIndex:        *searchIndexPath,
+		SearchIndexSet:     setFlags["search-index"],
 		Quicken:            *quickenPath,
 		QuickenSet:         setFlags["quicken-store"],
 		Timeline:           *timelinePath,
@@ -120,6 +123,7 @@ func Run() {
 		"copy_ledger", paths.CopyLedger,
 		"sync_jobs", paths.SyncJobs,
 		"mail_archive", paths.MailArchive,
+		"search_index", paths.SearchIndex,
 		"quicken_store", paths.Quicken,
 		"timeline_store", paths.Timeline,
 		"signal_store", paths.Signal,
@@ -320,6 +324,18 @@ func Run() {
 		slog.Info("mail archive disabled")
 	}
 
+	searchIndex, err := OpenSearchIndex(paths.SearchIndex)
+	if err != nil {
+		slog.Error("failed to open search index", "path", paths.SearchIndex, "error", err)
+		os.Exit(1)
+	}
+	if searchIndex != nil {
+		defer searchIndex.Close()
+		slog.Info("search index ready", "path", searchIndex.Path())
+	} else {
+		slog.Info("search index disabled")
+	}
+
 	quickenStore, err := OpenQuickenStore(paths.Quicken)
 	if err != nil {
 		slog.Error("failed to open quicken store", "path", paths.Quicken, "error", err)
@@ -423,6 +439,7 @@ func Run() {
 		syncJobs:      syncStore,
 		syncSchedules: scheduleStore,
 		mail:          mailArchive,
+		search:        searchIndex,
 		quicken:       quickenStore,
 		timeline:      timelineStore,
 		signal:        signalStore,

@@ -32,6 +32,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"name", "description"}, TitleField: "name"},
 	},
 	{
 		ID:              "tracks",
@@ -58,6 +59,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"name", "artists", "album"}, TitleField: "name"},
 	},
 	{
 		ID:              "albums",
@@ -80,6 +82,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"name", "artists"}, TitleField: "name"},
 	},
 	{
 		ID:              "artists",
@@ -103,6 +106,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"name"}, TitleField: "name"},
 	},
 	{
 		ID:              "contacts",
@@ -124,6 +128,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"name", "emails", "phones", "handles", "organization"}, TitleField: "name"},
 	},
 	{
 		ID:              "photos",
@@ -151,6 +156,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"filename", "caption", "people"}, TitleField: "filename"},
 	},
 	{
 		ID:              "events",
@@ -175,6 +181,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    []string{AccessFreeBusy},
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"title", "description", "location", "calendar_name"}, TitleField: "title"},
 	},
 	{
 		ID:              "messages",
@@ -200,6 +207,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    nil,
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"subject", "snippet"}, TitleField: "subject"},
 	},
 	{
 		ID:              "transactions",
@@ -229,6 +237,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    []string{AccessSummary},
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"description", "merchant", "category", "memo"}, TitleField: "description"},
 	},
 	{
 		ID:              "places",
@@ -260,6 +269,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    []string{AccessCity, AccessPrecise},
 		DefaultNone:      true,
+		Search:           &SearchSpec{Fields: []string{"place"}, TitleField: "place"},
 	},
 	{
 		ID:              "documents",
@@ -289,6 +299,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed: true,
 		AllowedLevels:    []string{AccessMetadata},
 		DefaultNone:      false,
+		Search:           &SearchSpec{Fields: []string{"title", "correspondent", "document_type", "tags"}, TitleField: "title"},
 	},
 }
 

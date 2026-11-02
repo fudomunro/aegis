@@ -194,6 +194,7 @@ func TestHandleLibraryDocuments_AggregatesAndFilters(t *testing.T) {
 		{ID: "drive", Name: "Google Drive", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{documents: []types.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Apartment lease 2024", "2024-01-15T12:00:00Z", "lease excerpt"),

@@ -586,7 +586,53 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
 			}
 		},
+		redactSearch: func(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
+			return s.searchRedactPlaceVisits(items, r)
+		},
 		markCanonical: s.stampPlaceVisitCanonical,
 		cacheKey:      "library:places" + filters.cacheKeySuffix(),
 	})
+}
+
+// searchRedactPlaceVisits re-applies per-source city/read/precise redaction
+// to index-hydrated visits (issue #178). Applying every source's level in
+// turn settles on the most restrictive one (never under-redact); the app
+// scope is an additional clamp, matching the fetch path.
+func (s *Server) searchRedactPlaceVisits(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
+	appPlaces := ""
+	if app := AppIdentityFrom(r); app != nil {
+		appPlaces = types.PlacesLevelForResponse(app.Scopes.For("places"))
+	}
+	out := make([]types.PlaceVisit, 0, len(items))
+	for _, v := range items {
+		skip := false
+		for _, src := range v.Sources {
+			svc := s.config.GetService(src.Service)
+			if svc == nil {
+				continue
+			}
+			level := types.PlacesLevelForResponse(s.effectivePermissions(svc).For("places"))
+			if appPlaces != "" && appPlaces != types.AccessNone {
+				level = tighterPlacesLevel(appPlaces, level)
+			}
+			red := redactPlaceVisitsForLevel([]types.PlaceVisit{v}, level)
+			if len(red) == 0 {
+				skip = true
+				break
+			}
+			v = red[0]
+		}
+		if skip {
+			continue
+		}
+		if appPlaces != "" && appPlaces != types.AccessNone {
+			red := redactPlaceVisitsForLevel([]types.PlaceVisit{v}, appPlaces)
+			if len(red) == 0 {
+				continue
+			}
+			v = red[0]
+		}
+		out = append(out, v)
+	}
+	return out
 }

@@ -9,7 +9,7 @@ A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aper
 Aegis runs as two components:
 
 1. **Pre-request hook** — Aperture calls Aegis before forwarding requests to LLM providers. Aegis detects service references and injects instructions that point the agent at Aegis's unified library (`/v1/library/{kind}`) instead of external APIs.
-2. **Unified library + content transport** — Agents call `GET /v1/library/{kind}` for the user's data (playlists, tracks, photos, messages, …). A narrow `/v1/services/{id}/...` transport remains only for content the library cannot store (photo bytes, full message bodies, playlist items) and local import.
+2. **Unified library + content transport** — Agents call `GET /v1/library/{kind}` for the user's data (playlists, tracks, photos, messages, …). Add `?q=` to search a kind's fields instead of paging the whole list. A narrow `/v1/services/{id}/...` transport remains only for content the library cannot store (photo bytes, full message bodies, playlist items) and local import.
 
 ```
 Agent → Aperture → Aegis (hook: inject library URLs) → LLM

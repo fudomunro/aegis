@@ -295,9 +295,40 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 			pageItems, pr := types.SlicePage(items, page)
 			return types.CalendarEventList{Events: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
 		},
+		redactSearch: func(items []types.CalendarEvent, r *http.Request) []types.CalendarEvent {
+			return s.searchRedactEvents(items, r)
+		},
 		markCanonical: s.stampCalendarEventCanonical,
 		stampCopies:   s.stampEventCopies,
 	})
+}
+
+// searchRedactEvents re-applies per-source freebusy redaction to
+// index-hydrated events (issue #178): a freebusy-only surface must never see
+// titles or descriptions from a stored payload.
+func (s *Server) searchRedactEvents(items []types.CalendarEvent, r *http.Request) []types.CalendarEvent {
+	appFreeBusy := false
+	if app := AppIdentityFrom(r); app != nil {
+		appFreeBusy = types.IsFreeBusyAccess(app.Scopes.For("events"))
+	}
+	out := make([]types.CalendarEvent, 0, len(items))
+	for _, e := range items {
+		redact := appFreeBusy
+		for _, src := range e.Sources {
+			svc := s.config.GetService(src.Service)
+			if svc == nil {
+				continue
+			}
+			if types.IsFreeBusyAccess(s.effectivePermissions(svc).For("events")) {
+				redact = true
+			}
+		}
+		if redact {
+			e = types.RedactCalendarEventsFreeBusy([]types.CalendarEvent{e})[0]
+		}
+		out = append(out, e)
+	}
+	return out
 }
 
 // HandleLibraryFreeBusy returns only busy intervals for scheduling apps:

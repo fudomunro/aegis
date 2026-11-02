@@ -21,6 +21,7 @@ const (
 	defaultLinksName        = "entity_links.json"
 	defaultCopyLedgerName   = "copy_ledger.db"
 	defaultMailArchiveName  = "mail-archive.db"
+	defaultSearchIndexName  = "search-index.db"
 	defaultQuickenName      = "quicken.db"
 	defaultTimelineName     = "timeline.db"
 	defaultSignalName       = "signal.db"
@@ -58,6 +59,9 @@ type DataPaths struct {
 	SyncJobs string
 	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
+	// SearchIndex is the SQLite library search-index path (issue #178).
+	// Empty disables q= on /v1/library/{kind}.
+	SearchIndex string
 	// Quicken is the SQLite Quicken import store path (issue #141).
 	// Empty disables the local Quicken source.
 	Quicken string
@@ -92,6 +96,8 @@ type StatePathOverrides struct {
 	SyncJobsSet        bool
 	MailArchive        string
 	MailArchiveSet     bool
+	SearchIndex        string
+	SearchIndexSet     bool
 	Quicken            string
 	QuickenSet         bool
 	Timeline           string
@@ -220,6 +226,16 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.MailArchive = ""
 	default:
 		paths.MailArchive = expandUserPath(ov.MailArchive)
+	}
+	// Search index: omitted → default under data dir; explicitly empty →
+	// q= search disabled (issue #178).
+	switch {
+	case !ov.SearchIndexSet:
+		paths.SearchIndex = filepath.Join(dir, defaultSearchIndexName)
+	case strings.TrimSpace(ov.SearchIndex) == "":
+		paths.SearchIndex = ""
+	default:
+		paths.SearchIndex = expandUserPath(ov.SearchIndex)
 	}
 	// Quicken import store: omitted → default under data dir; explicitly empty → disabled.
 	switch {

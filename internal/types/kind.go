@@ -50,6 +50,11 @@ type LibraryKind struct {
 	// DefaultNone keeps the type hidden unless a permissions map / data
 	// grant names it explicitly (places pattern, issue #142).
 	DefaultNone bool
+
+	// Search declares how this kind is searched (issue #178). Nil means
+	// the kind has no q= support. Builtin specs live with the registry;
+	// user-defined packs declare theirs in the schema file.
+	Search *SearchSpec
 }
 
 // Mentions reports whether the user message looks like a question about this
@@ -67,10 +72,18 @@ func (k LibraryKind) Mentions(msg string) bool {
 // Instructions builds the system-message hint for this library endpoint.
 func (k LibraryKind) Instructions(baseURL string) string {
 	root := strings.TrimRight(baseURL, "/")
+	searchHint := ""
+	if k.Search != nil {
+		searchHint = fmt.Sprintf(
+			"Search with q= (full-text over %s): GET %s%s?q=… — use this instead "+
+				"of paging the whole list when the user is looking for specific %s.\n",
+			strings.Join(k.Search.Fields, "/"), root, k.Path, k.Label,
+		)
+	}
 	return fmt.Sprintf(
 		"Unified %s library (use when the user asks about %s):\n"+
 			"GET %s%s — %s.\n"+
-			"%s Prefer this endpoint for questions like %q so the answer includes "+
+			"%s%s Prefer this endpoint for questions like %q so the answer includes "+
 			"every connected service.\n"+
 			"Page with limit (default 100, max 500) and cursor (opaque; response "+
 			"next_cursor continues the walk). total is the full filtered count; "+
@@ -80,7 +93,7 @@ func (k LibraryKind) Instructions(baseURL string) string {
 			"truncated means upstream page-cap incompleteness, not 'more pages in this response'.\n"+
 			"sources[].canonical marks the authoritative non-Aegis location for that item; "+
 			"prefer that service for writes or mirrors.",
-		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, k.ExampleQuestion,
+		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, searchHint, k.ExampleQuestion,
 	)
 }
 

@@ -629,6 +629,7 @@ on first run with mode `0700` (it holds secrets).
  tokens.json # encrypted OAuth tokens + static credentials (0600;)
  copy_ledger.db # SQLite copy ledger + sync job queue (empty -copy-ledger / -sync-jobs disables)
  mail-archive.db # SQLite+FTS mail archive (omit -mail-archive to disable)
+ search-index.db # SQLite library search index (omit -search-index to disable)
  quicken.db # Quicken QIF/QFX import store (; empty -quicken-store disables)
  timeline.db # Google Timeline import store (; empty -timeline-store disables)
  signal.db # Signal contacts/messages import store (; empty -signal-store disables)
@@ -649,6 +650,7 @@ An explicit flag always wins:
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-sync-jobs` | the copy-ledger path | Sync job queue; empty (explicitly set) disables the sync worker |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
+| `-search-index` | `search-index.db` | Empty string (explicitly set) disables `q=` search on `/v1/library/{kind}` |
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
 | `-signal-store` | `signal.db` | Empty string (explicitly set) disables the Signal import source |
@@ -684,6 +686,7 @@ directory or keep passing the explicit path flags.
 | `-sync-jobs` | the `-copy-ledger` path | Sync job queue path (co-located with the copy ledger by default); empty disables |
 | `-sync-workers` | `2` | Sync worker pool size; `0` disables the worker |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
+| `-search-index` | `<data-dir>/search-index.db` | Library search index path; empty disables `q=` search |
 | `-quicken-store` | `<data-dir>/quicken.db` | Quicken import store; empty disables |
 | `-import-quicken` | | Import a QIF/QFX file or directory, then exit |
 | `-timeline-store` | `<data-dir>/timeline.db` | Google Timeline import store; empty disables |

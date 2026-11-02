@@ -227,6 +227,7 @@ or `serviceProvidedTypes`.
     CanonicalAllowed: true,  // may appear in canonical_for
     AllowedLevels:    nil,   // optional: []string{types.AccessSummary, …}
     DefaultNone:      false, // true = opt-in like places (issue #142)
+    Search:           &types.SearchSpec{Fields: []string{"name"}, TitleField: "name"}, // nil = no q= support
 },
 
 // kindRuntime (core-owned visibility predicates):
@@ -249,6 +250,7 @@ Field guidance:
 | `CanonicalAllowed` | `true` when services can be the home copy for this kind |
 | `AllowedLevels` | Type-scoped redaction levels this kind can enforce (`AccessFreeBusy`, `AccessSummary`, `AccessCity`, `AccessPrecise`, `AccessMetadata`). Leave empty for none/read/write/read-write only. |
 | `DefaultNone` | `true` when the type stays hidden until a data grant names it (places pattern) |
+| `Search` | `&types.SearchSpec` naming the neutral JSON fields `q=` full-text indexes (issue #178). Declare user-visible text only — identity/transport keys (`id`, `sources`, `entity_id`, …) are never indexed. Kinds with `AllowedLevels` must also set `libraryKindSpec.redactSearch` so index-hydrated hits re-apply fetch-time redaction. Nil means `q` is rejected. |
 | `kindRuntime` row | Wire `HasProviders` to `hasProvider[P]` and `Readable` to `libraryReadableFor` — do not hand-roll; keep IDs in sync with `types.BuiltinLibraryKinds` |
 
 `LibraryKind.Instructions` automatically adds truncated-flag wording and the
@@ -484,10 +486,11 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 
 - [ ] Neutral `Widget` / `WidgetSource` / `WidgetList` in `internal/types/models.go` (sources[], Match, Extra)
 - [ ] `WidgetProvider` in `internal/types/providers.go` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
-- [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone`) **and** `kindRuntime` predicates
+- [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone` / `Search`) **and** `kindRuntime` predicates
 - [ ] Route in `libraryRouteHandlers()`
 - [ ] `DataTypeForPath` rules use the same permission key (reserved automatically via the registry)
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
+- [ ] `redactSearch` on the `libraryKindSpec` when the kind has `AllowedLevels` (search hits hydrate from the index and skip fetch-time redaction)
 - [ ] Identity key + `MergeWidgets` (durable ID first; record `Match`)
 - [ ] Connector implements `WidgetProvider` + `Capabilities()` data type
 - [ ] `DataTypeForPath` cases for the provider's paths
