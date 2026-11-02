@@ -10,11 +10,11 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 )
 
-// Mail archive ingest runner (issue #227, phase 1). Wraps the existing
-// MailArchiveSyncer contract so the queue, not a caller loop, owns resume:
-// each step is one bounded page batch and the durable cursor keeps its place.
-// This is the same seam POST /v1/mail/sync uses, minus the "repeat until
-// done" choreography.
+// Mail archive ingest (issue #227). doMailIngest is the single implementation
+// behind both the HTTP sync route and the sync queue runner, so the two
+// surfaces cannot drift. The runner adds queue bookkeeping on top; the route
+// keeps its response contract. Core-owned (like mail_archive_sync.go) — the
+// Host seam for connector-side runners stays open.
 
 // mailIngestKind is the library kind the mail ingest runner serves.
 const mailIngestKind = "messages"
@@ -27,15 +27,18 @@ type mailIngestPayload struct {
 	ResetCursor bool   `json:"reset_cursor,omitempty"`
 }
 
-// mailIngestRunner runs ingest jobs for the local mail archive.
-// Core-owned (like mail_archive_sync.go) — the Host seam for connector-side
-// runners stays open (issue #227).
+// mailIngestRunner runs ingest and import_snapshot jobs for the local mail
+// archive. `ingest` is live cursor paging (Gmail); `import_snapshot` is a
+// snapshot import (Google Takeout). Both chain through the same bounded-run
+// contract, so one runner serves both.
 type mailIngestRunner struct {
 	srv *Server
 }
 
 // JobTypes implements SyncRunner.
-func (r *mailIngestRunner) JobTypes() []string { return []string{SyncJobTypeIngest} }
+func (r *mailIngestRunner) JobTypes() []string {
+	return []string{SyncJobTypeIngest, SyncJobTypeImport}
+}
 
 // Kind implements SyncRunner.
 func (r *mailIngestRunner) Kind() string { return mailIngestKind }
@@ -45,67 +48,23 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 	if r == nil || r.srv == nil {
 		return SyncStep{}, fmt.Errorf("%w: mail ingest runner not wired", ErrSyncTerminal)
 	}
-	s := r.srv
-	if a := s.mail; a == nil {
-		return SyncStep{}, fmt.Errorf("%w: mail archive disabled", ErrSyncTerminal)
+	p, err := parseMailIngestPayload(job)
+	if err != nil {
+		return SyncStep{}, err
 	}
-
-	var p mailIngestPayload
-	if len(job.Payload) > 0 {
-		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			return SyncStep{}, fmt.Errorf("%w: bad ingest payload: %v", ErrSyncTerminal, err)
-		}
-	}
-	// The job's service wins only when the payload does not name one, so a
-	// chained step can keep its service without repeating it in every payload.
-	if p.Service == "" {
-		p.Service = strings.TrimSpace(job.Service)
-	}
-	if p.Service == "" {
-		p.Service = connectors.GoogleGmailServiceID
-	}
-
-	// Takeout is a read-only import location, not a live connector ingest.
-	if p.Service == takeoutServiceID {
-		return s.runTakeoutStep(job, p)
-	}
-
-	syncer := s.mailArchiveSyncer(p.Service)
-	if syncer == nil {
-		return SyncStep{}, fmt.Errorf("%w: service %s cannot sync the mail archive", ErrSyncTerminal, p.Service)
-	}
-	svc := s.config.GetService(p.Service)
-	if svc == nil || svc.Action == "block" {
-		return SyncStep{}, fmt.Errorf("%w: service %s is blocked", ErrSyncTerminal, p.Service)
-	}
-
-	// Serialize with the HTTP sync surface so an admin click and a queued
-	// job cannot interleave two page cursors into one store.
-	s.mailSyncMu.Lock()
-	defer s.mailSyncMu.Unlock()
-
-	max := p.MaxMessages
-	if max <= 0 {
-		max = 200
-	}
-	if max > 1000 {
-		max = 1000
-	}
-	result, err := syncer.SyncMailArchive(ctx, s.mail, MailSyncOptions{
-		MaxMessages: max,
-		Query:       p.Query,
-		ResetCursor: p.ResetCursor,
-	})
+	result, err := r.srv.doMailIngest(ctx, p)
 	step := SyncStep{
 		Done: result.Done,
 		Progress: mergeMailProgress(job.Progress, map[string]any{
-			"service":   result.Service,
-			"listed":    result.Listed,
-			"stored":    result.Stored,
-			"skipped":   result.Skipped,
-			"failed":    result.Failed,
-			"truncated": result.Truncated,
-			"done":      result.Done,
+			"service":     result.Service,
+			"listed":      result.Listed,
+			"stored":      result.Stored,
+			"skipped":     result.Skipped,
+			"failed":      result.Failed,
+			"truncated":   result.Truncated,
+			"done":        result.Done,
+			"query":       result.Query,
+			"last_stored": result.LastStored,
 		}),
 	}
 	if err != nil {
@@ -133,25 +92,72 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 	return step, nil
 }
 
-// quotaSyncBackoff waits out a provider per-user rate quota window.
-const quotaSyncBackoff = 5 * time.Minute
-
-// mailArchiveSyncer builds the ingest adapter for a service, mirroring the
-// construction in handleMailSyncRequest. Returns nil for non-syncable services.
-func (s *Server) mailArchiveSyncer(service string) MailArchiveSyncer {
-	connector, ok := s.connectors[service]
-	if !ok {
-		return nil
+// parseMailIngestPayload fills a payload from a job, defaulting the service
+// from the job row so a chained step need not repeat it. The job type picks
+// the default: `import_snapshot` is a snapshot import (Takeout), `ingest` is
+// live cursor paging (Gmail).
+func parseMailIngestPayload(job SyncJob) (mailIngestPayload, error) {
+	var p mailIngestPayload
+	if len(job.Payload) > 0 {
+		if err := json.Unmarshal(job.Payload, &p); err != nil {
+			return p, fmt.Errorf("%w: bad ingest payload: %v", ErrSyncTerminal, err)
+		}
 	}
-	gc, ok := connector.(*connectors.GoogleGmailConnector)
-	if !ok {
-		return nil
+	if p.Service == "" {
+		p.Service = strings.TrimSpace(job.Service)
 	}
-	return &gmailArchiveSyncer{GoogleGmailConnector: gc, host: s}
+	if p.Service == "" {
+		if job.JobType == SyncJobTypeImport {
+			p.Service = takeoutServiceID
+		} else {
+			p.Service = connectors.GoogleGmailServiceID
+		}
+	}
+	return p, nil
 }
 
-// runTakeoutStep ingests one bounded batch from the read-only Takeout export.
-func (s *Server) runTakeoutStep(job SyncJob, p mailIngestPayload) (SyncStep, error) {
+// doMailIngest runs one bounded ingest and reports the raw mail result. Both
+// the HTTP sync route and the queue runner go through here.
+func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (MailSyncResult, error) {
+	if s.mail == nil {
+		return MailSyncResult{Service: p.Service, Error: "mail archive disabled"},
+			fmt.Errorf("%w: mail archive disabled", ErrSyncTerminal)
+	}
+	if p.Service == takeoutServiceID {
+		return s.doTakeoutIngest(ctx, p)
+	}
+	syncer := s.mailArchiveSyncer(p.Service)
+	if syncer == nil {
+		return MailSyncResult{Service: p.Service},
+			fmt.Errorf("%w: service %s cannot sync the mail archive", ErrSyncTerminal, p.Service)
+	}
+	svc := s.config.GetService(p.Service)
+	if svc == nil || svc.Action == "block" {
+		return MailSyncResult{Service: p.Service},
+			fmt.Errorf("%w: service %s is blocked", ErrSyncTerminal, p.Service)
+	}
+
+	// Serialize with every other ingest so two page cursors cannot interleave
+	// into one store — the HTTP surface and the queue share this lock.
+	s.mailSyncMu.Lock()
+	defer s.mailSyncMu.Unlock()
+
+	max := clampMailSyncMax(p.MaxMessages)
+	result, err := syncer.SyncMailArchive(ctx, s.mail, MailSyncOptions{
+		MaxMessages: max,
+		Query:       p.Query,
+		ResetCursor: p.ResetCursor,
+	})
+	if err != nil && result.Error == "" {
+		result.Error = err.Error()
+	}
+	// Fail-open: report what was stored even when the run failed mid-batch.
+	return result, err
+}
+
+// doTakeoutIngest imports one bounded batch from the read-only Takeout export
+// and stamps its optimistic snapshot on the copy ledger.
+func (s *Server) doTakeoutIngest(_ context.Context, p mailIngestPayload) (MailSyncResult, error) {
 	a := s.mail
 	path := strings.TrimSpace(p.Query)
 	if strings.HasPrefix(path, "takeout:") {
@@ -161,7 +167,8 @@ func (s *Server) runTakeoutStep(job SyncJob, p mailIngestPayload) (SyncStep, err
 		path = a.TakeoutPath()
 	}
 	if path == "" {
-		return SyncStep{}, fmt.Errorf("%w: takeout path not configured", ErrSyncTerminal)
+		return MailSyncResult{Service: takeoutServiceID},
+			fmt.Errorf("%w: takeout path not configured", ErrSyncTerminal)
 	}
 
 	s.mailSyncMu.Lock()
@@ -174,27 +181,75 @@ func (s *Server) runTakeoutStep(job SyncJob, p mailIngestPayload) (SyncStep, err
 	if max > 20000 {
 		max = 20000
 	}
-	result, err := a.ImportTakeout(path, max)
-	if err == nil && result.Error == "" {
-		s.recordTakeoutSnapshot(path, result.Scanned, result.Stored, result.Skipped, result.Done)
+	res, err := a.ImportTakeout(path, max)
+	if err == nil && res.Error == "" {
+		s.recordTakeoutSnapshot(path, res.Scanned, res.Stored, res.Skipped, res.Done)
 	}
-	step := SyncStep{
-		Done: result.Done,
-		Progress: mergeMailProgress(job.Progress, map[string]any{
-			"service":   takeoutServiceID,
-			"listed":    result.Scanned,
-			"stored":    result.Stored,
-			"skipped":   result.Skipped,
-			"failed":    result.Failed,
-			"truncated": result.Truncated,
-			"done":      result.Done,
-			"path":      path,
-		}),
+	// Shape as a mail sync result so the HTTP route and the admin UI share
+	// one renderer with the Gmail path.
+	result := MailSyncResult{
+		Service:   takeoutServiceID,
+		Listed:    res.Scanned,
+		Stored:    res.Stored,
+		Skipped:   res.Skipped,
+		Failed:    res.Failed,
+		Truncated: res.Truncated,
+		Done:      res.Done,
+		Query:     "takeout:" + path,
+		Error:     res.Error,
 	}
-	if err != nil {
-		return step, err
+	if err != nil && result.Error == "" {
+		result.Error = err.Error()
 	}
-	return step, nil
+	return result, err
+}
+
+// clampMailSyncMax bounds one Gmail ingest batch.
+func clampMailSyncMax(max int) int {
+	if max <= 0 {
+		return 200
+	}
+	if max > 1000 {
+		return 1000
+	}
+	return max
+}
+
+// quotaSyncBackoff waits out a provider per-user rate quota window.
+const quotaSyncBackoff = 5 * time.Minute
+
+// mailArchiveSyncer builds the ingest adapter for a service, mirroring the
+// construction the HTTP route used. Returns nil for non-syncable services.
+func (s *Server) mailArchiveSyncer(service string) MailArchiveSyncer {
+	connector, ok := s.connectors[service]
+	if !ok {
+		return nil
+	}
+	gc, ok := connector.(*connectors.GoogleGmailConnector)
+	if !ok {
+		return nil
+	}
+	return &gmailArchiveSyncer{GoogleGmailConnector: gc, host: s}
+}
+
+// newSyncRunnerRegistry wires the runners this build supports.
+func newSyncRunnerRegistry(srv *Server) *RunnerRegistry {
+	r := NewRunnerRegistry()
+	r.Register(&mailIngestRunner{srv: srv})
+	return r
+}
+
+// syncEnqueueFromRequest maps an admin enqueue request onto SyncEnqueue.
+// Entity keys scope idempotency: a whole-collection ingest dedupes on the
+// service, so repeat clicks do not stack duplicate work.
+func syncEnqueueFromRequest(kind, jobType, service, entityKey string, payload map[string]any) SyncEnqueue {
+	return SyncEnqueue{
+		Kind:      strings.TrimSpace(kind),
+		JobType:   strings.TrimSpace(jobType),
+		Service:   strings.TrimSpace(service),
+		EntityKey: strings.TrimSpace(entityKey),
+		Payload:   payload,
+	}
 }
 
 // mailProgressCounters are the per-step fields that accumulate across a chain
@@ -202,8 +257,8 @@ func (s *Server) runTakeoutStep(job SyncJob, p mailIngestPayload) (SyncStep, err
 var mailProgressCounters = []string{"listed", "stored", "skipped", "failed"}
 
 // mergeMailProgress folds one step's counts onto the job's running totals.
-// Boolean/identity fields (done, truncated, service, path) reflect the latest
-// step.
+// Boolean/identity fields (done, truncated, service, query) reflect the
+// latest step.
 func mergeMailProgress(prev json.RawMessage, step map[string]any) map[string]any {
 	out := make(map[string]any, len(step))
 	if len(prev) > 0 {
@@ -234,24 +289,4 @@ func toInt(v any) int {
 		return int(n)
 	}
 	return 0
-}
-
-// newSyncRunnerRegistry wires the runners this build supports.
-func newSyncRunnerRegistry(srv *Server) *RunnerRegistry {
-	r := NewRunnerRegistry()
-	r.Register(&mailIngestRunner{srv: srv})
-	return r
-}
-
-// syncEnqueueFromRequest maps an admin enqueue request onto SyncEnqueue.
-// Entity keys scope idempotency: a whole-collection ingest dedupes on the
-// service, so repeat clicks do not stack duplicate work.
-func syncEnqueueFromRequest(kind, jobType, service, entityKey string, payload map[string]any) SyncEnqueue {
-	return SyncEnqueue{
-		Kind:      strings.TrimSpace(kind),
-		JobType:   strings.TrimSpace(jobType),
-		Service:   strings.TrimSpace(service),
-		EntityKey: strings.TrimSpace(entityKey),
-		Payload:   payload,
-	}
 }

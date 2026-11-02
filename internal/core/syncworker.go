@@ -411,6 +411,14 @@ func (w *SyncWorker) runJob(ctx context.Context, job SyncJob) {
 		cancel()
 	}()
 
+	// Keep the lease alive while the step runs. A long mirror step (hundreds
+	// of name-based lookups) can outlast a fixed lease, and a reclaimed lease
+	// would let another worker start the same batch mid-write. If renewal
+	// reports we no longer own the job, wind the step down.
+	renewStop := make(chan struct{})
+	defer close(renewStop)
+	go w.keepLeaseAlive(job, renewStop, cancel)
+
 	start := time.Now()
 	step, err := w.safeRun(stepCtx, runner, job)
 	elapsed := time.Since(start)
@@ -464,6 +472,41 @@ func (w *SyncWorker) runJob(ctx context.Context, job SyncJob) {
 		"job_id", job.ID, "kind", job.Kind, "job_type", job.JobType,
 		"service", job.Service, "attempts", next.Attempts,
 		"next_run_at", next.NextRunAt, "error", err)
+}
+
+// keepLeaseAlive renews a running job's lease until stop is closed or the
+// worker loses ownership.
+func (w *SyncWorker) keepLeaseAlive(job SyncJob, stop <-chan struct{}, cancel context.CancelFunc) {
+	if w.store == nil || !w.store.Enabled() {
+		return
+	}
+	// Renew well before the lease would lapse; a failed renewal cancels the
+	// step so we never write against a job someone else now owns.
+	interval := syncJobLease / 3
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			ok, err := w.store.RenewLease(job.ID, job.LeaseOwner, w.now().Add(syncJobLease))
+			if err != nil {
+				w.logger.Warn("sync lease renewal failed",
+					"job_id", job.ID, "owner", job.LeaseOwner, "error", err)
+				continue
+			}
+			if !ok {
+				w.logger.Warn("sync lease lost mid-step; winding down",
+					"job_id", job.ID, "owner", job.LeaseOwner)
+				cancel()
+				return
+			}
+		}
+	}
 }
 
 // trackActive registers (or clears, when cancel is nil) the cancel func for an
