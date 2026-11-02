@@ -108,7 +108,18 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 			"done":      result.Done,
 		}),
 	}
-	// Carry the (possibly reset) cursor flags forward only on the first step.
+	if err != nil {
+		// Leave step.Payload empty so a retry keeps the job's payload as-is,
+		// including reset_cursor — a failed first step must not silently
+		// resume from the saved cursor instead of starting over.
+		if isGmailQuotaError(err) {
+			step.RetryAfter = quotaSyncBackoff
+			return step, &SyncRetryAfter{Err: err, After: quotaSyncBackoff}
+		}
+		return step, err
+	}
+	// Only after a successful step: carry the service forward but drop the
+	// one-shot reset_cursor so the chain's later steps resume normally.
 	if !result.Done {
 		next := mailIngestPayload{
 			Service:     p.Service,
@@ -118,15 +129,6 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 		if b, merr := json.Marshal(next); merr == nil {
 			step.Payload = b
 		}
-	}
-	if err != nil {
-		// Quota and other provider pauses get a longer backoff than the
-		// default: the window is measured in minutes, not seconds.
-		if isGmailQuotaError(err) {
-			step.RetryAfter = quotaSyncBackoff
-			return step, &SyncRetryAfter{Err: err, After: quotaSyncBackoff}
-		}
-		return step, err
 	}
 	return step, nil
 }

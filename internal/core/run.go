@@ -482,11 +482,14 @@ func Run() {
 	}
 
 	// Sync worker (issue #227): drains the job queue in-process. Runners
-	// need the connector map above, so this starts after registration.
+	// need the connector map above, so this starts after registration. The
+	// registry lives on the Server too, so admin enqueue can validate a
+	// request even when -sync-workers 0 leaves the pool off.
 	// Fail-open: a disabled store or zero workers leaves the queue idle and
 	// the request-driven sync surfaces keep working.
+	srv.syncRunners = newSyncRunnerRegistry(srv)
 	if syncStore.Enabled() && *syncWorkers > 0 {
-		srv.syncWorker = NewSyncWorker(syncStore, newSyncRunnerRegistry(srv), SyncWorkerOptions{
+		srv.syncWorker = NewSyncWorker(syncStore, srv.syncRunners, SyncWorkerOptions{
 			Workers: *syncWorkers,
 			Owner:   "aegis",
 			Logger:  slog.Default(),

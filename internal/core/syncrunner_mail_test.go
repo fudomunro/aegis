@@ -37,8 +37,8 @@ func mailRunnerServer(t *testing.T, upstream http.Handler) (*Server, *JobStore, 
 	})
 	store := testJobStore(t)
 	srv.syncJobs = store
-	reg := newSyncRunnerRegistry(srv)
-	srv.syncWorker = NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1, Prom: srv.prom})
+	srv.syncRunners = newSyncRunnerRegistry(srv)
+	srv.syncWorker = NewSyncWorker(store, srv.syncRunners, SyncWorkerOptions{Workers: 1, Prom: srv.prom})
 	return srv, store, srv.syncWorker
 }
 
@@ -184,8 +184,8 @@ func TestMailIngestRunner_QuotaReturnsRetryAfter(t *testing.T) {
 	if !errors.As(err, &ra) || ra.After != quotaSyncBackoff {
 		t.Fatalf("err = %v, want a SyncRetryAfter of %v", err, quotaSyncBackoff)
 	}
-	class, after := classifySyncError(err, step.RetryAfter)
-	if class != SyncJobTypeErrorRetry || after != quotaSyncBackoff {
+	class, after := classifySyncError(err, 1, step.RetryAfter)
+	if class != SyncErrorClassRetry || after != quotaSyncBackoff {
 		t.Fatalf("classify = (%s,%v), want (retryable,%v)", class, after, quotaSyncBackoff)
 	}
 }

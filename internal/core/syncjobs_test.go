@@ -299,7 +299,7 @@ func TestJobStore_FailRetryAndTerminal(t *testing.T) {
 	if retried.Attempts != 1 {
 		t.Fatalf("retry attempts = %d, want 1", retried.Attempts)
 	}
-	if retried.LastErrorClass != SyncJobTypeErrorRetry {
+	if retried.LastErrorClass != SyncErrorClassRetry {
 		t.Fatalf("class = %s, want retryable", retried.LastErrorClass)
 	}
 	if !retried.NextRunAt.After(time.Now().UTC()) {
@@ -336,7 +336,7 @@ func TestJobStore_FailRetryAndTerminal(t *testing.T) {
 	if failed.State != SyncJobFailed {
 		t.Fatalf("terminal state = %s, want failed", failed.State)
 	}
-	if failed.LastErrorClass != SyncJobTypeErrorTerminal {
+	if failed.LastErrorClass != SyncErrorClassTerminal {
 		t.Fatalf("class = %s, want terminal", failed.LastErrorClass)
 	}
 	if failed.FinishedAt.IsZero() {
@@ -432,15 +432,25 @@ func TestJobStore_CancelPruneCountsList(t *testing.T) {
 
 func TestSyncBackoff(t *testing.T) {
 	seen := map[time.Duration]bool{}
+	var prevMid time.Duration
 	for attempt := 1; attempt <= 8; attempt++ {
 		d := syncBackoff(attempt)
 		if d <= 0 {
 			t.Fatalf("attempt %d backoff = %v, want > 0", attempt, d)
 		}
-		if d > 30*time.Minute+6*time.Second {
+		// 25% jitter keeps us within the cap plus one jitter window.
+		if d > 30*time.Minute+30*time.Minute/4+time.Second {
 			t.Fatalf("attempt %d backoff = %v, want <= cap + jitter", attempt, d)
 		}
 		seen[d] = true
+		if attempt <= 5 {
+			// The delay grows exponentially up to the cap.
+			mid := d - time.Duration(0)
+			if attempt > 1 && mid < prevMid/2 {
+				t.Fatalf("attempt %d backoff = %v, want >= half of %v (exponential)", attempt, d, prevMid)
+			}
+			prevMid = mid
+		}
 	}
 	if len(seen) < 4 {
 		t.Fatalf("backoffs clustered too tightly: %v", seen)
@@ -448,39 +458,49 @@ func TestSyncBackoff(t *testing.T) {
 	if syncBackoff(0) <= 0 {
 		t.Fatal("attempt 0 must still produce a delay")
 	}
+	// Attempt 1 vs attempt 4 must differ by roughly the exponential factor.
+	if syncBackoff(1) >= syncBackoff(4) {
+		t.Fatal("backoff must grow with the attempt number")
+	}
 }
 
 func TestClassifySyncError(t *testing.T) {
-	class, after := classifySyncError(nil, 0)
-	if class != SyncJobTypeErrorRetry || after <= 0 {
+	class, after := classifySyncError(nil, 1, 0)
+	if class != SyncErrorClassRetry || after <= 0 {
 		t.Fatalf("nil error = (%s,%v), want (retryable, >0)", class, after)
 	}
-	class, _ = classifySyncError(ErrSyncTerminal, 0)
-	if class != SyncJobTypeErrorTerminal {
+	// The backoff must be exponential in the attempt number, not fixed.
+	_, early := classifySyncError(errors.New("boom"), 1, 0)
+	_, late := classifySyncError(errors.New("boom"), 5, 0)
+	if late <= early {
+		t.Fatalf("attempt 5 backoff = %v, want > attempt 1 (%v)", late, early)
+	}
+	class, _ = classifySyncError(ErrSyncTerminal, 1, 0)
+	if class != SyncErrorClassTerminal {
 		t.Fatalf("terminal error class = %s", class)
 	}
-	class, _ = classifySyncError(fmt.Errorf("wrapped: %w", ErrSyncTerminal), 0)
-	if class != SyncJobTypeErrorTerminal {
+	class, _ = classifySyncError(fmt.Errorf("wrapped: %w", ErrSyncTerminal), 1, 0)
+	if class != SyncErrorClassTerminal {
 		t.Fatalf("wrapped terminal class = %s", class)
 	}
 	// No usable token cannot be fixed by retrying — park it.
-	class, _ = classifySyncError(types.ErrUnauthorized, 0)
-	if class != SyncJobTypeErrorTerminal {
+	class, _ = classifySyncError(types.ErrUnauthorized, 1, 0)
+	if class != SyncErrorClassTerminal {
 		t.Fatalf("unauthorized class = %s, want terminal", class)
 	}
-	class, _ = classifySyncError(fmt.Errorf("sync paused: %w", types.ErrUnauthorized), 0)
-	if class != SyncJobTypeErrorTerminal {
+	class, _ = classifySyncError(fmt.Errorf("sync paused: %w", types.ErrUnauthorized), 1, 0)
+	if class != SyncErrorClassTerminal {
 		t.Fatalf("wrapped unauthorized class = %s, want terminal", class)
 	}
-	class, after = classifySyncError(&SyncRetryAfter{Err: errors.New("q"), After: time.Minute}, 0)
-	if class != SyncJobTypeErrorRetry || after != time.Minute {
+	class, after = classifySyncError(&SyncRetryAfter{Err: errors.New("q"), After: time.Minute}, 1, 0)
+	if class != SyncErrorClassRetry || after != time.Minute {
 		t.Fatalf("retry-after = (%s,%v), want (retryable, 1m)", class, after)
 	}
-	class, after = classifySyncError(&SyncRetryAfter{Err: errors.New("q")}, 2*time.Second)
+	class, after = classifySyncError(&SyncRetryAfter{Err: errors.New("q")}, 1, 2*time.Second)
 	if after != 2*time.Second {
 		t.Fatalf("zero RetryAfter keeps the hint: %v", after)
 	}
-	if class != SyncJobTypeErrorRetry {
+	if class != SyncErrorClassRetry {
 		t.Fatalf("class = %s", class)
 	}
 }
@@ -692,7 +712,7 @@ func TestSyncWorker_RetriesThenFails(t *testing.T) {
 	if orphan.State != SyncJobFailed {
 		t.Fatalf("orphan state = %s, want failed (no runner is terminal)", orphan.State)
 	}
-	if orphan.LastErrorClass != SyncJobTypeErrorTerminal {
+	if orphan.LastErrorClass != SyncErrorClassTerminal {
 		t.Fatalf("orphan class = %s, want terminal", orphan.LastErrorClass)
 	}
 }
@@ -829,7 +849,10 @@ func syncAdminServer(t *testing.T) *Server {
 	srv := adminSplitServer(t)
 	store := testJobStore(t)
 	srv.syncJobs = store
-	srv.syncWorker = NewSyncWorker(store, newSyncRunnerRegistry(srv), SyncWorkerOptions{Workers: 1})
+	// Mirror production: the registry lives on the Server so admin enqueue
+	// can validate even when the worker pool is off.
+	srv.syncRunners = newSyncRunnerRegistry(srv)
+	srv.syncWorker = NewSyncWorker(store, srv.syncRunners, SyncWorkerOptions{Workers: 1})
 	return srv
 }
 
@@ -994,7 +1017,8 @@ func TestHandleAdminSync_RequiresAdminAuth(t *testing.T) {
 	srv := adminSplitServer(t)
 	store := testJobStore(t)
 	srv.syncJobs = store
-	srv.syncWorker = NewSyncWorker(store, newSyncRunnerRegistry(srv), SyncWorkerOptions{Workers: 1})
+	srv.syncRunners = newSyncRunnerRegistry(srv)
+	srv.syncWorker = NewSyncWorker(store, srv.syncRunners, SyncWorkerOptions{Workers: 1})
 
 	// Agent key must not reach the admin sync surface.
 	req := adminRequest(http.MethodGet, "/v1/admin/sync", "agent-key", "")
@@ -1051,7 +1075,7 @@ func TestPromMetrics_SyncSeries(t *testing.T) {
 	p.observeSyncJob("ingest", "google-gmail", SyncJobSucceeded, 1500*time.Millisecond)
 	p.observeSyncJob("ingest", "google-gmail", SyncJobQueued, 10*time.Millisecond)
 	p.observeSyncJob("ingest", "", SyncJobSucceeded, time.Millisecond)
-	p.observeSyncRetry("ingest", SyncJobTypeErrorRetry)
+	p.observeSyncRetry("ingest", SyncErrorClassRetry)
 	p.observeSyncRetry("", "")
 	p.setSyncQueueDepth(SyncCounts{Queued: 2, Running: 1, Succeeded: 7})
 	p.noteSyncSuccess("messages", "google-gmail", time.Unix(1700000000, 0).UTC())
@@ -1142,5 +1166,433 @@ func TestSyncJobIdempotencyKey(t *testing.T) {
 	}
 	if strings.Contains(a, " ") {
 		t.Fatalf("key %q must not contain spaces", a)
+	}
+}
+
+// --- regression: review findings on #228 ---
+
+// A repeat enqueue must resolve to its own row. LastInsertId on an upsert
+// still reports a previous insert on the connection (and the handle is shared
+// with the copy ledger in co-located mode), so the id must come from
+// RETURNING id rather than the driver's last-insert hint.
+func TestEnqueue_UpsertResolvesOwnRow(t *testing.T) {
+	s := testJobStore(t)
+	a := mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "svc-a"})
+	b := mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "svc-b"})
+	if a.ID == b.ID {
+		t.Fatalf("distinct keys must be distinct rows, both %s", a.ID)
+	}
+
+	again := mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "svc-a"})
+	if again.ID != a.ID {
+		t.Fatalf("re-enqueue(a) returned id %s (service %q), want %s (service %q)",
+			again.ID, again.Service, a.ID, a.Service)
+	}
+	if again.Service != "svc-a" {
+		t.Fatalf("re-enqueue(a) service = %q, want svc-a", again.Service)
+	}
+
+	// Same hazard with a shared handle: a copy-ledger insert between the two
+	// enqueues must not leak its rowid into the job lookup.
+	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
+	if err != nil {
+		t.Fatalf("OpenCopyLedger: %v", err)
+	}
+	defer ledger.Close()
+	shared, err := OpenJobStore(ledger.DB(), ledger.Path())
+	if err != nil {
+		t.Fatalf("OpenJobStore(shared): %v", err)
+	}
+	x := mustEnqueue(t, shared, SyncEnqueue{Kind: "photos", JobType: "ingest", Service: "x"})
+	if _, err := ledger.Upsert(CopyRecord{
+		Kind: "photos", EntityKey: "p1", Service: "x", ExternalID: "e1",
+	}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	y := mustEnqueue(t, shared, SyncEnqueue{Kind: "photos", JobType: "ingest", Service: "y"})
+	if _, err := ledger.Upsert(CopyRecord{
+		Kind: "photos", EntityKey: "p2", Service: "y", ExternalID: "e2",
+	}); err != nil {
+		t.Fatalf("Upsert: %v", err)
+	}
+	againX := mustEnqueue(t, shared, SyncEnqueue{Kind: "photos", JobType: "ingest", Service: "x"})
+	if againX.ID != x.ID || againX.Service != "x" {
+		t.Fatalf("shared re-enqueue(x) = %s/%q, want %s/x", againX.ID, againX.Service, x.ID)
+	}
+	if y.ID == x.ID {
+		t.Fatalf("shared distinct keys collided: %s", x.ID)
+	}
+}
+
+// Cancelling a running job must stick: a stale step finishing afterwards may
+// not drag it back to queued, and the step is reported as lost.
+func TestComplete_AfterCancelDoesNotResurrect(t *testing.T) {
+	s := testJobStore(t)
+	job := mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+	claimed, ok, _ := s.Claim("w1", time.Now().UTC().Add(time.Second))
+	if !ok {
+		t.Fatal("expected a claim")
+	}
+	canceled, err := s.Cancel(job.ID)
+	if err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if canceled.State != SyncJobCanceled {
+		t.Fatalf("cancel state = %s, want canceled", canceled.State)
+	}
+
+	if _, err := s.Complete(claimed, SyncStep{Done: false}); !errors.Is(err, ErrSyncJobLost) {
+		t.Fatalf("Complete after cancel err = %v, want ErrSyncJobLost", err)
+	}
+	if _, err := s.Fail(claimed, SyncStep{}, errors.New("boom")); !errors.Is(err, ErrSyncJobLost) {
+		t.Fatalf("Fail after cancel err = %v, want ErrSyncJobLost", err)
+	}
+	final, _ := s.GetByID(job.ID)
+	if final.State != SyncJobCanceled {
+		t.Fatalf("state = %s, want canceled (a stale step must not resurrect it)", final.State)
+	}
+}
+
+// A step whose lease expired and was reclaimed by another worker must not
+// overwrite the new owner's result.
+func TestComplete_LostLeaseDoesNotClobber(t *testing.T) {
+	s := testJobStore(t)
+	mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+	stale, ok, _ := s.Claim("w1", time.Now().UTC().Add(time.Second))
+	if !ok {
+		t.Fatal("expected a claim")
+	}
+
+	// Another worker reclaims after the lease expires.
+	if _, err := s.ReclaimExpired(time.Now().UTC().Add(syncJobLease + time.Minute)); err != nil {
+		t.Fatalf("ReclaimExpired: %v", err)
+	}
+	fresh, ok, _ := s.Claim("w2", time.Now().UTC().Add(syncJobLease+2*time.Minute))
+	if !ok {
+		t.Fatal("expected the reclaimed job to be claimable")
+	}
+	if fresh.LeaseOwner != "w2" {
+		t.Fatalf("fresh owner = %q, want w2", fresh.LeaseOwner)
+	}
+
+	if _, err := s.Complete(stale, SyncStep{Done: true}); !errors.Is(err, ErrSyncJobLost) {
+		t.Fatalf("stale Complete err = %v, want ErrSyncJobLost", err)
+	}
+	running, _ := s.GetByID(fresh.ID)
+	if running.State != SyncJobRunning || running.LeaseOwner != "w2" {
+		t.Fatalf("job = %s/%q, want running/w2 (stale step must not clobber)", running.State, running.LeaseOwner)
+	}
+
+	// The rightful owner still finishes normally.
+	done, err := s.Complete(fresh, SyncStep{Done: true})
+	if err != nil {
+		t.Fatalf("Complete(fresh): %v", err)
+	}
+	if done.State != SyncJobSucceeded {
+		t.Fatalf("final state = %s, want succeeded", done.State)
+	}
+}
+
+// Re-enqueueing a finished job must not inherit the previous run's progress
+// totals (mergeMailProgress accumulates, so a carried-over base would double).
+func TestEnqueue_ResetsProgressAndStartedAt(t *testing.T) {
+	s := testJobStore(t)
+	job := mustEnqueue(t, s, SyncEnqueue{
+		Kind: "messages", JobType: "ingest", Service: "google-gmail",
+		Payload: map[string]any{"stored": 10},
+	})
+	claimed, ok, _ := s.Claim("w", time.Now().UTC().Add(time.Second))
+	if !ok {
+		t.Fatal("expected a claim")
+	}
+	finished, err := s.Complete(claimed, SyncStep{
+		Done:     true,
+		Progress: map[string]any{"stored": 10},
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if !strings.Contains(string(finished.Progress), `"stored":10`) {
+		t.Fatalf("progress = %s, want the run's totals", finished.Progress)
+	}
+	if finished.StartedAt.IsZero() {
+		t.Fatal("finished job must carry started_at")
+	}
+
+	fresh := mustEnqueue(t, s, SyncEnqueue{
+		Kind: "messages", JobType: "ingest", Service: "google-gmail",
+	})
+	if fresh.ID != job.ID {
+		t.Fatalf("id = %s, want %s", fresh.ID, job.ID)
+	}
+	if string(fresh.Progress) != "{}" {
+		t.Fatalf("progress = %s, want {} (a new run must not inherit totals)", fresh.Progress)
+	}
+	if !fresh.StartedAt.IsZero() {
+		t.Fatalf("started_at = %v, want zeroed", fresh.StartedAt)
+	}
+}
+
+// A repeat enqueue must not yank the cursor out of an in-flight chain.
+func TestEnqueue_PreservesInFlightPayload(t *testing.T) {
+	s := testJobStore(t)
+	mustEnqueue(t, s, SyncEnqueue{
+		Kind: "messages", JobType: "ingest", Service: "google-gmail",
+		Payload:     map[string]any{"reset_cursor": true, "max_messages": 5},
+		MaxAttempts: 3,
+	})
+	claimed, ok, _ := s.Claim("w", time.Now().UTC().Add(time.Second))
+	if !ok {
+		t.Fatal("expected a claim")
+	}
+	// Chain to the next step, which drops reset_cursor as designed.
+	chained, err := s.Complete(claimed, SyncStep{
+		Payload: json.RawMessage(`{"service":"google-gmail","max_messages":5}`),
+	})
+	if err != nil {
+		t.Fatalf("Complete: %v", err)
+	}
+	if strings.Contains(string(chained.Payload), "reset_cursor") {
+		t.Fatalf("chained payload = %s, want reset_cursor dropped after success", chained.Payload)
+	}
+
+	// A repeat POST mid-chain must not put it back or change the budget.
+	again := mustEnqueue(t, s, SyncEnqueue{
+		Kind: "messages", JobType: "ingest", Service: "google-gmail",
+		Payload:     map[string]any{"reset_cursor": true, "max_messages": 99},
+		MaxAttempts: 1,
+	})
+	if strings.Contains(string(again.Payload), "reset_cursor") {
+		t.Fatalf("payload = %s, want in-flight payload preserved", again.Payload)
+	}
+	if !strings.Contains(string(again.Payload), `"max_messages":5`) {
+		t.Fatalf("payload = %s, want the chain's max_messages preserved", again.Payload)
+	}
+	if again.MaxAttempts != 3 {
+		t.Fatalf("max_attempts = %d, want 3 (in-flight budget preserved)", again.MaxAttempts)
+	}
+	if again.Attempts != 0 {
+		t.Fatalf("attempts = %d, want 0 (a chained success resets it)", again.Attempts)
+	}
+}
+
+// A queued job is pulled forward by an explicit enqueue so "run now" beats a
+// pending backoff; a running job is left alone.
+func TestEnqueue_PullsQueuedForwardLeavesRunning(t *testing.T) {
+	s := testJobStore(t)
+	s.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	base := s.now()
+	later := base.Add(30 * time.Minute)
+
+	backedOff := mustEnqueue(t, s, SyncEnqueue{
+		Kind: "messages", JobType: "ingest", Service: "google-gmail", RunAt: later,
+	})
+	if !backedOff.NextRunAt.Equal(later) {
+		t.Fatalf("next_run_at = %v, want %v", backedOff.NextRunAt, later)
+	}
+	pulled := mustEnqueue(t, s, SyncEnqueue{
+		Kind: "messages", JobType: "ingest", Service: "google-gmail", RunAt: base,
+	})
+	if pulled.NextRunAt.After(base.Add(time.Second)) {
+		t.Fatalf("next_run_at = %v, want pulled forward to %v", pulled.NextRunAt, base)
+	}
+
+	// Isolated store so the claim below targets exactly one job.
+	s2 := testJobStore(t)
+	s2.now = s.now
+	running := mustEnqueue(t, s2, SyncEnqueue{
+		Kind: "playlists", JobType: "ingest", Service: "spotify", RunAt: base,
+	})
+	claimed, ok, _ := s2.Claim("w", base)
+	if !ok || claimed.ID != running.ID {
+		t.Fatalf("claim = (%v,%s), want job %s", ok, claimed.ID, running.ID)
+	}
+	untouched := mustEnqueue(t, s2, SyncEnqueue{
+		Kind: "playlists", JobType: "ingest", Service: "spotify", RunAt: later,
+	})
+	if !untouched.NextRunAt.Equal(base) {
+		t.Fatalf("running job next_run_at = %v, want left at %v", untouched.NextRunAt, base)
+	}
+	if untouched.State != SyncJobRunning {
+		t.Fatalf("state = %s, want running (untouched)", untouched.State)
+	}
+	if running.ID != untouched.ID {
+		t.Fatalf("id drifted: %s vs %s", running.ID, untouched.ID)
+	}
+}
+
+// Startup recovery must not wait out the 30-minute lease.
+func TestReclaimAllRunning(t *testing.T) {
+	s := testJobStore(t)
+	mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest"})
+	mustEnqueue(t, s, SyncEnqueue{Kind: "playlists", JobType: "ingest"})
+	for i := 0; i < 2; i++ {
+		if _, ok, _ := s.Claim("w", time.Now().UTC().Add(time.Second)); !ok {
+			t.Fatalf("claim %d: expected a job", i)
+		}
+	}
+	// A live lease is NOT reclaimable by the expiry sweep...
+	if n, err := s.ReclaimExpired(time.Now().UTC().Add(time.Second)); err != nil || n != 0 {
+		t.Fatalf("ReclaimExpired(live) = (%d,%v), want (0,nil)", n, err)
+	}
+	// ...but startup recovery reclaims everything the previous process left.
+	n, err := s.ReclaimAllRunning()
+	if err != nil || n != 2 {
+		t.Fatalf("ReclaimAllRunning = (%d,%v), want (2,nil)", n, err)
+	}
+	if got := s.Counts("", ""); got.Queued != 2 || got.Running != 0 {
+		t.Fatalf("counts = %+v, want two queued", got)
+	}
+}
+
+// Breakdown must roll up the whole table, not just a recent-job window.
+func TestJobStore_BreakdownIsGlobal(t *testing.T) {
+	s := testJobStore(t)
+	for i := 0; i < 5; i++ {
+		mustEnqueue(t, s, SyncEnqueue{
+			Kind: "messages", JobType: "ingest", Service: "google-gmail",
+			EntityKey: fmt.Sprint("batch-", i),
+		})
+	}
+	b := s.Breakdown()
+	if b.ByKind["messages"].Queued != 5 {
+		t.Fatalf("by_kind = %+v, want messages/queued 5", b.ByKind)
+	}
+	if b.ByJobType["ingest"].Queued != 5 {
+		t.Fatalf("by_job_type = %+v, want ingest/queued 5", b.ByJobType)
+	}
+}
+
+// -sync-workers 0 leaves the worker nil while the store is enabled. Enqueue
+// must still validate and record work without panicking on the runner lookup.
+func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
+	srv := adminSplitServer(t)
+	srv.syncJobs = testJobStore(t)
+	srv.syncRunners = newSyncRunnerRegistry(srv)
+	// No syncWorker on purpose: the pool is off.
+
+	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
+	w := httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("GET status = %d, want 200", w.Code)
+	}
+	var status SyncStatus
+	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !status.Enabled {
+		t.Fatal("the queue is enabled even with the worker off")
+	}
+	if status.Workers != 0 {
+		t.Fatalf("workers = %d, want 0", status.Workers)
+	}
+
+	// Unknown job type is still rejected (validation does not need the pool).
+	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
+		`{"kind":"messages","job_type":"freshness_check"}`)
+	w = httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("unknown runner status = %d, want 400", w.Code)
+	}
+
+	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
+		`{"kind":"messages","job_type":"ingest","service":"google-gmail"}`)
+	w = httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("enqueue status = %d, body %s", w.Code, w.Body.String())
+	}
+	if got := srv.syncJobs.Counts("", ""); got.Queued != 1 {
+		t.Fatalf("counts = %+v, want one queued", got)
+	}
+
+	// Cancel with no worker must not panic either.
+	var job SyncJob
+	_ = json.Unmarshal(w.Body.Bytes(), &job)
+	req = adminRequest(http.MethodPost, "/v1/admin/sync/"+job.ID+"/cancel", "admin-key", "")
+	w = httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("cancel status = %d, body %s", w.Code, w.Body.String())
+	}
+}
+
+// A terminal failure on a first attempt is counted as failed, not queued:
+// the metric must follow the state the store landed on.
+func TestSyncWorker_MetricStateFollowsStore(t *testing.T) {
+	store := testJobStore(t)
+	reg := NewRunnerRegistry()
+	reg.Register(&stubRunner{
+		kind:     "messages",
+		jobTypes: []string{"ingest"},
+		fn: func(ctx context.Context, job SyncJob) (SyncStep, error) {
+			return SyncStep{}, fmt.Errorf("%w: nope", ErrSyncTerminal)
+		},
+	})
+	prom := NewPromMetrics()
+	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1, Prom: prom})
+	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", MaxAttempts: 5})
+
+	if !w.RunOnce(context.Background(), "w") {
+		t.Fatal("RunOnce must claim")
+	}
+	job := store.List(SyncFilter{})[0]
+	if job.State != SyncJobFailed {
+		t.Fatalf("state = %s, want failed (terminal on the first attempt)", job.State)
+	}
+	out := prom.promText()
+	if !strings.Contains(out, `aegis_sync_jobs_total{job_type="ingest",state="failed"} 1`) {
+		t.Fatalf("metrics must count the terminal failure as failed:\n%s", out)
+	}
+	if strings.Contains(out, `aegis_sync_jobs_total{job_type="ingest",state="queued"}`) {
+		t.Fatal("metrics must not count a terminal failure as queued")
+	}
+}
+
+// CancelJob stops an in-flight step; the runner sees a cancelled context.
+func TestSyncWorker_CancelJobStopsInFlightStep(t *testing.T) {
+	store := testJobStore(t)
+	reg := NewRunnerRegistry()
+	started := make(chan struct{})
+	stopped := make(chan struct{}, 1)
+	reg.Register(&stubRunner{
+		kind:     "messages",
+		jobTypes: []string{"ingest"},
+		fn: func(ctx context.Context, job SyncJob) (SyncStep, error) {
+			close(started)
+			<-ctx.Done()
+			stopped <- struct{}{}
+			return SyncStep{}, ctx.Err()
+		},
+	})
+	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1})
+	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest"})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		w.RunOnce(context.Background(), "w")
+	}()
+	<-started
+
+	job := store.List(SyncFilter{})[0]
+	if _, err := store.Cancel(job.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	if !w.CancelJob(job.ID) {
+		t.Fatal("CancelJob must report the in-flight step cancelled")
+	}
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("runner context was not cancelled")
+	}
+	<-done
+
+	final, _ := store.GetByID(job.ID)
+	if final.State != SyncJobCanceled {
+		t.Fatalf("state = %s, want canceled (the stale step must not resurrect it)", final.State)
 	}
 }

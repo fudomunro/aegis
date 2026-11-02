@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,13 +40,17 @@ const (
 // Job types. Open strings on purpose — user-defined types can register their
 // own ingest without core changes (issue #15).
 const (
-	SyncJobTypeIngest        = "ingest"
-	SyncJobTypeImport        = "import_snapshot"
-	SyncJobTypeMirror        = "mirror"
-	SyncJobTypeFreshness     = "freshness_check"
-	SyncJobTypeRepair        = "repair"
-	SyncJobTypeErrorRetry    = "retryable"
-	SyncJobTypeErrorTerminal = "terminal"
+	SyncJobTypeIngest    = "ingest"
+	SyncJobTypeImport    = "import_snapshot"
+	SyncJobTypeMirror    = "mirror"
+	SyncJobTypeFreshness = "freshness_check"
+	SyncJobTypeRepair    = "repair"
+)
+
+// Error classes recorded on a failed step (last_error_class).
+const (
+	SyncErrorClassRetry    = "retryable"
+	SyncErrorClassTerminal = "terminal"
 )
 
 // syncJobDefaultMaxAttempts bounds retries before a job parks in failed.
@@ -55,6 +60,10 @@ const syncJobDefaultMaxAttempts = 5
 // may reclaim it. Generous enough for one paced mail page (200 messages at
 // the Gmail get interval), short enough that a crash does not stall the queue.
 const syncJobLease = 30 * time.Minute
+
+// syncJobRetention is how long finished jobs stay queryable before the
+// housekeeping sweep drops them.
+const syncJobRetention = 7 * 24 * time.Hour
 
 // ErrSyncTerminal marks a failure retrying cannot fix (revoked token, bad
 // params, unsupported service). The job parks in failed instead of burning
@@ -149,12 +158,12 @@ type SyncStep struct {
 // (kind, job_type, service, entity key) — a repeat request refreshes a
 // terminal job back to queued and leaves queued/running jobs untouched.
 type SyncEnqueue struct {
-	Kind       string
-	JobType    string
-	Service    string
-	EntityKey  string
-	Payload    map[string]any
-	Priority   int
+	Kind        string
+	JobType     string
+	Service     string
+	EntityKey   string
+	Payload     map[string]any
+	Priority    int
 	MaxAttempts int
 	// RunAt defers the first attempt. Zero means now.
 	RunAt time.Time
@@ -247,7 +256,8 @@ func (s *JobStore) Close() error {
 	return s.db.Close()
 }
 
-// Path returns the on-disk location ("" when disabled or shared).
+// Path returns the on-disk location ("" when disabled). For a store sharing
+// the copy ledger's handle this is that same path.
 func (s *JobStore) Path() string {
 	if s == nil {
 		return ""
@@ -295,9 +305,14 @@ func normalizeSyncEnqueue(req SyncEnqueue) (SyncEnqueue, error) {
 }
 
 // Enqueue adds work to the queue, deduplicated on the idempotency key.
+//
 // A repeat request on a terminal job (succeeded/failed/canceled) resets it to
-// queued with a fresh attempt budget; queued/running/paused jobs are left
-// alone so an in-flight chain is never clobbered.
+// queued with a fresh attempt budget and cleared progress, so a new run never
+// inherits the previous run's totals. A queued job is pulled forward to the
+// requested run time (an explicit "run now" beats a pending backoff) but keeps
+// its in-flight payload, attempt budget, and priority, so a repeat POST cannot
+// yank the cursor out of a chain mid-flight. Running and paused jobs are left
+// untouched.
 func (s *JobStore) Enqueue(req SyncEnqueue) (SyncJob, error) {
 	req, err := normalizeSyncEnqueue(req)
 	if err != nil {
@@ -323,27 +338,51 @@ func (s *JobStore) Enqueue(req SyncEnqueue) (SyncJob, error) {
 	}
 	runAtS := runAt.UTC().Format(time.RFC3339Nano)
 	nowS := now.Format(time.RFC3339Nano)
-	res, err := s.db.Exec(`
+
+	// A terminal row is the only one that takes new payload/budget/progress;
+	// a queued row only gets pulled forward in time. RETURNING id avoids
+	// LastInsertId, which on an upsert still reports a previous insert on the
+	// connection (shared with the copy ledger in co-located mode).
+	var id int64
+	err = s.db.QueryRow(`
 INSERT INTO sync_jobs (
   kind, job_type, service, idempotency_key, payload, state,
   attempts, max_attempts, priority, next_run_at,
-  progress, created_at, updated_at
-) VALUES (?,?,?,?,?, 'queued', 0, ?, ?, ?, '{}', ?, ?)
+  progress, started_at, created_at, updated_at
+) VALUES (?,?,?,?,?, 'queued', 0, ?, ?, ?, '{}', '', ?, ?)
 ON CONFLICT(idempotency_key) DO UPDATE SET
-  payload=excluded.payload,
-  max_attempts=excluded.max_attempts,
-  priority=excluded.priority,
   state=CASE
     WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN 'queued'
     ELSE sync_jobs.state
+  END,
+  payload=CASE
+    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN excluded.payload
+    ELSE sync_jobs.payload
   END,
   attempts=CASE
     WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN 0
     ELSE sync_jobs.attempts
   END,
+  max_attempts=CASE
+    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN excluded.max_attempts
+    ELSE sync_jobs.max_attempts
+  END,
+  priority=CASE
+    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN excluded.priority
+    ELSE sync_jobs.priority
+  END,
   next_run_at=CASE
     WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN excluded.next_run_at
+    WHEN sync_jobs.state = 'queued' THEN excluded.next_run_at
     ELSE sync_jobs.next_run_at
+  END,
+  progress=CASE
+    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN '{}'
+    ELSE sync_jobs.progress
+  END,
+  started_at=CASE
+    WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN ''
+    ELSE sync_jobs.started_at
   END,
   last_error=CASE
     WHEN sync_jobs.state IN ('succeeded','failed','canceled') THEN ''
@@ -358,34 +397,15 @@ ON CONFLICT(idempotency_key) DO UPDATE SET
     ELSE sync_jobs.finished_at
   END,
   updated_at=excluded.updated_at
+RETURNING id
 `,
 		req.Kind, req.JobType, req.Service, key, payload,
 		req.MaxAttempts, req.Priority, runAtS, nowS, nowS,
-	)
+	).Scan(&id)
 	if err != nil {
 		return SyncJob{}, err
 	}
-	id, err := lastInsertID(res, s.db, key)
-	if err != nil {
-		return SyncJob{}, err
-	}
-	return s.GetByID(id)
-}
-
-// lastInsertID resolves the row id for an upsert. sqlite reports the
-// rowid of the insert or the conflicting row on upsert, but go-sqlite
-// drivers differ; fall back to a lookup by key.
-func lastInsertID(res sql.Result, db *sql.DB, key string) (string, error) {
-	if res != nil {
-		if id, err := res.LastInsertId(); err == nil && id > 0 {
-			return fmt.Sprint(id), nil
-		}
-	}
-	var id int64
-	if err := db.QueryRow(`SELECT id FROM sync_jobs WHERE idempotency_key=?`, key).Scan(&id); err != nil {
-		return "", err
-	}
-	return fmt.Sprint(id), nil
+	return s.GetByID(fmt.Sprint(id))
 }
 
 // ErrSyncJobNotFound is returned when no job matches the id.
@@ -539,8 +559,49 @@ WHERE id=? AND (
 	return job, true, nil
 }
 
+// ErrSyncJobLost reports that a finished step no longer owned its job: the
+// lease expired and was reclaimed by another worker, or the job was canceled
+// mid-flight. The step's outcome is discarded and no completion side effects
+// (metrics, onDone, cache invalidation) should run.
+var ErrSyncJobLost = errors.New("sync job ownership lost")
+
+// finishOwnedJob applies a step outcome only while this caller still owns the
+// job. A cancel or a reclaimed lease moves the row on without us, and a stale
+// step must not drag it back to queued. Returns ErrSyncJobLost when the
+// update matched no row. success resets the attempt budget so a long chain of
+// healthy pages is not killed by max_attempts (the budget bounds failures on
+// the *current* step, not the whole chain).
+func (s *JobStore) finishOwnedJob(job SyncJob, success bool, state, payload, progress, nextRun, finished, nowS, errText, errClass string) (SyncJob, error) {
+	attempts := "attempts"
+	if success {
+		attempts = "0"
+	}
+	res, err := s.db.Exec(`
+UPDATE sync_jobs
+SET state=?, payload=?, progress=?, next_run_at=?,
+    lease_owner='', lease_until='',
+    attempts=`+attempts+`,
+    last_error=?, last_error_class=?,
+    finished_at=?, updated_at=?
+WHERE id=? AND state='running' AND lease_owner=?
+`, state, payload, progress, nextRun, errText, errClass, finished, nowS,
+		job.ID, job.LeaseOwner)
+	if err != nil {
+		return job, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return job, err
+	}
+	if n == 0 {
+		return job, ErrSyncJobLost
+	}
+	return s.GetByID(job.ID)
+}
+
 // Complete records a successful step. step.Done finishes the job; otherwise
 // the same row is re-armed as queued with the next payload (job chaining).
+// Returns ErrSyncJobLost when the job was canceled or reclaimed first.
 func (s *JobStore) Complete(job SyncJob, step SyncStep) (SyncJob, error) {
 	if !s.Enabled() {
 		return job, nil
@@ -566,31 +627,18 @@ func (s *JobStore) Complete(job SyncJob, step SyncStep) (SyncJob, error) {
 	if len(step.Payload) > 0 {
 		payload = string(step.Payload)
 	}
-	// A successful step resets the attempt budget so a long chain of
-	// healthy pages is not killed by max_attempts (the budget bounds
-	// failures on the *current* step, not the whole chain).
-	_, err := s.db.Exec(`
-UPDATE sync_jobs
-SET state=?, payload=?, progress=?, next_run_at=?,
-    lease_owner='', lease_until='',
-    attempts=0,
-    last_error='', last_error_class='',
-    finished_at=?, updated_at=?
-WHERE id=?
-`, state, payload, progress, nextRun, finished, nowS, job.ID)
-	if err != nil {
-		return job, err
-	}
-	return s.GetByID(job.ID)
+	// A successful step resets the attempt budget (success=true below).
+	return s.finishOwnedJob(job, true, state, payload, progress, nextRun, finished, nowS, "", "")
 }
 
 // Fail records a failed step. Retryable failures schedule a backoff; terminal
-// failures (or an exhausted attempt budget) park the job in failed.
+// failures (or an exhausted attempt budget) park the job in failed. Returns
+// ErrSyncJobLost when the job was canceled or reclaimed first.
 func (s *JobStore) Fail(job SyncJob, step SyncStep, runErr error) (SyncJob, error) {
 	if !s.Enabled() {
 		return job, nil
 	}
-	class, after := classifySyncError(runErr, step.RetryAfter)
+	class, after := classifySyncError(runErr, job.Attempts, step.RetryAfter)
 	errText := ""
 	if runErr != nil {
 		errText = runErr.Error()
@@ -601,7 +649,7 @@ func (s *JobStore) Fail(job SyncJob, step SyncStep, runErr error) (SyncJob, erro
 	state := SyncJobFailed
 	nextRun := nowS
 	finished := nowS
-	if class == SyncJobTypeErrorRetry && job.Attempts < job.MaxAttempts {
+	if class == SyncErrorClassRetry && job.Attempts < job.MaxAttempts {
 		state = SyncJobQueued
 		finished = ""
 		nextRun = formatSyncTime(now.Add(after))
@@ -616,53 +664,45 @@ func (s *JobStore) Fail(job SyncJob, step SyncStep, runErr error) (SyncJob, erro
 	if len(step.Payload) > 0 {
 		payload = string(step.Payload)
 	}
-	_, err := s.db.Exec(`
-UPDATE sync_jobs
-SET state=?, payload=?, progress=?, next_run_at=?,
-    lease_owner='', lease_until='',
-    last_error=?, last_error_class=?,
-    finished_at=?, updated_at=?
-WHERE id=?
-`, state, payload, progress, nextRun, errText, class, finished, nowS, job.ID)
-	if err != nil {
-		return job, err
-	}
-	return s.GetByID(job.ID)
+	return s.finishOwnedJob(job, false, state, payload, progress, nextRun, finished, nowS, errText, class)
 }
 
 // classifySyncError buckets a step failure and resolves the backoff.
-// Terminal: explicit marker, no usable credentials, canceled lease owner.
-// Retryable: everything else, including provider quota windows — a job parked
-// forever after a transient OAuth gap would need manual re-enqueue, so those
-// get a long backoff instead (see SyncRetryAfter).
-func classifySyncError(runErr error, retryAfter time.Duration) (class string, after time.Duration) {
-	after = syncBackoff(1)
+// Terminal: explicit marker, or no usable credentials at all — retrying
+// cannot help until the user re-authorizes, so park the job rather than burn
+// the attempt budget (providers only surface ErrUnauthorized when
+// GetValidToken finds nothing; a refreshable 401 mid-run comes back as an
+// upstream HTTP error and stays retryable).
+// Retryable: everything else, including provider quota windows, which get a
+// long explicit backoff via SyncRetryAfter.
+// attempt is the job's post-claim attempt count (1-based); the delay grows
+// exponentially from it.
+func classifySyncError(runErr error, attempt int, retryAfter time.Duration) (class string, after time.Duration) {
+	after = syncBackoff(attempt)
 	if retryAfter > 0 {
 		after = retryAfter
 	}
 	if runErr == nil {
-		return SyncJobTypeErrorRetry, after
+		return SyncErrorClassRetry, after
 	}
 	if errors.Is(runErr, ErrSyncTerminal) {
-		return SyncJobTypeErrorTerminal, after
+		return SyncErrorClassTerminal, after
 	}
-	// No usable token at all: retrying cannot help until the user
-	// re-authorizes, so park it rather than burn the attempt budget.
 	if errors.Is(runErr, types.ErrUnauthorized) {
-		return SyncJobTypeErrorTerminal, after
+		return SyncErrorClassTerminal, after
 	}
 	var ra *SyncRetryAfter
 	if errors.As(runErr, &ra) {
 		if ra.After > 0 {
 			after = ra.After
 		}
-		return SyncJobTypeErrorRetry, after
+		return SyncErrorClassRetry, after
 	}
-	return SyncJobTypeErrorRetry, after
+	return SyncErrorClassRetry, after
 }
 
-// syncBackoff returns an exponential delay with jitter for attempt n (1-based),
-// capped so a flapping provider cannot park a job for hours.
+// syncBackoff returns an exponential delay for attempt n (1-based) with real
+// jitter, capped so a flapping provider cannot park a job for hours.
 func syncBackoff(attempt int) time.Duration {
 	if attempt < 1 {
 		attempt = 1
@@ -672,10 +712,9 @@ func syncBackoff(attempt int) time.Duration {
 	if d <= 0 || d > 30*time.Minute {
 		d = 30 * time.Minute
 	}
-	// Deterministic jitter (attempt-scaled) keeps the shape testable while
-	// still spreading retries across workers.
-	jitter := time.Duration(attempt*17%7) * time.Second
-	return d + jitter
+	// Up to 25% random jitter so concurrent workers retrying the same
+	// failure do not collide on the same tick.
+	return d + time.Duration(rand.Int64N(int64(d/4)+1))
 }
 
 // Cancel parks a job that should not run again. Returns ErrSyncJobNotFound
@@ -695,8 +734,9 @@ WHERE id=? AND state IN ('queued','running','paused')
 	return s.GetByID(id)
 }
 
-// ReclaimExpired moves leased-but-stale running jobs back to queued. Called
-// on startup and periodically so a crash mid-step loses no work.
+// ReclaimExpired moves leased-but-stale running jobs back to queued. Runs
+// periodically from the worker so a wedged step does not stall the queue for
+// the whole lease window.
 func (s *JobStore) ReclaimExpired(now time.Time) (int, error) {
 	if !s.Enabled() {
 		return 0, nil
@@ -707,6 +747,29 @@ UPDATE sync_jobs
 SET state='queued', lease_owner='', lease_until='', updated_at=?
 WHERE state='running' AND lease_until <> '' AND lease_until < ?
 `, nowS, nowS)
+	if err != nil {
+		return 0, err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
+}
+
+// ReclaimAllRunning returns every running job to queued. Called at startup: a
+// single-process restart means no in-flight step survived, so waiting out a
+// 30-minute lease would stall the queue for nothing.
+func (s *JobStore) ReclaimAllRunning() (int, error) {
+	if !s.Enabled() {
+		return 0, nil
+	}
+	nowS := formatSyncTime(s.clock())
+	res, err := s.db.Exec(`
+UPDATE sync_jobs
+SET state='queued', lease_owner='', lease_until='', updated_at=?
+WHERE state='running'
+`, nowS)
 	if err != nil {
 		return 0, err
 	}
@@ -802,6 +865,62 @@ type SyncCounts struct {
 // Total returns the sum of all state counts.
 func (c SyncCounts) Total() int {
 	return c.Queued + c.Running + c.Succeeded + c.Failed + c.Canceled + c.Paused
+}
+
+// SyncBreakdown is a global rollup of job states grouped by kind and by job
+// type. Computed from the whole table, not just recent rows, so the admin
+// summary matches Counts.
+type SyncBreakdown struct {
+	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
+	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
+}
+
+// Breakdown rolls up states grouped by kind and by job type.
+func (s *JobStore) Breakdown() SyncBreakdown {
+	out := SyncBreakdown{
+		ByKind:    make(map[string]SyncCounts),
+		ByJobType: make(map[string]SyncCounts),
+	}
+	if !s.Enabled() {
+		return out
+	}
+	rows, err := s.db.Query(`SELECT kind, job_type, state, COUNT(*) FROM sync_jobs GROUP BY kind, job_type, state`)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var kind, jobType, state string
+		var n int
+		if err := rows.Scan(&kind, &jobType, &state, &n); err != nil {
+			break
+		}
+		k := out.ByKind[kind]
+		bumpSyncCount(&k, state, n)
+		out.ByKind[kind] = k
+		jt := out.ByJobType[jobType]
+		bumpSyncCount(&jt, state, n)
+		out.ByJobType[jobType] = jt
+	}
+	return out
+}
+
+// bumpSyncCount adds n jobs of the given state to c.
+func bumpSyncCount(c *SyncCounts, state string, n int) {
+	switch state {
+	case SyncJobQueued:
+		c.Queued += n
+	case SyncJobRunning:
+		c.Running += n
+	case SyncJobSucceeded:
+		c.Succeeded += n
+	case SyncJobFailed:
+		c.Failed += n
+	case SyncJobCanceled:
+		c.Canceled += n
+	case SyncJobPaused:
+		c.Paused += n
+	}
 }
 
 // Counts rolls up job states, optionally scoped to one kind or job type.

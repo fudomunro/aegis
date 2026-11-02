@@ -18,14 +18,14 @@ import (
 
 // SyncStatus is the GET /v1/admin/sync response.
 type SyncStatus struct {
-	Enabled   bool                 `json:"enabled"`
-	Workers   int                  `json:"workers"`
-	StorePath string               `json:"store_path,omitempty"`
-	Kinds     []string             `json:"kinds,omitempty"`
-	Counts    SyncCounts           `json:"counts"`
+	Enabled   bool                  `json:"enabled"`
+	Workers   int                   `json:"workers"`
+	StorePath string                `json:"store_path,omitempty"`
+	Kinds     []string              `json:"kinds,omitempty"`
+	Counts    SyncCounts            `json:"counts"`
 	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
 	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
-	Jobs      []SyncJob            `json:"jobs"`
+	Jobs      []SyncJob             `json:"jobs"`
 }
 
 // SyncEnqueueRequest is the POST /v1/admin/sync body.
@@ -62,45 +62,17 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 		status.StorePath = store.Path()
 		status.Counts = store.Counts("", "")
 		status.Jobs = store.List(SyncFilter{Limit: 50})
-
-		byKind := make(map[string]SyncCounts)
-		byType := make(map[string]SyncCounts)
-		for _, job := range status.Jobs {
-			c := byKind[job.Kind]
-			bumpSyncCount(&c, job.State)
-			byKind[job.Kind] = c
-			t := byType[job.JobType]
-			bumpSyncCount(&t, job.State)
-			byType[job.JobType] = t
-		}
-		if len(byKind) > 0 {
-			status.ByKind = byKind
-		}
-		if len(byType) > 0 {
-			status.ByJobType = byType
+		// Global breakdown from the whole table, matching Counts — not the
+		// recent-job window, which would under-report quiet kinds.
+		if b := store.Breakdown(); len(b.ByKind) > 0 {
+			status.ByKind = b.ByKind
+			status.ByJobType = b.ByJobType
 		}
 	}
-	if s.syncWorker != nil {
-		status.Kinds = s.syncWorker.runners.Kinds()
+	if s.syncRunners != nil {
+		status.Kinds = s.syncRunners.Kinds()
 	}
 	writeJSON(w, status)
-}
-
-func bumpSyncCount(c *SyncCounts, state string) {
-	switch state {
-	case SyncJobQueued:
-		c.Queued++
-	case SyncJobRunning:
-		c.Running++
-	case SyncJobSucceeded:
-		c.Succeeded++
-	case SyncJobFailed:
-		c.Failed++
-	case SyncJobCanceled:
-		c.Canceled++
-	case SyncJobPaused:
-		c.Paused++
-	}
 }
 
 func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
@@ -130,10 +102,12 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, "kind and job_type are required")
 		return
 	}
-	if _, ok := s.syncWorker.runners.For(req.Kind, req.JobType); !ok {
-		writeJSONError(w, http.StatusBadRequest,
-			"no sync runner for kind="+req.Kind+" job_type="+req.JobType)
-		return
+	if s.syncRunners != nil {
+		if _, ok := s.syncRunners.For(req.Kind, req.JobType); !ok {
+			writeJSONError(w, http.StatusBadRequest,
+				"no sync runner for kind="+req.Kind+" job_type="+req.JobType)
+			return
+		}
 	}
 
 	entityKey := strings.TrimSpace(req.EntityKey)
@@ -179,6 +153,11 @@ func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "failed to cancel sync job")
 		return
+	}
+	// Stop the in-flight step too — parking the row alone would let a runner
+	// keep working on work the operator just cancelled.
+	if s.syncWorker != nil {
+		s.syncWorker.CancelJob(id)
 	}
 	writeJSON(w, job)
 }

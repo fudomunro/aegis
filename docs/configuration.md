@@ -489,9 +489,11 @@ POST /v1/admin/sync                  # enqueue: {kind, job_type, service, payloa
 POST /v1/admin/sync/{id}/cancel      # park a queued or running job
 ```
 
-Job types today: `ingest` (mail archive, Gmail page batches) and
-`import_snapshot` (Google Takeout). `mirror`, `freshness_check`, and `repair`
-are reserved for the next phases. Enqueue is idempotent on
+Job types today: `ingest` — mail archive page batches for Gmail, and Google
+Takeout imports (which run as `ingest` with `service: google-takeout`).
+`import_snapshot`, `mirror`, `freshness_check`, and `repair` are reserved for
+the next phases and have no runner yet, so posting them returns
+"no sync runner". Enqueue is idempotent on
 `(kind, job_type, service, entity_key)`, so a repeated request does not stack
 duplicate work.
 

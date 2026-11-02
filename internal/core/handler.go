@@ -107,6 +107,10 @@ type Server struct {
 	// Co-located with copies by default so completion and copy stamps share
 	// one transaction.
 	syncJobs *JobStore
+	// syncRunners maps (kind, job_type) to a runner. Held here, not only on
+	// the worker, so admin enqueue can validate a request even when
+	// -sync-workers 0 leaves the pool off.
+	syncRunners *RunnerRegistry
 	// syncWorker drains syncJobs. Nil when the queue is disabled.
 	syncWorker *SyncWorker
 	// mail is the optional local compressed mail archive (/v1/mail/*).

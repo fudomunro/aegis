@@ -3448,22 +3448,31 @@ job.read</pre>
     return bits.join(" · ");
   }
 
-  function renderSync(jobs) {
+  function renderSync(data) {
     const body = $("sync-body");
     const summary = $("sync-summary");
     if (!body) return;
-    const rows = (jobs || []).filter((job) => !syncTypeFilter || job.job_type === syncTypeFilter);
+    const jobs = (data && data.jobs) || [];
+    const rows = jobs.filter((job) => !syncTypeFilter || job.job_type === syncTypeFilter);
     if (summary) {
-      const states = {};
-      (jobs || []).forEach((j) => { states[j.state] = (states[j.state] || 0) + 1; });
-      const parts = Object.keys(states).sort().map((k) => states[k] + " " + k);
-      summary.textContent = parts.length
-        ? parts.join(" · ") + " · " + (jobs || []).length + " recent jobs"
-        : "No sync jobs yet.";
+      if (data && data.enabled === false) {
+        summary.textContent = "Sync queue disabled — set -sync-jobs to a path to enable it. " +
+          "Request-driven sync (mail sync, imports) still works.";
+      } else {
+        // Global counts, not the recent-job window, so quiet kinds still show.
+        const c = (data && data.counts) || {};
+        const parts = ["queued", "running", "succeeded", "failed", "canceled", "paused"]
+          .filter((k) => c[k])
+          .map((k) => c[k] + " " + k);
+        summary.textContent = parts.length
+          ? parts.join(" · ") + " · " + jobs.length + " recent jobs"
+          : "No sync jobs yet.";
+      }
     }
     if (!rows.length) {
       body.innerHTML = '<tr><td colspan="9" class="muted-num">No sync jobs' +
-        (syncTypeFilter ? " of this type" : "") + ".</td></tr>";
+        (syncTypeFilter ? " of this type" : "") + (data && data.enabled === false ? " (queue disabled)" : "") +
+        ".</td></tr>";
       return;
     }
     body.innerHTML = rows.map((job) => {
@@ -3509,7 +3518,7 @@ job.read</pre>
     if (body) body.innerHTML = '<tr><td colspan="9" class="muted-num">Loading…</td></tr>';
     try {
       const data = await api("/v1/admin/sync");
-      renderSync(data.jobs || []);
+      renderSync(data || {});
     } catch (err) {
       if (err.status === 401) { showAuthGate(true); return; }
       if (summary) summary.textContent = "";

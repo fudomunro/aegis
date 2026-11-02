@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sort"
@@ -119,6 +120,11 @@ type SyncWorker struct {
 	// the aegis_sync_last_success_timestamp_seconds gauge.
 	lastSuccessMu sync.Mutex
 	lastSuccess   map[string]time.Time
+
+	// active holds the cancel func per in-flight job id, so CancelJob can
+	// stop a running step instead of only blocking the next claim.
+	activeMu sync.Mutex
+	active   map[string]context.CancelFunc
 }
 
 // SyncWorkerOptions configures a worker. Zero values get sane defaults.
@@ -157,6 +163,7 @@ func NewSyncWorker(store *JobStore, runners *RunnerRegistry, opts SyncWorkerOpti
 		onDone:      opts.OnDone,
 		kick:        make(chan struct{}, 1),
 		lastSuccess: make(map[string]time.Time),
+		active:      make(map[string]context.CancelFunc),
 		now:         func() time.Time { return time.Now().UTC() },
 	}
 }
@@ -175,10 +182,11 @@ func (w *SyncWorker) Start() {
 	w.cancel = cancel
 	w.started = true
 
-	// Reclaim leases left by a previous process before accepting work.
+	// Startup recovery: a restart orphans every in-flight step, so reclaim
+	// all running rows immediately rather than waiting out the lease.
 	if w.store != nil && w.store.Enabled() {
-		if n, err := w.store.ReclaimExpired(time.Now().UTC()); err == nil && n > 0 {
-			w.logger.Info("reclaimed expired sync leases", "count", n)
+		if n, err := w.store.ReclaimAllRunning(); err == nil && n > 0 {
+			w.logger.Info("reclaimed orphaned sync jobs after restart", "count", n)
 		}
 	}
 
@@ -226,6 +234,7 @@ func (w *SyncWorker) loop(ctx context.Context, slot int) {
 	owner := fmt.Sprintf("%s-%d-%d", w.owner, time.Now().UnixNano()%1_000_000, slot)
 	ticker := time.NewTicker(w.poll)
 	defer ticker.Stop()
+	ticks := 0
 	for {
 		select {
 		case <-ctx.Done():
@@ -240,7 +249,28 @@ func (w *SyncWorker) loop(ctx context.Context, slot int) {
 				break
 			}
 		}
+		ticks++
+		// Housekeep roughly every ~50 idle polls: reclaim wedged leases and
+		// prune finished rows past retention. Cheap and not on the hot path.
+		if ticks%50 == 0 {
+			w.housekeep()
+		}
 		w.recordQueueDepth()
+	}
+}
+
+// housekeep reclaims leases a wedged step never gave back and drops finished
+// jobs past retention, so a noisy pipeline cannot fill the disk.
+func (w *SyncWorker) housekeep() {
+	if w.store == nil || !w.store.Enabled() {
+		return
+	}
+	now := w.now()
+	if n, err := w.store.ReclaimExpired(now); err == nil && n > 0 {
+		w.logger.Info("reclaimed expired sync leases", "count", n)
+	}
+	if n, err := w.store.Prune(syncJobRetention); err == nil && n > 0 {
+		w.logger.Info("pruned finished sync jobs", "count", n)
 	}
 }
 
@@ -268,20 +298,45 @@ func (w *SyncWorker) runJob(ctx context.Context, job SyncJob) {
 	if !ok {
 		// A runner can disappear across a config change; park the job as
 		// terminal rather than spinning on it.
-		_, _ = w.store.Fail(job, SyncStep{}, fmt.Errorf("%w: no runner for %s/%s", ErrSyncTerminal, job.Kind, job.JobType))
-		w.observe(job, SyncStep{}, ErrSyncTerminal, time.Duration(0))
+		next, ferr := w.store.Fail(job, SyncStep{}, fmt.Errorf("%w: no runner for %s/%s", ErrSyncTerminal, job.Kind, job.JobType))
+		if ferr != nil {
+			w.logger.Warn("sync fail recorded", "job_id", job.ID, "error", ferr)
+		}
+		w.observe(job, SyncStep{}, ErrSyncTerminal, next.State, time.Duration(0))
+		if next.State == SyncJobFailed {
+			w.callOnDone(next, false)
+		}
 		return
 	}
+
+	// Give the step its own cancelable context so an admin cancel can stop
+	// an in-flight runner rather than only blocking the next claim.
+	stepCtx, cancel := context.WithCancel(ctx)
+	w.trackActive(job.ID, cancel)
+	defer func() {
+		w.trackActive(job.ID, nil)
+		cancel()
+	}()
+
 	start := time.Now()
-	step, err := w.safeRun(ctx, runner, job)
+	step, err := w.safeRun(stepCtx, runner, job)
 	elapsed := time.Since(start)
-	w.observe(job, step, err, elapsed)
 
 	if err == nil {
 		next, cerr := w.store.Complete(job, step)
-		if cerr != nil {
+		switch {
+		case errors.Is(cerr, ErrSyncJobLost):
+			// Canceled or reclaimed mid-flight: the step's outcome is void.
+			w.observe(job, step, nil, SyncJobCanceled, elapsed)
+			w.logger.Info("sync step discarded (job no longer owned)",
+				"job_id", job.ID, "kind", job.Kind, "job_type", job.JobType)
+			return
+		case cerr != nil:
 			w.logger.Warn("sync complete failed", "job_id", job.ID, "error", cerr)
+			w.observe(job, step, nil, job.State, elapsed)
+			return
 		}
+		w.observe(job, step, nil, next.State, elapsed)
 		if step.Done {
 			w.noteSuccess(next)
 			w.callOnDone(next, true)
@@ -293,9 +348,18 @@ func (w *SyncWorker) runJob(ctx context.Context, job SyncJob) {
 	}
 
 	next, ferr := w.store.Fail(job, step, err)
-	if ferr != nil {
+	switch {
+	case errors.Is(ferr, ErrSyncJobLost):
+		w.observe(job, step, err, SyncJobCanceled, elapsed)
+		w.logger.Info("sync failure discarded (job no longer owned)",
+			"job_id", job.ID, "kind", job.Kind, "job_type", job.JobType, "error", err)
+		return
+	case ferr != nil:
 		w.logger.Warn("sync fail recorded", "job_id", job.ID, "error", ferr)
+		w.observe(job, step, err, job.State, elapsed)
+		return
 	}
+	w.observe(job, step, err, next.State, elapsed)
 	if next.State == SyncJobFailed {
 		w.callOnDone(next, false)
 		w.logger.Error("sync job failed",
@@ -307,6 +371,35 @@ func (w *SyncWorker) runJob(ctx context.Context, job SyncJob) {
 		"job_id", job.ID, "kind", job.Kind, "job_type", job.JobType,
 		"service", job.Service, "attempts", next.Attempts,
 		"next_run_at", next.NextRunAt, "error", err)
+}
+
+// trackActive registers (or clears, when cancel is nil) the cancel func for an
+// in-flight job so CancelJob can stop a running step.
+func (w *SyncWorker) trackActive(id string, cancel context.CancelFunc) {
+	w.activeMu.Lock()
+	defer w.activeMu.Unlock()
+	if cancel == nil {
+		delete(w.active, id)
+		return
+	}
+	w.active[id] = cancel
+}
+
+// CancelJob cancels an in-flight step for a job id. The job row is moved on by
+// the caller (JobStore.Cancel); this only stops the runner. Returns true when
+// a running step was actually cancelled.
+func (w *SyncWorker) CancelJob(id string) bool {
+	if w == nil {
+		return false
+	}
+	w.activeMu.Lock()
+	cancel, ok := w.active[id]
+	w.activeMu.Unlock()
+	if !ok {
+		return false
+	}
+	cancel()
+	return true
 }
 
 // safeRun keeps a panicking runner from taking the worker pool down. A panic
@@ -364,21 +457,19 @@ func (w *SyncWorker) LastSuccess() map[string]time.Time {
 	return out
 }
 
-func (w *SyncWorker) observe(job SyncJob, step SyncStep, err error, elapsed time.Duration) {
+// observe records one step outcome. state is the job state the store
+// actually landed on (a terminal failure on a first attempt is "failed", not
+// "queued", even though attempts is still below the budget).
+func (w *SyncWorker) observe(job SyncJob, step SyncStep, err error, state string, elapsed time.Duration) {
 	if w.prom == nil {
 		return
 	}
-	state := SyncJobSucceeded
-	if err != nil {
-		if job.Attempts >= job.MaxAttempts {
-			state = SyncJobFailed
-		} else {
-			state = SyncJobQueued
-		}
+	if state == "" {
+		state = job.State
 	}
 	w.prom.observeSyncJob(job.JobType, job.Service, state, elapsed)
 	if err != nil {
-		class, _ := classifySyncError(err, step.RetryAfter)
+		class, _ := classifySyncError(err, job.Attempts, step.RetryAfter)
 		w.prom.observeSyncRetry(job.JobType, class)
 	}
 }
