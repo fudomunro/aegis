@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -91,8 +92,10 @@ func (r *RunnerRegistry) Kinds() []string {
 type SyncWorker struct {
 	store   *JobStore
 	runners *RunnerRegistry
-	prom    *PromMetrics
-	logger  *slog.Logger
+	// schedules feeds the queue on a cadence (issue #227 phase 2). Optional.
+	schedules *ScheduleStore
+	prom      *PromMetrics
+	logger    *slog.Logger
 
 	// workers is the pool size. Per-service provider limits live in the
 	// runners (see mailSyncMu), not here.
@@ -134,6 +137,8 @@ type SyncWorkerOptions struct {
 	Owner   string
 	Logger  *slog.Logger
 	Prom    *PromMetrics
+	// Schedules, when set, is polled for due recurring templates.
+	Schedules *ScheduleStore
 	// OnDone runs after a job reaches succeeded/failed/canceled.
 	OnDone func(job SyncJob, succeeded bool)
 }
@@ -155,6 +160,7 @@ func NewSyncWorker(store *JobStore, runners *RunnerRegistry, opts SyncWorkerOpti
 	return &SyncWorker{
 		store:       store,
 		runners:     runners,
+		schedules:   opts.Schedules,
 		prom:        opts.Prom,
 		logger:      opts.Logger.With("component", "sync_worker"),
 		workers:     opts.Workers,
@@ -234,7 +240,7 @@ func (w *SyncWorker) loop(ctx context.Context, slot int) {
 	owner := fmt.Sprintf("%s-%d-%d", w.owner, time.Now().UnixNano()%1_000_000, slot)
 	ticker := time.NewTicker(w.poll)
 	defer ticker.Stop()
-	ticks := 0
+	lastHousekeep := time.Time{}
 	for {
 		select {
 		case <-ctx.Done():
@@ -249,29 +255,75 @@ func (w *SyncWorker) loop(ctx context.Context, slot int) {
 				break
 			}
 		}
-		ticks++
-		// Housekeep roughly every ~50 idle polls: reclaim wedged leases and
-		// prune finished rows past retention. Cheap and not on the hot path.
-		if ticks%50 == 0 {
+		// Housekeep on wall-clock cadence, not poll count: schedules must
+		// fire near their due time whatever the poll interval is.
+		if n := w.now(); n.Sub(lastHousekeep) >= syncHousekeepInterval {
+			lastHousekeep = n
 			w.housekeep()
 		}
 		w.recordQueueDepth()
 	}
 }
 
-// housekeep reclaims leases a wedged step never gave back and drops finished
-// jobs past retention, so a noisy pipeline cannot fill the disk.
+// syncHousekeepInterval is how often the pool reclaims leases, prunes
+// finished rows, and feeds due schedules. Short enough that a due schedule
+// fires promptly; long enough to stay off the hot path.
+const syncHousekeepInterval = 30 * time.Second
+
+// housekeep reclaims leases a wedged step never gave back, drops finished
+// jobs past retention, and feeds the queue from due schedules.
 func (w *SyncWorker) housekeep() {
-	if w.store == nil || !w.store.Enabled() {
+	now := w.now()
+	if w.store != nil && w.store.Enabled() {
+		if n, err := w.store.ReclaimExpired(now); err == nil && n > 0 {
+			w.logger.Info("reclaimed expired sync leases", "count", n)
+		}
+		if n, err := w.store.Prune(syncJobRetention); err == nil && n > 0 {
+			w.logger.Info("pruned finished sync jobs", "count", n)
+		}
+	}
+	w.enqueueDueSchedules(now)
+}
+
+// enqueueDueSchedules turns due recurring templates into jobs and re-arms
+// them. Enqueue is idempotent, so a template that fires while its previous job
+// is still queued does not stack a duplicate.
+func (w *SyncWorker) enqueueDueSchedules(now time.Time) {
+	if w.schedules == nil || !w.schedules.Enabled() {
 		return
 	}
-	now := w.now()
-	if n, err := w.store.ReclaimExpired(now); err == nil && n > 0 {
-		w.logger.Info("reclaimed expired sync leases", "count", n)
+	for _, sc := range w.schedules.Due(now) {
+		if w.store == nil || !w.store.Enabled() {
+			return
+		}
+		payload := map[string]any{}
+		if len(sc.Payload) > 0 {
+			var m map[string]any
+			if err := json.Unmarshal(sc.Payload, &m); err == nil {
+				payload = m
+			}
+		}
+		job, err := w.store.Enqueue(SyncEnqueue{
+			Kind:      sc.Kind,
+			JobType:   sc.JobType,
+			Service:   sc.Service,
+			EntityKey: sc.EntityKey,
+			Payload:   payload,
+			RunAt:     now,
+		})
+		if err != nil {
+			w.logger.Warn("sync schedule enqueue failed",
+				"schedule_id", sc.ID, "kind", sc.Kind, "job_type", sc.JobType, "error", err)
+			continue
+		}
+		if err := w.schedules.Requeue(sc); err != nil {
+			w.logger.Warn("sync schedule re-arm failed", "schedule_id", sc.ID, "error", err)
+		}
+		w.logger.Info("sync schedule fired",
+			"schedule_id", sc.ID, "kind", sc.Kind, "job_type", sc.JobType,
+			"job_id", job.ID, "every_seconds", sc.EverySeconds)
 	}
-	if n, err := w.store.Prune(syncJobRetention); err == nil && n > 0 {
-		w.logger.Info("pruned finished sync jobs", "count", n)
-	}
+	w.Kick()
 }
 
 // RunOnce claims and executes at most one due job. Returns false when the

@@ -484,18 +484,64 @@ next run times, with a **Sync mail now** button that enqueues work instead of
 driving a client-side batch loop. The same surface is available as JSON:
 
 ```
-GET  /v1/admin/sync                  # queue rollup + recent jobs
-POST /v1/admin/sync                  # enqueue: {kind, job_type, service, payload}
-POST /v1/admin/sync/{id}/cancel      # park a queued or running job
+GET  /v1/admin/sync                            # queue rollup, recent jobs, copy freshness, schedules
+POST /v1/admin/sync                            # enqueue: {kind, job_type, service, payload}
+POST /v1/admin/sync/{id}/cancel                # park a queued or running job
+POST /v1/admin/sync/schedules/{id}/enable      # resume a paused schedule
+POST /v1/admin/sync/schedules/{id}/disable     # pause a schedule
 ```
 
 Job types today: `ingest` — mail archive page batches for Gmail, and Google
-Takeout imports (which run as `ingest` with `service: google-takeout`).
-`import_snapshot`, `mirror`, `freshness_check`, and `repair` are reserved for
+Takeout imports (which run as `ingest` with `service: google-takeout`) — and
+`freshness_check`. `import_snapshot`, `mirror`, and `repair` are reserved for
 the next phases and have no runner yet, so posting them returns
 "no sync runner". Enqueue is idempotent on
 `(kind, job_type, service, entity_key)`, so a repeated request does not stack
 duplicate work.
+
+### Copy freshness
+
+A `freshness_check` job answers "is this backup still current?" without
+re-syncing anything. It walks the copy ledger, reads each copy's live version
+descriptor from its location, and stamps `status` and `last_checked_at`.
+Checks are observational: they never write to a source service.
+
+| Copy | Compared on | Result |
+|------|-------------|--------|
+| Mirrored playlists / liked tracks (Spotify, YouTube Music) | `snapshot_id` / `item_count` from one metadata call | changed ⇒ `stale`, gone ⇒ `missing`, same ⇒ `in_sync` |
+| Google Takeout snapshots | the recorded export path still exists | gone ⇒ `missing`, otherwise `in_sync` |
+
+Only version tokens present on **both** sides are compared, so a provider that
+omits `snapshot_id` never produces a false `stale`, and a renamed playlist is
+not treated as a drifted backup. Optimistic copies (mail-like snapshots) can
+only report presence — their contract is that material newer than the
+watermark is expected, so a check confirms the copy still exists and leaves
+drift to a re-import.
+
+Services with **no checker** yet (Bluesky photo shares, per-item CalDAV /
+CardDAV / Google etags) are left completely untouched: their rows keep
+`last_checked_at` empty and the admin panel counts them as **unchecked**
+rather than guessing. Failures are the same — an expired token or a provider
+error is not evidence about the copy, so the row is skipped.
+
+`GET /v1/admin/sync` returns the per-kind rollup under `freshness`:
+`in_sync`, `stale`, `missing`, `unknown`, `unchecked`, `total`,
+`last_checked_at`. That is the data to show a user where their copies stand.
+
+### Schedules
+
+Recurring work feeds the queue on its own so freshness accumulates without
+anyone clicking anything. A schedule is a row with its own `next_run_at`; when
+it comes due the worker enqueues the job (idempotent, so a still-queued job is
+not duplicated) and re-arms the schedule one interval out.
+
+On first start Aegis seeds one template per checked kind — **Daily copy
+freshness** for `messages`, `playlists`, and `tracks`, every 24 hours. The
+seed only fills in what is missing: a paused or edited schedule is left as the
+operator set it. Pause and resume from the panel or the
+`/v1/admin/sync/schedules/{id}/enable|disable` routes.
+
+Schedules live in the same SQLite file as the job queue and copy ledger.
 
 ### Environment variables
 
