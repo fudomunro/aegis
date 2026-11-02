@@ -5,6 +5,23 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Added
+
+- Queue-based data synchronization (issue #227, phase 1): a durable SQLite
+  sync job queue co-located with the copy ledger, an in-process worker pool
+  with lease-based claiming and backoff, and a mail-archive `ingest` runner so
+  Gmail page batches chain through the queue instead of a caller loop. Admin
+  surface `GET/POST /v1/admin/sync` plus `POST /v1/admin/sync/{id}/cancel`,
+  an Advanced → **Data sync** panel (queue state, per-job progress, "Sync mail
+  now"), and Prometheus sync series (`aegis_sync_jobs_total`,
+  `aegis_sync_retries_total`, `aegis_sync_job_duration_seconds`,
+  `aegis_sync_queue_depth`, `aegis_sync_last_success_timestamp_seconds`).
+  New flags: `-sync-jobs` (defaults to the copy-ledger path so job completion
+  and copy stamps share one transaction) and `-sync-workers`. Fail-open: an
+  empty `-sync-jobs` disables the queue and every request-driven sync surface
+  keeps working. Store choice (SQLite over PostgreSQL) is recorded on the
+  issue.
+
 ### Fixed
 
 - Pre-request hook no longer intercepts software-development messages that

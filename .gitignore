@@ -13,6 +13,7 @@ service_connections.json
 user_types.json
 user-types/
 copy_ledger.db
+sync_jobs.db
 mail-archive.db
 mail-archive.db-*
 quicken.db

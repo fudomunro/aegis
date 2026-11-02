@@ -52,6 +52,10 @@ type DataPaths struct {
 	Links string
 	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
 	CopyLedger string
+	// SyncJobs is the SQLite sync-job queue path (issue #227). Empty disables
+	// the sync worker. Defaults to the copy-ledger path so job completion and
+	// copy stamps can commit in one transaction.
+	SyncJobs string
 	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
 	// Quicken is the SQLite Quicken import store path (issue #141).
@@ -84,6 +88,8 @@ type StatePathOverrides struct {
 	Links              string
 	CopyLedger         string
 	CopyLedgerSet      bool
+	SyncJobs           string
+	SyncJobsSet        bool
 	MailArchive        string
 	MailArchiveSet     bool
 	Quicken            string
@@ -194,6 +200,17 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		paths.CopyLedger = ""
 	default:
 		paths.CopyLedger = expandUserPath(ov.CopyLedger)
+	}
+	// Sync jobs: omitted → the copy-ledger file (co-located, so a job's
+	// completion and its copy stamp can commit in one transaction); explicitly
+	// empty → the sync queue is disabled (issue #227).
+	switch {
+	case !ov.SyncJobsSet:
+		paths.SyncJobs = paths.CopyLedger
+	case strings.TrimSpace(ov.SyncJobs) == "":
+		paths.SyncJobs = ""
+	default:
+		paths.SyncJobs = expandUserPath(ov.SyncJobs)
 	}
 	// Mail archive: omitted → default under data dir; explicitly empty → disabled.
 	switch {

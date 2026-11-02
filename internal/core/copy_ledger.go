@@ -175,6 +175,16 @@ func (c *CopyLedger) Enabled() bool {
 	return c != nil && c.db != nil
 }
 
+// DB returns the underlying handle for co-located stores (the sync job
+// queue, issue #227) that need one transaction across tables. Nil when
+// disabled.
+func (c *CopyLedger) DB() *sql.DB {
+	if c == nil {
+		return nil
+	}
+	return c.db
+}
+
 // copySyncModeForKind picks the default fidelity (issue #76). Mail-like
 // kinds use optimistic snapshot watermarks; discrete objects use full.
 func copySyncModeForKind(kind string) string {

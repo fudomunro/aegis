@@ -51,6 +51,18 @@ type promAccessKey struct {
 	decision string
 }
 
+// promSyncKey labels sync job counters. No agent identities (cardinality).
+type promSyncKey struct {
+	jobType string
+	state   string
+}
+
+// promSyncDurKey labels sync job duration histograms.
+type promSyncDurKey struct {
+	jobType string
+	service string
+}
+
 // PromMetrics accumulates exportable counters. Safe for concurrent use.
 // Nil-safe: every observe method is a no-op on a nil receiver.
 type PromMetrics struct {
@@ -63,6 +75,13 @@ type PromMetrics struct {
 	denials      map[string]uint64 // surface|target -> count
 	upstream     map[string]*promHist
 	audit        map[string]uint64 // decision -> count
+
+	// Sync queue observability (issue #227).
+	syncJobs     map[promSyncKey]uint64
+	syncRetries  map[string]uint64 // job_type|error_class -> count
+	syncDuration map[promSyncDurKey]*promHist
+	syncQueue    map[string]int // state -> depth, refreshed by the worker
+	syncLastOK   map[string]float64
 }
 
 // NewPromMetrics creates an empty metrics registry.
@@ -75,6 +94,11 @@ func NewPromMetrics() *PromMetrics {
 		denials:      make(map[string]uint64),
 		upstream:     make(map[string]*promHist),
 		audit:        make(map[string]uint64),
+		syncJobs:     make(map[promSyncKey]uint64),
+		syncRetries:  make(map[string]uint64),
+		syncDuration: make(map[promSyncDurKey]*promHist),
+		syncQueue:    make(map[string]int),
+		syncLastOK:   make(map[string]float64),
 	}
 }
 
@@ -142,6 +166,83 @@ func (p *PromMetrics) observeUpstream(service string, d time.Duration, status in
 		p.upstream[service] = h
 	}
 	h.observe(seconds)
+	p.mu.Unlock()
+}
+
+// observeSyncJob records one sync job step outcome (issue #227).
+func (p *PromMetrics) observeSyncJob(jobType, service, state string, d time.Duration) {
+	if p == nil {
+		return
+	}
+	if jobType == "" {
+		jobType = "unknown"
+	}
+	if state == "" {
+		state = "unknown"
+	}
+	if service == "" {
+		service = "none"
+	}
+	seconds := d.Seconds()
+	if seconds < 0 {
+		seconds = 0
+	}
+	p.mu.Lock()
+	p.syncJobs[promSyncKey{jobType: jobType, state: state}]++
+	key := promSyncDurKey{jobType: jobType, service: service}
+	h := p.syncDuration[key]
+	if h == nil {
+		h = newPromHist()
+		p.syncDuration[key] = h
+	}
+	h.observe(seconds)
+	p.mu.Unlock()
+}
+
+// observeSyncRetry records a retried or terminal sync failure.
+func (p *PromMetrics) observeSyncRetry(jobType, class string) {
+	if p == nil {
+		return
+	}
+	if jobType == "" {
+		jobType = "unknown"
+	}
+	if class == "" {
+		class = "unknown"
+	}
+	p.mu.Lock()
+	p.syncRetries[jobType+"|"+class]++
+	p.mu.Unlock()
+}
+
+// setSyncQueueDepth refreshes the queue-depth gauges from the store rollup.
+func (p *PromMetrics) setSyncQueueDepth(c SyncCounts) {
+	if p == nil {
+		return
+	}
+	p.mu.Lock()
+	p.syncQueue[SyncJobQueued] = c.Queued
+	p.syncQueue[SyncJobRunning] = c.Running
+	p.syncQueue[SyncJobSucceeded] = c.Succeeded
+	p.syncQueue[SyncJobFailed] = c.Failed
+	p.syncQueue[SyncJobCanceled] = c.Canceled
+	p.syncQueue[SyncJobPaused] = c.Paused
+	p.mu.Unlock()
+}
+
+// noteSyncSuccess records the last successful finish per kind|service.
+func (p *PromMetrics) noteSyncSuccess(kind, service string, at time.Time) {
+	if p == nil {
+		return
+	}
+	if kind == "" {
+		kind = "unknown"
+	}
+	if service == "" {
+		service = "none"
+	}
+	p.mu.Lock()
+	p.syncLastOK[kind+"|"+service] = float64(at.Unix())
 	p.mu.Unlock()
 }
 
@@ -249,6 +350,88 @@ func (p *PromMetrics) promText() string {
 			service, cumulative)
 		fmt.Fprintf(&b, "aegis_upstream_duration_seconds_sum{service=%q} %g\n", service, h.sum)
 		fmt.Fprintf(&b, "aegis_upstream_duration_seconds_count{service=%q} %d\n", service, h.count)
+	}
+
+	writeMeta(&b, "aegis_sync_jobs_total", "counter",
+		"Sync job step outcomes by job type and result state.")
+	syncJobKeys := make([]promSyncKey, 0, len(p.syncJobs))
+	for k := range p.syncJobs {
+		syncJobKeys = append(syncJobKeys, k)
+	}
+	sort.Slice(syncJobKeys, func(i, j int) bool {
+		if syncJobKeys[i].jobType != syncJobKeys[j].jobType {
+			return syncJobKeys[i].jobType < syncJobKeys[j].jobType
+		}
+		return syncJobKeys[i].state < syncJobKeys[j].state
+	})
+	for _, k := range syncJobKeys {
+		fmt.Fprintf(&b, "aegis_sync_jobs_total{job_type=%q,state=%q} %d\n",
+			k.jobType, k.state, p.syncJobs[k])
+	}
+
+	writeMeta(&b, "aegis_sync_retries_total", "counter",
+		"Sync job retries and terminal failures by job type and error class.")
+	for _, key := range sortedKeys(p.syncRetries) {
+		parts := strings.SplitN(key, "|", 2)
+		jobType, class := "unknown", "unknown"
+		if len(parts) == 2 {
+			jobType, class = parts[0], parts[1]
+		}
+		fmt.Fprintf(&b, "aegis_sync_retries_total{job_type=%q,error_class=%q} %d\n",
+			jobType, class, p.syncRetries[key])
+	}
+
+	writeMeta(&b, "aegis_sync_job_duration_seconds", "histogram",
+		"Sync job step wall time in seconds by job type and service.")
+	syncDurKeys := make([]promSyncDurKey, 0, len(p.syncDuration))
+	for k := range p.syncDuration {
+		syncDurKeys = append(syncDurKeys, k)
+	}
+	sort.Slice(syncDurKeys, func(i, j int) bool {
+		if syncDurKeys[i].jobType != syncDurKeys[j].jobType {
+			return syncDurKeys[i].jobType < syncDurKeys[j].jobType
+		}
+		return syncDurKeys[i].service < syncDurKeys[j].service
+	})
+	for _, k := range syncDurKeys {
+		h := p.syncDuration[k]
+		var cumulative uint64
+		for i, bound := range upstreamDurationBuckets {
+			cumulative += h.counts[i]
+			fmt.Fprintf(&b, "aegis_sync_job_duration_seconds_bucket{job_type=%q,service=%q,le=%q} %d\n",
+				k.jobType, k.service, formatLE(bound), cumulative)
+		}
+		cumulative += h.counts[len(upstreamDurationBuckets)]
+		fmt.Fprintf(&b, "aegis_sync_job_duration_seconds_bucket{job_type=%q,service=%q,le=\"+Inf\"} %d\n",
+			k.jobType, k.service, cumulative)
+		fmt.Fprintf(&b, "aegis_sync_job_duration_seconds_sum{job_type=%q,service=%q} %g\n",
+			k.jobType, k.service, h.sum)
+		fmt.Fprintf(&b, "aegis_sync_job_duration_seconds_count{job_type=%q,service=%q} %d\n",
+			k.jobType, k.service, h.count)
+	}
+
+	writeMeta(&b, "aegis_sync_queue_depth", "gauge",
+		"Sync jobs by state (refreshed by the sync worker).")
+	for _, state := range []string{SyncJobQueued, SyncJobRunning, SyncJobSucceeded,
+		SyncJobFailed, SyncJobCanceled, SyncJobPaused} {
+		fmt.Fprintf(&b, "aegis_sync_queue_depth{state=%q} %d\n", state, p.syncQueue[state])
+	}
+
+	writeMeta(&b, "aegis_sync_last_success_timestamp_seconds", "gauge",
+		"Unix time of the most recent successful sync job per kind and service.")
+	lastKeys := make([]string, 0, len(p.syncLastOK))
+	for k := range p.syncLastOK {
+		lastKeys = append(lastKeys, k)
+	}
+	sort.Strings(lastKeys)
+	for _, key := range lastKeys {
+		parts := strings.SplitN(key, "|", 2)
+		kind, service := "unknown", "none"
+		if len(parts) == 2 {
+			kind, service = parts[0], parts[1]
+		}
+		fmt.Fprintf(&b, "aegis_sync_last_success_timestamp_seconds{kind=%q,service=%q} %g\n",
+			kind, service, p.syncLastOK[key])
 	}
 	return b.String()
 }

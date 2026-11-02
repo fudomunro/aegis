@@ -29,6 +29,11 @@ other protected APIs) because series include service ids and denial reasons.
 | `aegis_permission_denials_total` | counter | `surface`, `target` |
 | `aegis_audit_events_total` | counter | `decision` |
 | `aegis_upstream_duration_seconds` | histogram | `service` |
+| `aegis_sync_jobs_total` | counter | `job_type`, `state` |
+| `aegis_sync_retries_total` | counter | `job_type`, `error_class` |
+| `aegis_sync_job_duration_seconds` | histogram | `job_type`, `service` |
+| `aegis_sync_queue_depth` | gauge | `state` |
+| `aegis_sync_last_success_timestamp_seconds` | gauge | `kind`, `service` |
 
 Counters are process-lifetime and **reset on restart**. That is reset-safe for
 Prometheus: `rate()` / `increase()` treat a drop as a counter reset. Agent
