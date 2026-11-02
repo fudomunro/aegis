@@ -479,6 +479,11 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 	if err := validateCanonicalFor(c.Services); err != nil {
 		return err
 	}
+	// Write order is intentional (issue #71): the secret lands in tokens.json
+	// first, then this entry. A crash in between leaves an orphan secret — an
+	// unused key in the token store, harmless and overwritten on retry — and
+	// never an entry pointing at a missing secret. Do not reorder without
+	// re-reading that failure mode.
 	if err := c.saveServiceHeadersLocked(id, merged.Headers); err != nil {
 		return err
 	}
@@ -577,6 +582,8 @@ func (c *Config) SetTailscaleAdmin(entry tailscaleAdminEntry) error {
 		return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
 	}
 	if c.secrets != nil {
+		// Secret first, entry second — same deliberate order as
+		// SetServiceConnection; see the comment there (issue #71).
 		if err := c.secrets.SetSecret(TailscaleAPIKeySecretKey(), merged.APIKey); err != nil {
 			return err
 		}

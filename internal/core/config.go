@@ -445,25 +445,28 @@ func (c *Config) SeedDataGrant(dataType string, policy types.DataGrant) {
 // for a provider: data grant first, then service grant_limits tightened
 // on top (issue #148).
 func (c *Config) EffectivePermissions(serviceID string) types.Permissions {
+	// Hold the read lock across the whole resolution: typePolicies and the
+	// service's GrantLimits map are live references, and types.* only reads
+	// them. The result is a fresh map (or a clone), so nothing escapes.
 	c.mu.RLock()
-	policies := c.typePolicies
+	defer c.mu.RUnlock()
 	var legacy types.Permissions
 	if svc := c.serviceByID(serviceID); svc != nil {
 		legacy = svc.GrantLimits
 	}
-	c.mu.RUnlock()
-	return types.EffectivePermissions(policies, legacy, serviceID)
+	return types.EffectivePermissions(c.typePolicies, legacy, serviceID)
 }
 
 // EffectiveAccess resolves one data type for a provider. Unclassified paths
 // pass dataType == "" and get the Strictest view (issue #94).
 func (c *Config) EffectiveAccess(serviceID, dataType string) string {
+	// Same reasoning as EffectivePermissions: read the live maps under the
+	// lock rather than handing them to an unlocked caller.
 	c.mu.RLock()
-	policies := c.typePolicies
+	defer c.mu.RUnlock()
 	var legacy types.Permissions
 	if svc := c.serviceByID(serviceID); svc != nil {
 		legacy = svc.GrantLimits
 	}
-	c.mu.RUnlock()
-	return types.EffectiveAccess(policies, legacy, dataType, serviceID)
+	return types.EffectiveAccess(c.typePolicies, legacy, dataType, serviceID)
 }

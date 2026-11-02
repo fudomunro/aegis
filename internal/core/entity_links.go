@@ -85,7 +85,9 @@ func (st *EntityLinkStore) saveLocked() error {
 			return err
 		}
 	}
-	return os.WriteFile(st.path, append(data, '\n'), 0o644)
+	// Atomic: a crash mid-write must never leave a truncated link file,
+	// which would silently drop the user's confirmed identities.
+	return atomicWriteFile(st.path, append(data, '\n'), 0o644)
 }
 
 // List returns a copy of all links.
