@@ -5,6 +5,21 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Fixed
+
+- `entity_links.json` was the one state store still written with plain
+  `os.WriteFile`, so a crash could truncate it and silently drop the
+  operator's confirmed identities. It now goes through `atomicWriteFile`.
+- `EffectivePermissions` / `EffectiveAccess` handed live `typePolicies` and
+  `GrantLimits` map references to an unlocked caller after releasing `RLock`.
+  The only in-place mutator is `SeedDataGrant`, which today has no production
+  caller, so the escape was latent rather than reachable — but the read lock
+  is now held across the whole resolution so it cannot become a race. A
+  regression test drives concurrent `SeedDataGrant` + reads under `-race` and
+  fails on the old code.
+- `shouldSkipMatching` read `hookSkip` without the lock `Reload` (SIGHUP)
+  writes it under, so a reload racing live hook traffic was a data race.
+
 ### Changed
 
 - `POST /v1/mail/sync` and the admin mail-sync routes now run the same ingest

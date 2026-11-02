@@ -106,6 +106,11 @@ func (c *Config) shouldSkipMatching(userMessage string) (reason string) {
 	if looksLikeDevelopment(userMessage) {
 		return "development"
 	}
+	// hookSkip is replaced wholesale by Reload (SIGHUP), so read it under the
+	// same lock that write takes — otherwise a reload racing live hook traffic
+	// is a data race.
+	c.mu.RLock()
+	defer c.mu.RUnlock()
 	if c.hookSkip.matches(userMessage) {
 		return "skip_pattern"
 	}
