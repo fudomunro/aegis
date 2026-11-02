@@ -861,6 +861,52 @@
         </div>
       </div>
 
+      <h3 class="section-heading" style="margin-top:1.5rem">Copy freshness</h3>
+      <div class="help-box">
+        <p>Whether the copies Aegis placed elsewhere still match what was copied. Checks are observational — they never rewrite anything on the source service. A row marked <em>unchecked</em> has no checker yet and is left alone rather than guessed at.</p>
+      </div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>In sync</th>
+                <th>Stale</th>
+                <th>Missing</th>
+                <th>Unchecked</th>
+                <th>Total</th>
+                <th>Last checked</th>
+              </tr>
+            </thead>
+            <tbody id="freshness-body"><tr><td colspan="7" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <h3 class="section-heading" style="margin-top:1.5rem">Schedules</h3>
+      <div class="help-box">
+        <p>Recurring work that feeds the queue on its own — today a daily copy-freshness pass per kind. Pausing a schedule stops future runs; work already queued is unaffected.</p>
+      </div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Kind</th>
+                <th>Job</th>
+                <th>Every</th>
+                <th>Next run</th>
+                <th>Enabled</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="schedules-body"><tr><td colspan="7" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
       <h2 class="section-heading" id="section-copies">Copy ledger</h2>
       <div class="help-box">
         <h3>Where copies exist</h3>
@@ -3511,6 +3557,69 @@ job.read</pre>
     });
   }
 
+  function renderFreshness(rows) {
+    const body = $("freshness-body");
+    if (!body) return;
+    if (!rows || !rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="muted-num">No copies recorded yet.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map((f) => {
+      const checked = f.unchecked
+        ? f.unchecked + " unchecked"
+        : (f.last_checked_at ? "all checked" : "none checked");
+      return "<tr>" +
+        "<td>" + escapeHtml(f.kind) + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml(f.in_sync) + "</td>" +
+        "<td>" + (f.stale ? '<span class="warn">' + escapeHtml(f.stale) + "</span>" : "0") + "</td>" +
+        "<td>" + (f.missing ? '<span class="error-box" style="padding:0 .35rem">' + escapeHtml(f.missing) + "</span>" : "0") + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml(checked) + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml(f.total) + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml((f.last_checked_at || "—").replace("T", " ").replace(/\.\d+Z$/, "Z")) + "</td>" +
+        "</tr>";
+    }).join("");
+  }
+
+  function renderSchedules(rows) {
+    const body = $("schedules-body");
+    if (!body) return;
+    if (!rows || !rows.length) {
+      body.innerHTML = '<tr><td colspan="7" class="muted-num">No schedules configured.</td></tr>';
+      return;
+    }
+    body.innerHTML = rows.map((sc) => {
+      const every = sc.every_seconds >= 3600
+        ? (sc.every_seconds / 3600) + " h"
+        : Math.max(1, Math.round(sc.every_seconds / 60)) + " min";
+      const next = sc.enabled
+        ? escapeHtml((sc.next_run_at || "").replace("T", " ").replace(/\.\d+Z$/, "Z"))
+        : "paused";
+      return "<tr>" +
+        "<td>" + escapeHtml(sc.name || sc.job_type) + "</td>" +
+        "<td>" + escapeHtml(sc.kind) + "</td>" +
+        "<td>" + escapeHtml(sc.job_type) + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml(every) + "</td>" +
+        "<td class=\"muted-num\">" + next + "</td>" +
+        "<td>" + (sc.enabled ? "yes" : "no") + "</td>" +
+        "<td><button class=\"btn\" data-schedule-toggle=\"" + escapeHtml(sc.id) + "\" data-schedule-to=\"" +
+          (sc.enabled ? "disable" : "enable") + "\" type=\"button\">" +
+          (sc.enabled ? "Pause" : "Resume") + "</button></td>" +
+        "</tr>";
+    }).join("");
+    body.querySelectorAll("[data-schedule-toggle]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/v1/admin/sync/schedules/" + btn.getAttribute("data-schedule-toggle") +
+            "/" + btn.getAttribute("data-schedule-to"), { method: "POST" });
+          loadSync();
+        } catch (err) {
+          if (err.status === 401) { showAuthGate(true); return; }
+          alert(err.message || "Failed to update schedule");
+        }
+      });
+    });
+  }
+
   async function loadSync() {
     const body = $("sync-body");
     const summary = $("sync-summary");
@@ -3519,6 +3628,8 @@ job.read</pre>
     try {
       const data = await api("/v1/admin/sync");
       renderSync(data || {});
+      renderFreshness((data && data.freshness) || []);
+      renderSchedules((data && data.schedules) || []);
     } catch (err) {
       if (err.status === 401) { showAuthGate(true); return; }
       if (summary) summary.textContent = "";

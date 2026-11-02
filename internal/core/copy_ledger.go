@@ -395,6 +395,143 @@ FROM copy_records WHERE 1=1`
 	return out
 }
 
+// CopyCheckRow is one copy row plus its numeric ledger id. The id pages a
+// freshness walk; CopyRecord.ID is a display string ("cpy_<hex>") and is not
+// sortable, so the walk carries the real rowid.
+type CopyCheckRow struct {
+	ID  int64
+	Rec CopyRecord
+}
+
+// ListForCheck walks copy rows in stable id order for a freshness pass,
+// resuming after afterID so one job step can be bounded. Empty kind walks
+// every row. Only rows with a service id are returned — a copy with no
+// location cannot be checked.
+func (c *CopyLedger) ListForCheck(kind string, afterID int64, limit int) []CopyCheckRow {
+	if !c.Enabled() {
+		return nil
+	}
+	if limit <= 0 {
+		limit = 50
+	}
+	q := `
+SELECT id, kind, entity_key, source_service, source_id, service, external_id,
+       role, sync_mode, version_json, watermark, provenance, status, note,
+       last_synced_at, last_checked_at, created_at, updated_at
+FROM copy_records
+WHERE id > ? AND service <> ''`
+	args := []any{afterID}
+	if kind != "" {
+		q += ` AND kind=?`
+		args = append(args, kind)
+	}
+	q += ` ORDER BY id ASC LIMIT ?`
+	args = append(args, limit)
+	rows, err := c.db.Query(q, args...)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []CopyCheckRow
+	for rows.Next() {
+		rec, err := scanCopyRecord(rows)
+		if err != nil {
+			continue
+		}
+		out = append(out, CopyCheckRow{ID: parseSyncRowID(rec.ID), Rec: rec})
+	}
+	return out
+}
+
+// parseSyncRowID recovers the numeric rowid from a display id ("cpy_<hex>").
+// Zero when the string does not carry one.
+func parseSyncRowID(id string) int64 {
+	const prefix = "cpy_"
+	s := strings.TrimSpace(id)
+	if !strings.HasPrefix(s, prefix) {
+		return 0
+	}
+	s = s[len(prefix):]
+	if s == "" {
+		return 0
+	}
+	var n int64
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		var d int64
+		switch {
+		case c >= '0' && c <= '9':
+			d = int64(c - '0')
+		case c >= 'a' && c <= 'f':
+			d = int64(c-'a') + 10
+		case c >= 'A' && c <= 'F':
+			d = int64(c-'A') + 10
+		default:
+			return 0
+		}
+		n = n*16 + d
+	}
+	return n
+}
+
+// CopyFreshness is one kind's copy-status rollup, used by the admin sync
+// surface so the operator can see where copies stand without paging the
+// ledger. Unchecked counts rows still at `unknown` — the honest gap signal.
+type CopyFreshness struct {
+	Kind        string `json:"kind"`
+	InSync      int    `json:"in_sync"`
+	Stale       int    `json:"stale"`
+	Missing     int    `json:"missing"`
+	Unknown     int    `json:"unknown"`
+	Unchecked   int    `json:"unchecked"`
+	Checked     int    `json:"checked"`
+	Total       int    `json:"total"`
+	LastChecked string `json:"last_checked_at,omitempty"`
+}
+
+// FreshnessRollup aggregates copy status per kind. Unchecked is a subset of
+// unknown: rows that have never had a successful check stamped on them.
+func (c *CopyLedger) FreshnessRollup() []CopyFreshness {
+	if !c.Enabled() {
+		return nil
+	}
+	rows, err := c.db.Query(`
+SELECT kind,
+  SUM(CASE WHEN status='in_sync' THEN 1 ELSE 0 END),
+  SUM(CASE WHEN status='stale' THEN 1 ELSE 0 END),
+  SUM(CASE WHEN status='missing' THEN 1 ELSE 0 END),
+  SUM(CASE WHEN status='unknown' THEN 1 ELSE 0 END),
+  SUM(CASE WHEN last_checked_at='' THEN 1 ELSE 0 END),
+  COUNT(*),
+  MAX(NULLIF(last_checked_at, ''))
+FROM copy_records
+WHERE service <> ''
+GROUP BY kind
+ORDER BY kind
+`)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	out := make([]CopyFreshness, 0, 8)
+	for rows.Next() {
+		var f CopyFreshness
+		var inSync, stale, missing, unknown, unchecked, total int
+		var lastChecked sql.NullString
+		if err := rows.Scan(&f.Kind, &inSync, &stale, &missing, &unknown, &unchecked, &total, &lastChecked); err != nil {
+			break
+		}
+		f.InSync, f.Stale, f.Missing, f.Unknown = inSync, stale, missing, unknown
+		f.Unchecked, f.Total = unchecked, total
+		f.Checked = total - unchecked
+		if lastChecked.Valid {
+			f.LastChecked = lastChecked.String
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 // Delete removes one copy row.
 func (c *CopyLedger) Delete(kind, entityKey, service, externalID string) bool {
 	if !c.Enabled() {

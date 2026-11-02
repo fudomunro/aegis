@@ -7,6 +7,25 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- Copy freshness checks and sync schedules (issue #227, phase 2): a
+  `freshness_check` runner that walks the copy ledger and stamps
+  `status` / `last_checked_at` by comparing each copy's live version
+  descriptor (`snapshot_id` / `item_count` for mirrored playlists and liked
+  tracks on Spotify and YouTube Music; the recorded export path for Google
+  Takeout snapshots) — observational only, never writing to a source service.
+  Only version tokens present on both sides are compared, so an omitted
+  `snapshot_id` or a renamed playlist cannot produce a false `stale`. Services
+  with no checker (Bluesky shares, per-item CalDAV/CardDAV/Google etags) are
+  left untouched and reported as **unchecked** rather than guessed at.
+- Recurring sync schedules: templates with their own `next_run_at` that feed
+  the queue on a cadence and re-arm themselves. First start seeds a daily
+  copy-freshness pass for `messages`, `playlists`, and `tracks`; the seed
+  never clobbers an operator's pause or edit. Pause/resume via
+  `POST /v1/admin/sync/schedules/{id}/enable|disable`.
+- `GET /v1/admin/sync` now returns a per-kind `freshness` rollup
+  (`in_sync` / `stale` / `missing` / `unknown` / `unchecked` / `total` /
+  `last_checked_at`) and the `schedules` list; the Advanced → Data sync panel
+  shows both.
 - Queue-based data synchronization (issue #227, phase 1): a durable SQLite
   sync job queue co-located with the copy ledger, an in-process worker pool
   with lease-based claiming and backoff, and a mail-archive `ingest` runner so
@@ -24,6 +43,9 @@ issue numbers; this file is where that context lives.
 
 ### Fixed
 
+- Copy freshness walks page on the ledger's numeric rowid (`CopyCheckRow`)
+  instead of the `cpy_<hex>` display id, which is not sortable and silently
+  broke chained batches.
 - Pre-request hook no longer intercepts software-development messages that
   mention service names as identifiers (issue #205). Built-in development
   detection (code fences, source file paths, Aegis repo markers) plus optional

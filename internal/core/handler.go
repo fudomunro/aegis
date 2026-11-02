@@ -113,6 +113,9 @@ type Server struct {
 	syncRunners *RunnerRegistry
 	// syncWorker drains syncJobs. Nil when the queue is disabled.
 	syncWorker *SyncWorker
+	// syncSchedules holds recurring sync job templates (issue #227 phase 2).
+	// May be disabled.
+	syncSchedules *ScheduleStore
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
 	// quicken is the optional local Quicken import store (issue #141).

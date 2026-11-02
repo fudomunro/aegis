@@ -289,6 +289,23 @@ func Run() {
 		slog.Info("sync job store ready", "path", paths.SyncJobs, "enabled", syncStore.Enabled())
 	}
 
+	// Recurring sync templates live beside the jobs they feed, so a schedule
+	// and its job share one handle and one backup.
+	scheduleStore, err := OpenScheduleStore(syncStore.DB(), paths.SyncJobs)
+	if err != nil {
+		slog.Error("failed to open sync schedule store", "path", paths.SyncJobs, "error", err)
+		os.Exit(1)
+	}
+	if scheduleStore != nil {
+		defer scheduleStore.Close()
+		if scheduleStore.Enabled() {
+			if added, err := scheduleStore.SeedDefaults(); err == nil && added > 0 {
+				slog.Info("seeded default sync schedules", "count", added)
+			}
+			slog.Info("sync schedule store ready", "count", len(scheduleStore.List()))
+		}
+	}
+
 	mailArchive, err := OpenMailArchive(paths.MailArchive)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
@@ -402,6 +419,7 @@ func Run() {
 		csrfTokens:    NewStateStore(),
 		copies:        copies,
 		syncJobs:      syncStore,
+		syncSchedules: scheduleStore,
 		mail:          mailArchive,
 		quicken:       quickenStore,
 		timeline:      timelineStore,
@@ -488,12 +506,14 @@ func Run() {
 	// Fail-open: a disabled store or zero workers leaves the queue idle and
 	// the request-driven sync surfaces keep working.
 	srv.syncRunners = newSyncRunnerRegistry(srv)
+	registerFreshnessRunners(srv.syncRunners, srv)
 	if syncStore.Enabled() && *syncWorkers > 0 {
 		srv.syncWorker = NewSyncWorker(syncStore, srv.syncRunners, SyncWorkerOptions{
-			Workers: *syncWorkers,
-			Owner:   "aegis",
-			Logger:  slog.Default(),
-			Prom:    srv.prom,
+			Workers:   *syncWorkers,
+			Owner:     "aegis",
+			Logger:    slog.Default(),
+			Prom:      srv.prom,
+			Schedules: scheduleStore,
 			// Ingest changes what /v1/library/* would return; drop cached
 			// aggregates instead of waiting out the TTL (matches Signal import).
 			OnDone: func(job SyncJob, succeeded bool) {
@@ -665,6 +685,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminMailImport)(w, r)
 	case path == "sync":
 		s.AdminMiddleware(s.HandleAdminSync)(w, r)
+	case strings.HasPrefix(path, "sync/schedules/"):
+		s.AdminMiddleware(s.HandleAdminSyncSchedule)(w, r)
 	case strings.HasPrefix(path, "sync/") && strings.HasSuffix(path, "/cancel"):
 		s.AdminMiddleware(s.HandleAdminSyncCancel)(w, r)
 	case strings.HasPrefix(path, "library/"):

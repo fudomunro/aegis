@@ -25,7 +25,12 @@ type SyncStatus struct {
 	Counts    SyncCounts            `json:"counts"`
 	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
 	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
-	Jobs      []SyncJob             `json:"jobs"`
+	// Freshness is the copy ledger's per-kind status rollup (phase 2): the
+	// data an operator needs to see where their copies stand.
+	Freshness []CopyFreshness `json:"freshness,omitempty"`
+	// Schedules lists the recurring job templates feeding the queue.
+	Schedules []SyncSchedule `json:"schedules,omitempty"`
+	Jobs      []SyncJob      `json:"jobs"`
 }
 
 // SyncEnqueueRequest is the POST /v1/admin/sync body.
@@ -69,10 +74,64 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 			status.ByJobType = b.ByJobType
 		}
 	}
+	if s.copies != nil {
+		status.Freshness = s.copies.FreshnessRollup()
+	}
+	if s.syncSchedules != nil {
+		status.Schedules = s.syncSchedules.List()
+	}
 	if s.syncRunners != nil {
 		status.Kinds = s.syncRunners.Kinds()
 	}
 	writeJSON(w, status)
+}
+
+// HandleAdminSyncSchedule toggles a recurring template:
+// POST /v1/admin/sync/schedules/{id}/enable | /disable
+func (s *Server) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	if s.syncSchedules == nil || !s.syncSchedules.Enabled() {
+		writeJSONError(w, http.StatusServiceUnavailable, "sync schedules disabled")
+		return
+	}
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/sync/schedules/"), "/")
+	enable := true
+	switch {
+	case strings.HasSuffix(path, "/enable"):
+		path = strings.TrimSuffix(path, "/enable")
+	case strings.HasSuffix(path, "/disable"):
+		path = strings.TrimSuffix(path, "/disable")
+		enable = false
+	default:
+		writeJSONError(w, http.StatusNotFound, "unknown sync schedule action")
+		return
+	}
+	id := strings.TrimSpace(path)
+	if id == "" {
+		writeJSONError(w, http.StatusBadRequest, "schedule id required")
+		return
+	}
+	var sid int64
+	for _, ch := range id {
+		if ch < '0' || ch > '9' {
+			writeJSONError(w, http.StatusBadRequest, "schedule id must be numeric")
+			return
+		}
+		sid = sid*10 + int64(ch-'0')
+	}
+	sc, ok, err := s.syncSchedules.SetEnabled(sid, enable)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, "failed to update sync schedule")
+		return
+	}
+	if !ok {
+		writeJSONError(w, http.StatusNotFound, "unknown sync schedule")
+		return
+	}
+	writeJSON(w, sc)
 }
 
 func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
