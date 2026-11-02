@@ -284,3 +284,74 @@ func TestLibrarySearch_InstructionsMentionQ(t *testing.T) {
 		t.Fatalf("agent strings must not cite issues: %s", text)
 	}
 }
+
+func TestHandleAdminSearchStatus(t *testing.T) {
+	srv := searchTestServer(t, types.Contact{
+		Name:    "Ada Lovelace",
+		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
+	})
+	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest("GET", "/v1/admin/search/status", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.handleAdminRoutes(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
+	}
+	var st SearchIndexStatus
+	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	if !st.Enabled {
+		t.Fatal("index must report enabled")
+	}
+	if st.Path == "" {
+		t.Fatal("status must include the index path")
+	}
+	var contacts, tracks *SearchIndexKindStatus
+	for i := range st.Kinds {
+		switch st.Kinds[i].ID {
+		case "contacts":
+			contacts = &st.Kinds[i]
+		case "tracks":
+			tracks = &st.Kinds[i]
+		}
+	}
+	if contacts == nil || !contacts.Searchable || contacts.Docs != 1 {
+		t.Fatalf("contacts status = %+v", contacts)
+	}
+	if tracks == nil || !tracks.Searchable || tracks.Docs != 0 {
+		t.Fatalf("tracks status = %+v (searchable but cold)", tracks)
+	}
+	if st.Total != 1 {
+		t.Fatalf("total = %d, want 1", st.Total)
+	}
+
+	// Disabled index still reports kind searchability (q= is documented as
+	// unsupported at runtime, not undeclared).
+	srv.search = nil
+	req = httptest.NewRequest("GET", "/v1/admin/search/status", nil)
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminSearchStatus)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("disabled status = %d body=%s", w.Code, w.Body.String())
+	}
+	st = SearchIndexStatus{}
+	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+		t.Fatal(err)
+	}
+	if st.Enabled {
+		t.Fatal("index must report disabled")
+	}
+	if st.Total != 0 {
+		t.Fatalf("disabled total = %d", st.Total)
+	}
+}

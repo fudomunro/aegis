@@ -202,3 +202,35 @@ func TestFtsMatchExpr_StripsOperators(t *testing.T) {
 		t.Fatalf("blank match = %q", match)
 	}
 }
+
+func TestSearchIndex_CountsByKind(t *testing.T) {
+	x := newTestSearchIndex(t)
+	if _, err := x.CountsByKind(); err != nil {
+		t.Fatalf("empty counts: %v", err)
+	}
+	if err := x.Upsert("tracks", "", []types.SearchDocument{
+		searchDoc("t1", "One", "One"),
+		searchDoc("t2", "Two", "Two"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := x.Upsert("contacts", "shire", []types.SearchDocument{
+		searchDoc("c1", "Ada", "Ada"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	counts, err := x.CountsByKind()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if counts["tracks"] != 2 || counts["contacts"] != 1 {
+		t.Fatalf("counts = %v", counts)
+	}
+	if _, err := x.CountsByKind(); err != nil {
+		t.Fatal(err)
+	}
+	var nilIdx *SearchIndex
+	if _, err := nilIdx.CountsByKind(); err == nil {
+		t.Fatal("disabled index must error")
+	}
+}

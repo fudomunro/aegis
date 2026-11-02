@@ -7,6 +7,14 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Admin visibility for the library search index (issue #178 follow-up).**
+  `GET /v1/admin/search/status` reports enabled/path plus each kind's
+  searchable flag and indexed document count. The admin Library tab marks
+  searchable kinds with `q=` count chips and shows the current kind's index
+  depth in the source-overview title, the Home map gained a "Search index"
+  store node next to the token vault and data cache, and the Runtime
+  endpoints card documents `?q=` and the new status route.
+
 - **Library search (`q=`) with a pluggable per-kind index spec (issue #178).**
   Each `LibraryKind` (and user-defined schema pack via a `search` object)
   declares which neutral fields are searchable; a shared SQLite FTS5 index

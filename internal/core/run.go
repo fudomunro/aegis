@@ -701,6 +701,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminHookHealth)(w, r)
 	case path == "mail/status":
 		s.AdminMiddleware(s.HandleAdminMailStatus)(w, r)
+	case path == "search/status":
+		s.AdminMiddleware(s.HandleAdminSearchStatus)(w, r)
 	case path == "mail/sync":
 		s.AdminMiddleware(s.HandleAdminMailSync)(w, r)
 	case path == "mail/import":

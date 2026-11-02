@@ -749,6 +749,7 @@ POST /v1/admin/sync/resume — release a paused scope {"service":"spotify"}
 POST /v1/admin/sync/schedules/{id}/enable — resume a paused sync schedule
 POST /v1/admin/sync/schedules/{id}/disable — pause a sync schedule
 GET /v1/admin/library/{kind} — admin Library tab preview (; not counted as agent Home access)
+GET /v1/admin/search/status — search index health: enabled, path, per-kind searchable flag + indexed doc counts
 GET /v1/admin/permissions — type-centric data grants editor model: agent level + relevant apps/sync per data type
 GET /v1/admin/data-grants — agent data-grant map (primary,)
 PUT /v1/admin/data-grants — replace data grants {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
