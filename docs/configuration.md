@@ -454,6 +454,49 @@ tab filters by copy status (in sync / stale / missing / unchecked), and
 Advanced → Copy ledger lists `GET /v1/library/copies` rows with the same
 filters.
 
+### Sync queue
+
+Data movement (mail ingest, local imports, mirroring) runs as **sync jobs** on
+a small durable queue drained by an in-process worker. The job row is the
+*work*; the copy ledger row is the *fact* — jobs are what produce
+`last_synced_at`, `last_checked_at`, and `status` on copies.
+
+Stored in SQLite alongside the copy ledger by default (one file, so a job's
+completion and its copy stamp can commit in one transaction). `-sync-jobs`
+overrides the path; an explicitly empty value disables the queue and the
+worker, and every request-driven sync surface keeps working as before.
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `-sync-jobs` | the `-copy-ledger` path | Sync job queue path; empty disables |
+| `-sync-workers` | `2` | Worker pool size; `0` disables the worker |
+
+Each job is one bounded step — a mail page batch, an import chunk, a mirror
+batch. Long work chains through the queue rather than living in a caller
+loop, so closing a browser tab or restarting the process loses nothing: the
+step's cursor is already durable, and an expired lease is reclaimed on the
+next start. Failures retry with backoff (provider quota windows back off
+longer); revoked credentials and other unfixable errors park the job as
+terminal instead of burning the attempt budget.
+
+**Admin UI** (Advanced → Data sync) shows queue state, per-job progress, and
+next run times, with a **Sync mail now** button that enqueues work instead of
+driving a client-side batch loop. The same surface is available as JSON:
+
+```
+GET  /v1/admin/sync                  # queue rollup + recent jobs
+POST /v1/admin/sync                  # enqueue: {kind, job_type, service, payload}
+POST /v1/admin/sync/{id}/cancel      # park a queued or running job
+```
+
+Job types today: `ingest` — mail archive page batches for Gmail, and Google
+Takeout imports (which run as `ingest` with `service: google-takeout`).
+`import_snapshot`, `mirror`, `freshness_check`, and `repair` are reserved for
+the next phases and have no runner yet, so posting them returns
+"no sync runner". Enqueue is idempotent on
+`(kind, job_type, service, entity_key)`, so a repeated request does not stack
+duplicate work.
+
 ### Environment variables
 
 | Variable | Flag equivalent | Description |
@@ -493,7 +536,7 @@ on first run with mode `0700` (it holds secrets).
  user-types/ # user-defined type schema packs
  entity_links.json # confirmed playlist/entity links
  tokens.json # encrypted OAuth tokens + static credentials (0600;)
- copy_ledger.db # SQLite copy ledger (; empty -copy-ledger disables)
+ copy_ledger.db # SQLite copy ledger + sync job queue (empty -copy-ledger / -sync-jobs disables)
  mail-archive.db # SQLite+FTS mail archive (omit -mail-archive to disable)
  quicken.db # Quicken QIF/QFX import store (; empty -quicken-store disables)
  timeline.db # Google Timeline import store (; empty -timeline-store disables)
@@ -513,6 +556,7 @@ An explicit flag always wins:
 | `-token-file` | `tokens.json` | Encrypted token + static-credential storage |
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
+| `-sync-jobs` | the copy-ledger path | Sync job queue; empty (explicitly set) disables the sync worker |
 | `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
@@ -546,6 +590,8 @@ directory or keep passing the explicit path flags.
 | `-service-connections-file` | `<data-dir>/service_connections.json` | Admin service-connections overlay path (non-secret fields; secrets in the token store) |
 | `-link-file` | `<data-dir>/entity_links.json` | Entity link store path |
 | `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables |
+| `-sync-jobs` | the `-copy-ledger` path | Sync job queue path (co-located with the copy ledger by default); empty disables |
+| `-sync-workers` | `2` | Sync worker pool size; `0` disables the worker |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
 | `-quicken-store` | `<data-dir>/quicken.db` | Quicken import store; empty disables |
 | `-import-quicken` | | Import a QIF/QFX file or directory, then exit |

@@ -642,6 +642,7 @@
         <a href="#section-quicken">Quicken import</a>
         <a href="#section-signal">Signal import</a>
         <a href="#section-user-types">User-defined types</a>
+        <a href="#section-sync">Data sync</a>
         <a href="#section-copies">Copy ledger</a>
         <a href="#section-cache">Cache</a>
         <a href="#section-runtime">Runtime</a>
@@ -818,6 +819,46 @@
         <div class="meta" id="udt-browse-path"></div>
         <div id="udt-browse-entries" style="max-height:16rem; overflow:auto; margin-top:0.5rem"></div>
         <div id="udt-browse-hint" class="meta" style="margin-top:0.35rem"></div>
+      </div>
+
+      <h2 class="section-heading" id="section-sync">Data sync</h2>
+      <div class="help-box">
+        <h3>Sync activity</h3>
+        <p>Work in the sync queue: ingest, import, and mirror jobs with their state, attempt counts, and next run. This panel is about <em>work</em>; the Copy ledger below is about where <em>copies</em> live. Failures never block reading your data.</p>
+      </div>
+      <div class="toolbar">
+        <div class="copy-filter kind-switch" role="group" aria-label="Sync job type filter" id="sync-panel-filter">
+          <button type="button" class="kind-btn" data-sync-type="" aria-pressed="true">All</button>
+          <button type="button" class="kind-btn" data-sync-type="ingest" aria-pressed="false">Ingest</button>
+          <button type="button" class="kind-btn" data-sync-type="import_snapshot" aria-pressed="false">Import</button>
+          <button type="button" class="kind-btn" data-sync-type="mirror" aria-pressed="false">Mirror</button>
+          <button type="button" class="kind-btn" data-sync-type="freshness_check" aria-pressed="false">Freshness</button>
+          <button type="button" class="kind-btn" data-sync-type="repair" aria-pressed="false">Repair</button>
+        </div>
+        <div class="grow"></div>
+        <button class="btn" id="sync-mail-now" type="button">Sync mail now</button>
+        <button class="btn" id="reload-sync" type="button">Refresh</button>
+      </div>
+      <div id="sync-summary" class="meta" style="margin-bottom:0.75rem"></div>
+      <div class="card" style="padding:0; overflow:hidden">
+        <div style="overflow-x:auto">
+          <table>
+            <thead>
+              <tr>
+                <th>Kind</th>
+                <th>Job</th>
+                <th>Service</th>
+                <th>State</th>
+                <th>Attempts</th>
+                <th>Progress</th>
+                <th>Next run</th>
+                <th>Last error</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="sync-body"><tr><td colspan="9" class="muted-num">Loading…</td></tr></tbody>
+          </table>
+        </div>
       </div>
 
       <h2 class="section-heading" id="section-copies">Copy ledger</h2>
@@ -3394,6 +3435,109 @@ job.read</pre>
     });
   }
 
+  let syncTypeFilter = "";
+
+  function syncProgressText(job) {
+    if (!job || !job.progress) return "";
+    const p = job.progress;
+    const bits = [];
+    if (p.stored != null) bits.push(p.stored + " stored");
+    if (p.listed != null) bits.push(p.listed + " listed");
+    if (p.failed) bits.push(p.failed + " failed");
+    if (p.truncated) bits.push("truncated");
+    return bits.join(" · ");
+  }
+
+  function renderSync(data) {
+    const body = $("sync-body");
+    const summary = $("sync-summary");
+    if (!body) return;
+    const jobs = (data && data.jobs) || [];
+    const rows = jobs.filter((job) => !syncTypeFilter || job.job_type === syncTypeFilter);
+    if (summary) {
+      if (data && data.enabled === false) {
+        summary.textContent = "Sync queue disabled — set -sync-jobs to a path to enable it. " +
+          "Request-driven sync (mail sync, imports) still works.";
+      } else {
+        // Global counts, not the recent-job window, so quiet kinds still show.
+        const c = (data && data.counts) || {};
+        const parts = ["queued", "running", "succeeded", "failed", "canceled", "paused"]
+          .filter((k) => c[k])
+          .map((k) => c[k] + " " + k);
+        summary.textContent = parts.length
+          ? parts.join(" · ") + " · " + jobs.length + " recent jobs"
+          : "No sync jobs yet.";
+      }
+    }
+    if (!rows.length) {
+      body.innerHTML = '<tr><td colspan="9" class="muted-num">No sync jobs' +
+        (syncTypeFilter ? " of this type" : "") + (data && data.enabled === false ? " (queue disabled)" : "") +
+        ".</td></tr>";
+      return;
+    }
+    body.innerHTML = rows.map((job) => {
+      const stateLabel = escapeHtml(job.state);
+      const err = job.last_error
+        ? '<span class="muted-num" title="' + escapeHtml(job.last_error) + '">' +
+          escapeHtml(job.last_error_class || "error") + "</span>"
+        : "";
+      const next = job.next_run_at && job.state === "queued"
+        ? escapeHtml(job.next_run_at.replace("T", " ").replace(/\.\d+Z$/, "Z"))
+        : "";
+      return "<tr>" +
+        "<td>" + escapeHtml(job.kind) + "</td>" +
+        "<td>" + escapeHtml(job.job_type) + "</td>" +
+        "<td>" + escapeHtml(job.service || "—") + "</td>" +
+        "<td>" + stateLabel + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml(job.attempts) + "/" + escapeHtml(job.max_attempts) + "</td>" +
+        "<td class=\"muted-num\">" + escapeHtml(syncProgressText(job)) + "</td>" +
+        "<td class=\"muted-num\">" + next + "</td>" +
+        "<td>" + err + "</td>" +
+        "<td>" + (job.state === "queued" || job.state === "running"
+          ? '<button class="btn" data-sync-cancel="' + escapeHtml(job.id) + '" type="button">Cancel</button>'
+          : "") + "</td>" +
+        "</tr>";
+    }).join("");
+    body.querySelectorAll("[data-sync-cancel]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        try {
+          await api("/v1/admin/sync/" + btn.getAttribute("data-sync-cancel") + "/cancel", { method: "POST" });
+          loadSync();
+        } catch (err) {
+          if (err.status === 401) { showAuthGate(true); return; }
+          alert(err.message || "Failed to cancel sync job");
+        }
+      });
+    });
+  }
+
+  async function loadSync() {
+    const body = $("sync-body");
+    const summary = $("sync-summary");
+    if (summary) summary.textContent = "Loading sync activity…";
+    if (body) body.innerHTML = '<tr><td colspan="9" class="muted-num">Loading…</td></tr>';
+    try {
+      const data = await api("/v1/admin/sync");
+      renderSync(data || {});
+    } catch (err) {
+      if (err.status === 401) { showAuthGate(true); return; }
+      if (summary) summary.textContent = "";
+      if (body) {
+        body.innerHTML = '<tr><td colspan="9"><div class="error-box">' +
+          escapeHtml(err.message || "Failed to load sync activity") + "</div></td></tr>";
+      }
+    }
+  }
+
+  function setSyncTypeFilter(filter) {
+    syncTypeFilter = filter || "";
+    document.querySelectorAll("[data-sync-type]").forEach((btn) => {
+      const on = (btn.getAttribute("data-sync-type") || "") === syncTypeFilter;
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+    loadSync();
+  }
+
   async function loadCopies() {
     const body = $("copies-body");
     const summary = $("copies-summary");
@@ -3878,6 +4022,7 @@ function selectTab(name, opts) {
     if (name === "advanced") {
       loadCache();
       loadMailArchive();
+      loadSync();
       loadCopies();
       loadApertureSetup();
     }
@@ -3929,6 +4074,29 @@ function selectTab(name, opts) {
   });
   const reloadCopiesBtn = $("reload-copies");
   if (reloadCopiesBtn) reloadCopiesBtn.addEventListener("click", () => loadCopies());
+
+  document.querySelectorAll("[data-sync-type]").forEach((btn) => {
+    btn.addEventListener("click", () => setSyncTypeFilter(btn.getAttribute("data-sync-type")));
+  });
+  const reloadSyncBtn = $("reload-sync");
+  if (reloadSyncBtn) reloadSyncBtn.addEventListener("click", () => loadSync());
+  const syncMailNowBtn = $("sync-mail-now");
+  if (syncMailNowBtn) syncMailNowBtn.addEventListener("click", async () => {
+    syncMailNowBtn.disabled = true;
+    try {
+      await api("/v1/admin/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kind: "messages", job_type: "ingest", service: "google-gmail" }),
+      });
+      loadSync();
+    } catch (err) {
+      if (err.status === 401) { showAuthGate(true); return; }
+      alert(err.message || "Failed to start mail sync");
+    } finally {
+      syncMailNowBtn.disabled = false;
+    }
+  });
   $("reload-summary").addEventListener("click", () => loadSummary());
   $("reload-flow").addEventListener("click", () => loadFlow());
   document.querySelectorAll("[data-flow-window]").forEach((btn) => {

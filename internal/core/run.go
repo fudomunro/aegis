@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
+	"database/sql"
 	"flag"
 	"fmt"
 	"io"
@@ -29,6 +30,8 @@ func Run() {
 	tokenPath := flag.String("token-file", "", "path to encrypted token storage (default: <data-dir>/tokens.json)")
 	linkPath := flag.String("link-file", "", "path to user-confirmed entity links (default: <data-dir>/entity_links.json)")
 	copyLedgerPath := flag.String("copy-ledger", "", "path to SQLite copy ledger (default: <data-dir>/copy_ledger.db; empty disables)")
+	syncJobsPath := flag.String("sync-jobs", "", "path to SQLite sync job queue (default: the copy-ledger path, so job completion and copy stamps share one transaction; empty disables the sync worker)")
+	syncWorkers := flag.Int("sync-workers", 2, "sync worker pool size (0 disables the sync worker)")
 	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
 	serviceConnsPath := flag.String("service-connections-file", "", "path to admin service-connections overlay (default: <data-dir>/service_connections.json; secrets live in the encrypted token store)")
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
@@ -66,6 +69,8 @@ func Run() {
 		Links:              *linkPath,
 		CopyLedger:         *copyLedgerPath,
 		CopyLedgerSet:      setFlags["copy-ledger"],
+		SyncJobs:           *syncJobsPath,
+		SyncJobsSet:        setFlags["sync-jobs"],
 		MailArchive:        *mailArchivePath,
 		MailArchiveSet:     setFlags["mail-archive"],
 		Quicken:            *quickenPath,
@@ -111,6 +116,7 @@ func Run() {
 		"service_connections", paths.ServiceConnections,
 		"links", paths.Links,
 		"copy_ledger", paths.CopyLedger,
+		"sync_jobs", paths.SyncJobs,
 		"mail_archive", paths.MailArchive,
 		"quicken_store", paths.Quicken,
 		"timeline_store", paths.Timeline,
@@ -265,6 +271,24 @@ func Run() {
 		slog.Info("copy ledger ready", "path", copies.Path(), "enabled", copies.Enabled())
 	}
 
+	// Sync job queue (issue #227). Defaults to the copy-ledger file so a
+	// job's completion and its copy stamp can commit in one transaction.
+	// Shares the ledger handle only when the paths actually match; an
+	// explicit -sync-jobs opens its own file.
+	var syncShared *sql.DB
+	if paths.SyncJobs != "" && paths.SyncJobs == paths.CopyLedger {
+		syncShared = copies.DB()
+	}
+	syncStore, err := OpenJobStore(syncShared, paths.SyncJobs)
+	if err != nil {
+		slog.Error("failed to open sync job store", "path", paths.SyncJobs, "error", err)
+		os.Exit(1)
+	}
+	if syncStore != nil {
+		defer syncStore.Close()
+		slog.Info("sync job store ready", "path", paths.SyncJobs, "enabled", syncStore.Enabled())
+	}
+
 	mailArchive, err := OpenMailArchive(paths.MailArchive)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
@@ -377,6 +401,7 @@ func Run() {
 		grants:        NewGrantStore(),
 		csrfTokens:    NewStateStore(),
 		copies:        copies,
+		syncJobs:      syncStore,
 		mail:          mailArchive,
 		quicken:       quickenStore,
 		timeline:      timelineStore,
@@ -454,6 +479,33 @@ func Run() {
 			set = GenerateSampleLibraryFor(svc.Dataset)
 		}
 		srv.connectors[svc.ID] = NewSampleLibraryConnector(svc.ID, svc.Dataset, set)
+	}
+
+	// Sync worker (issue #227): drains the job queue in-process. Runners
+	// need the connector map above, so this starts after registration. The
+	// registry lives on the Server too, so admin enqueue can validate a
+	// request even when -sync-workers 0 leaves the pool off.
+	// Fail-open: a disabled store or zero workers leaves the queue idle and
+	// the request-driven sync surfaces keep working.
+	srv.syncRunners = newSyncRunnerRegistry(srv)
+	if syncStore.Enabled() && *syncWorkers > 0 {
+		srv.syncWorker = NewSyncWorker(syncStore, srv.syncRunners, SyncWorkerOptions{
+			Workers: *syncWorkers,
+			Owner:   "aegis",
+			Logger:  slog.Default(),
+			Prom:    srv.prom,
+			// Ingest changes what /v1/library/* would return; drop cached
+			// aggregates instead of waiting out the TTL (matches Signal import).
+			OnDone: func(job SyncJob, succeeded bool) {
+				if succeeded {
+					srv.cache.Clear()
+				}
+			},
+		})
+		srv.syncWorker.Start()
+		defer srv.syncWorker.Stop()
+	} else {
+		slog.Info("sync worker disabled", "queue_enabled", syncStore.Enabled(), "workers", *syncWorkers)
 	}
 
 	mux := http.NewServeMux()
@@ -611,6 +663,10 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminMailSync)(w, r)
 	case path == "mail/import":
 		s.AdminMiddleware(s.HandleAdminMailImport)(w, r)
+	case path == "sync":
+		s.AdminMiddleware(s.HandleAdminSync)(w, r)
+	case strings.HasPrefix(path, "sync/") && strings.HasSuffix(path, "/cancel"):
+		s.AdminMiddleware(s.HandleAdminSyncCancel)(w, r)
 	case strings.HasPrefix(path, "library/"):
 		s.AdminMiddleware(s.HandleAdminLibrary)(w, r)
 	case path == "permissions":

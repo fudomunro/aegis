@@ -726,6 +726,9 @@ GET /v1/admin/hook-health — Aperture hook health + expected config snippet
 POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
 GET /v1/admin/cache — in-memory cache inventory
 POST /v1/admin/cache/clear — clear the response cache
+GET /v1/admin/sync — sync job queue rollup + recent jobs (state, attempts, progress, next run)
+POST /v1/admin/sync — enqueue a sync job {"kind":"messages","job_type":"ingest","service":"google-gmail"}
+POST /v1/admin/sync/{id}/cancel — park a queued or running sync job
 GET /v1/admin/library/{kind} — admin Library tab preview (; not counted as agent Home access)
 GET /v1/admin/permissions — type-centric data grants editor model: agent level + relevant apps/sync per data type
 GET /v1/admin/data-grants — agent data-grant map (primary,)
