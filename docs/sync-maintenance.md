@@ -358,6 +358,38 @@ outcomes:
 - **confidence** — record depth (item-count bands: 1–2 low, 3–9 medium,
   10+ high), so a single early blip cannot read as high confidence.
 
+Each page also carries a **connection maturity** mark (issue #247) — a
+coverage statement, not an operational score, and the fourth thing a reader
+should not confuse with the three above. It answers: of the data types this
+service offers, how many does Aegis serve through the connection, and how
+completely does it fill their neutral-model fields? It moves only when the
+connector code moves:
+
+- **data types** — every type the service offers in theory, each marked
+  supported or not. The unsupported rows are the point: the gap is shown,
+  not implied by absence.
+- **field coverage** — for supported types that map to a neutral model,
+  which content fields the connector populates. `sources[]` is structural
+  and never graded.
+- **transport** — how the connection reaches the service (`api`,
+  `protocol`, `reverse-engineered`, `export/archive`). API-based
+  connections read as more mature than ones that depend on exported files
+  or an undocumented surface; it is shown beside the level rather than
+  folded into the number.
+
+The level (`complete` / `substantial` / `partial` / `basic`) bands on the
+lower of type coverage and field coverage, so a connection cannot read as
+mature by implementing one complete type out of ten. `complete` is the
+issue's bar: every offered type served and every graded field populated.
+
+The declaration lives in code (`internal/core/maturity.go`, graded by
+`internal/types/maturity.go`) next to the connectors it describes — the
+same class of hand-maintained metadata as `Capabilities()`. Tests hold it
+honest against the connectors themselves: anything the connector serves
+(a callable operation or a library feed) must read as supported, and no
+entry may claim a type the connector does not recognize. Both the published
+build and the instance build grade the same catalog.
+
 Two inputs shape the published build:
 
 - **The services manifest** (`site/maintenance/services.json`, committed):

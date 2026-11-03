@@ -46,7 +46,7 @@ func main() {
 		fail("scrape maintenance record: " + err.Error())
 	}
 
-	data := core.BuildMaintenanceDashboard(nil, metas, records, time.Now().UTC())
+	data := core.BuildMaintenanceDashboard(nil, metas, records, core.MaturityByService(), time.Now().UTC())
 	data.Version = *version
 	data.Commit = *commit
 	index, err := core.WriteMaintenanceDashboard(*out, data,

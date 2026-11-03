@@ -93,6 +93,7 @@ Service history below still reflects captured signals.</div>
     <tr>
       <th>Service</th><th>Connection</th>
       <th class="num">Success</th><th class="num">Stability</th><th>Confidence</th>
+      <th>Maturity</th><th>Transport</th>
       <th>Last activity</th><th>Record</th>
     </tr>
   </thead>
@@ -107,17 +108,28 @@ Service history below still reflects captured signals.</div>
       <td class="num"><span class="badge {{ scoreBadge .Scores.Success }}">{{ fmtPct .Scores.Success }}</span></td>
       <td class="num"><span class="badge {{ scoreBadge .Scores.Stability }}">{{ fmtPct .Scores.Stability }}</span></td>
       <td><span class="badge {{ confBadge .Scores.Confidence }}">{{ confLabel .Scores.Confidence }}</span></td>
+      <td>
+        {{- if .MaturityGrade }}
+        <span class="badge {{ maturityBadge .MaturityGrade.Level }}">{{ maturityLabel .MaturityGrade.Level }}</span>
+        <span class="legend">{{ maturityPct .MaturityGrade }}</span>
+        {{- else }}—{{ end -}}
+      </td>
+      <td>{{ if .MaturityGrade }}<span class="badge {{ transportBadge .MaturityGrade.Transport }}">{{ transportLabel .MaturityGrade.Transport }}</span>{{ else }}—{{ end }}</td>
       <td>{{ fmtTime .LastSeen }}</td>
       <td>{{ recordSummary .Fixes }}</td>
     </tr>
   {{ else }}
-    <tr><td colspan="7">No services recorded yet.</td></tr>
+    <tr><td colspan="9">No services recorded yet.</td></tr>
   {{ end }}
   </tbody>
 </table>
 <p class="legend">Success is the share of recorded problems resolved. Stability measures
 quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
-problem does not lower it. Confidence grades the depth of the record.</p>
+problem does not lower it. Confidence grades the depth of the record. Maturity is a
+coverage statement &mdash; of the data types the service offers, how many this connection
+serves, and how completely it fills their fields &mdash; not an operational score. It
+moves only when the connector moves. API-based transports read as more mature than
+export/import or reverse-engineered ones.</p>
 
 {{ if .Fixes }}
 <h2>Recent maintenance record</h2>
@@ -203,6 +215,50 @@ harness. Failures here are deliberate test activity and low stability is expecte
 <p class="legend">Success is the share of recorded problems resolved. Stability measures
 quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
 problem does not lower it. Confidence grades the depth of the record.</p>
+
+{{ if .Service.MaturityGrade }}
+<h2>Connection maturity</h2>
+<div class="cards">
+  <div class="card"><div class="k">Maturity</div>
+    <div class="v"><span class="badge {{ maturityBadge .Service.MaturityGrade.Level }}">{{ maturityLabel .Service.MaturityGrade.Level }}</span></div></div>
+  <div class="card"><div class="k">Data types served</div>
+    <div class="v">{{ maturityCoverage .Service.MaturityGrade }}</div></div>
+  {{ if .Service.MaturityGrade.FieldPct }}<div class="card"><div class="k">Field coverage</div>
+    <div class="v"><span class="badge {{ scoreBadge .Service.MaturityGrade.FieldPct }}">{{ fmtPct .Service.MaturityGrade.FieldPct }}</span></div></div>{{ end }}
+  <div class="card"><div class="k">Transport</div>
+    <div class="v"><span class="badge {{ transportBadge .Service.MaturityGrade.Transport }}">{{ transportLabel .Service.MaturityGrade.Transport }}</span></div></div>
+</div>
+<p class="legend">Maturity is a coverage statement, not an operational score: of the data
+types this service offers, how many the connection serves, and how completely it fills
+their neutral-model fields. It moves only when the connector code moves. The level bands
+on the lower of type coverage and field coverage. API-based transports read as more
+mature than export/import or reverse-engineered ones.</p>
+
+{{ if .Service.Maturity }}
+<h2>Data types</h2>
+<table>
+  <thead>
+    <tr><th>Data type</th><th>What the service offers</th><th>Served here</th><th class="num">Fields</th></tr>
+  </thead>
+  <tbody>
+  {{ range .Service.Maturity.DataTypes }}
+    <tr>
+      <td class="mono">{{ .Name }}</td>
+      <td>{{ .Description }}</td>
+      <td>
+        {{- if .Supported }}<span class="badge good">supported</span>
+        {{- else }}<span class="badge bad">not supported</span>{{ end -}}
+      </td>
+      <td class="num">{{ maturityFieldCount . }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+<p class="legend">Fields count populated neutral-model content fields over the graded set
+(service identity in sources[] is structural and not graded). &ldquo;Not supported&rdquo;
+rows are the gap: types the service offers that this connection does not serve yet.</p>
+{{ end }}
+{{ end }}
 
 {{ if .Service.History }}
 <h2>Capture history</h2>
