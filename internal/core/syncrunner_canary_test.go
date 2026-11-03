@@ -62,14 +62,27 @@ func TestCanaryRunner_HealthyAndEmptyAreHealth(t *testing.T) {
 	}
 }
 
-func TestCanaryRunner_ShapeDriftIsTerminal(t *testing.T) {
-	srv, _ := canaryTestServer(t, connectors.FakeModeDriftItems)
+func TestCanaryRunner_UnmappedDriftIsTerminal(t *testing.T) {
+	srv, _ := canaryTestServer(t, connectors.FakeModeDriftUnmapped)
 	_, err := canaryRun(t, srv, "spotify")
 	if err == nil {
-		t.Fatal("renamed items array must fail the canary")
+		t.Fatal("an unmapped rename must fail the canary")
 	}
 	if !errors.Is(err, ErrSyncTerminal) {
 		t.Fatalf("shape drift must be terminal, got %v", err)
+	}
+}
+
+func TestCanaryRunner_LearnedRenameIsHealth(t *testing.T) {
+	// The items→entries rename is the issue #240 migration: once the
+	// adapter reads it, the same payload is health, not drift.
+	srv, _ := canaryTestServer(t, connectors.FakeModeDriftItems)
+	step, err := canaryRun(t, srv, "spotify")
+	if err != nil {
+		t.Fatalf("learned rename must pass: %v", err)
+	}
+	if step.Progress["listed"] != 3 {
+		t.Fatalf("progress = %+v, want 3 listed", step.Progress)
 	}
 }
 

@@ -57,15 +57,17 @@ func TestFakeUpstream_Modes(t *testing.T) {
 		wantStatus int
 		wantItems  int
 		wantTotal  int
-		drifted    bool
+		renamedTo  string
 		garbage    bool
 	}{
-		{FakeModeHealthy, http.StatusOK, 3, 3, false, false},
-		{FakeModeEmpty, http.StatusOK, 0, 0, false, false},
-		{FakeModeHTTP500, http.StatusInternalServerError, 0, 0, false, false},
-		{FakeModeHTTP401, http.StatusUnauthorized, 0, 0, false, false},
-		{FakeModeGarbage, http.StatusOK, 0, 0, false, true},
-		{FakeModeDriftItems, http.StatusOK, 0, 3, true, false},
+		{FakeModeHealthy, http.StatusOK, 3, 3, "", false},
+		{FakeModeEmpty, http.StatusOK, 0, 0, "", false},
+		{FakeModeHTTP500, http.StatusInternalServerError, 0, 0, "", false},
+		{FakeModeHTTP401, http.StatusUnauthorized, 0, 0, "", false},
+		{FakeModeGarbage, http.StatusOK, 0, 0, "", true},
+		// Renamed rows carry the same three items under the new key.
+		{FakeModeDriftItems, http.StatusOK, 3, 3, fakeDriftField, false},
+		{FakeModeDriftUnmapped, http.StatusOK, 3, 3, fakeUnmappedField, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.mode, func(t *testing.T) {
@@ -86,15 +88,18 @@ func TestFakeUpstream_Modes(t *testing.T) {
 			if err := json.Unmarshal([]byte(body), &page); err != nil {
 				t.Fatalf("decode: %v (%s)", err, body)
 			}
-			if tc.drifted {
+			if tc.renamedTo != "" {
 				if _, ok := page["items"]; ok {
 					t.Fatalf("drift must rename items: %s", body)
 				}
-				if _, ok := page[fakeDriftField]; !ok {
-					t.Fatalf("drift must keep the renamed array: %s", body)
+				if _, ok := page[tc.renamedTo]; !ok {
+					t.Fatalf("drift must keep the renamed array %q: %s", tc.renamedTo, body)
 				}
 			}
 			items, _ := page["items"].([]any)
+			if tc.renamedTo != "" {
+				items, _ = page[tc.renamedTo].([]any)
+			}
 			if len(items) != tc.wantItems {
 				t.Fatalf("items = %d, want %d (%s)", len(items), tc.wantItems, body)
 			}
@@ -154,5 +159,38 @@ func TestFakeUpstream_NotFound(t *testing.T) {
 	resp, _ := fakeGet(t, srv.URL, "/v1/unknown")
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
+	}
+}
+
+// TestFakeUpstream_DriftFixtureProvenance pins the issue #240 repro fixture
+// to the fake's drift-items output: the fixture is the captured evidence,
+// and this keeps it honest as the fake evolves.
+func TestFakeUpstream_DriftFixtureProvenance(t *testing.T) {
+	fu := NewFakeUpstream()
+	if err := fu.SetMode(FakeModeDriftItems); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(fu)
+	defer srv.Close()
+
+	resp, body := fakeGet(t, srv.URL, "/v1/me/tracks?limit=50")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	fx, err := LoadReproFixture("testdata/repro/spotify/me-tracks-items-renamed/fixture.json")
+	if err != nil {
+		t.Fatalf("LoadReproFixture: %v", err)
+	}
+	var fromFake, fromFixture any
+	if err := json.Unmarshal([]byte(body), &fromFake); err != nil {
+		t.Fatalf("fake body: %v", err)
+	}
+	if err := json.Unmarshal([]byte(fx.Exchanges[0].Response.Body), &fromFixture); err != nil {
+		t.Fatalf("fixture body: %v", err)
+	}
+	got, _ := json.Marshal(fromFake)
+	want, _ := json.Marshal(fromFixture)
+	if string(got) != string(want) {
+		t.Fatalf("fixture drifted from the fake:\n fake: %s\nfixture: %s", got, want)
 	}
 }

@@ -52,8 +52,9 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 		t.Fatalf("healthy canary must not fail: %+v", sig.Sync.Failures)
 	}
 
-	// Injected contract drift: items[] renamed, total intact.
-	if err := fu.SetMode(connectors.FakeModeDriftItems); err != nil {
+	// Injected contract drift: an unmapped rename of items[] with total
+	// intact — the silent-degradation shape this loop exists to catch.
+	if err := fu.SetMode(connectors.FakeModeDriftUnmapped); err != nil {
 		t.Fatal(err)
 	}
 	mustEnqueue(t, srv.syncJobs, SyncEnqueue{Kind: "tracks", JobType: SyncJobTypeCanary, Service: "spotify", MaxAttempts: 1})
