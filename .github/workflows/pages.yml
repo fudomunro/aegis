@@ -1,15 +1,16 @@
 name: Pages
 
+# Release publishing (issue #239): every merge to main regenerates the
+# sync-maintenance dashboard from the repo's issue record and deploys it
+# with the marketing site.
 on:
   push:
     branches: [main]
-    paths:
-      - "site/**"
-      - ".github/workflows/pages.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: read
   pages: write
   id-token: write
 
@@ -26,6 +27,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build maintenance dashboard
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >
+          go run ./cmd/aegis-dashboard
+          -repo "${{ github.repository }}"
+          -out site/maintenance
+          -manifest site/maintenance/services.json
+          -commit "${{ github.sha }}"
 
       - uses: actions/configure-pages@v5
 

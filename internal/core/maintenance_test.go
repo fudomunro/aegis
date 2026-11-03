@@ -78,6 +78,9 @@ func TestCollectMaintenanceSignals_SyncFailures(t *testing.T) {
 	if sig.Sync.Counts.Failed != 1 {
 		t.Fatalf("counts = %+v, want one failed", sig.Sync.Counts)
 	}
+	if sig.Sync.ByService["google-gmail"].Failed != 1 {
+		t.Fatalf("by_service = %+v, want google-gmail/failed 1", sig.Sync.ByService)
+	}
 	if len(sig.Sync.Failures) != 1 {
 		t.Fatalf("failures = %+v, want one entry", sig.Sync.Failures)
 	}

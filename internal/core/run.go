@@ -726,6 +726,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminMaintenanceSignals)(w, r)
 	case path == "maintenance/scan":
 		s.AdminMiddleware(s.HandleAdminMaintenanceScan)(w, r)
+	case path == "maintenance/dashboard":
+		s.AdminMiddleware(s.HandleAdminMaintenanceDashboard)(w, r)
 	case path == "mail/status":
 		s.AdminMiddleware(s.HandleAdminMailStatus)(w, r)
 	case path == "search/status":

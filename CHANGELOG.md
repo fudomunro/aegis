@@ -7,6 +7,25 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Sync-maintenance dashboard, published at every release (issue #239).** An
+  entirely build-time generated static site — one page per service
+  connection with history and success / stability / confidence marks —
+  regenerates on every merge to main and ships with the marketing site
+  (`site/maintenance/`, linked from the site nav). The release build runs
+  `cmd/aegis-dashboard`, which scrapes the repo's issue record through the
+  ticket surface's `gh` transport: the loop's sync tickets in full lifecycle
+  plus reported issues behind an explicit allowlist (a `bug` label or closure
+  by a fix-convention PR) naming a service — open problems count against the
+  fix rate, completed ones read as historical fixes. Marks measure
+  maintenance responsiveness — fix rate, quietness since the last recorded
+  failure, record depth — not live sync outcomes. `site/maintenance/services.json`
+  is the committed manifest naming the pages and the drift-injection harness,
+  whose page is annotated as deliberately unstable (its heavy, unstable
+  activity is the point). The instance view stays on
+  `POST /v1/admin/maintenance/dashboard`, building the same pages from that
+  instance's signal bundles (which gain a `by_service` rollup) plus its own
+  issue scrape, fail-open.
+
 - **Drift-injection harness for the sync-maintenance loop (issue #86).** A
   dev-only fake provider (`-fake-upstream`, mounted at
   `/demo/fake-upstream`) serves a Spotify saved-tracks shape with switchable

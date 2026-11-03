@@ -183,31 +183,38 @@ func lineCommentIndex(line string) int {
 }
 
 func TestAdminHTMLVisibleText_NoIssueRefsOrAvoidTerms(t *testing.T) {
-	path := filepath.Join(repoRoot(t), "internal", "core", "web", "admin.html")
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read admin.html: %v", err)
-	}
-	visible := visibleAdminText(string(raw))
-	if issueRefRe.MatchString(visible) {
-		loc := issueRefRe.FindString(visible)
-		// Show a little context for debugging.
-		idx := strings.Index(visible, loc)
-		start := idx - 40
-		if start < 0 {
-			start = 0
+	// admin.html and the maintenance dashboard templates are the visible
+	// operator UI: copy rules apply to all of them.
+	for _, rel := range []string{
+		filepath.Join("internal", "core", "web", "admin.html"),
+		filepath.Join("internal", "core", "web", "maintenance_dashboard.html"),
+	} {
+		path := filepath.Join(repoRoot(t), rel)
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
 		}
-		end := idx + len(loc) + 40
-		if end > len(visible) {
-			end = len(visible)
+		visible := visibleAdminText(string(raw))
+		if issueRefRe.MatchString(visible) {
+			loc := issueRefRe.FindString(visible)
+			// Show a little context for debugging.
+			idx := strings.Index(visible, loc)
+			start := idx - 40
+			if start < 0 {
+				start = 0
+			}
+			end := idx + len(loc) + 40
+			if end > len(visible) {
+				end = len(visible)
+			}
+			t.Fatalf("%s visible text must not cite issues; found %q near %q",
+				rel, loc, truncateForTest(visible[start:end], 120))
 		}
-		t.Fatalf("admin.html visible text must not cite issues; found %q near %q",
-			loc, truncateForTest(visible[start:end], 120))
-	}
-	lower := strings.ToLower(visible)
-	for _, bad := range docsForbidden {
-		if strings.Contains(lower, bad) {
-			t.Fatalf("admin.html visible text contains avoid term %q", bad)
+		lower := strings.ToLower(visible)
+		for _, bad := range docsForbidden {
+			if strings.Contains(lower, bad) {
+				t.Fatalf("%s visible text contains avoid term %q", rel, bad)
+			}
 		}
 	}
 }

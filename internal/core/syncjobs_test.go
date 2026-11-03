@@ -1461,6 +1461,9 @@ func TestJobStore_BreakdownIsGlobal(t *testing.T) {
 	if b.ByJobType["ingest"].Queued != 5 {
 		t.Fatalf("by_job_type = %+v, want ingest/queued 5", b.ByJobType)
 	}
+	if b.ByService["google-gmail"].Queued != 5 {
+		t.Fatalf("by_service = %+v, want google-gmail/queued 5", b.ByService)
+	}
 }
 
 // -sync-workers 0 leaves the worker nil while the store is enabled. Enqueue

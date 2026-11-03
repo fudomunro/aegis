@@ -13,20 +13,39 @@ site/
   style.css       deep-sea theme, animations (respects prefers-reduced-motion)
   site.js         marine snow, scroll reveals, cursor-tracking jellyfish eyes
   favicon.svg     copy of web/favicon.svg
+  maintenance/    sync-maintenance dashboard (generated at release, see below)
 ```
 
 Live site: <https://fudomunro.github.io/aegis/> (GitHub Pages from this
 directory, deployed by [`.github/workflows/pages.yml`](../.github/workflows/pages.yml)
-on every `main` change under `site/`).
+on every `main` change).
 
 The **agent kit** (`demo.html`) is for tool-enabled agents (Bash/`curl`).
 Canonical brief text and sync rules: [`docs/agent-kit.md`](../docs/agent-kit.md).
 Credentials in `demo-config.js` must only point at a `-demo` read-only
 synthetic instance. Hosting runbook: [`deploy/demo/README.md`](../deploy/demo/README.md).
 
+## Maintenance dashboard (issue #239)
+
+`site/maintenance/` is the published sync-maintenance dashboard: one page per
+service connection with the maintenance record (sync tickets and historical
+fixes scraped from repo issues) and the success / stability / confidence
+marks. It is **generated at release time** — every merge to main runs
+`cmd/aegis-dashboard` in the Pages workflow and writes the pages into this
+directory before deploy — so the published history grows with each release.
+
+`site/maintenance/services.json` is the committed manifest the generator
+reads: which service pages to show, display names, and which entry is the
+drift-injection harness (annotated on its page as deliberately unstable).
+Harness runs should enqueue canaries with the `fake-upstream` service id so
+their tickets attribute to that page. Full semantics:
+[`docs/sync-maintenance.md`](../docs/sync-maintenance.md).
+
 Preview locally:
 
 ```bash
+go run ./cmd/aegis-dashboard -repo fudomunro/aegis -out site/maintenance \
+  -manifest site/maintenance/services.json
 python3 -m http.server -d site 8000   # then open http://localhost:8000
 ```
 
