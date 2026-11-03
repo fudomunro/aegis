@@ -30,7 +30,8 @@ func dashBundle(at time.Time, counts map[string]SyncCounts, failures []Maintenan
 	return sig
 }
 
-func TestBuildMaintenanceDashboard_Scores(t *testing.T) {
+func TestBuildMaintenanceDashboard_RecordMarks(t *testing.T) {
+	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	series := []MaintenanceSignals{
 		dashBundle(dashTime(0), map[string]SyncCounts{
 			"spotify": {Succeeded: 10},
@@ -40,34 +41,71 @@ func TestBuildMaintenanceDashboard_Scores(t *testing.T) {
 		}, []MaintenanceFailure{
 			{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(3)},
 		}),
-		dashBundle(dashTime(12), map[string]SyncCounts{
-			"spotify": {Succeeded: 20, Failed: 1},
-		}, nil),
 	}
-	data := BuildMaintenanceDashboard(series, []DashboardServiceMeta{{ID: "spotify"}}, nil, dashTime(12))
+	issues := []MaintenanceIssueRecord{
+		{
+			Number: 1, Title: "spotify ingest failed: 502", State: "closed", StateReason: "completed",
+			IsTicket: true, TicketService: "spotify", FirstSeen: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			CreatedAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), ClosedAt: time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			Number: 2, Title: "spotify canary failed", State: "open",
+			IsTicket: true, TicketService: "spotify", FirstSeen: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC),
+			CreatedAt: time.Date(2026, 1, 10, 0, 0, 0, 0, time.UTC),
+		},
+		{
+			Number: 3, Title: "spotify paging postmortem", State: "closed", StateReason: "not_planned",
+			IsTicket: true, TicketService: "spotify", FirstSeen: time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC),
+			CreatedAt: time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC),
+		},
+	}
+	data := BuildMaintenanceDashboard(series, []DashboardServiceMeta{{ID: "spotify"}}, issues, now)
 	if len(data.Services) != 1 {
 		t.Fatalf("services = %v, want one", data.Services)
 	}
 	svc := data.Services[0]
-	if svc.Scores.Success == nil || *svc.Scores.Success < 95 || *svc.Scores.Success > 96 {
-		t.Fatalf("success = %v, want ~95.2", svc.Scores.Success)
+	// Fix rate: 1 resolved of 3 recorded.
+	if svc.Scores.Success == nil || *svc.Scores.Success < 33 || *svc.Scores.Success > 34 {
+		t.Fatalf("success = %v, want ~33.3", svc.Scores.Success)
 	}
-	// One of two intervals carries a failure: (0h,6h] yes, (6h,12h] no.
-	if svc.Scores.Stability == nil || *svc.Scores.Stability != 50 {
-		t.Fatalf("stability = %v, want 50", svc.Scores.Stability)
+	// Last failure 40 days before now: the 30-day quiet window is full.
+	if svc.Scores.Stability == nil || *svc.Scores.Stability != 100 {
+		t.Fatalf("stability = %v, want 100", svc.Scores.Stability)
 	}
-	// 21 finished across 3 captures: medium, never high on so few captures.
 	if svc.Scores.Confidence != "medium" {
-		t.Fatalf("confidence = %q, want medium", svc.Scores.Confidence)
+		t.Fatalf("confidence = %q, want medium (3 items)", svc.Scores.Confidence)
 	}
-	if len(svc.History) != 3 {
-		t.Fatalf("history = %+v, want three points", svc.History)
+	// Capture history still builds from the series alongside the record.
+	if len(svc.History) != 2 || len(svc.Failures) != 1 {
+		t.Fatalf("history = %+v failures = %+v", svc.History, svc.Failures)
 	}
-	if svc.History[1].NewFailures != 1 || svc.History[2].NewFailures != 0 {
-		t.Fatalf("interval failures = %+v", svc.History)
-	}
-	if !svc.LastSeen.Equal(dashTime(12)) {
+	// Last activity spans captures and record events: the third ticket's
+	// failure onset (Jan 20) is newer than the last capture (Jan 2).
+	if !svc.LastSeen.Equal(time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC)) {
 		t.Fatalf("last seen = %v", svc.LastSeen)
+	}
+}
+
+func TestScoreDashboardRecord_QuietnessAndDepth(t *testing.T) {
+	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	twoDaysAgo := now.Add(-48 * time.Hour)
+	s := scoreDashboardRecord([]DashboardFix{{State: "fixed", FirstSeen: twoDaysAgo}}, now)
+	if s.Success == nil || *s.Success != 100 {
+		t.Fatalf("success = %v, want 100", s.Success)
+	}
+	// 2 quiet days of a 30-day window.
+	if s.Stability == nil || *s.Stability < 6 || *s.Stability > 7 {
+		t.Fatalf("stability = %v, want ~6.7", s.Stability)
+	}
+	if s.Confidence != "low" {
+		t.Fatalf("confidence = %q, want low on one item", s.Confidence)
+	}
+
+	if s := scoreDashboardRecord(nil, now); s.Confidence != "none" || s.Success != nil {
+		t.Fatalf("empty record = %+v, want none marks", s)
+	}
+	if got := recordConfidence(10); got != "high" {
+		t.Fatalf("recordConfidence(10) = %q", got)
 	}
 }
 
@@ -158,8 +196,9 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 	for _, f := range data.Fixes {
 		byNumber[f.Number] = f
 	}
-	if len(data.Fixes) != 4 {
-		t.Fatalf("mapped fixes = %+v, want 4 (10, 11, 20, 21)", data.Fixes)
+	// Tickets 10-11, reported fixes 20-21, open problem 32, dismissed 34.
+	if len(data.Fixes) != 6 {
+		t.Fatalf("mapped fixes = %+v, want 6 (10, 11, 20, 21, 32, 34)", data.Fixes)
 	}
 	if got := byNumber[10]; got.Kind != "ticket" || got.State != "open" || got.Service != "spotify" {
 		t.Fatalf("fix 10 = %+v", got)
@@ -167,14 +206,21 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 	if got := byNumber[11]; got.Kind != "ticket" || got.State != "fixed" {
 		t.Fatalf("fix 11 = %+v", got)
 	}
-	if got := byNumber[20]; got.Kind != "fix" || got.State != "fixed" || got.Service != "google-gmail" {
+	if got := byNumber[20]; got.Kind != "issue" || got.State != "fixed" || got.Service != "google-gmail" {
 		t.Fatalf("fix 20 = %+v", got)
 	}
-	if got := byNumber[21]; got.Kind != "fix" || got.Service != "google-gmail" {
+	if got := byNumber[21]; got.Kind != "issue" || got.Service != "google-gmail" {
 		t.Fatalf("fix 21 = %+v", got)
 	}
-	// Newest first.
-	if data.Fixes[0].Number != 21 {
+	// Open problem-shaped issues stay in the record and count as unresolved.
+	if got := byNumber[32]; got.State != "open" || got.Service != "google-gmail" {
+		t.Fatalf("fix 32 = %+v", got)
+	}
+	if got := byNumber[34]; got.State != "closed" {
+		t.Fatalf("fix 34 = %+v", got)
+	}
+	// Newest first (ties broken by issue number).
+	if data.Fixes[0].Number != 34 {
 		t.Fatalf("fixes not newest-first: %+v", data.Fixes)
 	}
 	// Ticket-only services open a page even with no queue evidence.
@@ -204,6 +250,41 @@ func TestMatchServiceInTitle(t *testing.T) {
 		if got := matchServiceInTitle(tc.title, ids); got != tc.want {
 			t.Fatalf("matchServiceInTitle(%q) = %q, want %q", tc.title, got, tc.want)
 		}
+	}
+}
+
+func TestLoadDashboardServiceMetas(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "services.json")
+	raw := `[
+	  {"id": "spotify", "name": "Spotify"},
+	  {"id": "fake-upstream", "name": "Drift-injection harness", "failure_injection": true},
+	  {"name": "no id, dropped"}
+	]`
+	if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	metas, err := LoadDashboardServiceMetas(path)
+	if err != nil {
+		t.Fatalf("LoadDashboardServiceMetas: %v", err)
+	}
+	if len(metas) != 2 {
+		t.Fatalf("metas = %+v, want 2", metas)
+	}
+	if metas[0].ID != "spotify" || metas[0].FailureInjection {
+		t.Fatalf("meta 0 = %+v", metas[0])
+	}
+	if metas[1].ID != "fake-upstream" || !metas[1].FailureInjection {
+		t.Fatalf("meta 1 = %+v", metas[1])
+	}
+	if _, err := LoadDashboardServiceMetas(filepath.Join(t.TempDir(), "missing.json")); err == nil {
+		t.Fatal("want error for missing manifest")
+	}
+	bad := filepath.Join(t.TempDir(), "bad.json")
+	if err := os.WriteFile(bad, []byte("nope"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := LoadDashboardServiceMetas(bad); err == nil {
+		t.Fatal("want error for unparseable manifest")
 	}
 }
 
@@ -272,7 +353,7 @@ func TestWriteMaintenanceDashboard(t *testing.T) {
 		"#42",
 		"j1",
 		"&lt;script&gt;alert(1)&lt;/script&gt;",
-		"History",
+		"Capture history",
 	} {
 		if !strings.Contains(svcPage, want) {
 			t.Fatalf("service page missing %q in:\n%s", want, svcPage)

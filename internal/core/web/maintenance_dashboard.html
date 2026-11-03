@@ -67,14 +67,14 @@ footer {
 <body>
 <main>
 <h1>Sync maintenance dashboard</h1>
-<p class="lede">History and confidence for every service connection, generated at build
-time from signal bundles and the maintenance record.</p>
+<p class="lede">History and confidence for every service connection, regenerated at
+every release from the maintenance record.</p>
 <p class="stamp">
   {{- if .Hostname }}{{ .Hostname }} · {{ end -}}
   {{- if .Version }}{{ .Version }}{{ if .Commit }} ({{ .Commit }}){{ end }} · {{ end -}}
-  generated {{ fmtTime .GeneratedAt }} ·
-  {{ .Captures }} capture{{ if ne .Captures 1 }}s{{ end }} ·
-  window {{ fmtTime .WindowStart }} → {{ fmtTime .WindowEnd }}
+  generated {{ fmtTime .GeneratedAt }}
+  {{- if .Captures }} · {{ .Captures }} capture{{ if ne .Captures 1 }}s{{ end }} ·
+  window {{ fmtTime .WindowStart }} → {{ fmtTime .WindowEnd }}{{ end }}
 </p>
 {{ if .FixHistoryError }}
 <div class="note">Maintenance record unavailable: {{ .FixHistoryError }}.
@@ -82,9 +82,9 @@ Service history below still reflects captured signals.</div>
 {{ end }}
 <div class="cards">
   <div class="card"><div class="k">Services</div><div class="v">{{ len .Services }}</div></div>
-  <div class="card"><div class="k">Captures</div><div class="v">{{ .Captures }}</div></div>
+  {{ if .Captures }}<div class="card"><div class="k">Captures</div><div class="v">{{ .Captures }}</div></div>{{ end }}
   <div class="card"><div class="k">Maintenance records</div><div class="v">{{ len .Fixes }}</div></div>
-  <div class="card"><div class="k">Copies stale or missing</div><div class="v">{{ sumDegraded .Freshness }}</div></div>
+  {{ if .Freshness }}<div class="card"><div class="k">Copies stale or missing</div><div class="v">{{ sumDegraded .Freshness }}</div></div>{{ end }}
 </div>
 
 <h2>Service connections</h2>
@@ -93,7 +93,7 @@ Service history below still reflects captured signals.</div>
     <tr>
       <th>Service</th><th>Connection</th>
       <th class="num">Success</th><th class="num">Stability</th><th>Confidence</th>
-      <th>Last seen</th><th>Record</th>
+      <th>Last activity</th><th>Record</th>
     </tr>
   </thead>
   <tbody>
@@ -115,8 +115,9 @@ Service history below still reflects captured signals.</div>
   {{ end }}
   </tbody>
 </table>
-<p class="legend">Success is how recorded finished work ends. Stability is the share of
-observation intervals without new failures. Confidence grades the evidence behind both.</p>
+<p class="legend">Success is the share of recorded problems resolved. Stability is how
+long the service has been quiet &mdash; days since its last recorded failure, over thirty.
+Confidence grades the depth of the record.</p>
 
 {{ if .Fixes }}
 <h2>Recent maintenance record</h2>
@@ -162,8 +163,8 @@ observation intervals without new failures. Confidence grades the evidence behin
 {{ end }}
 </main>
 <footer>
-Generated from signal bundles and the maintenance record. Pages name services and
-failure modes; bundle and page contents carry scrubbed metadata only.
+Generated from the maintenance record and any captured signal bundles. Pages name
+services and failure modes; contents carry scrubbed metadata only.
 </footer>
 </body>
 </html>{{end}}
@@ -196,15 +197,15 @@ harness. Failures here are deliberate test activity and low stability is expecte
     <div class="v"><span class="badge {{ scoreBadge .Service.Scores.Stability }}">{{ fmtPct .Service.Scores.Stability }}</span></div></div>
   <div class="card"><div class="k">Confidence</div>
     <div class="v"><span class="badge {{ confBadge .Service.Scores.Confidence }}">{{ confLabel .Service.Scores.Confidence }}</span></div></div>
-  <div class="card"><div class="k">Finished work</div>
-    <div class="v">{{ .Service.Latest.Succeeded }} / {{ addInt .Service.Latest.Succeeded .Service.Latest.Failed }}</div></div>
+  <div class="card"><div class="k">Recorded problems</div>
+    <div class="v">{{ len .Service.Fixes }}</div></div>
 </div>
-<p class="legend">Success is how recorded finished work ends. Stability is the share of
-observation intervals without new failures. Confidence grades finished volume and the
-number of captures.</p>
+<p class="legend">Success is the share of recorded problems resolved. Stability is how
+long the service has been quiet &mdash; days since its last recorded failure, over thirty.
+Confidence grades the depth of the record.</p>
 
-<h2>History</h2>
 {{ if .Service.History }}
+<h2>Capture history</h2>
 <table>
   <thead>
     <tr>
@@ -231,9 +232,6 @@ number of captures.</p>
 <p class="legend">Counts are cumulative queue totals at capture time. A
 &ldquo;totals dropped&rdquo; note means retention pruning removed old jobs between
 captures, not negative activity.</p>
-{{ else }}
-<p class="stamp">No per-service history captured yet. Capture signal bundles to build
-the timeline.</p>
 {{ end }}
 
 {{ if .Service.Failures }}
@@ -284,8 +282,8 @@ the timeline.</p>
 <p class="stamp"><a href="../index.html">← All services</a></p>
 </main>
 <footer>
-Generated from signal bundles and the maintenance record. Pages name services and
-failure modes; bundle and page contents carry scrubbed metadata only.
+Generated from the maintenance record and any captured signal bundles. Pages name
+services and failure modes; contents carry scrubbed metadata only.
 </footer>
 </body>
 </html>{{end}}

@@ -7,19 +7,23 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
-- **Sync-maintenance dashboard (issue #239).** `POST
-  /v1/admin/maintenance/dashboard` builds an entirely static site under
-  `<data-dir>/maintenance/dashboard/` — an index plus one page per service
-  connection with capture history, success / stability / confidence marks,
-  and the maintenance record: the loop's sync tickets in full lifecycle plus
-  historical fixes scraped from repo issues through the ticket surface's
-  `gh` transport (fail-open — a scrape error degrades the index note, never
-  the build). The drift-injection harness is a first-class page annotated as
-  deliberately unstable, so its low stability reads as test activity instead
-  of alarm. Signal bundles gain a `by_service` rollup so per-service
-  outcomes are attributable from bundles alone; scoring derives from the
-  capture series only, so an offline bundle collection scores identically to
-  a live instance build.
+- **Sync-maintenance dashboard, published at every release (issue #239).** An
+  entirely build-time generated static site — one page per service
+  connection with history and success / stability / confidence marks —
+  regenerates on every merge to main and ships with the marketing site
+  (`site/maintenance/`, linked from the site nav). The release build runs
+  `cmd/aegis-dashboard`, which scrapes the repo's issue record through the
+  ticket surface's `gh` transport: the loop's sync tickets in full lifecycle
+  plus problem-shaped issues naming a service (open ones count against the
+  fix rate, completed ones read as historical fixes). Marks measure
+  maintenance responsiveness — fix rate, quietness since the last recorded
+  failure, record depth — not live sync outcomes. `site/maintenance/services.json`
+  is the committed manifest naming the pages and the drift-injection harness,
+  whose page is annotated as deliberately unstable (its heavy, unstable
+  activity is the point). The instance view stays on
+  `POST /v1/admin/maintenance/dashboard`, building the same pages from that
+  instance's signal bundles (which gain a `by_service` rollup) plus its own
+  issue scrape, fail-open.
 
 - **Drift-injection harness for the sync-maintenance loop (issue #86).** A
   dev-only fake provider (`-fake-upstream`, mounted at

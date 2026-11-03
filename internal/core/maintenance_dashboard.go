@@ -2,6 +2,7 @@ package core
 
 import (
 	_ "embed"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"html/template"
@@ -36,16 +37,17 @@ type DashboardServiceMeta struct {
 }
 
 // DashboardScores are one service's success / stability / confidence marks,
-// derived from the capture series alone so an offline bundle collection
-// scores identically to a live instance build.
+// derived from the maintenance record so every build — release-published or
+// instance — reads the same way.
 type DashboardScores struct {
-	// Success is succeeded/(succeeded+failed) over recorded finished work,
-	// percent 0-100. Nil when nothing finished.
+	// Success is the share of recorded problems resolved (fix rate),
+	// percent 0-100. Nil when the record is empty.
 	Success *float64 `json:"success,omitempty"`
-	// Stability is the share of observed capture intervals with no new
-	// failed-job events, percent 0-100. Nil when fewer than two captures.
+	// Stability is how long the service has been quiet: days since the last
+	// recorded failure event over a thirty-day window, percent 0-100. Nil
+	// when the record is empty.
 	Stability *float64 `json:"stability,omitempty"`
-	// Confidence bands how much evidence backs the marks:
+	// Confidence bands the record depth:
 	// none | low | medium | high.
 	Confidence string `json:"confidence"`
 }
@@ -86,9 +88,20 @@ type DashboardFix struct {
 	// State is "open", "fixed" (completed), or "closed".
 	State string `json:"state"`
 	// ReproState is set for tickets: needs-fixture | ready.
-	ReproState string    `json:"repro_state,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	ClosedAt   time.Time `json:"closed_at,omitempty"`
+	ReproState string `json:"repro_state,omitempty"`
+	// FirstSeen is the failure onset from the ticket evidence block, when
+	// present; otherwise the issue creation time.
+	FirstSeen time.Time `json:"first_seen,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	ClosedAt  time.Time `json:"closed_at,omitempty"`
+}
+
+// FailureAt is when the record says the problem was observed.
+func (f DashboardFix) FailureAt() time.Time {
+	if !f.FirstSeen.IsZero() {
+		return f.FirstSeen
+	}
+	return f.CreatedAt
 }
 
 // DashboardService is one service/connection page's model.
@@ -235,18 +248,23 @@ func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardSer
 
 	sort.Strings(ids)
 	for _, id := range ids {
-		data.Services = append(data.Services, buildDashboardService(id, metaByID[id], sorted, fixes))
+		data.Services = append(data.Services, buildDashboardService(id, metaByID[id], sorted, fixes, generatedAt))
 	}
 	return data
 }
 
 // buildDashboardService assembles one service page model from the series.
-func buildDashboardService(id string, meta DashboardServiceMeta, series []MaintenanceSignals, fixes []DashboardFix) DashboardService {
+func buildDashboardService(id string, meta DashboardServiceMeta, series []MaintenanceSignals, fixes []DashboardFix, now time.Time) DashboardService {
 	svc := DashboardService{
 		ID:               id,
 		Name:             meta.Name,
 		Connection:       meta.Connection,
 		FailureInjection: meta.FailureInjection,
+	}
+	for _, fix := range fixes {
+		if fix.Service == id {
+			svc.Fixes = append(svc.Fixes, fix)
+		}
 	}
 
 	failuresByID := map[string]DashboardFailure{}
@@ -304,14 +322,26 @@ func buildDashboardService(id string, meta DashboardServiceMeta, series []Mainte
 		to := svc.History[i].CapturedAt
 		svc.History[i].NewFailures = countFailuresBetween(svc.Failures, from, to)
 	}
-	svc.Scores = scoreDashboardService(svc.History, svc.Failures)
+	svc.Scores = scoreDashboardRecord(svc.Fixes, now)
+	// Last activity is the newest evidence of any kind: a capture point or
+	// a record event (failure onset or resolution).
+	svc.LastSeen = lastRecordActivity(svc.Fixes, svc.LastSeen)
+	return svc
+}
 
-	for _, fix := range fixes {
-		if fix.Service == id {
-			svc.Fixes = append(svc.Fixes, fix)
+// lastRecordActivity returns the newest of baseline and the record's event
+// times (failure onset, resolution).
+func lastRecordActivity(fixes []DashboardFix, baseline time.Time) time.Time {
+	latest := baseline
+	for _, f := range fixes {
+		if at := f.FailureAt(); at.After(latest) {
+			latest = at
+		}
+		if !f.ClosedAt.IsZero() && f.ClosedAt.After(latest) {
+			latest = f.ClosedAt
 		}
 	}
-	return svc
+	return latest
 }
 
 // countFailuresBetween counts failure events dated inside (from, to].
@@ -325,57 +355,58 @@ func countFailuresBetween(failures []DashboardFailure, from, to time.Time) int {
 	return n
 }
 
-// scoreDashboardService derives the success / stability / confidence marks.
+// scoreDashboardRecord derives the marks from the maintenance record — the
+// evidence the release-published build always has. Marks measure
+// maintenance responsiveness, not sync outcomes (issue #239):
 //
-//	success    — succeeded/(succeeded+failed) from the latest cumulative
-//	             rollup: how recorded finished work ends.
-//	stability  — share of capture intervals with no new failed-job events:
-//	             how consistently the service stays out of trouble.
-//	confidence — evidence band from finished volume and capture count, so
-//	             a lucky streak on two data points cannot read as high.
-func scoreDashboardService(history []DashboardCapture, failures []DashboardFailure) DashboardScores {
+//	success    — share of recorded problems resolved (fix rate). A problem
+//	             closed as not planned counts as recorded but unresolved.
+//	stability  — how long the service has been quiet: days since the last
+//	             recorded failure event over a thirty-day window.
+//	confidence — record depth (item-count bands), so a single early blip
+//	             cannot read as high confidence.
+func scoreDashboardRecord(fixes []DashboardFix, now time.Time) DashboardScores {
 	var s DashboardScores
-	if len(history) == 0 && len(failures) == 0 {
+	if len(fixes) == 0 {
 		s.Confidence = "none"
 		return s
 	}
-	finished := 0
-	if len(history) > 0 {
-		latest := history[len(history)-1]
-		finished = latest.Counts.Succeeded + latest.Counts.Failed
-		if finished > 0 {
-			pct := 100 * float64(latest.Counts.Succeeded) / float64(finished)
-			s.Success = &pct
+	resolved := 0
+	var lastFailure time.Time
+	for _, f := range fixes {
+		if f.State == "fixed" {
+			resolved++
 		}
-		if len(history) >= 2 {
-			clean, intervals := 0, 0
-			for i := 1; i < len(history); i++ {
-				intervals++
-				if countFailuresBetween(failures, history[i-1].CapturedAt, history[i].CapturedAt) == 0 {
-					clean++
-				}
-			}
-			pct := 100 * float64(clean) / float64(intervals)
-			s.Stability = &pct
+		if at := f.FailureAt(); at.After(lastFailure) {
+			lastFailure = at
 		}
-		s.Confidence = confidenceBand(finished, len(history))
-		return s
 	}
-	// Failure events without a per-service rollup (older bundles): the
-	// events are evidence, the marks stay undetermined.
-	s.Confidence = "low"
+	pct := 100 * float64(resolved) / float64(len(fixes))
+	s.Success = &pct
+	if !lastFailure.IsZero() {
+		quiet := now.Sub(lastFailure).Hours() / 24
+		if quiet < 0 {
+			quiet = 0
+		}
+		if quiet > 30 {
+			quiet = 30
+		}
+		stability := 100 * quiet / 30
+		s.Stability = &stability
+	}
+	s.Confidence = recordConfidence(len(fixes))
 	return s
 }
 
-// confidenceBand grades how much evidence backs the marks: finished work
-// volume plus observed captures. A single snapshot can never score high.
-func confidenceBand(finished, captures int) string {
+// recordConfidence grades how much evidence backs the marks: how many
+// problems the record carries for the service.
+func recordConfidence(items int) string {
 	switch {
-	case finished >= 20 && captures >= 4:
+	case items >= 10:
 		return "high"
-	case finished >= 5 && captures >= 2:
+	case items >= 3:
 		return "medium"
-	case finished > 0 || captures > 0:
+	case items >= 1:
 		return "low"
 	default:
 		return "none"
@@ -457,11 +488,10 @@ var dashboardFuncs = template.FuncMap{
 		case "ticket":
 			return "sync ticket"
 		default:
-			return "fix"
+			return "reported"
 		}
 	},
 	"pageFile": servicePageFile,
-	"addInt":   func(a, b int) int { return a + b },
 	"sumDegraded": func(rows []CopyFreshness) int {
 		n := 0
 		for _, r := range rows {
@@ -569,6 +599,38 @@ func servicePageFile(id string) string {
 		s = fmt.Sprintf("%s-%08x", s, h.Sum32())
 	}
 	return s
+}
+
+// dashboardServiceManifestEntry is one row of the services manifest the
+// release-published build carries: CI has no instance config to project
+// page identity from.
+type dashboardServiceManifestEntry struct {
+	ID               string `json:"id"`
+	Name             string `json:"name,omitempty"`
+	Connection       string `json:"connection,omitempty"`
+	FailureInjection bool   `json:"failure_injection,omitempty"`
+}
+
+// LoadDashboardServiceMetas reads a services manifest (JSON array of
+// {id, name, connection, failure_injection}) for the published build: the
+// pages to show and which of them back onto the drift-injection harness.
+func LoadDashboardServiceMetas(path string) ([]DashboardServiceMeta, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var entries []dashboardServiceManifestEntry
+	if err := json.Unmarshal(raw, &entries); err != nil {
+		return nil, fmt.Errorf("parse services manifest: %w", err)
+	}
+	metas := make([]DashboardServiceMeta, 0, len(entries))
+	for _, e := range entries {
+		if e.ID == "" {
+			continue
+		}
+		metas = append(metas, DashboardServiceMeta(e))
+	}
+	return metas, nil
 }
 
 // dashboardServiceMetas projects configured services onto page identity,

@@ -89,15 +89,19 @@ scheduled job is the intended trigger for now:
 7 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/scan" >/dev/null
 ```
 
-The maintenance dashboard makes this work visible. `POST
-/v1/admin/maintenance/dashboard` builds an entirely static site — no scripts,
-no live queries — under `<data-dir>/maintenance/dashboard/`: an index plus one
-page per service connection with capture history, success / stability /
-confidence marks, and the maintenance record (sync tickets plus historical
-fixes scraped from repo issues; the scrape is fail-open and its absence is
-noted on the index). Services backed by the drift-injection harness are
-annotated so their deliberately low stability reads as test activity. Open
-`index.html` in a browser, or publish the directory as static files.
+The maintenance dashboard makes this work visible. The published dashboard
+regenerates at every release from the repo's issue record and lives on the
+marketing site (`site/maintenance/`, see `docs/sync-maintenance.md`). `POST
+/v1/admin/maintenance/dashboard` builds the same pages as an entirely static
+site under `<data-dir>/maintenance/dashboard/` for this instance: an index
+plus one page per service connection with capture history, the maintenance
+record (sync tickets and historical fixes scraped from repo issues), and
+success / stability / confidence marks derived from that record (fix rate,
+quietness, record depth — maintenance responsiveness, not live sync
+outcomes). The issue scrape is fail-open and its absence is noted on the
+index. Services backed by the drift-injection harness are annotated so their
+deliberately low stability reads as test activity. Open `index.html` in a
+browser, or publish the directory as static files.
 
 ### Access audit log
 

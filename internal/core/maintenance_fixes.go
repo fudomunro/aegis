@@ -17,9 +17,11 @@ import (
 // Two kinds of record material exist:
 //   - Tickets (label sync-failure): the loop's own issues, shown in full
 //     lifecycle (open with repro state, or fixed when closed completed).
-//   - Historical fixes: completed issues that read as fixes and name a
-//     configured service. Feature asks, docs, and unmapped issues are
-//     dropped — the page is a maintenance record, not an issue mirror.
+//   - Reported issues: problem-shaped issues that name a configured
+//     service — open problems stay visible and count against the fix rate,
+//     completed ones read as historical fixes. Feature asks, docs, and
+//     unmapped issues are dropped — the page is a maintenance record, not
+//     an issue mirror.
 
 // MaintenanceIssueRecord is one repo issue scraped for the dashboard's
 // maintenance record. Raw bodies are parsed and dropped at scrape time so
@@ -40,6 +42,8 @@ type MaintenanceIssueRecord struct {
 	TicketService string `json:"ticket_service,omitempty"`
 	// ReproState mirrors the ticket's label state for display.
 	ReproState string `json:"repro_state,omitempty"`
+	// FirstSeen is the failure onset from the ticket evidence block.
+	FirstSeen time.Time `json:"first_seen,omitempty"`
 }
 
 // ListIssues scrapes the repo's issue history via the gh CLI. Implements the
@@ -86,6 +90,7 @@ func issueRecord(i *ghListIssue) MaintenanceIssueRecord {
 		if rec.TicketService == "" {
 			rec.TicketService = signatureService(ticket.Signature)
 		}
+		rec.FirstSeen = ticket.FirstSeen
 		if rec.ReproState == "" {
 			rec.ReproState = reproStateFromLabels(rec.Labels, ticket.ReproState)
 		}
@@ -144,18 +149,19 @@ func isFeatureAskTitle(title string) bool {
 // ids. A match is kept only when it resolves to a service in the dashboard.
 var serviceTitleAliases = map[string]string{
 	"spotify":          "spotify",
-	"youtube music":    "youtube",
-	"youtube":          "youtube",
-	"amazon music":     "amazonmusic",
-	"amazonmusic":      "amazonmusic",
+	"youtube music":    "youtube-music",
+	"youtube":          "youtube-music",
+	"amazon music":     "amazon-music",
 	"gmail":            "google-gmail",
 	"google photos":    "google-photos",
-	"google contacts":  "google-contacts",
+	"google contacts":  "google",
 	"google calendar":  "google-calendar",
+	"google drive":     "google-drive",
 	"immich":           "immich",
 	"bluesky":          "bluesky",
 	"ynab":             "ynab",
 	"owntracks":        "owntracks",
+	"paperless":        "paperless",
 	"quicken":          "quicken",
 	"signal messenger": "signal",
 }
@@ -192,16 +198,12 @@ func matchServiceInTitle(title string, ids []string) string {
 	return ""
 }
 
-// resolveServiceID picks the dashboard service a canonical alias names:
-// exact id first, then an id containing the canonical name (custom ids).
+// resolveServiceID picks the dashboard service a canonical alias names.
+// Exact id only: a substring guess would misattribute (the contacts id
+// "google" must not swallow every "google-*" page).
 func resolveServiceID(canonical string, ids []string) string {
 	for _, id := range ids {
 		if strings.EqualFold(id, canonical) {
-			return id
-		}
-	}
-	for _, id := range ids {
-		if strings.Contains(strings.ToLower(id), strings.ToLower(canonical)) {
 			return id
 		}
 	}
@@ -210,6 +212,9 @@ func resolveServiceID(canonical string, ids []string) string {
 
 // mapIssueRecord projects a scraped issue onto the dashboard's maintenance
 // record. ok is false when the issue is not record material for any service.
+// Non-ticket items are problem-shaped issues naming a service: open ones
+// stay visible (they count against the fix rate), completed ones read as
+// historical fixes.
 func mapIssueRecord(rec MaintenanceIssueRecord, ids []string) (DashboardFix, bool) {
 	if rec.IsTicket {
 		svc := rec.TicketService
@@ -234,12 +239,10 @@ func mapIssueRecord(rec MaintenanceIssueRecord, ids []string) (DashboardFix, boo
 			Kind:       "ticket",
 			State:      state,
 			ReproState: rec.ReproState,
+			FirstSeen:  rec.FirstSeen,
 			CreatedAt:  rec.CreatedAt,
 			ClosedAt:   rec.ClosedAt,
 		}, true
-	}
-	if rec.State != "closed" || rec.StateReason != "completed" {
-		return DashboardFix{}, false
 	}
 	if hasAnyLabel(rec.Labels, "enhancement", "documentation") {
 		return DashboardFix{}, false
@@ -251,13 +254,21 @@ func mapIssueRecord(rec MaintenanceIssueRecord, ids []string) (DashboardFix, boo
 	if svc == "" {
 		return DashboardFix{}, false
 	}
+	state := "open"
+	switch {
+	case rec.State == "closed" && rec.StateReason == "completed":
+		state = "fixed"
+	case rec.State == "closed":
+		state = "closed"
+	}
 	return DashboardFix{
 		Number:    rec.Number,
 		URL:       rec.URL,
 		Title:     rec.Title,
 		Service:   svc,
-		Kind:      "fix",
-		State:     "fixed",
+		Kind:      "issue",
+		State:     state,
+		FirstSeen: rec.FirstSeen,
 		CreatedAt: rec.CreatedAt,
 		ClosedAt:  rec.ClosedAt,
 	}, true
