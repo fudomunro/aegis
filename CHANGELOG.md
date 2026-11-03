@@ -11,9 +11,9 @@ issue numbers; this file is where that context lives.
   dev-only fake provider (`-fake-upstream`, mounted at
   `/demo/fake-upstream`) serves a Spotify saved-tracks shape with switchable
   failure modes — `healthy`, `empty`, `http-500`, `http-401`, `garbage`,
-  and `drift-items` (contract drift: the `items` array renamed while
-  pagination metadata still claims a library — the silent-degradation shape
-  the loop must catch). A new `canary` sync job type fetches one saved-tracks
+  `drift-items` (the `items` array renamed to `entries` — the issue #240
+  migration), and `drift-unmapped` (renamed to a name no adapter knows —
+  the silent-degradation shape the loop must catch). A new `canary` sync job type fetches one saved-tracks
   page through the configured endpoint and fails on errors or on that
   incoherent shape (total > 0, zero items; a genuinely empty library is
   health), so injected drift becomes sync-job failures, signal bundles, and
@@ -84,6 +84,15 @@ issue numbers; this file is where that context lives.
 
 ### Fixed
 
+- **Spotify paging reads came up silently empty when the provider renamed
+  the `items` array (issue #240).** Every paging read — mirror source and
+  library connector alike — keyed on `items` alone, so a contract change
+  yielded an empty library with no error while `total` still claimed
+  contents. Found by the drift-injection loop (the canary's total>0 /
+  zero-items guard ticketed it as `sync-failure` #240); fixed by routing
+  every read through one `connectors.SpotifyPagingItems` helper that knows
+  the `items` → `entries` migration, so the next rename has exactly one
+  place to land. Repro fixture + red tests ride along.
 - `entity_links.json` was the one state store still written with plain
   `os.WriteFile`, so a crash could truncate it and silently drop the
   operator's confirmed identities. It now goes through `atomicWriteFile`.

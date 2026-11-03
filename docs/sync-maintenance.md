@@ -313,7 +313,8 @@ instance:
    | `empty` | Coherent empty library (total 0) — health |
    | `http-500` / `http-401` | Error statuses |
    | `garbage` | 200 with a body that is not JSON |
-   | `drift-items` | Valid JSON with the `items` array renamed — silent degradation |
+   | `drift-items` | Valid JSON with the `items` array renamed to `entries` — the issue #240 migration, which the adapter now reads (regression shape) |
+   | `drift-unmapped` | Valid JSON with the `items` array renamed to a name no adapter knows — silent degradation, for the canary's incoherence guard |
 
    ```bash
    curl -X POST -H "Authorization: Bearer $ADMIN_KEY" \

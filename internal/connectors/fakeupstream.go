@@ -31,15 +31,23 @@ const (
 	// FakeModeGarbage answers 200 with a body that is not JSON — the parse
 	// layer must fail loudly.
 	FakeModeGarbage = "garbage"
-	// FakeModeDriftItems is the contract drift: valid JSON, total intact,
-	// but the items array has been renamed. Parsers that read items[] see a
-	// library that is empty while the pagination metadata still claims
-	// contents — the silent-degradation shape the loop must catch.
+	// FakeModeDriftItems is a contract drift the adapter has since learned:
+	// valid JSON, total intact, items renamed to entries. Kept as the
+	// regression shape for issue #240.
 	FakeModeDriftItems = "drift-items"
+	// FakeModeDriftUnmapped is a contract change no adapter knows: items
+	// renamed to a name outside the known migrations. Parsers go silently
+	// empty while pagination metadata still claims contents — the
+	// future-drift shape for the canary's incoherence guard and the loop's
+	// silent-degradation path.
+	FakeModeDriftUnmapped = "drift-unmapped"
 )
 
-// fakeDriftField is what a provider rename of "items" looks like.
+// fakeDriftField is the renamed array the adapter learned to read (#240).
 const fakeDriftField = "entries"
+
+// fakeUnmappedField is a rename no adapter knows.
+const fakeUnmappedField = "saved_tracks"
 
 // fakeUpstreamTracks is the synthetic library. One item carries a null
 // track (removed local file) so parsers that skip nulls stay honest.
@@ -101,7 +109,7 @@ func (f *FakeUpstream) Mode() string {
 func (f *FakeUpstream) SetMode(mode string) error {
 	switch mode {
 	case FakeModeHealthy, FakeModeEmpty, FakeModeHTTP500, FakeModeHTTP401,
-		FakeModeGarbage, FakeModeDriftItems:
+		FakeModeGarbage, FakeModeDriftItems, FakeModeDriftUnmapped:
 	default:
 		return fmt.Errorf("unknown fake upstream mode %q", mode)
 	}
@@ -114,7 +122,7 @@ func (f *FakeUpstream) SetMode(mode string) error {
 // Modes lists the failure modes the control surface accepts.
 func Modes() []string {
 	return []string{FakeModeHealthy, FakeModeEmpty, FakeModeHTTP500, FakeModeHTTP401,
-		FakeModeGarbage, FakeModeDriftItems}
+		FakeModeGarbage, FakeModeDriftItems, FakeModeDriftUnmapped}
 }
 
 // ServeHTTP routes by path suffix so the handler works at any mount prefix.
@@ -215,11 +223,15 @@ func (f *FakeUpstream) serveSavedTracks(w http.ResponseWriter, r *http.Request) 
 		"next":     nil,
 		"total":    total,
 	}
-	if mode == FakeModeDriftItems {
-		// Contract drift: the payload is valid and complete except the items
-		// array has a new name. Parsers keyed on items[] go silently empty.
+	switch mode {
+	case FakeModeDriftItems:
+		// Learned migration (#240): the payload is valid and complete
+		// except the items array has the renamed key.
 		page[fakeDriftField] = items
-	} else {
+	case FakeModeDriftUnmapped:
+		// Unmapped contract change: renamed to a name no adapter reads.
+		page[fakeUnmappedField] = items
+	default:
 		page["items"] = items
 	}
 	_ = json.NewEncoder(w).Encode(page)

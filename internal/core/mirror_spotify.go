@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/connectors"
 )
 
 // spotifyMirror implements mirrorSource and mirrorTarget against the Spotify Web API.
@@ -41,7 +43,7 @@ func (m *spotifyMirror) collectPlaylistTracks(ctx context.Context, playlistID st
 		if err != nil {
 			return out, truncated, err
 		}
-		items, _ := raw["items"].([]any)
+		items := connectors.SpotifyPagingItems(raw)
 		for _, item := range items {
 			e, ok := item.(map[string]any)
 			if !ok {
@@ -173,18 +175,16 @@ func (m *spotifyMirror) loadLikedTracksPage(ctx context.Context, cursor string, 
 // neutral tracks and reports the overall total.
 func spotifyItemsToTracks(raw map[string]any) ([]mirrorTrack, int) {
 	var out []mirrorTrack
-	if items, ok := raw["items"].([]any); ok {
-		for _, item := range items {
-			e, ok := item.(map[string]any)
-			if !ok {
-				continue
-			}
-			t, _ := e["track"].(map[string]any)
-			if t == nil {
-				continue
-			}
-			out = append(out, mirrorTrackFromSpotify(t))
+	for _, item := range connectors.SpotifyPagingItems(raw) {
+		e, ok := item.(map[string]any)
+		if !ok {
+			continue
 		}
+		t, _ := e["track"].(map[string]any)
+		if t == nil {
+			continue
+		}
+		out = append(out, mirrorTrackFromSpotify(t))
 	}
 	return out, asInt(raw["total"])
 }
@@ -198,7 +198,7 @@ func (m *spotifyMirror) loadLikedTracks(ctx context.Context) ([]mirrorTrack, boo
 		if err != nil {
 			return out, false, err
 		}
-		items, _ := raw["items"].([]any)
+		items := connectors.SpotifyPagingItems(raw)
 		for _, item := range items {
 			saved, ok := item.(map[string]any)
 			if !ok {

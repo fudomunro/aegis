@@ -296,7 +296,7 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]types.Alb
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return nil, false, err
 		}
-		items, _ := raw["items"].([]any)
+		items := SpotifyPagingItems(raw)
 		for _, item := range items {
 			saved, ok := item.(map[string]any)
 			if !ok {
@@ -478,7 +478,7 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]types.Tra
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return nil, false, err
 		}
-		items, _ := raw["items"].([]any)
+		items := SpotifyPagingItems(raw)
 		for _, item := range items {
 			saved, ok := item.(map[string]any)
 			if !ok {
@@ -529,7 +529,7 @@ func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]types.Playl
 		if err := json.Unmarshal(data, &raw); err != nil {
 			return nil, false, err
 		}
-		items, _ := raw["items"].([]any)
+		items := SpotifyPagingItems(raw)
 		for _, item := range items {
 			p, ok := item.(map[string]any)
 			if !ok {
@@ -628,7 +628,7 @@ func (c *SpotifyConnector) NeutralPlaylist(p map[string]any) types.Playlist {
 }
 
 func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) types.PlaylistList {
-	items, _ := raw["items"].([]any)
+	items := SpotifyPagingItems(raw)
 	playlists := make([]types.Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
@@ -648,7 +648,7 @@ func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) types.Playl
 }
 
 func (c *SpotifyConnector) TransformSavedTracks(raw map[string]any) map[string]any {
-	items, _ := raw["items"].([]any)
+	items := SpotifyPagingItems(raw)
 	tracks := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		saved, ok := item.(map[string]any)
@@ -674,7 +674,7 @@ func (c *SpotifyConnector) TransformSavedTracks(raw map[string]any) map[string]a
 }
 
 func (c *SpotifyConnector) TransformSavedAlbums(raw map[string]any) map[string]any {
-	items, _ := raw["items"].([]any)
+	items := SpotifyPagingItems(raw)
 	albums := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		saved, ok := item.(map[string]any)
@@ -724,7 +724,7 @@ func (c *SpotifyConnector) TransformPlayer(raw map[string]any) map[string]any {
 }
 
 func (c *SpotifyConnector) TransformRecentlyPlayed(raw map[string]any) map[string]any {
-	items, _ := raw["items"].([]any)
+	items := SpotifyPagingItems(raw)
 	tracks := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		entry, ok := item.(map[string]any)
@@ -746,7 +746,7 @@ func (c *SpotifyConnector) TransformRecentlyPlayed(raw map[string]any) map[strin
 }
 
 func (c *SpotifyConnector) TransformTrackList(raw map[string]any) map[string]any {
-	items, _ := raw["items"].([]any)
+	items := SpotifyPagingItems(raw)
 	tracks := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		t, ok := item.(map[string]any)
@@ -765,7 +765,7 @@ func (c *SpotifyConnector) TransformTrackList(raw map[string]any) map[string]any
 }
 
 func (c *SpotifyConnector) TransformArtistList(raw map[string]any) map[string]any {
-	items, _ := raw["items"].([]any)
+	items := SpotifyPagingItems(raw)
 	artists := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		a, ok := item.(map[string]any)
@@ -816,6 +816,18 @@ func (c *SpotifyConnector) TransformSearch(raw map[string]any) map[string]any {
 
 // NeutralSpotifyTrack maps a raw Spotify track object into the neutral Track.
 // Artist/album names become unified identities; Spotify IDs live in Sources.
+// SpotifyPagingItems returns a Spotify paging object's item array. The
+// provider has renamed this field before (issue #240); known migrations live
+// here so every paging read shares one answer instead of each silently
+// inventing its own.
+func SpotifyPagingItems(raw map[string]any) []any {
+	if items, ok := raw["items"].([]any); ok {
+		return items
+	}
+	items, _ := raw["entries"].([]any)
+	return items
+}
+
 func NeutralSpotifyTrack(track map[string]any) types.Track {
 	id, _ := track["id"].(string)
 	name, _ := track["name"].(string)
