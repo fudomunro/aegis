@@ -1,14 +1,35 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+// fakeIssueTracker records upserts for scanner tests.
+type fakeIssueTracker struct {
+	calls []MaintenanceTicket
+	// action/error returned per upsert; defaults "opened".
+	action string
+	err    error
+}
+
+func (f *fakeIssueTracker) UpsertTicket(_ context.Context, t MaintenanceTicket) (IssueRef, string, error) {
+	f.calls = append(f.calls, t)
+	if f.err != nil {
+		return IssueRef{}, "", f.err
+	}
+	action := f.action
+	if action == "" {
+		action = "opened"
+	}
+	return IssueRef{Number: len(f.calls), URL: "https://github.com/example/repo/issues/1"}, action, nil
+}
 
 func TestNormalizeErrorShape(t *testing.T) {
 	a := normalizeErrorShape("spotify saved tracks returned 502")
@@ -54,11 +75,13 @@ func mustWriteBundle(t *testing.T, dir string, sig MaintenanceSignals) {
 
 func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 	dir := t.TempDir()
+	tracker := &fakeIssueTracker{}
+
 	// One bundle only: flake, must stay a metric.
 	mustWriteBundle(t, dir, scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
 		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
 
-	report, err := ScanMaintenanceDir(dir)
+	report, err := ScanMaintenanceDir(context.Background(), dir, tracker)
 	if err != nil {
 		t.Fatalf("ScanMaintenanceDir: %v", err)
 	}
@@ -68,26 +91,26 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 	if len(report.Tickets) != 1 || report.Tickets[0].Action != "skipped" {
 		t.Fatalf("one-off failure must skip: %+v", report.Tickets)
 	}
-	if tickets, _ := ListMaintenanceTickets(dir); len(tickets) != 0 {
-		t.Fatalf("no ticket file may exist for a flake: %+v", tickets)
+	if len(tracker.calls) != 0 {
+		t.Fatalf("flake must never reach the tracker: %+v", tracker.calls)
 	}
 
 	// Same signature in a second bundle: now it is a ticket.
 	mustWriteBundle(t, dir, scanBundle(time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
 		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "Spotify saved tracks returned 503")))
 
-	report, err = ScanMaintenanceDir(dir)
+	report, err = ScanMaintenanceDir(context.Background(), dir, tracker)
 	if err != nil {
 		t.Fatalf("ScanMaintenanceDir: %v", err)
 	}
-	if len(report.Tickets) != 1 || report.Tickets[0].Action != "opened" {
+	if len(report.Tickets) != 1 || report.Tickets[0].Action != "opened" ||
+		report.Tickets[0].Number != 1 || report.Tickets[0].URL == "" {
 		t.Fatalf("recurrent failure must open: %+v", report.Tickets)
 	}
-	tickets, err := ListMaintenanceTickets(dir)
-	if err != nil || len(tickets) != 1 {
-		t.Fatalf("ListMaintenanceTickets = %+v, %v", tickets, err)
+	if len(tracker.calls) != 1 {
+		t.Fatalf("upserts = %+v", tracker.calls)
 	}
-	tk := tickets[0]
+	tk := tracker.calls[0]
 	if tk.Count != 2 || tk.ReproState != ReproStateNeedsFixture || tk.Tier != scanDefaultTier {
 		t.Fatalf("ticket = %+v", tk)
 	}
@@ -105,6 +128,7 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 
 func TestScanMaintenanceDir_FreshnessFromLatestBundle(t *testing.T) {
 	dir := t.TempDir()
+	tracker := &fakeIssueTracker{}
 	sig := scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC))
 	sig.Freshness = []CopyFreshness{
 		{Kind: "tracks", InSync: 8, Stale: 2, Missing: 1},
@@ -112,84 +136,50 @@ func TestScanMaintenanceDir_FreshnessFromLatestBundle(t *testing.T) {
 	}
 	mustWriteBundle(t, dir, sig)
 
-	report, err := ScanMaintenanceDir(dir)
+	report, err := ScanMaintenanceDir(context.Background(), dir, tracker)
 	if err != nil {
 		t.Fatalf("ScanMaintenanceDir: %v", err)
 	}
 	// State-like signal: one bundle is enough.
-	found := false
+	if len(tracker.calls) != 1 || tracker.calls[0].Kind != "tracks" {
+		t.Fatalf("stale/missing kind must ticket once: %+v (report %+v)", tracker.calls, report)
+	}
 	for _, ref := range report.Tickets {
-		if ref.Action == "opened" && ref.Signature == freshnessSignature("tracks") {
-			found = true
-		}
-		if ref.Signature == freshnessSignature("messages") {
+		if ref.Signature == freshnessSignature("messages") && ref.Action != "skipped" {
 			t.Fatalf("healthy kind must not ticket: %+v", ref)
 		}
 	}
-	if !found {
-		t.Fatalf("stale/missing kind must open: %+v", report.Tickets)
-	}
 }
 
-func TestScanMaintenanceDir_UpdatePreservesTriage(t *testing.T) {
+func TestScanMaintenanceDir_NilTrackerAndTrackerError(t *testing.T) {
 	dir := t.TempDir()
 	base := time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC)
 	for i := 0; i < 2; i++ {
 		mustWriteBundle(t, dir, scanBundle(base.Add(time.Duration(i)*time.Hour),
 			scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
 	}
-	if _, err := ScanMaintenanceDir(dir); err != nil {
-		t.Fatalf("scan: %v", err)
-	}
-	tickets, err := ListMaintenanceTickets(dir)
-	if err != nil || len(tickets) != 1 {
-		t.Fatalf("tickets = %+v, %v", tickets, err)
-	}
 
-	// Simulate triage attaching a repro bundle.
-	triaged := tickets[0]
-	triaged.Title = "Spotify saved-tracks parse regression"
-	triaged.Tier = "fixture"
-	triaged.ReproState = ReproStateReady
-	triaged.Fixture = "internal/connectors/testdata/repro/spotify/track-object-null-items/fixture.json"
-	triaged.ReproTest = "TestSpotifyLikedTracks_ReproFixture"
-	triaged.Expected = "2 tracks"
-	triaged.Actual = "0 tracks"
-	path := filepath.Join(dir, ticketsDirName, ticketFileName(triaged.Signature))
-	raw, _ := json.MarshalIndent(triaged, "", "  ")
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	// A third observation arrives; rescan.
-	mustWriteBundle(t, dir, scanBundle(base.Add(2*time.Hour),
-		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
-	report, err := ScanMaintenanceDir(dir)
+	report, err := ScanMaintenanceDir(context.Background(), dir, nil)
 	if err != nil {
-		t.Fatalf("rescan: %v", err)
+		t.Fatalf("nil tracker: %v", err)
 	}
-	if report.Tickets[0].Action != "updated" {
-		t.Fatalf("action = %+v", report.Tickets[0])
+	if len(report.Tickets) != 1 || report.Tickets[0].Action != "disabled" {
+		t.Fatalf("nil tracker must report disabled: %+v", report.Tickets)
 	}
-	tickets, _ = ListMaintenanceTickets(dir)
-	got := tickets[0]
-	if got.Count != 3 {
-		t.Fatalf("count = %d, want 3", got.Count)
+
+	broken := &fakeIssueTracker{err: errors.New("gh unavailable")}
+	report, err = ScanMaintenanceDir(context.Background(), dir, broken)
+	if err != nil {
+		t.Fatalf("tracker errors must not sink the scan: %v", err)
 	}
-	if got.Title != triaged.Title || got.Tier != triaged.Tier || got.ReproState != ReproStateReady {
-		t.Fatalf("triage clobbered: %+v", got)
-	}
-	if got.Fixture != triaged.Fixture || got.ReproTest != triaged.ReproTest ||
-		got.Expected != triaged.Expected || got.Actual != triaged.Actual {
-		t.Fatalf("repro bundle clobbered: %+v", got)
-	}
-	if !got.FirstSeen.Equal(base) {
-		t.Fatalf("first_seen = %v, want earliest %v", got.FirstSeen, base)
+	if len(report.Tickets) != 1 || report.Tickets[0].Action != "error" ||
+		report.Tickets[0].Error == "" {
+		t.Fatalf("tracker error must surface fail-open: %+v", report.Tickets)
 	}
 }
 
 func TestScanMaintenanceDir_NoBundles(t *testing.T) {
-	report, err := ScanMaintenanceDir(t.TempDir())
+	report, err := ScanMaintenanceDir(context.Background(), t.TempDir(), &fakeIssueTracker{})
 	if err != nil {
 		t.Fatalf("empty dir must not error: %v", err)
 	}
@@ -201,6 +191,7 @@ func TestScanMaintenanceDir_NoBundles(t *testing.T) {
 func TestHandleAdminMaintenanceScan(t *testing.T) {
 	srv := adminSplitServer(t)
 	srv.dataDir = t.TempDir()
+	srv.maintenanceIssues = &fakeIssueTracker{}
 	bundleDir := filepath.Join(srv.dataDir, dataDirMaintenanceSubdir)
 	mustWriteBundle(t, bundleDir, scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
 		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
@@ -233,41 +224,5 @@ func TestHandleAdminMaintenanceScan(t *testing.T) {
 	srv.AdminMiddleware(srv.HandleAdminMaintenanceScan)(w, req)
 	if w.Code == http.StatusOK {
 		t.Fatal("agent credentials must not run scans")
-	}
-}
-
-func TestHandleAdminMaintenanceTickets(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.dataDir = t.TempDir()
-	bundleDir := filepath.Join(srv.dataDir, dataDirMaintenanceSubdir)
-	for i := 0; i < 2; i++ {
-		mustWriteBundle(t, bundleDir, scanBundle(time.Date(2026, 2, 10, 10+i, 0, 0, 0, time.UTC),
-			scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
-	}
-	if _, err := ScanMaintenanceDir(bundleDir); err != nil {
-		t.Fatalf("scan: %v", err)
-	}
-
-	req := adminRequest(http.MethodGet, "/v1/admin/maintenance/tickets", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceTickets)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var got struct {
-		Tickets []MaintenanceTicket `json:"tickets"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(got.Tickets) != 1 {
-		t.Fatalf("tickets = %+v", got.Tickets)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/tickets", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceTickets)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("POST status = %d, want 405", w.Code)
 	}
 }

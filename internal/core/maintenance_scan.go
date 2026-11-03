@@ -1,8 +1,7 @@
 package core
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,11 +15,11 @@ import (
 
 // Maintenance scanner (issue #86, phase 2): reads the signal bundles a
 // capture leaves under <data-dir>/maintenance/, clusters failures by
-// normalized signature, and opens structured tickets under
-// <data-dir>/maintenance/tickets/ — the phase-3 input contract. A local
-// scheduled job triggers it (POST /v1/admin/maintenance/scan); the scanner
-// itself only reads paths, so it can move to cloud compute later without
-// touching instance IPC.
+// normalized signature, and tickets recurrent evidence as GitHub issues via
+// an IssueTracker — there is no local defect store. A local scheduled job
+// triggers it (POST /v1/admin/maintenance/scan); the scanner itself only
+// reads paths, so it can move to cloud compute later without touching
+// instance IPC.
 //
 // Two reproducibility gates, one per signal nature:
 //   - Failure clusters are event-like: ticketed only when the same signature
@@ -33,8 +32,6 @@ import (
 // ReproTest, ReproState, Expected, and Actual survive a rescan.
 
 const (
-	// ticketsDirName is the ticket subdirectory under the data dir.
-	ticketsDirName = "tickets"
 	// scanRecurrenceMin is how many distinct bundles a failure signature must
 	// appear in before it is ticketed.
 	scanRecurrenceMin = 2
@@ -56,8 +53,8 @@ const (
 // until a human reclassifies it.
 const scanDefaultTier = "connector-logic"
 
-// MaintenanceTicket is one sync-failure ticket: structured data, not prose
-// (docs/sync-maintenance.md).
+// MaintenanceTicket is the structured ticket contract (issue body evidence
+// block), not prose — see docs/sync-maintenance.md.
 type MaintenanceTicket struct {
 	Signature  string `json:"signature"`
 	Title      string `json:"title"`
@@ -99,9 +96,11 @@ type MaintenanceScanReport struct {
 
 // MaintenanceScanTicketRef says what the scan did for one signature.
 type MaintenanceScanTicketRef struct {
-	Path      string `json:"path"`
 	Signature string `json:"signature"`
-	Action    string `json:"action"` // opened | updated | skipped
+	Action    string `json:"action"` // opened | updated | reopened | skipped | disabled | error
+	Number    int    `json:"number,omitempty"`
+	URL       string `json:"url,omitempty"`
+	Error     string `json:"error,omitempty"`
 }
 
 type scanCluster struct {
@@ -163,10 +162,11 @@ func freshnessSignature(kind string) string {
 }
 
 // ScanMaintenanceDir runs one scan pass over the signal bundles in dir and
-// writes tickets under dir/tickets. Rescans are idempotent: counts and
-// observation history are recomputed from the bundles on disk, and
-// human-edited ticket fields survive updates.
-func ScanMaintenanceDir(dir string) (*MaintenanceScanReport, error) {
+// upserts GitHub issues for ticketable clusters. Rescans are idempotent:
+// counts and observation history are recomputed from the bundles on disk,
+// and the tracker preserves triage (labels, fixture/test slots) on updates.
+// A nil tracker scans only, marking ticketable clusters "disabled".
+func ScanMaintenanceDir(ctx context.Context, dir string, tracker IssueTracker) (*MaintenanceScanReport, error) {
 	report := &MaintenanceScanReport{Tickets: []MaintenanceScanTicketRef{}}
 	bundles, err := loadSignalBundles(dir)
 	if err != nil {
@@ -242,19 +242,23 @@ func ScanMaintenanceDir(dir string) (*MaintenanceScanReport, error) {
 			})
 			continue
 		}
-		path, existed, err := writeMaintenanceTicket(dir, c)
+		ref := MaintenanceScanTicketRef{Signature: sig}
+		if tracker == nil {
+			ref.Action = "disabled"
+			report.Tickets = append(report.Tickets, ref)
+			continue
+		}
+		issue, action, err := tracker.UpsertTicket(ctx, clusterTicket(c))
 		if err != nil {
-			return nil, err
+			// Fail-open: one tracker error must not sink the scan pass.
+			ref.Action = "error"
+			ref.Error = err.Error()
+		} else {
+			ref.Action = action
+			ref.Number = issue.Number
+			ref.URL = issue.URL
 		}
-		action := "opened"
-		if existed {
-			action = "updated"
-		}
-		report.Tickets = append(report.Tickets, MaintenanceScanTicketRef{
-			Path:      path,
-			Signature: sig,
-			Action:    action,
-		})
+		report.Tickets = append(report.Tickets, ref)
 	}
 	return report, nil
 }
@@ -290,29 +294,15 @@ type signalBundle struct {
 	sourceName string
 }
 
-func ticketFileName(signature string) string {
-	sum := sha256.Sum256([]byte(signature))
-	return hex.EncodeToString(sum[:8]) + ".json"
-}
-
-// writeMaintenanceTicket merges one cluster into its ticket file and returns
-// the path and whether a ticket already existed. Scanner-generated fields are
-// recomputed; triage fields on an existing ticket are preserved.
-func writeMaintenanceTicket(dir string, c *scanCluster) (string, bool, error) {
-	ticketsDir := filepath.Join(dir, ticketsDirName)
-	if err := os.MkdirAll(ticketsDir, 0o700); err != nil {
-		return "", false, err
-	}
-	path := filepath.Join(ticketsDir, ticketFileName(c.signature))
-
+// clusterTicket builds the ticket contract for one cluster: scanner-generated
+// fields recomputed from the bundles on disk. Triage fields arrive empty and
+// are preserved by the IssueTracker on updates.
+func clusterTicket(c *scanCluster) MaintenanceTicket {
 	obs := c.obs
 	if len(obs) > scanObservationCap {
 		obs = obs[len(obs)-scanObservationCap:]
 	}
-	first := obs[0].CapturedAt
-	last := obs[len(obs)-1].CapturedAt
-
-	t := MaintenanceTicket{
+	return MaintenanceTicket{
 		Signature:    c.signature,
 		Title:        clusterTitle(c),
 		Service:      c.service,
@@ -321,39 +311,11 @@ func writeMaintenanceTicket(dir string, c *scanCluster) (string, bool, error) {
 		ErrorClass:   c.errorClass,
 		ReproState:   ReproStateNeedsFixture,
 		Tier:         scanDefaultTier,
-		FirstSeen:    first,
-		LastSeen:     last,
+		FirstSeen:    obs[0].CapturedAt,
+		LastSeen:     obs[len(obs)-1].CapturedAt,
 		Count:        len(c.obs),
 		Observations: obs,
 	}
-
-	// Preserve triage and keep the earliest first-seen across rescans.
-	existed := false
-	if raw, err := os.ReadFile(path); err == nil {
-		var old MaintenanceTicket
-		if json.Unmarshal(raw, &old) == nil {
-			existed = true
-			t.Title = old.Title
-			t.Tier = old.Tier
-			t.ReproState = old.ReproState
-			t.Fixture = old.Fixture
-			t.ReproTest = old.ReproTest
-			t.Expected = old.Expected
-			t.Actual = old.Actual
-			if !old.FirstSeen.IsZero() && old.FirstSeen.Before(first) {
-				t.FirstSeen = old.FirstSeen
-			}
-		}
-	}
-
-	data, err := json.MarshalIndent(t, "", "  ")
-	if err != nil {
-		return "", existed, err
-	}
-	if err := os.WriteFile(path, append(data, '\n'), 0o600); err != nil {
-		return "", existed, err
-	}
-	return path, existed, nil
 }
 
 func clusterTitle(c *scanCluster) string {
@@ -380,34 +342,9 @@ func clusterTitle(c *scanCluster) string {
 	return fmt.Sprintf("%s %s failed: %s", label, c.jobType, excerpt)
 }
 
-// ListMaintenanceTickets reads the ticket dir, newest failure last-seen first.
-func ListMaintenanceTickets(dir string) ([]MaintenanceTicket, error) {
-	paths, err := filepath.Glob(filepath.Join(dir, ticketsDirName, "*.json"))
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(paths)
-	out := make([]MaintenanceTicket, 0, len(paths))
-	for _, p := range paths {
-		raw, err := os.ReadFile(p)
-		if err != nil {
-			return nil, err
-		}
-		var t MaintenanceTicket
-		if err := json.Unmarshal(raw, &t); err != nil {
-			return nil, fmt.Errorf("parse ticket %s: %w", p, err)
-		}
-		out = append(out, t)
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].LastSeen.After(out[j].LastSeen)
-	})
-	return out, nil
-}
-
 // HandleAdminMaintenanceScan runs one scan pass over the signal bundles on
-// disk (POST). Admin-scoped like the rest of /v1/admin — tickets name
-// services and failure modes (issue #181).
+// disk and upserts GitHub-issue tickets (POST). Admin-scoped like the rest of
+// /v1/admin — tickets name services and failure modes (issue #181).
 func (s *Server) HandleAdminMaintenanceScan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -417,28 +354,10 @@ func (s *Server) HandleAdminMaintenanceScan(w http.ResponseWriter, r *http.Reque
 		writeJSONError(w, http.StatusInternalServerError, "data directory not configured")
 		return
 	}
-	report, err := ScanMaintenanceDir(filepath.Join(s.dataDir, dataDirMaintenanceSubdir))
+	report, err := ScanMaintenanceDir(r.Context(), filepath.Join(s.dataDir, dataDirMaintenanceSubdir), s.maintenanceIssues)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "scan failed: "+err.Error())
 		return
 	}
 	writeJSON(w, report)
-}
-
-// HandleAdminMaintenanceTickets lists open tickets (GET).
-func (s *Server) HandleAdminMaintenanceTickets(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if s.dataDir == "" {
-		writeJSONError(w, http.StatusInternalServerError, "data directory not configured")
-		return
-	}
-	tickets, err := ListMaintenanceTickets(filepath.Join(s.dataDir, dataDirMaintenanceSubdir))
-	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "list failed: "+err.Error())
-		return
-	}
-	writeJSON(w, map[string]any{"tickets": tickets})
 }

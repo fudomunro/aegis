@@ -45,6 +45,7 @@ func Run() {
 	signalPath := flag.String("signal-store", "", "path to local Signal import store (default: <data-dir>/signal.db; empty disables)")
 	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit (issue #168)")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
+	maintenanceRepo := flag.String("maintenance-repo", "", "GitHub repo (owner/name) where sync-maintenance tickets are opened as issues (reads AEGIS_MAINTENANCE_REPO if empty; empty disables ticketing)")
 	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
@@ -189,6 +190,9 @@ func Run() {
 	}
 	if *adminLogins == "" {
 		*adminLogins = os.Getenv("AEGIS_ADMIN_LOGINS")
+	}
+	if *maintenanceRepo == "" {
+		*maintenanceRepo = os.Getenv("AEGIS_MAINTENANCE_REPO")
 	}
 	if err := validateAuthCredentials(*authMode, *apiKey, *adminAPIKey); err != nil {
 		slog.Error(err.Error())
@@ -449,6 +453,13 @@ func Run() {
 		apertureURL:   *apertureURL,
 	}
 
+	// Sync-maintenance tickets are GitHub issues (issue #86). An empty repo
+	// disables ticketing: scans still cluster and report, nothing external.
+	if *maintenanceRepo != "" {
+		srv.maintenanceIssues = NewGhIssueTracker(*maintenanceRepo)
+		slog.Info("maintenance ticketing enabled", "repo", *maintenanceRepo)
+	}
+
 	// User-defined types (issue #15): load schema packs from the user-types
 	// directory (default <data-dir>/user-types). Fail-open — a bad schema is
 	// skipped and logged; built-in kinds always stay available.
@@ -703,8 +714,6 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminMaintenanceSignals)(w, r)
 	case path == "maintenance/scan":
 		s.AdminMiddleware(s.HandleAdminMaintenanceScan)(w, r)
-	case path == "maintenance/tickets":
-		s.AdminMiddleware(s.HandleAdminMaintenanceTickets)(w, r)
 	case path == "mail/status":
 		s.AdminMiddleware(s.HandleAdminMailStatus)(w, r)
 	case path == "search/status":

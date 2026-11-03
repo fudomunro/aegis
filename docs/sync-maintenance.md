@@ -30,6 +30,7 @@ Keep these apart — "repair" already names two different things.
 | **`repair` job type** | Runtime **data** repair (re-copy, restamp ledger facts). Not code repair |
 | **Freshness check** | Data-level drift signal: copy rows re-checked against the source (`in_sync` / `stale` / `missing`) |
 | **Repro bundle** | The evidence a ticket carries: scrubbed fixture + red test + failure signature |
+| **Ticket** | A GitHub issue in the Aegis repo carrying the structured contract below (label `sync-failure`). The loop never grows a parallel defect tracker |
 | **Maintenance signals** | The collected observation bundle (phase 1): API `GET /v1/admin/maintenance/signals`, files under `<data-dir>/maintenance/`. Named "maintenance" to stay clear of the Signal messenger connector (`signal.db`, `/v1/admin/signal`) |
 | **Canary** | A scheduled test run — synthetic (fixture replay) or against live provider accounts |
 
@@ -127,12 +128,15 @@ phase 2 cannot tell which code a failure refers to.
 - **Silent degradation counts.** Rising `stale`/`missing`, stale
   `aegis_sync_last_success_timestamp_seconds`, upstream latency shifts, and
   empty-result anomalies ticket just like error-class failures.
-- Output is a structured ticket, not prose — it is phase 3's input contract.
+- Output is a GitHub issue carrying the structured ticket contract (below)
+  — phase 3's input contract. Dedup is a signature marker in the issue body;
+  one signature never becomes two issues.
 
 ### Phase 3 — Fix PR
 
 The agent's job: turn the ticket's red test green without changing product
-semantics. Sequence:
+semantics. Pickup is label-filtered — `gh issue list --label sync-failure
+--label ready` — so `needs-fixture` tickets wait at triage. Sequence:
 
 1. Reproduce: add the repro test from the bundle. **It must be red on main.**
 2. Fix the connector (or, rarely, core dispatch) behind that test.
@@ -175,9 +179,13 @@ Reviewer checklist for fix PRs:
 
 ## Ticket schema (repro bundle)
 
-The ticket is data. A scanner that cannot fill `signature`, the observation
-window, and `repro_state` is not ready to ticket; the repro-bundle fields
-are filled at triage and gate phase-3 pickup.
+The ticket is data. The GitHub issue body carries it as an evidence block
+the scanner rewrites on every scan (idempotent — no comment spam); prose and
+checklist edits around the block are triage's and never touched. A scanner
+that cannot fill `signature`, the observation window, and `repro_state` is
+not ready to ticket; the repro-bundle fields are filled at triage and gate
+phase-3 pickup. Labels mirror `repro_state` and are authoritative on update:
+flipping `needs-fixture` → `ready` is how triage promotes a ticket.
 
 | Field | Notes |
 |-------|-------|
@@ -277,6 +285,8 @@ fixes **code** (connectors). Keep the seam:
 
 Deliberately out of scope while the loop proves out:
 
+- **A local or parallel defect tracker.** Tickets are GitHub issues — the
+  project's existing issue-driven workflow is the tracker.
 - **Declarative patchable connector packs** (hot-reload without a rebuild) —
   promising follow-on so drift-prone call shapes can be fixed without a
   release, but this doc's loop patches Go source and ships a release.
@@ -305,7 +315,7 @@ Prove the loop on one or two connectors before building fleet collection:
    `<data-dir>/maintenance/`).
 2. **Fixture capture + scrubber** for one connector, replayable offline
    (repro fixtures under `internal/connectors/testdata/repro/`).
-3. A scanner over local signal bundles that opens structured tickets
+3. A scanner over local signal bundles that opens GitHub issues as tickets
    (a local scheduled job; manual trigger is fine to start).
 4. One end-to-end fix cycle — ideally a forced contract drift — done
    agent-assisted with a human reviewer, using the ticket schema as-is.

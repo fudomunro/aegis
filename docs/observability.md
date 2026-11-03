@@ -56,8 +56,7 @@ not reach agent credentials.
 |----------|--------|---------|
 | `GET /v1/admin/maintenance/signals` | GET | Current signal bundle (JSON) |
 | `POST /v1/admin/maintenance/signals` | POST | Capture: write the bundle under `<data-dir>/maintenance/`, return its path |
-| `POST /v1/admin/maintenance/scan` | POST | Scan captured bundles; open/update structured tickets under `<data-dir>/maintenance/tickets/` |
-| `GET /v1/admin/maintenance/tickets` | GET | List sync-failure tickets (`repro_state`, observations, triage fields) |
+| `POST /v1/admin/maintenance/scan` | POST | Scan captured bundles; ticket recurrent failures as GitHub issues |
 
 The bundle is self-contained: build stamp (`version`, `commit`, hostname),
 sync-queue rollups (`counts`, `by_kind`, `by_job_type`), up to 20 recent
@@ -75,9 +74,13 @@ curl -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/
 The scanner (phase 2 of `docs/sync-maintenance.md`) clusters bundle failures
 by normalized signature and tickets only recurrent evidence — two or more
 distinct bundles — while freshness findings (stale/missing copies) ticket
-from the latest bundle alone. Tickets are structured JSON files, not prose;
-rescans never clobber triage fields. A local scheduled job is the intended
-trigger for now:
+from the latest bundle alone. **Tickets are GitHub issues** (label
+`sync-failure`, deduped by a signature marker in the body), not a separate
+defect store: the scanner rewrites only the evidence block on rescan and
+never touches triage prose or labels. Enable ticketing with
+`-maintenance-repo owner/name` (or `AEGIS_MAINTENANCE_REPO`); it uses the
+`gh` CLI, so the instance needs no GitHub token of its own. A local
+scheduled job is the intended trigger for now:
 
 ```cron
 0 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals" >/dev/null
