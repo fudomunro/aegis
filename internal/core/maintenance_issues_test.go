@@ -181,8 +181,9 @@ func TestGhIssueTracker_UpdatePreservesTriage(t *testing.T) {
 	existing.Title = "Spotify saved-tracks parse regression"
 	body := renderIssueBody(existing)
 
+	// Labels are objects in real `gh issue list --json` output, not names.
 	listJSON := `[{"number":12,"state":"open","url":"https://github.com/example/repo/issues/12",` +
-		`"labels":["sync-failure","ready"],"body":` + jsonString(body) + `}]`
+		`"labels":[{"name":"sync-failure"},{"name":"ready"}],"body":` + jsonString(body) + `}]`
 	rec := &recordingRun{respond: func(args []string) (string, error) {
 		switch args[1] {
 		case "list":
@@ -250,7 +251,7 @@ func TestGhIssueTracker_ReopenAndLabelSync(t *testing.T) {
 	existing := sampleTicket()
 	body := renderIssueBody(existing)
 	listJSON := `[{"number":9,"state":"closed","url":"https://github.com/example/repo/issues/9",` +
-		`"labels":["sync-failure","ready","needs-fixture"],"body":` + jsonString(body) + `}]`
+		`"labels":[{"name":"sync-failure"},{"name":"ready"},{"name":"needs-fixture"}],"body":` + jsonString(body) + `}]`
 	rec := &recordingRun{respond: func(args []string) (string, error) {
 		switch args[1] {
 		case "list":
