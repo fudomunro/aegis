@@ -156,3 +156,36 @@ func TestFakeUpstream_NotFound(t *testing.T) {
 		t.Fatalf("status = %d, want 404", resp.StatusCode)
 	}
 }
+
+// TestFakeUpstream_DriftFixtureProvenance pins the issue #240 repro fixture
+// to the fake's drift-items output: the fixture is the captured evidence,
+// and this keeps it honest as the fake evolves.
+func TestFakeUpstream_DriftFixtureProvenance(t *testing.T) {
+	fu := NewFakeUpstream()
+	if err := fu.SetMode(FakeModeDriftItems); err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(fu)
+	defer srv.Close()
+
+	resp, body := fakeGet(t, srv.URL, "/v1/me/tracks?limit=50")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+	fx, err := LoadReproFixture("testdata/repro/spotify/me-tracks-items-renamed/fixture.json")
+	if err != nil {
+		t.Fatalf("LoadReproFixture: %v", err)
+	}
+	var fromFake, fromFixture any
+	if err := json.Unmarshal([]byte(body), &fromFake); err != nil {
+		t.Fatalf("fake body: %v", err)
+	}
+	if err := json.Unmarshal([]byte(fx.Exchanges[0].Response.Body), &fromFixture); err != nil {
+		t.Fatalf("fixture body: %v", err)
+	}
+	got, _ := json.Marshal(fromFake)
+	want, _ := json.Marshal(fromFixture)
+	if string(got) != string(want) {
+		t.Fatalf("fixture drifted from the fake:\n fake: %s\nfixture: %s", got, want)
+	}
+}

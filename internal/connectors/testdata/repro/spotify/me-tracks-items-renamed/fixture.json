@@ -1,0 +1,24 @@
+{
+  "service": "spotify",
+  "signature": "spotify/me-tracks-items-renamed",
+  "captured_at": "2026-11-03T14:05:00Z",
+  "notes": "Saved-tracks page from the fake upstream's drift-items mode: the items array arrives renamed to entries while total still claims a library. Regression: the paging parse must read the renamed field. See issue #240.",
+  "exchanges": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/v1/me/tracks?limit=50",
+        "headers": {
+          "Accept": "application/json"
+        }
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "Content-Type": "application/json"
+        },
+        "body": "{\"entries\":[{\"added_at\":\"2026-01-01T00:00:00Z\",\"track\":{\"album\":{\"album_type\":\"album\",\"id\":\"al1\",\"name\":\"Fixture Album\"},\"artists\":[{\"id\":\"ar1\",\"name\":\"Fixture Artist\"}],\"duration_ms\":200000,\"explicit\":false,\"external_ids\":{\"isrc\":\"USFAK1234567\"},\"external_urls\":{\"spotify\":\"https://open.spotify.com/track/t1\"},\"id\":\"t1\",\"is_local\":false,\"name\":\"Fixture Track One\",\"uri\":\"spotify:track:t1\"}},{\"added_at\":\"2026-01-01T00:00:00Z\",\"track\":{\"album\":{\"album_type\":\"album\",\"id\":\"al1\",\"name\":\"Fixture Album\"},\"artists\":[{\"id\":\"ar1\",\"name\":\"Fixture Artist\"}],\"duration_ms\":185000,\"explicit\":false,\"external_ids\":{\"isrc\":\"USFAK2234567\"},\"external_urls\":{\"spotify\":\"https://open.spotify.com/track/t2\"},\"id\":\"t2\",\"is_local\":false,\"name\":\"Fixture Track Two\",\"uri\":\"spotify:track:t2\"}},{\"added_at\":\"2026-01-01T00:00:00Z\",\"track\":{\"album\":{\"album_type\":\"album\",\"id\":\"al1\",\"name\":\"Fixture Album\"},\"artists\":[{\"id\":\"ar1\",\"name\":\"Fixture Artist\"}],\"duration_ms\":210000,\"explicit\":false,\"external_ids\":{\"isrc\":\"USFAK3234567\"},\"external_urls\":{\"spotify\":\"https://open.spotify.com/track/t3\"},\"id\":\"t3\",\"is_local\":false,\"name\":\"Fixture Track Three\",\"uri\":\"spotify:track:t3\"}}],\"href\":\"https://api.spotify.com/v1/me/tracks\",\"limit\":50,\"next\":null,\"offset\":0,\"previous\":null,\"total\":3}"
+      }
+    }
+  ]
+}

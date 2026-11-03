@@ -47,3 +47,34 @@ func TestSpotifyLikedTracks_ReproFixture(t *testing.T) {
 		t.Fatalf("album = %+v", tracks[0].Album)
 	}
 }
+
+// TestSpotifyLikedTracks_MeTracksItemsRenamed replays the issue #240 repro
+// fixture: the saved-tracks page arrives with the items array renamed to
+// entries while total still claims a library. Expected: three tracks. On
+// main this parse reads items[] only and goes silently empty.
+func TestSpotifyLikedTracks_MeTracksItemsRenamed(t *testing.T) {
+	fx, err := LoadReproFixture("testdata/repro/spotify/me-tracks-items-renamed/fixture.json")
+	if err != nil {
+		t.Fatalf("LoadReproFixture: %v", err)
+	}
+	srv := NewReplayServer(fx)
+	defer srv.Close()
+
+	host := newTestHostWithService("spotify", srv.URL+"/v1", "https://aegis.example.com")
+	host.setToken("spotify", "test-token")
+	conn := NewSpotifyConnector(host)
+
+	tracks, truncated, err := conn.ListUserLikedTracks(context.Background())
+	if err != nil {
+		t.Fatalf("ListUserLikedTracks: %v", err)
+	}
+	if truncated {
+		t.Fatal("single recorded page must not report truncation")
+	}
+	if len(tracks) != 3 {
+		t.Fatalf("tracks = %d (%+v), want 3 (renamed items array must be read)", len(tracks), tracks)
+	}
+	if tracks[0].Sources[0].ID != "t1" || tracks[2].Sources[0].ID != "t3" {
+		t.Fatalf("tracks = %+v", tracks)
+	}
+}
