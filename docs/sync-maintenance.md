@@ -341,16 +341,20 @@ therefore grows with the project: each release publishes an updated view.
 
 The **evidence is the issue record** — the loop's `sync-failure` tickets in
 full lifecycle (open with `needs-fixture`/`ready`, or fixed once closed
-completed) plus problem-shaped issues that name a service (open ones stay
-visible and count against the fix rate; completed ones read as historical
-fixes). Feature asks, docs, and unmapped issues are dropped: the page is a
-maintenance record, not an issue mirror. The marks measure maintenance
-responsiveness, not live sync outcomes:
+completed) plus reported issues behind an explicit allowlist: a `bug` label
+or closure by a fix-convention PR (`fix:` title or `fix/` branch), naming a
+service. Allowlisted problems stay visible while open and count against the
+fix rate; anything else is dropped — the page is a maintenance record, not
+an issue mirror, and a smaller record is safer to publish than a wrong one.
+Triage therefore curates the published record: add the `bug` label to make
+an issue count. The marks measure maintenance responsiveness, not live sync
+outcomes:
 
 - **success** — share of recorded problems resolved (fix rate). A problem
   closed as not planned counts as recorded but unresolved.
 - **stability** — how long the service has been quiet: days since the last
-  recorded failure event over a thirty-day window.
+  recorded failure event over a thirty-day window. Quiet is not health — an
+  old open problem does not lower it.
 - **confidence** — record depth (item-count bands: 1–2 low, 3–9 medium,
   10+ high), so a single early blip cannot read as high confidence.
 

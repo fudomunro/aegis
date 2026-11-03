@@ -161,11 +161,13 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 		},
 		{
 			Number: 20, URL: "u/20", Title: "google-gmail attachments endpoint returns 502",
-			State: "closed", StateReason: "completed", CreatedAt: dashTime(4), ClosedAt: dashTime(5),
+			State: "closed", StateReason: "completed", ClosedByFix: true,
+			CreatedAt: dashTime(4), ClosedAt: dashTime(5),
 		},
 		{
 			Number: 21, URL: "u/21", Title: "Gmail fetch drops attachments",
-			State: "closed", StateReason: "completed", CreatedAt: dashTime(6), ClosedAt: dashTime(7),
+			State: "closed", StateReason: "completed", ClosedByFix: true,
+			CreatedAt: dashTime(6), ClosedAt: dashTime(7),
 		},
 		{
 			Number: 30, URL: "u/30", Title: "Add support for Spotify widgets",
@@ -178,7 +180,7 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 		},
 		{
 			Number: 32, URL: "u/32", Title: "gmail gap still open",
-			State: "open", CreatedAt: dashTime(8),
+			State: "open", Labels: []string{"bug"}, CreatedAt: dashTime(8),
 		},
 		{
 			Number: 33, URL: "u/33", Title: "unrelated cleanup landed",
@@ -186,7 +188,8 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 		},
 		{
 			Number: 34, URL: "u/34", Title: "gmail outage postmortem",
-			State: "closed", StateReason: "not_planned", CreatedAt: dashTime(8), ClosedAt: dashTime(9),
+			State: "closed", StateReason: "not_planned", Labels: []string{"bug"},
+			CreatedAt: dashTime(8), ClosedAt: dashTime(9),
 		},
 	}
 	data := BuildMaintenanceDashboard(nil,
@@ -196,7 +199,9 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 	for _, f := range data.Fixes {
 		byNumber[f.Number] = f
 	}
-	// Tickets 10-11, reported fixes 20-21, open problem 32, dismissed 34.
+	// Tickets 10-11, allowlisted fixes 20-21, allowlisted open problem 32,
+	// allowlisted not-planned closure 34. Items without allowlist evidence
+	// (30, 31, 33) never enter the record.
 	if len(data.Fixes) != 6 {
 		t.Fatalf("mapped fixes = %+v, want 6 (10, 11, 20, 21, 32, 34)", data.Fixes)
 	}
@@ -212,7 +217,7 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 	if got := byNumber[21]; got.Kind != "issue" || got.Service != "google-gmail" {
 		t.Fatalf("fix 21 = %+v", got)
 	}
-	// Open problem-shaped issues stay in the record and count as unresolved.
+	// Open allowlisted problems stay in the record and count as unresolved.
 	if got := byNumber[32]; got.State != "open" || got.Service != "google-gmail" {
 		t.Fatalf("fix 32 = %+v", got)
 	}
@@ -323,12 +328,38 @@ func TestWriteMaintenanceDashboard(t *testing.T) {
 		dashTime(1),
 	)
 	dir := t.TempDir()
-	index, err := WriteMaintenanceDashboard(dir, data)
+	index, err := WriteMaintenanceDashboard(dir, data, DashboardPublishedFileMode, DashboardPublishedDirMode)
 	if err != nil {
 		t.Fatalf("WriteMaintenanceDashboard: %v", err)
 	}
 	if index != filepath.Join(dir, "index.html") {
 		t.Fatalf("index = %q", index)
+	}
+	if st, err := os.Stat(index); err != nil {
+		t.Fatalf("stat index: %v", err)
+	} else if st.Mode().Perm() != DashboardPublishedFileMode {
+		t.Fatalf("index mode = %v, want %v (Pages upload needs world-readable files)", st.Mode().Perm(), DashboardPublishedFileMode)
+	}
+	// A rewrite over an existing tree must land the requested posture too:
+	// OpenFile keeps old modes and creation is umask-masked.
+	if err := os.Chmod(index, DashboardPrivateFileMode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(dir, "services"), DashboardPrivateDirMode); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := WriteMaintenanceDashboard(dir, data, DashboardPublishedFileMode, DashboardPublishedDirMode); err != nil {
+		t.Fatalf("rewrite: %v", err)
+	}
+	if st, err := os.Stat(index); err != nil {
+		t.Fatalf("stat index: %v", err)
+	} else if st.Mode().Perm() != DashboardPublishedFileMode {
+		t.Fatalf("index mode after rewrite = %v, want %v", st.Mode().Perm(), DashboardPublishedFileMode)
+	}
+	if st, err := os.Stat(filepath.Join(dir, "services")); err != nil {
+		t.Fatalf("stat services: %v", err)
+	} else if st.Mode().Perm() != DashboardPublishedDirMode {
+		t.Fatalf("services mode after rewrite = %v, want %v", st.Mode().Perm(), DashboardPublishedDirMode)
 	}
 	raw, err := os.ReadFile(index)
 	if err != nil {

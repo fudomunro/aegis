@@ -44,8 +44,9 @@ type DashboardScores struct {
 	// percent 0-100. Nil when the record is empty.
 	Success *float64 `json:"success,omitempty"`
 	// Stability is how long the service has been quiet: days since the last
-	// recorded failure event over a thirty-day window, percent 0-100. Nil
-	// when the record is empty.
+	// recorded failure event over a thirty-day window, percent 0-100. Quiet
+	// is not health — an old open problem does not lower it. Nil when the
+	// record is empty.
 	Stability *float64 `json:"stability,omitempty"`
 	// Confidence bands the record depth:
 	// none | low | medium | high.
@@ -224,6 +225,17 @@ func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardSer
 		}
 	}
 
+	// Ticket services are known before mapping starts, so attribution of
+	// later title-matched issues never depends on gh output order.
+	for _, rec := range issues {
+		if rec.TicketService == "" {
+			continue
+		}
+		if _, seen := metaByID[rec.TicketService]; !seen {
+			ids = append(ids, rec.TicketService)
+			metaByID[rec.TicketService] = DashboardServiceMeta{ID: rec.TicketService}
+		}
+	}
 	// Map the scraped issue history onto services; ticket services open
 	// their own page even without config or queue evidence.
 	fixes := make([]DashboardFix, 0, len(issues))
@@ -362,7 +374,8 @@ func countFailuresBetween(failures []DashboardFailure, from, to time.Time) int {
 //	success    — share of recorded problems resolved (fix rate). A problem
 //	             closed as not planned counts as recorded but unresolved.
 //	stability  — how long the service has been quiet: days since the last
-//	             recorded failure event over a thirty-day window.
+//	             recorded failure event over a thirty-day window. Quiet is
+//	             not health — an old open problem does not lower it.
 //	confidence — record depth (item-count bands), so a single early blip
 //	             cannot read as high confidence.
 func scoreDashboardRecord(fixes []DashboardFix, now time.Time) DashboardScores {
@@ -509,30 +522,47 @@ var dashboardFuncs = template.FuncMap{
 		if len(fixes) == 0 {
 			return "—"
 		}
-		fixed, open := 0, 0
+		fixed, open, closed := 0, 0, 0
 		for _, f := range fixes {
-			if f.State == "open" {
-				open++
-			} else {
+			switch f.State {
+			case "fixed":
 				fixed++
+			case "open":
+				open++
+			default:
+				closed++
 			}
 		}
-		switch {
-		case open == 0:
-			return fmt.Sprintf("%d fixed", fixed)
-		case fixed == 0:
-			return fmt.Sprintf("%d open", open)
-		default:
-			return fmt.Sprintf("%d fixed · %d open", fixed, open)
+		parts := make([]string, 0, 3)
+		if fixed > 0 {
+			parts = append(parts, fmt.Sprintf("%d fixed", fixed))
 		}
+		if open > 0 {
+			parts = append(parts, fmt.Sprintf("%d open", open))
+		}
+		if closed > 0 {
+			parts = append(parts, fmt.Sprintf("%d closed", closed))
+		}
+		return strings.Join(parts, " · ")
 	},
 }
 
+// Dashboard write postures. The published site must be readable by others
+// (the Pages upload fails otherwise), while the instance build under the
+// data dir carries scrubbed failure text and stays private like the bundles.
+const (
+	DashboardPublishedFileMode = 0o644
+	DashboardPublishedDirMode  = 0o755
+	DashboardPrivateFileMode   = 0o600
+	DashboardPrivateDirMode    = 0o700
+)
+
 // WriteMaintenanceDashboard renders data as a static site under dir:
 // index.html plus one page per service under services/. Returns the index
-// path. Files are written 0600 in 0700 directories, matching the bundle
-// posture: the pages name services and failure modes.
-func WriteMaintenanceDashboard(dir string, data DashboardData) (string, error) {
+// path. Files are written fileMode in dirMode directories — use the
+// DashboardPrivate* posture for instance builds and DashboardPublished*
+// for the release-published site.
+func WriteMaintenanceDashboard(dir string, data DashboardData, fileMode, dirMode os.FileMode) (string, error) {
 	if dir == "" {
 		return "", fmt.Errorf("empty dashboard directory")
 	}
@@ -540,11 +570,19 @@ func WriteMaintenanceDashboard(dir string, data DashboardData) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("parse dashboard template: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "services"), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "services"), dirMode); err != nil {
 		return "", err
 	}
+	// MkdirAll and OpenFile leave existing modes untouched and creation
+	// modes are umask-masked; the posture must hold either way (the Pages
+	// upload fails on non-world-readable output).
+	for _, d := range []string{dir, filepath.Join(dir, "services")} {
+		if err := os.Chmod(d, dirMode); err != nil {
+			return "", err
+		}
+	}
 	index := filepath.Join(dir, "index.html")
-	if err := renderDashboardFile(tmpl, index, "index", data); err != nil {
+	if err := renderDashboardFile(tmpl, index, "index", data, fileMode); err != nil {
 		return "", err
 	}
 	for _, svc := range data.Services {
@@ -557,16 +595,22 @@ func WriteMaintenanceDashboard(dir string, data DashboardData) (string, error) {
 			Service:     svc,
 		}
 		name := servicePageFile(svc.ID) + ".html"
-		if err := renderDashboardFile(tmpl, filepath.Join(dir, "services", name), "service", page); err != nil {
+		if err := renderDashboardFile(tmpl, filepath.Join(dir, "services", name), "service", page, fileMode); err != nil {
 			return "", err
 		}
 	}
 	return index, nil
 }
 
-func renderDashboardFile(tmpl *template.Template, path, name string, v any) error {
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+func renderDashboardFile(tmpl *template.Template, path, name string, v any, mode os.FileMode) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
+		return err
+	}
+	// Force the mode: OpenFile is umask-masked on create and keeps the old
+	// mode when truncating an existing file.
+	if err := f.Chmod(mode); err != nil {
+		f.Close()
 		return err
 	}
 	if err := tmpl.ExecuteTemplate(f, name, v); err != nil {
@@ -694,7 +738,7 @@ func (s *Server) HandleAdminMaintenanceDashboard(w http.ResponseWriter, r *http.
 	data.FixHistoryError = fixErr
 
 	outDir := filepath.Join(maintDir, "dashboard")
-	index, err := WriteMaintenanceDashboard(outDir, data)
+	index, err := WriteMaintenanceDashboard(outDir, data, DashboardPrivateFileMode, DashboardPrivateDirMode)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, "dashboard build failed: "+err.Error())
 		return

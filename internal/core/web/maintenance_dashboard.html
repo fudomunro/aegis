@@ -115,9 +115,9 @@ Service history below still reflects captured signals.</div>
   {{ end }}
   </tbody>
 </table>
-<p class="legend">Success is the share of recorded problems resolved. Stability is how
-long the service has been quiet &mdash; days since its last recorded failure, over thirty.
-Confidence grades the depth of the record.</p>
+<p class="legend">Success is the share of recorded problems resolved. Stability measures
+quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
+problem does not lower it. Confidence grades the depth of the record.</p>
 
 {{ if .Fixes }}
 <h2>Recent maintenance record</h2>
@@ -200,9 +200,9 @@ harness. Failures here are deliberate test activity and low stability is expecte
   <div class="card"><div class="k">Recorded problems</div>
     <div class="v">{{ len .Service.Fixes }}</div></div>
 </div>
-<p class="legend">Success is the share of recorded problems resolved. Stability is how
-long the service has been quiet &mdash; days since its last recorded failure, over thirty.
-Confidence grades the depth of the record.</p>
+<p class="legend">Success is the share of recorded problems resolved. Stability measures
+quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
+problem does not lower it. Confidence grades the depth of the record.</p>
 
 {{ if .Service.History }}
 <h2>Capture history</h2>

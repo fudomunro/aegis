@@ -25,6 +25,8 @@ func main() {
 	repo := flag.String("repo", os.Getenv("GITHUB_REPOSITORY"), "GitHub repo (owner/name) to scrape for the maintenance record")
 	out := flag.String("out", "site/maintenance", "output directory for the static dashboard")
 	manifest := flag.String("manifest", "", "optional services manifest (JSON) naming the pages to show")
+	version := flag.String("version", core.Version, "build version stamp shown on the pages")
+	commit := flag.String("commit", core.Commit, "build commit stamp shown on the pages")
 	flag.Parse()
 
 	if *repo == "" {
@@ -45,9 +47,10 @@ func main() {
 	}
 
 	data := core.BuildMaintenanceDashboard(nil, metas, records, time.Now().UTC())
-	data.Version = core.Version
-	data.Commit = core.Commit
-	index, err := core.WriteMaintenanceDashboard(*out, data)
+	data.Version = *version
+	data.Commit = *commit
+	index, err := core.WriteMaintenanceDashboard(*out, data,
+		core.DashboardPublishedFileMode, core.DashboardPublishedDirMode)
 	if err != nil {
 		fail("build dashboard: " + err.Error())
 	}

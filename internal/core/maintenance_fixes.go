@@ -3,7 +3,8 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"sort"
+	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -11,17 +12,19 @@ import (
 // GitHub issue history for the sync-maintenance dashboard (issue #239). The
 // same gh-CLI transport as the ticket surface scrapes the repo's issue
 // record so each service page can show historical fixes alongside the signal
-// history — the maintenance loop's work made visible. Fail-open: a scrape
-// error degrades the dashboard with a note, never a failed build.
+// history — the maintenance loop's work made visible. The instance build
+// fails open (a scrape error degrades the dashboard with a note); the
+// release build treats a scrape error as fatal, so an empty record never
+// overwrites a good one.
 //
 // Two kinds of record material exist:
 //   - Tickets (label sync-failure): the loop's own issues, shown in full
 //     lifecycle (open with repro state, or fixed when closed completed).
-//   - Reported issues: problem-shaped issues that name a configured
-//     service — open problems stay visible and count against the fix rate,
-//     completed ones read as historical fixes. Feature asks, docs, and
-//     unmapped issues are dropped — the page is a maintenance record, not
-//     an issue mirror.
+//   - Reported issues, behind an explicit allowlist — a `bug` label or
+//     closure by a fix-convention PR — that names a configured service:
+//     open problems stay visible and count against the fix rate, completed
+//     ones read as historical fixes. Anything else is dropped — the page is
+//     a maintenance record, not an issue mirror.
 
 // MaintenanceIssueRecord is one repo issue scraped for the dashboard's
 // maintenance record. Raw bodies are parsed and dropped at scrape time so
@@ -37,6 +40,9 @@ type MaintenanceIssueRecord struct {
 	ClosedAt    time.Time `json:"closed_at,omitempty"`
 	// IsTicket marks sync-maintenance loop tickets.
 	IsTicket bool `json:"is_ticket,omitempty"`
+	// ClosedByFix marks issues a merged fix-convention PR closes (fix:
+	// title or fix/ branch) — the allowlist evidence for non-ticket items.
+	ClosedByFix bool `json:"closed_by_fix,omitempty"`
 	// TicketService is the service the ticket contract attributes the issue
 	// to (evidence block, falling back to the signature marker).
 	TicketService string `json:"ticket_service,omitempty"`
@@ -46,12 +52,18 @@ type MaintenanceIssueRecord struct {
 	FirstSeen time.Time `json:"first_seen,omitempty"`
 }
 
+// scrapeIssueLimit caps one gh fetch. Hitting the cap means the record is
+// truncated — the oldest history would quietly drop out — so the scrape
+// fails instead of publishing a partial view.
+const scrapeIssueLimit = 2000
+
 // ListIssues scrapes the repo's issue history via the gh CLI. Implements the
 // read half of IssueTracker so the dashboard build can enrich service pages
-// without a second transport.
+// without a second transport. A second call reads merged PRs so non-ticket
+// record items can prove they were fixed (closed by a fix-convention PR).
 func (g *ghIssueTracker) ListIssues(ctx context.Context) ([]MaintenanceIssueRecord, error) {
 	out, err := g.run(ctx, "issue", "list", "-R", g.repo,
-		"--state", "all", "--limit", "500",
+		"--state", "all", "--limit", strconv.Itoa(scrapeIssueLimit),
 		"--json", "number,title,url,state,stateReason,labels,createdAt,closedAt,body")
 	if err != nil {
 		return nil, err
@@ -60,11 +72,63 @@ func (g *ghIssueTracker) ListIssues(ctx context.Context) ([]MaintenanceIssueReco
 	if err := json.Unmarshal([]byte(out), &issues); err != nil {
 		return nil, err
 	}
+	if len(issues) >= scrapeIssueLimit {
+		return nil, fmt.Errorf("issue history truncated at %d issues; raise the scrape limit", scrapeIssueLimit)
+	}
+	fixClosed, err := g.listFixClosedIssues(ctx)
+	if err != nil {
+		return nil, err
+	}
 	recs := make([]MaintenanceIssueRecord, 0, len(issues))
 	for i := range issues {
-		recs = append(recs, issueRecord(&issues[i]))
+		rec := issueRecord(&issues[i])
+		rec.ClosedByFix = fixClosed[rec.Number]
+		recs = append(recs, rec)
 	}
 	return recs, nil
+}
+
+// ghListPR is the subset of `gh pr list --json` the allowlist needs.
+type ghListPR struct {
+	Title       string `json:"title"`
+	HeadRefName string `json:"headRefName"`
+	Closing     []struct {
+		Number int `json:"number"`
+	} `json:"closingIssuesReferences"`
+}
+
+// listFixClosedIssues returns the issue numbers a merged fix-convention PR
+// closes (fix: title or fix/ branch).
+func (g *ghIssueTracker) listFixClosedIssues(ctx context.Context) (map[int]bool, error) {
+	out, err := g.run(ctx, "pr", "list", "-R", g.repo,
+		"--state", "merged", "--limit", strconv.Itoa(scrapeIssueLimit),
+		"--json", "title,headRefName,closingIssuesReferences")
+	if err != nil {
+		return nil, err
+	}
+	var prs []ghListPR
+	if err := json.Unmarshal([]byte(out), &prs); err != nil {
+		return nil, fmt.Errorf("parse gh pr list: %w", err)
+	}
+	if len(prs) >= scrapeIssueLimit {
+		return nil, fmt.Errorf("merged PR history truncated at %d; raise the scrape limit", scrapeIssueLimit)
+	}
+	fixClosed := map[int]bool{}
+	for _, pr := range prs {
+		if !isFixPR(pr.Title, pr.HeadRefName) {
+			continue
+		}
+		for _, c := range pr.Closing {
+			fixClosed[c.Number] = true
+		}
+	}
+	return fixClosed, nil
+}
+
+// isFixPR reports whether a merged PR follows the repo's fix convention.
+func isFixPR(title, headRefName string) bool {
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(title)), "fix:") ||
+		strings.HasPrefix(strings.ToLower(headRefName), "fix/")
 }
 
 // issueRecord flattens one scraped issue: parse the ticket contract (then
@@ -125,26 +189,6 @@ func signatureFromBody(body string) string {
 	return rest[:j]
 }
 
-// featureAskPrefixes are title openings that read as product asks, not
-// fixes. Matched case-insensitively at the start of the title.
-var featureAskPrefixes = []string{
-	"add ", "docs:", "explore ", "investigate ", "evaluate ",
-	"define ", "design ", "map out ", "provide ", "create ",
-}
-
-// isFeatureAskTitle reports whether a title reads as a feature request or
-// investigation rather than a fix. The heuristic is deliberately narrow: it
-// only ever suppresses, never attributes.
-func isFeatureAskTitle(title string) bool {
-	lower := strings.ToLower(strings.TrimSpace(title))
-	for _, p := range featureAskPrefixes {
-		if strings.HasPrefix(lower, p) {
-			return true
-		}
-	}
-	return false
-}
-
 // serviceTitleAliases map unambiguous title phrases onto canonical service
 // ids. A match is kept only when it resolves to a service in the dashboard.
 var serviceTitleAliases = map[string]string{
@@ -166,36 +210,41 @@ var serviceTitleAliases = map[string]string{
 	"signal messenger": "signal",
 }
 
-// matchServiceInTitle attributes an issue title to a known service: longest
-// configured service id as a substring first, then curated alias phrases.
-// Returns "" when the title names no known service.
+// commonWordIDs are configured ids that are also common English words. A
+// bare substring match would swallow unrelated titles ("maintenance signal
+// bundle"), so only their alias phrases may attribute them.
+var commonWordIDs = map[string]bool{"google": true, "signal": true}
+
+// matchServiceInTitle attributes an issue title to a known service. Every
+// id and alias-phrase candidate is ranked by match length — longest wins —
+// so "Google Photos" cannot fall to the bare "google" id and "YouTube
+// Music" beats a stray "spotify". Returns "" when the title names no known
+// service.
 func matchServiceInTitle(title string, ids []string) string {
 	lower := strings.ToLower(title)
-	ordered := make([]string, 0, len(ids))
+	best, bestLen := "", 0
+	consider := func(id string, n int) {
+		if id == "" {
+			return
+		}
+		if n > bestLen || (n == bestLen && id < best) {
+			best, bestLen = id, n
+		}
+	}
 	for _, id := range ids {
-		if id != "" {
-			ordered = append(ordered, id)
+		if id == "" || commonWordIDs[strings.ToLower(id)] {
+			continue
 		}
-	}
-	sortStringsByLenDesc(ordered)
-	for _, id := range ordered {
 		if strings.Contains(lower, strings.ToLower(id)) {
-			return id
+			consider(id, len(id))
 		}
 	}
-	aliases := make([]string, 0, len(serviceTitleAliases))
-	for a := range serviceTitleAliases {
-		aliases = append(aliases, a)
-	}
-	sortStringsByLenDesc(aliases)
-	for _, a := range aliases {
+	for a, canonical := range serviceTitleAliases {
 		if strings.Contains(lower, a) {
-			if id := resolveServiceID(serviceTitleAliases[a], ids); id != "" {
-				return id
-			}
+			consider(resolveServiceID(canonical, ids), len(a))
 		}
 	}
-	return ""
+	return best
 }
 
 // resolveServiceID picks the dashboard service a canonical alias names.
@@ -212,9 +261,10 @@ func resolveServiceID(canonical string, ids []string) string {
 
 // mapIssueRecord projects a scraped issue onto the dashboard's maintenance
 // record. ok is false when the issue is not record material for any service.
-// Non-ticket items are problem-shaped issues naming a service: open ones
-// stay visible (they count against the fix rate), completed ones read as
-// historical fixes.
+// Non-ticket items pass an explicit allowlist — a `bug` label or closure by
+// a fix-convention PR — so published marks never count a design ask or a
+// test task as a problem; allowlisted problems stay visible while open and
+// count against the fix rate.
 func mapIssueRecord(rec MaintenanceIssueRecord, ids []string) (DashboardFix, bool) {
 	if rec.IsTicket {
 		svc := rec.TicketService
@@ -224,42 +274,25 @@ func mapIssueRecord(rec MaintenanceIssueRecord, ids []string) (DashboardFix, boo
 		if svc == "" {
 			return DashboardFix{}, false
 		}
-		state := "open"
-		switch {
-		case rec.State == "closed" && rec.StateReason != "not_planned":
-			state = "fixed"
-		case rec.State == "closed":
-			state = "closed"
-		}
 		return DashboardFix{
 			Number:     rec.Number,
 			URL:        rec.URL,
 			Title:      rec.Title,
 			Service:    svc,
 			Kind:       "ticket",
-			State:      state,
+			State:      recordState(rec),
 			ReproState: rec.ReproState,
 			FirstSeen:  rec.FirstSeen,
 			CreatedAt:  rec.CreatedAt,
 			ClosedAt:   rec.ClosedAt,
 		}, true
 	}
-	if hasAnyLabel(rec.Labels, "enhancement", "documentation") {
-		return DashboardFix{}, false
-	}
-	if isFeatureAskTitle(rec.Title) {
+	if !hasLabel(rec.Labels, "bug") && !rec.ClosedByFix {
 		return DashboardFix{}, false
 	}
 	svc := matchServiceInTitle(rec.Title, ids)
 	if svc == "" {
 		return DashboardFix{}, false
-	}
-	state := "open"
-	switch {
-	case rec.State == "closed" && rec.StateReason == "completed":
-		state = "fixed"
-	case rec.State == "closed":
-		state = "closed"
 	}
 	return DashboardFix{
 		Number:    rec.Number,
@@ -267,24 +300,23 @@ func mapIssueRecord(rec MaintenanceIssueRecord, ids []string) (DashboardFix, boo
 		Title:     rec.Title,
 		Service:   svc,
 		Kind:      "issue",
-		State:     state,
+		State:     recordState(rec),
 		FirstSeen: rec.FirstSeen,
 		CreatedAt: rec.CreatedAt,
 		ClosedAt:  rec.ClosedAt,
 	}, true
 }
 
-// hasAnyLabel reports whether labels contain any of the given names.
-func hasAnyLabel(labels []string, names ...string) bool {
-	for _, n := range names {
-		if hasLabel(labels, n) {
-			return true
-		}
+// recordState maps a scraped issue state onto the record vocabulary. Only
+// a completed close counts as fixed — not planned and duplicate closures
+// stay recorded but unresolved.
+func recordState(rec MaintenanceIssueRecord) string {
+	switch {
+	case rec.State == "closed" && rec.StateReason == "completed":
+		return "fixed"
+	case rec.State == "closed":
+		return "closed"
+	default:
+		return "open"
 	}
-	return false
-}
-
-// sortStringsByLenDesc orders longest first so the longest match wins.
-func sortStringsByLenDesc(s []string) {
-	sort.Slice(s, func(i, j int) bool { return len(s[i]) > len(s[j]) })
 }
