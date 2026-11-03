@@ -7,6 +7,22 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Drift-injection harness for the sync-maintenance loop (issue #86).** A
+  dev-only fake provider (`-fake-upstream`, mounted at
+  `/demo/fake-upstream`) serves a Spotify saved-tracks shape with switchable
+  failure modes — `healthy`, `empty`, `http-500`, `http-401`, `garbage`,
+  and `drift-items` (contract drift: the `items` array renamed while
+  pagination metadata still claims a library — the silent-degradation shape
+  the loop must catch). A new `canary` sync job type fetches one saved-tracks
+  page through the configured endpoint and fails on errors or on that
+  incoherent shape (total > 0, zero items; a genuinely empty library is
+  health), so injected drift becomes sync-job failures, signal bundles, and
+  scanner tickets without waiting for real provider drift. The harness seeds
+  placeholder tokens for services pointed at the fake — only under the dev
+  flag, never on a real instance. `TestMaintenanceLoop_FakeDriftToTicket`
+  drives the whole chain in CI. Walkthrough: "Driving the loop without real
+  drift" in `docs/sync-maintenance.md`.
+
 - **Maintenance scanner: sync-failure tickets as GitHub issues (issue #86,
   phase 2).** `POST /v1/admin/maintenance/scan` reads the captured signal
   bundles and clusters failures by normalized signature (service, job type,

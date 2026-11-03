@@ -696,6 +696,7 @@ directory or keep passing the explicit path flags.
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-maintenance-repo` | | GitHub repo (`owner/name`) where sync-maintenance tickets are opened as issues (via the `gh` CLI); empty disables ticketing |
+| `-fake-upstream` | | **Dev/test only** — serve an injectable fake provider at `/demo/fake-upstream` and seed placeholder tokens for services pointed at it. Never enable on a real instance |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
 | `-token-pass` | | Secret-encryption passphrase (required). Covers OAuth tokens **and** static service-connection credentials. Wrong passphrase refuses to start and never overwrites `tokens.json` |
