@@ -1005,32 +1005,36 @@ func (c SyncCounts) Total() int {
 	return c.Queued + c.Running + c.Succeeded + c.Failed + c.Canceled + c.Paused
 }
 
-// SyncBreakdown is a global rollup of job states grouped by kind and by job
-// type. Computed from the whole table, not just recent rows, so the admin
-// summary matches Counts.
+// SyncBreakdown is a global rollup of job states grouped by kind, by job
+// type, and by service. Computed from the whole table, not just recent rows,
+// so the admin summary matches Counts.
 type SyncBreakdown struct {
 	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
 	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
+	ByService map[string]SyncCounts `json:"by_service,omitempty"`
 }
 
-// Breakdown rolls up states grouped by kind and by job type.
+// Breakdown rolls up states grouped by kind, by job type, and by service.
+// Service-less jobs land under the empty key and are dropped from the
+// per-service map so signal bundles name real services only.
 func (s *JobStore) Breakdown() SyncBreakdown {
 	out := SyncBreakdown{
 		ByKind:    make(map[string]SyncCounts),
 		ByJobType: make(map[string]SyncCounts),
+		ByService: make(map[string]SyncCounts),
 	}
 	if !s.Enabled() {
 		return out
 	}
-	rows, err := s.db.Query(`SELECT kind, job_type, state, COUNT(*) FROM sync_jobs GROUP BY kind, job_type, state`)
+	rows, err := s.db.Query(`SELECT kind, job_type, service, state, COUNT(*) FROM sync_jobs GROUP BY kind, job_type, service, state`)
 	if err != nil {
 		return out
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var kind, jobType, state string
+		var kind, jobType, service, state string
 		var n int
-		if err := rows.Scan(&kind, &jobType, &state, &n); err != nil {
+		if err := rows.Scan(&kind, &jobType, &service, &state, &n); err != nil {
 			break
 		}
 		k := out.ByKind[kind]
@@ -1039,6 +1043,11 @@ func (s *JobStore) Breakdown() SyncBreakdown {
 		jt := out.ByJobType[jobType]
 		bumpSyncCount(&jt, state, n)
 		out.ByJobType[jobType] = jt
+		if service != "" {
+			svc := out.ByService[service]
+			bumpSyncCount(&svc, state, n)
+			out.ByService[service] = svc
+		}
 	}
 	return out
 }

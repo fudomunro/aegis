@@ -1,0 +1,384 @@
+package core
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func dashTime(h int) time.Time {
+	return time.Date(2026, 1, 2, h, 0, 0, 0, time.UTC)
+}
+
+func dashBundle(at time.Time, counts map[string]SyncCounts, failures []MaintenanceFailure) MaintenanceSignals {
+	sig := MaintenanceSignals{CapturedAt: at, Version: "dev", Commit: "none"}
+	if counts != nil {
+		sig.Sync = &MaintenanceSync{Enabled: true, ByService: counts}
+	}
+	if failures != nil {
+		if sig.Sync == nil {
+			sig.Sync = &MaintenanceSync{Enabled: true}
+		}
+		sig.Sync.Failures = failures
+	}
+	return sig
+}
+
+func TestBuildMaintenanceDashboard_Scores(t *testing.T) {
+	series := []MaintenanceSignals{
+		dashBundle(dashTime(0), map[string]SyncCounts{
+			"spotify": {Succeeded: 10},
+		}, nil),
+		dashBundle(dashTime(6), map[string]SyncCounts{
+			"spotify": {Succeeded: 15, Failed: 1},
+		}, []MaintenanceFailure{
+			{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(3)},
+		}),
+		dashBundle(dashTime(12), map[string]SyncCounts{
+			"spotify": {Succeeded: 20, Failed: 1},
+		}, nil),
+	}
+	data := BuildMaintenanceDashboard(series, []DashboardServiceMeta{{ID: "spotify"}}, nil, dashTime(12))
+	if len(data.Services) != 1 {
+		t.Fatalf("services = %v, want one", data.Services)
+	}
+	svc := data.Services[0]
+	if svc.Scores.Success == nil || *svc.Scores.Success < 95 || *svc.Scores.Success > 96 {
+		t.Fatalf("success = %v, want ~95.2", svc.Scores.Success)
+	}
+	// One of two intervals carries a failure: (0h,6h] yes, (6h,12h] no.
+	if svc.Scores.Stability == nil || *svc.Scores.Stability != 50 {
+		t.Fatalf("stability = %v, want 50", svc.Scores.Stability)
+	}
+	// 21 finished across 3 captures: medium, never high on so few captures.
+	if svc.Scores.Confidence != "medium" {
+		t.Fatalf("confidence = %q, want medium", svc.Scores.Confidence)
+	}
+	if len(svc.History) != 3 {
+		t.Fatalf("history = %+v, want three points", svc.History)
+	}
+	if svc.History[1].NewFailures != 1 || svc.History[2].NewFailures != 0 {
+		t.Fatalf("interval failures = %+v", svc.History)
+	}
+	if !svc.LastSeen.Equal(dashTime(12)) {
+		t.Fatalf("last seen = %v", svc.LastSeen)
+	}
+}
+
+func TestBuildMaintenanceDashboard_CounterResetAndDedup(t *testing.T) {
+	series := []MaintenanceSignals{
+		dashBundle(dashTime(0), map[string]SyncCounts{
+			"spotify": {Succeeded: 30, Failed: 2},
+		}, []MaintenanceFailure{
+			{ID: "j1", Service: "spotify", JobType: "ingest", UpdatedAt: dashTime(0), Error: "boom"},
+		}),
+		dashBundle(dashTime(6), map[string]SyncCounts{
+			"spotify": {Succeeded: 5},
+		}, []MaintenanceFailure{
+			// Same job, later re-failure: one event, latest time wins.
+			{ID: "j1", Service: "spotify", JobType: "ingest", UpdatedAt: dashTime(6), Error: "boom again"},
+		}),
+	}
+	data := BuildMaintenanceDashboard(series, nil, nil, dashTime(6))
+	svc := data.Services[0]
+	if !svc.History[1].CounterReset {
+		t.Fatalf("capture 2 must flag the counter reset: %+v", svc.History)
+	}
+	if len(svc.Failures) != 1 {
+		t.Fatalf("failures = %+v, want deduped to one", svc.Failures)
+	}
+	if !svc.Failures[0].UpdatedAt.Equal(dashTime(6)) || svc.Failures[0].Error != "boom again" {
+		t.Fatalf("dedup kept the wrong record: %+v", svc.Failures[0])
+	}
+}
+
+func TestBuildMaintenanceDashboard_NoDataConfidence(t *testing.T) {
+	data := BuildMaintenanceDashboard(nil, []DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}}, nil, dashTime(0))
+	svc := data.Services[0]
+	if svc.Scores.Confidence != "none" || svc.Scores.Success != nil || svc.Scores.Stability != nil {
+		t.Fatalf("scores = %+v, want none marks", svc.Scores)
+	}
+	if svc.NameOrID() != "Spotify" {
+		t.Fatalf("name = %q", svc.NameOrID())
+	}
+}
+
+func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
+	issues := []MaintenanceIssueRecord{
+		{
+			Number: 10, URL: "u/10", Title: "spotify canary failed: shape drift",
+			State: "open", IsTicket: true, TicketService: "spotify",
+			ReproState: ReproStateReady, CreatedAt: dashTime(1),
+		},
+		{
+			Number: 11, URL: "u/11", Title: "spotify ingest failed: 502",
+			State: "closed", StateReason: "completed", IsTicket: true,
+			TicketService: "spotify", CreatedAt: dashTime(2), ClosedAt: dashTime(3),
+		},
+		{
+			Number: 20, URL: "u/20", Title: "google-gmail attachments endpoint returns 502",
+			State: "closed", StateReason: "completed", CreatedAt: dashTime(4), ClosedAt: dashTime(5),
+		},
+		{
+			Number: 21, URL: "u/21", Title: "Gmail fetch drops attachments",
+			State: "closed", StateReason: "completed", CreatedAt: dashTime(6), ClosedAt: dashTime(7),
+		},
+		{
+			Number: 30, URL: "u/30", Title: "Add support for Spotify widgets",
+			State: "closed", StateReason: "completed", Labels: []string{"enhancement"},
+			CreatedAt: dashTime(8), ClosedAt: dashTime(9),
+		},
+		{
+			Number: 31, URL: "u/31", Title: "Add gmail attachment download",
+			State: "closed", StateReason: "completed", CreatedAt: dashTime(8), ClosedAt: dashTime(9),
+		},
+		{
+			Number: 32, URL: "u/32", Title: "gmail gap still open",
+			State: "open", CreatedAt: dashTime(8),
+		},
+		{
+			Number: 33, URL: "u/33", Title: "unrelated cleanup landed",
+			State: "closed", StateReason: "completed", CreatedAt: dashTime(8), ClosedAt: dashTime(9),
+		},
+		{
+			Number: 34, URL: "u/34", Title: "gmail outage postmortem",
+			State: "closed", StateReason: "not_planned", CreatedAt: dashTime(8), ClosedAt: dashTime(9),
+		},
+	}
+	data := BuildMaintenanceDashboard(nil,
+		[]DashboardServiceMeta{{ID: "google-gmail"}}, issues, dashTime(10))
+
+	byNumber := map[int]DashboardFix{}
+	for _, f := range data.Fixes {
+		byNumber[f.Number] = f
+	}
+	if len(data.Fixes) != 4 {
+		t.Fatalf("mapped fixes = %+v, want 4 (10, 11, 20, 21)", data.Fixes)
+	}
+	if got := byNumber[10]; got.Kind != "ticket" || got.State != "open" || got.Service != "spotify" {
+		t.Fatalf("fix 10 = %+v", got)
+	}
+	if got := byNumber[11]; got.Kind != "ticket" || got.State != "fixed" {
+		t.Fatalf("fix 11 = %+v", got)
+	}
+	if got := byNumber[20]; got.Kind != "fix" || got.State != "fixed" || got.Service != "google-gmail" {
+		t.Fatalf("fix 20 = %+v", got)
+	}
+	if got := byNumber[21]; got.Kind != "fix" || got.Service != "google-gmail" {
+		t.Fatalf("fix 21 = %+v", got)
+	}
+	// Newest first.
+	if data.Fixes[0].Number != 21 {
+		t.Fatalf("fixes not newest-first: %+v", data.Fixes)
+	}
+	// Ticket-only services open a page even with no queue evidence.
+	services := map[string]bool{}
+	for _, svc := range data.Services {
+		services[svc.ID] = true
+	}
+	if !services["spotify"] || !services["google-gmail"] {
+		t.Fatalf("services = %v", data.Services)
+	}
+}
+
+func TestMatchServiceInTitle(t *testing.T) {
+	ids := []string{"google-gmail", "google-photos", "spotify"}
+	cases := []struct {
+		title string
+		want  string
+	}{
+		{"google-gmail attachments endpoint returns 502", "google-gmail"},
+		{"Gmail fetch loop drops attachments", "google-gmail"},
+		{"Google Photos picker stalls", "google-photos"},
+		{"spotify saved tracks paging", "spotify"},
+		{"nothing relevant here", ""},
+		{"signal bundles overflow", ""},
+	}
+	for _, tc := range cases {
+		if got := matchServiceInTitle(tc.title, ids); got != tc.want {
+			t.Fatalf("matchServiceInTitle(%q) = %q, want %q", tc.title, got, tc.want)
+		}
+	}
+}
+
+func TestServicePageFile(t *testing.T) {
+	if got := servicePageFile("google-gmail"); got != "google-gmail" {
+		t.Fatalf("plain id rewritten: %q", got)
+	}
+	a := servicePageFile("a/b")
+	b := servicePageFile("a_b")
+	if a == "a/b" || !strings.HasPrefix(a, "a_b-") {
+		t.Fatalf("unsafe id = %q", a)
+	}
+	if a == b {
+		t.Fatalf("collision: %q == %q", a, b)
+	}
+}
+
+func TestWriteMaintenanceDashboard(t *testing.T) {
+	data := BuildMaintenanceDashboard(
+		[]MaintenanceSignals{
+			dashBundle(dashTime(0), map[string]SyncCounts{
+				"spotify": {Succeeded: 2, Failed: 1},
+			}, []MaintenanceFailure{
+				{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(0),
+					Error: `boom <script>alert(1)</script>`},
+			}),
+		},
+		[]DashboardServiceMeta{
+			{ID: "spotify", Name: "Spotify", FailureInjection: true},
+		},
+		[]MaintenanceIssueRecord{
+			{Number: 42, URL: "https://github.com/example/repo/issues/42", Title: "spotify canary failed: boom",
+				State: "closed", StateReason: "completed", IsTicket: true, TicketService: "spotify",
+				CreatedAt: dashTime(0), ClosedAt: dashTime(1)},
+		},
+		dashTime(1),
+	)
+	dir := t.TempDir()
+	index, err := WriteMaintenanceDashboard(dir, data)
+	if err != nil {
+		t.Fatalf("WriteMaintenanceDashboard: %v", err)
+	}
+	if index != filepath.Join(dir, "index.html") {
+		t.Fatalf("index = %q", index)
+	}
+	raw, err := os.ReadFile(index)
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	page := string(raw)
+	for _, want := range []string{"Sync maintenance dashboard", "spotify", "failure injection"} {
+		if !strings.Contains(page, want) {
+			t.Fatalf("index missing %q", want)
+		}
+	}
+
+	svcPath := filepath.Join(dir, "services", "spotify.html")
+	raw, err = os.ReadFile(svcPath)
+	if err != nil {
+		t.Fatalf("read service page: %v", err)
+	}
+	svcPage := string(raw)
+	for _, want := range []string{
+		"Failure injection",
+		"drift-injection",
+		"#42",
+		"j1",
+		"&lt;script&gt;alert(1)&lt;/script&gt;",
+		"History",
+	} {
+		if !strings.Contains(svcPage, want) {
+			t.Fatalf("service page missing %q in:\n%s", want, svcPage)
+		}
+	}
+	if strings.Contains(svcPage, "<script>alert") {
+		t.Fatal("failure error must be HTML-escaped")
+	}
+}
+
+func TestHandleAdminMaintenanceDashboard_Build(t *testing.T) {
+	srv := adminSplitServer(t)
+	srv.dataDir = t.TempDir()
+	srv.syncJobs = testJobStore(t)
+	srv.config.EnsureService(Service{
+		ID: "spotify", Name: "Spotify", Endpoint: "http://localhost:8080" + fakeUpstreamMount,
+	})
+	mustEnqueue(t, srv.syncJobs, SyncEnqueue{Kind: "tracks", JobType: "canary", Service: "spotify"})
+	srv.maintenanceIssues = &fakeIssueTracker{records: []MaintenanceIssueRecord{
+		{Number: 7, URL: "https://github.com/example/repo/issues/7", Title: "spotify canary failed",
+			State: "closed", StateReason: "completed", IsTicket: true, TicketService: "spotify",
+			CreatedAt: dashTime(0), ClosedAt: dashTime(1)},
+	}}
+
+	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "admin-key", "")
+	w := httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
+	}
+	var got MaintenanceDashboardResult
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if !strings.HasPrefix(got.Path, filepath.Join(srv.dataDir, "maintenance")) {
+		t.Fatalf("dashboard path = %q, want under data dir", got.Path)
+	}
+	if _, err := os.Stat(got.Index); err != nil {
+		t.Fatalf("index missing: %v", err)
+	}
+	if len(got.Services) == 0 || got.Services[0] != "spotify" {
+		t.Fatalf("services = %v, want spotify", got.Services)
+	}
+	if got.Fixes != 1 {
+		t.Fatalf("fixes = %d, want 1", got.Fixes)
+	}
+	if got.Captures != 1 {
+		t.Fatalf("captures = %d, want the live snapshot", got.Captures)
+	}
+	svcPage := filepath.Join(got.Path, "services", "spotify.html")
+	raw, err := os.ReadFile(svcPage)
+	if err != nil {
+		t.Fatalf("read service page: %v", err)
+	}
+	if !strings.Contains(string(raw), "Failure injection") {
+		t.Fatal("configured fake-upstream service must carry the failure-injection note")
+	}
+}
+
+func TestHandleAdminMaintenanceDashboard_FixHistoryFailOpen(t *testing.T) {
+	srv := adminSplitServer(t)
+	srv.dataDir = t.TempDir()
+	srv.maintenanceIssues = &fakeIssueTracker{listErr: errors.New("gh unavailable")}
+
+	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "admin-key", "")
+	w := httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("scrape failure must fail open, got %d: %s", w.Code, w.Body.String())
+	}
+	var got MaintenanceDashboardResult
+	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got.FixHistoryError == "" {
+		t.Fatal("fix_history_error must report the scrape failure")
+	}
+	if _, err := os.Stat(got.Index); err != nil {
+		t.Fatalf("index missing despite scrape failure: %v", err)
+	}
+}
+
+func TestHandleAdminMaintenanceDashboard_MethodAndAuth(t *testing.T) {
+	srv := adminSplitServer(t)
+
+	req := adminRequest(http.MethodGet, "/v1/admin/maintenance/dashboard", "admin-key", "")
+	w := httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET status = %d, want 405", w.Code)
+	}
+
+	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "admin-key", "")
+	w = httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("POST without data dir = %d, want 500", w.Code)
+	}
+
+	srv.dataDir = t.TempDir()
+	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "agent-key", "")
+	w = httptest.NewRecorder()
+	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
+	if w.Code == http.StatusOK {
+		t.Fatalf("agent credentials must not build the dashboard: %d", w.Code)
+	}
+}

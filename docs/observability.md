@@ -57,14 +57,16 @@ not reach agent credentials.
 | `GET /v1/admin/maintenance/signals` | GET | Current signal bundle (JSON) |
 | `POST /v1/admin/maintenance/signals` | POST | Capture: write the bundle under `<data-dir>/maintenance/`, return its path |
 | `POST /v1/admin/maintenance/scan` | POST | Scan captured bundles; ticket recurrent failures as GitHub issues |
+| `POST /v1/admin/maintenance/dashboard` | POST | Build the static sync-maintenance dashboard under `<data-dir>/maintenance/dashboard/` |
 
 The bundle is self-contained: build stamp (`version`, `commit`, hostname),
-sync-queue rollups (`counts`, `by_kind`, `by_job_type`), up to 20 recent
-failed jobs with scrubbed error text, and the per-kind copy freshness
-rollup. Failure text is redacted (emails, credentials) and truncated before
-it leaves the process; bundles never include request/response bodies,
-library contents, tokens, or agent identities. Files land as `signals-<UTC>.json`
-(0600); the scheduled scanner that reads them may rotate old files.
+sync-queue rollups (`counts`, `by_kind`, `by_job_type`, `by_service`), up to
+20 recent failed jobs with scrubbed error text, and the per-kind copy
+freshness rollup. Failure text is redacted (emails, credentials) and
+truncated before it leaves the process; bundles never include
+request/response bodies, library contents, tokens, or agent identities.
+Files land as `signals-<UTC>.json` (0600); the scheduled scanner that reads
+them may rotate old files.
 
 ```bash
 # Capture a bundle to <data-dir>/maintenance/
@@ -86,6 +88,16 @@ scheduled job is the intended trigger for now:
 0 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/signals" >/dev/null
 7 * * * * curl -sS -X POST -H "Authorization: Bearer $ADMIN_KEY" "$AEGIS/v1/admin/maintenance/scan" >/dev/null
 ```
+
+The maintenance dashboard makes this work visible. `POST
+/v1/admin/maintenance/dashboard` builds an entirely static site — no scripts,
+no live queries — under `<data-dir>/maintenance/dashboard/`: an index plus one
+page per service connection with capture history, success / stability /
+confidence marks, and the maintenance record (sync tickets plus historical
+fixes scraped from repo issues; the scrape is fail-open and its absence is
+noted on the index). Services backed by the drift-injection harness are
+annotated so their deliberately low stability reads as test activity. Open
+`index.html` in a browser, or publish the directory as static files.
 
 ### Access audit log
 

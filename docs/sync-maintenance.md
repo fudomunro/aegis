@@ -327,6 +327,46 @@ instance:
    `ReproRecorder`, attach it with a red test, flip the label to `ready`,
    and the fix cycle (first-slice item 4) picks it up from there.
 
+## Dashboard
+
+The loop's work should be visible, not implied (issue #239). The dashboard is
+an **entirely build-time generated** static site over the phase-1 evidence:
+`POST /v1/admin/maintenance/dashboard` reads the captured bundles (plus a
+fresh in-memory snapshot as the final capture) and writes plain files under
+`<data-dir>/maintenance/dashboard/` — `index.html` and one page per service
+connection under `services/`. No scripts, no live queries; open it in a
+browser or publish the directory as static files.
+
+Each service page carries three things:
+
+- **History** — the capture series (cumulative queue rollups per bundle,
+  with counter-reset notes when retention pruning drops totals) and the
+  deduped failed-job events with their scrubbed errors.
+- **Success / stability / confidence** — computed from the series alone so an
+  offline bundle collection scores identically to a live build:
+  - *success* — `succeeded / (succeeded + failed)` from the latest rollup;
+  - *stability* — share of capture intervals with no new failed-job events
+    (events date from the job's `updated_at`, so re-captures of a parked
+    failure do not inflate the count);
+  - *confidence* — evidence band (`none`/`low`/`medium`/`high`) from finished
+    volume and capture count; a lucky streak on two data points never reads
+    as high.
+- **Maintenance record** — the service's GitHub-issue history: the loop's own
+  `sync-failure` tickets in full lifecycle (open with `needs-fixture`/`ready`,
+  or fixed once closed completed), plus historical fixes scraped from
+  completed issues that name the service. The scrape reuses the ticket
+  surface's `gh` transport and is **fail-open**: without it the build still
+  lands and the index notes the missing record.
+
+The drift-injection harness is a first-class page, not noise to hide:
+services whose configured `endpoint` points at the fake upstream are
+annotated as failure injection — "a lot of activity, not much stability" is
+their job, and the marks say so instead of alarm-mongering.
+
+Per-service rollups (`by_service`) extend the signal bundle so the dashboard
+(and later the scanner) can attribute outcomes to services from bundles
+alone, keeping the "scanner reads paths" seam intact.
+
 ## Non-goals
 
 Deliberately out of scope while the loop proves out:
