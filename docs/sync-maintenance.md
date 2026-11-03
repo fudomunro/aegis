@@ -118,8 +118,12 @@ phase 2 cannot tell which code a failure refers to.
   from the data dir for now; long-term expect it to move to paid cloud
   compute. Bundles are therefore self-contained files — the scanner reads
   paths, not local IPC.
-- **Ticket only what is reproducible.** A ticket must arrive with a repro
-  bundle (below). Non-reproducible flake is a metric, not a ticket.
+- **Ticket only what is reproducible.** Two gates. At scan time, failure
+  clusters must recur across bundles; freshness findings are state, so the
+  latest bundle is the evidence. At pickup time, phase 3 takes a ticket only
+  once its repro bundle is attached (below): scanner-opened tickets start
+  `repro_state: needs-fixture` and are promoted to `ready` at triage.
+  One-off flake stays a metric.
 - **Silent degradation counts.** Rising `stale`/`missing`, stale
   `aegis_sync_last_success_timestamp_seconds`, upstream latency shifts, and
   empty-result anomalies ticket just like error-class failures.
@@ -171,12 +175,14 @@ Reviewer checklist for fix PRs:
 
 ## Ticket schema (repro bundle)
 
-The ticket is data. A scanner that cannot fill these fields is not ready to
-ticket.
+The ticket is data. A scanner that cannot fill `signature`, the observation
+window, and `repro_state` is not ready to ticket; the repro-bundle fields
+are filled at triage and gate phase-3 pickup.
 
 | Field | Notes |
 |-------|-------|
 | `signature` | Stable id: service + path class + error class + hash of normalized error |
+| `repro_state` | `needs-fixture` (scanner-opened) or `ready` (repro bundle complete; phase 3 picks up `ready` only) |
 | `service_id` / connector | Which adapter; which `LibraryKind`s are affected |
 | `observed_in` | Aegis version/commit + instance id |
 | `first_seen` / `last_seen` / `count` | From the cluster, not a single line |
