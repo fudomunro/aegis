@@ -248,43 +248,49 @@ func TestGhIssueTracker_UpdatePreservesTriage(t *testing.T) {
 }
 
 func TestGhIssueTracker_ReopenAndLabelSync(t *testing.T) {
-	existing := sampleTicket()
-	body := renderIssueBody(existing)
-	listJSON := `[{"number":9,"state":"closed","url":"https://github.com/example/repo/issues/9",` +
-		`"labels":[{"name":"sync-failure"},{"name":"ready"},{"name":"needs-fixture"}],"body":` + jsonString(body) + `}]`
-	rec := &recordingRun{respond: func(args []string) (string, error) {
-		switch args[1] {
-		case "list":
-			return listJSON, nil
-		default:
-			return "", nil
-		}
-	}}
-	g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+	// gh emits state uppercase ("CLOSED"); the reopen check must accept
+	// either casing.
+	for _, state := range []string{"closed", "CLOSED"} {
+		t.Run(state, func(t *testing.T) {
+			existing := sampleTicket()
+			body := renderIssueBody(existing)
+			listJSON := `[{"number":9,"state":"` + state + `","url":"https://github.com/example/repo/issues/9",` +
+				`"labels":[{"name":"sync-failure"},{"name":"ready"},{"name":"needs-fixture"}],"body":` + jsonString(body) + `}]`
+			rec := &recordingRun{respond: func(args []string) (string, error) {
+				switch args[1] {
+				case "list":
+					return listJSON, nil
+				default:
+					return "", nil
+				}
+			}}
+			g := &ghIssueTracker{repo: "example/repo", run: rec.run}
 
-	_, action, err := g.UpsertTicket(context.Background(), sampleTicket())
-	if err != nil {
-		t.Fatalf("UpsertTicket: %v", err)
-	}
-	if action != "reopened" {
-		t.Fatalf("action = %q, want reopened", action)
-	}
-	joined := rec.joined()
-	var labelCall, reopenCall string
-	for _, c := range joined {
-		if strings.Contains(c, "--add-label") {
-			labelCall = c
-		}
-		if strings.Contains(c, "issue reopen") {
-			reopenCall = c
-		}
-	}
-	if reopenCall == "" {
-		t.Fatalf("closed issue must reopen: %v", joined)
-	}
-	// Both labels present → ready wins, needs-fixture gets dropped.
-	if !strings.Contains(labelCall, "--add-label ready") || !strings.Contains(labelCall, "--remove-label needs-fixture") {
-		t.Fatalf("label sync = %s", labelCall)
+			_, action, err := g.UpsertTicket(context.Background(), sampleTicket())
+			if err != nil {
+				t.Fatalf("UpsertTicket: %v", err)
+			}
+			if action != "reopened" {
+				t.Fatalf("action = %q, want reopened", action)
+			}
+			joined := rec.joined()
+			var labelCall, reopenCall string
+			for _, c := range joined {
+				if strings.Contains(c, "--add-label") {
+					labelCall = c
+				}
+				if strings.Contains(c, "issue reopen") {
+					reopenCall = c
+				}
+			}
+			if reopenCall == "" {
+				t.Fatalf("closed issue must reopen: %v", joined)
+			}
+			// Both labels present → ready wins, needs-fixture gets dropped.
+			if !strings.Contains(labelCall, "--add-label ready") || !strings.Contains(labelCall, "--remove-label needs-fixture") {
+				t.Fatalf("label sync = %s", labelCall)
+			}
+		})
 	}
 }
 
