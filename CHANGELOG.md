@@ -14,8 +14,9 @@ issue numbers; this file is where that context lives.
   (`site/maintenance/`, linked from the site nav). The release build runs
   `cmd/aegis-dashboard`, which scrapes the repo's issue record through the
   ticket surface's `gh` transport: the loop's sync tickets in full lifecycle
-  plus problem-shaped issues naming a service (open ones count against the
-  fix rate, completed ones read as historical fixes). Marks measure
+  plus reported issues behind an explicit allowlist (a `bug` label or closure
+  by a fix-convention PR) naming a service — open problems count against the
+  fix rate, completed ones read as historical fixes. Marks measure
   maintenance responsiveness — fix rate, quietness since the last recorded
   failure, record depth — not live sync outcomes. `site/maintenance/services.json`
   is the committed manifest naming the pages and the drift-injection harness,
