@@ -7,20 +7,24 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
-- **Maintenance scanner: clustered sync-failure tickets (issue #86, phase 2).**
-  `POST /v1/admin/maintenance/scan` reads the captured signal bundles and
-  clusters failures by normalized signature (service, job type, error class,
-  and an error shape with ids, URLs, and status codes collapsed). Recurrent
-  signatures — two or more distinct bundles — open structured tickets under
-  `<data-dir>/maintenance/tickets/`; freshness findings (stale/missing
-  copies) ticket straight from the latest bundle, since the rollup is state
-  rather than an event stream. One-off flake stays a metric. Tickets carry
-  the phase-3 input contract: `repro_state` (`needs-fixture` → `ready`),
-  observations with version stamps, and triage slots (fixture, red test,
-  expected/actual) that rescans never clobber. `GET
-  /v1/admin/maintenance/tickets` lists them. Trigger is a local scheduled
-  job (cron against the admin endpoint) for now; the scanner reads only
-  bundle paths so it can move to cloud compute later.
+- **Maintenance scanner: sync-failure tickets as GitHub issues (issue #86,
+  phase 2).** `POST /v1/admin/maintenance/scan` reads the captured signal
+  bundles and clusters failures by normalized signature (service, job type,
+  error class, and an error shape with ids, URLs, and status codes
+  collapsed). Recurrent signatures — two or more distinct bundles — are
+  ticketed as GitHub issues (label `sync-failure`, one issue per signature,
+  deduped by a body marker); freshness findings (stale/missing copies)
+  ticket straight from the latest bundle, since the rollup is state rather
+  than an event stream. One-off flake stays a metric. The issue body carries
+  the phase-3 input contract in a scanner-owned evidence block
+  (`repro_state`, version-stamped observations, fixture/test slots) that
+  rescans rewrite idempotently without touching triage prose or labels;
+  flipping the `needs-fixture` label to `ready` is how triage promotes a
+  ticket into the fix loop. Ticketing is enabled with
+  `-maintenance-repo owner/name` (via the `gh` CLI — no service token) and
+  triggered by a local scheduled job for now; the scanner reads only bundle
+  paths so it can move to cloud compute later. There is deliberately no
+  local defect store.
 
 - **Sync maintenance phase 1: signal bundles and repro fixtures (issue #86).**
   `GET /v1/admin/maintenance/signals` reports a self-contained observation

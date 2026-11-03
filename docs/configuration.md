@@ -695,6 +695,7 @@ directory or keep passing the explicit path flags.
 | `-import-signal` | | Import a Signal export (JSONL/JSON or plaintext SQLite), then exit |
 | `-audit-log` | `<data-dir>/audit_log.db` | Access audit log path; empty disables |
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
+| `-maintenance-repo` | | GitHub repo (`owner/name`) where sync-maintenance tickets are opened as issues (via the `gh` CLI); empty disables ticketing |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
 | `-token-pass` | | Secret-encryption passphrase (required). Covers OAuth tokens **and** static service-connection credentials. Wrong passphrase refuses to start and never overwrites `tokens.json` |

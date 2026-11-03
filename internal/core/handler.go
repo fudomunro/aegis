@@ -139,6 +139,9 @@ type Server struct {
 	audit *AuditLog
 	// prom holds process-lifetime counters for GET /metrics (issue #105).
 	prom *PromMetrics
+	// maintenanceIssues is the GitHub-issue ticket surface for the sync
+	// maintenance loop (issue #86). Nil disables ticketing (scan-only).
+	maintenanceIssues IssueTracker
 	// apertureURL is the optional public base URL of the Aperture gateway.
 	// Used only for admin live links / setup guide — never required for proxying.
 	apertureURL string
