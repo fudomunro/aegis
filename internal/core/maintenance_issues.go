@@ -71,13 +71,28 @@ func NewGhIssueTracker(repo string) *ghIssueTracker {
 	}
 }
 
+// ghLabel is one label object on an issue. gh emits labels as objects
+// ({"name": …}), not bare name strings.
+type ghLabel struct {
+	Name string `json:"name"`
+}
+
 // ghListIssue is the subset of `gh issue list --json` we rely on.
 type ghListIssue struct {
-	Number int      `json:"number"`
-	State  string   `json:"state"`
-	URL    string   `json:"url"`
-	Labels []string `json:"labels"`
-	Body   string   `json:"body"`
+	Number int       `json:"number"`
+	State  string    `json:"state"`
+	URL    string    `json:"url"`
+	Labels []ghLabel `json:"labels"`
+	Body   string    `json:"body"`
+}
+
+// labelNames extracts the label names for matching and repro-state lookup.
+func (i *ghListIssue) labelNames() []string {
+	out := make([]string, 0, len(i.Labels))
+	for _, l := range i.Labels {
+		out = append(out, l.Name)
+	}
+	return out
 }
 
 // UpsertTicket implements IssueTracker.
@@ -102,7 +117,8 @@ func (g *ghIssueTracker) UpsertTicket(ctx context.Context, t MaintenanceTicket) 
 
 	// refreshIssueBody carries triage fields from the old evidence block
 	// onto t; the issue labels decide repro_state.
-	t.ReproState = reproStateFromLabels(existing.Labels, t.ReproState)
+	labelNames := existing.labelNames()
+	t.ReproState = reproStateFromLabels(labelNames, t.ReproState)
 
 	if _, err := g.run(ctx, "issue", "edit", strconv.Itoa(existing.Number), "-R", g.repo,
 		"--body", refreshIssueBody(existing.Body, t)); err != nil {
@@ -113,9 +129,9 @@ func (g *ghIssueTracker) UpsertTicket(ctx context.Context, t MaintenanceTicket) 
 	if t.ReproState == ReproStateReady {
 		want, drop = readyLabel, needsFixtureLabel
 	}
-	if !hasLabel(existing.Labels, want) || hasLabel(existing.Labels, drop) {
+	if !hasLabel(labelNames, want) || hasLabel(labelNames, drop) {
 		args := []string{"issue", "edit", strconv.Itoa(existing.Number), "-R", g.repo, "--add-label", want}
-		if hasLabel(existing.Labels, drop) {
+		if hasLabel(labelNames, drop) {
 			args = append(args, "--remove-label", drop)
 		}
 		if _, err := g.run(ctx, args...); err != nil {
