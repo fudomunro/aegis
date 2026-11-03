@@ -15,8 +15,8 @@ import (
 )
 
 // Sync job queue (issue #227): durable, restartable units of data-movement
-// work — ingest, import, mirror, freshness check, repair. The job row is the
-// work; the copy ledger row is the fact. A long job is a chain of small
+// work — ingest, import, mirror, freshness check, repair, canary. The job row
+// is the work; the copy ledger row is the fact. A long job is a chain of small
 // leased steps: a runner returns Continue plus a payload, and the queue
 // re-arms the same row. Fail-open: a disabled or broken queue degrades to
 // today's request-driven behavior and never blocks library reads.
@@ -45,6 +45,7 @@ const (
 	SyncJobTypeMirror    = "mirror"
 	SyncJobTypeFreshness = "freshness_check"
 	SyncJobTypeRepair    = "repair"
+	SyncJobTypeCanary    = "canary"
 )
 
 // Error classes recorded on a failed step (last_error_class).

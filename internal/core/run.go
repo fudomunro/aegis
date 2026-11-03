@@ -46,6 +46,7 @@ func Run() {
 	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit (issue #168)")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	maintenanceRepo := flag.String("maintenance-repo", "", "GitHub repo (owner/name) where sync-maintenance tickets are opened as issues (reads AEGIS_MAINTENANCE_REPO if empty; empty disables ticketing)")
+	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
 	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
@@ -538,6 +539,7 @@ func Run() {
 	srv.syncRunners = newSyncRunnerRegistry(srv)
 	registerFreshnessRunners(srv.syncRunners, srv)
 	registerMirrorRunners(srv.syncRunners, srv)
+	registerCanaryRunners(srv.syncRunners, srv)
 	if syncStore.Enabled() && *syncWorkers > 0 {
 		srv.syncWorker = NewSyncWorker(syncStore, srv.syncRunners, SyncWorkerOptions{
 			Workers:            *syncWorkers,
@@ -577,6 +579,16 @@ func Run() {
 	// like OAuth authorize; grant POST and token exchange have their own rules.
 	mux.HandleFunc("GET /demo/third-party", srv.HandleThirdPartyDemo)
 	mux.HandleFunc("HEAD /demo/third-party", srv.HandleThirdPartyDemo)
+	// Dev-only injectable fake provider (issue #86) for driving the
+	// sync-maintenance loop with synthetic drift. Data paths are open like
+	// the rest of /demo; control is admin-scoped.
+	if *fakeUpstream {
+		fu := connectors.NewFakeUpstream()
+		mux.HandleFunc("/demo/fake-upstream/control", srv.AdminMiddleware(fu.ServeControl))
+		mux.HandleFunc("/demo/fake-upstream/", fu.ServeHTTP)
+		seedFakeUpstreamTokens(srv)
+		slog.Warn("fake upstream enabled — dev/test only", "mount", fakeUpstreamMount)
+	}
 	mux.HandleFunc("GET /v1/apps/authorize", srv.HandleAppAuthorize)
 	// Minting an app token is admin-equivalent (issue #181).
 	mux.HandleFunc("POST /v1/apps/authorize", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))

@@ -26,7 +26,7 @@ Keep these apart — "repair" already names two different things.
 |------|--------------|
 | **Sync maintenance** | The program: detect and repair connector reliability over time (#86) |
 | **Self-repair loop** | The automated pipeline in this doc (phases 1–5) |
-| **Sync job** | Durable queue unit of data-movement work (#227): `ingest`, `import_snapshot`, `mirror`, `freshness_check`, `repair` |
+| **Sync job** | Durable queue unit of data-movement work (#227): `ingest`, `import_snapshot`, `mirror`, `freshness_check`, `repair`, `canary` |
 | **`repair` job type** | Runtime **data** repair (re-copy, restamp ledger facts). Not code repair |
 | **Freshness check** | Data-level drift signal: copy rows re-checked against the source (`in_sync` / `stale` / `missing`) |
 | **Repro bundle** | The evidence a ticket carries: scrubbed fixture + red test + failure signature |
@@ -280,6 +280,51 @@ fixes **code** (connectors). Keep the seam:
 - Do not overload `repair` to mean code repair. If the loop ever needs to
   enqueue its own work on the queue, it gets a new `job_type` (the queue
   accepts open strings by design).
+
+## Driving the loop without real drift
+
+Before real provider drift appears, the loop can be exercised end to end
+against an injectable fake provider. The proof in CI is
+`TestMaintenanceLoop_FakeDriftToTicket`; for a manual run against a dev
+instance:
+
+1. **Start with the harness** — `-fake-upstream` (dev/test only, never on a
+   real instance) serves a Spotify saved-tracks shape at
+   `/demo/fake-upstream` and seeds placeholder tokens for any configured
+   service whose `endpoint` points there. Control is admin-scoped at
+   `POST /demo/fake-upstream/control`.
+2. **Point a service at it**, e.g. a `spotify` service with
+   `endpoint: http://localhost:8080/demo/fake-upstream`.
+3. **Enqueue a canary** — the `canary` job type fetches one saved-tracks
+   page through the configured endpoint and fails on errors or on the
+   silent-drift shape (pagination metadata claims a library, items yield
+   nothing). A genuinely empty library is health:
+
+   ```bash
+   curl -X POST -H "Authorization: Bearer $ADMIN_KEY" \
+     -d '{"kind":"tracks","job_type":"canary","service":"spotify"}' \
+     "$AEGIS/v1/admin/sync"
+   ```
+4. **Inject a failure mode** and run the canary again:
+
+   | Mode | What the connector sees |
+   |------|-------------------------|
+   | `healthy` | Normal saved-tracks pages |
+   | `empty` | Coherent empty library (total 0) — health |
+   | `http-500` / `http-401` | Error statuses |
+   | `garbage` | 200 with a body that is not JSON |
+   | `drift-items` | Valid JSON with the `items` array renamed — silent degradation |
+
+   ```bash
+   curl -X POST -H "Authorization: Bearer $ADMIN_KEY" \
+     -d '{"mode":"drift-items"}' \
+     "$AEGIS/demo/fake-upstream/control"
+   ```
+5. **Collect and scan** (the phase-1/2 surface): capture a bundle, scan, and
+   the drift surfaces as a `sync-failure` ticket with `needs-fixture`.
+   Record the repro fixture from the fake's drifted response via the
+   `ReproRecorder`, attach it with a red test, flip the label to `ready`,
+   and the fix cycle (first-slice item 4) picks it up from there.
 
 ## Non-goals
 
