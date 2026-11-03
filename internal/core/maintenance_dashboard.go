@@ -12,6 +12,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Sync-maintenance dashboard (issue #239): an entirely build-time generated
@@ -118,6 +120,13 @@ type DashboardService struct {
 	History   []DashboardCapture `json:"history,omitempty"`
 	Failures  []DashboardFailure `json:"failures,omitempty"`
 	Fixes     []DashboardFix     `json:"fixes,omitempty"`
+	// Maturity is the connection's coverage declaration (issue #247): what
+	// the service offers and what Aegis serves. Nil when the catalog has
+	// no entry — test fixtures and the drift-injection harness.
+	Maturity *types.ConnectionMaturity `json:"maturity,omitempty"`
+	// MaturityGrade is the derived coverage mark, shown beside the
+	// operational scores and deliberately not mixed into them.
+	MaturityGrade *types.MaturityGrade `json:"maturity_grade,omitempty"`
 }
 
 // NameOrID is the display name for a service page.
@@ -172,10 +181,11 @@ type MaintenanceDashboardResult struct {
 }
 
 // BuildMaintenanceDashboard projects one capture series, the configured
-// service list, and scraped repo issues onto the static dashboard model.
-// Services carry their whole capture history, failure events, scores, and
-// maintenance record; records that map to no service are dropped.
-func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardServiceMeta, issues []MaintenanceIssueRecord, generatedAt time.Time) DashboardData {
+// service list, the connection maturity catalog, and scraped repo issues
+// onto the static dashboard model. Services carry their whole capture
+// history, failure events, scores, maturity coverage, and maintenance
+// record; records that map to no service are dropped.
+func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardServiceMeta, issues []MaintenanceIssueRecord, maturity map[string]types.ConnectionMaturity, generatedAt time.Time) DashboardData {
 	sorted := append([]MaintenanceSignals(nil), series...)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].CapturedAt.Before(sorted[j].CapturedAt)
@@ -260,18 +270,24 @@ func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardSer
 
 	sort.Strings(ids)
 	for _, id := range ids {
-		data.Services = append(data.Services, buildDashboardService(id, metaByID[id], sorted, fixes, generatedAt))
+		data.Services = append(data.Services, buildDashboardService(id, metaByID[id], sorted, fixes, maturity[id], generatedAt))
 	}
 	return data
 }
 
 // buildDashboardService assembles one service page model from the series.
-func buildDashboardService(id string, meta DashboardServiceMeta, series []MaintenanceSignals, fixes []DashboardFix, now time.Time) DashboardService {
+func buildDashboardService(id string, meta DashboardServiceMeta, series []MaintenanceSignals, fixes []DashboardFix, maturity types.ConnectionMaturity, now time.Time) DashboardService {
 	svc := DashboardService{
 		ID:               id,
 		Name:             meta.Name,
 		Connection:       meta.Connection,
 		FailureInjection: meta.FailureInjection,
+	}
+	if maturity.Service != "" {
+		m := maturity
+		svc.Maturity = &m
+		grade := types.GradeConnectionMaturity(m)
+		svc.MaturityGrade = &grade
 	}
 	for _, fix := range fixes {
 		if fix.Service == id {
@@ -475,6 +491,83 @@ var dashboardFuncs = template.FuncMap{
 		default:
 			return c
 		}
+	},
+	"maturityBadge": func(level string) string {
+		switch level {
+		case "complete":
+			return "good"
+		case "substantial":
+			return "info"
+		case "partial":
+			return "warn"
+		default:
+			return "bad"
+		}
+	},
+	"maturityLabel": func(level string) string {
+		if level == "" {
+			return "—"
+		}
+		return level
+	},
+	"transportBadge": func(t types.Transport) string {
+		switch t {
+		case types.TransportAPI:
+			return "good"
+		case types.TransportProtocol:
+			return "info"
+		case types.TransportReverseEngineered:
+			return "warn"
+		default:
+			return "plain"
+		}
+	},
+	"transportLabel": func(t types.Transport) string {
+		switch t {
+		case types.TransportAPI:
+			return "API"
+		case types.TransportProtocol:
+			return "protocol"
+		case types.TransportReverseEngineered:
+			return "reverse-engineered"
+		case types.TransportArchive:
+			return "export/archive"
+		case "":
+			return "—"
+		default:
+			return string(t)
+		}
+	},
+	"maturityCoverage": func(g *types.MaturityGrade) string {
+		if g == nil {
+			return "—"
+		}
+		return fmt.Sprintf("%d/%d", g.Supported, g.Offered)
+	},
+	// maturityPct is the figure the level bands on: the lower of type
+	// coverage and field coverage. Shown beside the level so a one-type
+	// connection with thin fields does not read as a puzzle.
+	"maturityPct": func(g *types.MaturityGrade) string {
+		if g == nil {
+			return "—"
+		}
+		pct := g.CoveragePct
+		if g.FieldPct != nil && *g.FieldPct < pct {
+			pct = *g.FieldPct
+		}
+		return fmt.Sprintf("%.0f%%", pct)
+	},
+	"maturityFieldCount": func(f types.DataMaturity) string {
+		if len(f.Fields) == 0 {
+			return "—"
+		}
+		pop := 0
+		for _, c := range f.Fields {
+			if c.Supported {
+				pop++
+			}
+		}
+		return fmt.Sprintf("%d/%d", pop, len(f.Fields))
 	},
 	"stateBadge": func(state string) string {
 		switch state {
@@ -734,7 +827,7 @@ func (s *Server) HandleAdminMaintenanceDashboard(w http.ResponseWriter, r *http.
 			fixErr = err.Error()
 		}
 	}
-	data := BuildMaintenanceDashboard(series, s.dashboardServiceMetas(), records, time.Now().UTC())
+	data := BuildMaintenanceDashboard(series, s.dashboardServiceMetas(), records, MaturityByService(), time.Now().UTC())
 	data.FixHistoryError = fixErr
 
 	outDir := filepath.Join(maintDir, "dashboard")
