@@ -327,6 +327,58 @@ instance:
    `ReproRecorder`, attach it with a red test, flip the label to `ready`,
    and the fix cycle (first-slice item 4) picks it up from there.
 
+## Dashboard
+
+The loop's work should be visible, not implied (issue #239). The dashboard is
+an **entirely build-time generated** static site — no scripts, no live
+queries — with one page per service connection showing history and the
+success / stability / confidence marks, and it is **published as part of
+every release** (merge to main, for now). The Pages workflow runs
+`cmd/aegis-dashboard`, which scrapes the repo's issue record with the same
+`gh` transport as the ticket surface and writes the pages next to the
+marketing site (`site/maintenance/`), linked from the site nav. History
+therefore grows with the project: each release publishes an updated view.
+
+The **evidence is the issue record** — the loop's `sync-failure` tickets in
+full lifecycle (open with `needs-fixture`/`ready`, or fixed once closed
+completed) plus reported issues behind an explicit allowlist: a `bug` label
+or closure by a fix-convention PR (`fix:` title or `fix/` branch), naming a
+service. Allowlisted problems stay visible while open and count against the
+fix rate; anything else is dropped — the page is a maintenance record, not
+an issue mirror, and a smaller record is safer to publish than a wrong one.
+Triage therefore curates the published record: add the `bug` label to make
+an issue count. The marks measure maintenance responsiveness, not live sync
+outcomes:
+
+- **success** — share of recorded problems resolved (fix rate). A problem
+  closed as not planned counts as recorded but unresolved.
+- **stability** — how long the service has been quiet: days since the last
+  recorded failure event over a thirty-day window. Quiet is not health — an
+  old open problem does not lower it.
+- **confidence** — record depth (item-count bands: 1–2 low, 3–9 medium,
+  10+ high), so a single early blip cannot read as high confidence.
+
+Two inputs shape the published build:
+
+- **The services manifest** (`site/maintenance/services.json`, committed):
+  which pages exist, display names, and which entry is the drift-injection
+  harness. Harness runs should enqueue canaries with the `fake-upstream`
+  service id so their tickets attribute to that page — it is annotated as
+  deliberately unstable, and its "a lot of activity, not much stability" is
+  exactly what its marks should say.
+- **The repo's issue history**, scraped at generation time. A scrape failure
+  fails the release build rather than publishing an empty record over a good
+  one.
+
+The instance view stays on the admin surface: `POST
+/v1/admin/maintenance/dashboard` builds the same pages from that instance's
+signal bundles plus its own issue scrape (`-maintenance-repo`), including
+capture-history tables and scrubbed failure events where bundles exist. It
+is fail-open on scrape errors — the instance build degrades to a noted gap
+instead of a failed request. Signal bundles carry a `by_service` rollup so
+per-service history is attributable from bundles alone, keeping the
+"scanner reads paths" seam intact.
+
 ## Non-goals
 
 Deliberately out of scope while the loop proves out:

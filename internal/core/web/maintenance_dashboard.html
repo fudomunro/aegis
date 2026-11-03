@@ -1,0 +1,289 @@
+{{define "style"}}:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #1c2430; --muted: #5c6b7a;
+  --line: #dde3ea; --accent: #0f766e; --good: #166534; --good-bg: #dcfce7;
+  --warn: #92400e; --warn-bg: #fef3c7; --bad: #991b1b; --bad-bg: #fee2e2;
+  --info: #1e40af; --info-bg: #dbeafe;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; padding: 32px 24px 64px; background: var(--bg); color: var(--ink);
+  font: 15px/1.55 -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+main { max-width: 980px; margin: 0 auto; }
+h1 { font-size: 26px; margin: 0 0 4px; }
+h2 { font-size: 18px; margin: 32px 0 10px; }
+p.lede { color: var(--muted); margin: 0 0 22px; }
+a { color: var(--accent); }
+table {
+  width: 100%; border-collapse: collapse; background: var(--card);
+  border: 1px solid var(--line); border-radius: 10px; overflow: hidden;
+}
+th, td { padding: 9px 12px; text-align: left; border-bottom: 1px solid var(--line); }
+th {
+  font-size: 12px; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); background: #fbfcfd;
+}
+tr:last-child td { border-bottom: 0; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.cards { display: flex; flex-wrap: wrap; gap: 12px; margin: 18px 0 6px; }
+.card {
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: 13px 18px; min-width: 150px;
+}
+.card .k {
+  font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em;
+}
+.card .v { font-size: 22px; font-weight: 600; margin-top: 2px; }
+.badge {
+  display: inline-block; padding: 2px 9px; border-radius: 999px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+}
+.badge.good { background: var(--good-bg); color: var(--good); }
+.badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.bad { background: var(--bad-bg); color: var(--bad); }
+.badge.info { background: var(--info-bg); color: var(--info); }
+.badge.plain { background: #eef1f5; color: var(--muted); }
+.note {
+  background: var(--warn-bg); color: var(--warn); border: 1px solid #f3e0a6;
+  border-radius: 10px; padding: 12px 16px; margin: 16px 0;
+}
+.note.info { background: var(--info-bg); color: var(--info); border-color: #bfd7f5; }
+.stamp { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+.legend { color: var(--muted); font-size: 13px; margin: 10px 0 0; }
+.mono { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 13px; }
+footer {
+  max-width: 980px; margin: 40px auto 0; color: var(--muted); font-size: 12.5px;
+  border-top: 1px solid var(--line); padding-top: 14px;
+}{{end}}
+
+{{define "index"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sync maintenance dashboard</title>
+<style>{{template "style" .}}</style>
+</head>
+<body>
+<main>
+<h1>Sync maintenance dashboard</h1>
+<p class="lede">History and confidence for every service connection, regenerated at
+every release from the maintenance record.</p>
+<p class="stamp">
+  {{- if .Hostname }}{{ .Hostname }} · {{ end -}}
+  {{- if .Version }}{{ .Version }}{{ if .Commit }} ({{ .Commit }}){{ end }} · {{ end -}}
+  generated {{ fmtTime .GeneratedAt }}
+  {{- if .Captures }} · {{ .Captures }} capture{{ if ne .Captures 1 }}s{{ end }} ·
+  window {{ fmtTime .WindowStart }} → {{ fmtTime .WindowEnd }}{{ end }}
+</p>
+{{ if .FixHistoryError }}
+<div class="note">Maintenance record unavailable: {{ .FixHistoryError }}.
+Service history below still reflects captured signals.</div>
+{{ end }}
+<div class="cards">
+  <div class="card"><div class="k">Services</div><div class="v">{{ len .Services }}</div></div>
+  {{ if .Captures }}<div class="card"><div class="k">Captures</div><div class="v">{{ .Captures }}</div></div>{{ end }}
+  <div class="card"><div class="k">Maintenance records</div><div class="v">{{ len .Fixes }}</div></div>
+  {{ if .Freshness }}<div class="card"><div class="k">Copies stale or missing</div><div class="v">{{ sumDegraded .Freshness }}</div></div>{{ end }}
+</div>
+
+<h2>Service connections</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Service</th><th>Connection</th>
+      <th class="num">Success</th><th class="num">Stability</th><th>Confidence</th>
+      <th>Last activity</th><th>Record</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{ range .Services }}
+    <tr>
+      <td>
+        <a href="services/{{ pageFile .ID }}.html">{{ .NameOrID }}</a>
+        {{ if .FailureInjection }}<span class="badge warn">failure injection</span>{{ end }}
+      </td>
+      <td>{{ if .Connection }}<span class="mono">{{ .Connection }}</span>{{ else }}—{{ end }}</td>
+      <td class="num"><span class="badge {{ scoreBadge .Scores.Success }}">{{ fmtPct .Scores.Success }}</span></td>
+      <td class="num"><span class="badge {{ scoreBadge .Scores.Stability }}">{{ fmtPct .Scores.Stability }}</span></td>
+      <td><span class="badge {{ confBadge .Scores.Confidence }}">{{ confLabel .Scores.Confidence }}</span></td>
+      <td>{{ fmtTime .LastSeen }}</td>
+      <td>{{ recordSummary .Fixes }}</td>
+    </tr>
+  {{ else }}
+    <tr><td colspan="7">No services recorded yet.</td></tr>
+  {{ end }}
+  </tbody>
+</table>
+<p class="legend">Success is the share of recorded problems resolved. Stability measures
+quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
+problem does not lower it. Confidence grades the depth of the record.</p>
+
+{{ if .Fixes }}
+<h2>Recent maintenance record</h2>
+<table>
+  <thead>
+    <tr><th>Ref</th><th>Service</th><th>Kind</th><th>State</th><th>Created</th><th>Closed</th><th>Title</th></tr>
+  </thead>
+  <tbody>
+  {{ range firstN .Fixes 15 }}
+    <tr>
+      <td><a href="{{ .URL }}">#{{ .Number }}</a></td>
+      <td><a href="services/{{ pageFile .Service }}.html">{{ .Service }}</a></td>
+      <td>{{ kindLabel .Kind }}</td>
+      <td><span class="badge {{ stateBadge .State }}">{{ stateLabel .State }}</span>{{ if .ReproState }} <span class="badge plain">{{ .ReproState }}</span>{{ end }}</td>
+      <td>{{ fmtTime .CreatedAt }}</td>
+      <td>{{ fmtTime .ClosedAt }}</td>
+      <td>{{ .Title }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ end }}
+
+{{ if .Freshness }}
+<h2>Copy freshness</h2>
+<table>
+  <thead>
+    <tr><th>Kind</th><th class="num">In sync</th><th class="num">Stale</th><th class="num">Missing</th><th class="num">Unchecked</th><th class="num">Total</th></tr>
+  </thead>
+  <tbody>
+  {{ range .Freshness }}
+    <tr>
+      <td>{{ .Kind }}</td>
+      <td class="num">{{ .InSync }}</td>
+      <td class="num">{{ .Stale }}</td>
+      <td class="num">{{ .Missing }}</td>
+      <td class="num">{{ .Unchecked }}</td>
+      <td class="num">{{ .Total }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ end }}
+</main>
+<footer>
+Generated from the maintenance record and any captured signal bundles. Pages name
+services and failure modes; contents carry scrubbed metadata only.
+</footer>
+</body>
+</html>{{end}}
+
+{{define "service"}}<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ .Service.NameOrID }} — sync maintenance</title>
+<style>{{template "style" .}}</style>
+</head>
+<body>
+<main>
+<h1>{{ .Service.NameOrID }}</h1>
+<p class="stamp">
+  service <span class="mono">{{ .Service.ID }}</span>
+  {{- if .Service.Connection }} · connection <span class="mono">{{ .Service.Connection }}</span>{{ end }}
+  {{- if .Version }} · {{ .Version }}{{ if .Commit }} ({{ .Commit }}){{ end }}{{ end }}
+</p>
+{{ if .Service.FailureInjection }}
+<div class="note">Failure injection — this connection is backed by the drift-injection
+harness. Failures here are deliberate test activity and low stability is expected.</div>
+{{ end }}
+
+<div class="cards">
+  <div class="card"><div class="k">Success</div>
+    <div class="v"><span class="badge {{ scoreBadge .Service.Scores.Success }}">{{ fmtPct .Service.Scores.Success }}</span></div></div>
+  <div class="card"><div class="k">Stability</div>
+    <div class="v"><span class="badge {{ scoreBadge .Service.Scores.Stability }}">{{ fmtPct .Service.Scores.Stability }}</span></div></div>
+  <div class="card"><div class="k">Confidence</div>
+    <div class="v"><span class="badge {{ confBadge .Service.Scores.Confidence }}">{{ confLabel .Service.Scores.Confidence }}</span></div></div>
+  <div class="card"><div class="k">Recorded problems</div>
+    <div class="v">{{ len .Service.Fixes }}</div></div>
+</div>
+<p class="legend">Success is the share of recorded problems resolved. Stability measures
+quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
+problem does not lower it. Confidence grades the depth of the record.</p>
+
+{{ if .Service.History }}
+<h2>Capture history</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Captured</th>
+      <th class="num">Succeeded</th><th class="num">Failed</th>
+      <th class="num">Queued</th><th class="num">Running</th>
+      <th class="num">New failures</th><th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+  {{ range .Service.History }}
+    <tr>
+      <td>{{ fmtTime .CapturedAt }}</td>
+      <td class="num">{{ .Counts.Succeeded }}</td>
+      <td class="num">{{ .Counts.Failed }}</td>
+      <td class="num">{{ .Counts.Queued }}</td>
+      <td class="num">{{ .Counts.Running }}</td>
+      <td class="num">{{ .NewFailures }}</td>
+      <td>{{ if .CounterReset }}<span class="badge plain">totals dropped</span>{{ end }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+<p class="legend">Counts are cumulative queue totals at capture time. A
+&ldquo;totals dropped&rdquo; note means retention pruning removed old jobs between
+captures, not negative activity.</p>
+{{ end }}
+
+{{ if .Service.Failures }}
+<h2>Failure events</h2>
+<table>
+  <thead>
+    <tr><th>When</th><th>Job</th><th>Type</th><th>Kind</th><th>Class</th><th class="num">Attempts</th><th>Error</th></tr>
+  </thead>
+  <tbody>
+  {{ range .Service.Failures }}
+    <tr>
+      <td>{{ fmtTime .UpdatedAt }}</td>
+      <td class="mono">{{ .ID }}</td>
+      <td>{{ .JobType }}</td>
+      <td>{{ .Kind }}</td>
+      <td>{{ .ErrorClass }}</td>
+      <td class="num">{{ .Attempts }}</td>
+      <td>{{ .Error }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ end }}
+
+<h2>Maintenance record</h2>
+{{ if .Service.Fixes }}
+<table>
+  <thead>
+    <tr><th>Ref</th><th>Kind</th><th>State</th><th>Created</th><th>Closed</th><th>Title</th></tr>
+  </thead>
+  <tbody>
+  {{ range .Service.Fixes }}
+    <tr>
+      <td><a href="{{ .URL }}">#{{ .Number }}</a></td>
+      <td>{{ kindLabel .Kind }}</td>
+      <td><span class="badge {{ stateBadge .State }}">{{ stateLabel .State }}</span>{{ if .ReproState }} <span class="badge plain">{{ .ReproState }}</span>{{ end }}</td>
+      <td>{{ fmtTime .CreatedAt }}</td>
+      <td>{{ fmtTime .ClosedAt }}</td>
+      <td>{{ .Title }}</td>
+    </tr>
+  {{ end }}
+  </tbody>
+</table>
+{{ else }}
+<p class="stamp">No tickets or fixes recorded for this service yet.</p>
+{{ end }}
+
+<p class="stamp"><a href="../index.html">← All services</a></p>
+</main>
+<footer>
+Generated from the maintenance record and any captured signal bundles. Pages name
+services and failure modes; contents carry scrubbed metadata only.
+</footer>
+</body>
+</html>{{end}}

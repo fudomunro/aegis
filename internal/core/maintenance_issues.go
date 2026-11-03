@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // GitHub issues are the sync-maintenance ticket surface (issue #86): the
@@ -44,9 +45,11 @@ type IssueRef struct {
 
 // IssueTracker is the ticket surface. UpsertTicket creates, updates, or
 // reopens exactly one issue per ticket and reports what it did
-// ("opened" | "updated" | "reopened").
+// ("opened" | "updated" | "reopened"). ListIssues scrapes the repo's issue
+// history for the dashboard's maintenance record (issue #239).
 type IssueTracker interface {
 	UpsertTicket(ctx context.Context, t MaintenanceTicket) (IssueRef, string, error)
+	ListIssues(ctx context.Context) ([]MaintenanceIssueRecord, error)
 }
 
 // ghIssueTracker opens and updates tickets via the gh CLI against an
@@ -79,11 +82,15 @@ type ghLabel struct {
 
 // ghListIssue is the subset of `gh issue list --json` we rely on.
 type ghListIssue struct {
-	Number int       `json:"number"`
-	State  string    `json:"state"`
-	URL    string    `json:"url"`
-	Labels []ghLabel `json:"labels"`
-	Body   string    `json:"body"`
+	Number      int       `json:"number"`
+	State       string    `json:"state"`
+	StateReason string    `json:"stateReason"`
+	URL         string    `json:"url"`
+	Title       string    `json:"title"`
+	Labels      []ghLabel `json:"labels"`
+	Body        string    `json:"body"`
+	CreatedAt   time.Time `json:"createdAt"`
+	ClosedAt    time.Time `json:"closedAt"`
 }
 
 // labelNames extracts the label names for matching and repro-state lookup.

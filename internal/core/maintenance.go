@@ -47,6 +47,7 @@ type MaintenanceSync struct {
 	Counts    SyncCounts            `json:"counts"`
 	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
 	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
+	ByService map[string]SyncCounts `json:"by_service,omitempty"`
 	Failures  []MaintenanceFailure  `json:"failures,omitempty"`
 }
 
@@ -85,9 +86,10 @@ func (s *Server) CollectMaintenanceSignals() MaintenanceSignals {
 		sync := &MaintenanceSync{Enabled: s.syncJobs.Enabled()}
 		if sync.Enabled {
 			sync.Counts = s.syncJobs.Counts("", "")
-			if b := s.syncJobs.Breakdown(); len(b.ByKind) > 0 || len(b.ByJobType) > 0 {
+			if b := s.syncJobs.Breakdown(); len(b.ByKind) > 0 || len(b.ByJobType) > 0 || len(b.ByService) > 0 {
 				sync.ByKind = b.ByKind
 				sync.ByJobType = b.ByJobType
+				sync.ByService = b.ByService
 			}
 			for _, j := range s.syncJobs.List(SyncFilter{State: SyncJobFailed, Limit: signalFailureCap}) {
 				sync.Failures = append(sync.Failures, MaintenanceFailure{
