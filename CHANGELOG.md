@@ -7,6 +7,29 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Split listeners for external access (issue #149, phase 1; re-landed —
+  the original merge stranded on a stale stacked branch).** The surface
+  can be served on two listeners per `docs/external-access.md`: the **API
+  listener** (`-addr`) carries the agent/external routes and may be published
+  behind TLS; the **admin listener** (`-admin-addr`, tailnet/loopback only —
+  anything else is refused at startup) carries policy and setup surfaces and
+  stays in-tailnet. The API listener serves an explicit **allowlist**
+  (`POST /v1/pre-request`, library reads, `/v1/services/*` content transport,
+  mail search/status, `GET /v1/auth/status`, `POST /v1/apps/token`/
+  `revoke`, health probes) — unlisted routes answer 404 there and default to
+  the admin side, so a newly registered route cannot leak onto the published
+  surface. With `-external-access` (requires `-admin-addr`) the API listener
+  accepts **invite tokens and app tokens only**: no ambient identity is
+  resolved there and the shared agent key is refused, so a transcript leak
+  never becomes internet-wide read. The admin listener serves the agent tier
+  as well, so Aperture and tagged hosts keep ambient identity and the agent
+  key with no migration. Per-listener base URLs (`-admin-base-url`) keep
+  OAuth redirects and CSRF origin checks on the right origin. Merge review
+  and the copy ledger stay admin-side (they are not data-type grants).
+  Single-listener deployments are unchanged. Follow-ons: scope-grant
+  enforcement (deny-by-default), invite minting/rotation with hashed
+  storage, and rate limiting with trusted-proxy config.
+
 - **Invite lifecycle with hash at rest (issue #253, phase 3).** Data-scope
   credentials — the invite tokens external principals hold — are now
   administered like app tokens instead of by editing `data_scopes.json`:

@@ -194,6 +194,16 @@ func appPathAllowed(path string) bool {
 	return false
 }
 
+// baseURLFor returns the public base URL of the listener that received r —
+// the admin listener's own URL for OAuth redirects and CSRF origin checks
+// when listeners are split, else the instance base URL.
+func (s *Server) baseURLFor(r *http.Request) string {
+	if u := listenerBaseURLFrom(r); u != "" {
+		return u
+	}
+	return s.baseURL
+}
+
 // AuthMiddleware authenticates requests according to the configured auth mode.
 // A valid third-party app token is accepted in every mode and yields a scoped
 // identity (issue #131) limited to library data reads. Successful tailnet
@@ -227,6 +237,16 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				return
 			}
 			next(w, withAuthKind(withDataScope(r, sc), authKindAPIKey))
+			return
+		}
+
+		// External access (docs/external-access.md): the published API
+		// listener accepts invite tokens and app tokens only. The shared
+		// agent key never crosses the public bind (a transcript leak must
+		// not become internet-wide read), and ambient identity is not
+		// resolved at all — both are tailnet-listener credentials.
+		if externalAPIFrom(r) {
+			s.deny(w, r, nil, "external API accepts invite tokens and app tokens only")
 			return
 		}
 
@@ -303,6 +323,13 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	// identity from explicit admin API-key credentials (issue #182).
 	next = s.csrfGuard(next)
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Defense in depth (docs/external-access.md): admin surfaces are
+		// never served on the published API listener — the allowlist gate
+		// answers 404 first, and this refuses even a mis-gated route.
+		if externalAPIFrom(r) {
+			writeJSONError(w, http.StatusNotFound, "not found")
+			return
+		}
 		if app := s.authenticateApp(r); app != nil {
 			s.denyStatus(w, r, nil, http.StatusForbidden, "app token not permitted on admin endpoints")
 			return
@@ -756,7 +783,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		// Use connector-specific instructions if available.
 		if connector, ok := s.connectors[svc.ID]; ok {
-			instructions = append(instructions, connector.SystemInstructions(s.baseURL))
+			instructions = append(instructions, connector.SystemInstructions(s.baseURLFor(r)))
 		} else {
 			instruction := fmt.Sprintf(
 				"When working with %s, use Aegis's unified library endpoints "+

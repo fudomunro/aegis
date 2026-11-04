@@ -120,20 +120,50 @@ func gracefulStop(srv *http.Server, timeout time.Duration) error {
 	return srv.Shutdown(ctx)
 }
 
-// runHTTPServer serves mux with explicit timeouts, drains in-flight requests
-// on SIGINT/SIGTERM, and reloads config on SIGHUP (issue #96).
+// namedListener is one bound surface of a split deployment (external
+// access): the API listener and the admin listener each get their own
+// address and handler chain.
+type namedListener struct {
+	name string // "api" or "admin", for logs
+	addr string
+	http.Handler
+}
+
+// runHTTPServer serves a single listener (single-listener deployments).
 // Returns nil on graceful shutdown.
 func runHTTPServer(addr string, handler http.Handler, cfg *Config) error {
-	srv := newAegisHTTPServer(addr, handler)
+	return runHTTPServers([]namedListener{{name: "api", addr: addr, Handler: handler}}, cfg)
+}
 
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- srv.ListenAndServe()
-	}()
+// runHTTPServers serves every listener with explicit timeouts, drains
+// in-flight requests on SIGINT/SIGTERM, and reloads config on SIGHUP
+// (issue #96). Any listener failing to bind fails startup; any listener
+// erroring at runtime shuts the rest down. Returns nil on graceful shutdown.
+func runHTTPServers(listeners []namedListener, cfg *Config) error {
+	servers := make([]*http.Server, 0, len(listeners))
+	errCh := make(chan error, len(listeners))
+	for _, l := range listeners {
+		srv := newAegisHTTPServer(l.addr, l.Handler)
+		servers = append(servers, srv)
+		go func() {
+			errCh <- srv.ListenAndServe()
+		}()
+		slog.Info("listener up", "name", l.name, "addr", l.addr)
+	}
 
 	sigCh := make(chan os.Signal, 2)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer signal.Stop(sigCh)
+
+	stopAll := func() error {
+		var firstErr error
+		for _, srv := range servers {
+			if err := gracefulStop(srv, 30*time.Second); err != nil && firstErr == nil {
+				firstErr = err
+			}
+		}
+		return firstErr
+	}
 
 	for {
 		select {
@@ -141,6 +171,9 @@ func runHTTPServer(addr string, handler http.Handler, cfg *Config) error {
 			if errors.Is(err, http.ErrServerClosed) {
 				return nil
 			}
+			// One listener died: bring the others down so the split
+			// never serves half a deployment.
+			_ = stopAll()
 			return err
 		case sig := <-sigCh:
 			switch sig {
@@ -156,7 +189,7 @@ func runHTTPServer(addr string, handler http.Handler, cfg *Config) error {
 				}
 			case syscall.SIGINT, syscall.SIGTERM:
 				slog.Info("shutdown signal received", "signal", sig.String())
-				if err := gracefulStop(srv, 30*time.Second); err != nil {
+				if err := stopAll(); err != nil {
 					slog.Error("graceful shutdown failed", "error", err)
 					return err
 				}

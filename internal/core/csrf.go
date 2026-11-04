@@ -87,7 +87,7 @@ func (s *Server) sameOriginRequest(r *http.Request) bool {
 	if strings.EqualFold(r.Header.Get("Sec-Fetch-Site"), "same-origin") {
 		return true
 	}
-	return originMatchesBase(r.Header.Get("Origin"), s.baseURL)
+	return originMatchesBase(r.Header.Get("Origin"), s.baseURLFor(r))
 }
 
 // isContentTransportPath reports whether the route accepts arbitrary upload
