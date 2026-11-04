@@ -40,18 +40,20 @@ use to decide *whose* data is in play.
 | `id` | Stable scope id (`frodo`, `default`, …) |
 | `name` | Display label |
 | `dataset` | Partition id. Empty = owner/default partition (no filter) |
-| `api_key` | Agent credential for this scope (file-only; never logged) |
+| `api_key` | Agent credential for this scope (file-only; never logged). Under external access this is the **invite token** |
 | `read_only` | Reject mutating agent methods (demo default) |
-| `grants` | Optional type-level `DataGrants` tightening for this principal |
+| `grants` | Type-level `DataGrants` — the **complete allow list** for invite tokens (deny-by-default; unlisted = `none`) |
 | `disabled` | Soft delete |
 
 ### Principal resolution (M1)
 
 1. Request carries a scope API key (`Authorization: Bearer` or `X-Api-Key`)
-   → that scope.
+   → that scope. Under external access this is the **invite token** — the
+   only credential an external principal holds.
 2. Legacy `-api-key` / `-admin-api-key`, or tailnet identity → **default**
    scope (`dataset` empty, no extra grants). Existing behavior unchanged.
-3. Later: tailnet login → scope mapping, per-person household scopes.
+3. Optional later: tailnet login → scope mapping (in-tailnet family members
+   without a token). Not required by the external-access contract.
 
 ## Dataset partition
 
@@ -79,16 +81,29 @@ can move to per-user connector state without changing the principal model.
 ## Grants
 
 `DataScope.grants` uses the existing type-level `types.DataGrants` and is
-validated on load. **Not yet enforced** in this release — reserved for the
-multi-user follow-on so principals can tighten type access. Until enforcement
-lands, do not assume scope grants restrict reads. `read_only` is enforced.
+validated on load. **Not yet enforced** in code — enforcement is part of the
+external-access implementation. The semantics are decided
+([`external-access.md`](external-access.md)):
 
-When enforced they will **tighten** what the default policy already allows
-(same rule as service `grant_limits`): default policy sets the ceiling; scope
-grants can only narrow it for that principal.
+**Deny-by-default for invite tokens.** For an external principal the scope's
+`grants` map is the **complete allow list**: an unlisted data type resolves
+to `none`. A reserved `default` entry sets the level for unlisted types (so
+"share everything read-only" stays expressible); opt-in types (places) still
+require an explicit name. `read_only: true` still caps methods regardless of
+levels.
 
-Demo scopes typically set `read_only: true` and leave grants empty (full
-read of *their* dataset).
+Until enforcement lands, do not assume scope grants restrict reads — mint
+scopes for principals you already trust.
+
+**Owner-tier split.** The shared agent key and tailnet agents keep today's
+"omit = unrestricted" agent-data-grant semantics (places opt-in `none`).
+Scope grants for invite tokens deliberately diverge: sharing is opt-in per
+data type. Scope grants also never exceed what agent data grants allow (AND
+of both layers, same as app tokens).
+
+Demo scopes that expect full read of *their* dataset must set
+`"grants": {"default": {"default": "read"}}` (or list types) once
+enforcement lands; `read_only: true` remains the demo's write wall.
 
 ## Isolation contract (testable)
 
@@ -137,13 +152,23 @@ local secret-bearing state, not a git file.
 
 ## Relationship to multi-user modes
 
-This note defines the **principal and isolation seam**. Remaining
-multi-user work:
+This note defines the **principal and isolation seam**. Multi-user modes
+(issue #149) resolve through external access
+([`external-access.md`](external-access.md)):
 
-- Tailnet login → scope (and admin identity vs member identity)
-- Shared dataset with per-person grants (household)
-- Optional per-user connections / canonical homes
-- Admin surfaces to create and rotate scope keys
+- **Household / family access** = one invite token (scope key) per person on
+  the owner dataset, with per-person grants. Works from the tailnet or
+  anywhere else. Covered here + deny-by-default grants.
+- **Other Aegis instances sharing with you** = each side issues the other an
+  invite token and calls the other's API listener. No federation protocol;
+  the credential model is identical.
+
+Still open (not part of the external-access contract):
+
+- Optional tailnet login → scope mapping
+- Per-user provider connections / canonical homes (every principal reads the
+  owner's connected services)
+- Cross-instance discovery and per-instance identity
 
 ## Implementation sketch (M1)
 

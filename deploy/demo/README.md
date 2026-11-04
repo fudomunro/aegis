@@ -1,8 +1,9 @@
 # Aegis public demo — deploy runbook
 
 Stands up a **read-only synthetic** Aegis (`-demo`) for alpha testers and the
-marketing agent kit. Not the product deployment model: the real Aegis stays on
-your tailnet (see `SECURITY.md`).
+marketing agent kit. Not the product deployment model: a real Aegis keeps
+admin in-tailnet and publishes only the API listener, and only as external
+access describes (`SECURITY.md`, `docs/external-access.md`).
 
 ```
 Internet → nginx (aegis.unified-designs.com) → aegis-demo 127.0.0.1:8090
@@ -10,8 +11,8 @@ Internet → nginx (aegis.unified-designs.com) → aegis-demo 127.0.0.1:8090
 ```
 
 Live profile on the shared Ubuntu droplet (nginx + systemd, same host as the
-unified-designs / experiments sites). Do **not** open 8090 publicly and do
-**not** use Tailscale Funnel.
+unified-designs / experiments sites). Do **not** open the admin surface
+publicly; this runbook's nginx fronts only the demo API.
 
 | | |
 |--|--|
@@ -130,4 +131,6 @@ has fields the tester can paste into.
 
 - Not a multi-tenant SaaS threat model (`docs/threat-model.md`).
 - Not a place for real mail, music tokens, or personal photos.
-- Not Funnel / public-tunnel product advice — the product stays tailnet-private.
+- Not external-access product advice — a real Aegis publishes the API
+  listener only as `docs/external-access.md` describes (invite tokens,
+  admin in-tailnet).

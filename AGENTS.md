@@ -65,8 +65,13 @@ them away.
   `service_connections.json`, `user_types.json`, `.aegis-token-pass`, or live
   binaries. Example config only via `aegis.example.json`. Prefer the OS data
   directory (issue #74) over the git worktree for runtime state.
-- **No Tailscale Funnel.** Aegis holds music OAuth tokens; it is a tailnet
-  service. See `SECURITY.md`.
+- **External access is invite-only and split-listener.** The API listener may
+  be published (credential perimeter: invite tokens / app tokens / agent key);
+  the **admin listener stays in-tailnet** and is never published. Ambient
+  Tailscale identity is never trusted on an externally reachable listener.
+  External principals are **deny-by-default** (scope grants are the complete
+  allow list). No self-service signup, passwords, OIDC, or instance
+  federation in this phase. See `docs/external-access.md` and `SECURITY.md`.
 - **No issue numbers in user-facing copy.** GitHub issue refs stay in code
   comments and maintainer docs only — never README headings, admin UI visible
   text, or LLM-agent strings. Enforced by `internal/core/docs_hygiene_test.go`
@@ -85,7 +90,8 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Data directory + state path layout | `internal/core/datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core/config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `internal/core/permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
-| Data scopes (principal → dataset) | `internal/core/datascope.go`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. |
+| Data scopes (principal → dataset) | `internal/core/datascope.go`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
+| External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
 | Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
@@ -334,6 +340,10 @@ decided:
 - User-defined types full product surface (admin authoring, hot-reload packs;
   PoC + file selection land under #15)
 - First-run onboarding for tailnet + OAuth (#8)
+- Per-user provider connections (every principal reads the owner's connected
+  services; external access does not change this) and instance federation
+  beyond invite tokens (#149 — the external-access contract is decided in
+  `docs/external-access.md`; these two remain open)
 
 ## Definition of done
 

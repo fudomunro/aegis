@@ -63,7 +63,8 @@ You should see neutral playlist objects with `sources[]` provenance. Vocabulary 
 | [docs/api.md](docs/api.md) | Agent-facing HTTP surface (library, hook, transport) |
 | [docs/configuration.md](docs/configuration.md) | Config schema, data grants, flags, token encryption |
 | [docs/observability.md](docs/observability.md) | Health, metrics, audit log |
-| [SECURITY.md](SECURITY.md) | Tailnet auth model, ACLs, operational guidance |
+| [SECURITY.md](SECURITY.md) | Auth model (tailnet and external access), ACLs, operational guidance |
+| [docs/external-access.md](docs/external-access.md) | Publishing the API listener: split listeners, invite tokens, deny-by-default grants |
 | [docs/threat-model.md](docs/threat-model.md) | Assets, actors, threats, residual risks |
 | [docs/glossary.md](docs/glossary.md) | Canonical product vocabulary |
 | [docs/caldav-carddav.md](docs/caldav-carddav.md) | Nextcloud/iCloud/Fastmail DAV setup |
