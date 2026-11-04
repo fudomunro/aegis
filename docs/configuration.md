@@ -859,10 +859,13 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
 - `read_only` rejects mutating agent methods except the pre-request hook.
 - `grants` is the **complete allow list** for that principal —
   **deny-by-default**: an unlisted data type resolves to `none`. A reserved
-  `default` entry sets the level for unlisted types. (Owner-tier credentials
-  — the shared agent key and tailnet logins — keep the usual agent data grant
-  semantics, where omit means unrestricted.) Scope grants also never exceed
-  agent data grants.
+  `default` entry sets the level for unlisted types. Ambiguity is fail-closed:
+  a listed type with an empty entry, or with only `providers` overrides,
+  resolves to `none` (provider entries tighten, they never open a closed
+  type — set the type's `default` field to grant access). (Owner-tier
+  credentials — the shared agent key and tailnet logins — keep the usual
+  agent data grant semantics, where omit means unrestricted.) Scope grants
+  also never exceed agent data grants.
 
 A service with `endpoint: "sample://library"` serves synthetic library
 fixtures bound to `Service.Dataset` — useful for demos and isolation tests

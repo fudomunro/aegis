@@ -87,10 +87,24 @@ external-access implementation. The semantics are decided
 
 **Deny-by-default for invite tokens.** For an external principal the scope's
 `grants` map is the **complete allow list**: an unlisted data type resolves
-to `none`. A reserved `default` entry sets the level for unlisted types (so
-"share everything read-only" stays expressible); opt-in types (places) still
-require an explicit name. `read_only: true` still caps methods regardless of
-levels.
+to `none`. A reserved `default` entry sets the level for **unlisted** types
+(so "share everything read-only" stays expressible); opt-in types (places)
+still require an explicit name. `read_only: true` still caps methods
+regardless of levels.
+
+**Resolution is fail-closed** — every ambiguity resolves to `none`:
+
+| Entry | Resolves to |
+|-------|-------------|
+| Type absent, no `default` key | `none` |
+| Type absent, `default` key present | the `default` key's level |
+| `{"music": {}}` (listed, empty) | `none` — a listed type must state its own level |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides only tighten; they never open a closed type. Set the type's `default` field to grant, provider entries to narrow |
+| `{"default": {"default": "read"}, "music": {}}` | `none` for `music` — the `default` key covers unlisted types only |
+
+This runs in a **dedicated scope-grants resolver**, never in
+`types.DataGrants.Access` (owner-tier "unset = unrestricted" semantics must
+not move). Each resolution row becomes a test case.
 
 Until enforcement lands, do not assume scope grants restrict reads — mint
 scopes for principals you already trust.
@@ -104,6 +118,14 @@ of both layers, same as app tokens).
 Demo scopes that expect full read of *their* dataset must set
 `"grants": {"default": {"default": "read"}}` (or list types) once
 enforcement lands; `read_only: true` remains the demo's write wall.
+`deploy/demo/data_scopes.example.json` already carries that entry.
+
+**Storage.** `data_scopes.json` today holds plaintext `api_key` values
+(hashed in memory at load only). **Hash at rest is a contract requirement**
+for internet-reachable credentials: the invite lifecycle must store only
+the SHA-256 hash (like `apps.json`), display plaintext once at mint, and
+migrate existing plaintext entries on load. Until then, treat
+`data_scopes.json` as a password file.
 
 ## Isolation contract (testable)
 

@@ -43,14 +43,18 @@ exposure, grant defaults, TLS/rate-limit duties, and the threat model.
 5. **Ambient identity is never trusted on the public surface.** Serve
    identity headers are forgeable by anyone who can open a TCP connection to
    a public socket; see "The landmine" below.
+6. **The agent API key never crosses the public bind.** Under external
+   access the published API listener accepts **invite and app tokens only**;
+   the agent key stays a tailnet-listener credential. A transcript leak of
+   the agent key must not become internet-wide full read.
 
 ## Model
 
 ```
                     ┌─ credential perimeter (may be public) ─┐
-Public internet ──► │  API listener                          │
-  (invite tokens)   │  pre-request · library · content       │
-                    │  transport · mail agent routes ·       │
+Public internet ──► │  API listener (route allowlist)        │
+  (invite tokens,   │  pre-request · library · content       │
+   app tokens)      │  transport · mail agent routes ·       │
                     │  auth/status · app token redeem        │
                     └───────────────────┬────────────────────┘
                                         │ DataScope { dataset,
@@ -61,20 +65,35 @@ Public internet ──► │  API listener                          │
 
                     ┌─ tailnet perimeter (never public) ─────┐
 Tailnet ──────────► │  Admin listener                        │
-  (Serve / WhoIs)   │  /v1/admin/* · /metrics · OAuth flows  │
-  or admin key      │  app consent · mail sync · mirror/…    │
+  (Serve / WhoIs)   │  admin tier: /v1/admin/* · /metrics ·  │
+  or admin key      │    OAuth · consent · sync · mirror/…   │
+                    │  agent tier: same API routes, for      │
+                    │    tailnet agents (ambient identity    │
+                    │    or agent key) — no migration for    │
+                    │    Aperture / tagged hosts             │
                     └────────────────────────────────────────┘
 ```
 
 | Listener | Serves | Auth | Exposure |
 |----------|--------|------|----------|
-| **API** | `POST /v1/pre-request`, `/v1/library/*`, `/v1/services/*`, `/v1/mail/*` (agent routes), `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | Invite token (data-scope key), app token, agent API key. **No ambient identity** when external access is on | May be public behind TLS |
-| **Admin** | `/v1/admin/*`, `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, `POST /v1/mail/sync`, mirror / photo-share / entity-link writes | Tailnet identity (existing admin rules) or admin API key | Tailnet or loopback only |
+| **API** | **Allowlist only**: `POST /v1/pre-request`, `/v1/library/*`, `/v1/services/*`, `/v1/mail/*` (agent routes), `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | **Invite token, app token only** under external access. No ambient identity, no agent key | May be public behind TLS |
+| **Admin** | Admin tier: `/v1/admin` and `/v1/admin/*` (API + SPA shell), the admin SPA routes (`/`, `/home`, `/library`, `/services`, `/advanced`), `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, `POST /v1/mail/sync`, mirror / photo-share / entity-link writes. **Plus the agent-tier routes above**, for tailnet callers | Tailnet identity (existing admin rules) or admin API key for admin tier; tailnet identity or agent key for agent tier | Tailnet or loopback only |
 
-When a route is registered on both lists (`/healthz`), that is deliberate
-liveness. Everything admin-tier answers **404 on the API listener** when
-external access is enabled — the public surface must not advertise the
-policy API.
+**The API listener route set is an allowlist, not a blocklist.** A route that
+is not listed answers **404** there and is served only by the admin listener.
+New routes default to the admin side until explicitly added to the allowlist;
+a forgotten route therefore cannot leak onto the public surface. `/healthz`
+on both listeners is deliberate liveness. Demo routes are **off** the
+allowlist by default: `/demo/fake-upstream/*` (dev harness) never publishes,
+and `/demo/third-party` is exposed only by the demo deployment's edge
+(`deploy/demo/`), which is the named single-listener exception.
+
+Serving the agent tier on the admin listener is what keeps in-tailnet agents
+(Aperture's `/v1/pre-request` call, tagged hosts) working unchanged — and it
+is the more secure arrangement: tailnet agents need **no shared key at all**
+(keep `auth-mode=tailnet` and drop `-api-key`, per `SECURITY.md` best
+practice 2), instead of every external-access deployment being pushed to
+distribute the owner-tier agent key to its agents.
 
 ### External principal
 
@@ -86,13 +105,13 @@ instance's operator — the credential model is identical.
 
 Owner-tier credentials are unchanged and are *not* external principals:
 
-| Credential | Tier | Grant semantics |
-|------------|------|-----------------|
-| Tailnet identity (admin rules) | Admin | Owner policy; admin surfaces |
-| Admin API key | Admin | Owner policy; admin surfaces |
-| Agent API key (`-api-key`) | Agent (owner) | Agent **data grants**; omit = unrestricted (places opt-in `none`) |
-| Invite token (scope key) | Agent (external) | **Scope grants, deny-by-default** |
-| App token (`aeg_app_…`) | App | App scopes AND agent data grants (unchanged) |
+| Credential | Tier | Grant semantics | Accepted on |
+|------------|------|-----------------|-------------|
+| Tailnet identity (admin rules) | Admin | Owner policy; admin surfaces | Admin listener |
+| Admin API key | Admin | Owner policy; admin surfaces | Admin listener |
+| Agent API key (`-api-key`) | Agent (owner) | Agent **data grants**; omit = unrestricted (places opt-in `none`) | Admin listener only under external access (never the published bind) |
+| Invite token (scope key) | Agent (external) | **Scope grants, deny-by-default** | Both listeners |
+| App token (`aeg_app_…`) | App | App scopes AND agent data grants (unchanged) | Both listeners |
 
 ### Deny-by-default (external principals)
 
@@ -100,7 +119,7 @@ For an invite token, the scope's `grants` map is the **complete allow list**:
 
 1. A data type not listed resolves to **`none`** for that principal —
    unlike agent data grants, where omit means unrestricted.
-2. A reserved `default` entry sets the level for unlisted types, so
+2. A reserved `default` entry sets the level for **unlisted** types only, so
    "share everything read-only" stays expressible
    (`"grants": {"default": {"default": "read"}}`) without listing every
    kind.
@@ -110,6 +129,23 @@ For an invite token, the scope's `grants` map is the **complete allow list**:
 5. The dataset partition rule is unchanged: household sharing is the owner's
    dataset (empty `dataset`) with narrower grants; isolated personas keep
    named datasets.
+
+**Resolution is fail-closed, and every ambiguity resolves to `none`:**
+
+| Entry | Resolves to |
+|-------|-------------|
+| Type absent, no `default` key | `none` |
+| Type absent, `default` key present | the `default` key's level |
+| `{"music": {}}` (listed, empty) | `none` — a listed type must state its own level |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides can only **tighten** a level, never open a closed type. To grant, set the type's `default` field and use provider entries to narrow |
+| `{"default": {"default": "read"}, "music": {...}}` with `music.default` empty | `none` for `music` — the `default` key covers **unlisted** types only; listing a type is an explicit act |
+
+This resolution runs in a **dedicated scope-grants resolver**, not in
+`types.DataGrants.Access`. `DataGrants.Access` keeps owner-tier semantics
+("unset default preserves pre-permission behavior"); the two must not be
+merged, or a scope fix silently changes owner behavior and vice versa. The
+scope resolver is its own function with its own tests (every row of the
+table above is a case).
 
 This is a deliberate **split** from owner-tier semantics, not a silent
 behavior change: the shared agent key and tailnet agents keep the current
@@ -127,21 +163,30 @@ grants already allow (AND of both layers, same as app tokens).
 
 `buildIdentityResolver` currently wires `ServeHeaderResolver` unconditionally
 in `auto`/`tailnet` modes. `Tailscale-User-Login` is just a request header: on
-a public socket any client can claim any login, and the default admin rule
-(any allowed non-tagged user login) turns one forged header into **full
-admin**. Today this is safe only because nothing but `tailscale serve` can
-reach the binary.
+any socket a client can reach, a client can claim any login, and the default
+admin rule (any allowed non-tagged user login) turns one forged header into
+**full admin**.
+
+This is not merely a tomorrow problem. The default `-addr :8080` binds **all
+interfaces**, so on a default install any LAN peer can send the forged header
+directly to the port — `SECURITY.md` only *suggests* binding to localhost or
+the Tailscale IP. The landmine is live today on any host that did not follow
+that advice.
 
 Contract:
 
 1. When external access is enabled, the API listener resolves **no ambient
-   identity** — no Serve headers, no WhoIs. Explicit credentials only. An
-   in-tailnet caller uses the same keys as anyone else (agent key or its
-   invite token).
+   identity** — no Serve headers, no WhoIs. Explicit credentials only.
 2. The admin listener keeps Serve/WhoIs resolution; it is reachable from the
    tailnet only, which is what makes those headers trustworthy.
 3. The trust of identity headers stays a property of *listener exposure*,
    never of the auth mode name.
+4. **Startup refusal, not a warning:** Aegis refuses to start when
+   Serve-header trust is enabled and the listener's bind address is neither
+   loopback nor a Tailscale IP, and external access is enabled. (A
+   `fix/` follow-up should also default `-addr` to loopback and/or refuse
+   or loudly warn on non-loopback binds with Serve-header trust even in
+   tailnet-only mode — the LAN exposure above exists there too.)
 
 ## Transport and hardening duties
 
@@ -152,12 +197,24 @@ the deployment's:
   tunnel). Aegis continues to speak HTTP on the listener.
 - **Rate limiting** on authentication and token-bearing routes (brute-force
   damping; per-IP and per-token failure caps). Required before the public
-  bind is a supported deployment; none exists in the binary today.
+  bind is a supported deployment; none exists in the binary today. Per-IP
+  caps need a **trusted-proxy configuration**: behind an edge every request
+  arrives from the proxy's address, so the real client IP is only
+  trustworthy from an explicitly configured `X-Forwarded-For` /
+  `X-Real-IP` hop (the demo nginx already sets `X-Real-IP`). Without that,
+  limits are either global or spoofable.
 - **Body caps** already exist per route family and stay.
 - **Audit log** already records principal and decision; external principals
   appear there like any other caller.
-- **Secrets at rest** are unchanged — invite tokens are stored hashed
-  (`data_scopes.json` is 0600 and secret-bearing, like `apps.json`).
+- **Invite tokens are stored hashed at rest.** This is a **contract
+  requirement**, not the status quo: `data_scopes.json` today holds
+  plaintext `api_key` values (hashed only in memory at load). Internet-
+  reachable bearer credentials must match the `apps.json` posture — mint
+  writes only the SHA-256 hash, plaintext is displayed once, and existing
+  plaintext entries are migrated to hashes on load. Until that lands,
+  `data_scopes.json` is plaintext-under-0600 and must be treated like a
+  password file. (`threat-model.md` §5.1 states the requirement; do not
+  describe it as already true.)
 
 ## What does not change
 
@@ -171,8 +228,10 @@ the deployment's:
   invent a second API.
 - **App tokens.** Same shape; external access is what finally makes
   third-party reachability practical.
-- **Pre-request hook.** Stays on the API listener (Aperture and bridges are
-  just callers with the agent key or an invite token).
+- **Pre-request hook.** Stays on the API allowlist for external callers
+  (an external principal's agent gets instructions like any other). In-
+  tailnet Aperture keeps calling it with ambient identity or the agent key
+  on the admin listener — no migration for the hook path.
 
 ## Issue #149 mapping
 
@@ -188,20 +247,29 @@ OIDC/passwords, cross-instance discovery, hosted multi-tenant SaaS.
 ## Implementation sketch (follow-on work)
 
 1. **Listener split** — `AdminMiddleware` routes move to `-admin-addr`
-   (tailnet/loopback bind); API routes stay on `-addr` (or `-api-addr`).
-   Admin paths return 404 on the API listener when external access is on.
-   Per-listener base URLs for OAuth redirect and CSRF origin checks.
-2. **Identity gating** — ambient identity resolution attaches per listener:
-   admin always, API only when external access is off. Startup refuses a
-   public API bind with Serve-header trust enabled.
-3. **Scope grant enforcement** — deny-by-default resolution layered over
-   `types.DataGrants`, the reserved `default` entry, migration for packs
+   (tailnet/loopback bind), which also serves the agent tier for tailnet
+   callers (ambient identity / agent key); API routes stay on `-addr` (or
+   `-api-addr`) behind a **route allowlist** — unlisted routes 404 there and
+   default to the admin side. Per-listener base URLs for OAuth redirect and
+   CSRF origin checks.
+2. **Identity and credential gating** — ambient identity resolution attaches
+   per listener: admin always, API never under external access. Startup
+   **refuses** (not warns) a public API bind with Serve-header trust
+   enabled, and refuses the agent key on the published bind. Follow-up
+   `fix/`: default `-addr` to loopback so the LAN forge path closes too.
+3. **Scope grant enforcement** — a dedicated fail-closed scope-grants
+   resolver (never `DataGrants.Access`), the reserved `default` entry, the
+   empty/override cases in the resolution table above, migration for packs
    assuming empty = full read, and the isolation-contract tests extended
-   with a third principal that holds *no* grants.
+   with a third principal that holds *no* grants plus a case per resolution
+   row.
 4. **Invite lifecycle** — admin mint / rotate / disable for scope keys
-   (reusing `api_key_hint`), keeping plaintext display-once.
-5. **Hardening** — rate limiting on auth and token routes, external-principal
-   audit fields, deployment docs for the TLS edge.
+   (reusing `api_key_hint`). **Hash at rest**: mint writes only the SHA-256
+   hash, plaintext is shown once (like app tokens), and existing plaintext
+   `api_key` entries are migrated to hashes on load.
+5. **Hardening** — rate limiting on auth and token routes (with
+   trusted-proxy config for client IPs), external-principal audit fields,
+   deployment docs for the TLS edge.
 
 No change to fail-open, named-service connectors, "Aegis owns OAuth", the
 coverage floor, or the secrets-out-of-git rule.

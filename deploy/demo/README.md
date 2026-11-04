@@ -5,14 +5,24 @@ marketing agent kit. Not the product deployment model: a real Aegis keeps
 admin in-tailnet and publishes only the API listener, and only as external
 access describes (`SECURITY.md`, `docs/external-access.md`).
 
+**Named exception:** the demo is a *single-listener* binary published to the
+internet — the arrangement `docs/external-access.md` otherwise forbids. It is
+acceptable here because `-demo` forces `api-key` auth (no ambient identity to
+forge), serves only synthetic read-only data, and **nginx enforces the
+listener split at the edge**: `aegis-demo.nginx` / `aegis-demo-ip.nginx`
+return 404 for `/v1/admin`, `/metrics`, the admin SPA routes, and the
+`/demo/fake-upstream` harness. Admin stays on `127.0.0.1:8090` (SSH tunnel
+plus the admin key from `/etc/aegis-demo/env`). Do not remove those blocks.
+
 ```
 Internet → nginx (aegis.unified-designs.com) → aegis-demo 127.0.0.1:8090
-                └→ static agent kit (GitHub Pages) ← paste base URL + key
+           (404s admin/metrics/SPA)             └→ static agent kit (GitHub Pages) ← paste base URL + key
 ```
 
 Live profile on the shared Ubuntu droplet (nginx + systemd, same host as the
-unified-designs / experiments sites). Do **not** open the admin surface
-publicly; this runbook's nginx fronts only the demo API.
+unified-designs / experiments sites). The vhosts front only the demo API —
+admin, metrics, and the admin SPA are dropped with 404 at the edge (blocks
+in both nginx configs; see the exception note above).
 
 | | |
 |--|--|
@@ -92,6 +102,12 @@ curl -sS https://aegis.unified-designs.com/healthz
 curl -sS -H "X-Api-Key: <shire key>" \
   "https://aegis.unified-designs.com/v1/mail/search?sort=asc&limit=1"
 # expect: The party will be on the twenty-second (2023-04-12)
+
+# Admin surface must be dead at the edge (404, not 401/403):
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  https://aegis.unified-designs.com/v1/admin/summary   # expect 404
+curl -sS -o /dev/null -w '%{http_code}\n' \
+  https://aegis.unified-designs.com/metrics            # expect 404
 ```
 
 No `curl -k` — the certificate should verify.
@@ -124,7 +140,7 @@ has fields the tester can paste into.
 | Restart | `systemctl restart aegis-demo` |
 | Rotate a key | edit `/var/lib/aegis-demo/data_scopes.json`, restart |
 | Renew TLS | certbot timer (automatic); `certbot renew --dry-run` to check |
-| Admin API | key in `/etc/aegis-demo/env` — never in the kit |
+| Admin API | key in `/etc/aegis-demo/env` — never in the kit; call `127.0.0.1:8090` over SSH (the edge 404s admin) |
 | Backups | none — disposable synthetic state |
 
 ## What this is not

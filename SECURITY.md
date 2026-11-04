@@ -76,10 +76,13 @@ credentials that work in any mode (see `docs/external-access.md`).
 | `tailnet` | Require Tailscale identity; ignore API key | Aegis only reachable inside the tailnet |
 | `api-key` | Require `Authorization: Bearer <key>` or `X-Api-Key` | Legacy, tests, or non-Tailscale hosts |
 
-Token credentials accepted alongside these modes (both listeners): the
-**invite token** (data-scope key; external principal, deny-by-default), the
-**app token** (`aeg_app_…`, scoped library reads), and the shared **agent API
-key** (owner-tier).
+Token credentials accepted alongside these modes: the **invite token**
+(data-scope key; external principal, deny-by-default) and the **app token**
+(`aeg_app_…`, scoped library reads) on both listeners; the shared **agent
+API key** (owner-tier) on the **admin listener only** when external access
+is enabled — the published bind never accepts it. In-tailnet agents
+(Aperture, tagged hosts) keep ambient identity on the admin listener
+unchanged; they need no key when external access turns on.
 
 Flags / env:
 
@@ -212,8 +215,14 @@ from other LAN interfaces.
 1. **Publish the API listener only as external access describes**
    (`docs/external-access.md`). If you expose it, expose **only** the API
    listener, behind TLS, with invite tokens — never the admin listener.
-   Tailscale Funnel is acceptable **only** for that split setup; a
-   single-listener binary must stay inside the tailnet.
+   Tailscale Funnel is acceptable **only** for that split setup: Funnel
+   requests reach the backend without Serve identity headers and outside
+   WhoIs resolution, so the forged-identity path is closed — provided the
+   API listener is on a **different backend port** from the one Serve uses
+   for the admin listener. A single-listener binary must stay inside the
+   tailnet unless the edge enforces the split itself (the named demo
+   exception: `deploy/demo/` returns 404 for admin, metrics, and the admin
+   SPA at nginx).
 2. **Prefer `auth-mode=tailnet`** once Serve or WhoIs is working; drop the
    shared key so it cannot leak into agent transcripts or shell history.
 3. **Keep an agent API key** only if you need `ts-unplug` / CLI bridges or

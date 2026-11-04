@@ -127,24 +127,30 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
-- **External access is the multi-user path (issue #149) — trust-model contract
-  rewritten, docs-first.** Aegis stops assuming "tailnet = perimeter" for every
-  surface. The model is now **two listeners**: a publishable **API listener**
-  whose perimeter is the *credential* (invite tokens, app tokens, agent key),
-  and an **admin listener that stays in-tailnet** and is never published.
-  External principals authenticate with **invite tokens** (data-scope keys),
-  are **deny-by-default** on data types (scope grants are the complete allow
+- **Docs/contract: external access is the multi-user path (issue #149) —
+  trust-model rewrite, no behavior change in this entry.** The contract
+  later code PRs are reviewed against stops assuming "tailnet = perimeter"
+  for every surface. The model is now **two listeners**: a publishable
+  **API listener** whose perimeter is the *credential* (invite tokens and
+  app tokens only — the owner-tier agent key stays tailnet-side), and an
+  **admin listener that stays in-tailnet** and is never published. External
+  principals authenticate with **invite tokens** (data-scope keys), are
+  **deny-by-default** on data types (scope grants are the complete allow
   list; a reserved `default` entry covers "share everything read-only"), and
   are never admin. Ambient Tailscale identity (Serve headers / WhoIs) must
   never be trusted on an externally reachable listener — the old
   always-on `ServeHeaderResolver` trust is called out as a landmine to fix
-  before any public bind. No self-service signup, passwords, OIDC, or
-  instance federation in this phase; another Aegis instance is just a caller
-  holding an invite token. `SECURITY.md`, `docs/threat-model.md`,
-  `docs/data-scopes.md`, `docs/glossary.md`, `docs/configuration.md`, and the
-  AGENTS.md non-negotiables follow; the listener split, grant enforcement,
-  invite lifecycle, and rate limiting land as code next. Design note:
-  `docs/external-access.md`.
+  before any public bind (startup refusal, not a warning). Hash-at-rest for
+  invite tokens, a fail-closed scope-grants resolver, an API route
+  allowlist, and rate limiting with trusted-proxy config are contract
+  requirements the implementation must meet. No self-service signup,
+  passwords, OIDC, or instance federation in this phase; another Aegis
+  instance is just a caller holding an invite token. `SECURITY.md`,
+  `docs/threat-model.md`, `docs/data-scopes.md`, `docs/glossary.md`,
+  `docs/configuration.md`, the demo runbook/nginx (admin now dropped at the
+  edge), and the AGENTS.md non-negotiables follow; the listener split,
+  grant enforcement, invite lifecycle, and rate limiting land as code next.
+  Design note: `docs/external-access.md`.
 - `POST /v1/mail/sync` and the admin mail-sync routes now run the same ingest
   implementation as the sync queue (`doMailIngest`) instead of a parallel
   inline copy, so the two surfaces cannot drift. The request and response

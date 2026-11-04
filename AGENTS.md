@@ -66,12 +66,18 @@ them away.
   binaries. Example config only via `aegis.example.json`. Prefer the OS data
   directory (issue #74) over the git worktree for runtime state.
 - **External access is invite-only and split-listener.** The API listener may
-  be published (credential perimeter: invite tokens / app tokens / agent key);
-  the **admin listener stays in-tailnet** and is never published. Ambient
-  Tailscale identity is never trusted on an externally reachable listener.
-  External principals are **deny-by-default** (scope grants are the complete
-  allow list). No self-service signup, passwords, OIDC, or instance
-  federation in this phase. See `docs/external-access.md` and `SECURITY.md`.
+  be published (credential perimeter: **invite tokens and app tokens only** —
+  the owner-tier agent key never crosses the public bind); the **admin
+  listener stays in-tailnet** and is never published (it also serves agent
+  routes for tailnet callers, so Aperture and tagged hosts keep ambient
+  identity with no migration). Ambient Tailscale identity is never trusted
+  on an externally reachable listener. External principals are
+  **deny-by-default** (scope grants are the complete allow list; resolution
+  is fail-closed in a dedicated resolver). The API route set is an
+  **allowlist** — unlisted routes 404 and default to the admin side. Hash
+  at rest for invite tokens is a contract requirement. No self-service
+  signup, passwords, OIDC, or instance federation in this phase. See
+  `docs/external-access.md` and `SECURITY.md`.
 - **No issue numbers in user-facing copy.** GitHub issue refs stay in code
   comments and maintainer docs only — never README headings, admin UI visible
   text, or LLM-agent strings. Enforced by `internal/core/docs_hygiene_test.go`

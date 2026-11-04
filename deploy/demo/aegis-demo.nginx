@@ -11,6 +11,24 @@ server {
         root /var/www/html;
     }
 
+    # Admin surface is never public (docs/external-access.md). This deploy is
+    # a single-listener binary, so the edge enforces the split: admin API,
+    # metrics, and the admin SPA stay reachable only on 127.0.0.1:8090
+    # (SSH tunnel), never through this vhost. The dev-only fake-upstream
+    # harness is dropped too.
+    location ~ ^/(v1/admin|metrics)(/|$) {
+        return 404;
+    }
+    location ~ ^/(home|library|services|advanced)(/|$) {
+        return 404;
+    }
+    location ^~ /demo/fake-upstream {
+        return 404;
+    }
+    location = / {
+        return 404;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:8090;
         proxy_set_header Host $host;
