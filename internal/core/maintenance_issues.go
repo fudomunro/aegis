@@ -147,7 +147,9 @@ func (g *ghIssueTracker) UpsertTicket(ctx context.Context, t MaintenanceTicket) 
 	}
 
 	action := "updated"
-	if existing.State == "closed" {
+	// gh emits state uppercase ("OPEN"/"CLOSED"); a closed ticket must
+	// reopen when the scanner finds fresh evidence for its signature.
+	if strings.EqualFold(existing.State, "closed") {
 		if _, err := g.run(ctx, "issue", "reopen", strconv.Itoa(existing.Number), "-R", g.repo); err != nil {
 			return IssueRef{}, "", err
 		}
