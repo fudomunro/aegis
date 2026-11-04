@@ -71,6 +71,7 @@ the most weight in product language.
 | **ServiceConnector** (`Capabilities` + `SystemInstructions` + `HandleProxy`) | code + product |
 | **Named service** (Spotify, Gmail, Immich, …) | product |
 | **Connection** (OAuth provider credential) | product + code |
+| **Connection maturity** (coverage: data types served, fields, transport) | product |
 | Service definition (`services[]`, action inject/block) | product + code |
 | **Host** (connector seam) | code |
 | Token store / OAuth token / refresh | code + product |
@@ -251,6 +252,7 @@ After the overlap call-outs above, the stable concepts.
 | **Host** | Connector seam: services the runtime offers connectors (tokens, config, HTTP). Not `*Server`. | `host.go:27`, `docs/restructure-core-types-connectors.md` |
 | **Named service** | Config row in `services[]` with id, name, action (`inject`/`block`), endpoint, aliases, `canonical_for`. | `config.go`, `aegis.example.json` |
 | **Connection** | OAuth credential entry referenced by services (`connection` + `oauth_scopes`). | `connections.go` |
+| **Connection maturity** | Coverage of one connection: data types the service offers vs those Aegis serves, content-field coverage, and transport tier. A code-declared mark on the sync dashboard — not an operational score. | `internal/types/maturity.go`, `internal/core/maturity.go`, `docs/sync-maintenance.md` |
 | **TokenStore** | Encrypted-at-rest OAuth tokens (AES-256-GCM + PBKDF2), refresh singleflight. | `tokens.go:23` |
 | **Encrypted static credentials** | Non-OAuth secrets (e.g. Immich/YNAB API keys) stored under the same `-token-pass` master key; admin API exposes presence only. | `service_connections.go`, `tokens.go`, `SECURITY.md` |
 | **CalDAV / CardDAV** | Named-service adapters for calendars/contacts (Nextcloud, iCloud app-specific passwords). Mirrored events feed freebusy. | `internal/connectors/{caldav,carddav,dav,ical,vcard}.go`, `docs/caldav-carddav.md` |

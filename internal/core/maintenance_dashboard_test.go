@@ -59,7 +59,7 @@ func TestBuildMaintenanceDashboard_RecordMarks(t *testing.T) {
 			CreatedAt: time.Date(2026, 1, 20, 0, 0, 0, 0, time.UTC),
 		},
 	}
-	data := BuildMaintenanceDashboard(series, []DashboardServiceMeta{{ID: "spotify"}}, issues, now)
+	data := BuildMaintenanceDashboard(series, []DashboardServiceMeta{{ID: "spotify"}}, issues, nil, now)
 	if len(data.Services) != 1 {
 		t.Fatalf("services = %v, want one", data.Services)
 	}
@@ -123,7 +123,7 @@ func TestBuildMaintenanceDashboard_CounterResetAndDedup(t *testing.T) {
 			{ID: "j1", Service: "spotify", JobType: "ingest", UpdatedAt: dashTime(6), Error: "boom again"},
 		}),
 	}
-	data := BuildMaintenanceDashboard(series, nil, nil, dashTime(6))
+	data := BuildMaintenanceDashboard(series, nil, nil, nil, dashTime(6))
 	svc := data.Services[0]
 	if !svc.History[1].CounterReset {
 		t.Fatalf("capture 2 must flag the counter reset: %+v", svc.History)
@@ -137,7 +137,7 @@ func TestBuildMaintenanceDashboard_CounterResetAndDedup(t *testing.T) {
 }
 
 func TestBuildMaintenanceDashboard_NoDataConfidence(t *testing.T) {
-	data := BuildMaintenanceDashboard(nil, []DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}}, nil, dashTime(0))
+	data := BuildMaintenanceDashboard(nil, []DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}}, nil, nil, dashTime(0))
 	svc := data.Services[0]
 	if svc.Scores.Confidence != "none" || svc.Scores.Success != nil || svc.Scores.Stability != nil {
 		t.Fatalf("scores = %+v, want none marks", svc.Scores)
@@ -193,7 +193,7 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 		},
 	}
 	data := BuildMaintenanceDashboard(nil,
-		[]DashboardServiceMeta{{ID: "google-gmail"}}, issues, dashTime(10))
+		[]DashboardServiceMeta{{ID: "google-gmail"}}, issues, nil, dashTime(10))
 
 	byNumber := map[int]DashboardFix{}
 	for _, f := range data.Fixes {
@@ -325,6 +325,7 @@ func TestWriteMaintenanceDashboard(t *testing.T) {
 				State: "closed", StateReason: "completed", IsTicket: true, TicketService: "spotify",
 				CreatedAt: dashTime(0), ClosedAt: dashTime(1)},
 		},
+		nil,
 		dashTime(1),
 	)
 	dir := t.TempDir()
@@ -492,5 +493,72 @@ func TestHandleAdminMaintenanceDashboard_MethodAndAuth(t *testing.T) {
 	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
 	if w.Code == http.StatusOK {
 		t.Fatalf("agent credentials must not build the dashboard: %d", w.Code)
+	}
+}
+
+func TestBuildMaintenanceDashboard_Maturity(t *testing.T) {
+	cat := MaturityByService()
+	spotify, ok := cat["spotify"]
+	if !ok {
+		t.Fatal("catalog has no spotify entry")
+	}
+	data := BuildMaintenanceDashboard(nil,
+		[]DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}, {ID: "fake-upstream", FailureInjection: true}},
+		nil, cat, dashTime(1))
+
+	var svc, harness *DashboardService
+	for i := range data.Services {
+		switch data.Services[i].ID {
+		case "spotify":
+			svc = &data.Services[i]
+		case "fake-upstream":
+			harness = &data.Services[i]
+		}
+	}
+	if svc == nil || harness == nil {
+		t.Fatalf("services = %+v, want spotify and fake-upstream", data.Services)
+	}
+	if svc.Maturity == nil || svc.MaturityGrade == nil {
+		t.Fatalf("spotify maturity = %+v, want declaration and grade", svc.Maturity)
+	}
+	if svc.Maturity.Service != "spotify" || svc.MaturityGrade.Level == "" {
+		t.Fatalf("spotify maturity = %+v grade = %+v", svc.Maturity, svc.MaturityGrade)
+	}
+	if svc.MaturityGrade.Offered != len(spotify.DataTypes) {
+		t.Fatalf("offered = %d, want %d", svc.MaturityGrade.Offered, len(spotify.DataTypes))
+	}
+	if harness.Maturity != nil || harness.MaturityGrade != nil {
+		t.Fatalf("harness maturity = %+v, want nil for a non-catalog service", harness.Maturity)
+	}
+}
+
+func TestWriteMaintenanceDashboard_Maturity(t *testing.T) {
+	cat := MaturityByService()
+	data := BuildMaintenanceDashboard(nil,
+		[]DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}}, nil, cat, dashTime(1))
+	dir := t.TempDir()
+	if _, err := WriteMaintenanceDashboard(dir, data, DashboardPublishedFileMode, DashboardPublishedDirMode); err != nil {
+		t.Fatalf("WriteMaintenanceDashboard: %v", err)
+	}
+	index, err := os.ReadFile(filepath.Join(dir, "index.html"))
+	if err != nil {
+		t.Fatalf("read index: %v", err)
+	}
+	level := data.Services[0].MaturityGrade.Level
+	for _, want := range []string{"Maturity", "Transport", level, "API"} {
+		if !strings.Contains(string(index), want) {
+			t.Errorf("index.html missing %q (maturity level %q)", want, level)
+		}
+	}
+	page, err := os.ReadFile(filepath.Join(dir, "services", "spotify.html"))
+	if err != nil {
+		t.Fatalf("read service page: %v", err)
+	}
+	for _, want := range []string{
+		"Connection maturity", "Data types", "audiobooks", "not supported", "supported",
+	} {
+		if !strings.Contains(string(page), want) {
+			t.Errorf("spotify.html missing %q", want)
+		}
 	}
 }

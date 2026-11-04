@@ -18,6 +18,8 @@ inventory and [`audience-map.md`](audience-map.md) for who each surface talks to
 | **Service** | Named upstream brand and its `services[]` config row (Spotify, Gmail, Immich, …) | The Go adapter; the OAuth credential |
 | **Connector** | The Go adapter implementing `ServiceConnector` (`internal/connectors`) | The named brand in product prose |
 | **Connection** | OAuth credential entry in top-level `connections{}` (`connection` + `oauth_scopes`) | The service itself |
+| **Connection maturity** | Coverage of one connection: of the data types the service offers, how many Aegis serves through it, and how completely it fills their fields | Not an operational score — the sync dashboard's success / stability / confidence are separate; prefer **maturity** alone once the page is in view |
+| **Transport** | How a connection reaches its service: `api` / `protocol` / `reverse-engineered` / `export/archive` | The maturity modifier; not the content-transport APIs |
 
 Config keys stay `services`, `connections`, `connector` is code-only.
 
