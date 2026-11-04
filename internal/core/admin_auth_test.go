@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -502,6 +503,78 @@ func TestValidateAuthCredentials(t *testing.T) {
 	}
 	if err := validateAuthCredentials(AuthModeTailnet, "", ""); err != nil {
 		t.Fatalf("tailnet mode needs no key: %v", err)
+	}
+}
+
+func TestValidateListenAddr(t *testing.T) {
+	// Loopback and Tailscale IPs are sound binds for Serve identity trust.
+	for _, addr := range []string{
+		"127.0.0.1:8080",
+		"localhost:8080",
+		"[::1]:8080",
+		"100.64.0.5:8080",
+		"100.127.255.254:8080",
+		"[fd7a:115c:a1e0::1]:8080",
+	} {
+		if err := validateListenAddr(addr, AuthModeAuto); err != nil {
+			t.Errorf("validateListenAddr(%q, auto) = %v, want nil", addr, err)
+		}
+		if err := validateListenAddr(addr, AuthModeTailnet); err != nil {
+			t.Errorf("validateListenAddr(%q, tailnet) = %v, want nil", addr, err)
+		}
+	}
+
+	// Wildcard and LAN binds with Serve trust would accept forged identity
+	// headers from any peer that reaches the port.
+	for _, addr := range []string{
+		":8080",
+		"0.0.0.0:8080",
+		"[::]:8080",
+		"192.168.1.50:8080",
+		"10.0.0.5:8080",
+		"example.com:8080",
+	} {
+		if err := validateListenAddr(addr, AuthModeAuto); err == nil {
+			t.Errorf("validateListenAddr(%q, auto) = nil, want refusal", addr)
+		}
+		if err := validateListenAddr(addr, AuthModeTailnet); err == nil {
+			t.Errorf("validateListenAddr(%q, tailnet) = nil, want refusal", addr)
+		}
+	}
+
+	// api-key mode resolves no ambient identity: any bind is fine.
+	if err := validateListenAddr(":8080", AuthModeAPIKey); err != nil {
+		t.Fatalf("api-key mode must allow wildcard binds: %v", err)
+	}
+	if err := validateListenAddr("not-an-addr", AuthModeAPIKey); err != nil {
+		t.Fatalf("api-key mode skips bind parsing: %v", err)
+	}
+
+	// Malformed listen addresses fail regardless of mode.
+	if err := validateListenAddr("127.0.0.1", AuthModeAuto); err == nil {
+		t.Fatal("missing port must error in tailnet modes")
+	}
+}
+
+func TestIsTailnetListenIP(t *testing.T) {
+	mustIP := func(s string) net.IP {
+		ip := net.ParseIP(s)
+		if ip == nil {
+			t.Fatalf("bad ip %q", s)
+		}
+		return ip
+	}
+	if !isTailnetListenIP(mustIP("100.64.0.1")) {
+		t.Error("100.64.0.1 is in the Tailscale CGNAT range")
+	}
+	if !isTailnetListenIP(mustIP("fd7a:115c:a1e0::1")) {
+		t.Error("fd7a:115c:a1e0::1 is in the Tailscale ULA range")
+	}
+	if isTailnetListenIP(mustIP("192.168.1.5")) {
+		t.Error("192.168.1.5 is a LAN address, not Tailscale")
+	}
+	if isTailnetListenIP(mustIP("100.0.0.1")) {
+		t.Error("100.0.0.1 is below the CGNAT range")
 	}
 }
 

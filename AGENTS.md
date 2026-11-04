@@ -235,7 +235,7 @@ go build -o aegis .
 
 # Dev server (values are local-only examples)
 ./aegis \
-  -addr :8080 \
+  -addr 127.0.0.1:8080 \
   -base-url http://localhost:8080 \
   -api-key dev-key \
   -token-pass dev-pass \

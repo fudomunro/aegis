@@ -668,7 +668,7 @@ directory or keep passing the explicit path flags.
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `-addr` | `:8080` | Listen address |
+| `-addr` | `127.0.0.1:8080` | Listen address. Loopback by default; with Serve identity trust (`auto`/`tailnet` auth mode) a wildcard or LAN bind is refused at startup — bind loopback behind `tailscale serve`, the Tailscale IP, or use `-auth-mode api-key` |
 | `-base-url` | | Public base URL (required) |
 | `-auth-mode` | `auto` | `auto`, `tailnet`, or `api-key` — see [SECURITY.md](../SECURITY.md) |
 | `-api-key` | | Agent API key (library/hook/content; never admin). Required only if `auth-mode=api-key` and no admin key |

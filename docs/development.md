@@ -22,7 +22,7 @@ go build -o aegis .
 
 # Run with text logging for development
 ./aegis \
-  -addr :8080 \
+  -addr 127.0.0.1:8080 \
   -base-url http://localhost:8080 \
   -api-key dev-key \
   -token-pass dev-pass \
