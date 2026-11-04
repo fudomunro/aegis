@@ -756,10 +756,11 @@ to the new secret before restarting the service.
 
 Aegis authenticates callers in two tiers:
 
-1. **Tailscale identity** (recommended for agents) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat.
+1. **Tailscale identity** (recommended for agents) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat. Trusted only on listeners that are not externally reachable.
 2. **Agent API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools. Never opens admin surfaces.
-3. **Admin API key** (`-admin-api-key`) — for curl/scripts that manage data grants, apps, mirror, and other admin writes.
-4. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients. See [Third-party app tokens](#third-party-app-tokens). Never admin.
+3. **Admin API key** (`-admin-api-key`) — for curl/scripts that manage data grants, apps, mirror, and other admin writes. Admin surfaces live on the in-tailnet admin listener.
+4. **Invite token** — `Authorization: Bearer <key>` or `X-Api-Key`, one per external principal (a data-scope key). Deny-by-default grants; never admin. See [external access](external-access.md).
+5. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients. See [Third-party app tokens](#third-party-app-tokens). Never admin.
 
 Default mode is `auto` (identity if present, else API key). For a solo tailnet, prefer `-auth-mode tailnet` and no key: your browser login is admin, tagged agent hosts are not. Full policy guidance lives in [SECURITY.md](../SECURITY.md).
 
@@ -811,10 +812,12 @@ availability fields even if service permissions would allow full events ( + #131
 never reads a full-events cache.
 
 **Reachability.** App tokens are an authorization layer, not a public ingress.
-The third party must be able to reach Aegis (tailnet, VPN, or a tunnel you
-operate). Do not use Tailscale Funnel. For interactive browser use, the user’s
-machine can call Aegis on localhost/MagicDNS while it is awake; background
-backend pull needs an always-on host.
+The third party must be able to reach Aegis over a path you control: the
+tailnet, a VPN, or [external access](external-access.md) (a published API
+listener with invite tokens). Keep the admin listener in-tailnet. For
+interactive browser use, the user’s machine can call Aegis on
+localhost/MagicDNS while it is awake; background backend pull needs an
+always-on host.
 
 **Storage.** `apps.json` (mode 0600) holds SHA-256 token hashes and hints only.
 Rotate or delete an app at any time; tokens are not recoverable.
@@ -848,11 +851,21 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
 ```
 
 - Each `api_key` authenticates as that scope (agent tier only — never admin).
+  Under [external access](external-access.md) this key is the **invite token**
+  issued to an external principal.
 - `dataset` selects the partition. Services with a matching `dataset` field
   and mail rows tagged with that dataset are visible; other partitions are
   invisible (not 403). Empty `dataset` is the owner/default view (no filter).
 - `read_only` rejects mutating agent methods except the pre-request hook.
-- Optional `grants` tighten type-level data grants for that principal.
+- `grants` is the **complete allow list** for that principal —
+  **deny-by-default**: an unlisted data type resolves to `none`. A reserved
+  `default` entry sets the level for unlisted types. Ambiguity is fail-closed:
+  a listed type with an empty entry, or with only `providers` overrides,
+  resolves to `none` (provider entries tighten, they never open a closed
+  type — set the type's `default` field to grant access). (Owner-tier
+  credentials — the shared agent key and tailnet logins — keep the usual
+  agent data grant semantics, where omit means unrestricted.) Scope grants
+  also never exceed agent data grants.
 
 A service with `endpoint: "sample://library"` serves synthetic library
 fixtures bound to `Service.Dataset` — useful for demos and isolation tests

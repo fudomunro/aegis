@@ -2,18 +2,28 @@
 
 Aegis holds OAuth tokens for music services and exposes user data (playlists,
 library, search) to LLM agents. This document describes the recommended access
-model when Aegis runs in a [Tailscale](https://tailscale.com) tailnet — the
-same identity layer [Aperture](https://tailscale.com/docs/aperture) uses.
-Product vocabulary (data grant, access levels, LLM agent) is in
+model for both deployment shapes: on a [Tailscale](https://tailscale.com)
+tailnet (the default) and externally reachable ("external access", see
+[`docs/external-access.md`](docs/external-access.md)). Product vocabulary
+(data grant, access levels, LLM agent) is in
 [`docs/glossary.md`](docs/glossary.md). The structured asset/threat/residual-risk
 model for auditors is in [`docs/threat-model.md`](docs/threat-model.md).
 
 ## Trust model
 
+Aegis serves **two listeners with different perimeters**:
+
+| Listener | Perimeter | Exposure |
+|----------|-----------|----------|
+| **API listener** (`/v1/library/*`, pre-request, content transport, mail agent routes, app-token endpoints) | **The credential** when external access is enabled; the tailnet when it is not | May be public behind TLS |
+| **Admin listener** (`/v1/admin/*`, `/metrics`, OAuth flows, app consent, mirror/link writes, mail sync) | **The tailnet** — Tailscale identity or the admin API key | In-tailnet / loopback only. Never public |
+
+### Tailnet perimeter (admin listener, tailnet-only API)
+
 **By default, treat the tailnet as the access boundary.** Anything that can
-reach Aegis was admitted to the tailnet by you (or another admin) via SSO,
-device approval, and ACLs. Aegis does not need a second shared secret for
-every agent on that tailnet.
+reach a tailnet-only listener was admitted to the tailnet by you (or another
+admin) via SSO, device approval, and ACLs. Aegis does not need a second
+shared secret for every agent on that tailnet.
 
 Tailscale proves *who* is connecting:
 
@@ -29,13 +39,50 @@ available for external bridges and debugging; admin surfaces use a separate
 credential (issue #181) so agents cannot rewrite the policy that constrains
 them.
 
+### Credential perimeter (external access)
+
+When the API listener is reachable outside the tailnet, reachability proves
+nothing — the socket is hostile. **The credential is the perimeter:**
+
+- Every request must present a token: an **invite token** (data-scope key),
+  an app token, or the agent API key. Nothing is ambient.
+- **Ambient Tailscale identity is never trusted on a publicly reachable
+  listener.** Serve identity headers are just headers; anyone who can open a
+  TCP connection can forge `Tailscale-User-Login` and the default admin rule
+  would hand them the store. Identity resolution (Serve headers, WhoIs) runs
+  only on listeners that are not externally reachable.
+- **External principals are deny-by-default.** An invite token sees exactly
+  the data types its data scope grants (see
+  [`docs/data-scopes.md`](docs/data-scopes.md) and "What authorized means"
+  below) — sharing is opt-in per data type.
+- **Admin stays in-tailnet.** The admin listener is never published; policy
+  is changed from inside the tailnet only (issue #149 decision).
+- TLS termination, rate limiting, and abuse damping are the deployment's
+  duty once the listener is public (see `docs/external-access.md`
+  "Transport and hardening duties").
+
+An external principal may be a person, a third-party backend, or another
+Aegis instance's operator — the credential model is identical. There is no
+federation protocol; "other Aegis" is just a caller holding an invite token.
+
 ## Auth modes
+
+Auth modes govern the **tailnet perimeter**. External access adds token
+credentials that work in any mode (see `docs/external-access.md`).
 
 | Mode | Behavior | When to use |
 |------|----------|-------------|
 | `auto` (default) | Prefer Tailscale identity; fall back to API key | Most deployments: tailnet-first, key for bridges |
 | `tailnet` | Require Tailscale identity; ignore API key | Aegis only reachable inside the tailnet |
 | `api-key` | Require `Authorization: Bearer <key>` or `X-Api-Key` | Legacy, tests, or non-Tailscale hosts |
+
+Token credentials accepted alongside these modes: the **invite token**
+(data-scope key; external principal, deny-by-default) and the **app token**
+(`aeg_app_…`, scoped library reads) on both listeners; the shared **agent
+API key** (owner-tier) on the **admin listener only** when external access
+is enabled — the published bind never accepts it. In-tailnet agents
+(Aperture, tagged hosts) keep ambient identity on the admin listener
+unchanged; they need no key when external access turns on.
 
 Flags / env:
 
@@ -55,12 +102,14 @@ so a guest laptop or tagged CI runner cannot read your Spotify library.
 ## Admin vs agent credentials (issue #181)
 
 Authentication answers *who may call Aegis*. A second tier answers *who may
-change policy*.
+change policy*. The two tiers live on **separate listeners**: agent/external
+traffic on the API listener, policy on the admin listener (in-tailnet).
 
 | Principal | Credentials | May call |
 |-----------|-------------|----------|
-| **Agent** | Agent API key (`-api-key`), tagged devices, third-party app tokens, allowed tailnet logins | Library reads, pre-request hook, content transport (`/v1/services/*`), mail search/status, `GET /v1/auth/status` |
-| **Admin** | Admin API key (`-admin-api-key`) or a tailnet **user** login that passes admin rules | Everything agents can, plus `/v1/admin/*`, data-grant writes, app minting (`POST /v1/apps/authorize`), mirror / photo-share / entity-link writes, mail sync, OAuth revoke, `/metrics` |
+| **Agent** | Agent API key (`-api-key`), tagged devices, third-party app tokens, allowed tailnet logins, invite tokens | Library reads, pre-request hook, content transport (`/v1/services/*`), mail search/status, `GET /v1/auth/status` |
+| **External** | Invite token (data-scope key) | Same agent surface, narrowed to the scope's **granted** data types and dataset; never admin |
+| **Admin** | Admin API key (`-admin-api-key`) or a tailnet **user** login that passes admin rules, on the admin listener | Everything agents can, plus `/v1/admin/*`, data-grant writes, app minting (`POST /v1/apps/authorize`), mirror / photo-share / entity-link writes, mail sync, OAuth revoke, `/metrics` |
 
 **Default on a solo tailnet:** admin = allowed user logins (your browser
 session through Tailscale Serve); agents = tagged nodes and the API key. Tagged
@@ -105,7 +154,14 @@ The admin SPA and consent page send same-origin `fetch` with
 
 ## How identity is resolved
 
-Aegis tries, in order:
+**Identity resolution runs only on listeners that are not externally
+reachable.** On a public socket these headers are forgeable by any client, so
+the API listener under external access resolves no ambient identity at all —
+explicit tokens only. This is a property of listener exposure, not of the
+auth mode name.
+
+On the admin listener (and a tailnet-only API listener), Aegis tries, in
+order:
 
 1. **Tailscale Serve headers** (`Tailscale-User-Login`, `Tailscale-Node-Tags`, …)  
    Trustworthy only when clients cannot reach Aegis except through
@@ -156,9 +212,17 @@ from other LAN interfaces.
 
 ## Best practices
 
-1. **Do not use Tailscale Funnel** for Aegis. Funnel publishes the service
-   to the public internet; the API is designed for a private tailnet and holds
-   music OAuth tokens.
+1. **Publish the API listener only as external access describes**
+   (`docs/external-access.md`). If you expose it, expose **only** the API
+   listener, behind TLS, with invite tokens — never the admin listener.
+   Tailscale Funnel is acceptable **only** for that split setup: Funnel
+   requests reach the backend without Serve identity headers and outside
+   WhoIs resolution, so the forged-identity path is closed — provided the
+   API listener is on a **different backend port** from the one Serve uses
+   for the admin listener. A single-listener binary must stay inside the
+   tailnet unless the edge enforces the split itself (the named demo
+   exception: `deploy/demo/` returns 404 for admin, metrics, and the admin
+   SPA at nginx).
 2. **Prefer `auth-mode=tailnet`** once Serve or WhoIs is working; drop the
    shared key so it cannot leak into agent transcripts or shell history.
 3. **Keep an agent API key** only if you need `ts-unplug` / CLI bridges or
@@ -192,7 +256,8 @@ from other LAN interfaces.
     unauthenticated liveness/readiness probes with no inventory. `/metrics`
     is admin-scoped (issue #181) because series include service ids and denial
     reasons (issue #105). Point Prometheus at it with an admin API key or from
-    a tailnet admin identity — do not expose it through Funnel.
+    a tailnet admin identity — it lives on the admin listener and is never
+    published.
 12. **Audit log is local state.** `<data-dir>/audit_log.db` records who
     accessed which data type and whether the call was allowed or denied
     (redacted — no tokens or bodies). Treat the file like `tokens.json`:
@@ -212,12 +277,15 @@ from other LAN interfaces.
 
 After authentication, Aegis is still **single-user** with respect to stored
 OAuth tokens: every authorized caller uses the same Spotify/YouTube/Amazon
-tokens on disk. Tailnet identity controls *who can call the API*; it does not
-yet isolate *whose* music library is returned.
+tokens on disk. Credentials control *who can call the API and what they may
+see*; they do not yet isolate *whose* music library is returned. External
+principals therefore read the **owner's** connected services, narrowed by
+their grants ([`docs/data-scopes.md`](docs/data-scopes.md)).
 
-If you need per-user libraries later, store tokens keyed by Tailscale login and
-select the store from `PeerIdentityFrom(r)`. Until then, keep the allowlist
-tight on shared tailnets.
+If you need per-user libraries later, store tokens keyed by the caller's
+login/invite and select the store from the request principal. Until then,
+keep the allowlist tight on shared tailnets and grant external principals
+only what they need.
 
 ### Data grants (data-type permissions)
 
@@ -235,6 +303,15 @@ a capabilities listing API. Omitting a data grant (or `permissions`) preserves
 unrestricted access for authorized callers unless a type defaults closed
 (places default to `none`).
 
+**External principals (invite tokens) are deny-by-default** — the owner-tier
+“omit = unrestricted” rule does not apply to them. Their data scope's
+`grants` map is the complete allow list: an unlisted data type resolves to
+`none` (a reserved `default` entry can set the level for unlisted types;
+opt-in types still require an explicit name). Sharing is opt-in per data
+type. Scope grants also never exceed what agent data grants allow (AND of
+both layers). This is the deliberate split from owner-tier semantics — see
+`docs/external-access.md` “Deny-by-default”.
+
 ### Third-party app tokens (issue #131)
 
 Non-agent clients use a **separate app token** (`aeg_app_…`) registered in the
@@ -245,21 +322,35 @@ admin API. App tokens:
 - Never grant more than agent data grants / service permissions allow (AND of both layers).
 - Are stored as SHA-256 hashes in `apps.json` (0600); plaintext is shown once.
 
-An app token is still only useful if the third party can **reach** Aegis. Keep
-Aegis on the tailnet (or a path you control). Do not use Funnel to publish the
-API for third-party apps. Prefer `freebusy` over full `events` for scheduling
-clients.
+An app token is an authorization layer; reachability comes from the
+deployment. With external access, the third party calls the published API
+listener like any invite-token holder. Without it, the third party must
+reach Aegis over the tailnet, VPN, or a tunnel you operate. Prefer `freebusy`
+over full `events` for scheduling clients.
 
 
 ## Deployment checklist
 
+Tailnet-only deployment:
+
 - [ ] Aegis host tagged (`tag:aegis`) and ACL/grant limited to intended users
-- [ ] Not exposed with Funnel
-- [ ] `tailscale serve` in front **or** Aegis bound to localhost/Tailscale IP
+- [ ] Single listener not published (Serve in front **or** bound to localhost/Tailscale IP)
 - [ ] `auth-mode=tailnet` (or `auto` while migrating)
 - [ ] `allowed-logins` set if the tailnet is shared
 - [ ] `admin-logins` set if tagged agent hosts share the tailnet with you
 - [ ] `admin-api-key` set (and different from `api-key`) if you admin via curl
+
+External access adds (see `docs/external-access.md`):
+
+- [ ] **Split listeners**: admin listener on tailnet/loopback only; API listener is the only published surface
+- [ ] TLS terminated at an edge you control (reverse proxy, tunnel, or Funnel on the API listener only)
+- [ ] Invite tokens minted per external principal; scope grants listed explicitly (deny-by-default — no relying on "omit = everything")
+- [ ] Ambient identity disabled on the API listener (startup refuses a public bind with Serve-header trust)
+- [ ] Rate limiting / brute-force damping in front of token auth
+- [ ] Admin surfaces verified unreachable from outside (404 on the API listener)
+
+Every deployment:
+
 - [ ] `AEGIS_TOKEN_PASS` set and `tokens.json` (under the data directory) not world-readable
 - [ ] Agent API key removed or stored outside agent-accessible paths; never reused as admin key
 - [ ] `/metrics` scrape credentials stored like any other admin API key; `/healthz` stays unauthenticated

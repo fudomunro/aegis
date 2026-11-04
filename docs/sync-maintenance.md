@@ -94,8 +94,8 @@ Two sources, deliberately in this order:
 
 1. **Live instances.** Scrape `/metrics` over the tailnet and export error-log
    lines and freshness rollups. Pull-based (scrape) by default: instances need
-   no egress, and the trust boundary stays the tailnet (`SECURITY.md` — no
-   Funnel).
+   no egress, and the trust boundary stays the tailnet (`SECURITY.md` — the
+   admin listener is never published; `/metrics` is admin-scoped).
 2. **Scheduled tests (canaries).** Escalate by risk tier:
 
 | Tier | What runs | When |

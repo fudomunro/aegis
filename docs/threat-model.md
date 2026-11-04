@@ -5,8 +5,11 @@ hold the line. Operational setup and flags live in [`SECURITY.md`](../SECURITY.m
 product vocabulary is in [`glossary.md`](glossary.md). This document is the
 structured view; when code changes the trust boundary, update both.
 
-Aegis is a **private tailnet service**. It is not a multi-tenant SaaS and is
-not designed for a hostile public network.
+Aegis serves **two listeners with different perimeters** ([`external-access.md`](external-access.md)):
+the **admin listener** rides the tailnet; the **API listener** may be publicly
+reachable, where the credential — not the network — is the perimeter. It is
+not a multi-tenant SaaS. The tailnet-only deployment (nothing published) is
+the default and the simpler of the two.
 
 ---
 
@@ -27,7 +30,8 @@ LLM agent ──► Aperture ──► Aegis pre-request hook ──► LLM prov
 
 | Boundary | What crosses it |
 |----------|-----------------|
-| Tailnet edge | Tailscale identity (Serve headers or WhoIs); optional agent API key |
+| Tailnet edge (admin listener, tailnet-only API) | Tailscale identity (Serve headers or WhoIs); optional agent API key |
+| Public edge (API listener, external access) | Invite tokens, app tokens, agent API key — **no ambient identity** |
 | Aegis ↔ LLM request | Injected system instructions (never tokens) |
 | Aegis ↔ providers | OAuth / static credentials from the encrypted token store |
 | Aegis ↔ disk | `tokens.json`, `data_grants.json`, `apps.json`, `audit_log.db`, … |
@@ -57,11 +61,13 @@ of full message bodies outside the optional local mail archive.
 
 | Actor | Trust | Credential | Max reach |
 |-------|-------|------------|-----------|
-| Tailnet owner / admin principal | Highest on the service | Admin API key or user login (`-admin-logins`) | Policy writes, OAuth, app minting, `/v1/admin/*`, `/metrics` |
+| Tailnet owner / admin principal | Highest on the service | Admin API key or user login (`-admin-logins`), on the admin listener | Policy writes, OAuth, app minting, `/v1/admin/*`, `/metrics` |
 | LLM agent (runtime) | Constrained by data grants | Agent API key, tagged device, allowed tailnet login | Library reads, hook, content transport, mail search |
+| External principal (invite token) | Constrained by scope grants, **deny-by-default** | Invite token (data-scope key) | Granted data types of the owner's data, in its dataset; never admin |
 | Third-party app | Least privilege | App token `aeg_app_…` | Library **read** only, AND of app scopes × data grants |
 | Human operator (SSH/host) | Host root | OS account | Full data directory — out of Aegis’s auth |
-| Public internet | Untrusted | — | Must have **no** path (no Funnel) |
+| Public internet (API listener) | Untrusted | — | Reaches the API listener only, and only with a valid token; admin listener has **no** public path |
+| Public internet (admin listener) | Untrusted | — | Must have **no** path |
 
 Authentication answers *who may call*. Data grants answer *what an authorized
 caller may do with each data type*. Admin is never the agent key.
@@ -70,10 +76,15 @@ caller may do with each data type*. Admin is never the agent key.
 
 ## 4. Trust assumptions
 
-1. **Tailnet admission is the perimeter.** Device approval + ACLs/grants decide
-   who can open a TCP connection to Aegis.
+1. **Perimeter depends on the listener.** Tailnet admission (device approval +
+   ACLs/grants) is the perimeter for the admin listener and a tailnet-only
+   API listener. On a published API listener, the **credential** is the
+   perimeter — reachability proves nothing.
 2. **Tailscale identity headers are trustworthy only behind Serve (or an
-   equivalent proxy that strips inbound identity headers).**
+   equivalent proxy that strips inbound identity headers) — and never on a
+   publicly reachable listener.** Serve headers are forgeable by any client
+   that can open a TCP connection to a public socket; ambient identity
+   resolution is disabled there entirely.
 3. **Host filesystem is trusted** for the data directory (mode 0700). Disk
    encryption of `tokens.json` protects stolen media/backups, not a live root
    attacker.
@@ -97,6 +108,7 @@ caller may do with each data type*. Admin is never the agent key.
 | Agent transcripts contain tokens | Agents never see tokens; Aegis owns OAuth; admin/API expose presence/scopes/expiry only |
 | Reuse agent key as admin | Separate `-admin-api-key`; shared `-api-key` is never admin (#181) |
 | App token database stolen | Only SHA-256 hashes in `apps.json` (0600); plaintext shown once |
+| Invite token leaked or brute-forced | **Hashed at rest is a contract requirement** (today `data_scopes.json` holds plaintext `api_key`, 0600 — migrate to `apps.json`-style SHA-256 storage with the invite lifecycle); revoke/disable per scope; rate limiting on token auth is required before a public bind |
 | Schema pack smuggles secrets | `http_json` credential headers rejected at UDT load |
 
 ### 5.2 Unauthorized access
@@ -106,7 +118,10 @@ caller may do with each data type*. Admin is never the agent key.
 | Guest laptop / tagged CI on shared tailnet reads library | `-allowed-logins` allowlist; tag service host; deny-by-default grants |
 | Agent rewrites policy that constrains it | Admin tier separate; agent credential gets **403** on `/v1/admin/*` writes |
 | Tagged device treated as admin | Tagged identities are **not** admin unless listed in `-admin-logins` |
-| Public exposure (Funnel / LAN bind) | **No Funnel**; bind localhost/Tailscale IP or Serve; tag `tag:aegis` |
+| Forged `Tailscale-User-Login` header on a public socket | Ambient identity resolution is **disabled on externally reachable listeners**; tokens only (see `external-access.md` "The landmine") |
+| External principal reads data outside its grants | Scope grants are **deny-by-default**: unlisted data type = `none`; AND with agent data grants; never admin |
+| Admin surface reachable from outside | Split listeners: admin listener tailnet/loopback only; admin paths **404** on the published API listener |
+| Public exposure beyond intent | Publish the **API listener only**, behind TLS, invite tokens; tag `tag:aegis`; never an unsplit listener — unless the edge enforces the split (named demo exception: nginx drops admin/metrics/SPA) |
 | Unapproved device joins with stolen auth key | Tailscale device approval |
 | `/metrics` leaks inventory to the world | Admin-scoped (#181); series include service ids / denial reasons |
 
@@ -155,13 +170,16 @@ caller may do with each data type*. Admin is never the agent key.
 | Unbounded memory from huge hook bodies | Hook body cap |
 | OAuth state / page loops | Caps, eviction, `libraryPageCap`, singleflight refresh |
 | Fail-closed lockout on provider errors | **Fail-open**: parse/fetch errors allow the request and log |
+| Credential stuffing / token brute force on a public listener | Rate limiting per IP and per token (required before public bind; none in the binary yet); tokens matched via SHA-256 hash lookup rather than raw comparison |
+| DoS via a published API listener | Body caps; edge rate limits; availability of the owner's own tailnet path is independent |
 
 ---
 
 ## 6. Residual risks (accepted)
 
-1. **Single-user token blast radius** — any authorized agent/app shares one
-   provider identity. Per-user libraries are future work.
+1. **Single-user token blast radius** — any authorized caller shares one
+   provider identity; external principals read the owner's connected
+   services within their grants. Per-user libraries are future work.
 2. **Fail-open** — a malicious payload that breaks the hook still reaches the
    LLM *without* Aegis instructions (and without Aegis data). Prefer that over
    blocking the user’s chat.
@@ -175,6 +193,11 @@ caller may do with each data type*. Admin is never the agent key.
    the prose.
 6. **Audit log is local** — useful for review, not a remote SIEM unless the
    operator ships it.
+7. **Invited external principals are real people with tokens** — a leaked
+   invite token is a credential leak, bounded by that scope's grants,
+   dataset, and `read_only`. Revocation is per-scope; rate limiting bounds
+   guessing. Invite tokens are the weakest sustained trust link in external
+   access — mint them narrowly.
 
 ---
 
@@ -183,10 +206,12 @@ caller may do with each data type*. Admin is never the agent key.
 | Control area | Primary reference |
 |--------------|-------------------|
 | Trust model, auth modes, identity resolution | [`SECURITY.md`](../SECURITY.md) |
+| External access (listeners, invite tokens, deny-by-default) | [`external-access.md`](external-access.md) |
 | Admin vs agent credentials | SECURITY.md “Admin vs agent credentials” |
 | CSRF / Origin | SECURITY.md “CSRF / origin protection on writes” |
 | Encryption at rest | SECURITY.md “Best practices” §8; README “Token encryption” |
 | Data grants / redaction | SECURITY.md “What authorized means”; [`glossary.md`](glossary.md) |
+| Principal → dataset isolation | [`data-scopes.md`](data-scopes.md) |
 | Audit log | SECURITY.md “Best practices” §12 |
 | Deployment checklist | SECURITY.md “Deployment checklist” |
 | Product rules (fail-open, no media store, type-centric) | [`../AGENTS.md`](../AGENTS.md) |
@@ -195,12 +220,16 @@ caller may do with each data type*. Admin is never the agent key.
 
 ## 8. Out of scope
 
-- Multi-tenant / SaaS deployment
-- Tailscale Funnel or any public exposure
+- Multi-tenant SaaS / hosted tenancy (external access shares **one** owner's
+  data per instance)
+- Admin surfaces reachable from the public internet (the admin listener is
+  in-tailnet by contract)
 - Cryptographic proof of media ownership (PoC only)
 - Malicious provider backends
 - Side-channel attacks on the LLM host
 - Formal verification of OAuth redirect handling beyond the documented public login/callback surfaces
+- Federation between Aegis instances (invite tokens are the entire
+  cross-instance story for now)
 
 When adding a surface that stores secrets, expands admin power, or creates a
 new ambient-auth path, extend this model in the same PR.

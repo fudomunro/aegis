@@ -59,7 +59,9 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Effective access** | Resolved level after data grant + service tighten | |
 | **Accessor** | Principal-level data grant per data type (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
-| **Admin principal** | Admin API key or allowed tailnet user login | Who may change policy (data grants, apps, UDT file selection); agent credentials are never admin (issue #181) |
+| **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDT file selection); agent credentials are never admin (issue #181) |
+| **External principal** | Caller holding an **invite token** (a data-scope key) | Deny-by-default grants; never admin; may be a person, backend, or another Aegis operator |
+| **Invite token** | The credential issued to an external principal | Data-scope `api_key` (0600); **hashed at rest is a contract requirement** — today the file holds plaintext, migrate with the invite lifecycle. Minted by the admin, shown once |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
 One-line shape (also in `docs/configuration.md` “Data grants”): **data grants** are the product
@@ -78,7 +80,7 @@ like this:
 | Network capability (`ip`) | Tailnet grant/ACL for reaching Aegis |
 | Application capability (`app`) | **Access level** on a **data type** (`freebusy`, `read`, …) |
 | `ro` / `rw` (e.g. Taildrive) | `read` / `read-write` |
-| Deny-by-default | Unset data grant; places default `none` |
+| Deny-by-default | Owner tier: unset data grant; places default `none`. **External principals**: any unlisted data type is `none` |
 
 Say “data grant” for what the user allows; reserve bare **grant** for Tailscale
 policy or the third-party one-time **grant code** (`aeg_grant_…`).
@@ -104,6 +106,9 @@ policy or the third-party one-time **grant code** (`aeg_grant_…`).
 | Prefer | Means |
 |--------|-------|
 | **Data directory** | Single OS app-data root for mutable state |
+| **API listener** | The listener serving agent/external surfaces; publishable behind TLS under external access |
+| **Admin listener** | The listener serving policy/setup surfaces; in-tailnet only, never published |
+| **External access** | Deployment shape where the API listener is reachable outside the tailnet and the credential is the perimeter |
 | **Hook health** | Aperture wiring diagnostics + fix strings |
 | **Audit log** | Durable access log (agent, surface, decision, …) |
 | **Admin map** | UI topology of services → data types → agents |

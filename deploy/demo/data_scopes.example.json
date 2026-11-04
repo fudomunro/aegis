@@ -6,14 +6,16 @@
       "name": "Frodo's circle",
       "dataset": "shire",
       "api_key": "YOUR_SHIRE_KEY",
-      "read_only": true
+      "read_only": true,
+      "grants": { "default": { "default": "read" } }
     },
     {
       "id": "gondor",
       "name": "South-kingdom",
       "dataset": "gondor",
       "api_key": "YOUR_GONDOR_KEY",
-      "read_only": true
+      "read_only": true,
+      "grants": { "default": { "default": "read" } }
     }
   ]
 }

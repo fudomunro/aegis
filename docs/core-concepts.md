@@ -21,7 +21,7 @@ the most weight in product language.
 
 | Concept | Surface weight |
 |---------|----------------|
-| **Aegis** (the private tailnet service) | product |
+| **Aegis** (the personal library service) | product |
 | **Fail-open** | product rule |
 | **Aegis owns OAuth** | product rule |
 | **Aegis does not store media** / bytes stay on source | product rule |
@@ -206,7 +206,7 @@ After the overlap call-outs above, the stable concepts.
 | **Named-service connectors** | Spotify, Gmail, Immich, … are first-class adapters and match targets, not generic scrapers. | `internal/connectors/`, `run.go` |
 | **Connections (not per-surface OAuth)** | Surfaces reference top-level `connections` entries. | `connections.go`, `aegis.example.json` |
 | **Content/ingest only** | `/v1/services/{id}/…` is photo bytes, full message bodies, playlist items, local import — not a provider API mirror. | `internal/types/agentpaths.go`, `proxy.go` |
-| **No Tailscale Funnel** | Aegis holds music OAuth tokens; tailnet-only. | `SECURITY.md` |
+| **External access (invite-only)** | Two listeners: the API listener may be published (credential perimeter — invite tokens, deny-by-default grants); the admin listener stays in-tailnet. No signup/OIDC/federation. | `SECURITY.md`, `docs/external-access.md` |
 
 ### Data types and library
 
