@@ -14,262 +14,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// --- placeTracks: create vs append ---
-
-func TestSpotifyPlaceTracks_CreatesThenAppends(t *testing.T) {
-	var mu sync.Mutex
-	var created, addBodies []string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		switch {
-		case r.Method == http.MethodGet && r.URL.Path == "/me":
-			json.NewEncoder(w).Encode(map[string]any{"id": "user1"})
-		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/users/user1/playlists"):
-			created = append(created, r.URL.Path)
-			json.NewEncoder(w).Encode(map[string]any{
-				"id": "PL1", "external_urls": map[string]any{"spotify": "https://open.spotify.com/playlist/PL1"},
-			})
-		case r.Method == http.MethodPost && strings.Contains(r.URL.Path, "/playlists/PL1/tracks"):
-			addBodies = append(addBodies, r.URL.Path)
-			json.NewEncoder(w).Encode(map[string]any{"snapshot_id": "snap"})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(up.Close)
-
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	m := &spotifyMirror{s: srv}
-
-	tracks := []mirrorTrack{{Name: "A", SourceURI: "spotify:track:a"}}
-	id, link, copied, skips, err := m.placeTracks(context.Background(), "", "Backup", tracks)
-	if err != nil {
-		t.Fatalf("placeTracks(create): %v", err)
-	}
-	if id != "PL1" || link == "" || copied != 1 || len(skips) != 0 {
-		t.Fatalf("create = (%q,%q,%d,%v)", id, link, copied, skips)
-	}
-	if len(created) != 1 || len(addBodies) != 1 {
-		t.Fatalf("created=%v add=%v, want one of each", created, addBodies)
-	}
-
-	// A second step with a known playlist id must append, not create.
-	id2, _, copied2, _, err := m.placeTracks(context.Background(), "PL1", "Backup",
-		[]mirrorTrack{{Name: "B", SourceURI: "spotify:track:b"}})
-	if err != nil {
-		t.Fatalf("placeTracks(append): %v", err)
-	}
-	if id2 != "PL1" || copied2 != 1 {
-		t.Fatalf("append = (%q,%d)", id2, copied2)
-	}
-	if len(created) != 1 {
-		t.Fatalf("append must not create another playlist, created=%v", created)
-	}
-	if len(addBodies) != 2 {
-		t.Fatalf("append must post to the same playlist, add=%v", addBodies)
-	}
-}
-
-func TestYouTubePlaceTracks_CreatesThenAppends(t *testing.T) {
-	var mu sync.Mutex
-	var created, itemPosts int
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		mu.Lock()
-		defer mu.Unlock()
-		switch {
-		case r.Method == http.MethodPost && r.URL.Path == "/playlists":
-			created++
-			json.NewEncoder(w).Encode(map[string]any{"id": "PLy"})
-		case r.Method == http.MethodPost && r.URL.Path == "/playlistItems":
-			itemPosts++
-			json.NewEncoder(w).Encode(map[string]any{"id": "item"})
-		case r.Method == http.MethodPost && r.URL.Path == "/search":
-			json.NewEncoder(w).Encode(map[string]any{
-				"items": []any{map[string]any{"id": map[string]any{"videoId": "vid"}}},
-			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(up.Close)
-
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	m := &youtubeMirror{s: srv}
-
-	id, link, copied, _, err := m.placeTracks(context.Background(), "", "Backup",
-		[]mirrorTrack{{Name: "A", SourceID: "v1"}})
-	if err != nil {
-		t.Fatalf("placeTracks(create): %v", err)
-	}
-	if id != "PLy" || link == "" || copied != 1 {
-		t.Fatalf("create = (%q,%q,%d)", id, link, copied)
-	}
-	if created != 1 || itemPosts != 1 {
-		t.Fatalf("created=%d items=%d, want 1/1", created, itemPosts)
-	}
-
-	if _, _, copied2, _, err := m.placeTracks(context.Background(), "PLy", "Backup",
-		[]mirrorTrack{{Name: "B", SourceID: "v2"}}); err != nil || copied2 != 1 {
-		t.Fatalf("append = (%d,%v)", copied2, err)
-	}
-	if created != 1 || itemPosts != 2 {
-		t.Fatalf("append must not create: created=%d items=%d", created, itemPosts)
-	}
-}
-
-// --- cursor-paged source reads ---
-
-func TestSpotifyLoadPages(t *testing.T) {
-	var gotPaths []string
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotPaths = append(gotPaths, r.URL.Path+"?"+r.URL.RawQuery)
-		switch {
-		case strings.HasPrefix(r.URL.Path, "/playlists/PL1/tracks"):
-			json.NewEncoder(w).Encode(map[string]any{
-				"total": 3,
-				"items": []any{
-					map[string]any{"track": map[string]any{"id": "t1", "name": "One", "uri": "spotify:track:t1"}},
-					map[string]any{"track": map[string]any{"id": "t2", "name": "Two", "uri": "spotify:track:t2"}},
-				},
-			})
-		case strings.HasPrefix(r.URL.Path, "/playlists/PL1"):
-			json.NewEncoder(w).Encode(map[string]any{
-				"name": "Road trip", "external_urls": map[string]any{"spotify": "u"},
-			})
-		case strings.HasPrefix(r.URL.Path, "/me/tracks"):
-			json.NewEncoder(w).Encode(map[string]any{
-				"total": 2,
-				"items": []any{
-					map[string]any{"track": map[string]any{"id": "s1", "name": "S", "uri": "spotify:track:s1"}},
-				},
-			})
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(up.Close)
-
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	m := &spotifyMirror{s: srv}
-
-	ref, tracks, total, next, err := m.loadPlaylistPage(context.Background(), "PL1", "", 2)
-	if err != nil {
-		t.Fatalf("loadPlaylistPage(first): %v", err)
-	}
-	if ref.Name != "Road trip" || total != 3 || len(tracks) != 2 {
-		t.Fatalf("first page = (%+v, %d tracks, total %d)", ref, len(tracks), total)
-	}
-	if next != "2" {
-		t.Fatalf("next = %q, want offset 2", next)
-	}
-
-	// Second page must not refetch the playlist object.
-	before := len(gotPaths)
-	_, tracks2, total2, next2, err := m.loadPlaylistPage(context.Background(), "PL1", "2", 2)
-	if err != nil {
-		t.Fatalf("loadPlaylistPage(second): %v", err)
-	}
-	if total2 != 3 || len(tracks2) != 2 {
-		t.Fatalf("second page = %d tracks, total %d", len(tracks2), total2)
-	}
-	// The mock returns the same 2 items regardless of offset, but next is
-	// computed from offset+len < total, so offset 2 + 2 > 3 must stop.
-	if next2 != "" {
-		t.Fatalf("next2 = %q, want empty (past the end)", next2)
-	}
-	if len(gotPaths) <= before {
-		t.Fatal("second page must issue its own request")
-	}
-	for _, p := range gotPaths[before:] {
-		if !strings.Contains(p, "/tracks") {
-			t.Fatalf("second page refetched %q, want only the tracks page", p)
-		}
-	}
-
-	liked, likedTotal, likedNext, err := m.loadLikedTracksPage(context.Background(), "", 1)
-	if err != nil {
-		t.Fatalf("loadLikedTracksPage: %v", err)
-	}
-	if likedTotal != 2 || len(liked) != 1 || likedNext != "1" {
-		t.Fatalf("liked = %d tracks, total %d, next %q", len(liked), likedTotal, likedNext)
-	}
-
-	if _, _, _, _, err := m.loadPlaylistPage(context.Background(), "PL1", "bogus", 1); err == nil {
-		t.Fatal("a non-numeric cursor must be rejected")
-	}
-	if _, _, _, err := m.loadLikedTracksPage(context.Background(), "bogus", 1); err == nil {
-		t.Fatal("a non-numeric liked cursor must be rejected")
-	}
-}
-
-func TestYouTubeLoadPages(t *testing.T) {
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/playlists":
-			json.NewEncoder(w).Encode(map[string]any{
-				"items": []any{map[string]any{
-					"snippet":        map[string]any{"title": "My list"},
-					"contentDetails": map[string]any{"itemCount": 5},
-				}},
-			})
-		case r.URL.Path == "/playlistItems":
-			body := map[string]any{
-				"items": []any{map[string]any{
-					"snippet": map[string]any{
-						"title":      "Clip",
-						"resourceId": map[string]any{"videoId": "vid1"},
-					},
-				}},
-			}
-			if r.URL.Query().Get("pageToken") == "" {
-				body["nextPageToken"] = "tok2"
-			}
-			json.NewEncoder(w).Encode(body)
-		default:
-			w.WriteHeader(http.StatusNotFound)
-		}
-	}))
-	t.Cleanup(up.Close)
-
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: up.URL,
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	m := &youtubeMirror{s: srv}
-
-	ref, tracks, total, next, err := m.loadPlaylistPage(context.Background(), "PLx", "", 5)
-	if err != nil {
-		t.Fatalf("loadPlaylistPage: %v", err)
-	}
-	if ref.Name != "My list" || total != 5 || len(tracks) != 1 || next != "tok2" {
-		t.Fatalf("page = (%+v, %d tracks, total %d, next %q)", ref, len(tracks), total, next)
-	}
-	_, _, _, next2, err := m.loadPlaylistPage(context.Background(), "PLx", "tok2", 5)
-	if err != nil {
-		t.Fatalf("loadPlaylistPage(page2): %v", err)
-	}
-	if next2 != "" {
-		t.Fatalf("next2 = %q, want empty", next2)
-	}
-
-	liked, likedTotal, _, err := m.loadLikedTracksPage(context.Background(), "", 5)
-	if err != nil {
-		t.Fatalf("loadLikedTracksPage: %v", err)
-	}
-	if likedTotal != 5 || len(liked) != 1 {
-		t.Fatalf("liked = %d tracks, total %d", len(liked), likedTotal)
-	}
-}
 
 // --- mirror runner ---
 
@@ -282,12 +26,12 @@ type recordingMirrorTarget struct {
 	failOnce bool
 }
 
-func (t *recordingMirrorTarget) placeTracks(ctx context.Context, playlistID, name string, tracks []mirrorTrack) (string, string, int, []MirrorSkip, error) {
+func (t *recordingMirrorTarget) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []types.Track) (types.PlacePlaylistItemsResult, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.failOnce {
 		t.failOnce = false
-		return playlistID, "", 0, nil, fmt.Errorf("upstream 502")
+		return types.PlacePlaylistItemsResult{PlaylistID: playlistID}, fmt.Errorf("upstream 502")
 	}
 	if playlistID == "" {
 		t.created++
@@ -297,31 +41,32 @@ func (t *recordingMirrorTarget) placeTracks(ctx context.Context, playlistID, nam
 	}
 	t.lastID = playlistID
 	t.copied += len(tracks)
-	return playlistID, "https://example.com/" + playlistID, len(tracks), nil, nil
+	return types.PlacePlaylistItemsResult{
+		PlaylistID: playlistID,
+		URL:        "https://example.com/" + playlistID,
+		Copied:     len(tracks),
+	}, nil
 }
 
-func (t *recordingMirrorTarget) saveLikedTracks(ctx context.Context, tracks []mirrorTrack) (int, []MirrorSkip, error) {
+func (t *recordingMirrorTarget) SaveLikedTracks(ctx context.Context, tracks []types.Track) (types.SaveLikedTracksResult, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.copied += len(tracks)
-	return len(tracks), nil, nil
+	return types.SaveLikedTracksResult{Copied: len(tracks)}, nil
 }
 
 // stubMirrorSource serves pages from a fixed slice.
 type stubMirrorSource struct {
-	tracks []mirrorTrack
+	tracks []types.Track
 	name   string
 }
 
-func (s *stubMirrorSource) loadPlaylist(ctx context.Context, id string) (MirrorRef, []mirrorTrack, bool, error) {
-	return MirrorRef{Service: "stub", ID: id, Name: s.name, Count: len(s.tracks)}, s.tracks, false, nil
+// srcTrack builds a stub fixture track with a service-local id.
+func srcTrack(name, id string) types.Track {
+	return types.Track{Name: name, Sources: []types.TrackSource{{Service: "stub", ID: id}}}
 }
 
-func (s *stubMirrorSource) loadLikedTracks(ctx context.Context) ([]mirrorTrack, bool, error) {
-	return s.tracks, false, nil
-}
-
-func (s *stubMirrorSource) loadPlaylistPage(ctx context.Context, id, cursor string, limit int) (MirrorRef, []mirrorTrack, int, string, error) {
+func (s *stubMirrorSource) ListPlaylistItems(ctx context.Context, id, cursor string, limit int) (types.Playlist, types.TrackPage, error) {
 	offset := 0
 	if cursor != "" {
 		fmt.Sscanf(cursor, "%d", &offset)
@@ -338,14 +83,17 @@ func (s *stubMirrorSource) loadPlaylistPage(ctx context.Context, id, cursor stri
 	if end < len(s.tracks) {
 		next = fmt.Sprint(end)
 	}
-	return MirrorRef{Service: "stub", ID: id, Name: s.name, Count: len(s.tracks)},
-		page, len(s.tracks), next, nil
+	return types.Playlist{Name: s.name, Sources: []types.PlaylistSource{{Service: "stub", ID: id}}},
+		types.TrackPage{Tracks: page, Total: len(s.tracks), Next: next}, nil
 }
 
-func (s *stubMirrorSource) loadLikedTracksPage(ctx context.Context, cursor string, limit int) ([]mirrorTrack, int, string, error) {
-	ref, tracks, total, next, err := s.loadPlaylistPage(ctx, "liked", cursor, limit)
-	_ = ref
-	return tracks, total, next, err
+func (s *stubMirrorSource) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
+	return s.tracks, false, nil
+}
+
+func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (types.TrackPage, error) {
+	_, page, err := s.ListPlaylistItems(ctx, "liked", cursor, limit)
+	return page, err
 }
 
 // mirrorStubServer builds a Server whose mirror adapters are stubs and whose
@@ -382,10 +130,10 @@ func mirrorTestServer(t *testing.T, src mirrorSource, dst mirrorTarget) (*Server
 }
 
 func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
-	tracks := []mirrorTrack{
-		{Name: "One", SourceID: "t1"}, {Name: "Two", SourceID: "t2"},
-		{Name: "Three", SourceID: "t3"}, {Name: "Four", SourceID: "t4"},
-		{Name: "Five", SourceID: "t5"},
+	tracks := []types.Track{
+		srcTrack("One", "t1"), srcTrack("Two", "t2"),
+		srcTrack("Three", "t3"), srcTrack("Four", "t4"),
+		srcTrack("Five", "t5"),
 	}
 	src := &stubMirrorSource{tracks: tracks, name: "Road trip"}
 	dst := &recordingMirrorTarget{}
@@ -427,9 +175,9 @@ func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
 }
 
 func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
-	tracks := []mirrorTrack{
-		{Name: "One", SourceID: "t1"}, {Name: "Two", SourceID: "t2"},
-		{Name: "Three", SourceID: "t3"},
+	tracks := []types.Track{
+		srcTrack("One", "t1"), srcTrack("Two", "t2"),
+		srcTrack("Three", "t3"),
 	}
 	src := &stubMirrorSource{tracks: tracks}
 	dst := &recordingMirrorTarget{}
@@ -459,13 +207,13 @@ func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
 func TestMirrorRunner_RepairSkipsWhatTheTargetHolds(t *testing.T) {
 	source := &stubMirrorSource{
 		name: "Road trip",
-		tracks: []mirrorTrack{
-			{Name: "One", SourceID: "t1"}, {Name: "Two", SourceID: "t2"},
+		tracks: []types.Track{
+			srcTrack("One", "t1"), srcTrack("Two", "t2"),
 		},
 	}
 	// The target's source reader reports it already holds "One".
 	target := &stubMirrorSource{
-		tracks: []mirrorTrack{{Name: "One", SourceID: "t1"}},
+		tracks: []types.Track{srcTrack("One", "t1")},
 	}
 	dst := &recordingMirrorTarget{}
 	srv := mirrorStubServer(t, nil, dst)
@@ -507,7 +255,7 @@ func TestMirrorRunner_RepairSkipsWhatTheTargetHolds(t *testing.T) {
 }
 
 func TestMirrorRunner_TerminalValidation(t *testing.T) {
-	src := &stubMirrorSource{tracks: []mirrorTrack{{Name: "A", SourceID: "a"}}}
+	src := &stubMirrorSource{tracks: []types.Track{srcTrack("A", "a")}}
 	dst := &recordingMirrorTarget{}
 	_, store, w := mirrorTestServer(t, src, dst)
 
@@ -533,7 +281,7 @@ func TestMirrorRunner_TerminalValidation(t *testing.T) {
 }
 
 func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
-	src := &stubMirrorSource{tracks: []mirrorTrack{{Name: "A", SourceID: "a"}}, name: "L"}
+	src := &stubMirrorSource{tracks: []types.Track{srcTrack("A", "a")}, name: "L"}
 	dst := &recordingMirrorTarget{}
 	srv, store, w := mirrorTestServer(t, src, dst)
 	mustEnqueue(t, store, SyncEnqueue{
@@ -559,7 +307,7 @@ func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
 }
 
 func TestMirrorRunner_RetriesUpstreamError(t *testing.T) {
-	src := &stubMirrorSource{tracks: []mirrorTrack{{Name: "A", SourceID: "a"}}, name: "L"}
+	src := &stubMirrorSource{tracks: []types.Track{srcTrack("A", "a")}, name: "L"}
 	dst := &recordingMirrorTarget{failOnce: true}
 	_, store, w := mirrorTestServer(t, src, dst)
 	mustEnqueue(t, store, SyncEnqueue{
@@ -856,18 +604,3 @@ func TestParseServiceConcurrency(t *testing.T) {
 	}
 }
 
-// --- identity key ---
-
-func TestMirrorIdentityKey(t *testing.T) {
-	if mirrorIdentityKey(mirrorTrack{SourceID: "x"}) != "id:x" {
-		t.Fatal("id must win")
-	}
-	if mirrorIdentityKey(mirrorTrack{SourceURI: "u"}) != "uri:u" {
-		t.Fatal("uri next")
-	}
-	a := mirrorIdentityKey(mirrorTrack{Name: " Song ", Artists: []string{" Artist "}})
-	b := mirrorIdentityKey(mirrorTrack{Name: "song", Artists: []string{"artist"}})
-	if a != b {
-		t.Fatalf("name identity must normalise: %q vs %q", a, b)
-	}
-}

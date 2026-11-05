@@ -38,20 +38,20 @@ func (r *canaryRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 	if err != nil {
 		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
 	}
-	tracks, total, _, err := src.loadLikedTracksPage(ctx, "", canaryPageLimit)
+	page, err := src.ListUserLikedTracksPage(ctx, "", canaryPageLimit)
 	if err != nil {
 		return SyncStep{}, err
 	}
-	if total > 0 && len(tracks) == 0 {
+	if page.Total > 0 && len(page.Tracks) == 0 {
 		return SyncStep{}, fmt.Errorf(
-			"%w: canary got total=%d but no items — response shape drift?", ErrSyncTerminal, total)
+			"%w: canary got total=%d but no items — response shape drift?", ErrSyncTerminal, page.Total)
 	}
 	return SyncStep{
 		Done: true,
 		Progress: map[string]any{
 			"service": job.Service,
-			"listed":  len(tracks),
-			"total":   total,
+			"listed":  len(page.Tracks),
+			"total":   page.Total,
 		},
 	}, nil
 }

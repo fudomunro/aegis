@@ -24,6 +24,7 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.syncJobs = testJobStore(t)
 	srv.syncRunners = NewRunnerRegistry()
 	registerCanaryRunners(srv.syncRunners, srv)
