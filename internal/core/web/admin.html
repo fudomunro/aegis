@@ -568,38 +568,7 @@
         </details>
       </div>
 
-      <div class="help-box" id="ynab-setup-panel">
-        <div class="card-header" style="margin:0">
-          <h3 style="margin:0">YNAB — budget transactions</h3>
-          <div class="grow"></div>
-          <button class="btn" id="ynab-test" type="button">Test</button>
-          <button class="btn btn-primary" id="ynab-save" type="button">Save connection</button>
-        </div>
-        <p class="meta" style="margin:0.55rem 0 0.35rem">
-          Live budget line items for <code>GET /v1/library/transactions</code>.
-          Create a Personal Access Token in YNAB → Account Settings → Developer Settings.
-          Stored in <code>service_connections.json</code> — never shown again after save.
-          <a href="https://api.ynab.com/" target="_blank" rel="noopener noreferrer">YNAB API docs</a>
-        </p>
-        <div class="meta" id="ynab-status-meta">Loading YNAB setup…</div>
-        <div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0">
-          <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-            <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-              API endpoint
-              <input id="ynab-endpoint" type="url" placeholder="https://api.ynab.com/v1" spellcheck="false" autocomplete="off">
-            </label>
-            <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-              Personal Access Token
-              <input id="ynab-token" type="password" placeholder="YNAB → Developer Settings" autocomplete="off" spellcheck="false">
-            </label>
-          </div>
-          <div class="toolbar" style="margin:0.65rem 0 0">
-            <button class="btn btn-primary" id="ynab-save-2" type="button">Save &amp; test</button>
-          </div>
-          <div id="ynab-result" class="meta" style="margin:0.55rem 0 0"></div>
-          <div id="ynab-hints" class="meta" style="margin:0.45rem 0 0"></div>
-        </div>
-      </div>
+      <div class="help-box" id="setup-ynab" data-setup-service="ynab"></div>
 
 
       <div class="toolbar">
@@ -4023,7 +3992,7 @@ job.read</pre>
         '<div class="card-header"><h3>Endpoints</h3></div>' +
         '<div class="meta">Agents use <code>/v1/library/playlists</code>, <code>/v1/library/tracks</code>, <code>/v1/library/albums</code>, <code>/v1/library/artists</code>, <code>/v1/library/contacts</code>, <code>/v1/library/photos</code>, <code>/v1/library/events</code>, <code>/v1/library/messages</code>, <code>/v1/library/transactions</code>, <code>/v1/mail/*</code>, and <code>/v1/services/{id}/…</code>. Add <code>?q=…</code> to a library endpoint to full-text search it.</div>' +
         '<div class="meta">Hook: <code>POST /v1/pre-request</code> · Admin: <code>/v1/admin</code></div>' +
-        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/search/status</code>, <code>/v1/admin/services/{id}/grant-limits</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/ynab/*</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
+        '<div class="meta">Admin APIs: <code>/v1/admin/summary</code>, <code>/v1/admin/flow</code>, <code>/v1/admin/cache</code>, <code>/v1/admin/library/{kind}</code> (preview; does not count as Home access), <code>/v1/admin/search/status</code>, <code>/v1/admin/services/{id}/grant-limits</code>, <code>/v1/admin/immich/*</code> (setup), <code>/v1/admin/setup/ynab</code>, <code>/v1/admin/quicken/*</code>, <code>/v1/admin/mail/status</code>, <code>/v1/admin/mail/sync</code></div>' +
       "</article>";
   }
 
@@ -4366,72 +4335,128 @@ function selectTab(name, opts) {
   });
   $("sync-takeout").addEventListener("click", () => runTakeoutSync());
 
-  // --- YNAB setup (issue #141) ---
-  async function loadYNABStatus() {
-    const meta = $("ynab-status-meta");
-    const hints = $("ynab-hints");
-    const result = $("ynab-result");
-    if (!meta) return;
+  // --- Generic connector onboarding (issue #265) ---
+  // Renders any connector's setup panel from the spec its Onboarder declares.
+  // No provider copy lives in this file. Guide bodies are plain text with
+  // `code` spans and [text](https://...) links; everything is HTML-escaped
+  // before those two are rewritten.
+
+  function formatSetupText(text) {
+    let out = escapeHtml(text == null ? "" : text);
+    out = out.replace(/`([^`]+)`/g, "<code>$1</code>");
+    out = out.replace(
+      /\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,
+      '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>'
+    );
+    return out;
+  }
+
+  function setupActionButtons(spec, placement) {
+    return (spec.actions || []).filter((a) => (a.placement || "header") === placement);
+  }
+
+  function setupActionHTML(a) {
+    // Save/apply verbs are the panel's primary buttons; probes are secondary.
+    const primary = a.kind === "save" || a.kind === "apply";
+    return (
+      '<button class="btn' + (primary ? " btn-primary" : "") + '" type="button" data-setup-action="' +
+      escapeHtml(a.id) + '">' + escapeHtml(a.label) + "</button>"
+    );
+  }
+
+  function renderSetupPanel(host, spec, status, probe) {
+    if (!host) return;
+    const fields = (spec.fields || []).map((f) => {
+      const st = (status.fields || {})[f.id] || {};
+      const type = f.secret ? "password" : f.kind === "url" ? "url" : "text";
+      const value = f.secret ? "" : st.value || "";
+      return (
+        '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
+        escapeHtml(f.label) +
+        '<input data-setup-field="' + escapeHtml(f.id) + '" type="' + type + '"' +
+        (f.placeholder ? ' placeholder="' + escapeHtml(f.placeholder) + '"' : "") +
+        ' value="' + escapeHtml(value) + '" spellcheck="false" autocomplete="off">' +
+        (f.help ? '<span class="meta">' + formatSetupText(f.help) + "</span>" : "") +
+        "</label>"
+      );
+    }).join("");
+    const guides = (spec.guides || []).map((g) => {
+      const title = g.title ? "<strong>" + escapeHtml(g.title) + "</strong> " : "";
+      const cmd = g.command
+        ? '<pre class="mono" style="margin:0.45rem 0 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
+          escapeHtml(g.command) + "</pre>"
+        : "";
+      return title + formatSetupText(g.body) + cmd;
+    }).join(" ");
+    const headerBtns = setupActionButtons(spec, "header").map(setupActionHTML).join("");
+    const formBtns = setupActionButtons(spec, "form").map(setupActionHTML).join("");
+    const summary = (status.summary || []).join(" \u00b7 ");
+    const hints = (status.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
+    let result = "";
+    if (probe && probe.code && probe.code !== "unchecked") {
+      result = probe.ok
+        ? '<div class="meta">' + escapeHtml(probe.message || "ok") + "</div>"
+        : '<div class="error-box">' + escapeHtml(probe.message || "failed") + "</div>";
+    }
+    host.innerHTML =
+      '<div class="card-header" style="margin:0">' +
+      '<h3 style="margin:0">' + escapeHtml(spec.title || spec.display_name || spec.service_id) + "</h3>" +
+      '<div class="grow"></div>' + headerBtns + "</div>" +
+      (guides ? '<p class="meta" style="margin:0.55rem 0 0.35rem">' + guides + "</p>" : "") +
+      '<div class="meta">' + escapeHtml(summary) + "</div>" +
+      '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0">' +
+      '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">' + fields + "</div>" +
+      (formBtns ? '<div class="toolbar" style="margin:0.65rem 0 0">' + formBtns + "</div>" : "") +
+      '<div class="setup-result meta" style="margin:0.55rem 0 0"></div>' +
+      '<div class="setup-hints meta" style="margin:0.45rem 0 0">' + hints + "</div>" +
+      "</div>";
+    const resultBox = host.querySelector(".setup-result");
+    if (resultBox) resultBox.innerHTML = result;
+    host.querySelectorAll("[data-setup-action]").forEach((btn) => {
+      btn.addEventListener("click", (e) => runSetupAction(host, spec, e.currentTarget));
+    });
+  }
+
+  async function loadSetupPanel(host) {
+    if (!host) return;
+    host.innerHTML = '<div class="meta">Loading setup\u2026</div>';
+    const id = host.dataset.setupService;
     try {
-      const st = await api("/v1/admin/ynab/setup");
-      if ($("ynab-endpoint") && st.endpoint) $("ynab-endpoint").value = st.endpoint;
-      const bits = [];
-      bits.push(st.has_token ? "token: configured (" + escapeHtml(st.token_source || "saved") + ")" : "token: not set");
-      if (st.probe_status === "ok") bits.push("API: ok · " + (st.budget_count || 0) + " budget(s)");
-      else if (st.probe_status) bits.push("API: " + escapeHtml(st.probe_status));
-      bits.push(st.library_ready ? "library: ready" : "library: not ready");
-      meta.innerHTML = bits.map(escapeHtml).join(" · ");
-      if (hints) {
-        hints.innerHTML = (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
-      }
-      if (result && st.probe_status === "unauthorized") {
-        result.innerHTML = '<div class="error-box">' + escapeHtml(st.probe_detail || "YNAB token rejected") + "</div>";
-      } else if (result && st.probe_status === "ok" && st.probe_detail) {
-        result.innerHTML = '<div class="meta">' + escapeHtml(st.probe_detail) + "</div>";
-      }
+      const view = await api("/v1/admin/setup/" + encodeURIComponent(id));
+      renderSetupPanel(host, view.spec, view.status, view.status && view.status.probe);
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
-      else meta.textContent = "Failed to load YNAB setup: " + (err.message || err);
+      else host.innerHTML = '<div class="meta">Failed to load setup: ' + escapeHtml(err.message || err) + "</div>";
     }
   }
 
-  async function ynabRunSave(btn) {
-    const endpoint = ($("ynab-endpoint").value || "").trim() || "https://api.ynab.com/v1";
-    const token = ($("ynab-token").value || "").trim();
+  async function runSetupAction(host, spec, btn) {
+    const id = spec.service_id;
+    const action = (spec.actions || []).find((a) => a.id === btn.dataset.setupAction);
+    if (!action) return;
+    const values = {};
+    (action.fields || []).forEach((fid) => {
+      const input = host.querySelector('[data-setup-field="' + fid + '"]');
+      if (input) values[fid] = input.value;
+    });
     if (btn) btn.disabled = true;
-    $("ynab-result").textContent = "Saving…";
+    const result = host.querySelector(".setup-result");
+    if (result) result.textContent = action.busy_label || "Working\u2026";
     try {
-      const st = await api("/v1/admin/ynab/config", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ endpoint, token }),
-      });
-      if ($("ynab-token")) $("ynab-token").value = "";
-      $("ynab-result").innerHTML = st && st.probe_status === "ok"
-        ? '<div class="meta">' + escapeHtml(st.probe_detail || "Saved") + "</div>"
-        : '<div class="meta">Saved.</div>';
-      await loadYNABStatus();
+      const res = await api(
+        "/v1/admin/setup/" + encodeURIComponent(id) + "/" + encodeURIComponent(action.id),
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ values }),
+        }
+      );
+      // A save carries no probe of its own; show the post-save diagnosis the
+      // status just computed. Re-rendering blanks every secret input.
+      renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
-      else $("ynab-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "save failed") + "</div>";
-    } finally {
-      if (btn) btn.disabled = false;
-    }
-  }
-
-  async function ynabRunTest(btn) {
-    if (btn) btn.disabled = true;
-    $("ynab-result").textContent = "Testing YNAB API…";
-    try {
-      const res = await api("/v1/admin/ynab/test", { method: "POST" });
-      $("ynab-result").innerHTML = res && res.ok
-        ? '<div class="meta">' + escapeHtml(res.detail || "ok") + "</div>"
-        : '<div class="error-box">' + escapeHtml((res && res.detail) || "test failed") + "</div>";
-      await loadYNABStatus();
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      else $("ynab-result").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "test failed") + "</div>";
-    } finally {
+      else if (result) result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed") + "</div>";
       if (btn) btn.disabled = false;
     }
   }
@@ -4483,12 +4508,9 @@ function selectTab(name, opts) {
     }
   }
 
-  $("ynab-save").addEventListener("click", (e) => ynabRunSave(e.currentTarget));
-  $("ynab-save-2").addEventListener("click", (e) => ynabRunSave(e.currentTarget));
-  $("ynab-test").addEventListener("click", (e) => ynabRunTest(e.currentTarget));
   $("quicken-import").addEventListener("click", () => runQuickenImport());
   $("quicken-refresh").addEventListener("click", () => loadQuickenStatus());
-  loadYNABStatus();
+  document.querySelectorAll("[data-setup-service]").forEach((host) => loadSetupPanel(host));
   loadQuickenStatus();
 
   // --- Signal import (issue #168) ---

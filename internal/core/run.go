@@ -888,8 +888,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminApps)(w, r)
 	case path == "immich" || strings.HasPrefix(path, "immich/"):
 		s.AdminMiddleware(s.HandleAdminImmichSetup)(w, r)
-	case path == "ynab" || strings.HasPrefix(path, "ynab/"):
-		s.AdminMiddleware(s.HandleAdminYNABSetup)(w, r)
+	case strings.HasPrefix(path, "setup/"):
+		s.AdminMiddleware(s.handleAdminOnboarding)(w, r)
 	case path == "quicken" || strings.HasPrefix(path, "quicken/"):
 		s.AdminMiddleware(s.HandleAdminQuicken)(w, r)
 	case path == "timeline" || strings.HasPrefix(path, "timeline/"):

@@ -3,6 +3,7 @@
 package connectors
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"time"
@@ -42,6 +43,11 @@ type Host interface {
 	// ObserveUpstream records upstream latency/status (no-op when metrics
 	// are disabled).
 	ObserveUpstream(serviceID string, elapsed time.Duration, status int)
+	// LibraryReadable reports whether agents can currently read the given
+	// library kind — a provider is registered and the type policy allows it.
+	// Setup flows use it to report readiness without reaching into core's
+	// registries.
+	LibraryReadable(kind string) bool
 }
 
 // ServiceConnector is an optional interface for services that provide
@@ -53,4 +59,27 @@ type ServiceConnector interface {
 	SystemInstructions(baseURL string) string
 	// HandleProxy handles a proxied request for this service.
 	HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string)
+}
+
+// Onboarder is the optional interface for connectors that drive their own
+// advanced setup (issue #265): credential/config inputs, verification probes,
+// external-tool guidance, status reporting. Core hosts the flow generically —
+// admin routes and rendering, token/secret writes, config overlay persistence,
+// the permissions perimeter — and the connector owns every provider-specific
+// string, rule, and probe.
+//
+// The split is the maturity catalog's (#247): declare, don't render. A
+// connector never ships HTML or JS, and never writes Aegis tokens or config —
+// save/apply verbs return types.StateUpdate values that core alone persists.
+type Onboarder interface {
+	// Onboarding returns the declared contract: fields, copyable guidance,
+	// and the verbs this flow runs.
+	Onboarding() types.OnboardingSpec
+	// OnboardingStatus derives the live view. Read-only and fail-open: a
+	// broken provider reports failed rows and hints, never an error page.
+	OnboardingStatus(ctx context.Context) types.OnboardingStatus
+	// OnboardingRun executes one declared verb. Probe verbs are read-only;
+	// save/apply verbs return StateUpdates for core to persist and may mutate
+	// external systems.
+	OnboardingRun(ctx context.Context, action string, in types.OnboardingInput) (types.OnboardingResult, error)
 }

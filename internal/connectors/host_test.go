@@ -60,6 +60,7 @@ func (h *testHost) CacheSet(key, value string, ttl time.Duration) {
 }
 
 func (h *testHost) ObserveUpstream(serviceID string, elapsed time.Duration, status int) {}
+func (h *testHost) LibraryReadable(kind string) bool                   { return false }
 
 func newTestHostWithService(id, endpoint, baseURL string) *testHost {
 	h := newTestHost(baseURL)
