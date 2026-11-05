@@ -46,6 +46,13 @@
       "worktree"
     ]
   },
+  "trusted_proxies": ["127.0.0.1/32"],
+  "rate_limits": {
+    "auth_per_minute": 60,
+    "auth_failures_per_ip": 10,
+    "auth_failures_per_token": 10,
+    "window_seconds": 300
+  },
   "data_grants": {
     "tracks": {
       "default": "read",

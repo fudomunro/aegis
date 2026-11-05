@@ -7,6 +7,7 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+<<<<<<< HEAD
 - **Split listeners for external access (issue #149, phase 1; re-landed —
   the original merge stranded on a stale stacked branch).** The surface
   can be served on two listeners per `docs/external-access.md`: the **API
@@ -29,6 +30,47 @@ issue numbers; this file is where that context lives.
   Single-listener deployments are unchanged. Follow-ons: scope-grant
   enforcement (deny-by-default), invite minting/rotation with hashed
   storage, and rate limiting with trusted-proxy config.
+=======
+- **External-access hardening (issue #253, phase 4).** The last contract
+  item before a public bind is a supported deployment:
+  - **Rate limiting on auth and token surfaces** (`rate_limits` config) —
+    per-client-IP request damping on `/v1/apps/token`, `/v1/apps/authorize`,
+    `/v1/apps/revoke`, and `/v1/auth/*`, plus per-IP and per-token failure
+    caps on failed authentications everywhere, **including the admin
+    surface** (lockouts answer 429). The per-token counter keys on the
+    SHA-256 of the presented credential, so one hammered key is bounded
+    whatever the source IP; per-IP keys bucket IPv6 by `/64` (privacy-
+    extension rotation makes per-address caps meaningless). Defaults: 60
+    req/min, 10 failures per IP and per token per 5 min; negative disables
+    a cap and `window_seconds: -1` disables the failure caps (it is not a
+    permanent lockout). Per-IP caps are **skipped for loopback peers when
+    `trusted_proxies` is empty** — a same-host edge would put every caller
+    in one bucket and let one attacker lock out the whole deployment — and
+    requests that resolve a tailnet identity are exempt entirely (ambient
+    identity is not a guessable credential). Counters are fixed-window,
+    memory-bounded, and best-effort — brute-force damping, not an
+    availability guarantee (body caps and edge limits still cover volume).
+  - **Trusted-proxy client IPs** (`trusted_proxies` + `client_ip_header`
+    config) — forwarded headers are believed only from listed proxy
+    addresses, and **exactly one header is read** (`x-forwarded-for`, the
+    default, with the rightmost-untrusted walk; or `x-real-ip` for edges
+    that overwrite it) — never a fallback chain, so a client-supplied value
+    in the unused header cannot forge the client IP. Without the list,
+    forwarded headers are ignored entirely. Startup **refuses** the
+    combination of `trusted_proxies` with Serve identity trust (`auto` /
+    `tailnet`): a generic edge forwards client-supplied
+    `Tailscale-User-Login`, which the local-peer gate would trust into
+    admin. Rate limits and audit both resolve through this.
+  - **External-principal audit fields** — invite-token principals now audit
+    as `scope:<id>` (previously the shared `api-key` label), and audit rows
+    carry the resolved `client_ip` (column added with an automatic
+    migration for existing `audit_log.db` files). Rate-limit denials audit
+    as reason `rate_limited`.
+  - **TLS edge deployment notes** in `docs/external-access.md` (edge
+    terminates TLS, sets the client-IP hop, never publishes the admin
+    listener) with the `trusted_proxies` / `rate_limits` shape in
+    `docs/configuration.md`.
+>>>>>>> origin/main
 
 - **Invite lifecycle with hash at rest (issue #253, phase 3).** Data-scope
   credentials — the invite tokens external principals hold — are now
