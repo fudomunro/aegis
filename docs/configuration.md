@@ -877,6 +877,40 @@ A service with `endpoint: "sample://library"` serves synthetic library
 fixtures bound to `Service.Dataset` — useful for demos and isolation tests
 without OAuth.
 
+### Trusted proxies and rate limits
+
+Two `aegis.json` fields harden a published API listener
+([external access](external-access.md)):
+
+```json
+{
+  "trusted_proxies": ["127.0.0.1/32"],
+  "rate_limits": {
+    "auth_per_minute": 60,
+    "auth_failures_per_ip": 10,
+    "auth_failures_per_token": 10,
+    "window_seconds": 300
+  }
+}
+```
+
+- `trusted_proxies` lists proxy addresses (IP or CIDR) whose
+  `X-Real-IP` / `X-Forwarded-For` headers are believed when resolving the
+  client IP for rate limits and audit. Empty (default): forwarded headers
+  are ignored and the peer address is used — never widen this past your
+  actual edge, since any client connecting *from* a listed address can
+  forge its client IP. Invalid entries refuse config load.
+- `rate_limits` tunes brute-force damping on authentication and token
+  routes (`/v1/apps/token`, `/v1/apps/authorize`, `/v1/apps/revoke`,
+  `/v1/auth/*`) plus failed authentications everywhere:
+  `auth_per_minute` caps requests per client IP per minute;
+  `auth_failures_per_ip` and `auth_failures_per_token` lock out a client
+  IP or one presented credential after that many failed authentications in
+  `window_seconds`. Lockouts answer **429**. Zero fields use the defaults
+  shown; a **negative** value disables that cap. Fail-open by design: the
+  counters bound credential guessing, not availability (body caps and edge
+  rate limits cover volume).
+
 ### Demo mode (public synthetic instance)
 
 `-demo` (or `AEGIS_DEMO=1`) is a deployment profile for a public demo host:

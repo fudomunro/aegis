@@ -437,6 +437,7 @@ func Run() {
 		cache:         NewCache(),
 		tokens:        tokens,
 		oauthStates:   NewStateStore(),
+		rl:            newRateLimiter(),
 		connectors:    make(map[string]connectors.ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
@@ -594,11 +595,13 @@ func Run() {
 		seedFakeUpstreamTokens(srv)
 		slog.Warn("fake upstream enabled — dev/test only", "mount", fakeUpstreamMount)
 	}
-	mux.HandleFunc("GET /v1/apps/authorize", srv.HandleAppAuthorize)
+	// Auth/token routes carry credential exchange — brute-force damped
+	// (issue #253) per client IP.
+	mux.HandleFunc("GET /v1/apps/authorize", srv.rateLimitAuth(srv.HandleAppAuthorize))
 	// Minting an app token is admin-equivalent (issue #181).
 	mux.HandleFunc("POST /v1/apps/authorize", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
-	mux.HandleFunc("POST /v1/apps/token", withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken))
-	mux.HandleFunc("POST /v1/apps/revoke", withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke))
+	mux.HandleFunc("POST /v1/apps/token", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken)))
+	mux.HandleFunc("POST /v1/apps/revoke", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke)))
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
@@ -613,7 +616,7 @@ func Run() {
 	mux.HandleFunc("POST /v1/mail/sync", srv.AdminMiddleware(withBodyLimit(maxMailBodyBytes, srv.HandleMailSync)))
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
 	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
-	mux.HandleFunc("/v1/auth/", srv.handleAuthRoutes)
+	mux.HandleFunc("/v1/auth/", srv.rateLimitAuth(srv.handleAuthRoutes))
 	// Admin shell and JSON both require admin auth (issues #98, #181): the
 	// SPA is markup only, but unauthenticated peers should not learn the API
 	// surface and agent credentials must not open the admin UI.

@@ -7,6 +7,33 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **External-access hardening (issue #253, phase 4).** The last contract
+  item before a public bind is a supported deployment:
+  - **Rate limiting on auth and token surfaces** (`rate_limits` config) —
+    per-client-IP request damping on `/v1/apps/token`, `/v1/apps/authorize`,
+    `/v1/apps/revoke`, and `/v1/auth/*`, plus per-IP and per-token failure
+    caps on failed authentications anywhere (lockouts answer 429). The
+    per-token counter keys on the SHA-256 of the presented credential, so
+    one hammered key is bounded whatever the source IP. Defaults: 60
+    req/min, 10 failures per IP and per token per 5 min; negative disables
+    a cap. Counters are fixed-window, memory-bounded, and best-effort —
+    brute-force damping, not an availability guarantee (body caps and edge
+    limits still cover volume).
+  - **Trusted-proxy client IPs** (`trusted_proxies` config) — forwarded
+    `X-Real-IP` / `X-Forwarded-For` headers are believed only from listed
+    proxy addresses (rightmost-untrusted XFF walk); without the list,
+    forwarded headers are ignored and caps key on the peer address. Rate
+    limits and audit both resolve through it.
+  - **External-principal audit fields** — invite-token principals now audit
+    as `scope:<id>` (previously the shared `api-key` label), and audit rows
+    carry the resolved `client_ip` (column added with an automatic
+    migration for existing `audit_log.db` files). Rate-limit denials audit
+    as reason `rate_limited`.
+  - **TLS edge deployment notes** in `docs/external-access.md` (edge
+    terminates TLS, sets the client-IP hop, never publishes the admin
+    listener) with the `trusted_proxies` / `rate_limits` shape in
+    `docs/configuration.md`.
+
 - **Invite lifecycle with hash at rest (issue #253, phase 3).** Data-scope
   credentials — the invite tokens external principals hold — are now
   administered like app tokens instead of by editing `data_scopes.json`:

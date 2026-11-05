@@ -4,6 +4,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
 	"context"
+	"database/sql"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -353,4 +354,107 @@ type fakeLikedTracks struct {
 
 func (f *fakeLikedTracks) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
 	return f.tracks, false, nil
+}
+
+func TestAuditLog_MigratesLegacySchema(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.db")
+	// Legacy shape: no client_ip column (pre issue #253).
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := `CREATE TABLE audit_events (
+  id INTEGER PRIMARY KEY,
+  at TEXT NOT NULL,
+  agent TEXT NOT NULL DEFAULT '',
+  surface TEXT NOT NULL DEFAULT '',
+  target TEXT NOT NULL DEFAULT '',
+  data_type TEXT NOT NULL DEFAULT '',
+  decision TEXT NOT NULL DEFAULT 'allow',
+  reason TEXT NOT NULL DEFAULT '',
+  cache TEXT NOT NULL DEFAULT '',
+  method TEXT NOT NULL DEFAULT '',
+  status INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);`
+	if _, err := db.Exec(legacy); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO audit_events (at, agent, created_at) VALUES (?, 'old-row', ?)`,
+		time.Now().UTC().Format(time.RFC3339Nano), time.Now().UTC().Format(time.RFC3339Nano)); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	a, err := OpenAuditLog(path, 30)
+	if err != nil {
+		t.Fatalf("open legacy: %v", err)
+	}
+	defer a.Close()
+	a.Write(AuditEvent{Agent: "scope:family", Surface: MetricSurfaceLibrary, ClientIP: "203.0.113.9"})
+
+	rows, err := a.List(AuditFilter{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2", len(rows))
+	}
+	byAgent := map[string]AuditEvent{}
+	for _, row := range rows {
+		byAgent[row.Agent] = row
+	}
+	if got := byAgent["scope:family"].ClientIP; got != "203.0.113.9" {
+		t.Fatalf("client_ip = %q", got)
+	}
+	if _, ok := byAgent["old-row"]; !ok {
+		t.Fatalf("legacy row missing after migration: %+v", rows)
+	}
+}
+
+func TestAgentForRequest_ScopePrincipal(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	if got := agentForRequest(req); got != "api-key" {
+		t.Fatalf("bare = %q", got)
+	}
+	req = withDataScope(req, &DataScope{ID: "family"})
+	if got := agentForRequest(req); got != "scope:family" {
+		t.Fatalf("scope principal = %q", got)
+	}
+}
+
+func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
+	a, err := OpenAuditLog(filepath.Join(t.TempDir(), "audit.db"), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	srv := &Server{
+		metrics: NewAccessMetrics(8),
+		audit:   a,
+		config:  &Config{TrustedProxies: []string{"127.0.0.1"}},
+	}
+	if err := validateConfig(srv.config); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req.RemoteAddr = "127.0.0.1:52000"
+	req.Header.Set("X-Real-IP", "203.0.113.9")
+	srv.recordAccessFrom(req, AccessEvent{Agent: "scope:family", Surface: MetricSurfaceLibrary, Target: "contacts"})
+
+	rows, err := a.List(AuditFilter{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("rows = %d, want 1", len(rows))
+	}
+	if rows[0].ClientIP != "203.0.113.9" {
+		t.Fatalf("client_ip = %q, want the trusted-proxy forwarded address", rows[0].ClientIP)
+	}
+	if rows[0].Agent != "scope:family" {
+		t.Fatalf("agent = %q", rows[0].Agent)
+	}
 }

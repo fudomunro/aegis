@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,8 +24,16 @@ type Config struct {
 	DataGrantsBootstrap types.DataGrants `json:"data_grants,omitempty"`
 	// Hook configures pre-request matching skips (issue #205). See hook_skip.go.
 	Hook HookConfig `json:"hook,omitempty"`
+	// TrustedProxies lists proxy addresses (CIDR or single IP) whose
+	// forwarded client-IP headers are believed (issue #253). Empty:
+	// RemoteAddr only — forwarded headers are never trusted.
+	TrustedProxies []string `json:"trusted_proxies,omitempty"`
+	// RateLimits tunes brute-force damping on auth/token routes (issue #253).
+	RateLimits RateLimitConfig `json:"rate_limits,omitempty"`
 	// hookSkip holds compiled Hook.SkipPatterns (not serialized).
 	hookSkip hookSkip
+	// trustedProxyNets holds compiled TrustedProxies (not serialized).
+	trustedProxyNets []net.IPNet
 	path     string
 	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
 	// Admin data-grant saves always write here — never aegis.json.
@@ -183,6 +192,9 @@ func (c *Config) Reload() error {
 	c.DataGrantsBootstrap = fresh.DataGrantsBootstrap
 	c.Hook = fresh.Hook
 	c.hookSkip = fresh.hookSkip
+	c.TrustedProxies = fresh.TrustedProxies
+	c.RateLimits = fresh.RateLimits
+	c.trustedProxyNets = fresh.trustedProxyNets
 	c.typePolicies = c.DataGrantsBootstrap
 	if err := c.applyDataGrantsOverlayLocked(); err != nil {
 		return err
@@ -210,6 +222,11 @@ func validateConfig(cfg *Config) error {
 		return err
 	}
 	cfg.hookSkip = skip
+	nets, err := compileTrustedProxies(cfg.TrustedProxies)
+	if err != nil {
+		return err
+	}
+	cfg.trustedProxyNets = nets
 	for _, svc := range services {
 		if err := types.ValidatePermissions(svc.GrantLimits); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)
@@ -398,6 +415,13 @@ func (c *Config) SetServicePermissions(id string, p types.Permissions) error {
 		c.Services[idx].GrantLimits = types.Permissions(p.Clone())
 	}
 	return c.setServiceLimitsEntryLocked(id, p)
+}
+
+// trustedNets returns the compiled trusted-proxy list (issue #253).
+func (c *Config) trustedNets() []net.IPNet {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.trustedProxyNets
 }
 
 // DataGrants returns a snapshot of the agent data-grant map.
