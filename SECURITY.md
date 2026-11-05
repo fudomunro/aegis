@@ -164,9 +164,14 @@ On the admin listener (and a tailnet-only API listener), Aegis tries, in
 order:
 
 1. **Tailscale Serve headers** (`Tailscale-User-Login`, `Tailscale-Node-Tags`, …)  
-   Trustworthy only when clients cannot reach Aegis except through
-   `tailscale serve` (or an equivalent proxy that strips inbound identity
-   headers and sets its own).
+   Trusted only when the request arrives **from this host** (loopback or an
+   address on one of the machine's own interfaces) — the hop `tailscale
+   serve` or a same-host reverse proxy makes. A peer that reaches the socket
+   directly (LAN or tailnet) can write those headers itself, so from a
+   non-local `RemoteAddr` they are ignored and resolution falls through to
+   WhoIs. `RemoteAddr` comes from the accepted TCP connection and cannot be
+   forged. An equivalent remote proxy is not a supported trust path — use
+   WhoIs or API keys instead.
 
 2. **WhoIs via tailscaled LocalAPI** (`/var/run/tailscale/tailscaled.sock`)  
    Works when Aegis shares a host with `tailscaled`. Queries the peer’s
@@ -174,6 +179,14 @@ order:
 
 Tagged devices without a user login get a synthetic identity (tags joined with
 commas), matching Aperture’s model — e.g. `tag:aperture,tag:ci`.
+
+**Bind address is validated at startup.** With Serve identity trust
+(`auto`/`tailnet` auth mode), Aegis refuses to start on a wildcard
+(`:8080`, `0.0.0.0`) or LAN bind — those make the port reachable by peers who
+could try forged headers and expand the attack surface for no reason. `-addr`
+defaults to `127.0.0.1:8080`. Sound binds: loopback (front with `tailscale
+serve`), the Tailscale IP, or `-auth-mode api-key` (no ambient identity to
+forge). The request-level local-peer gate above holds regardless.
 
 ## Recommended tailnet policy
 

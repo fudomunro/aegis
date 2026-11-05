@@ -43,6 +43,45 @@ type IdentityResolver interface {
 // equivalent reverse proxy that strips and re-sets these headers).
 type ServeHeaderResolver struct{}
 
+// isLocalPeer reports whether the request originated from this host — the
+// only place Serve identity headers are believable. `tailscale serve` and
+// same-host reverse proxies connect over loopback (or to this host's own
+// address); a LAN or tailnet peer that reaches the socket directly has a
+// RemoteAddr that is neither, and its `Tailscale-User-Login` header is
+// client-controlled forgery. RemoteAddr comes from the accepted TCP
+// connection and cannot be forged, so it is the right gate.
+func isLocalPeer(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		host = r.RemoteAddr
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return false
+	}
+	if ip.IsLoopback() {
+		return true
+	}
+	return isOwnInterfaceIP(ip)
+}
+
+// isOwnInterfaceIP reports whether ip is assigned to an interface on this
+// host (covers a same-host proxy addressing the Tailscale or LAN IP rather
+// than loopback).
+func isOwnInterfaceIP(ip net.IP) bool {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return false
+	}
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if ok && ipnet.IP.Equal(ip) {
+			return true
+		}
+	}
+	return false
+}
+
 // well-known Serve identity headers.
 // https://tailscale.com/kb/1312/serve#identity-headers
 const (
@@ -54,6 +93,12 @@ const (
 )
 
 func (ServeHeaderResolver) Resolve(_ context.Context, r *http.Request) (*PeerIdentity, error) {
+	if !isLocalPeer(r) {
+		// Direct connection from a non-local peer: these headers are
+		// client-controlled and must not grant an identity. WhoIs (the
+		// next resolver) is the truth for tailnet peers.
+		return nil, nil
+	}
 	login := strings.TrimSpace(r.Header.Get(headerLogin))
 	if login == "" {
 		login = strings.TrimSpace(r.Header.Get(headerIdentity))

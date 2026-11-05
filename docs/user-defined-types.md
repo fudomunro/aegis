@@ -188,7 +188,7 @@ Try it:
 ```bash
 export AEGIS_USER_TYPES_DIR=$PWD/examples/user-types
 # or copy examples/user-types/reading-list into <data-dir>/user-types/
-./aegis -addr :8080 -api-key dev-key -token-pass dev-pass
+./aegis -addr 127.0.0.1:8080 -api-key dev-key -token-pass dev-pass
 curl -s -H "Authorization: Bearer dev-key" \
   http://localhost:8080/v1/library/reading-list | jq .
 ```

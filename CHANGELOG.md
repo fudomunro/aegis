@@ -230,6 +230,22 @@ issue numbers; this file is where that context lives.
 
 ### Security
 
+- **Serve identity headers can no longer be forged (issue #149 landmine).**
+  `Tailscale-User-Login` and friends are request headers — on any socket a
+  LAN or tailnet peer could reach directly (the default `-addr :8080` bound
+  all interfaces), one forged header passed the default admin rule and became
+  full admin. Three layers close it: (1) `ServeHeaderResolver` trusts headers
+  only from a **local peer** (loopback or an address on this host's own
+  interfaces — the hop `tailscale serve` or a same-host proxy makes);
+  `RemoteAddr` is the accepted connection's address and cannot be forged, so
+  from a remote peer the headers are ignored and resolution falls through to
+  WhoIs; (2) `-addr` now defaults to `127.0.0.1:8080`; (3) with Serve
+  identity trust (`auto`/`tailnet` auth mode), startup **refuses** a wildcard
+  or LAN bind — sound binds are loopback behind `tailscale serve`, the
+  Tailscale IP, or `-auth-mode api-key` (no ambient identity to forge).
+  Existing deployments binding `:8080` in `auto`/`tailnet` mode must pass
+  `-addr 127.0.0.1:8080` (or the Tailscale IP) after upgrading. Landed ahead
+  of the external-access listener split as its prerequisite.
 - CI secret scan (gitleaks) over the full tree and history, with an allowlist
   for operator snippets and test fakes. `public_hygiene_test.go` fails the
   Test job if private host/path/email patterns reappear in the worktree.

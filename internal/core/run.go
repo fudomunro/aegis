@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -18,7 +19,7 @@ import (
 )
 
 func Run() {
-	addr := flag.String("addr", ":8080", "listen address")
+	addr := flag.String("addr", "127.0.0.1:8080", "listen address (loopback by default; with Serve identity trust — auto/tailnet auth mode — a wildcard or LAN bind is refused at startup: bind loopback behind tailscale serve, the Tailscale IP, or use -auth-mode api-key)")
 	baseURL := flag.String("base-url", "", "public base URL of this Aegis instance (reads AEGIS_BASE_URL env if empty)")
 	apiKey := flag.String("api-key", "", "API key for LLM agents / library callers (reads AEGIS_API_KEY env if empty; optional in tailnet/auto modes; never admin)")
 	adminAPIKey := flag.String("admin-api-key", "", "API key for admin surfaces (reads AEGIS_ADMIN_API_KEY env if empty; distinct from -api-key so agents cannot rewrite data grants)")
@@ -196,6 +197,10 @@ func Run() {
 		*maintenanceRepo = os.Getenv("AEGIS_MAINTENANCE_REPO")
 	}
 	if err := validateAuthCredentials(*authMode, *apiKey, *adminAPIKey); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+	if err := validateListenAddr(*addr, *authMode); err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
@@ -651,6 +656,60 @@ func Run() {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// tailscaleListenNets are the address ranges Tailscale assigns to nodes
+// (CGNAT for IPv4, the Tailscale ULA for IPv6). Binding there keeps the
+// listener off LAN interfaces while still reachable over the tailnet.
+var tailscaleListenNets = func() []*net.IPNet {
+	nets := make([]*net.IPNet, 0, 2)
+	for _, cidr := range []string{"100.64.0.0/10", "fd7a:115c:a1e0::/48"} {
+		_, n, err := net.ParseCIDR(cidr)
+		if err != nil {
+			continue
+		}
+		nets = append(nets, n)
+	}
+	return nets
+}()
+
+func isTailnetListenIP(ip net.IP) bool {
+	for _, n := range tailscaleListenNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	return false
+}
+
+// validateListenAddr refuses binds that would expose Serve identity headers
+// to peers that can forge them. Serve/WhoIs trust (auth modes auto and
+// tailnet) is only sound when the listener is not reachable from a network
+// where clients arrive unproxied: loopback (behind `tailscale serve`), a
+// Tailscale IP (tailnet-only), or an equivalent local proxy. A wildcard or
+// LAN bind would let any peer on that network present a forged
+// `Tailscale-User-Login` header directly to the port (the default admin rule
+// turns one forged header into full admin). api-key mode resolves no ambient
+// identity, so any bind is fine there.
+func validateListenAddr(addr, authMode string) error {
+	if authMode == AuthModeAPIKey {
+		return nil
+	}
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return fmt.Errorf("invalid -addr %q: %w", addr, err)
+	}
+	if strings.EqualFold(host, "localhost") {
+		return nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return fmt.Errorf("refusing -addr %q: with Serve identity trust (auth-mode %s) bind an IP literal on loopback or the Tailscale IP, not %q", addr, authMode, host)
+	}
+	if ip.IsLoopback() || isTailnetListenIP(ip) {
+		return nil
+	}
+	return fmt.Errorf("refusing -addr %q: with Serve identity trust (auth-mode %s) a non-loopback bind would accept forged Tailscale identity headers from the LAN — bind 127.0.0.1 and front with `tailscale serve`, bind the Tailscale IP, or use -auth-mode api-key", addr, authMode)
 }
 
 // validateAuthCredentials checks auth-mode and the agent/admin key split
