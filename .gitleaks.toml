@@ -17,4 +17,7 @@ regexes = [
   # forward; these cover keys already in history and any *-key-1234 fakes.
   '''[a-z]+-key-1234''',
   '''aeg_(test|demo)_[a-z0-9_]+''',
+  # Docs placeholder for api_key_hint (docs/configuration.md). Anchored: real
+  # invite tokens carry a 43-char payload and never match this exact form.
+  '''^aeg_invite_3f9c2a1b$''',
 ]

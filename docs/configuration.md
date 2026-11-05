@@ -844,7 +844,7 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
       "name": "Shire demo",
       "dataset": "shire",
       "api_key_hash": "9f2c…",
-      "api_key_hint": "aeg_invite_3f9c2a1b",
+      "api_key_hint": "aeg_invite_…",
       "read_only": true
     }
   ]
