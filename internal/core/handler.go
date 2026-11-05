@@ -574,6 +574,7 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 		Reason:   "auth",
 		Method:   requestMethod(r),
 		Status:   status,
+		ClientIP: s.clientIPFor(r),
 	})
 	if status == http.StatusForbidden {
 		writeJSONError(w, status, "forbidden: admin credential required")

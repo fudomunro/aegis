@@ -64,6 +64,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Decision: DecisionDeny,
 			Reason:   "not_content_path",
 			Method:   r.Method,
+			ClientIP: s.clientIPFor(r),
 			Status:   http.StatusNotFound,
 		})
 		writeJSONError(w, http.StatusNotFound,
@@ -84,6 +85,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Decision: DecisionDeny,
 			Reason:   "service_blocked",
 			Method:   r.Method,
+			ClientIP: s.clientIPFor(r),
 			Status:   http.StatusForbidden,
 		})
 		writeJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))
@@ -104,6 +106,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Decision: DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
+			ClientIP: s.clientIPFor(r),
 			Status:   http.StatusForbidden,
 		})
 		return
@@ -139,6 +142,7 @@ func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache s
 		DataType: dataType,
 		Cache:    cache,
 		Method:   r.Method,
+		ClientIP: s.clientIPFor(r),
 	})
 }
 
