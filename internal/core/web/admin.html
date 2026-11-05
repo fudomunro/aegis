@@ -1499,6 +1499,8 @@ job.read</pre>
   // Nested layout: Aperture wraps Aegis; Aegis holds Token vault
   // (connection tokens) and Data cache (synced library data types).
   // Individual agents stack on the left when the window has access data (issue #114).
+  // Shared between layoutFlowMap and renderFlowMap (store-shelf title row).
+  const flowTitleH = 22;
   function layoutFlowMap(topo) {
     const nodes = topo.nodes || [];
     const dataTypes = topo.data_types || [];
@@ -1509,21 +1511,20 @@ job.read</pre>
     nodes.forEach((n) => { byId[n.id] = n; });
 
     const pad = 12;
-    const titleH = 22;
     // Data types are a vertical list — one type per row, full container width.
     const typeRowH = 24;
     const typeGap = 6;
     const typeCount = Math.max(dataTypes.length, 1);
-    const typeBlockH = titleH + typeCount * (typeRowH + typeGap);
+    const typeBlockH = flowTitleH + typeCount * (typeRowH + typeGap);
 
     const tokenRowH = 24;
     const tokenGap = 6;
     const tokenCount = Math.max(tokens.length, 1);
-    const tokenBlockH = titleH + tokenCount * (tokenRowH + tokenGap);
+    const tokenBlockH = flowTitleH + tokenCount * (tokenRowH + tokenGap);
 
     const storeGap = 10;
     const aegisTitleH = 36;
-    const searchBlockH = titleH + 20;
+    const searchBlockH = flowTitleH + 20;
     const aegisH = aegisTitleH + tokenBlockH + storeGap + typeBlockH + storeGap + searchBlockH + pad * 2;
     const apertureTitleH = 28;
     const aperturePad = 12;
@@ -1537,7 +1538,7 @@ job.read</pre>
     const agentsHaveDetail = agentInstances.length > 0;
     const agentCount = agentsHaveDetail ? agentInstances.length : 1;
     const agentStackH = agentsHaveDetail
-      ? titleH + agentCount * (agentRowH + agentGap) + pad
+      ? flowTitleH + agentCount * (agentRowH + agentGap) + pad
       : 56;
 
     const agents = { x: 20, y: 0, w: agentW, h: agentStackH, id: "agents" };
@@ -1572,7 +1573,7 @@ job.read</pre>
     const agentItems = agentInstances.map((n, i) => ({
       id: n.id,
       x: agents.x + pad,
-      y: agents.y + titleH + i * (agentRowH + agentGap),
+      y: agents.y + flowTitleH + i * (agentRowH + agentGap),
       w: agents.w - pad * 2,
       h: agentRowH,
       label: n.label || String(n.id).replace(/^agent:/, ""),
@@ -1600,7 +1601,7 @@ job.read</pre>
     const tokenItems = tokens.map((n, i) => ({
       id: n.id,
       x: innerX + pad,
-      y: tokensY + titleH + i * (tokenRowH + tokenGap),
+      y: tokensY + flowTitleH + i * (tokenRowH + tokenGap),
       w: innerW - pad * 2,
       h: tokenRowH,
       label: n.label,
@@ -1625,7 +1626,7 @@ job.read</pre>
     };
     const typeOrigin = {
       x: innerX + pad,
-      y: cacheY + titleH,
+      y: cacheY + flowTitleH,
       rowW: innerW - pad * 2,
       rowH: typeRowH,
       gap: typeGap,
@@ -1867,7 +1868,7 @@ job.read</pre>
     const searchPos = pos.search;
     if (searchPos) {
       drawStoreShell(searchPos, "search", searchPos.status || "");
-      parts.push('<text x="' + (searchPos.x + 28) + '" y="' + (searchPos.y + titleH + 4) +
+      parts.push('<text x="' + (searchPos.x + 28) + '" y="' + (searchPos.y + flowTitleH + 4) +
         '" dominant-baseline="central" fill="#8b949e" font-size="10" font-family="system-ui,sans-serif">' +
         escapeHtml(searchPos.detail || "") + "</text>");
     }
