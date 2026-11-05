@@ -489,7 +489,7 @@ func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel
 		inner := targets[i].list
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
-			level = s.effectivePermissions(svc).For(permType)
+			level = s.requestLevel(r, svc, permType)
 		}
 		effective := types.PlacesLevelForResponse(level)
 		if appPlaces != "" && appPlaces != types.AccessNone {
@@ -611,7 +611,7 @@ func (s *Server) searchRedactPlaceVisits(items []types.PlaceVisit, r *http.Reque
 			if svc == nil {
 				continue
 			}
-			level := types.PlacesLevelForResponse(s.effectivePermissions(svc).For("places"))
+			level := types.PlacesLevelForResponse(s.requestLevel(r, svc, "places"))
 			if appPlaces != "" && appPlaces != types.AccessNone {
 				level = tighterPlacesLevel(appPlaces, level)
 			}

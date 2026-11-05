@@ -46,9 +46,20 @@ func (s *Server) requireMailArchive(w http.ResponseWriter) *MailArchive {
 	return s.mail
 }
 
+// mailReadable reports whether any non-blocked service allows message reads
+// (owner tier). Request-scoped callers use mailReadableFor.
 func (s *Server) mailReadable() bool {
-	// Local archive is readable when any non-blocked service allows message reads.
 	return s.libraryReadableFor(mailPermType)
+}
+
+// mailReadableFor reports whether the request may use the mail archive: the
+// principal's scope grants messages (deny-by-default) and the owner tier
+// allows message reads.
+func (s *Server) mailReadableFor(r *http.Request) bool {
+	if !scopeAllows(r, mailPermType, http.MethodGet) {
+		return false
+	}
+	return s.mailReadable()
 }
 
 // HandleMailStatus reports archive health: GET /v1/mail/status
@@ -57,7 +68,7 @@ func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if !s.mailReadable() {
+	if !s.mailReadableFor(r) {
 		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
@@ -84,7 +95,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if !s.mailReadable() {
+	if !s.mailReadableFor(r) {
 		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
@@ -144,7 +155,7 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if !s.mailReadable() {
+	if !s.mailReadableFor(r) {
 		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
@@ -209,7 +220,7 @@ func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	if !s.mailReadable() {
+	if !s.mailReadableFor(r) {
 		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
@@ -300,7 +311,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		return
 	}
 	// Admin sync is operator-owned; only the agent surface honors messages=read.
-	if requireAgentMessagesRead && !s.effectivePermissions(svc).AllowsRead(mailPermType) {
+	if requireAgentMessagesRead && !s.requestPermissions(r, svc).AllowsRead(mailPermType) {
 		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
@@ -335,7 +346,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	}
 	// Takeout is not a live service in aegis.json; agent reads still need
 	// messages permission on some configured message-capable service.
-	if requireAgentMessagesRead && !s.mailReadable() {
+	if requireAgentMessagesRead && !s.mailReadableFor(r) {
 		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
@@ -410,8 +421,8 @@ func writeMailJSON(w http.ResponseWriter, v any) {
 
 // mailArchiveHints returns pre-request instruction text when the user wants
 // local archive search rather than a live provider listing.
-func (s *Server) mailArchiveHints(msg string) []string {
-	if s.mail == nil || !s.mailReadable() {
+func (s *Server) mailArchiveHints(r *http.Request, msg string) []string {
+	if s.mail == nil || !s.mailReadableFor(r) {
 		return nil
 	}
 	if !mentionsMailArchive(msg) {

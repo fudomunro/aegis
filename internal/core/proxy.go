@@ -72,7 +72,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	dataType := types.DataTypeForPath(remainingPath)
-	accessLevel := s.effectivePermissions(svc).AccessForDataType(dataType)
+	accessLevel := s.requestLevel(r, svc, dataType)
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)

@@ -135,8 +135,8 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 		Name:    "Frodo Baggins",
 		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
 	})
-	shire := &DataScope{ID: "shire", Dataset: "shire"}
-	gondor := &DataScope{ID: "gondor", Dataset: "gondor"}
+	shire := &DataScope{ID: "shire", Dataset: "shire", Grants: readAllGrants()}
+	gondor := &DataScope{ID: "gondor", Dataset: "gondor", Grants: readAllGrants()}
 
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req = withDataScope(req, shire)

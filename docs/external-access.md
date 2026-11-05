@@ -268,7 +268,8 @@ OIDC/passwords, cross-instance discovery, hosted multi-tenant SaaS.
    empty/override cases in the resolution table above, migration for packs
    assuming empty = full read, and the isolation-contract tests extended
    with a third principal that holds *no* grants plus a case per resolution
-   row.
+   row. (Landed: `types.ScopeGrantsAccess` / `ScopeTighten`, enforced at the
+   library, content-transport, mail, pre-request, and cache-key seams.)
 4. **Invite lifecycle** — admin mint / rotate / disable for scope keys
    (reusing `api_key_hint`). **Hash at rest**: mint writes only the SHA-256
    hash, plaintext is shown once (like app tokens), and existing plaintext

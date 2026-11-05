@@ -7,6 +7,28 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Scope-grant enforcement: deny-by-default for invite tokens (issue #253,
+  phase 2).** The fail-closed scope-grants resolver is live and enforced at
+  the existing seams — library aggregation, content transport, mail routes,
+  pre-request injection, and per-scope cache keys. An external principal's
+  `grants` map is now the **complete allow list**: an unlisted type resolves
+  to `none`, a reserved `default` entry covers unlisted types only, a listed
+  type with an empty entry (or only provider overrides) resolves to `none`,
+  and provider entries tighten a stated level without ever opening a closed
+  type. Opt-in types (places) still need an explicit name. The resolver is
+  `types.ScopeGrantsAccess` / `ScopeTighten` — deliberately separate from
+  `DataGrants.Access`, which keeps owner-tier "unset = unrestricted"
+  semantics. Effective access ANDs both layers (same as app tokens): a scope
+  grant can never open what owner data grants closed. Redaction-level kinds
+  (freebusy events, summary transactions, city/precise places, metadata
+  documents) now pick up their level from the ANDed view, so a
+  freebusy-only principal sees redacted rows even when the owner tier is
+  read. **Migration:** scopes relying on "empty grants = full read" must set
+  `"grants": {"default": {"default": "read"}}` (the demo pack already
+  does) — an empty `grants` map now denies everything. Each row of the
+  resolution table is a test case, and the isolation contract gains a
+  principal holding no grants.
+
 - **Sync-maintenance dashboard, published at every release (issue #239).** An
   entirely build-time generated static site — one page per service
   connection with history and success / stability / confidence marks —
