@@ -40,6 +40,7 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 		AccessToken: "yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 	if ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db")); err == nil {
 		t.Cleanup(func() { ledger.Close() })

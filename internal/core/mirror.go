@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"sort"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/types"
@@ -73,36 +74,12 @@ type MirrorResult struct {
 	IdentityNote string           `json:"identity_note"`
 }
 
-// mirrorTrack is a neutral track used while copying between services.
-type mirrorTrack struct {
-	Name       string
-	Artists    []string
-	Album      string
-	DurationMs int
-	// SourceID / SourceURI are set when the source service can name the item.
-	SourceID  string
-	SourceURI string
-}
-
-func (t mirrorTrack) display() string {
-	artists := strings.Join(t.Artists, ", ")
-	if artists == "" {
-		return t.Name
-	}
-	return t.Name + " — " + artists
-}
-
-func (t mirrorTrack) searchQuery() string {
-	if len(t.Artists) == 0 {
-		return t.Name
-	}
-	return t.Name + " " + t.Artists[0]
-}
-
 // HandleLibraryMirror copies a playlist or liked-tracks list from one service
 // to another (issue #16 phase 3). Aegis still stores no media; it reads
 // from the source service and writes through the target's upstream API using
-// the stored OAuth token.
+// the stored OAuth token. Placement is reconciliation over data types
+// (issue #254): core plans against neutral models, connectors execute the
+// placement and report per-item skips.
 //
 // POST /v1/library/mirror
 func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
@@ -181,22 +158,22 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	var tracks []mirrorTrack
+	var tracks []types.Track
 	var srcRef MirrorRef
 	var truncated bool
 
 	switch req.Kind {
 	case MirrorKindPlaylists:
-		pl, items, tr, err := src.loadPlaylist(ctx, req.SourceID)
+		ref, items, tr, err := loadMirrorPlaylistItems(ctx, src, req.SourceID)
 		if err != nil {
 			s.writeMirrorUpstreamError(w, logger, sourceService, err)
 			return
 		}
 		truncated = tr
 		tracks = items
-		srcRef = MirrorRef{Service: sourceService, ID: pl.ID, Name: pl.Name, URL: pl.URL, Count: len(items)}
+		srcRef = mirrorRefFromPlaylist(sourceService, ref, len(items))
 	case MirrorKindTracks:
-		items, tr, err := src.loadLikedTracks(ctx)
+		items, tr, err := src.ListUserLikedTracks(ctx)
 		if err != nil {
 			s.writeMirrorUpstreamError(w, logger, sourceService, err)
 			return
@@ -212,14 +189,10 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		srcRef.Count = len(tracks)
 	}
 
-	// Service-local IDs/URIs do not transfer across APIs. Force the target
-	// adapter to search by name/artist when source and target differ.
-	if sourceService != req.TargetService {
-		for i := range tracks {
-			tracks[i].SourceID = ""
-			tracks[i].SourceURI = ""
-		}
-	}
+	// Placement matching lives in the write operations: they honor their own
+	// service's local references and catalog-search the rest. Service-local
+	// IDs never transfer across APIs, so cross-service copies match by
+	// name/artist there.
 
 	name := strings.TrimSpace(req.Name)
 	if name == "" {
@@ -250,30 +223,30 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var skips []MirrorSkip
+	var skips []types.PlaceSkip
 	switch req.Kind {
 	case MirrorKindPlaylists:
-		id, url, copied, sk, err := dst.placeTracks(ctx, "", name, tracks)
+		res, err := dst.PlacePlaylistItems(ctx, "", name, tracks)
 		if err != nil {
 			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
 		}
-		result.Target = MirrorRef{Service: req.TargetService, ID: id, Name: name, URL: url, Count: copied}
-		result.Copied = copied
-		skips = sk
-		s.recordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, id, name, copied, "")
+		result.Target = MirrorRef{Service: req.TargetService, ID: res.PlaylistID, Name: name, URL: res.URL, Count: res.Copied}
+		result.Copied = res.Copied
+		skips = res.Skips
+		s.recordMirrorCopy(MirrorKindPlaylists, sourceService, req.SourceID, req.TargetService, res.PlaylistID, name, res.Copied, "")
 	case MirrorKindTracks:
-		copied, sk, err := dst.saveLikedTracks(ctx, tracks)
+		res, err := dst.SaveLikedTracks(ctx, tracks)
 		if err != nil {
 			s.writeMirrorUpstreamError(w, logger, req.TargetService, err)
 			return
 		}
-		result.Target = MirrorRef{Service: req.TargetService, Name: "liked/saved tracks", Count: copied}
-		result.Copied = copied
-		skips = sk
-		s.recordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", copied, "")
+		result.Target = MirrorRef{Service: req.TargetService, Name: "liked/saved tracks", Count: res.Copied}
+		result.Copied = res.Copied
+		skips = res.Skips
+		s.recordMirrorCopy(MirrorKindTracks, sourceService, "", req.TargetService, "", "liked/saved tracks", res.Copied, "")
 	}
-	result.Skips = skips
+	result.Skips = toMirrorSkips(skips)
 	result.Skipped = len(skips)
 
 	logger.Info("mirror complete",
@@ -343,50 +316,105 @@ func (s *Server) defaultMirrorSource(kind string) string {
 	return ""
 }
 
+// mirrorSource is the read surface the mirror engine needs from a service:
+// the type-level list operations reconciliation plans against.
 type mirrorSource interface {
-	loadPlaylist(ctx context.Context, id string) (ref MirrorRef, tracks []mirrorTrack, truncated bool, err error)
-	loadLikedTracks(ctx context.Context) (tracks []mirrorTrack, truncated bool, err error)
-	// Cursor-paged reads for chained mirror jobs. An empty cursor starts at
-	// the beginning; next == "" means the list is exhausted. Paging this way
-	// keeps a chained job at one upstream page per step instead of
-	// re-walking the whole list each time.
-	loadPlaylistPage(ctx context.Context, id, cursor string, limit int) (ref MirrorRef, tracks []mirrorTrack, total int, next string, err error)
-	loadLikedTracksPage(ctx context.Context, cursor string, limit int) (tracks []mirrorTrack, total int, next string, err error)
+	types.PlaylistItemsProvider
+	types.LikedTrackProvider
+	types.LikedTrackPageProvider
 }
 
+// mirrorTarget is the write surface: the type-level placement operations
+// (issue #254). Appending to a known playlist is what lets a mirror chain
+// spread across job steps without creating a playlist per batch
+// (issue #227 phase 3).
 type mirrorTarget interface {
-	// placeTracks appends tracks to an existing target playlist, or creates
-	// one named name when playlistID is empty. Appending is what lets a
-	// mirror chain spread across job steps without creating a playlist per
-	// batch (issue #227 phase 3).
-	placeTracks(ctx context.Context, playlistID, name string, tracks []mirrorTrack) (id, url string, copied int, skips []MirrorSkip, err error)
-	saveLikedTracks(ctx context.Context, tracks []mirrorTrack) (copied int, skips []MirrorSkip, err error)
+	types.PlaylistItemWriteProvider
+	types.LikedTrackWriteProvider
 }
 
 func (s *Server) mirrorSourceFor(serviceID, kind string) (mirrorSource, error) {
 	if s.mirrorSourceFn != nil {
 		return s.mirrorSourceFn(serviceID, kind)
 	}
-	switch serviceID {
-	case "spotify":
-		return &spotifyMirror{s: s}, nil
-	case "youtube-music":
-		return &youtubeMirror{s: s}, nil
+	if conn, ok := s.connectors[serviceID].(mirrorSource); ok {
+		return conn, nil
 	}
-	return nil, fmt.Errorf("mirror source %q is not supported yet (supported: spotify, youtube-music)", serviceID)
+	return nil, fmt.Errorf("mirror source %q is not supported yet (supported: %s)",
+		serviceID, mirrorSupportedFor[mirrorSource](s))
 }
 
 func (s *Server) mirrorTargetFor(serviceID, kind string) (mirrorTarget, error) {
 	if s.mirrorTargetFn != nil {
 		return s.mirrorTargetFn(serviceID, kind)
 	}
-	switch serviceID {
-	case "spotify":
-		return &spotifyMirror{s: s}, nil
-	case "youtube-music":
-		return &youtubeMirror{s: s}, nil
+	if conn, ok := s.connectors[serviceID].(mirrorTarget); ok {
+		return conn, nil
 	}
-	return nil, fmt.Errorf("mirror target %q is not supported yet (supported: spotify, youtube-music)", serviceID)
+	return nil, fmt.Errorf("mirror target %q is not supported yet (supported: %s)",
+		serviceID, mirrorSupportedFor[mirrorTarget](s))
+}
+
+// mirrorSupportedFor lists registered services implementing P, so
+// "not supported yet" copy stays accurate as connectors gain operations.
+func mirrorSupportedFor[P any](s *Server) string {
+	ids := make([]string, 0, len(s.connectors))
+	for id, conn := range s.connectors {
+		if _, ok := any(conn).(P); ok {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return "none"
+	}
+	sort.Strings(ids)
+	return strings.Join(ids, ", ")
+}
+
+// loadMirrorPlaylistItems pages a source playlist through the items
+// operation, up to libraryPageCap pages. truncated reports the cap was hit
+// with more items still upstream.
+func loadMirrorPlaylistItems(ctx context.Context, src types.PlaylistItemsProvider, id string) (types.Playlist, []types.Track, bool, error) {
+	var ref types.Playlist
+	var tracks []types.Track
+	cursor := ""
+	for page := 0; page < libraryPageCap; page++ {
+		r, p, err := src.ListPlaylistItems(ctx, id, cursor, 100)
+		if err != nil {
+			return ref, tracks, false, err
+		}
+		if page == 0 {
+			ref = r
+		}
+		tracks = append(tracks, p.Tracks...)
+		if p.Next == "" {
+			return ref, tracks, false, nil
+		}
+		cursor = p.Next
+	}
+	return ref, tracks, true, nil
+}
+
+// mirrorRefFromPlaylist projects a neutral playlist ref onto the API shape.
+func mirrorRefFromPlaylist(service string, p types.Playlist, count int) MirrorRef {
+	ref := MirrorRef{Service: service, Name: p.Name, Count: count}
+	if len(p.Sources) > 0 {
+		ref.ID = p.Sources[0].ID
+		ref.URL = p.Sources[0].URL
+	}
+	return ref
+}
+
+// toMirrorSkips projects placement skips onto the API shape.
+func toMirrorSkips(skips []types.PlaceSkip) []MirrorSkip {
+	if len(skips) == 0 {
+		return nil
+	}
+	out := make([]MirrorSkip, 0, len(skips))
+	for _, sk := range skips {
+		out = append(out, MirrorSkip{Name: sk.Name, Reason: sk.Reason})
+	}
+	return out
 }
 
 // mirrorUpstream performs a raw JSON call to a service's configured endpoint

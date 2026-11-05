@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Mirror and repair job runners (issue #227 phase 3). One runner serves both
@@ -14,11 +16,10 @@ import (
 // executor surface #86 needs; the policy of *when* to repair stays there.
 //
 // A playlist mirror chains through the queue one source page at a time,
-// appending to a single target playlist (mirrorTarget.placeTracks with a
+// appending to a single target playlist (PlaylistItemWriteProvider with a
 // known playlist id) instead of creating a playlist per batch. Repair adds a
 // target-side existence filter so a re-run converges rather than duplicating
-// what is already placed — the same name/identity matching mirror already
-// uses.
+// what is already placed — the same name/identity matching placement uses.
 
 // mirrorJobPayload is the job payload for a mirror or repair step.
 type mirrorJobPayload struct {
@@ -117,16 +118,22 @@ func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 		pageLimit = mirrorTrackCap
 	}
 	var (
-		tracks []mirrorTrack
+		tracks []types.Track
 		total  int
 		next   string
 		srcRef MirrorRef
 	)
 	switch p.Kind {
 	case MirrorKindPlaylists:
-		srcRef, tracks, total, next, err = src.loadPlaylistPage(ctx, p.SourceID, p.Cursor, pageLimit)
+		var ref types.Playlist
+		var page types.TrackPage
+		ref, page, err = src.ListPlaylistItems(ctx, p.SourceID, p.Cursor, pageLimit)
+		tracks, total, next = page.Tracks, page.Total, page.Next
+		srcRef = mirrorRefFromPlaylist(p.SourceService, ref, total)
 	case MirrorKindTracks:
-		tracks, total, next, err = src.loadLikedTracksPage(ctx, p.Cursor, pageLimit)
+		var page types.TrackPage
+		page, err = src.ListUserLikedTracksPage(ctx, p.Cursor, pageLimit)
+		tracks, total, next = page.Tracks, page.Total, page.Next
 		srcRef = MirrorRef{Service: p.SourceService, Name: "liked/saved tracks", Count: total}
 	default:
 		return SyncStep{}, fmt.Errorf("%w: kind %q is not a mirrorable list", ErrSyncTerminal, p.Kind)
@@ -138,14 +145,9 @@ func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 	}
 	p.SourceTotal = total
 
-	// Service-local IDs do not transfer across APIs. Force the target adapter
-	// to match by name/artist when source and target differ.
-	if p.SourceService != p.TargetService {
-		for i := range tracks {
-			tracks[i].SourceID = ""
-			tracks[i].SourceURI = ""
-		}
-	}
+	// Placement matching lives in the write operations: they honor their own
+	// service's local references and catalog-search the rest. Service-local
+	// IDs never transfer across APIs.
 
 	// The source page is the work this step planned, whether or not some of
 	// it turns out to be already placed.
@@ -181,19 +183,19 @@ func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 	if !p.DryRun && len(tracks) > 0 {
 		switch p.Kind {
 		case MirrorKindPlaylists:
-			id, _, copied, skips, perr := dst.placeTracks(ctx, p.TargetID, name, tracks)
-			p.Skipped += len(skips)
-			if id != "" {
-				p.TargetID = id
+			res, perr := dst.PlacePlaylistItems(ctx, p.TargetID, name, tracks)
+			p.Skipped += len(res.Skips)
+			if res.PlaylistID != "" {
+				p.TargetID = res.PlaylistID
 			}
-			p.Copied += copied
+			p.Copied += res.Copied
 			if perr != nil {
 				return r.step(p, false), perr
 			}
 		case MirrorKindTracks:
-			copied, skips, perr := dst.saveLikedTracks(ctx, tracks)
-			p.Skipped += len(skips)
-			p.Copied += copied
+			res, perr := dst.SaveLikedTracks(ctx, tracks)
+			p.Skipped += len(res.Skips)
+			p.Copied += res.Copied
 			if perr != nil {
 				return r.step(p, false), perr
 			}
@@ -254,35 +256,22 @@ func defaultMirrorName(kind string) string {
 	return "Aegis mirror"
 }
 
-// mirrorIdentityKey reduces a track to the identity mirror matches on: the
-// service-local id when present, else name + first artist.
-func mirrorIdentityKey(t mirrorTrack) string {
-	if t.SourceID != "" {
-		return "id:" + t.SourceID
-	}
-	if t.SourceURI != "" {
-		return "uri:" + t.SourceURI
-	}
-	return repairIdentityKey(t)
-}
-
 // repairIdentityKey is always name-based. Repair compares a source list
-// against a target list from a *different* service, and cross-service mirror
-// clears service-local ids before placing — so id keys would never line up.
-// Name + first artist is the same matching mirror already uses across
-// services.
-func repairIdentityKey(t mirrorTrack) string {
+// against a target list from a *different* service, and placement matches
+// cross-service by name/artist in the write operation — so id keys would
+// never line up. Name + first artist is the same matching placement uses.
+func repairIdentityKey(t types.Track) string {
 	artist := ""
 	if len(t.Artists) > 0 {
-		artist = t.Artists[0]
+		artist = t.Artists[0].Name
 	}
 	return "name:" + strings.ToLower(strings.TrimSpace(t.Name)) + "|" +
 		strings.ToLower(strings.TrimSpace(artist))
 }
 
 // loadTargetIdentities reads what a target playlist already holds so a repair
-// can skip those items. It reuses the target service's source reader — both
-// adapters can page a playlist — so no extra adapter method is needed.
+// can skip those items. It reuses the items operation on the target service,
+// so no extra adapter method is needed.
 func loadTargetIdentities(ctx context.Context, s *Server, targetService, targetID string) (map[string]bool, error) {
 	src, err := s.mirrorSourceFor(targetService, MirrorKindPlaylists)
 	if err != nil {
@@ -290,18 +279,18 @@ func loadTargetIdentities(ctx context.Context, s *Server, targetService, targetI
 	}
 	out := make(map[string]bool)
 	cursor := ""
-	for page := 0; page < libraryPageCap; page++ {
-		_, tracks, _, next, err := src.loadPlaylistPage(ctx, targetID, cursor, 100)
+	for i := 0; i < libraryPageCap; i++ {
+		_, page, err := src.ListPlaylistItems(ctx, targetID, cursor, 100)
 		if err != nil {
 			return out, err
 		}
-		for _, t := range tracks {
+		for _, t := range page.Tracks {
 			out[repairIdentityKey(t)] = true
 		}
-		if next == "" {
+		if page.Next == "" {
 			return out, nil
 		}
-		cursor = next
+		cursor = page.Next
 	}
 	return out, nil
 }

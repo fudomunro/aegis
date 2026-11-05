@@ -226,3 +226,82 @@ func DocumentServiceName(d Document) string {
 	}
 	return ""
 }
+
+// Cursor-paged reads and placement writes (issue #254 mirror rethink).
+// Mirroring is not a data type: it is reconciliation over data types. Core
+// plans what should exist where and schedules the work; connectors expose
+// the operations below — read a list in pages, place items into a playlist,
+// save liked tracks — and report per-item skips so planning can react.
+
+// TrackPage is one cursor page of service-local tracks.
+type TrackPage struct {
+	Tracks []Track `json:"tracks,omitempty"`
+	// Total is the upstream item count, when known.
+	Total int `json:"total,omitempty"`
+	// Next is the opaque cursor for the following page; "" ends the list.
+	Next string `json:"next,omitempty"`
+}
+
+// PlaylistItemsProvider is implemented by connectors that can page through
+// the tracks of one service-local playlist. Reconciliation reads source
+// lists this way and re-reads targets to see what is already placed.
+type PlaylistItemsProvider interface {
+	// ListPlaylistItems returns one page of a playlist's tracks. ref carries
+	// the playlist's service-local identity (name/URL in Sources); only the
+	// page at the start cursor needs to fill it. Return ErrUnauthorized when
+	// no valid token is available.
+	ListPlaylistItems(ctx context.Context, playlistID, cursor string, limit int) (ref Playlist, page TrackPage, err error)
+}
+
+// LikedTrackPageProvider is the cursor-paged form of LikedTrackProvider.
+// Chained sync jobs step one upstream page at a time instead of re-walking
+// the whole list on every step.
+type LikedTrackPageProvider interface {
+	// ListUserLikedTracksPage returns one page of the user's liked/saved
+	// tracks. Return ErrUnauthorized when no valid token is available.
+	ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (page TrackPage, err error)
+}
+
+// PlaceSkip is one item a placement operation could not place.
+type PlaceSkip struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// PlacePlaylistItemsResult reports a playlist placement.
+type PlacePlaylistItemsResult struct {
+	// PlaylistID is the service-local target playlist (created or appended).
+	PlaylistID string `json:"playlist_id"`
+	// URL is a deep link to the target playlist, when available.
+	URL string `json:"url,omitempty"`
+	// Copied is how many tracks were placed.
+	Copied int `json:"copied"`
+	// Skips are items that could not be placed (no catalog match, …).
+	Skips []PlaceSkip `json:"skips,omitempty"`
+}
+
+// PlaylistItemWriteProvider is implemented by connectors that can create a
+// playlist and place tracks in it. Placement matches by the connector's own
+// catalog search when a track carries no service-local reference.
+type PlaylistItemWriteProvider interface {
+	// PlacePlaylistItems creates a playlist named name when playlistID is
+	// empty, else appends to it — appending is what lets a chained job spread
+	// across steps without creating a playlist per batch. Return
+	// ErrUnauthorized when no valid token is available.
+	PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []Track) (PlacePlaylistItemsResult, error)
+}
+
+// SaveLikedTracksResult reports a liked/saved placement.
+type SaveLikedTracksResult struct {
+	Copied int         `json:"copied"`
+	Skips  []PlaceSkip `json:"skips,omitempty"`
+}
+
+// LikedTrackWriteProvider is implemented by connectors that can save/like
+// tracks on the user's account.
+type LikedTrackWriteProvider interface {
+	// SaveLikedTracks marks the given tracks as liked/saved. Matching is by
+	// service-local reference when present, else catalog search. Return
+	// ErrUnauthorized when no valid token is available.
+	SaveLikedTracks(ctx context.Context, tracks []Track) (SaveLikedTracksResult, error)
+}
