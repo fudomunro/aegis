@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -10,9 +11,39 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// Spotify reconciliation operations (issue #254): paged list reads and
-// placement writes over neutral models. Core plans and schedules; these
-// methods are the service-local operations it calls.
+// Spotify reconciliation operations (issue #254): paged list reads,
+// metadata probes for freshness checks, and placement writes over neutral
+// models. Core plans and schedules; these methods are the service-local
+// operations it calls.
+
+// GetPlaylistMeta implements types.PlaylistMetaProvider in one metadata
+// call: name, snapshot_id version token, and item count.
+func (c *SpotifyConnector) GetPlaylistMeta(ctx context.Context, playlistID string) (types.PlaylistMeta, bool, error) {
+	raw, status, err := apiJSON(ctx, c.host, SpotifyServiceID, "GET", "/playlists/"+url.PathEscape(playlistID), nil, nil)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return types.PlaylistMeta{}, false, nil
+		}
+		return types.PlaylistMeta{}, false, err
+	}
+	name, _ := raw["name"].(string)
+	snapshot, _ := raw["snapshot_id"].(string)
+	tracks, _ := raw["tracks"].(map[string]any)
+	total, _ := AsInt(tracks["total"])
+	return types.PlaylistMeta{Name: name, ItemCount: total, VersionToken: snapshot}, true, nil
+}
+
+// SavedTrackCount implements types.PlaylistMetaProvider: the size of the
+// liked/saved list, the comparable token for liked-tracks copies.
+func (c *SpotifyConnector) SavedTrackCount(ctx context.Context) (int, error) {
+	raw, _, err := apiJSON(ctx, c.host, SpotifyServiceID, "GET", "/me/tracks",
+		url.Values{"limit": []string{"1"}}, nil)
+	if err != nil {
+		return 0, err
+	}
+	total, _ := AsInt(raw["total"])
+	return total, nil
+}
 
 // ListPlaylistItems implements types.PlaylistItemsProvider. One page of a
 // Spotify playlist's tracks starting at the offset named by cursor. Only

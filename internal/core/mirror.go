@@ -1,15 +1,12 @@
 package core
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"sort"
 	"strings"
 
@@ -451,70 +448,3 @@ func mirrorOpFor[P any](s *Server, serviceID, what string) (P, error) {
 		what, serviceID, mirrorSupportedFor[P](s))
 }
 
-// mirrorUpstream performs a raw JSON call to a service's configured endpoint
-// using the stored OAuth token. Unlike HandleServiceProxy it does not run
-// connector response transforms, so callers can use native API shapes.
-func (s *Server) mirrorUpstream(ctx context.Context, serviceID, method, path string, query url.Values, body any) (map[string]any, int, error) {
-	svc := s.config.GetService(serviceID)
-	if svc == nil {
-		return nil, 0, fmt.Errorf("service %q not configured", serviceID)
-	}
-	if svc.Endpoint == "" {
-		return nil, 0, fmt.Errorf("service %q has no upstream endpoint", serviceID)
-	}
-	token := s.GetValidToken(serviceID, slog.Default())
-	if token == "" {
-		return nil, 0, types.ErrUnauthorized
-	}
-
-	u := trimRightSlash(svc.Endpoint) + path
-	if len(query) > 0 {
-		u += "?" + query.Encode()
-	}
-
-	var bodyReader io.Reader
-	if body != nil {
-		buf, err := json.Marshal(body)
-		if err != nil {
-			return nil, 0, err
-		}
-		bodyReader = bytes.NewReader(buf)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, method, u, bodyReader)
-	if err != nil {
-		return nil, 0, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := aegisHTTPClient.Do(req)
-	if err != nil {
-		return nil, 0, err
-	}
-	defer resp.Body.Close()
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, 0, err
-	}
-	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, resp.StatusCode, types.ErrUnauthorized
-	}
-	if resp.StatusCode >= 400 {
-		msg := strings.TrimSpace(string(data))
-		if len(msg) > 240 {
-			msg = msg[:240] + "…"
-		}
-		return nil, resp.StatusCode, fmt.Errorf("upstream %s %s returned %d: %s", method, path, resp.StatusCode, msg)
-	}
-	if len(data) == 0 {
-		return map[string]any{}, resp.StatusCode, nil
-	}
-	var parsed map[string]any
-	if err := json.Unmarshal(data, &parsed); err != nil {
-		return nil, resp.StatusCode, fmt.Errorf("decode upstream response: %w", err)
-	}
-	return parsed, resp.StatusCode, nil
-}

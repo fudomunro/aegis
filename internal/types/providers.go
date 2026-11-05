@@ -262,6 +262,31 @@ type LikedTrackPageProvider interface {
 	ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (page TrackPage, err error)
 }
 
+// PlaylistMeta is a playlist's live version descriptor: what a freshness
+// check compares against its recorded watermark.
+type PlaylistMeta struct {
+	Name string `json:"name"`
+	// ItemCount is the playlist's current item count.
+	ItemCount int `json:"item_count"`
+	// VersionToken is the provider's change token (e.g. Spotify's
+	// snapshot_id), when the API exposes one.
+	VersionToken string `json:"version_token,omitempty"`
+}
+
+// PlaylistMetaProvider is implemented by connectors that can report a
+// playlist's live version descriptor in one cheap metadata call (no item
+// paging) — the read freshness checks use to answer "is this backup still
+// current?" without re-syncing anything.
+type PlaylistMetaProvider interface {
+	// GetPlaylistMeta returns the playlist's current name, item count, and
+	// version token. ok is false when the playlist does not exist. Return
+	// ErrUnauthorized when no valid token is available.
+	GetPlaylistMeta(ctx context.Context, playlistID string) (meta PlaylistMeta, ok bool, err error)
+	// SavedTrackCount returns how many items the user's liked/saved list
+	// currently holds — the comparable token for liked-tracks copies.
+	SavedTrackCount(ctx context.Context) (n int, err error)
+}
+
 // PlaceSkip is one item a placement operation could not place.
 type PlaceSkip struct {
 	Name   string `json:"name"`

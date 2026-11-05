@@ -339,3 +339,41 @@ func TestYouTubeSaveLikedTracks_RateError(t *testing.T) {
 		t.Fatal("expected rate error")
 	}
 }
+
+func TestYouTubePlaylistMeta(t *testing.T) {
+	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		switch id {
+		case "PLx":
+			writeMirrorJSON(w, map[string]any{
+				"items": []any{map[string]any{
+					"snippet":        map[string]any{"title": "My list"},
+					"contentDetails": map[string]any{"itemCount": 4},
+				}},
+			})
+		case "LL":
+			writeMirrorJSON(w, map[string]any{
+				"items": []any{map[string]any{"contentDetails": map[string]any{"itemCount": 7}}},
+			})
+		default:
+			writeMirrorJSON(w, map[string]any{"items": []any{}})
+		}
+	}))
+
+	meta, ok, err := c.GetPlaylistMeta(context.Background(), "PLx")
+	if err != nil || !ok {
+		t.Fatalf("GetPlaylistMeta = (%+v,%v,%v)", meta, ok, err)
+	}
+	if meta.Name != "My list" || meta.ItemCount != 4 || meta.VersionToken != "" {
+		t.Fatalf("meta = %+v", meta)
+	}
+
+	if _, ok, err := c.GetPlaylistMeta(context.Background(), "gone"); err != nil || ok {
+		t.Fatalf("missing playlist = (ok=%v err=%v), want (false,nil)", ok, err)
+	}
+
+	n, err := c.SavedTrackCount(context.Background())
+	if err != nil || n != 7 {
+		t.Fatalf("SavedTrackCount = %d, %v", n, err)
+	}
+}

@@ -544,3 +544,41 @@ func TestNeutralSpotifyTrack_PartialShapes(t *testing.T) {
 		t.Fatalf("got = %+v", got)
 	}
 }
+
+func TestSpotifyPlaylistMeta(t *testing.T) {
+	c := newSpotifyMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/playlists/pl1":
+			writeMirrorJSON(w, map[string]any{
+				"name": "Road trip", "snapshot_id": "snap-1",
+				"tracks": map[string]any{"total": 12},
+			})
+		case r.URL.Path == "/playlists/gone":
+			http.NotFound(w, r)
+		case r.URL.Path == "/me/tracks":
+			if r.URL.Query().Get("limit") != "1" {
+				t.Errorf("saved count limit = %q", r.URL.Query().Get("limit"))
+			}
+			writeMirrorJSON(w, map[string]any{"total": 44})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+
+	meta, ok, err := c.GetPlaylistMeta(context.Background(), "pl1")
+	if err != nil || !ok {
+		t.Fatalf("GetPlaylistMeta = (%+v,%v,%v)", meta, ok, err)
+	}
+	if meta.Name != "Road trip" || meta.VersionToken != "snap-1" || meta.ItemCount != 12 {
+		t.Fatalf("meta = %+v", meta)
+	}
+
+	if _, ok, err := c.GetPlaylistMeta(context.Background(), "gone"); err != nil || ok {
+		t.Fatalf("missing playlist = (ok=%v err=%v), want (false,nil)", ok, err)
+	}
+
+	n, err := c.SavedTrackCount(context.Background())
+	if err != nil || n != 44 {
+		t.Fatalf("SavedTrackCount = %d, %v", n, err)
+	}
+}

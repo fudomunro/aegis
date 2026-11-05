@@ -2,11 +2,11 @@ package core
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
-	"net/url"
 	"os"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Copy freshness checks (issue #227 phase 2, closing the observational
@@ -210,13 +210,13 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 // --- checkers ---
 
 // musicMirrorChecker validates mirrored playlists and liked-tracks lists
-// against the target service using one cheap metadata read — the same
-// "snapshot_id / item_count" tokens the copy fidelity table promises.
+// against the target service's live metadata (types.PlaylistMetaProvider)
+// — the same "snapshot_id / item_count" tokens the copy fidelity table
+// promises. Endpoint comes from the connector's configured service (never
+// hardcoded), per the connector rules.
 type musicMirrorChecker struct {
-	srv         *Server
-	service     string
-	playlistGet func(ctx context.Context, id string) (name string, snapshotID string, itemCount int, found bool, err error)
-	likedCount  func(ctx context.Context) (int, error)
+	srv     *Server
+	service string
 }
 
 // Services implements CopyChecker.
@@ -224,22 +224,20 @@ func (c *musicMirrorChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
 func (c *musicMirrorChecker) Check(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+	p, ok := c.srv.connectors[c.service].(types.PlaylistMetaProvider)
+	if !ok {
+		return CopyVersion{}, false, false, nil
+	}
 	// Liked-tracks mirrors have no target id; the only comparable token is
 	// how many items the target's saved list holds now.
 	if strings.TrimSpace(rec.ExternalID) == "" {
-		if c.likedCount == nil {
-			return CopyVersion{}, false, false, nil
-		}
-		n, err := c.likedCount(ctx)
+		n, err := p.SavedTrackCount(ctx)
 		if err != nil {
 			return CopyVersion{}, false, false, err
 		}
 		return CopyVersion{ItemCount: n}, true, true, nil
 	}
-	if c.playlistGet == nil {
-		return CopyVersion{}, false, false, nil
-	}
-	name, snapshot, count, found, err := c.playlistGet(ctx, rec.ExternalID)
+	meta, found, err := p.GetPlaylistMeta(ctx, rec.ExternalID)
 	if err != nil {
 		return CopyVersion{}, false, false, err
 	}
@@ -248,81 +246,10 @@ func (c *musicMirrorChecker) Check(ctx context.Context, rec CopyRecord) (CopyVer
 	}
 	return CopyVersion{
 		ExternalID: rec.ExternalID,
-		SnapshotID: snapshot,
-		ItemCount:  count,
-		Name:       name,
+		SnapshotID: meta.VersionToken,
+		ItemCount:  meta.ItemCount,
+		Name:       meta.Name,
 	}, true, true, nil
-}
-
-// spotifyMirrorChecker reads playlist / saved-track metadata from Spotify.
-// Endpoint comes from config (never hardcoded), per the connector rules.
-func spotifyMirrorChecker(srv *Server) CopyChecker {
-	return &musicMirrorChecker{
-		srv:     srv,
-		service: "spotify",
-		playlistGet: func(ctx context.Context, id string) (string, string, int, bool, error) {
-			raw, status, err := srv.mirrorUpstream(ctx, "spotify", "GET", "/playlists/"+url.PathEscape(id), nil, nil)
-			if err != nil {
-				if status == 404 {
-					return "", "", 0, false, nil
-				}
-				return "", "", 0, false, err
-			}
-			name, _ := raw["name"].(string)
-			snapshot, _ := raw["snapshot_id"].(string)
-			return name, snapshot, spotifyTotal(raw), true, nil
-		},
-		likedCount: func(ctx context.Context) (int, error) {
-			raw, _, err := srv.mirrorUpstream(ctx, "spotify", "GET", "/me/tracks",
-				url.Values{"limit": []string{"1"}}, nil)
-			if err != nil {
-				return 0, err
-			}
-			return asInt(raw["total"]), nil
-		},
-	}
-}
-
-// youtubeMusicMirrorChecker reads playlist metadata from YouTube Music.
-func youtubeMusicMirrorChecker(srv *Server) CopyChecker {
-	return &musicMirrorChecker{
-		srv:     srv,
-		service: "youtube-music",
-		playlistGet: func(ctx context.Context, id string) (string, string, int, bool, error) {
-			raw, status, err := srv.mirrorUpstream(ctx, "youtube-music", "GET", "/playlists",
-				url.Values{"part": []string{"snippet,contentDetails"}, "id": []string{id}}, nil)
-			if err != nil {
-				if status == 404 {
-					return "", "", 0, false, nil
-				}
-				return "", "", 0, false, err
-			}
-			items, _ := raw["items"].([]any)
-			if len(items) == 0 {
-				return "", "", 0, false, nil
-			}
-			pl, _ := items[0].(map[string]any)
-			snippet, _ := pl["snippet"].(map[string]any)
-			title, _ := snippet["title"].(string)
-			details, _ := pl["contentDetails"].(map[string]any)
-			return title, "", asInt(details["itemCount"]), true, nil
-		},
-		likedCount: func(ctx context.Context) (int, error) {
-			// The liked-videos playlist is the mirror target for saved tracks.
-			raw, _, err := srv.mirrorUpstream(ctx, "youtube-music", "GET", "/playlists",
-				url.Values{"part": []string{"contentDetails"}, "id": []string{"LL"}}, nil)
-			if err != nil {
-				return 0, err
-			}
-			items, _ := raw["items"].([]any)
-			if len(items) == 0 {
-				return 0, nil
-			}
-			pl, _ := items[0].(map[string]any)
-			details, _ := pl["contentDetails"].(map[string]any)
-			return asInt(details["itemCount"]), nil
-		},
-	}
 }
 
 // takeoutChecker validates an optimistic Google Takeout snapshot against the
@@ -350,37 +277,18 @@ func (takeoutChecker) Check(_ context.Context, rec CopyRecord) (CopyVersion, boo
 	return CopyVersion{ExternalID: path, Name: path}, true, true, nil
 }
 
-// newCheckerRegistry wires the checkers this build supports. Services with no
-// checker (Bluesky shares, DAV item etags) are deliberately absent: their
+// newCheckerRegistry wires the checkers this build supports. Music services
+// register from the connector map: any connector exposing
+// types.PlaylistMetaProvider gets the shared mirror checker. Services with
+// no checker (Bluesky shares, DAV item etags) are deliberately absent: their
 // rows stay `unknown` until a checker lands, which is the honest answer.
 func newCheckerRegistry(srv *Server) *CheckerRegistry {
 	r := NewCheckerRegistry()
-	r.Register(spotifyMirrorChecker(srv))
-	r.Register(youtubeMusicMirrorChecker(srv))
+	for id, conn := range srv.connectors {
+		if _, ok := conn.(types.PlaylistMetaProvider); ok {
+			r.Register(&musicMirrorChecker{srv: srv, service: id})
+		}
+	}
 	r.Register(takeoutChecker{})
 	return r
-}
-
-// --- small helpers ---
-
-// spotifyTotal pulls tracks.total from a Spotify playlist object.
-func spotifyTotal(raw map[string]any) int {
-	tracks, _ := raw["tracks"].(map[string]any)
-	return asInt(tracks["total"])
-}
-
-// asInt coerces a JSON-decoded number to an int.
-func asInt(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	case json.Number:
-		i, _ := n.Int64()
-		return int(i)
-	}
-	return 0
 }
