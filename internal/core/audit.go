@@ -45,12 +45,14 @@ CREATE TABLE IF NOT EXISTS audit_events (
   cache TEXT NOT NULL DEFAULT '',
   method TEXT NOT NULL DEFAULT '',
   status INTEGER NOT NULL DEFAULT 0,
+  client_ip TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS audit_events_at ON audit_events(at);
 CREATE INDEX IF NOT EXISTS audit_events_agent ON audit_events(agent, at);
 CREATE INDEX IF NOT EXISTS audit_events_decision ON audit_events(decision, at);
 CREATE INDEX IF NOT EXISTS audit_events_target ON audit_events(target, at);
+CREATE INDEX IF NOT EXISTS audit_events_client_ip ON audit_events(client_ip, at);
 `
 
 // AccessEventToAudit projects a redacted access event onto the durable
@@ -67,11 +69,13 @@ func AccessEventToAudit(ev AccessEvent) AuditEvent {
 		Cache:    ev.Cache,
 		Method:   ev.Method,
 		Status:   ev.Status,
+		ClientIP: ev.ClientIP,
 	}
 }
 
 // AuditEvent is one redacted access record. Mirrors AccessEvent plus
-// HTTP method/status for denials. Never holds tokens or bodies.
+// HTTP method/status for denials and the resolved client IP. Never holds
+// tokens or bodies.
 type AuditEvent struct {
 	At       time.Time
 	Agent    string
@@ -83,6 +87,7 @@ type AuditEvent struct {
 	Cache    string
 	Method   string
 	Status   int
+	ClientIP string
 }
 
 // AuditLog is the SQLite-backed durable audit sink. Empty path disables
@@ -99,6 +104,45 @@ type AuditLog struct {
 
 // OpenAuditLog opens or creates the audit database at path. Empty path
 // returns a disabled log so call sites can stay unconditional.
+// migrateAuditColumns adds columns missing from older audit databases
+// (issue #253) so the schema's index creation succeeds. No-op on fresh
+// databases: PRAGMA table_info on a missing table returns no rows.
+func migrateAuditColumns(db *sql.DB) error {
+	rows, err := db.Query(`PRAGMA table_info(audit_events)`)
+	if err != nil {
+		return err
+	}
+	cols := map[string]bool{}
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			ctype     string
+			notNull   int
+			dfltValue any
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notNull, &dfltValue, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		cols[name] = true
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(cols) == 0 {
+		return nil
+	}
+	if !cols["client_ip"] {
+		if _, err := db.Exec(`ALTER TABLE audit_events ADD COLUMN client_ip TEXT NOT NULL DEFAULT ''`); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func OpenAuditLog(path string, retentionDays int) (*AuditLog, error) {
 	if path == "" {
 		return &AuditLog{}, nil
@@ -123,6 +167,12 @@ func OpenAuditLog(path string, retentionDays int) (*AuditLog, error) {
 	if _, err := db.Exec(`PRAGMA busy_timeout=5000`); err != nil {
 		db.Close()
 		return nil, err
+	}
+	// Older databases predate newer columns (issue #253); add them before
+	// the schema runs so its CREATE INDEX statements can succeed.
+	if err := migrateAuditColumns(db); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("audit schema migration: %w", err)
 	}
 	if _, err := db.Exec(auditSchema); err != nil {
 		db.Close()
@@ -196,10 +246,10 @@ func (a *AuditLog) Write(ev AuditEvent) {
 	created := time.Now().UTC().Format(time.RFC3339Nano)
 	_, err := a.db.Exec(`
 INSERT INTO audit_events (
-  at, agent, surface, target, data_type, decision, reason, cache, method, status, created_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  at, agent, surface, target, data_type, decision, reason, cache, method, status, client_ip, created_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		at, ev.Agent, ev.Surface, ev.Target, ev.DataType, ev.Decision,
-		ev.Reason, ev.Cache, ev.Method, ev.Status, created,
+		ev.Reason, ev.Cache, ev.Method, ev.Status, ev.ClientIP, created,
 	)
 	if err != nil {
 		// Fail-open: never surface audit write errors to the caller.
@@ -279,7 +329,7 @@ func (a *AuditLog) List(f AuditFilter) ([]AuditEvent, error) {
 	if limit <= 0 || limit > 1000 {
 		limit = 100
 	}
-	query := `SELECT at, agent, surface, target, data_type, decision, reason, cache, method, status
+	query := `SELECT at, agent, surface, target, data_type, decision, reason, cache, method, status, client_ip
 FROM audit_events WHERE 1=1`
 	args := make([]any, 0, 4)
 	if f.Agent != "" {
@@ -309,7 +359,7 @@ FROM audit_events WHERE 1=1`
 			at string
 		)
 		if err := rows.Scan(&at, &ev.Agent, &ev.Surface, &ev.Target, &ev.DataType,
-			&ev.Decision, &ev.Reason, &ev.Cache, &ev.Method, &ev.Status); err != nil {
+			&ev.Decision, &ev.Reason, &ev.Cache, &ev.Method, &ev.Status, &ev.ClientIP); err != nil {
 			return nil, err
 		}
 		if t, err := time.Parse(time.RFC3339Nano, at); err == nil {

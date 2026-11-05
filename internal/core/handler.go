@@ -94,6 +94,8 @@ type Server struct {
 	cache       *Cache
 	tokens      *TokenStore
 	oauthStates *StateStore
+	// rl damps credential guessing on auth/token surfaces (issue #253).
+	rl *rateLimiter
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
 	refreshFlight tokenFlight
 	connectors    map[string]connectors.ServiceConnector
@@ -207,6 +209,13 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	// identity from explicit API-key / app-token credentials (issue #182).
 	next = s.csrfGuard(next)
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Brute-force damping (issue #253): a client IP or presented
+		// credential over its failure cap is rejected before any credential
+		// work.
+		if s.authLockedOut(r) {
+			s.rateLimited(w, r)
+			return
+		}
 		// App tokens are intentional third-party credentials. When present
 		// and valid, they win so scopes cannot be bypassed by a concurrent
 		// tailnet identity.
@@ -223,10 +232,11 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// principal with a dataset partition. They are agent-tier and never
 		// admin. Prefer them over the shared -api-key when both could match.
 		if sc := s.authenticateScope(r); sc != nil {
+			r = withDataScope(r, sc)
 			if !s.allowScopeMethod(w, r, sc) {
 				return
 			}
-			next(w, withAuthKind(withDataScope(r, sc), authKindAPIKey))
+			next(w, withAuthKind(r, authKindAPIKey))
 			return
 		}
 
@@ -303,6 +313,12 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	// identity from explicit admin API-key credentials (issue #182).
 	next = s.csrfGuard(next)
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Brute-force damping (issue #253): the admin key is the most
+		// valuable credential and gets the same failure caps as agent auth.
+		if s.authLockedOut(r) {
+			s.rateLimited(w, r)
+			return
+		}
 		if app := s.authenticateApp(r); app != nil {
 			s.denyStatus(w, r, nil, http.StatusForbidden, "app token not permitted on admin endpoints")
 			return
@@ -502,9 +518,12 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, 
 }
 
 func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIdentity, status int, reason string) {
-	attrs := []any{"remote", r.RemoteAddr, "path", r.URL.Path, "reason", reason, "status", status}
+	attrs := []any{"remote", s.clientIPFor(r), "path", r.URL.Path, "reason", reason, "status", status}
 	agent := "api-key"
-	if id != nil {
+	if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
+		agent = "scope:" + sc.ID
+		attrs = append(attrs, "scope", sc.ID)
+	} else if id != nil {
 		attrs = append(attrs, "login", id.LoginName, "identity_source", id.Source)
 		if id.LoginName != "" {
 			agent = id.LoginName
@@ -513,6 +532,11 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 	slog.Warn("unauthorized request", attrs...)
 	if r.URL != nil && r.URL.Path == hookPath {
 		s.recordHook(HookObservation{Action: "auth_fail", Host: requestHost(r)})
+	}
+	// Failed authentication counts against the brute-force caps (issue #253).
+	// Denials that came with a resolved tailnet identity are not guesses.
+	if status == http.StatusUnauthorized && id == nil {
+		s.recordAuthFailure(r)
 	}
 	// Durable auth denials (issue #105). Route family only — never the full path.
 	s.recordAccess(AccessEvent{

@@ -108,11 +108,13 @@ browser, or publish the directory as static files.
 Durable, append-only record of allowed and denied data access. Stored in
 SQLite at `<data-dir>/audit_log.db`.
 
-Each row is redacted like the in-memory access ring: agent login
-or `app:<id>`, surface (`library` / `service` / `auth` / …), target (service
-id or library kind), data type, decision, and a short reason
-(`permission`, `app_scope`, `service_blocked`, `auth`). **No tokens, request
-bodies, query strings, or full paths.**
+Each row is redacted like the in-memory access ring: agent login,
+`app:<id>`, or `scope:<id>` (external principals holding invite tokens),
+surface (`library` / `service` / `auth` / …), target (service id or library
+kind), data type, decision, a short reason (`permission`, `app_scope`,
+`service_blocked`, `auth`, `rate_limited`), and the resolved `client_ip`
+(trusted-proxy aware — see [`configuration.md`](configuration.md)). **No
+tokens, request bodies, query strings, or full paths.**
 
 - **Retention:** 30 days by default (`-audit-retention-days`). Older rows are
  pruned on startup and periodically on write. A hard row cap (500k) drops the

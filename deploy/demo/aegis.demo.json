@@ -14,5 +14,7 @@
       "endpoint": "sample://library",
       "dataset": "gondor"
     }
-  ]
+  ],
+  "trusted_proxies": ["127.0.0.1/32"],
+  "client_ip_header": "x-real-ip"
 }

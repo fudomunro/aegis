@@ -108,7 +108,7 @@ caller may do with each data type*. Admin is never the agent key.
 | Agent transcripts contain tokens | Agents never see tokens; Aegis owns OAuth; admin/API expose presence/scopes/expiry only |
 | Reuse agent key as admin | Separate `-admin-api-key`; shared `-api-key` is never admin (#181) |
 | App token database stolen | Only SHA-256 hashes in `apps.json` (0600); plaintext shown once |
-| Invite token leaked or brute-forced | **Hashed at rest is a contract requirement** (today `data_scopes.json` holds plaintext `api_key`, 0600 — migrate to `apps.json`-style SHA-256 storage with the invite lifecycle); revoke/disable per scope; rate limiting on token auth is required before a public bind |
+| Invite token leaked or brute-forced | Only SHA-256 hashes at rest (`api_key_hash`, 0600), like `apps.json`; plaintext shown once at mint; revoke/disable per scope; rate limiting on token auth (`rate_limits`) bounds guessing |
 | Schema pack smuggles secrets | `http_json` credential headers rejected at UDT load |
 
 ### 5.2 Unauthorized access
@@ -170,7 +170,7 @@ caller may do with each data type*. Admin is never the agent key.
 | Unbounded memory from huge hook bodies | Hook body cap |
 | OAuth state / page loops | Caps, eviction, `libraryPageCap`, singleflight refresh |
 | Fail-closed lockout on provider errors | **Fail-open**: parse/fetch errors allow the request and log |
-| Credential stuffing / token brute force on a public listener | Rate limiting per IP and per token (required before public bind; none in the binary yet); tokens matched via SHA-256 hash lookup rather than raw comparison |
+| Credential stuffing / token brute force on a public listener | Rate limiting per IP and per token (`rate_limits`, trusted-proxy aware); tokens matched via SHA-256 hash lookup rather than raw comparison |
 | DoS via a published API listener | Body caps; edge rate limits; availability of the owner's own tailnet path is independent |
 
 ---

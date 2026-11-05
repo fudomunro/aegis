@@ -46,6 +46,9 @@ type AccessEvent struct {
 	Method string
 	// Status is the HTTP response status when known (audit only).
 	Status int
+	// ClientIP is the resolved client address (trusted-proxy aware). Filled
+	// on the request path; empty for internal/admin rows (issue #253).
+	ClientIP string
 }
 
 // AccessMetrics is a lock-protected ring buffer of recent access events.
@@ -304,6 +307,11 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 // "api-key". Never returns token material.
 func agentForRequest(r *http.Request) string {
 	if r != nil {
+		if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
+			// External principals (invite tokens) audit by scope id, never
+			// the shared agent-key label (issue #253).
+			return "scope:" + sc.ID
+		}
 		if app := AppIdentityFrom(r); app != nil && app.ID != "" {
 			return "app:" + app.ID
 		}
@@ -345,6 +353,7 @@ func (s *Server) recordAccess(ev AccessEvent) {
 			Cache:    ev.Cache,
 			Method:   ev.Method,
 			Status:   ev.Status,
+			ClientIP: ev.ClientIP,
 		})
 	}
 	if s.prom != nil {
@@ -374,6 +383,9 @@ func skipAccessMetrics(r *http.Request) bool {
 func (s *Server) recordAccessFrom(r *http.Request, ev AccessEvent) {
 	if skipAccessMetrics(r) {
 		return
+	}
+	if ev.ClientIP == "" {
+		ev.ClientIP = s.clientIPFor(r)
 	}
 	s.recordAccess(ev)
 }
