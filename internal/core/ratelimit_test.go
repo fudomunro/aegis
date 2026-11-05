@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"testing"
 	"time"
 )
@@ -250,5 +251,98 @@ func TestValidateEdgeTrust(t *testing.T) {
 	}
 	if err := validateEdgeTrust(AuthModeAuto, false, nil); err != nil {
 		t.Fatalf("no trusted proxies: %v", err)
+	}
+}
+
+func TestValidatePublicCredentials(t *testing.T) {
+	trusted, err := compileTrustedProxies([]string{"127.0.0.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	long := "0123456789abcdef0123456789abcdef"
+	// A short operator-chosen key behind a trusted edge is brute-forceable.
+	if err := validatePublicCredentials(trusted, "short-key", ""); err == nil {
+		t.Fatal("short api-key behind trusted_proxies must be refused")
+	}
+	if err := validatePublicCredentials(trusted, "", "short-admin"); err == nil {
+		t.Fatal("short admin-api-key behind trusted_proxies must be refused")
+	}
+	if err := validatePublicCredentials(trusted, long, long); err != nil {
+		t.Fatalf("long keys must pass: %v", err)
+	}
+	// Not a public shape: tailnet-only deployments keep short local keys.
+	if err := validatePublicCredentials(nil, "short-key", ""); err != nil {
+		t.Fatalf("no trusted proxies must not constrain keys: %v", err)
+	}
+	if err := validatePublicCredentials(trusted, "", ""); err != nil {
+		t.Fatalf("unset keys pass (other tiers may authenticate): %v", err)
+	}
+}
+
+func TestRateLimiter_EvictsInBatches(t *testing.T) {
+	l := newRateLimiter()
+	for i := 0; i < maxRateTrackedKeys+1; i++ {
+		l.hit(fmt.Sprintf("ip:%d", i), 10, time.Minute)
+	}
+	l.mu.Lock()
+	n := len(l.counts)
+	l.mu.Unlock()
+	// One insert past the cap drops the oldest batch (~10%), so the next
+	// full scan is many inserts away — not one-per-key.
+	if n > maxRateTrackedKeys {
+		t.Fatalf("tracked keys = %d, want <= %d", n, maxRateTrackedKeys)
+	}
+	if want := maxRateTrackedKeys - maxRateTrackedKeys/10 + 1; n > want {
+		t.Fatalf("tracked keys = %d, want a batch drop to about %d", n, want)
+	}
+}
+
+func TestRateLimited_AuditCoalesced(t *testing.T) {
+	a, err := OpenAuditLog(filepath.Join(t.TempDir(), "audit.db"), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	srv := &Server{
+		metrics: NewAccessMetrics(16),
+		audit:   a,
+		prom:    NewPromMetrics(),
+		config:  &Config{},
+		rl:      newRateLimiter(),
+	}
+	for i := 0; i < 5; i++ {
+		w := httptest.NewRecorder()
+		srv.rateLimited(w, httptest.NewRequest(http.MethodPost, "/v1/apps/token", nil))
+		if w.Code != http.StatusTooManyRequests {
+			t.Fatalf("status = %d", w.Code)
+		}
+	}
+	rows, err := a.List(AuditFilter{Limit: 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("audit rows = %d, want 1 coalesced row per key per window", len(rows))
+	}
+	if rows[0].Reason != "rate_limited" {
+		t.Fatalf("reason = %q", rows[0].Reason)
+	}
+}
+
+func TestAuthFailures_AnonymousNotCounted(t *testing.T) {
+	// Credential-less 401s ("tailnet identity required", probes) are not
+	// guesswork and must not burn the lockout budget (issue #253).
+	srv := testServerWithBase(&Config{
+		RateLimits: RateLimitConfig{AuthFailuresPerIP: 3, AuthFailuresPerToken: -1, WindowSeconds: 60},
+	}, "https://aegis.example.com")
+	srv.rl = newRateLimiter()
+	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	for i := 0; i < 6; i++ {
+		w := httptest.NewRecorder()
+		h(w, httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil))
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d = %d, want 401 (anonymous 401s must not lock out)", i, w.Code)
+		}
 	}
 }

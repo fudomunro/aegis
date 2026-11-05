@@ -545,7 +545,7 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, 
 }
 
 func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIdentity, status int, reason string) {
-	attrs := []any{"remote", s.clientIPFor(r), "path", r.URL.Path, "reason", reason, "status", status}
+	attrs := []any{"remote", s.clientIPFor(r), "peer", r.RemoteAddr, "path", r.URL.Path, "reason", reason, "status", status}
 	agent := "api-key"
 	if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
 		agent = "scope:" + sc.ID

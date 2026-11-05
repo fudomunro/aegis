@@ -114,7 +114,9 @@ surface (`library` / `service` / `auth` / …), target (service id or library
 kind), data type, decision, a short reason (`permission`, `app_scope`,
 `service_blocked`, `auth`, `rate_limited`), and the resolved `client_ip`
 (trusted-proxy aware — see [`configuration.md`](configuration.md)). **No
-tokens, request bodies, query strings, or full paths.**
+tokens, request bodies, query strings, or full paths.** Note that
+`client_ip` is personal data: it is retained for the audit window above
+and exposed through admin tooling — treat `audit_log.db` accordingly.
 
 - **Retention:** 30 days by default (`-audit-retention-days`). Older rows are
  pruned on startup and periodically on write. A hard row cap (500k) drops the

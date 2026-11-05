@@ -250,6 +250,10 @@ func Run() {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
+	if err := validatePublicCredentials(cfg.trustedNets(), *apiKey, *adminAPIKey); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
 	if len(cfg.trustedNets()) == 0 {
 		slog.Warn("trusted_proxies is empty — per-IP rate limits key on the peer address and are skipped for loopback peers (a same-host edge would share one bucket); set trusted_proxies when Aegis sits behind a reverse proxy")
 	}
@@ -757,6 +761,30 @@ func validateListenAddr(addr, authMode string) error {
 		return nil
 	}
 	return fmt.Errorf("refusing -addr %q: with Serve identity trust (auth-mode %s) a non-loopback bind would accept forged Tailscale identity headers from the LAN — bind 127.0.0.1 and front with `tailscale serve`, bind the Tailscale IP, or use -auth-mode api-key", addr, authMode)
+}
+
+// minPublicCredentialLen is the minimum -api-key / -admin-api-key length
+// accepted behind a trusted edge (issue #253). On a published listener
+// those keys are the perimeter, and the rate caps only slow guessing — a
+// short operator-chosen key is brute-forceable regardless of damping.
+const minPublicCredentialLen = 32
+
+// validatePublicCredentials refuses weak operator-chosen credentials in a
+// deployment whose edge is trusted (public shape). Generated credentials
+// (invite/app tokens) are high-entropy and not affected.
+func validatePublicCredentials(trusted []net.IPNet, apiKey, adminAPIKey string) error {
+	if len(trusted) == 0 {
+		return nil
+	}
+	for name, key := range map[string]string{"api-key": apiKey, "admin-api-key": adminAPIKey} {
+		if key == "" {
+			continue
+		}
+		if len(key) < minPublicCredentialLen {
+			return fmt.Errorf("refusing %s shorter than %d characters behind trusted_proxies: on a published listener this key is the perimeter and rate caps only slow guessing — generate a long random key", name, minPublicCredentialLen)
+		}
+	}
+	return nil
 }
 
 // validateEdgeTrust refuses a generic-edge deployment whose edge can forge

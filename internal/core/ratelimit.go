@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net"
 	"net/http"
+	"sort"
 	"sync"
 	"time"
 )
@@ -93,13 +94,18 @@ type rateCounters struct {
 
 // rateLimiter is a mutex-guarded fixed-window counter store.
 type rateLimiter struct {
-	mu     sync.Mutex
-	counts map[string]*rateCounters
-	now    func() time.Time
+	mu      sync.Mutex
+	counts  map[string]*rateCounters
+	audited map[string]time.Time
+	now     func() time.Time
 }
 
 func newRateLimiter() *rateLimiter {
-	return &rateLimiter{counts: make(map[string]*rateCounters), now: time.Now}
+	return &rateLimiter{
+		counts:  make(map[string]*rateCounters),
+		audited: make(map[string]time.Time),
+		now:     time.Now,
+	}
 }
 
 func (l *rateLimiter) counter(key string, window time.Duration, now time.Time) *rateCounters {
@@ -116,7 +122,9 @@ func (l *rateLimiter) counter(key string, window time.Duration, now time.Time) *
 }
 
 // hit records one request against key and reports whether it is within
-// limit for the current window (limit <= 0 disables the cap).
+// limit for the current window (limit <= 0 disables the cap). Fixed
+// windows allow a 2x burst across a window boundary — accepted for
+// brute-force damping; volume control belongs to the edge.
 func (l *rateLimiter) hit(key string, limit int, window time.Duration) bool {
 	if l == nil || limit <= 0 {
 		return true
@@ -161,7 +169,9 @@ func (l *rateLimiter) locked(key string, limit int, window time.Duration) bool {
 	return c.failures >= limit
 }
 
-// evictLocked drops stale windows and, past the key cap, the oldest entries.
+// evictLocked drops stale windows and, past the key cap, the oldest batch.
+// Batch eviction keeps the amortized cost per insert O(1): a full pass runs
+// once per eviction batch, never per key (issue #253).
 func (l *rateLimiter) evictLocked(now time.Time, window time.Duration) {
 	if len(l.counts) <= maxRateTrackedKeys {
 		return
@@ -175,26 +185,65 @@ func (l *rateLimiter) evictLocked(now time.Time, window time.Duration) {
 			delete(l.counts, key)
 		}
 	}
-	for len(l.counts) > maxRateTrackedKeys {
-		oldestKey := ""
-		var oldest time.Time
-		for key, c := range l.counts {
-			if oldestKey == "" || c.windowStart.Before(oldest) {
-				oldestKey, oldest = key, c.windowStart
-			}
-		}
-		if oldestKey == "" {
-			return
-		}
-		delete(l.counts, oldestKey)
+	over := len(l.counts) - maxRateTrackedKeys
+	if over <= 0 {
+		return
+	}
+	// Drop the oldest batch (~10% of the cap) so the next full pass is many
+	// inserts away.
+	drop := maxRateTrackedKeys / 10
+	if drop < over {
+		drop = over
+	}
+	type entry struct {
+		key string
+		at  time.Time
+	}
+	all := make([]entry, 0, len(l.counts))
+	for key, c := range l.counts {
+		all = append(all, entry{key, c.windowStart})
+	}
+	sort.Slice(all, func(i, j int) bool { return all[i].at.Before(all[j].at) })
+	for i := 0; i < drop && i < len(all); i++ {
+		delete(l.counts, all[i].key)
 	}
 }
 
+// auditOnce reports whether this is the first request for key in the
+// current window — used to coalesce 429 audit rows so a flood cannot wash
+// the audit trail (issue #253).
+func (l *rateLimiter) auditOnce(key string, window time.Duration) bool {
+	if l == nil {
+		return true
+	}
+	if window <= 0 {
+		window = defaultRateWindowSeconds * time.Second
+	}
+	now := l.now()
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	t := l.audited[key]
+	if !t.IsZero() && now.Sub(t) < window {
+		return false
+	}
+	l.audited[key] = now
+	if len(l.audited) > maxRateTrackedKeys {
+		for k, v := range l.audited {
+			if now.Sub(v) >= window {
+				delete(l.audited, k)
+			}
+		}
+	}
+	return true
+}
+
 // rateLimited writes a 429 with Retry-After and records the damp in the
-// audit trail (reason "rate_limited").
+// audit trail (reason "rate_limited"). At most one audit row per key per
+// window — every damp still bumps the metrics counter, but a flood must
+// not wash real evidence out of the audit log (issue #253).
 func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Retry-After", "60")
-	s.recordAccessFrom(r, AccessEvent{
+	ev := AccessEvent{
 		Agent:    agentForRequest(r),
 		Surface:  MetricSurfaceAuth,
 		Target:   auditRouteFamily(r),
@@ -202,7 +251,13 @@ func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 		Reason:   "rate_limited",
 		Method:   requestMethod(r),
 		Status:   http.StatusTooManyRequests,
-	})
+	}
+	key := "429:" + ipBucket(s.clientIPFor(r))
+	if s.rl == nil || s.rl.auditOnce(key, s.rateLimitPolicy().window) {
+		s.recordAccessFrom(r, ev)
+	} else if s.prom != nil {
+		s.prom.observeAccess(ev)
+	}
 	writeJSONError(w, http.StatusTooManyRequests, "rate limited: too many requests")
 }
 
@@ -259,15 +314,19 @@ func (s *Server) skipPerIPLimits(r *http.Request) bool {
 
 // authLockedOut reports whether this request must be damped before any
 // credential work: the client IP or the presented credential has exceeded
-// its failure cap. Requests that resolved a tailnet identity are exempt —
-// ambient identity is not a guessable credential, so damping it only locks
-// out honest tailnet callers sharing an IP bucket.
+// its failure cap. Credential-less requests that resolved a tailnet
+// identity are exempt — ambient identity is not a guessable credential, so
+// damping it only locks out honest tailnet callers sharing an IP bucket.
+// Keyed requests stay damped even with identity, or a locked bucket would
+// become a validity oracle.
 func (s *Server) authLockedOut(r *http.Request) bool {
 	if s == nil || s.rl == nil {
 		return false
 	}
-	if id, _ := s.resolveIdentity(r); id != nil {
-		return false
+	if presentedAPIKey(r) == "" {
+		if id, _ := s.resolveIdentity(r); id != nil {
+			return false
+		}
 	}
 	lim := s.rateLimitPolicy()
 	if !s.skipPerIPLimits(r) {
@@ -282,19 +341,21 @@ func (s *Server) authLockedOut(r *http.Request) bool {
 }
 
 // recordAuthFailure counts one failed authentication against the client IP
-// and, when a credential was presented, its hash. Callers skip counting for
-// denials that came with a resolved tailnet identity (not guesswork).
+// and, when a credential was presented, its hash. Only presented-credential
+// failures are guesswork — anonymous 401s ("tailnet identity required",
+// unconfigured probes) must not burn the lockout budget (issue #253).
 func (s *Server) recordAuthFailure(r *http.Request) {
 	if s == nil || s.rl == nil {
+		return
+	}
+	if presentedAPIKey(r) == "" {
 		return
 	}
 	lim := s.rateLimitPolicy()
 	if !s.skipPerIPLimits(r) {
 		s.rl.recordFailure("ip:"+ipBucket(s.clientIPFor(r)), lim.failPerIP, lim.window)
 	}
-	if key := presentedAPIKey(r); key != "" {
-		s.rl.recordFailure(tokenFailKey(key), lim.failPerToken, lim.window)
-	}
+	s.rl.recordFailure(tokenFailKey(presentedAPIKey(r)), lim.failPerToken, lim.window)
 }
 
 // tokenFailKey is the per-credential failure counter key: the SHA-256 of

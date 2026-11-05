@@ -102,8 +102,6 @@ type AuditLog struct {
 	pruneEvery time.Duration
 }
 
-// OpenAuditLog opens or creates the audit database at path. Empty path
-// returns a disabled log so call sites can stay unconditional.
 // migrateAuditColumns adds columns missing from older audit databases
 // (issue #253) so the schema's index creation succeeds. No-op on fresh
 // databases: PRAGMA table_info on a missing table returns no rows.
@@ -143,6 +141,8 @@ func migrateAuditColumns(db *sql.DB) error {
 	return nil
 }
 
+// OpenAuditLog opens or creates the audit database at path. Empty path
+// returns a disabled log so call sites can stay unconditional.
 func OpenAuditLog(path string, retentionDays int) (*AuditLog, error) {
 	if path == "" {
 		return &AuditLog{}, nil
