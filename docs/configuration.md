@@ -670,6 +670,9 @@ directory or keep passing the explicit path flags.
 |------|---------|-------------|
 | `-addr` | `127.0.0.1:8080` | Listen address. Loopback by default; with Serve identity trust (`auto`/`tailnet` auth mode) a wildcard or LAN bind is refused at startup — bind loopback behind `tailscale serve`, the Tailscale IP, or use `-auth-mode api-key` |
 | `-base-url` | | Public base URL (required) |
+| `-admin-addr` | | Listen address for admin surfaces (tailnet/loopback only). Empty = single-listener mode where admin shares `-addr`. See [External access](external-access.md) |
+| `-admin-base-url` | | Public base URL of the admin listener (required with `-admin-addr`; used for OAuth redirects and CSRF origin checks) |
+| `-external-access` | `false` | Publish the API listener for external principals: invite/app tokens only on `-addr`, admin surfaces only on `-admin-addr`. Requires `-admin-addr` |
 | `-auth-mode` | `auto` | `auto`, `tailnet`, or `api-key` — see [SECURITY.md](../SECURITY.md) |
 | `-api-key` | | Agent API key (library/hook/content; never admin). Required only if `auth-mode=api-key` and no admin key |
 | `-admin-api-key` | | Admin API key. Required for key-based admin; the agent key never opens admin surfaces |
@@ -773,6 +776,41 @@ require `Content-Type: application/json`; the third-party consent form carries
 a per-render CSRF token. API-key and app-token writes are not
 browser-ambient and skip the Origin check. See
 [SECURITY.md](../SECURITY.md#csrf--origin-protection-on-writes-issue-182).
+
+### External access (split listeners)
+
+By default one listener serves every route. For external principals — family,
+friends, another Aegis instance — split the surface instead:
+
+```bash
+./aegis \
+ -addr 0.0.0.0:8080 \
+ -base-url https://aegis.example.com \
+ -admin-addr 100.64.0.5:8081 \
+ -admin-base-url https://aegis-admin.your-tailnet.ts.net \
+ -external-access \
+ -auth-mode tailnet
+```
+
+- The **API listener** (`-addr`, `-base-url`) may be published behind TLS.
+  It serves an **allowlist** of agent/external routes — `POST /v1/pre-request`,
+  library reads, `/v1/services/*` content transport, mail search/status,
+  `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`,
+  `/healthz`, `/readyz`. Unlisted routes answer 404 there and are served only
+  by the admin listener, so a new route cannot leak onto the public surface
+  by default. Under `-external-access` it accepts **invite tokens and app
+  tokens only** — no ambient identity, and the shared agent key is refused.
+- The **admin listener** (`-admin-addr`, `-admin-base-url`) stays in-tailnet
+  (loopback or Tailscale IP — anything else is refused at startup) and serves
+  everything: admin surfaces plus the agent tier for tailnet callers, so
+  Aperture and tagged hosts keep working with ambient identity or the agent
+  key. It is never published.
+- `read_only` on a data scope still permits the pre-request hook (it is a
+  read-only classification webhook).
+
+External access requires `-admin-addr`; running it on a single listener would
+publish the admin surface. The full contract — including the route allowlist
+and the trust rationale — lives in [`docs/external-access.md`](external-access.md).
 
 ### Third-party app tokens
 

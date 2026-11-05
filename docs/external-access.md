@@ -324,19 +324,24 @@ IP.
 principal still reads the owner's connected services), self-service signup,
 OIDC/passwords, cross-instance discovery, hosted multi-tenant SaaS.
 
-## Implementation sketch (follow-on work)
+## Implementation sketch
 
-1. **Listener split** — `AdminMiddleware` routes move to `-admin-addr`
+Status: items 1–2 landed (listener split + credential gating, this change;
+the LAN forge path closed earlier in `fix/serve-header-loopback-guard`).
+Items 3–5 remain follow-on work.
+
+1. **Listener split** — DONE. `AdminMiddleware` routes serve on `-admin-addr`
    (tailnet/loopback bind), which also serves the agent tier for tailnet
-   callers (ambient identity / agent key); API routes stay on `-addr` (or
-   `-api-addr`) behind a **route allowlist** — unlisted routes 404 there and
-   default to the admin side. Per-listener base URLs for OAuth redirect and
+   callers (ambient identity / agent key); API routes stay on `-addr` behind
+   a **route allowlist** — unlisted routes 404 there and default to the admin
+   side. Per-listener base URLs (`-admin-base-url`) for OAuth redirects and
    CSRF origin checks.
-2. **Identity and credential gating** — ambient identity resolution attaches
-   per listener: admin always, API never under external access. Startup
-   **refuses** (not warns) a public API bind with Serve-header trust
-   enabled, and refuses the agent key on the published bind. (The LAN forge
-   path already closed in `fix/serve-header-loopback-guard`: local-peer
+2. **Identity and credential gating** — DONE. Ambient identity resolution
+   attaches per listener: admin always, API never under external access
+   (`-external-access`, which requires `-admin-addr`). The agent key is
+   refused on the published bind; startup refuses external access without
+   the split and refuses non-loopback/non-tailnet admin binds. (The LAN
+   forge path closed in `fix/serve-header-loopback-guard`: local-peer
    Serve-header gate, loopback `-addr` default, startup refusal for wildcard
    and LAN binds under Serve trust.)
 3. **Scope grant enforcement** — a dedicated fail-closed scope-grants
