@@ -13,6 +13,11 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
+const (
+	AmazonMusicServiceID   = "amazon-music"
+	AmazonMusicServiceName = "Amazon Music"
+)
+
 // AmazonMusicConnector provides proxying for Amazon Music.
 // Amazon Music does not currently have a public REST API, so this
 // connector uses a configurable upstream endpoint and applies

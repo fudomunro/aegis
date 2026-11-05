@@ -864,28 +864,9 @@ func librarySourceDisplayName(s *Server, id string) string {
 		return "Mail archive"
 	case takeoutServiceID:
 		return takeoutServiceName
-	case connectors.GoogleGmailServiceID:
-		return connectors.GoogleGmailServiceName
-	case connectors.GoogleCalendarServiceID:
-		return connectors.GoogleCalendarServiceName
-	case connectors.GoogleContactsServiceID:
-		return connectors.GoogleContactsServiceName
-	case connectors.GooglePhotosServiceID:
-		return connectors.GooglePhotosServiceName
-	case connectors.ImmichServiceID:
-		return connectors.ImmichServiceName
-	case connectors.YNABServiceID:
-		return connectors.YNABServiceName
-	case connectors.OwnTracksServiceID:
-		return connectors.OwnTracksServiceName
-	case connectors.PaperlessServiceID:
-		return connectors.PaperlessServiceName
-	case connectors.GoogleDriveServiceID:
-		return connectors.GoogleDriveServiceName
-	case connectors.CardDAVServiceID:
-		return connectors.CardDAVServiceName
-	case connectors.CalDAVServiceID:
-		return connectors.CalDAVServiceName
+	}
+	if name, ok := connectors.ServiceName(id); ok {
+		return name
 	}
 	if svc := s.config.GetService(id); svc != nil && svc.Name != "" {
 		return svc.Name
