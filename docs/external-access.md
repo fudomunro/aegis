@@ -273,7 +273,9 @@ OIDC/passwords, cross-instance discovery, hosted multi-tenant SaaS.
 4. **Invite lifecycle** — admin mint / rotate / disable for scope keys
    (reusing `api_key_hint`). **Hash at rest**: mint writes only the SHA-256
    hash, plaintext is shown once (like app tokens), and existing plaintext
-   `api_key` entries are migrated to hashes on load.
+   `api_key` entries are migrated to hashes on load. (Landed:
+   `POST /v1/admin/data-scopes` mint, `.../{id}/rotate`, `PATCH .../{id}`
+   disable; `data_scopes.json` version 2 stores `api_key_hash`.)
 5. **Hardening** — rate limiting on auth and token routes (with
    trusted-proxy config for client IPs), external-principal audit fields,
    deployment docs for the TLS edge.

@@ -2,12 +2,16 @@ package core
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"sort"
+	"strings"
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/types"
@@ -18,7 +22,13 @@ import (
 // identity → which data this caller may read. See docs/data-scopes.md.
 
 // dataScopesFileVersion is the on-disk schema version for data_scopes.json.
-const dataScopesFileVersion = 1
+// Version 2 stores only key hashes (issue #253); version 1 files with
+// plaintext api_key are migrated on load.
+const dataScopesFileVersion = 2
+
+// inviteTokenPrefix marks generated invite tokens (the scope credential
+// under external access) so they cannot be confused with other keys.
+const inviteTokenPrefix = "aeg_invite_"
 
 // DataScope is one principal's view of Aegis data.
 type DataScope struct {
@@ -27,11 +37,13 @@ type DataScope struct {
 	// Dataset partitions local stores and service visibility. Empty means
 	// the owner/default partition (no dataset filter — today's behavior).
 	Dataset string `json:"dataset,omitempty"`
-	// APIKey is the agent credential presented by this scope. Stored on
-	// disk (data_scopes.json, 0600); never returned by admin APIs.
+	// APIKey is the legacy plaintext credential. Accepted on load and
+	// migrated to hash at rest; never written back and never returned by
+	// admin APIs.
 	APIKey string `json:"api_key,omitempty"`
-	// APIKeyHash is hex(sha256(APIKey)) after load. Not serialized back.
-	APIKeyHash string `json:"-"`
+	// APIKeyHash is hex(sha256(api_key)) — the stored credential. Mint and
+	// rotate write only this; authentication hashes the presented key.
+	APIKeyHash string `json:"api_key_hash,omitempty"`
 	// APIKeyHint is a short non-secret prefix for admin UIs.
 	APIKeyHint string `json:"api_key_hint,omitempty"`
 	// ReadOnly rejects mutating agent methods for this principal (demo).
@@ -91,28 +103,35 @@ func (s *DataScopeStore) reload() error {
 	if err := json.Unmarshal(raw, &file); err != nil {
 		return fmt.Errorf("parse data_scopes.json: %w", err)
 	}
-	if file.Version != 0 && file.Version != dataScopesFileVersion {
+	if file.Version != 0 && file.Version != 1 && file.Version != dataScopesFileVersion {
 		return fmt.Errorf("unsupported data_scopes.json version %d", file.Version)
 	}
 	byID := make(map[string]*DataScope, len(file.DataScopes))
 	byHash := make(map[string]*DataScope, len(file.DataScopes))
+	migrated := false
 	for i := range file.DataScopes {
 		sc := file.DataScopes[i]
 		if sc.ID == "" {
 			return fmt.Errorf("data_scopes: entry %d missing id", i)
 		}
-		if sc.APIKey == "" {
-			return fmt.Errorf("data_scopes: scope %q missing api_key", sc.ID)
-		}
 		if err := types.ValidateDataGrants(sc.Grants); err != nil {
 			return fmt.Errorf("data_scopes: scope %q grants: %w", sc.ID, err)
 		}
-		sum := sha256.Sum256([]byte(sc.APIKey))
-		sc.APIKeyHash = hex.EncodeToString(sum[:])
-		if len(sc.APIKey) >= 8 {
-			sc.APIKeyHint = sc.APIKey[:8]
+		if sc.APIKey != "" {
+			// Legacy plaintext entry (issue #253): keep only the hash at
+			// rest, exactly like a freshly minted invite token.
+			sum := sha256.Sum256([]byte(sc.APIKey))
+			sc.APIKeyHash = hex.EncodeToString(sum[:])
+			if sc.APIKeyHint == "" {
+				sc.APIKeyHint = scopeKeyHint(sc.APIKey)
+			}
+			sc.APIKey = ""
+			migrated = true
 		}
-		sc.APIKey = ""
+		if sc.APIKeyHash == "" {
+			return fmt.Errorf("data_scopes: scope %q missing api_key or api_key_hash", sc.ID)
+		}
+		sc.APIKeyHash = strings.ToLower(sc.APIKeyHash)
 		stored := sc
 		if _, ok := byID[stored.ID]; ok {
 			return fmt.Errorf("data_scopes: duplicate scope id %q", stored.ID)
@@ -126,8 +145,36 @@ func (s *DataScopeStore) reload() error {
 	s.mu.Lock()
 	s.byID = byID
 	s.byHash = byHash
+	if migrated {
+		if err := s.persistLocked(); err != nil {
+			s.mu.Unlock()
+			return fmt.Errorf("data_scopes: migrate plaintext api_key: %w", err)
+		}
+	}
 	s.mu.Unlock()
 	return nil
+}
+
+// persistLocked writes data_scopes.json (sorted, 0600). Callers hold s.mu.
+func (s *DataScopeStore) persistLocked() error {
+	if s.path == "" {
+		return fmt.Errorf("data scopes path is empty; cannot save")
+	}
+	ids := make([]string, 0, len(s.byID))
+	for id := range s.byID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := dataScopesFile{Version: dataScopesFileVersion, DataScopes: make([]DataScope, 0, len(ids))}
+	for _, id := range ids {
+		out.DataScopes = append(out.DataScopes, *s.byID[id])
+	}
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return err
+	}
+	data = append(data, '\n')
+	return atomicWriteFile(s.path, data, 0o600)
 }
 
 // FindByAPIKey resolves a presented agent credential to its scope.
@@ -158,7 +205,7 @@ func (s *DataScopeStore) Get(id string) *DataScope {
 	return s.byID[id]
 }
 
-// All returns a snapshot of scopes (API keys omitted).
+// All returns a snapshot of scopes (key material omitted).
 func (s *DataScopeStore) All() []DataScope {
 	if s == nil {
 		return nil
@@ -169,9 +216,239 @@ func (s *DataScopeStore) All() []DataScope {
 	for _, sc := range s.byID {
 		cp := *sc
 		cp.APIKey = ""
+		cp.APIKeyHash = ""
 		out = append(out, cp)
 	}
 	return out
+}
+
+// DataScopeView is the secret-free admin projection of a scope. Key material
+// never leaves the store; api_key_hint identifies a credential in UIs.
+type DataScopeView struct {
+	ID         string           `json:"id"`
+	Name       string           `json:"name,omitempty"`
+	Dataset    string           `json:"dataset,omitempty"`
+	APIKeyHint string           `json:"api_key_hint,omitempty"`
+	Grants     types.DataGrants `json:"grants,omitempty"`
+	ReadOnly   bool             `json:"read_only,omitempty"`
+	Disabled   bool             `json:"disabled,omitempty"`
+}
+
+// DataScopeCreateRequest mints a scope with a generated invite token.
+type DataScopeCreateRequest struct {
+	ID       string           `json:"id"`
+	Name     string           `json:"name,omitempty"`
+	Dataset  string           `json:"dataset,omitempty"`
+	Grants   types.DataGrants `json:"grants,omitempty"`
+	ReadOnly bool             `json:"read_only,omitempty"`
+}
+
+// DataScopeUpdateRequest patches scope fields. The key is rotated, not
+// patched (issue #253).
+type DataScopeUpdateRequest struct {
+	Name     *string           `json:"name,omitempty"`
+	Grants   *types.DataGrants `json:"grants,omitempty"`
+	ReadOnly *bool             `json:"read_only,omitempty"`
+	Disabled *bool             `json:"disabled,omitempty"`
+}
+
+func scopeView(sc *DataScope) DataScopeView {
+	return DataScopeView{
+		ID:         sc.ID,
+		Name:       sc.Name,
+		Dataset:    sc.Dataset,
+		APIKeyHint: sc.APIKeyHint,
+		Grants:     sc.Grants,
+		ReadOnly:   sc.ReadOnly,
+		Disabled:   sc.Disabled,
+	}
+}
+
+// List returns secret-free views of every scope, ordered by id.
+func (s *DataScopeStore) List() []DataScopeView {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.byID))
+	for id := range s.byID {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	out := make([]DataScopeView, 0, len(ids))
+	for _, id := range ids {
+		out = append(out, scopeView(s.byID[id]))
+	}
+	return out
+}
+
+// View returns the secret-free view of one scope.
+func (s *DataScopeStore) View(id string) (DataScopeView, bool) {
+	if s == nil {
+		return DataScopeView{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	sc := s.byID[id]
+	if sc == nil {
+		return DataScopeView{}, false
+	}
+	return scopeView(sc), true
+}
+
+// Create mints a scope with a generated invite token. The plaintext token is
+// returned once; only its hash is stored (issue #253).
+func (s *DataScopeStore) Create(req DataScopeCreateRequest) (DataScopeView, string, error) {
+	id := strings.TrimSpace(req.ID)
+	if id == "" {
+		return DataScopeView{}, "", fmt.Errorf("scope id is required")
+	}
+	if err := validateScopeID(id); err != nil {
+		return DataScopeView{}, "", err
+	}
+	if req.Grants != nil {
+		if err := types.ValidateDataGrants(req.Grants); err != nil {
+			return DataScopeView{}, "", err
+		}
+	}
+	token, hash, hint, err := generateInviteToken()
+	if err != nil {
+		return DataScopeView{}, "", fmt.Errorf("generating invite token: %w", err)
+	}
+	sc := &DataScope{
+		ID:         id,
+		Name:       strings.TrimSpace(req.Name),
+		Dataset:    strings.TrimSpace(req.Dataset),
+		APIKeyHash: hash,
+		APIKeyHint: hint,
+		ReadOnly:   req.ReadOnly,
+		Grants:     req.Grants,
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.byID[id]; exists {
+		return DataScopeView{}, "", fmt.Errorf("scope %q already exists", id)
+	}
+	for _, existing := range s.byID {
+		if existing.APIKeyHash == hash {
+			return DataScopeView{}, "", fmt.Errorf("token collision")
+		}
+	}
+	s.byID[id] = sc
+	s.byHash[hash] = sc
+	if err := s.persistLocked(); err != nil {
+		delete(s.byID, id)
+		delete(s.byHash, hash)
+		return DataScopeView{}, "", err
+	}
+	return scopeView(sc), token, nil
+}
+
+// Update patches name/grants/read_only/disabled. Key material is not
+// patchable — use Rotate.
+func (s *DataScopeStore) Update(id string, req DataScopeUpdateRequest) (DataScopeView, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sc := s.byID[id]
+	if sc == nil {
+		return DataScopeView{}, fmt.Errorf("scope %q not found", id)
+	}
+	if req.Name != nil {
+		sc.Name = strings.TrimSpace(*req.Name)
+	}
+	if req.Grants != nil {
+		if err := types.ValidateDataGrants(*req.Grants); err != nil {
+			return DataScopeView{}, err
+		}
+		sc.Grants = *req.Grants
+	}
+	if req.ReadOnly != nil {
+		sc.ReadOnly = *req.ReadOnly
+	}
+	if req.Disabled != nil {
+		sc.Disabled = *req.Disabled
+	}
+	if err := s.persistLocked(); err != nil {
+		return DataScopeView{}, err
+	}
+	return scopeView(sc), nil
+}
+
+// Rotate replaces the scope's invite token and returns the new plaintext
+// once. The previous token stops authenticating immediately.
+func (s *DataScopeStore) Rotate(id string) (DataScopeView, string, error) {
+	token, hash, hint, err := generateInviteToken()
+	if err != nil {
+		return DataScopeView{}, "", fmt.Errorf("generating invite token: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sc := s.byID[id]
+	if sc == nil {
+		return DataScopeView{}, "", fmt.Errorf("scope %q not found", id)
+	}
+	if _, exists := s.byHash[hash]; exists {
+		return DataScopeView{}, "", fmt.Errorf("token collision")
+	}
+	oldHash := sc.APIKeyHash
+	sc.APIKeyHash = hash
+	sc.APIKeyHint = hint
+	if oldHash != "" {
+		delete(s.byHash, oldHash)
+	}
+	s.byHash[hash] = sc
+	if err := s.persistLocked(); err != nil {
+		return DataScopeView{}, "", err
+	}
+	return scopeView(sc), token, nil
+}
+
+// generateInviteToken returns a new high-entropy invite token (plaintext)
+// and its storage hash/hint.
+func generateInviteToken() (token, hash, hint string, err error) {
+	raw := make([]byte, 32)
+	if _, err := rand.Read(raw); err != nil {
+		return "", "", "", err
+	}
+	token = inviteTokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	sum := sha256.Sum256([]byte(token))
+	hash = hex.EncodeToString(sum[:])
+	hint = scopeKeyHint(token)
+	return token, hash, hint, nil
+}
+
+// scopeKeyHint is the non-secret key prefix for admin UIs. Generated invite
+// tokens are hinted past their well-known prefix so hints discriminate.
+func scopeKeyHint(key string) string {
+	payload := key
+	if strings.HasPrefix(key, inviteTokenPrefix) {
+		payload = strings.TrimPrefix(key, inviteTokenPrefix)
+	}
+	if len(payload) > 8 {
+		payload = payload[:8]
+	}
+	if strings.HasPrefix(key, inviteTokenPrefix) {
+		return inviteTokenPrefix + payload
+	}
+	return payload
+}
+
+func validateScopeID(id string) error {
+	if len(id) > 64 {
+		return fmt.Errorf("scope id must be at most 64 characters")
+	}
+	for _, r := range id {
+		ok := r == '-' || r == '_' ||
+			(r >= 'a' && r <= 'z') ||
+			(r >= 'A' && r <= 'Z') ||
+			(r >= '0' && r <= '9')
+		if !ok {
+			return fmt.Errorf("scope id must be alphanumeric, dash, or underscore")
+		}
+	}
+	return nil
 }
 
 // Path is the on-disk data_scopes.json location.
