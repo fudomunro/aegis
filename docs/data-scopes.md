@@ -40,7 +40,9 @@ use to decide *whose* data is in play.
 | `id` | Stable scope id (`frodo`, `default`, …) |
 | `name` | Display label |
 | `dataset` | Partition id. Empty = owner/default partition (no filter) |
-| `api_key` | Agent credential for this scope (file-only; never logged). Under external access this is the **invite token** |
+| `api_key` | Legacy plaintext credential. Accepted on load and migrated to `api_key_hash`; never written back. Under external access the scope credential is the **invite token** |
+| `api_key_hash` | `hex(sha256(api_key))` — the stored credential. Mint/rotate write only this |
+| `api_key_hint` | Short non-secret prefix for admin UIs (identifies a key without revealing it) |
 | `read_only` | Reject mutating agent methods (demo default) |
 | `grants` | Type-level `DataGrants` — the **complete allow list** for invite tokens (deny-by-default; unlisted = `none`) |
 | `disabled` | Soft delete |
@@ -118,12 +120,12 @@ is deny-by-default, so an empty `grants` map now denies everything.
 `read_only: true` remains the demo's write wall.
 `deploy/demo/data_scopes.example.json` already carries that entry.
 
-**Storage.** `data_scopes.json` today holds plaintext `api_key` values
-(hashed in memory at load only). **Hash at rest is a contract requirement**
-for internet-reachable credentials: the invite lifecycle must store only
-the SHA-256 hash (like `apps.json`), display plaintext once at mint, and
-migrate existing plaintext entries on load. Until then, treat
-`data_scopes.json` as a password file.
+**Storage (hash at rest).** `data_scopes.json` stores only the SHA-256 hash
+of each invite token (like `apps.json`); the plaintext is shown once at mint
+or rotate. Legacy files with plaintext `api_key` entries are migrated to
+hashes on load. Admin lifecycle: `GET`/`POST /v1/admin/data-scopes`,
+`POST /v1/admin/data-scopes/{id}/rotate`, `PATCH /v1/admin/data-scopes/{id}`
+(disable/enable) — plaintext returns only from create and rotate.
 
 ## Isolation contract (testable)
 
@@ -153,7 +155,7 @@ For scopes A and B with datasets `a` and `b`:
 
 | File | Contents |
 |------|----------|
-| `<data-dir>/data_scopes.json` | Scope records (0600). Holds `api_key` material — never commit. |
+| `<data-dir>/data_scopes.json` | Scope records (0600). Holds invite key **hashes** (`api_key_hash`); legacy plaintext is migrated on load — never commit this file. |
 
 Unit tests and docs must use allowlisted placeholder keys (`YOUR_*`,
 `aeg_test_*` / `aeg_demo_*`, or `*-key-1234`), never realistic secrets —
@@ -166,7 +168,7 @@ local secret-bearing state, not a git file.
 
 | Demo need | Covered here |
 |-----------|--------------|
-| One API key per persona | `DataScope.api_key` |
+| One API key per persona | `DataScope` invite token (`api_key_hash` at rest) |
 | Personas cannot read each other | dataset partition + cache keys |
 | Synthetic-only, read-only | `read_only` + demo-owned datasets |
 | Theme (LotR, …) | Dataset *content*, not in this note |

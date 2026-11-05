@@ -621,7 +621,7 @@ on first run with mode `0700` (it holds secrets).
  aegis.json # bootstrap config (OAuth clients live here)
  data_grants.json # admin data-grant overlay (non-secret)
  apps.json # third-party app registry (0600; token hashes only)
- data_scopes.json # principal → dataset registry (0600; holds API keys)
+ data_scopes.json # principal → dataset registry (0600; invite key hashes)
  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (non-secret fields; secrets in tokens.json)
  user_types.json # admin UDT local-file selection overlay
  user-types/ # user-defined type schema packs
@@ -831,28 +831,32 @@ Google connection. Cancelled rows are included and omitted from free/busy.
 
 ### Data scopes (principal → dataset)
 
-`data_scopes.json` (0600, under the data directory) maps agent API keys to
+`data_scopes.json` (0600, under the data directory) maps invite tokens to
 **data scopes**: which dataset partition that principal may read. This is the
 multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "data_scopes": [
     {
       "id": "shire",
       "name": "Shire demo",
       "dataset": "shire",
-      "api_key": "YOUR_SHIRE_API_KEY",
+      "api_key_hash": "9f2c…",
+      "api_key_hint": "aeg_invite_…",
       "read_only": true
     }
   ]
 }
 ```
 
-- Each `api_key` authenticates as that scope (agent tier only — never admin).
-  Under [external access](external-access.md) this key is the **invite token**
-  issued to an external principal.
+- Each scope credential authenticates as that scope (agent tier only — never
+  admin). Under [external access](external-access.md) this key is the
+  **invite token** issued to an external principal. Only its SHA-256 hash is
+  stored (`api_key_hash`); the plaintext is shown once at mint
+  (`POST /v1/admin/data-scopes`) or rotate. Legacy files with plaintext
+  `api_key` are migrated to hashes on load.
 - `dataset` selects the partition. Services with a matching `dataset` field
   and mail rows tagged with that dataset are visible; other partitions are
   invisible (not 403). Empty `dataset` is the owner/default view (no filter).
@@ -866,6 +870,8 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
   credentials — the shared agent key and tailnet logins — keep the usual
   agent data grant semantics, where omit means unrestricted.) Scope grants
   also never exceed agent data grants.
+- Admin lifecycle (`/v1/admin/data-scopes`): mint, rotate, and disable scope
+  keys — see [`docs/data-scopes.md`](data-scopes.md).
 
 A service with `endpoint: "sample://library"` serves synthetic library
 fixtures bound to `Service.Dataset` — useful for demos and isolation tests

@@ -61,7 +61,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
 | **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDT file selection); agent credentials are never admin (issue #181) |
 | **External principal** | Caller holding an **invite token** (a data-scope key) | Deny-by-default grants; never admin; may be a person, backend, or another Aegis operator |
-| **Invite token** | The credential issued to an external principal | Data-scope `api_key` (0600); **hashed at rest is a contract requirement** — today the file holds plaintext, migrate with the invite lifecycle. Minted by the admin, shown once |
+| **Invite token** | The credential issued to an external principal | Data-scope key, **hashed at rest** (`api_key_hash`, 0600) like app tokens. Minted/rotated by the admin (`/v1/admin/data-scopes`), plaintext shown once; legacy plaintext entries migrate on load |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
 One-line shape (also in `docs/configuration.md` “Data grants”): **data grants** are the product

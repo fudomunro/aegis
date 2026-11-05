@@ -811,6 +811,8 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminPermissionsOverview)(w, r)
 	case path == "data-grants":
 		s.AdminMiddleware(s.HandleAdminDataGrants)(w, r)
+	case path == "data-scopes" || strings.HasPrefix(path, "data-scopes/"):
+		s.AdminMiddleware(s.HandleAdminDataScopes)(w, r)
 	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/grant-limits"):
 		s.AdminMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
 	case path == "apps" || strings.HasPrefix(path, "apps/"):

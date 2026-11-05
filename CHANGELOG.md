@@ -7,6 +7,19 @@ issue numbers; this file is where that context lives.
 
 ### Added
 
+- **Invite lifecycle with hash at rest (issue #253, phase 3).** Data-scope
+  credentials — the invite tokens external principals hold — are now
+  administered like app tokens instead of by editing `data_scopes.json`:
+  `POST /v1/admin/data-scopes` mints, `POST /v1/admin/data-scopes/{id}/rotate`
+  re-issues, and `PATCH /v1/admin/data-scopes/{id}` disables/renables (or
+  retunes `name` / `grants` / `read_only`). Plaintext invite tokens return
+  only from mint and rotate; `data_scopes.json` (version 2) stores just the
+  SHA-256 hash (`api_key_hash`) plus a non-secret `api_key_hint`, matching
+  the `apps.json` posture. Legacy files with plaintext `api_key` entries are
+  migrated to hashes on load. Generated tokens carry an `aeg_invite_` prefix
+  so they cannot be confused with app tokens or the agent key; lookup stays
+  hash-based and prefix-agnostic for operator-chosen keys.
+
 - **Scope-grant enforcement: deny-by-default for invite tokens (issue #253,
   phase 2).** The fail-closed scope-grants resolver is live and enforced at
   the existing seams — library aggregation, content transport, mail routes,

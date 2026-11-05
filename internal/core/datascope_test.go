@@ -645,3 +645,233 @@ func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
 		}
 	}
 }
+
+// --- invite lifecycle (issue #253 phase 3) ---
+
+func TestDataScopeStore_MigratesPlaintextToHashAtRest(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data_scopes.json")
+	legacy := `{"version":1,"data_scopes":[{"id":"shire","dataset":"shire","api_key":"YOUR_SHIRE_KEY"}]}`
+	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewDataScopeStore(path)
+	if err != nil {
+		t.Fatalf("load legacy: %v", err)
+	}
+	sc := s.FindByAPIKey("YOUR_SHIRE_KEY")
+	if sc == nil || sc.ID != "shire" {
+		t.Fatalf("legacy key must resolve after migration: %#v", sc)
+	}
+	if sc.APIKeyHint != "YOUR_SHI" {
+		t.Fatalf("hint = %q, want first 8 of the key", sc.APIKeyHint)
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "YOUR_SHIRE_KEY") {
+		t.Fatalf("migrated file still holds plaintext: %s", raw)
+	}
+	if !strings.Contains(string(raw), "api_key_hash") {
+		t.Fatalf("migrated file missing hash: %s", raw)
+	}
+
+	// The migrated file (hash-only) must load and resolve without the plaintext.
+	s2, err := NewDataScopeStore(path)
+	if err != nil {
+		t.Fatalf("reload migrated: %v", err)
+	}
+	if s2.FindByAPIKey("YOUR_SHIRE_KEY") == nil {
+		t.Fatal("key must resolve from hash-only file")
+	}
+}
+
+func TestDataScopeStore_MintStoresHashOnly(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "data_scopes.json")
+	s, err := NewDataScopeStore(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, token, err := s.Create(DataScopeCreateRequest{
+		ID:     "family",
+		Name:   "Family",
+		Grants: readAllGrants(),
+	})
+	if err != nil {
+		t.Fatalf("create: %v", err)
+	}
+	if !strings.HasPrefix(token, "aeg_invite_") {
+		t.Fatalf("token = %q, want invite prefix", token)
+	}
+	if view.APIKeyHint == "" || strings.Contains(view.APIKeyHint, token[len("aeg_invite_"):]) {
+		t.Fatalf("hint must be a short non-secret prefix: %q", view.APIKeyHint)
+	}
+	if s.FindByAPIKey(token) == nil {
+		t.Fatal("minted token must authenticate")
+	}
+
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), token) {
+		t.Fatalf("store holds plaintext token: %s", raw)
+	}
+	if !strings.Contains(string(raw), "api_key_hash") || !strings.Contains(string(raw), view.APIKeyHint) {
+		t.Fatalf("store missing hash or hint: %s", raw)
+	}
+}
+
+func TestDataScopeStore_RotateInvalidatesOldToken(t *testing.T) {
+	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, oldToken, err := s.Create(DataScopeCreateRequest{ID: "shire", Grants: readAllGrants()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, newToken, err := s.Rotate("shire")
+	if err != nil {
+		t.Fatalf("rotate: %v", err)
+	}
+	if newToken == oldToken {
+		t.Fatal("rotate must issue a new token")
+	}
+	if s.FindByAPIKey(oldToken) != nil {
+		t.Fatal("old token must stop authenticating")
+	}
+	if s.FindByAPIKey(newToken) == nil {
+		t.Fatal("new token must authenticate")
+	}
+	if view.APIKeyHint == "" {
+		t.Fatal("rotate must refresh the hint")
+	}
+}
+
+func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
+	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, token, err := s.Create(DataScopeCreateRequest{ID: "shire", Grants: readAllGrants()})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	view, err := s.Update("shire", DataScopeUpdateRequest{Disabled: boolPtr(true)})
+	if err != nil {
+		t.Fatalf("disable: %v", err)
+	}
+	if !view.Disabled {
+		t.Fatal("view must show disabled")
+	}
+	if s.FindByAPIKey(token) != nil {
+		t.Fatal("disabled scope must not authenticate")
+	}
+
+	grants := types.DataGrants{"contacts": {Default: types.AccessRead}}
+	view, err = s.Update("shire", DataScopeUpdateRequest{Disabled: boolPtr(false), Grants: &grants})
+	if err != nil {
+		t.Fatalf("update grants: %v", err)
+	}
+	if s.FindByAPIKey(token) == nil {
+		t.Fatal("re-enabled scope must authenticate")
+	}
+	if got := view.Grants["contacts"].Default; got != types.AccessRead {
+		t.Fatalf("grants = %v, want contacts read", view.Grants)
+	}
+}
+
+func TestDataScopeStore_CreateRejectsDuplicateAndBadID(t *testing.T) {
+	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Create(DataScopeCreateRequest{ID: "bad id!"}); err == nil {
+		t.Fatal("invalid id must be rejected")
+	}
+	if _, _, err := s.Create(DataScopeCreateRequest{ID: "dup"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := s.Create(DataScopeCreateRequest{ID: "dup"}); err == nil {
+		t.Fatal("duplicate id must be rejected")
+	}
+	if _, _, err := s.Rotate("missing"); err == nil {
+		t.Fatal("rotating a missing scope must fail")
+	}
+}
+
+func TestAdminDataScopes_CRUD(t *testing.T) {
+	store, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := testServerWithBase(&Config{Services: []Service{}}, "https://aegis.example.com")
+	srv.scopes = store
+
+	adminReq := func(method, path, body string) *httptest.ResponseRecorder {
+		t.Helper()
+		var reader *strings.Reader
+		if body == "" {
+			reader = strings.NewReader("")
+		} else {
+			reader = strings.NewReader(body)
+		}
+		req := httptest.NewRequest(method, path, reader)
+		req.Header.Set("X-Api-Key", "test-key")
+		w := httptest.NewRecorder()
+		srv.AuthMiddleware(srv.HandleAdminDataScopes)(w, req)
+		return w
+	}
+
+	// Mint
+	w := adminReq("POST", "/v1/admin/data-scopes",
+		`{"id":"family","name":"Family","grants":{"default":{"default":"read"}}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
+	}
+	var created struct {
+		Scope       DataScopeView `json:"scope"`
+		InviteToken string        `json:"invite_token"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatalf("decode create: %v", err)
+	}
+	if created.InviteToken == "" || created.Scope.ID != "family" {
+		t.Fatalf("create resp: %+v", created)
+	}
+
+	// List must never include the plaintext token.
+	w = adminReq("GET", "/v1/admin/data-scopes", "")
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "family") {
+		t.Fatalf("list: %d %s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), created.InviteToken) {
+		t.Fatal("list must not include plaintext invite token")
+	}
+
+	// Disable via patch.
+	w = adminReq("PATCH", "/v1/admin/data-scopes/family", `{"disabled":true}`)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"disabled":true`) {
+		t.Fatalf("patch: %d %s", w.Code, w.Body.String())
+	}
+
+	// Rotate.
+	w = adminReq("POST", "/v1/admin/data-scopes/family/rotate", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("rotate: %d %s", w.Code, w.Body.String())
+	}
+	var rotated struct {
+		InviteToken string `json:"invite_token"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &rotated); err != nil || rotated.InviteToken == "" {
+		t.Fatalf("rotate resp: %s", w.Body.String())
+	}
+	if rotated.InviteToken == created.InviteToken {
+		t.Fatal("rotate must issue a new token")
+	}
+}
+
+func boolPtr(b bool) *bool { return &b }
