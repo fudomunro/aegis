@@ -23,6 +23,7 @@ func (maturityHost) BaseURL() string                              { return "http
 func (maturityHost) CacheGet(string) (string, bool)               { return "", false }
 func (maturityHost) CacheSet(string, string, time.Duration)       {}
 func (maturityHost) ObserveUpstream(string, time.Duration, int)   {}
+func (maturityHost) LibraryReadable(string) bool                    { return false }
 
 // catalogTestConnector is one connector under consistency check: its
 // registered ID, the instance, and the capability names it advertises.

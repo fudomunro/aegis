@@ -57,5 +57,16 @@ func (s *Server) CacheSet(key, value string, ttl time.Duration) {
 	s.cache.Set(key, value, ttl)
 }
 
+// LibraryReadable reports whether agents can currently read the given library
+// kind: a provider is registered and the type policy allows reads. Backs
+// connectors.Host for setup readiness reporting (issue #265).
+func (s *Server) LibraryReadable(kind string) bool {
+	if s == nil {
+		return false
+	}
+	rt, ok := kindRuntime[kind]
+	return ok && rt.HasProviders(s) && rt.Readable(s)
+}
+
 // Server implements connectors.Host (compile-time check).
 var _ connectors.Host = (*Server)(nil)
