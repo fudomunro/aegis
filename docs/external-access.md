@@ -161,19 +161,26 @@ grants already allow (AND of both layers, same as app tokens).
 
 ## The landmine (must fix before any public bind)
 
-`buildIdentityResolver` currently wires `ServeHeaderResolver` unconditionally
-in `auto`/`tailnet` modes. `Tailscale-User-Login` is just a request header: on
-any socket a client can reach, a client can claim any login, and the default
-admin rule (any allowed non-tagged user login) turns one forged header into
-**full admin**.
+`buildIdentityResolver` wires `ServeHeaderResolver` in `auto`/`tailnet` modes.
+`Tailscale-User-Login` is just a request header: on any socket a client can
+reach, a client can claim any login, and the default admin rule (any allowed
+non-tagged user login) turns one forged header into **full admin**.
 
-This is not merely a tomorrow problem. The default `-addr :8080` binds **all
-interfaces**, so on a default install any LAN peer can send the forged header
-directly to the port — `SECURITY.md` only *suggests* binding to localhost or
-the Tailscale IP. The landmine is live today on any host that did not follow
-that advice.
+The LAN exposure this created — the default `-addr :8080` binding all
+interfaces — is closed by `fix/serve-header-loopback-guard`, which lands
+before any external-access code:
 
-Contract:
+1. **Request-level gate:** Serve headers are trusted only when `RemoteAddr`
+   is a local peer (loopback or an address on this host's own interfaces —
+   the hop `tailscale serve` or a same-host proxy makes). From a remote peer
+   they are ignored and resolution falls through to WhoIs. `RemoteAddr` is
+   the accepted connection's address and cannot be forged.
+2. **Loopback default:** `-addr` defaults to `127.0.0.1:8080`.
+3. **Startup refusal:** with Serve identity trust (`auto`/`tailnet`), a
+   wildcard or LAN bind is refused — sound binds are loopback, a Tailscale
+   IP, or `-auth-mode api-key`.
+
+Remaining contract for the listener split itself:
 
 1. When external access is enabled, the API listener resolves **no ambient
    identity** — no Serve headers, no WhoIs. Explicit credentials only.
@@ -181,12 +188,9 @@ Contract:
    tailnet only, which is what makes those headers trustworthy.
 3. The trust of identity headers stays a property of *listener exposure*,
    never of the auth mode name.
-4. **Startup refusal, not a warning:** Aegis refuses to start when
-   Serve-header trust is enabled and the listener's bind address is neither
-   loopback nor a Tailscale IP, and external access is enabled. (A
-   `fix/` follow-up should also default `-addr` to loopback and/or refuse
-   or loudly warn on non-loopback binds with Serve-header trust even in
-   tailnet-only mode — the LAN exposure above exists there too.)
+4. **Startup refusal, not a warning** for the external-access case: Aegis
+   refuses to start when the API listener's bind would expose it without the
+   external-access profile (tokens-only, allowlisted routes).
 
 ## Transport and hardening duties
 
@@ -255,8 +259,10 @@ OIDC/passwords, cross-instance discovery, hosted multi-tenant SaaS.
 2. **Identity and credential gating** — ambient identity resolution attaches
    per listener: admin always, API never under external access. Startup
    **refuses** (not warns) a public API bind with Serve-header trust
-   enabled, and refuses the agent key on the published bind. Follow-up
-   `fix/`: default `-addr` to loopback so the LAN forge path closes too.
+   enabled, and refuses the agent key on the published bind. (The LAN forge
+   path already closed in `fix/serve-header-loopback-guard`: local-peer
+   Serve-header gate, loopback `-addr` default, startup refusal for wildcard
+   and LAN binds under Serve trust.)
 3. **Scope grant enforcement** — a dedicated fail-closed scope-grants
    resolver (never `DataGrants.Access`), the reserved `default` entry, the
    empty/override cases in the resolution table above, migration for packs

@@ -111,6 +111,7 @@ func TestServeHeaderResolver_Variants(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			req := httptest.NewRequest("GET", "/", nil)
+			req.RemoteAddr = "127.0.0.1:1234" // request arrives via the local serve hop
 			for k, v := range tc.headers {
 				req.Header.Set(k, v)
 			}

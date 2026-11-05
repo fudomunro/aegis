@@ -10,6 +10,7 @@ import (
 
 func TestServeHeaderResolver_UserLogin(t *testing.T) {
 	r := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	r.RemoteAddr = "127.0.0.1:1234"
 	r.Header.Set("Tailscale-User-Login", "alice@example.com")
 	r.Header.Set("Tailscale-User-Name", "Alice")
 
@@ -30,6 +31,7 @@ func TestServeHeaderResolver_UserLogin(t *testing.T) {
 
 func TestServeHeaderResolver_TagsOnly(t *testing.T) {
 	r := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	r.RemoteAddr = "127.0.0.1:1234"
 	r.Header.Set("Tailscale-Node-Tags", "tag:aperture,tag:client")
 
 	id, err := ServeHeaderResolver{}.Resolve(context.Background(), r)
@@ -74,8 +76,9 @@ func TestAuthMiddleware_TailnetMode_RequiresIdentity(t *testing.T) {
 		t.Fatalf("code=%d called=%v", w.Code, called)
 	}
 
-	// With Serve headers → allowed without API key.
+	// With Serve headers from the local serve hop → allowed without API key.
 	req = httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("Tailscale-User-Login", "alice@example.com")
 	w = httptest.NewRecorder()
 	h(w, req)
@@ -96,6 +99,7 @@ func TestAuthMiddleware_TailnetMode_Allowlist(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("Tailscale-User-Login", "bob@example.com")
 	w := httptest.NewRecorder()
 	h(w, req)
@@ -104,6 +108,7 @@ func TestAuthMiddleware_TailnetMode_Allowlist(t *testing.T) {
 	}
 
 	req = httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("Tailscale-User-Login", "alice@example.com")
 	w = httptest.NewRecorder()
 	h(w, req)
@@ -127,6 +132,7 @@ func TestAuthMiddleware_AutoMode_PrefersIdentity(t *testing.T) {
 	})
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	req.RemoteAddr = "127.0.0.1:1234"
 	req.Header.Set("Tailscale-User-Login", "alice@example.com")
 	w := httptest.NewRecorder()
 	h(w, req)
@@ -221,6 +227,7 @@ func TestMultiResolver_FirstHitWins(t *testing.T) {
 		ServeHeaderResolver{},
 	}}
 	r := httptest.NewRequest("GET", "/", nil)
+	r.RemoteAddr = "127.0.0.1:1234"
 	r.Header.Set("Tailscale-User-Login", "carol@example.com")
 	id, err := m.Resolve(context.Background(), r)
 	if err != nil || id == nil || id.LoginName != "carol@example.com" {
@@ -246,5 +253,71 @@ func TestDenyWritesJSON(t *testing.T) {
 	}
 	if body["error"] != "unauthorized" {
 		t.Fatalf("body=%v", body)
+	}
+}
+
+func TestServeHeaderResolver_IgnoresForgedHeadersFromRemotePeer(t *testing.T) {
+	// A LAN or tailnet peer that reaches the socket directly can write any
+	// Tailscale-User-Login header. RemoteAddr is the accepted connection's
+	// address and cannot be forged, so headers must grant nothing here.
+	for _, remote := range []string{
+		"192.168.1.50:44321",
+		"100.64.0.9:9999",
+		"10.0.0.5:1234",
+	} {
+		r := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+		r.RemoteAddr = remote
+		r.Header.Set("Tailscale-User-Login", "alice@example.com")
+		r.Header.Set("Tailscale-Node-Tags", "tag:aperture")
+
+		id, err := ServeHeaderResolver{}.Resolve(context.Background(), r)
+		if err != nil {
+			t.Fatalf("remote %s: %v", remote, err)
+		}
+		if id != nil {
+			t.Fatalf("remote %s: forged headers must not resolve an identity, got %+v", remote, id)
+		}
+	}
+}
+
+func TestIsLocalPeer(t *testing.T) {
+	cases := []struct {
+		remote string
+		want   bool
+	}{
+		{"127.0.0.1:8080", true},
+		{"[::1]:8080", true},
+		{"192.168.1.50:44321", false},
+		{"100.64.0.9:9999", false},
+		{"", false},
+		{"garbage", false},
+	}
+	for _, tc := range cases {
+		r := httptest.NewRequest("GET", "/", nil)
+		r.RemoteAddr = tc.remote
+		if got := isLocalPeer(r); got != tc.want {
+			t.Errorf("isLocalPeer(%q) = %v, want %v", tc.remote, got, tc.want)
+		}
+	}
+}
+
+func TestAuthMiddleware_TailnetMode_RejectsForgedHeadersFromRemotePeer(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.authMode = AuthModeTailnet
+	srv.identity = ServeHeaderResolver{}
+	srv.allowedLogins = []string{"alice@example.com"}
+
+	called := false
+	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+	})
+
+	req := httptest.NewRequest("GET", "/v1/services/spotify/me", nil)
+	req.RemoteAddr = "192.168.1.50:44321"
+	req.Header.Set("Tailscale-User-Login", "alice@example.com")
+	w := httptest.NewRecorder()
+	h(w, req)
+	if called || w.Code != http.StatusUnauthorized {
+		t.Fatalf("forged headers from a remote peer must not authenticate: code=%d called=%v", w.Code, called)
 	}
 }
