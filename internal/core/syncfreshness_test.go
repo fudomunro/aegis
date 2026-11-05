@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -416,8 +417,9 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
-	c := spotifyMirrorChecker(srv)
+	c := &musicMirrorChecker{srv: srv, service: "spotify"}
 
 	cur, exists, ok, err := c.Check(context.Background(), CopyRecord{ExternalID: "pl1"})
 	if err != nil || !ok || !exists {
@@ -472,8 +474,9 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 		ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 
-	c := youtubeMusicMirrorChecker(srv)
+	c := &musicMirrorChecker{srv: srv, service: "youtube-music"}
 	cur, exists, ok, err := c.Check(context.Background(), CopyRecord{ExternalID: "PLx"})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check = (%+v,%v,%v,%v)", cur, exists, ok, err)
@@ -1016,6 +1019,7 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
 		t.Fatal(err)

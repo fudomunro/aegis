@@ -3,18 +3,61 @@ package connectors
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"net/url"
 	"strconv"
 
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// YouTube Music reconciliation operations (issue #254): paged list reads
-// and placement writes over neutral models against YouTube Data API v3.
+// YouTube Music reconciliation operations (issue #254): paged list reads,
+// metadata probes for freshness checks, and placement writes over neutral
+// models against YouTube Data API v3.
 
 // youtubeLikedPlaylistID is the auto-generated liked-videos playlist the
-// liked-tracks placement reads and writes.
+// liked-tracks placement and probe read and write.
 const youtubeLikedPlaylistID = "LL"
+
+// GetPlaylistMeta implements types.PlaylistMetaProvider in one metadata
+// call: title and item count (YouTube exposes no change token).
+func (c *YouTubeMusicConnector) GetPlaylistMeta(ctx context.Context, playlistID string) (types.PlaylistMeta, bool, error) {
+	raw, status, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlists",
+		url.Values{"part": []string{"snippet,contentDetails"}, "id": []string{playlistID}}, nil)
+	if err != nil {
+		if status == http.StatusNotFound {
+			return types.PlaylistMeta{}, false, nil
+		}
+		return types.PlaylistMeta{}, false, err
+	}
+	items, _ := raw["items"].([]any)
+	if len(items) == 0 {
+		return types.PlaylistMeta{}, false, nil
+	}
+	pl, _ := items[0].(map[string]any)
+	snippet, _ := pl["snippet"].(map[string]any)
+	title, _ := snippet["title"].(string)
+	details, _ := pl["contentDetails"].(map[string]any)
+	count, _ := AsInt(details["itemCount"])
+	return types.PlaylistMeta{Name: title, ItemCount: count}, true, nil
+}
+
+// SavedTrackCount implements types.PlaylistMetaProvider via the liked-videos
+// playlist — the mirror target for saved tracks.
+func (c *YouTubeMusicConnector) SavedTrackCount(ctx context.Context) (int, error) {
+	raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlists",
+		url.Values{"part": []string{"contentDetails"}, "id": []string{youtubeLikedPlaylistID}}, nil)
+	if err != nil {
+		return 0, err
+	}
+	items, _ := raw["items"].([]any)
+	if len(items) == 0 {
+		return 0, nil
+	}
+	pl, _ := items[0].(map[string]any)
+	details, _ := pl["contentDetails"].(map[string]any)
+	count, _ := AsInt(details["itemCount"])
+	return count, nil
+}
 
 // ListPlaylistItems implements types.PlaylistItemsProvider. One page of a
 // YouTube playlist's items. The cursor is YouTube's opaque nextPageToken;
