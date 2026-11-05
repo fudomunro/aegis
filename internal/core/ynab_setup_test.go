@@ -85,7 +85,7 @@ func TestAdminYNABSetup_StatusAndConfig(t *testing.T) {
 
 func TestAdminQuicken_ImportFlow(t *testing.T) {
 	dir := t.TempDir()
-	store, err := OpenQuickenStore(filepath.Join(dir, "quicken.db"))
+	store, err := connectors.OpenQuickenStore(filepath.Join(dir, "quicken.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +118,7 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 		t.Fatalf("import %d body=%s", w2.Code, w2.Body.String())
 	}
 	var out struct {
-		Result QuickenImportResult `json:"result"`
+		Result connectors.QuickenImportResult `json:"result"`
 		Status QuickenImportStatus `json:"status"`
 	}
 	if err := json.Unmarshal(w2.Body.Bytes(), &out); err != nil {
@@ -143,9 +143,9 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
-	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, srv.quicken)
+	srv.connectors[connectors.QuickenServiceID] = connectors.NewQuickenConnector(srv.quicken)
 	// Quicken is file-based: even if present in config, keep it off the list.
-	cfg.Services = append(cfg.Services, Service{ID: quickenServiceID, Name: "Quicken", Action: "inject"})
+	cfg.Services = append(cfg.Services, Service{ID: connectors.QuickenServiceID, Name: "Quicken", Action: "inject"})
 
 	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -162,7 +162,7 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	}
 	var ynab *AdminService
 	for i := range resp.Services {
-		if resp.Services[i].ID == quickenServiceID {
+		if resp.Services[i].ID == connectors.QuickenServiceID {
 			t.Fatal("quicken must not appear in admin services list")
 		}
 		if resp.Services[i].ID == connectors.YNABServiceID {
@@ -185,7 +185,7 @@ func TestYNABCapabilities_OnlyTransactions(t *testing.T) {
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	qcaps := NewQuickenConnector(&Server{}, nil).Capabilities()
+	qcaps := connectors.NewQuickenConnector(nil).Capabilities()
 	if len(qcaps.DataTypes) != 1 || qcaps.DataTypes[0].Name != "transactions" {
 		t.Fatalf("quicken caps = %+v", qcaps)
 	}

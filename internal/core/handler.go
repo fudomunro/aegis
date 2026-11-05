@@ -127,11 +127,11 @@ type Server struct {
 	// search is the local library search index (issue #178). May be disabled.
 	search *SearchIndex
 	// quicken is the optional local Quicken import store (issue #141).
-	quicken *QuickenStore
+	quicken *connectors.QuickenStore
 	// timeline is the optional local Google Timeline import store (issue #142).
-	timeline *TimelineStore
+	timeline *connectors.TimelineStore
 	// signal is the optional local Signal import store (issue #168).
-	signal *SignalStore
+	signal *connectors.SignalStore
 	// mailSyncMu serializes archive ingest so admin UI and agents cannot
 	// interleave two Gmail page cursors into the same store.
 	mailSyncMu sync.Mutex

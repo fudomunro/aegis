@@ -499,14 +499,14 @@ func TestPrimaryService_Empty(t *testing.T) {
 }
 
 func TestNormalizeHandleList(t *testing.T) {
-	got := normalizeHandleList([]string{"@Alice", "alice", "  ", "bob"})
+	got := types.NormalizeHandleList([]string{"@Alice", "alice", "  ", "bob"})
 	if len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
 		t.Fatalf("got = %#v", got)
 	}
-	if normalizeHandleList(nil) != nil {
+	if types.NormalizeHandleList(nil) != nil {
 		t.Fatal("nil in → nil out")
 	}
-	if normalizeHandleList([]string{"  "}) != nil {
+	if types.NormalizeHandleList([]string{"  "}) != nil {
 		t.Fatal("all-empty → nil")
 	}
 }

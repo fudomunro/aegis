@@ -557,7 +557,7 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message, dataset strin
 			continue
 		}
 		for _, src := range m.Sources {
-			if id := types.NormalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
+			if id := types.NormalizeMessageID(types.ExtraString(src.Extra, "message_id")); id != "" {
 				want[id] = true
 			}
 		}

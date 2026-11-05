@@ -1,9 +1,9 @@
-package core
+package connectors
 
 import (
 	"bufio"
-	"context"
 	"database/sql"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,12 +13,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
-	_ "modernc.org/sqlite"
 )
 
 // Signal local import (issue #168). Signal has no public message API, so
@@ -29,16 +26,29 @@ import (
 // /v1/library/messages like other file-based import sources.
 
 const (
-	signalServiceID   = "signal"
-	signalServiceName = "Signal"
+	SignalServiceID   = "signal"
+	SignalServiceName = "Signal"
 )
+
+// SignalService is the service card the local Signal import store injects
+// into config (issue #266).
+func SignalService() LocalStoreService {
+	return LocalStoreService{
+		ID:          SignalServiceID,
+		Name:        SignalServiceName,
+		Action:      "inject",
+		Description: "Locally imported Signal contacts and messages (Advanced → Signal import).",
+		GrantLimits: types.Permissions{
+			"contacts": types.AccessRead,
+			"messages": types.AccessRead,
+		},
+	}
+}
 
 // SignalStore is a local SQLite store of imported Signal contacts/messages.
 // Empty path disables the store (like mail-archive / quicken / timeline).
 type SignalStore struct {
-	db   *sql.DB
-	path string
-	mu   sync.RWMutex
+	localStore
 }
 
 // SignalImportResult reports one import run.
@@ -56,36 +66,38 @@ type SignalImportResult struct {
 	Error           string `json:"error,omitempty"`
 }
 
+// LogAttrs returns slog keyvals for one finished import run.
+func (r SignalImportResult) LogAttrs() []any {
+	return []any{"format", r.Format,
+		"contacts_stored", r.ContactsStored, "messages_stored", r.MessagesStored,
+		"contacts_skipped", r.ContactsSkipped, "messages_skipped", r.MessagesSkipped,
+		"errors", r.Errors, "done", r.Done}
+}
+
+// Failed reports a run that recorded errors but stored nothing.
+func (r SignalImportResult) Failed() bool {
+	return r.Errors > 0 && r.ContactsStored == 0 && r.MessagesStored == 0
+}
+
+var _ ImportStore = (*SignalStore)(nil)
+var _ ImportOutcome = SignalImportResult{}
+
 // OpenSignalStore opens (or creates) the local Signal SQLite store.
 // An empty path returns nil (disabled).
 func OpenSignalStore(path string) (*SignalStore, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
+	s := &SignalStore{}
+	if err := s.openLocalStore(path, "signal", signalSchema); err != nil {
+		return nil, err
+	}
+	if !s.Enabled() {
 		return nil, nil
-	}
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("create signal store dir: %w", err)
-		}
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		db.Close()
-		return nil, err
-	}
-	s := &SignalStore{db: db, path: path}
-	if err := s.init(); err != nil {
-		db.Close()
-		return nil, err
 	}
 	return s, nil
 }
 
-func (s *SignalStore) init() error {
-	_, err := s.db.Exec(`
+// signalSchema installs the imported contact/message tables.
+const signalSchema = `
+
 CREATE TABLE IF NOT EXISTS signal_contacts (
   source_id TEXT PRIMARY KEY,
   file_path TEXT NOT NULL,
@@ -110,31 +122,15 @@ CREATE TABLE IF NOT EXISTS signal_messages (
 );
 CREATE INDEX IF NOT EXISTS signal_messages_sent ON signal_messages(sent_at);
 CREATE INDEX IF NOT EXISTS signal_messages_thread ON signal_messages(thread_id);
-`)
-	return err
-}
+`
 
-func (s *SignalStore) Close() error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.Close()
-}
 
-func (s *SignalStore) Path() string {
-	if s == nil {
-		return ""
-	}
-	return s.path
-}
 
 func (s *SignalStore) Enabled() bool { return s != nil && s.db != nil }
 
-// UpsertContact stores or replaces one imported contact keyed by source_id.
-func (s *SignalStore) UpsertContact(filePath string, c types.Contact) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("signal store disabled")
-	}
+// upsertSignalContactTx stores or replaces one imported contact keyed by
+// source_id.
+func upsertSignalContactTx(tx *sql.Tx, filePath string, c types.Contact) error {
 	id := signalContactSourceID(c)
 	if id == "" {
 		return fmt.Errorf("signal contact missing source id")
@@ -143,9 +139,7 @@ func (s *SignalStore) UpsertContact(filePath string, c types.Contact) error {
 	if err != nil {
 		return err
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err = s.db.Exec(`
+	_, err = tx.Exec(`
 INSERT INTO signal_contacts(
   source_id, file_path, name, phones, emails, handles, organization, raw_json
 ) VALUES (?,?,?,?,?,?,?,?)
@@ -167,11 +161,9 @@ ON CONFLICT(source_id) DO UPDATE SET
 	return err
 }
 
-// UpsertMessage stores or replaces one imported message keyed by source_id.
-func (s *SignalStore) UpsertMessage(filePath string, m types.Message) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("signal store disabled")
-	}
+// upsertSignalMessageTx stores or replaces one imported message keyed by
+// source_id.
+func upsertSignalMessageTx(tx *sql.Tx, filePath string, m types.Message) error {
 	id := signalMessageSourceID(m)
 	if id == "" {
 		return fmt.Errorf("signal message missing source id")
@@ -194,9 +186,7 @@ func (s *SignalStore) UpsertMessage(filePath string, m types.Message) error {
 			snippet = snippet[:200]
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err = s.db.Exec(`
+	_, err = tx.Exec(`
 INSERT INTO signal_messages(
   source_id, file_path, thread_id, sent_at, received_at, direction,
   body_snippet, from_name, from_phone, raw_json
@@ -218,6 +208,47 @@ ON CONFLICT(source_id) DO UPDATE SET
 	return err
 }
 
+// UpsertContact stores or replaces one imported contact keyed by source_id.
+func (s *SignalStore) UpsertContact(filePath string, c types.Contact) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("signal store disabled")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := upsertSignalContactTx(tx, filePath, c); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// UpsertMessage stores or replaces one imported message keyed by source_id.
+func (s *SignalStore) UpsertMessage(filePath string, m types.Message) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("signal store disabled")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := upsertSignalMessageTx(tx, filePath, m); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+const (
+	signalContactHasQuery = `SELECT COUNT(1) FROM signal_contacts WHERE source_id = ?`
+	signalMessageHasQuery = `SELECT COUNT(1) FROM signal_messages WHERE source_id = ?`
+)
+
 // HasContact reports whether the contact source_id is already stored.
 func (s *SignalStore) HasContact(sourceID string) bool {
 	return s.hasRow(`SELECT COUNT(1) FROM signal_contacts WHERE source_id = ?`, sourceID)
@@ -228,24 +259,13 @@ func (s *SignalStore) HasMessage(sourceID string) bool {
 	return s.hasRow(`SELECT COUNT(1) FROM signal_messages WHERE source_id = ?`, sourceID)
 }
 
-func (s *SignalStore) hasRow(query, sourceID string) bool {
-	if s == nil || s.db == nil {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var n int
-	err := s.db.QueryRow(query, sourceID).Scan(&n)
-	return err == nil && n > 0
-}
-
 // ListContacts returns stored contacts (name order).
 func (s *SignalStore) ListContacts(limit int) ([]types.Contact, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("signal store disabled")
 	}
-	if limit <= 0 || limit > libraryItemCap {
-		limit = libraryItemCap
+	if limit <= 0 || limit > LibraryItemCap {
+		limit = LibraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -277,8 +297,8 @@ func (s *SignalStore) ListMessages(limit int) ([]types.Message, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("signal store disabled")
 	}
-	if limit <= 0 || limit > libraryItemCap {
-		limit = libraryItemCap
+	if limit <= 0 || limit > LibraryItemCap {
+		limit = LibraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -348,11 +368,11 @@ func signalMessageSourceID(m types.Message) string {
 }
 
 func newSignalContact(id, name string, phones, emails, handles []string, organization string) types.Contact {
-	c := types.NewContact(signalServiceID, signalServiceName, id, name, emails, phones)
+	c := types.NewContact(SignalServiceID, SignalServiceName, id, name, emails, phones)
 	if c.Name == "" && len(c.Phones) == 0 && len(c.Emails) == 0 && len(handles) == 0 {
 		return types.Contact{}
 	}
-	c.Handles = normalizeHandleList(handles)
+	c.Handles = types.NormalizeHandleList(handles)
 	if organization != "" {
 		c.Organization = organization
 	}
@@ -373,7 +393,7 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 	from := rec.From
 	if from != nil {
 		// Normalize into a Signal-sourced contact spelling.
-		nc := types.NewContact(signalServiceID, signalServiceName, "", from.Name, from.Emails, from.Phones)
+		nc := types.NewContact(SignalServiceID, SignalServiceName, "", from.Name, from.Emails, from.Phones)
 		if nc.Name != "" || len(nc.Phones) > 0 || len(nc.Emails) > 0 {
 			from = &nc
 		} else {
@@ -382,7 +402,7 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 	}
 	to := make([]types.Contact, 0, len(rec.To))
 	for _, t := range rec.To {
-		nc := types.NewContact(signalServiceID, signalServiceName, "", t.Name, t.Emails, t.Phones)
+		nc := types.NewContact(SignalServiceID, SignalServiceName, "", t.Name, t.Emails, t.Phones)
 		if nc.Name != "" || len(nc.Phones) > 0 || len(nc.Emails) > 0 {
 			to = append(to, nc)
 		}
@@ -395,8 +415,8 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 		}
 	}
 	src := types.MessageSource{
-		Service:     signalServiceID,
-		ServiceName: signalServiceName,
+		Service:     SignalServiceID,
+		ServiceName: SignalServiceName,
 		ID:          id,
 		ThreadID:    rec.ThreadID,
 		Canonical:   true,
@@ -496,7 +516,7 @@ type signalJSONBundle struct {
 }
 
 func (p signalPerson) contact() types.Contact {
-	return types.NewContact(signalServiceID, signalServiceName, "", p.Name, p.Emails, p.Phones)
+	return types.NewContact(SignalServiceID, SignalServiceName, "", p.Name, p.Emails, p.Phones)
 }
 
 func (l signalJSONLLine) toContact() types.Contact {
@@ -585,6 +605,8 @@ func ImportSignalPath(store *SignalStore, path string) (SignalImportResult, erro
 }
 
 func importSignalFile(store *SignalStore, file string, res *SignalImportResult) error {
+	batch := &signalBatch{file: file}
+	var err error
 	ext := strings.ToLower(filepath.Ext(file))
 	switch ext {
 	case ".db", ".sqlite", ".sqlite3":
@@ -593,27 +615,29 @@ func importSignalFile(store *SignalStore, file string, res *SignalImportResult) 
 		} else if res.Format != "sqlite" {
 			res.Format = "mixed"
 		}
-		return importSignalSQLite(store, file, res)
+		err = importSignalSQLite(store, file, res, batch)
 	case ".jsonl", ".ndjson":
 		if res.Format == "" {
 			res.Format = "jsonl"
 		} else if res.Format != "jsonl" {
 			res.Format = "mixed"
 		}
-		return importSignalJSONL(store, file, res)
+		err = importSignalJSONL(store, file, res, batch)
 	case ".json":
 		if res.Format == "" {
 			res.Format = "json"
 		} else if res.Format != "json" {
 			res.Format = "mixed"
 		}
-		return importSignalJSON(store, file, res)
+		err = importSignalJSON(store, file, res, batch)
 	default:
-		return fmt.Errorf("unsupported Signal export type %q", ext)
+		err = fmt.Errorf("unsupported Signal export type %q", ext)
 	}
+	batch.flush(store, res)
+	return err
 }
 
-func importSignalJSONL(store *SignalStore, file string, res *SignalImportResult) error {
+func importSignalJSONL(store *SignalStore, file string, res *SignalImportResult, batch *signalBatch) error {
 	f, err := os.Open(file)
 	if err != nil {
 		return err
@@ -634,7 +658,7 @@ func importSignalJSONL(store *SignalStore, file string, res *SignalImportResult)
 			slog.Warn("signal jsonl line parse failed", "path", file, "line", lineNo, "error", err)
 			continue
 		}
-		if err := storeSignalRecord(store, file, rec, res); err != nil {
+		if err := storeSignalRecord(rec, res, batch); err != nil {
 			res.Errors++
 			slog.Warn("signal jsonl store failed", "path", file, "line", lineNo, "error", err)
 		}
@@ -642,7 +666,7 @@ func importSignalJSONL(store *SignalStore, file string, res *SignalImportResult)
 	return sc.Err()
 }
 
-func importSignalJSON(store *SignalStore, file string, res *SignalImportResult) error {
+func importSignalJSON(store *SignalStore, file string, res *SignalImportResult, batch *signalBatch) error {
 	raw, err := os.ReadFile(file)
 	if err != nil {
 		return err
@@ -656,13 +680,13 @@ func importSignalJSON(store *SignalStore, file string, res *SignalImportResult) 
 	if err := json.Unmarshal(raw, &bundle); err == nil && (len(bundle.Contacts) > 0 || len(bundle.Messages) > 0) {
 		for _, rec := range bundle.Contacts {
 			rec.Type = "contact"
-			if err := storeSignalRecord(store, file, rec, res); err != nil {
+			if err := storeSignalRecord(rec, res, batch); err != nil {
 				res.Errors++
 			}
 		}
 		for _, rec := range bundle.Messages {
 			rec.Type = "message"
-			if err := storeSignalRecord(store, file, rec, res); err != nil {
+			if err := storeSignalRecord(rec, res, batch); err != nil {
 				res.Errors++
 			}
 		}
@@ -672,7 +696,7 @@ func importSignalJSON(store *SignalStore, file string, res *SignalImportResult) 
 	var lines []signalJSONLLine
 	if err := json.Unmarshal(raw, &lines); err == nil && len(lines) > 0 {
 		for _, rec := range lines {
-			if err := storeSignalRecord(store, file, rec, res); err != nil {
+			if err := storeSignalRecord(rec, res, batch); err != nil {
 				res.Errors++
 			}
 		}
@@ -681,44 +705,62 @@ func importSignalJSON(store *SignalStore, file string, res *SignalImportResult) 
 	// Single object
 	var one signalJSONLLine
 	if err := json.Unmarshal(raw, &one); err == nil && (one.Type != "" || one.Body != "" || one.Name != "") {
-		return storeSignalRecord(store, file, one, res)
+		return storeSignalRecord(one, res, batch)
 	}
 	return fmt.Errorf("unrecognized Signal JSON shape in %s", file)
 }
 
-func storeSignalRecord(store *SignalStore, file string, rec signalJSONLLine, res *SignalImportResult) error {
+
+// signalBatch collects parsed rows for one import file so contacts and
+// messages are written in batched transactions (issue #266).
+type signalBatch struct {
+	file     string
+	contacts []types.Contact
+	messages []types.Message
+}
+
+// flush writes the collected rows and folds per-kind counters into res.
+func (b *signalBatch) flush(store *SignalStore, res *SignalImportResult) {
+	if store == nil || !store.Enabled() {
+		return
+	}
+	if len(b.contacts) > 0 {
+		var st ImportStats
+		upsertRows(&store.localStore, &st, b.contacts, signalContactSourceID, signalContactHasQuery,
+			func(tx *sql.Tx, c types.Contact) error { return upsertSignalContactTx(tx, b.file, c) })
+		res.ContactsStored += st.Stored
+		res.ContactsSkipped += st.Skipped
+		res.Errors += st.Errors
+		b.contacts = nil
+	}
+	if len(b.messages) > 0 {
+		var st ImportStats
+		upsertRows(&store.localStore, &st, b.messages, signalMessageSourceID, signalMessageHasQuery,
+			func(tx *sql.Tx, m types.Message) error { return upsertSignalMessageTx(tx, b.file, m) })
+		res.MessagesStored += st.Stored
+		res.MessagesSkipped += st.Skipped
+		res.Errors += st.Errors
+		b.messages = nil
+	}
+}
+
+func storeSignalRecord(rec signalJSONLLine, res *SignalImportResult, b *signalBatch) error {
 	switch strings.ToLower(strings.TrimSpace(rec.Type)) {
 	case "contact", "recipient", "person":
 		res.ContactsScanned++
 		c := rec.toContact()
-		id := signalContactSourceID(c)
-		if id == "" {
+		if signalContactSourceID(c) == "" {
 			return fmt.Errorf("contact missing id/identity")
 		}
-		if store.HasContact(id) {
-			res.ContactsSkipped++
-			return nil
-		}
-		if err := store.UpsertContact(file, c); err != nil {
-			return err
-		}
-		res.ContactsStored++
+		b.contacts = append(b.contacts, c)
 		return nil
 	case "message", "chat", "sms":
 		res.MessagesScanned++
 		m := rec.toMessage()
-		id := signalMessageSourceID(m)
-		if id == "" {
+		if signalMessageSourceID(m) == "" {
 			return fmt.Errorf("message missing id")
 		}
-		if store.HasMessage(id) {
-			res.MessagesSkipped++
-			return nil
-		}
-		if err := store.UpsertMessage(file, m); err != nil {
-			return err
-		}
-		res.MessagesStored++
+		b.messages = append(b.messages, m)
 		return nil
 	default:
 		return fmt.Errorf("unknown Signal record type %q", rec.Type)
@@ -729,7 +771,7 @@ func storeSignalRecord(store *SignalStore, file string, rec signalJSONLLine, res
 // Signal Desktop schema (conversations/messages) or the Android /
 // signalbackup-tools schema (recipient/message/thread). Encrypted app
 // databases are not supported — decrypt or export first.
-func importSignalSQLite(store *SignalStore, file string, res *SignalImportResult) error {
+func importSignalSQLite(store *SignalStore, file string, res *SignalImportResult, batch *signalBatch) error {
 	db, err := sql.Open("sqlite", file)
 	if err != nil {
 		return err
@@ -759,15 +801,15 @@ func importSignalSQLite(store *SignalStore, file string, res *SignalImportResult
 
 	switch {
 	case tables["messages"] && tables["conversations"]:
-		return importSignalDesktopSQLite(db, store, file, res)
+		return importSignalDesktopSQLite(db, store, file, res, batch)
 	case tables["message"] && tables["recipient"]:
-		return importSignalAndroidSQLite(db, store, file, res)
+		return importSignalAndroidSQLite(db, store, file, res, batch)
 	default:
 		return fmt.Errorf("unrecognized Signal SQLite schema in %s (want Desktop conversations/messages or Android recipient/message)", file)
 	}
 }
 
-func importSignalDesktopSQLite(db *sql.DB, store *SignalStore, file string, res *SignalImportResult) error {
+func importSignalDesktopSQLite(db *sql.DB, store *SignalStore, file string, res *SignalImportResult, batch *signalBatch) error {
 	// Conversations → contacts (private chats with a phone / name).
 	crows, err := db.Query(`
 SELECT id, IFNULL(name,''), IFNULL(e164,''), IFNULL(serviceId,''), IFNULL(type,''), IFNULL(profileName,'')
@@ -803,7 +845,7 @@ FROM conversations`)
 			Phones:  phones,
 			Handles: handles,
 		}
-		if err := storeSignalRecord(store, file, rec, res); err != nil {
+		if err := storeSignalRecord(rec, res, batch); err != nil {
 			res.Errors++
 		}
 	}
@@ -854,14 +896,14 @@ FROM messages`)
 			ThreadID:   convID,
 			Read:       true,
 		}
-		if err := storeSignalRecord(store, file, rec, res); err != nil {
+		if err := storeSignalRecord(rec, res, batch); err != nil {
 			res.Errors++
 		}
 	}
 	return mrows.Err()
 }
 
-func importSignalAndroidSQLite(db *sql.DB, store *SignalStore, file string, res *SignalImportResult) error {
+func importSignalAndroidSQLite(db *sql.DB, store *SignalStore, file string, res *SignalImportResult, batch *signalBatch) error {
 	// recipient → contacts
 	rrows, err := db.Query(`
 SELECT _id, IFNULL(display_name,''), IFNULL(phone,'')
@@ -886,7 +928,7 @@ FROM recipient`)
 			Name:   name,
 			Phones: phones,
 		}
-		if err := storeSignalRecord(store, file, rec, res); err != nil {
+		if err := storeSignalRecord(rec, res, batch); err != nil {
 			res.Errors++
 		}
 	}
@@ -963,7 +1005,7 @@ FROM message`)
 		if from != nil {
 			rec.From = from
 		}
-		if err := storeSignalRecord(store, file, rec, res); err != nil {
+		if err := storeSignalRecord(rec, res, batch); err != nil {
 			res.Errors++
 		}
 	}
@@ -1071,23 +1113,23 @@ func (c *SignalConnector) SystemInstructions(baseURL string) string {
 func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	store := c.store
 	if store == nil || !store.Enabled() {
-		writeJSONError(w, http.StatusNotFound, "signal store disabled")
+		WriteJSONError(w, http.StatusNotFound, "signal store disabled")
 		return
 	}
 	path := strings.Trim(remainingPath, "/")
 	if path == "" {
-		path = strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/services/"+signalServiceID), "/")
+		path = strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/services/"+SignalServiceID), "/")
 	}
 	switch {
 	case r.Method == http.MethodGet && (path == "import/status"):
 		contacts, messages, err := store.Counts()
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "signal store error")
+			WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		writeJSON(w, map[string]any{"contacts": contacts, "messages": messages, "path": store.Path()})
+		WriteJSON(w, map[string]any{"contacts": contacts, "messages": messages, "path": store.Path()})
 	case r.Method == http.MethodGet && (path == "messages" || path == "messages/"):
-		limit := libraryItemCap
+		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				limit = n
@@ -1095,12 +1137,12 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		}
 		list, err := store.ListMessages(limit)
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "signal store error")
+			WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		writeJSON(w, types.MessageList{Messages: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		WriteJSON(w, types.MessageList{Messages: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodGet && (path == "contacts" || path == "contacts/" || path == "me/contacts"):
-		limit := libraryItemCap
+		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				limit = n
@@ -1108,27 +1150,27 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		}
 		list, err := store.ListContacts(limit)
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "signal store error")
+			WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		writeJSON(w, types.ContactList{Contacts: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		WriteJSON(w, types.ContactList{Contacts: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && path == "import":
 		var req struct {
 			Path string `json:"path"`
 		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err := json.Unmarshal(body, &req); err != nil || strings.TrimSpace(req.Path) == "" {
-			writeJSONError(w, http.StatusBadRequest, "path is required")
+			WriteJSONError(w, http.StatusBadRequest, "path is required")
 			return
 		}
 		res, err := ImportSignalPath(store, req.Path)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, res)
+		WriteJSON(w, res)
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -1138,7 +1180,7 @@ func (c *SignalConnector) ListUserContacts(ctx context.Context) (contacts []type
 	if store == nil || !store.Enabled() {
 		return nil, false, types.ErrUnauthorized
 	}
-	list, err := store.ListContacts(libraryItemCap)
+	list, err := store.ListContacts(LibraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1154,7 +1196,7 @@ func (c *SignalConnector) ListMessages(ctx context.Context) (messages []types.Me
 	if store == nil || !store.Enabled() {
 		return nil, false, types.ErrUnauthorized
 	}
-	list, err := store.ListMessages(libraryItemCap)
+	list, err := store.ListMessages(LibraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}
@@ -1171,119 +1213,8 @@ func (c *SignalConnector) ListMessages(ctx context.Context) (messages []types.Me
 }
 
 var (
-	_ connectors.ServiceConnector = (*SignalConnector)(nil)
+	_ ServiceConnector = (*SignalConnector)(nil)
 	_ types.MessageProvider       = (*SignalConnector)(nil)
 	_ types.ContactProvider       = (*SignalConnector)(nil)
 )
 
-// --- Admin import status / run (issue #168) ---
-
-// SignalImportStatus is GET /v1/admin/signal/status.
-type SignalImportStatus struct {
-	Enabled    bool     `json:"enabled"`
-	Path       string   `json:"path,omitempty"`
-	Contacts   int      `json:"contacts"`
-	Messages   int      `json:"messages"`
-	StoreEmpty bool     `json:"store_empty"`
-	LibraryURL string   `json:"library_url,omitempty"`
-	SamplePath string   `json:"sample_hint,omitempty"`
-	Hints      []string `json:"hints,omitempty"`
-}
-
-// SignalImportRequest is POST /v1/admin/signal/import.
-type SignalImportRequest struct {
-	Path string `json:"path"`
-}
-
-// HandleAdminSignal serves /v1/admin/signal/*.
-func (s *Server) HandleAdminSignal(w http.ResponseWriter, r *http.Request) {
-	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/signal"), "/")
-	switch {
-	case path == "" || path == "status":
-		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(s.signalStatus())
-	case path == "import":
-		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleSignalImport(w, r)
-	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
-	}
-}
-
-func (s *Server) signalStatus() SignalImportStatus {
-	store := s.signal
-	st := SignalImportStatus{
-		Enabled:    store != nil && store.Enabled(),
-		SamplePath: "~/Downloads/signal-export (JSONL, or plaintext .db from signalbackup-tools)",
-	}
-	if st.Enabled {
-		st.Path = store.Path()
-		if c, m, err := store.Counts(); err == nil {
-			st.Contacts, st.Messages = c, m
-		}
-		st.StoreEmpty = st.Contacts == 0 && st.Messages == 0
-	}
-	root := strings.TrimRight(s.baseURL, "/")
-	st.LibraryURL = root + "/v1/library/messages"
-	if !st.Enabled {
-		st.Hints = append(st.Hints, "Signal store is disabled — restart with -signal-store <path> (default under the data dir).")
-	} else if st.StoreEmpty {
-		st.Hints = append(st.Hints,
-			"Signal has no public chat API. Export on the device, decrypt if needed, then import the files below.",
-			"Android: Settings → Chats → Chat backups → Create backup, then decrypt with signalbackup-tools to a plaintext database.sqlite.",
-			"Desktop: copy the Signal data directory's sql/db.sqlite after decrypting it (community exporters can dump JSONL).",
-			"Aegis also accepts a JSONL export: one object per line with \"type\":\"contact\"|\"message\".",
-			"Re-import is safe: rows already stored are skipped. Attachments are never stored.")
-	} else {
-		st.Hints = append(st.Hints,
-			fmt.Sprintf("%d contact(s) and %d message(s) imported. Agents can query them via %s when contacts/messages permissions allow.",
-				st.Contacts, st.Messages, st.LibraryURL))
-	}
-	return st
-}
-
-func (s *Server) handleSignalImport(w http.ResponseWriter, r *http.Request) {
-	store := s.signal
-	if store == nil || !store.Enabled() {
-		writeJSONError(w, http.StatusBadRequest, "signal store disabled — set -signal-store")
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid body")
-		return
-	}
-	var req SignalImportRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	req.Path = strings.TrimSpace(req.Path)
-	if req.Path == "" {
-		writeJSONError(w, http.StatusBadRequest, "path is required — a Signal export file or directory")
-		return
-	}
-	res, err := ImportSignalPath(store, req.Path)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	s.cache.Clear()
-	slog.Info("signal import from admin UI",
-		"path", res.Path, "format", res.Format,
-		"contacts_stored", res.ContactsStored, "messages_stored", res.MessagesStored,
-		"contacts_skipped", res.ContactsSkipped, "messages_skipped", res.MessagesSkipped,
-		"errors", res.Errors)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"result": res,
-		"status": s.signalStatus(),
-	})
-}

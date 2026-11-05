@@ -62,12 +62,12 @@ func TestNormalizePlaceVisitTime_Variants(t *testing.T) {
 	}
 }
 
-func TestRoundCoordAndCopysign(t *testing.T) {
-	if roundCoord(44.64886) != 44.649 {
-		t.Fatalf("round = %v", roundCoord(44.64886))
+func TestRoundCoord(t *testing.T) {
+	if types.RoundCoord(44.64886) != 44.649 {
+		t.Fatalf("round = %v", types.RoundCoord(44.64886))
 	}
-	if copysign(1.5, -1) != -1.5 || copysign(1.5, 1) != 1.5 {
-		t.Fatal("copysign")
+	if types.RoundCoord(-44.64886) != -44.649 {
+		t.Fatalf("round negative = %v", types.RoundCoord(-44.64886))
 	}
 }
 
@@ -192,12 +192,12 @@ func TestOwnTracksConnector_HandleProxy(t *testing.T) {
 
 func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 	dir := t.TempDir()
-	store, err := OpenTimelineStore(filepath.Join(dir, "timeline.db"))
+	store, err := connectors.OpenTimelineStore(filepath.Join(dir, "timeline.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer store.Close()
-	cfg := &Config{Services: []Service{{ID: timelineServiceID, Name: "Google Timeline", Action: "inject"}}}
+	cfg := &Config{Services: []Service{{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.timeline = store
 
@@ -219,7 +219,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("import status = %d body=%s", w2.Code, w2.Body.String())
 	}
-	var res TimelineImportResult
+	var res connectors.TimelineImportResult
 	if err := json.Unmarshal(w2.Body.Bytes(), &res); err != nil {
 		t.Fatal(err)
 	}
@@ -248,7 +248,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 }
 
 func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
-	conn := NewTimelineConnector(nil)
+	conn := connectors.NewTimelineConnector(nil)
 	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
@@ -292,11 +292,11 @@ func TestPhotosTakenDuring_Edges(t *testing.T) {
 }
 
 func TestPlaceVisitFilters_CacheKey(t *testing.T) {
-	f := PlaceVisitFilters{After: "2023-01-01T00:00:00Z", Before: "2023-02-01T00:00:00Z", Locality: "Halifax", Kind: types.PlaceKindVisit}
-	if f.cacheKeySuffix() == "" {
+	f := types.PlaceVisitFilters{After: "2023-01-01T00:00:00Z", Before: "2023-02-01T00:00:00Z", Locality: "Halifax", Kind: types.PlaceKindVisit}
+	if f.CacheKeySuffix() == "" {
 		t.Fatal("expected cache key")
 	}
-	if (PlaceVisitFilters{}).cacheKeySuffix() != "" {
+	if (types.PlaceVisitFilters{}).CacheKeySuffix() != "" {
 		t.Fatal("empty filters")
 	}
 }

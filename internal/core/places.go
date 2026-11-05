@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 	"sort"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,75 +16,10 @@ const (
 	PlaceVisitMatchWindow     = "window_place"
 )
 
-// placeVisitServiceName returns the first source service name for stable sort.
-func placeVisitServiceName(v types.PlaceVisit) string {
-	if len(v.Sources) > 0 {
-		return v.Sources[0].ServiceName
-	}
-	return ""
-}
 
-// placeIdentityKey is the sort/merge key. Prefer durable provider IDs when
-// present; otherwise start day + end day + normalized place key. Visits
-// without any identity fall back to service:id so they stay distinct.
-func placeIdentityKey(v types.PlaceVisit) string {
-	if id := strings.ToLower(strings.TrimSpace(v.EntityID)); id != "" {
-		return "pid:" + id
-	}
-	for _, src := range v.Sources {
-		if id := strings.ToLower(strings.TrimSpace(messageExtraString(src.Extra, "provider_id"))); id != "" {
-			return "pid:" + id
-		}
-		if id := strings.ToLower(strings.TrimSpace(messageExtraString(src.Extra, "place_id"))); id != "" {
-			return "pid:" + id
-		}
-		if id := strings.ToLower(strings.TrimSpace(src.ID)); id != "" {
-			return "pid:" + id
-		}
-	}
-	start := types.NormalizePlaceVisitTime(v.StartAt)
-	end := types.NormalizePlaceVisitTime(v.EndAt)
-	placeKey := placeMergeKey(v.Place)
-	if start == "" || placeKey == "" {
-		if len(v.Sources) > 0 && v.Sources[0].Service != "" && v.Sources[0].ID != "" {
-			return "src:" + v.Sources[0].Service + ":" + v.Sources[0].ID
-		}
-		return "anon:" + placeVisitServiceName(v) + ":" + v.StartAt
-	}
-	return "wp:" + start + "|" + end + "|" + placeKey
-}
 
-// placeMergeKey is the durable-ish place identity: locality+name when named,
-// otherwise coordinates rounded to ~100m.
-func placeMergeKey(p types.Place) string {
-	name := types.NormalizeIdentityKey(p.Name)
-	if name == "" {
-		name = types.NormalizeIdentityKey(p.Address)
-	}
-	loc := types.NormalizeIdentityKey(p.Locality)
-	country := types.NormalizeIdentityKey(p.Country)
-	if name != "" || loc != "" {
-		return "n:" + name + "|l:" + loc + "|c:" + country
-	}
-	if p.Lat != 0 || p.Lng != 0 {
-		return "g:" + strconv.FormatFloat(roundCoord(p.Lat), 'f', 3, 64) +
-			"," + strconv.FormatFloat(roundCoord(p.Lng), 'f', 3, 64)
-	}
-	return ""
-}
 
-// roundCoord rounds to ~0.001° (~100m) so provider jitter does not split
-// the same place across merge keys.
-func roundCoord(v float64) float64 {
-	return float64(int(v*1000+copysign(0.5, v))) / 1000
-}
 
-func copysign(mag, sign float64) float64 {
-	if sign < 0 {
-		return -mag
-	}
-	return mag
-}
 
 // placeVisitMatchKind records how identity was established.
 func placeVisitMatchKind(key string) string {
@@ -165,7 +99,7 @@ func MergePlaceVisits(in []types.PlaceVisit) []types.PlaceVisit {
 	var order []string
 	byKey := map[string]*slot{}
 	for _, v := range in {
-		key := placeIdentityKey(v)
+		key := types.PlaceIdentityKey(v)
 		if key == "" {
 			continue
 		}
@@ -243,7 +177,7 @@ func MergePlaceVisits(in []types.PlaceVisit) []types.PlaceVisit {
 		if si != sj {
 			return si < sj // chronological
 		}
-		return placeIdentityKey(out[i]) < placeIdentityKey(out[j])
+		return types.PlaceIdentityKey(out[i]) < types.PlaceIdentityKey(out[j])
 	})
 	return out
 }
@@ -256,7 +190,7 @@ func placeVisitsMatchNearbyWindow(a, b types.PlaceVisit, slackSec int64) bool {
 		return false
 	}
 	// Same durable ID is already handled in phase 1; only window+place here.
-	pkA, pkB := placeMergeKey(a.Place), placeMergeKey(b.Place)
+	pkA, pkB := types.PlaceMergeKey(a.Place), types.PlaceMergeKey(b.Place)
 	if pkA == "" || pkA != pkB {
 		return false
 	}
@@ -310,7 +244,7 @@ func placeDurableIDsAgree(v types.PlaceVisit) bool {
 	for _, src := range v.Sources {
 		id := ""
 		for _, k := range []string{"provider_id", "place_id"} {
-			if val := strings.ToLower(strings.TrimSpace(messageExtraString(src.Extra, k))); val != "" {
+			if val := strings.ToLower(strings.TrimSpace(types.ExtraString(src.Extra, k))); val != "" {
 				id = val
 				break
 			}
@@ -329,91 +263,13 @@ func placeDurableIDsAgree(v types.PlaceVisit) bool {
 	return len(seen) <= 1
 }
 
-// PlaceVisitFilters is the query filter set for GET /v1/library/places.
-type PlaceVisitFilters struct {
-	After    string
-	Before   string
-	Locality string
-	Kind     string
-}
-
-// ParsePlaceVisitFilters reads after, before, locality, and kind query params.
-// The issue's API shape is GET /v1/library/places?after=&before=&locality=.
-func ParsePlaceVisitFilters(r *http.Request) PlaceVisitFilters {
-	q := r.URL.Query()
-	return PlaceVisitFilters{
-		After:    types.NormalizePlaceVisitTime(q.Get("after")),
-		Before:   types.NormalizePlaceVisitTime(q.Get("before")),
-		Locality: strings.TrimSpace(q.Get("locality")),
-		Kind:     types.NormalizePlaceVisitKind(q.Get("kind")),
-	}
-}
-
-func (f PlaceVisitFilters) Empty() bool {
-	return f.After == "" && f.Before == "" && f.Locality == "" && f.Kind == ""
-}
-
-func (f PlaceVisitFilters) matches(v types.PlaceVisit) bool {
-	if f.Kind != "" && types.NormalizePlaceVisitKind(v.Kind) != f.Kind {
-		return false
-	}
-	if f.Locality != "" {
-		loc := types.NormalizeIdentityKey(v.Place.Locality)
-		want := types.NormalizeIdentityKey(f.Locality)
-		if loc == "" || !strings.Contains(loc, want) {
-			return false
-		}
-	}
-	start := types.NormalizePlaceVisitTime(v.StartAt)
-	end := types.NormalizePlaceVisitTime(v.EndAt)
-	if end == "" {
-		end = start
-	}
-	if f.After != "" {
-		// Visit overlaps [after, ∞).
-		if end != "" && end < f.After {
-			return false
-		}
-		if end == "" && start < f.After {
-			return false
-		}
-	}
-	if f.Before != "" {
-		// Visit overlaps (-∞, before).
-		if start > f.Before {
-			return false
-		}
-	}
-	return true
-}
-
-func (f PlaceVisitFilters) cacheKeySuffix() string {
-	if f.Empty() {
-		return ""
-	}
-	var b strings.Builder
-	if f.After != "" {
-		b.WriteString("|after:" + f.After)
-	}
-	if f.Before != "" {
-		b.WriteString("|before:" + f.Before)
-	}
-	if f.Locality != "" {
-		b.WriteString("|loc:" + strings.ToLower(f.Locality))
-	}
-	if f.Kind != "" {
-		b.WriteString("|kind:" + f.Kind)
-	}
-	return b.String()
-}
-
-func filterPlaceVisits(in []types.PlaceVisit, f PlaceVisitFilters) []types.PlaceVisit {
+func filterPlaceVisits(in []types.PlaceVisit, f types.PlaceVisitFilters) []types.PlaceVisit {
 	if f.Empty() {
 		return in
 	}
 	out := make([]types.PlaceVisit, 0, len(in))
 	for _, v := range in {
-		if f.matches(v) {
+		if f.Matches(v) {
 			out = append(out, v)
 		}
 	}
@@ -565,7 +421,7 @@ func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
 // Permission key: places. Default is none. Access city|read|precise redacts.
 func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("places")
-	filters := ParsePlaceVisitFilters(r)
+	filters := types.ParsePlaceVisitFilters(r)
 	appLevel := ""
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
@@ -575,8 +431,8 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.PlaceVisit], []string) {
 			return placesProviderTargets(s, r, kind.PermType, appLevel)
 		},
-		serviceOf: placeVisitServiceName,
-		sortKey:   placeIdentityKey,
+		serviceOf: types.PlaceVisitServiceName,
+		sortKey:   types.PlaceIdentityKey,
 		merge:     MergePlaceVisits,
 		encode: func(items []types.PlaceVisit, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterPlaceVisits(items, filters)
@@ -590,7 +446,7 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 			return s.searchRedactPlaceVisits(items, r)
 		},
 		markCanonical: s.stampPlaceVisitCanonical,
-		cacheKey:      "library:places" + filters.cacheKeySuffix(),
+		cacheKey:      "library:places" + filters.CacheKeySuffix(),
 	})
 }
 

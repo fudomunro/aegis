@@ -49,9 +49,9 @@ func maturityTestConnectors() []catalogTestConnector {
 		{id: connectors.CalDAVServiceID, conn: connectors.NewCalDAVConnector(host)},
 		{id: connectors.CardDAVServiceID, conn: connectors.NewCardDAVConnector(host)},
 		{id: connectors.PaperlessServiceID, conn: connectors.NewPaperlessConnector(host)},
-		{id: signalServiceID, conn: NewSignalConnector(nil)},
-		{id: quickenServiceID, conn: NewQuickenConnector(host, nil)},
-		{id: timelineServiceID, conn: NewTimelineConnector(nil)},
+		{id: connectors.SignalServiceID, conn: connectors.NewSignalConnector(nil)},
+		{id: connectors.QuickenServiceID, conn: connectors.NewQuickenConnector(nil)},
+		{id: connectors.TimelineServiceID, conn: connectors.NewTimelineConnector(nil)},
 	}
 }
 

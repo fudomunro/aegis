@@ -246,23 +246,17 @@ type QuickenImportRequest struct {
 
 // HandleAdminQuicken serves /v1/admin/quicken/*.
 func (s *Server) HandleAdminQuicken(w http.ResponseWriter, r *http.Request) {
-	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/quicken"), "/")
-	switch {
-	case path == "" || path == "status":
-		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.writeQuickenStatus(w)
-	case path == "import":
-		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleQuickenImport(w, r)
-	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
-	}
+	s.HandleAdminImportStore(w, r, importStoreAdmin{
+		prefix:     "/v1/admin/quicken",
+		flagName:   "-quicken-store",
+		pathHint:   "a QIF/QFX file or directory",
+		store:      s.quicken,
+		status:     func() any { return s.quickenStatus() },
+		importPath: func(path string) (any, error) { return connectors.ImportQuickenPath(s.quicken, path) },
+		logAttrs: func(res any) []any {
+			return res.(connectors.QuickenImportResult).LogAttrs()
+		},
+	})
 }
 
 func (s *Server) quickenStatus() QuickenImportStatus {
@@ -293,45 +287,3 @@ func (s *Server) quickenStatus() QuickenImportStatus {
 	return st
 }
 
-func (s *Server) writeQuickenStatus(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.quickenStatus())
-}
-
-func (s *Server) handleQuickenImport(w http.ResponseWriter, r *http.Request) {
-	store := s.quicken
-	if store == nil || !store.Enabled() {
-		writeJSONError(w, http.StatusBadRequest, "quicken store disabled — set -quicken-store")
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid body")
-		return
-	}
-	var req QuickenImportRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	req.Path = strings.TrimSpace(req.Path)
-	if req.Path == "" {
-		writeJSONError(w, http.StatusBadRequest, "path is required — a QIF/QFX file or directory")
-		return
-	}
-	res, err := ImportQuickenPath(store, req.Path)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	// Library cache must not serve the old empty list.
-	s.cache.Clear()
-	slog.Info("quicken import from admin UI",
-		"path", res.Path, "scanned", res.Scanned, "stored", res.Stored,
-		"skipped", res.Skipped, "errors", res.Errors)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
-		"result": res,
-		"status": s.quickenStatus(),
-	})
-}

@@ -56,7 +56,7 @@ func TestMergePlaceVisits_WindowAndDurableID(t *testing.T) {
 	}
 	var harbor *types.PlaceVisit
 	for i := range merged {
-		if merged[i].EntityID == "tl-harbor-20230704" || containsService(merged[i], timelineServiceID) {
+		if merged[i].EntityID == "tl-harbor-20230704" || containsService(merged[i], connectors.TimelineServiceID) {
 			if merged[i].Place.Name == "Halifax Harbour" && merged[i].StartAt == "2023-07-04T16:00:00Z" {
 				harbor = &merged[i]
 			}
@@ -95,17 +95,17 @@ func containsService(v types.PlaceVisit, id string) bool {
 
 func TestPlaceVisitFilters(t *testing.T) {
 	visits := MergePlaceVisits(samplePlaces())
-	f := PlaceVisitFilters{Locality: "Lunenburg"}
+	f := types.PlaceVisitFilters{Locality: "Lunenburg"}
 	got := filterPlaceVisits(visits, f)
 	if len(got) != 2 { // visit + drive trip to Lunenburg
 		t.Fatalf("locality filter = %d, want 2", len(got))
 	}
-	f2 := PlaceVisitFilters{After: "2024-01-01T00:00:00Z"}
+	f2 := types.PlaceVisitFilters{After: "2024-01-01T00:00:00Z"}
 	got2 := filterPlaceVisits(visits, f2)
 	if len(got2) != 1 {
 		t.Fatalf("after filter = %d, want 1", len(got2))
 	}
-	f3 := PlaceVisitFilters{Kind: types.PlaceKindTrip}
+	f3 := types.PlaceVisitFilters{Kind: types.PlaceKindTrip}
 	got3 := filterPlaceVisits(visits, f3)
 	if len(got3) != 1 {
 		t.Fatalf("kind=trip filter = %d, want 1", len(got3))
@@ -244,7 +244,7 @@ func TestPhotosPlacesJoinDemo(t *testing.T) {
 func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
 				GrantLimits: types.Permissions{"places": types.AccessPrecise}},
 			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject",
 				GrantLimits: types.Permissions{"places": types.AccessRead}},
@@ -252,7 +252,7 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		timelineServiceID:             &fakePlaceProvider{visits: samplePlaces()},
+		connectors.TimelineServiceID:             &fakePlaceProvider{visits: samplePlaces()},
 		connectors.OwnTracksServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
@@ -274,12 +274,12 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject"},
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()},
+		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -294,13 +294,13 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
 				GrantLimits: types.Permissions{"places": types.AccessCity}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
+		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -329,13 +329,13 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
 				GrantLimits: types.Permissions{"places": types.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
+		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -364,13 +364,13 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: timelineServiceID, Name: "Google Timeline", Action: "inject",
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
 				GrantLimits: types.Permissions{"places": types.AccessPrecise}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		timelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
+		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")

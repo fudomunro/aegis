@@ -15,7 +15,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func Run() {
@@ -373,7 +372,7 @@ func Run() {
 		slog.Info("search index disabled")
 	}
 
-	quickenStore, err := OpenQuickenStore(paths.Quicken)
+	quickenStore, err := connectors.OpenQuickenStore(paths.Quicken)
 	if err != nil {
 		slog.Error("failed to open quicken store", "path", paths.Quicken, "error", err)
 		os.Exit(1)
@@ -383,18 +382,12 @@ func Run() {
 		slog.Info("quicken store ready", "path", quickenStore.Path())
 		// File-based import source: not an operator-facing service card.
 		// Inject an in-memory entry so /v1/library/transactions can fan in.
-		cfg.EnsureService(Service{
-			ID:          quickenServiceID,
-			Name:        quickenServiceName,
-			Action:      "inject",
-			Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
-			GrantLimits: types.Permissions{"transactions": types.AccessRead},
-		})
+		ensureLocalStoreService(cfg, connectors.QuickenService())
 	} else {
 		slog.Info("quicken store disabled")
 	}
 
-	timelineStore, err := OpenTimelineStore(paths.Timeline)
+	timelineStore, err := connectors.OpenTimelineStore(paths.Timeline)
 	if err != nil {
 		slog.Error("failed to open timeline store", "path", paths.Timeline, "error", err)
 		os.Exit(1)
@@ -404,18 +397,12 @@ func Run() {
 		slog.Info("timeline store ready", "path", timelineStore.Path())
 		// File-based import source. Places is opt-in (default none) — enable
 		// city/read/precise on this service or another places provider.
-		cfg.EnsureService(Service{
-			ID:          timelineServiceID,
-			Name:        timelineServiceName,
-			Action:      "inject",
-			Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
-			GrantLimits: types.Permissions{"places": types.AccessRead},
-		})
+		ensureLocalStoreService(cfg, connectors.TimelineService())
 	} else {
 		slog.Info("timeline store disabled")
 	}
 
-	signalStore, err := OpenSignalStore(paths.Signal)
+	signalStore, err := connectors.OpenSignalStore(paths.Signal)
 	if err != nil {
 		slog.Error("failed to open signal store", "path", paths.Signal, "error", err)
 		os.Exit(1)
@@ -424,16 +411,7 @@ func Run() {
 		defer signalStore.Close()
 		slog.Info("signal store ready", "path", signalStore.Path())
 		// File-based import source. Contacts + messages from a local export.
-		cfg.EnsureService(Service{
-			ID:          signalServiceID,
-			Name:        signalServiceName,
-			Action:      "inject",
-			Description: "Locally imported Signal contacts and messages (Advanced → Signal import).",
-			GrantLimits: types.Permissions{
-				"contacts": types.AccessRead,
-				"messages": types.AccessRead,
-			},
-		})
+		ensureLocalStoreService(cfg, connectors.SignalService())
 	} else {
 		slog.Info("signal store disabled")
 	}
@@ -527,7 +505,7 @@ func Run() {
 	srv.connectors[connectors.GoogleGmailServiceID] = gGmailConn
 	// Financial transactions (issue #141): YNAB live API + local Quicken import.
 	srv.connectors[connectors.YNABServiceID] = connectors.NewYNABConnector(srv)
-	srv.connectors[quickenServiceID] = NewQuickenConnector(srv, quickenStore)
+	srv.connectors[connectors.QuickenServiceID] = connectors.NewQuickenConnector(quickenStore)
 	// Location history (issue #142): OwnTracks live + local Google Timeline import.
 	srv.connectors[connectors.OwnTracksServiceID] = connectors.NewOwnTracksConnector(srv)
 	srv.connectors[connectors.BlueskyServiceID] = connectors.NewBlueskyConnector(srv)
@@ -536,9 +514,9 @@ func Run() {
 	// CalDAV/CardDAV (issue #146): Nextcloud, iCloud, Fastmail contacts + calendar.
 	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
 	srv.connectors[connectors.CalDAVServiceID] = connectors.NewCalDAVConnector(srv)
-	srv.connectors[timelineServiceID] = NewTimelineConnector(timelineStore)
+	srv.connectors[connectors.TimelineServiceID] = connectors.NewTimelineConnector(timelineStore)
 	// Signal contacts + messages (issue #168): local file-based import only.
-	srv.connectors[signalServiceID] = NewSignalConnector(signalStore)
+	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(signalStore)
 	// Synthetic calendar fixtures for demos / query testing (issue #77, #131).
 	// A service with endpoint sample://calendar gets this connector instead of
 	// a live provider so free/busy demos work without OAuth.
@@ -1105,119 +1083,84 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 	return 0
 }
 
-// runImportQuickenCLI imports a QIF/QFX file or directory into the local
-// Quicken store, then exits (issue #141).
-func runImportQuickenCLI(storePath, importPath string) int {
+// ensureLocalStoreService injects a local import store's service card into
+// config so /v1/library fan-in sees it as a source (issue #266).
+func ensureLocalStoreService(cfg *Config, d connectors.LocalStoreService) {
+	cfg.EnsureService(Service{
+		ID:          d.ID,
+		Name:        d.Name,
+		Action:      d.Action,
+		Description: d.Description,
+		GrantLimits: d.GrantLimits,
+	})
+}
+
+// runImportCLI runs a one-shot import against any local import store, then
+// exits (issue #266). Flag parsing stays here; the store owns the run.
+func runImportCLI(name, storePath, importPath string, open func(string) (connectors.ImportStore, error), run func(connectors.ImportStore, string) (connectors.ImportOutcome, error)) int {
 	storePath = strings.TrimSpace(storePath)
 	if storePath == "" {
-		slog.Error("quicken store path is required for -import-quicken")
+		slog.Error(name + " store path is required for -import-" + name)
 		return 1
 	}
-	store, err := OpenQuickenStore(storePath)
+	store, err := open(storePath)
 	if err != nil {
-		slog.Error("failed to open quicken store", "path", storePath, "error", err)
+		slog.Error("failed to open "+name+" store", "path", storePath, "error", err)
 		return 1
 	}
-	if store == nil {
-		slog.Error("quicken store disabled — set -quicken-store")
+	if store == nil || !store.Enabled() {
+		slog.Error(name + " store disabled — set -" + name + "-store")
 		return 1
 	}
 	defer store.Close()
-	res, err := ImportQuickenPath(store, importPath)
+	res, err := run(store, importPath)
 	if err != nil {
-		slog.Error("quicken import failed", "path", importPath, "error", err)
+		slog.Error(name+" import failed", "path", importPath, "error", err)
 		return 1
 	}
-	slog.Info("quicken import finished",
-		"path", importPath,
-		"scanned", res.Scanned,
-		"stored", res.Stored,
-		"skipped", res.Skipped,
-		"errors", res.Errors,
-		"done", res.Done,
+	slog.Info(name+" import finished",
+		append([]any{"path", importPath}, res.LogAttrs()...)...,
 	)
-	if res.Errors > 0 && res.Stored == 0 {
+	if res.Failed() {
 		return 1
 	}
 	return 0
+}
+
+// runImportQuickenCLI imports a QIF/QFX file or directory into the local
+// Quicken store, then exits (issue #141).
+func runImportQuickenCLI(storePath, importPath string) int {
+	return runImportCLI("quicken", storePath, importPath,
+		func(p string) (connectors.ImportStore, error) {
+			return connectors.OpenQuickenStore(p)
+		},
+		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
+			return connectors.ImportQuickenPath(st.(*connectors.QuickenStore), p)
+		})
 }
 
 // runImportTimelineCLI imports a Google Timeline JSON file/directory/zip into
 // the local store, then exits (issue #142).
 func runImportTimelineCLI(storePath, importPath string) int {
-	storePath = strings.TrimSpace(storePath)
-	if storePath == "" {
-		slog.Error("timeline store path is required for -import-timeline")
-		return 1
-	}
-	store, err := OpenTimelineStore(storePath)
-	if err != nil {
-		slog.Error("failed to open timeline store", "path", storePath, "error", err)
-		return 1
-	}
-	if store == nil {
-		slog.Error("timeline store disabled — set -timeline-store")
-		return 1
-	}
-	defer store.Close()
-	res, err := ImportTimelinePath(store, importPath)
-	if err != nil {
-		slog.Error("timeline import failed", "path", importPath, "error", err)
-		return 1
-	}
-	slog.Info("timeline import finished",
-		"path", importPath,
-		"scanned", res.Scanned,
-		"stored", res.Stored,
-		"skipped", res.Skipped,
-		"errors", res.Errors,
-		"done", res.Done,
-	)
-	if res.Errors > 0 && res.Stored == 0 {
-		return 1
-	}
-	return 0
+	return runImportCLI("timeline", storePath, importPath,
+		func(p string) (connectors.ImportStore, error) {
+			return connectors.OpenTimelineStore(p)
+		},
+		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
+			return connectors.ImportTimelinePath(st.(*connectors.TimelineStore), p)
+		})
 }
 
 // runImportSignalCLI imports a Signal export file or directory into the local
 // store, then exits (issue #168).
 func runImportSignalCLI(storePath, importPath string) int {
-	storePath = strings.TrimSpace(storePath)
-	if storePath == "" {
-		slog.Error("signal store path is required for -import-signal")
-		return 1
-	}
-	store, err := OpenSignalStore(storePath)
-	if err != nil {
-		slog.Error("failed to open signal store", "path", storePath, "error", err)
-		return 1
-	}
-	if store == nil {
-		slog.Error("signal store disabled — set -signal-store")
-		return 1
-	}
-	defer store.Close()
-	res, err := ImportSignalPath(store, importPath)
-	if err != nil {
-		slog.Error("signal import failed", "path", importPath, "error", err)
-		return 1
-	}
-	slog.Info("signal import finished",
-		"path", importPath,
-		"format", res.Format,
-		"contacts_scanned", res.ContactsScanned,
-		"contacts_stored", res.ContactsStored,
-		"contacts_skipped", res.ContactsSkipped,
-		"messages_scanned", res.MessagesScanned,
-		"messages_stored", res.MessagesStored,
-		"messages_skipped", res.MessagesSkipped,
-		"errors", res.Errors,
-		"done", res.Done,
-	)
-	if res.Errors > 0 && res.ContactsStored == 0 && res.MessagesStored == 0 {
-		return 1
-	}
-	return 0
+	return runImportCLI("signal", storePath, importPath,
+		func(p string) (connectors.ImportStore, error) {
+			return connectors.OpenSignalStore(p)
+		},
+		func(st connectors.ImportStore, p string) (connectors.ImportOutcome, error) {
+			return connectors.ImportSignalPath(st.(*connectors.SignalStore), p)
+		})
 }
 
 // runTokenRekeyCLI re-encrypts the token store under a new passphrase with

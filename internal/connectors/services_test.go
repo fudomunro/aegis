@@ -23,6 +23,9 @@ func TestServiceName(t *testing.T) {
 		{CardDAVServiceID, CardDAVServiceName},
 		{PaperlessServiceID, PaperlessServiceName},
 		{SampleCalendarServiceID, SampleCalendarServiceName},
+		{SignalServiceID, SignalServiceName},
+		{QuickenServiceID, QuickenServiceName},
+		{TimelineServiceID, TimelineServiceName},
 	}
 	for _, tc := range cases {
 		name, ok := ServiceName(tc.id)
@@ -30,7 +33,7 @@ func TestServiceName(t *testing.T) {
 			t.Errorf("ServiceName(%q) = %q, %v; want %q, true", tc.id, name, ok, tc.name)
 		}
 	}
-	for _, id := range []string{"", "tidal", "quicken", "signal", "google-takeout", "mail-archive"} {
+	for _, id := range []string{"", "tidal", "google-takeout", "mail-archive"} {
 		if name, ok := ServiceName(id); ok {
 			t.Errorf("ServiceName(%q) = %q, true; want false for non-connector services", id, name)
 		}

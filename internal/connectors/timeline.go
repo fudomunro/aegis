@@ -1,9 +1,9 @@
-package core
+package connectors
 
 import (
+	"database/sql"
 	"archive/zip"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -14,11 +14,9 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
-	_ "modernc.org/sqlite"
 )
 
 // Google Maps Timeline local import (issue #142). Timeline moved on-device in
@@ -28,16 +26,26 @@ import (
 // and place metadata — never a raw GPS firehose beyond the import archive.
 
 const (
-	timelineServiceID   = "google-timeline"
-	timelineServiceName = "Google Timeline"
+	TimelineServiceID   = "google-timeline"
+	TimelineServiceName = "Google Timeline"
 )
+
+// TimelineService is the service card the local Timeline import store injects
+// into config (issue #266).
+func TimelineService() LocalStoreService {
+	return LocalStoreService{
+		ID:          TimelineServiceID,
+		Name:        TimelineServiceName,
+		Action:      "inject",
+		Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
+		GrantLimits: types.Permissions{"places": types.AccessRead},
+	}
+}
 
 // TimelineStore is a local SQLite store of imported Timeline visits/trips.
 // Empty path disables the store (like mail-archive / quicken).
 type TimelineStore struct {
-	db   *sql.DB
-	path string
-	mu   sync.RWMutex
+	localStore
 }
 
 // TimelineImportResult reports one import run.
@@ -51,36 +59,34 @@ type TimelineImportResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
+// LogAttrs returns slog keyvals for one finished import run.
+func (r TimelineImportResult) LogAttrs() []any {
+	return []any{"scanned", r.Scanned, "stored", r.Stored,
+		"skipped", r.Skipped, "errors", r.Errors, "done", r.Done}
+}
+
+// Failed reports a run that recorded errors but stored nothing.
+func (r TimelineImportResult) Failed() bool { return r.Errors > 0 && r.Stored == 0 }
+
+var _ ImportStore = (*TimelineStore)(nil)
+var _ ImportOutcome = TimelineImportResult{}
+
 // OpenTimelineStore opens (or creates) the local Timeline SQLite store.
 // An empty path returns nil (disabled).
 func OpenTimelineStore(path string) (*TimelineStore, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
+	s := &TimelineStore{}
+	if err := s.openLocalStore(path, "timeline", timelineSchema); err != nil {
+		return nil, err
+	}
+	if !s.Enabled() {
 		return nil, nil
-	}
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("create timeline store dir: %w", err)
-		}
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		db.Close()
-		return nil, err
-	}
-	s := &TimelineStore{db: db, path: path}
-	if err := s.init(); err != nil {
-		db.Close()
-		return nil, err
 	}
 	return s, nil
 }
 
-func (s *TimelineStore) init() error {
-	_, err := s.db.Exec(`
+// timelineSchema installs the imported visit/trip table.
+const timelineSchema = `
+
 CREATE TABLE IF NOT EXISTS timeline_visits (
   source_id TEXT PRIMARY KEY,
   file_path TEXT NOT NULL,
@@ -100,31 +106,12 @@ CREATE TABLE IF NOT EXISTS timeline_visits (
 );
 CREATE INDEX IF NOT EXISTS timeline_visits_start ON timeline_visits(start_at);
 CREATE INDEX IF NOT EXISTS timeline_visits_locality ON timeline_visits(place_locality);
-`)
-	return err
-}
+`
 
-func (s *TimelineStore) Close() error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.Close()
-}
 
-func (s *TimelineStore) Path() string {
-	if s == nil {
-		return ""
-	}
-	return s.path
-}
 
-func (s *TimelineStore) Enabled() bool { return s != nil && s.db != nil }
-
-// Upsert stores or replaces one imported visit keyed by source_id.
-func (s *TimelineStore) Upsert(filePath string, v types.PlaceVisit) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("timeline store disabled")
-	}
+// upsertTimelineTx stores or replaces one imported visit keyed by source_id.
+func upsertTimelineTx(tx *sql.Tx, filePath string, v types.PlaceVisit) error {
 	id := placeVisitSourceID(v)
 	if id == "" {
 		return fmt.Errorf("timeline visit missing source id")
@@ -138,9 +125,7 @@ func (s *TimelineStore) Upsert(filePath string, v types.PlaceVisit) error {
 		lat = sql.NullFloat64{Float64: v.Place.Lat, Valid: true}
 		lng = sql.NullFloat64{Float64: v.Place.Lng, Valid: true}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err = s.db.Exec(`
+	_, err = tx.Exec(`
 INSERT INTO timeline_visits(
   source_id, file_path, start_at, end_at, kind, mode, confidence,
   place_name, place_address, place_locality, place_country,
@@ -170,24 +155,38 @@ ON CONFLICT(source_id) DO UPDATE SET
 	return err
 }
 
-func (s *TimelineStore) Has(sourceID string) bool {
+// Upsert stores or replaces one imported visit keyed by source_id.
+func (s *TimelineStore) Upsert(filePath string, v types.PlaceVisit) error {
 	if s == nil || s.db == nil {
-		return false
+		return fmt.Errorf("timeline store disabled")
 	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var n int
-	err := s.db.QueryRow(`SELECT COUNT(1) FROM timeline_visits WHERE source_id = ?`, sourceID).Scan(&n)
-	return err == nil && n > 0
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := upsertTimelineTx(tx, filePath, v); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+const timelineHasQuery = `SELECT COUNT(1) FROM timeline_visits WHERE source_id = ?`
+
+// Has reports whether source_id is already stored.
+func (s *TimelineStore) Has(sourceID string) bool {
+	return s.hasRow(timelineHasQuery, sourceID)
 }
 
 // List returns stored visits (chronological), optional filters.
-func (s *TimelineStore) List(f PlaceVisitFilters, limit int) ([]types.PlaceVisit, error) {
+func (s *TimelineStore) List(f types.PlaceVisitFilters, limit int) ([]types.PlaceVisit, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("timeline store disabled")
 	}
-	if limit <= 0 || limit > libraryItemCap {
-		limit = libraryItemCap
+	if limit <= 0 || limit > LibraryItemCap {
+		limit = LibraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -206,7 +205,7 @@ func (s *TimelineStore) List(f PlaceVisitFilters, limit int) ([]types.PlaceVisit
 		if err := json.Unmarshal([]byte(raw), &v); err != nil {
 			continue
 		}
-		if f.Empty() || f.matches(v) {
+		if f.Empty() || f.Matches(v) {
 			out = append(out, v)
 		}
 	}
@@ -229,14 +228,14 @@ func placeVisitSourceID(v types.PlaceVisit) string {
 		return "e:" + id
 	}
 	for _, src := range v.Sources {
-		if id := strings.TrimSpace(messageExtraString(src.Extra, "provider_id")); id != "" {
+		if id := strings.TrimSpace(types.ExtraString(src.Extra, "provider_id")); id != "" {
 			return "p:" + src.Service + ":" + id
 		}
 		if id := strings.TrimSpace(src.ID); id != "" {
 			return "s:" + src.Service + ":" + id
 		}
 	}
-	return "w:" + placeIdentityKey(v)
+	return "w:" + types.PlaceIdentityKey(v)
 }
 
 // --- Google Timeline JSON shapes ---
@@ -370,7 +369,7 @@ func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 			if pid == "" {
 				pid = v.PlaceID
 			}
-			visit := types.NewPlaceVisit(timelineServiceID, timelineServiceName, pid, types.PlaceVisit{
+			visit := types.NewPlaceVisit(TimelineServiceID, TimelineServiceName, pid, types.PlaceVisit{
 				StartAt:    v.Duration.start(),
 				EndAt:      v.Duration.end(),
 				Place:      place,
@@ -402,7 +401,7 @@ func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 			if aid == "" {
 				aid = a.StartLocation.PlaceID
 			}
-			trip := types.NewPlaceVisit(timelineServiceID, timelineServiceName, "seg:"+a.Duration.start(), types.PlaceVisit{
+			trip := types.NewPlaceVisit(TimelineServiceID, TimelineServiceName, "seg:"+a.Duration.start(), types.PlaceVisit{
 				StartAt: a.Duration.start(),
 				EndAt:   a.Duration.end(),
 				Place:   place,
@@ -468,19 +467,13 @@ func ImportTimelinePath(store *TimelineStore, path string) (TimelineImportResult
 			res.Errors++
 			continue
 		}
-		for _, v := range visits {
-			res.Scanned++
-			id := placeVisitSourceID(v)
-			if id != "" && store.Has(id) {
-				res.Skipped++
-				continue
-			}
-			if err := store.Upsert(f, v); err != nil {
-				res.Errors++
-				continue
-			}
-			res.Stored++
-		}
+		var st ImportStats
+		upsertRows(&store.localStore, &st, visits, placeVisitSourceID, timelineHasQuery,
+			func(tx *sql.Tx, v types.PlaceVisit) error { return upsertTimelineTx(tx, f, v) })
+		res.Scanned += st.Scanned
+		res.Stored += st.Stored
+		res.Skipped += st.Skipped
+		res.Errors += st.Errors
 	}
 	res.Done = true
 	return res, nil
@@ -610,7 +603,7 @@ func (c *TimelineConnector) SystemInstructions(baseURL string) string {
 }
 
 func (c *TimelineConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	writeJSONError(w, http.StatusNotFound, "google-timeline is import-only; use /v1/library/places")
+	WriteJSONError(w, http.StatusNotFound, "google-timeline is import-only; use /v1/library/places")
 }
 
 // ListUserPlaceVisits returns imported visits as a PlaceVisitProvider.
@@ -618,8 +611,8 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []t
 	if c == nil || c.store == nil || !c.store.Enabled() {
 		return nil, false, types.ErrUnauthorized
 	}
-	logger := slog.With("connector", timelineServiceID)
-	items, listErr := c.store.List(PlaceVisitFilters{}, libraryItemCap)
+	logger := slog.With("connector", TimelineServiceID)
+	items, listErr := c.store.List(types.PlaceVisitFilters{}, LibraryItemCap)
 	if listErr != nil {
 		logger.Error("timeline store list failed", "error", listErr)
 		return nil, false, listErr
@@ -629,109 +622,8 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []t
 	}
 	out := make([]types.PlaceVisit, 0, len(items))
 	for _, v := range items {
-		out = append(out, types.NewPlaceVisit(timelineServiceID, timelineServiceName, placeVisitSourceID(v), v))
+		out = append(out, types.NewPlaceVisit(TimelineServiceID, TimelineServiceName, placeVisitSourceID(v), v))
 	}
 	return out, truncated, nil
 }
 
-// --- Admin import status / run (issue #142) ---
-
-// TimelineImportStatus is GET /v1/admin/timeline/status.
-type TimelineImportStatus struct {
-	Enabled    bool     `json:"enabled"`
-	Path       string   `json:"path,omitempty"`
-	Count      int      `json:"count"`
-	StoreEmpty bool     `json:"store_empty"`
-	LibraryURL string   `json:"library_url,omitempty"`
-	SamplePath string   `json:"sample_hint,omitempty"`
-	Hints      []string `json:"hints,omitempty"`
-}
-
-// TimelineImportRequest is POST /v1/admin/timeline/import.
-type TimelineImportRequest struct {
-	Path string `json:"path"`
-}
-
-// HandleAdminTimeline serves /v1/admin/timeline/*.
-func (s *Server) HandleAdminTimeline(w http.ResponseWriter, r *http.Request) {
-	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/timeline"), "/")
-	switch {
-	case path == "" || path == "status":
-		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.writeTimelineStatus(w)
-	case path == "import":
-		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-			return
-		}
-		s.handleTimelineImport(w, r)
-	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
-	}
-}
-
-func (s *Server) timelineStatus() TimelineImportStatus {
-	store := s.timeline
-	st := TimelineImportStatus{
-		Enabled:    store != nil && store.Enabled(),
-		SamplePath: "~/Downloads/Takeout/Location History/Semantic Location History (JSON files or a Takeout zip)",
-	}
-	if st.Enabled {
-		st.Path = store.Path()
-		if n, err := store.Count(); err == nil {
-			st.Count = n
-		}
-		st.StoreEmpty = st.Count == 0
-	}
-	root := strings.TrimRight(s.baseURL, "/")
-	st.LibraryURL = root + "/v1/library/places"
-	if !st.Enabled {
-		st.Hints = append(st.Hints, "Timeline store is disabled — restart with -timeline-store <path> (default under the data dir).")
-	} else if st.StoreEmpty {
-		st.Hints = append(st.Hints,
-			"Export Location History from Google Takeout (Timeline → Export), then import the Semantic Location History folder or zip below.",
-			"Re-import is safe: rows already stored are skipped. places permission defaults to none — enable city, read, or precise to let agents query it.")
-	} else {
-		st.Hints = append(st.Hints,
-			fmt.Sprintf("%d visit/trip window(s) imported. Agents can query them via %s when places permissions allow.", st.Count, st.LibraryURL))
-	}
-	return st
-}
-
-func (s *Server) writeTimelineStatus(w http.ResponseWriter) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(s.timelineStatus())
-}
-
-func (s *Server) handleTimelineImport(w http.ResponseWriter, r *http.Request) {
-	store := s.timeline
-	if store == nil || !store.Enabled() {
-		writeJSONError(w, http.StatusBadRequest, "timeline store disabled — set -timeline-store")
-		return
-	}
-	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid body")
-		return
-	}
-	var req TimelineImportRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-	req.Path = strings.TrimSpace(req.Path)
-	if req.Path == "" {
-		writeJSONError(w, http.StatusBadRequest, "path is required — a Timeline JSON file, directory, or Takeout zip")
-		return
-	}
-	res, err := ImportTimelinePath(store, req.Path)
-	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(res)
-}
