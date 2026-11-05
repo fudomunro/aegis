@@ -65,7 +65,7 @@ instance never mix (demo personas).
 |-------|------|
 | Services / connectors | `Service.Dataset` empty → visible to every scope. Set → visible only when `scope.dataset` equals it. |
 | Mail archive rows | `dataset` column. Scope with empty dataset sees all rows. Scope with `dataset=X` sees only rows tagged `X`. |
-| Library cache | Cache keys include the scope dataset so one persona cannot read another’s cached page. |
+| Library cache | Cache keys include the scope dataset and a grants fingerprint so one persona cannot read another’s cached page. |
 | Sibling mail hydration | Same dataset filter as search, so merge cannot pull a foreign partition. |
 
 Invisible services are **skipped**, not reported as denied — a caller should
@@ -81,9 +81,9 @@ can move to per-user connector state without changing the principal model.
 ## Grants
 
 `DataScope.grants` uses the existing type-level `types.DataGrants` and is
-validated on load. **Not yet enforced** in code — enforcement is part of the
-external-access implementation. The semantics are decided
-([`external-access.md`](external-access.md)):
+validated on load. **Enforced** since the scope-grants resolver landed: the
+semantics are decided in [`external-access.md`](external-access.md) and every
+row of the resolution table is a test case.
 
 **Deny-by-default for invite tokens.** For an external principal the scope's
 `grants` map is the **complete allow list**: an unlisted data type resolves
@@ -104,10 +104,7 @@ regardless of levels.
 
 This runs in a **dedicated scope-grants resolver**, never in
 `types.DataGrants.Access` (owner-tier "unset = unrestricted" semantics must
-not move). Each resolution row becomes a test case.
-
-Until enforcement lands, do not assume scope grants restrict reads — mint
-scopes for principals you already trust.
+not move). Each resolution row is a test case.
 
 **Owner-tier split.** The shared agent key and tailnet agents keep today's
 "omit = unrestricted" agent-data-grant semantics (places opt-in `none`).
@@ -115,9 +112,10 @@ Scope grants for invite tokens deliberately diverge: sharing is opt-in per
 data type. Scope grants also never exceed what agent data grants allow (AND
 of both layers, same as app tokens).
 
-Demo scopes that expect full read of *their* dataset must set
-`"grants": {"default": {"default": "read"}}` (or list types) once
-enforcement lands; `read_only: true` remains the demo's write wall.
+**Migration.** Scopes that relied on "empty grants = full read" must set
+`"grants": {"default": {"default": "read"}}` (or list types) — enforcement
+is deny-by-default, so an empty `grants` map now denies everything.
+`read_only: true` remains the demo's write wall.
 `deploy/demo/data_scopes.example.json` already carries that entry.
 
 **Storage.** `data_scopes.json` today holds plaintext `api_key` values
@@ -133,13 +131,16 @@ For scopes A and B with datasets `a` and `b`:
 
 1. GET `/v1/library/*` with A’s key never returns rows sourced only from `b`.
 2. `/v1/mail/search` and `/v1/library/messages` with A’s key never return `b` rows.
-3. A cache fill under A is never served to B.
+3. A cache fill under A is never served to B — including two principals that
+   share a dataset but hold different grants.
 4. Services bound to `b` are invisible to A (no 403 oracle) — including
    `/v1/services/{id}/...`, `/v1/library/documents/{service}/{id}/text`, and
    pre-request matching/blocking.
 5. Default scope (empty dataset) keeps today’s “see everything” behavior.
 6. `read_only` scopes cannot invoke mutating agent routes.
 7. Data-scope keys never authenticate admin routes.
+8. A principal holding **no grants** sees nothing: every type resolves to
+   `none` (library and mail deny; pre-request injects no data hints).
 
 ## Non-goals (this note)
 

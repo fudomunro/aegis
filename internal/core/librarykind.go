@@ -210,14 +210,18 @@ func (s *Server) libraryReadableFor(permType string) bool {
 }
 
 // libraryHintsForMessage returns instruction blocks for every library kind
-// that matches a service-less user question. Used by the pre-request hook.
-func (s *Server) libraryHintsForMessage(msg string) []string {
+// that matches a service-less user question and is readable for this request
+// (owner grants AND scope grants). Used by the pre-request hook.
+func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 	var out []string
 	for _, k := range s.allLibraryKinds() {
 		if !k.Mentions(msg) {
 			continue
 		}
 		if !kindHasProviders(k.ID, s) || !kindReadable(k.ID, s) {
+			continue
+		}
+		if !scopeAllows(r, k.PermType, http.MethodGet) {
 			continue
 		}
 		if schema, ok := s.udtSchemaForKind(k.ID); ok {
@@ -305,7 +309,7 @@ func collectProviders[T any, P any](
 		if !ok {
 			continue
 		}
-		if !s.effectivePermissions(svc).AllowsRead(permType) {
+		if !types.AllowsMethod(s.requestLevel(r, svc, permType), http.MethodGet) {
 			denied = append(denied, id)
 			continue
 		}
@@ -390,6 +394,27 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	// Data-scope grants are deny-by-default (issue #253): an unlisted kind is
+	// none for the principal, mirroring the app-scope gate above.
+	if sc := DataScopeFrom(r); sc != nil && !scopeAllows(r, kind.PermType, r.Method) {
+		level := types.ScopeGrantsAccess(sc.Grants, kind.PermType, "")
+		logger.Info("library "+kind.ID+" denied by scope grant", "scope", sc.ID, "grant", level)
+		s.recordAccessFrom(r, AccessEvent{
+			Agent:    agent,
+			Surface:  MetricSurfaceLibrary,
+			Target:   kind.ID,
+			DataType: kind.ID,
+			Cache:    MetricCacheMiss,
+			Decision: DecisionDeny,
+			Reason:   "scope_grant",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
+		})
+		writeJSONError(w, http.StatusForbidden,
+			fmt.Sprintf("denied: data scope grant for %s is %q", kind.ID, level))
+		return
+	}
+
 	if q != "" {
 		handleLibrarySearch(s, w, r, spec, q, pageReq, agent, app)
 		return
@@ -422,7 +447,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		svc := s.config.GetService(id)
 		perm := ""
 		if svc != nil {
-			perm = s.effectivePermissions(svc).For(kind.PermType)
+			perm = s.requestLevel(r, svc, kind.PermType)
 		}
 		logger.Info("library "+kind.ID+" denied by permission", "service", id, "permission", perm)
 		// Per-service denial for the audit trail (issue #105). Even when

@@ -335,7 +335,7 @@ func documentsProviderTargets(s *Server, r *http.Request, permType string, appLe
 		inner := targets[i].list
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
-			level = s.effectivePermissions(svc).For(permType)
+			level = s.requestLevel(r, svc, permType)
 		}
 		effective := level
 		if appMeta {
@@ -417,7 +417,7 @@ func (s *Server) searchRedactDocuments(items []types.Document, r *http.Request) 
 				// Local/import sources gate their own content.
 				continue
 			}
-			level := s.effectivePermissions(svc).For("documents")
+			level := s.requestLevel(r, svc, "documents")
 			red := redactDocumentsForLevel([]types.Document{d}, types.DocumentsLevelForResponse(level))
 			if len(red) == 0 {
 				skip = true
@@ -478,7 +478,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 			writeJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}
-		level = s.effectivePermissions(svc).For(kind.PermType)
+		level = s.requestLevel(r, svc, kind.PermType)
 	} else if app != nil {
 		level = app.Scopes.For(kind.PermType)
 	}

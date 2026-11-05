@@ -637,7 +637,7 @@ func transactionsProviderTargets(s *Server, r *http.Request, permType string, ap
 		inner := targets[i].list
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
-			level = s.effectivePermissions(svc).For(permType)
+			level = s.requestLevel(r, svc, permType)
 		}
 		effective := level
 		if appSummary {
@@ -725,7 +725,7 @@ func (s *Server) searchRedactTransactions(items []types.Transaction, r *http.Req
 			if svc == nil {
 				continue
 			}
-			level := s.effectivePermissions(svc).For("transactions")
+			level := s.requestLevel(r, svc, "transactions")
 			red := redactTransactionsForLevel([]types.Transaction{t}, level)
 			if len(red) == 0 {
 				skip = true

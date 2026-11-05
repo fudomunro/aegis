@@ -11,8 +11,16 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
+
+// readAllGrants is the migrated "share everything read-only" grant map
+// (docs/external-access.md): packs that relied on "empty grants = full read"
+// state it explicitly now that scope resolution is deny-by-default.
+func readAllGrants() types.DataGrants {
+	return types.DataGrants{types.PermissionDefaultKey: {Default: types.AccessRead}}
+}
 
 func writeDataScopes(t *testing.T, scopes []DataScope) string {
 	t.Helper()
@@ -93,26 +101,40 @@ func TestServiceVisibleToScope(t *testing.T) {
 }
 
 func TestScopeCacheSuffix(t *testing.T) {
-	if scopeCacheSuffix(nil) != "" || scopeCacheSuffix(&DataScope{ID: "x"}) != "" {
-		t.Fatal("default partition must not change cache keys")
+	if scopeCacheSuffix(nil) != "" {
+		t.Fatal("default principal must not change cache keys")
 	}
-	if got := scopeCacheSuffix(&DataScope{Dataset: "shire"}); got != "|ds:shire" {
-		t.Fatalf("suffix = %q", got)
+	// Every scoped principal is namespaced — grants change response content
+	// even on the owner dataset (issue #253).
+	plain := scopeCacheSuffix(&DataScope{ID: "x"})
+	if !strings.Contains(plain, "|sg:") {
+		t.Fatalf("scope without dataset = %q, want grants fingerprint", plain)
+	}
+	shire := scopeCacheSuffix(&DataScope{Dataset: "shire"})
+	if !strings.HasPrefix(shire, "|ds:shire|sg:") {
+		t.Fatalf("suffix = %q", shire)
+	}
+	read := scopeCacheSuffix(&DataScope{Dataset: "shire", Grants: readAllGrants()})
+	if read == shire {
+		t.Fatal("different grants must not share a cache suffix")
+	}
+	if again := scopeCacheSuffix(&DataScope{Dataset: "shire", Grants: readAllGrants()}); again != read {
+		t.Fatalf("identical grants must fingerprint identically: %q vs %q", again, read)
+	}
+	if got := scopeCacheSuffix(&DataScope{Dataset: "gondor", Grants: readAllGrants()}); got == read {
+		t.Fatal("different datasets must not share a cache suffix")
 	}
 }
 
-// twoScopeServer builds a server with two dataset-partitioned sample library
-// services and two matching data-scope API keys, plus a seeded mail archive.
-func twoScopeServer(t *testing.T) *Server {
+// scopeServer builds a server with two dataset-partitioned sample library
+// services, data-scope API keys, and a seeded mail archive.
+func scopeServer(t *testing.T, scopes []DataScope) *Server {
 	t.Helper()
 	cfg := &Config{Services: []Service{
 		{ID: "sample-library-shire", Name: "Sample Shire", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "shire"},
 		{ID: "sample-library-gondor", Name: "Sample Gondor", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "gondor"},
 	}}
-	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
-		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
-		{ID: "gondor", Dataset: "gondor", APIKey: "YOUR_GONDOR_KEY"},
-	}))
+	loaded, err := NewDataScopeStore(writeDataScopes(t, scopes))
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
 	}
@@ -137,7 +159,7 @@ func twoScopeServer(t *testing.T) *Server {
 		config:     cfg,
 		cache:      NewCache(),
 		connectors: make(map[string]connectors.ServiceConnector),
-		scopes:     scopes,
+		scopes:     loaded,
 		mail:       archive,
 		links:      &EntityLinkStore{},
 		metrics:    NewAccessMetrics(32),
@@ -145,6 +167,17 @@ func twoScopeServer(t *testing.T) *Server {
 	srv.connectors["sample-library-shire"] = NewSampleLibraryConnector("sample-library-shire", "shire", GenerateSampleLibraryFor("shire"))
 	srv.connectors["sample-library-gondor"] = NewSampleLibraryConnector("sample-library-gondor", "gondor", GenerateSampleLibraryFor("gondor"))
 	return srv
+}
+
+// twoScopeServer is the standard isolation fixture: one granted principal
+// per dataset plus a no-grants principal on shire (deny-by-default control).
+func twoScopeServer(t *testing.T) *Server {
+	t.Helper()
+	return scopeServer(t, []DataScope{
+		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
+		{ID: "gondor", Dataset: "gondor", APIKey: "YOUR_GONDOR_KEY", Grants: readAllGrants()},
+		{ID: "empty", Dataset: "shire", APIKey: "YOUR_EMPTY_KEY"},
+	})
 }
 
 func scopeRequest(key, path string) *http.Request {
@@ -464,5 +497,151 @@ CREATE TABLE mail_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 	msgs, _, err := archive.ListMessagesForLibrary(10, "shire")
 	if err != nil || len(msgs) != 1 {
 		t.Fatalf("dataset rows after migrate: %d err=%v", len(msgs), err)
+	}
+}
+
+// TestScopeGrants_NoGrantsPrincipalSeesNothing extends the isolation contract
+// with a principal holding no grants: deny-by-default resolves every type to
+// none, so library, mail, and pre-request injection all come up empty.
+func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
+	srv := twoScopeServer(t)
+
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/library/contacts"))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("library status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.handleMailRoutes)(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/mail/search"))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("mail search status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	payload := `{"user_message":"search my email archive for invoices and show my contacts","request_body":{}}`
+	w = httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/pre-request", strings.NewReader(payload))
+	req.Header.Set("X-Api-Key", "YOUR_EMPTY_KEY")
+	srv.AuthMiddleware(srv.HandlePreRequest)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("pre-request status = %d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "/v1/library") || strings.Contains(w.Body.String(), "/v1/mail") {
+		t.Fatalf("no-grants principal was given data hints: %s", w.Body.String())
+	}
+}
+
+// TestScopeGrants_TypeAllowList covers the deny-by-default rows of the
+// resolution table at the HTTP seam: listed types answer, unlisted types 403.
+func TestScopeGrants_TypeAllowList(t *testing.T) {
+	srv := scopeServer(t, []DataScope{
+		{ID: "contacts-only", Dataset: "shire", APIKey: "YOUR_CONTACTS_KEY",
+			Grants: types.DataGrants{"contacts": {Default: types.AccessRead}}},
+	})
+
+	body := callLibrary(t, srv, "YOUR_CONTACTS_KEY", "/v1/library/contacts")
+	if !strings.Contains(body, "shire") {
+		t.Fatalf("granted type missing: %s", body)
+	}
+
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/library/tracks"))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unlisted type status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.handleMailRoutes)(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/mail/search"))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("unlisted mail status = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+// TestScopeGrants_ProviderOverrideTightens proves provider entries only narrow
+// a stated type level: the overridden connector disappears from the aggregate
+// while the other still answers.
+func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
+	srv := scopeServer(t, []DataScope{
+		{ID: "house", APIKey: "YOUR_HOUSE_KEY", Grants: types.DataGrants{
+			"contacts": {
+				Default:   types.AccessRead,
+				Providers: map[string]string{"sample-library-gondor": types.AccessNone},
+			},
+		}},
+	})
+	// Shared services (no dataset) so one principal sees both connectors.
+	srv.config.Services[0].Dataset = ""
+	srv.config.Services[1].Dataset = ""
+
+	body := callLibrary(t, srv, "YOUR_HOUSE_KEY", "/v1/library/contacts")
+	if !strings.Contains(body, "shire") {
+		t.Fatalf("granted provider missing: %s", body)
+	}
+	if strings.Contains(body, "gondor") {
+		t.Fatalf("provider override did not tighten: %s", body)
+	}
+}
+
+// TestScopeGrants_NeverExceedsOwnerDataGrants proves the two layers AND: a
+// scope grant cannot open a data type the owner tier closed.
+func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
+	srv := scopeServer(t, []DataScope{
+		{ID: "house", Dataset: "shire", APIKey: "YOUR_HOUSE_KEY",
+			Grants: types.DataGrants{"contacts": {Default: types.AccessFull}}},
+	})
+	for i := range srv.config.Services {
+		srv.config.Services[i].GrantLimits = types.Permissions{"contacts": types.AccessNone}
+	}
+
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, scopeRequest("YOUR_HOUSE_KEY", "/v1/library/contacts"))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("owner denial must survive a granting scope: status = %d body=%s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "denied") {
+		t.Fatalf("expected a denial body: %s", w.Body.String())
+	}
+}
+
+// TestScopeGrants_RedactionLevelAndCache: two principals on one dataset with
+// different event levels must see differently redacted responses — and the
+// cache must not hand the full-read page to the freebusy-only principal.
+func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
+	srv := scopeServer(t, []DataScope{
+		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
+		{ID: "shire-busy", Dataset: "shire", APIKey: "YOUR_BUSY_KEY",
+			Grants: types.DataGrants{"events": {Default: types.AccessFreeBusy}}},
+	})
+
+	call := func(key string) []types.CalendarEvent {
+		t.Helper()
+		w := httptest.NewRecorder()
+		srv.AuthMiddleware(srv.HandleLibraryEvents)(w, scopeRequest(key, "/v1/library/events"))
+		if w.Code != http.StatusOK {
+			t.Fatalf("events %s status = %d body=%s", key, w.Code, w.Body.String())
+		}
+		var list types.CalendarEventList
+		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+			t.Fatalf("parse events %s: %v", key, err)
+		}
+		if len(list.Events) == 0 {
+			t.Fatalf("events %s returned none: %s", key, w.Body.String())
+		}
+		return list.Events
+	}
+
+	// Full-read scope first so its page is cached before the freebusy read.
+	for _, e := range call("YOUR_SHIRE_KEY") {
+		if e.Title == "" {
+			t.Fatalf("full-read events must keep titles: %+v", e)
+		}
+	}
+	for _, e := range call("YOUR_BUSY_KEY") {
+		if e.Title != "" {
+			t.Fatalf("freebusy-only events leaked a title: %+v", e)
+		}
+		if e.StartAt == "" {
+			t.Fatalf("freebusy events must keep times: %+v", e)
+		}
 	}
 }

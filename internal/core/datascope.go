@@ -36,10 +36,9 @@ type DataScope struct {
 	APIKeyHint string `json:"api_key_hint,omitempty"`
 	// ReadOnly rejects mutating agent methods for this principal (demo).
 	ReadOnly bool `json:"read_only,omitempty"`
-	// Grants optionally tighten type-level agent access for this principal.
-	// Reserved for multi-user follow-on (issue #149): loaded and validated
-	// but not yet applied in permission enforcement. Do not assume they
-	// restrict access until enforcement lands.
+	// Grants are this principal's deny-by-default allow list (issue #253).
+	// Scope grants only tighten owner-tier policy (AND of both layers) and an
+	// unlisted type resolves to none. See docs/external-access.md.
 	Grants types.DataGrants `json:"grants,omitempty"`
 	// Disabled blocks authentication without deleting the record.
 	Disabled bool `json:"disabled,omitempty"`
@@ -228,11 +227,43 @@ func serviceVisibleToScope(svc *Service, sc *DataScope) bool {
 	return sc.Dataset == svc.Dataset
 }
 
-// scopeCacheSuffix namespaces library cache entries per dataset partition so
-// one principal cannot read another's cached page.
+// scopeAllows reports whether the request's data scope grants the method on
+// a data type. Deny-by-default: an unlisted type resolves to none. The owner
+// principal (no scope) is unrestricted here — owner-tier policy is enforced
+// separately so the two layers never drift into each other.
+func scopeAllows(r *http.Request, dataType, method string) bool {
+	sc := DataScopeFrom(r)
+	if sc == nil {
+		return true
+	}
+	return types.AllowsMethod(types.ScopeGrantsAccess(sc.Grants, dataType, ""), method)
+}
+
+// scopeCacheSuffix namespaces library cache entries per principal so one
+// scope cannot read another's cached page: the dataset partition plus a
+// fingerprint of the scope's grants (two principals with different grants
+// see different responses even inside one dataset).
 func scopeCacheSuffix(sc *DataScope) string {
-	if sc == nil || sc.Dataset == "" {
+	if sc == nil {
 		return ""
 	}
-	return "|ds:" + sc.Dataset
+	suffix := ""
+	if sc.Dataset != "" {
+		suffix += "|ds:" + sc.Dataset
+	}
+	return suffix + "|sg:" + scopeGrantsFingerprint(sc.Grants)
+}
+
+// scopeGrantsFingerprint is a stable short digest of a grant map (json.Marshal
+// sorts map keys). Empty grants share the reserved "none" fingerprint.
+func scopeGrantsFingerprint(g types.DataGrants) string {
+	if len(g) == 0 {
+		return "none"
+	}
+	raw, err := json.Marshal(g)
+	if err != nil {
+		return "invalid"
+	}
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:8])
 }

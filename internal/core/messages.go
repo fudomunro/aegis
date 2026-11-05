@@ -285,7 +285,7 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 			// Local archive is another source of the same collection (Gmail
 			// archive rows + Google Takeout). Fail-open with live providers if
 			// the archive is disabled (issue #139).
-			if s.mail != nil && s.mailReadable() {
+			if s.mail != nil && s.mailReadableFor(r) {
 				archive := s.mail
 				dataset := scopeDataset(r)
 				targets = append(targets, namedLister[types.Message]{

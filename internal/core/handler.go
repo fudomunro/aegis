@@ -710,9 +710,9 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	// Surface matching unified library endpoints alongside service proxy hints.
 	// Issue #125: photo questions that named a service still need /v1/library/photos
 	// (and the no-bypass policy); do not gate library hints on zero service matches.
-	libraryInstructions := s.libraryHintsForMessage(payload.UserMessage)
+	libraryInstructions := s.libraryHintsForMessage(r, payload.UserMessage)
 	// Local mail archive search is a separate surface from live provider listing.
-	libraryInstructions = append(libraryInstructions, s.mailArchiveHints(payload.UserMessage)...)
+	libraryInstructions = append(libraryInstructions, s.mailArchiveHints(r, payload.UserMessage)...)
 
 	if len(matched) == 0 && len(libraryInstructions) == 0 {
 		logger.Debug("no services matched, allowing")
@@ -750,7 +750,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		// Skip services that deny every data type — nothing useful to inject.
-		if allDataDenied(s.effectivePermissions(&svc)) {
+		if allDataDenied(s.requestPermissions(r, &svc)) {
 			logger.Info("skipping inject: all data types denied by permission", "service", svc.ID)
 			continue
 		}
@@ -766,7 +766,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			)
 			instructions = append(instructions, instruction)
 		}
-		if notice := permissionNotice(s.effectivePermissions(&svc)); notice != "" {
+		if notice := permissionNotice(s.requestPermissions(r, &svc)); notice != "" {
 			instructions = append(instructions, notice)
 		}
 	}

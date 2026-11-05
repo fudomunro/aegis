@@ -85,6 +85,35 @@ func (s *Server) effectivePermissions(svc *Service) types.Permissions {
 	return s.config.EffectivePermissions(svc.ID)
 }
 
+// requestLevel returns the effective access level for a data type on a
+// service for this request: owner-tier effective permissions tightened by
+// the principal's scope grants (issue #253). Scope grants never open what
+// owner policy closed — the level is the stricter of both layers.
+func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) string {
+	level := s.effectivePermissions(svc).AccessForDataType(dataType)
+	sc := DataScopeFrom(r)
+	if sc == nil {
+		return level
+	}
+	provider := ""
+	if svc != nil {
+		provider = svc.ID
+	}
+	return types.ScopeTighten(sc.Grants, level, dataType, provider)
+}
+
+// requestPermissions is requestLevel's map view: owner-tier effective
+// permissions AND scope grants, key by key. Used where a permission map
+// feeds notices and all-denied checks.
+func (s *Server) requestPermissions(r *http.Request, svc *Service) types.Permissions {
+	owner := s.effectivePermissions(svc)
+	sc := DataScopeFrom(r)
+	if sc == nil {
+		return owner
+	}
+	return types.ScopeTightenPermissions(sc.Grants, owner)
+}
+
 // AllowDataPermission enforces the service's permission for a proxy request.
 // Returns true when the request may proceed. On denial it writes a 403 JSON error.
 // Permissions further constrain the connector: a write level never unlocks
@@ -96,7 +125,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		return false
 	}
 	dataType := types.DataTypeForPath(remainingPath)
-	level := s.effectivePermissions(svc).AccessForDataType(dataType)
+	level := s.requestLevel(r, svc, dataType)
 	if s.connectorWriteBlocked(svc.ID, dataType, r.Method) {
 		label := dataType
 		if label == "" {

@@ -405,13 +405,14 @@ func (s *stubNoSyncConnector) HandleProxy(http.ResponseWriter, *http.Request, st
 func TestMailArchiveHints(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	if hints := srv.mailArchiveHints("search my email archive for invoices"); len(hints) == 0 {
+	req := httptest.NewRequest(http.MethodGet, "/v1/mail/search", nil)
+	if hints := srv.mailArchiveHints(req, "search my email archive for invoices"); len(hints) == 0 {
 		t.Fatal("expected archive hints")
 	}
-	if hints := srv.mailArchiveHints("what is the oldest available message?"); len(hints) == 0 {
+	if hints := srv.mailArchiveHints(req, "what is the oldest available message?"); len(hints) == 0 {
 		t.Fatal("expected archive hints for oldest-message questions")
 	}
-	if hints := srv.mailArchiveHints("play some jazz"); len(hints) != 0 {
+	if hints := srv.mailArchiveHints(req, "play some jazz"); len(hints) != 0 {
 		t.Fatalf("unexpected hints: %v", hints)
 	}
 	// Finding a specific message should get search-first guidance.
@@ -420,12 +421,12 @@ func TestMailArchiveHints(t *testing.T) {
 		"where is the mail from last week?",
 		"look up the email about baptism",
 	} {
-		if hints := srv.mailArchiveHints(msg); len(hints) == 0 {
+		if hints := srv.mailArchiveHints(req, msg); len(hints) == 0 {
 			t.Fatalf("expected archive hints for %q", msg)
 		}
 	}
 	srv.mail = nil
-	if hints := srv.mailArchiveHints("search my email archive"); len(hints) != 0 {
+	if hints := srv.mailArchiveHints(req, "search my email archive"); len(hints) != 0 {
 		t.Fatalf("disabled archive should not hint: %v", hints)
 	}
 }

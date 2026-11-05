@@ -276,7 +276,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 				inner := targets[i].list
 				level := ""
 				if svc := s.config.GetService(id); svc != nil {
-					level = s.effectivePermissions(svc).For(kind.PermType)
+					level = s.requestLevel(r, svc, kind.PermType)
 				}
 				if !appFreeBusy && !types.IsFreeBusyAccess(level) {
 					continue
@@ -319,7 +319,7 @@ func (s *Server) searchRedactEvents(items []types.CalendarEvent, r *http.Request
 			if svc == nil {
 				continue
 			}
-			if types.IsFreeBusyAccess(s.effectivePermissions(svc).For("events")) {
+			if types.IsFreeBusyAccess(s.requestLevel(r, svc, "events")) {
 				redact = true
 			}
 		}
