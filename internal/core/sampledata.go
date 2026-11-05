@@ -656,7 +656,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			EntityID:    "AQB-20240305-0001",
 			Account:     &types.TransactionAccount{Name: "Everyday Checking", Type: "checking", Last4: "4421"},
 			Sources: []types.TransactionSource{
-				{Service: quickenServiceID, ServiceName: quickenServiceName, ID: "AQB-20240305-0001",
+				{Service: connectors.QuickenServiceID, ServiceName: connectors.QuickenServiceName, ID: "AQB-20240305-0001",
 					Extra: map[string]any{"fitid": "AQB-20240305-0001"}},
 			},
 		},
@@ -686,7 +686,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			EntityID:    "qif-coffee",
 			Account:     &types.TransactionAccount{Name: "Credit Card", Type: "creditCard", Last4: "9902"},
 			Sources: []types.TransactionSource{
-				{Service: quickenServiceID, ServiceName: quickenServiceName, ID: "qif-coffee",
+				{Service: connectors.QuickenServiceID, ServiceName: connectors.QuickenServiceName, ID: "qif-coffee",
 					Extra: map[string]any{"fitid": "qif-coffee"}},
 			},
 		},
@@ -770,7 +770,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 				Lng:      -63.5752,
 			},
 			Sources: []types.PlaceVisitSource{
-				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-harbor-20230704", Canonical: true, PointIDs: []string{"tl-harbor-20230704"}},
+				{Service: connectors.TimelineServiceID, ServiceName: connectors.TimelineServiceName, ID: "tl-harbor-20230704", Canonical: true, PointIDs: []string{"tl-harbor-20230704"}},
 			},
 		},
 		{
@@ -804,7 +804,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 				Lng:      -64.3188,
 			},
 			Sources: []types.PlaceVisitSource{
-				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-lunenburg-20230705", Canonical: true},
+				{Service: connectors.TimelineServiceID, ServiceName: connectors.TimelineServiceName, ID: "tl-lunenburg-20230705", Canonical: true},
 			},
 		},
 		{
@@ -819,7 +819,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			},
 			EntityID: "tl-drive-halifax-lunenburg",
 			Sources: []types.PlaceVisitSource{
-				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-drive-halifax-lunenburg"},
+				{Service: connectors.TimelineServiceID, ServiceName: connectors.TimelineServiceName, ID: "tl-drive-halifax-lunenburg"},
 			},
 		},
 		{
@@ -835,7 +835,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			},
 			EntityID: "tl-harbor-20240311",
 			Sources: []types.PlaceVisitSource{
-				{Service: timelineServiceID, ServiceName: timelineServiceName, ID: "tl-harbor-20240311"},
+				{Service: connectors.TimelineServiceID, ServiceName: connectors.TimelineServiceName, ID: "tl-harbor-20240311"},
 			},
 		},
 	}

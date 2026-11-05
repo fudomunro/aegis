@@ -236,7 +236,7 @@ func TestMailArchiveSyncer_BuildsOnlyGmail(t *testing.T) {
 		t.Fatal("unknown service must not build a syncer")
 	}
 	// A connector that is not the Gmail adapter yields nil.
-	srv.connectors["quickenish"] = NewQuickenConnector(srv, nil)
+	srv.connectors["quickenish"] = connectors.NewQuickenConnector(nil)
 	if srv.mailArchiveSyncer("quickenish") != nil {
 		t.Fatal("non-Gmail connector must not build a mail syncer")
 	}

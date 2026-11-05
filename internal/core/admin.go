@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -174,7 +175,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		// Quicken and Signal are file-based imports (Advanced tab), not
 		// configured OAuth/static services — keep them off the services list
 		// (issues #141, #168).
-		if svc.ID == quickenServiceID || svc.ID == signalServiceID {
+		if svc.ID == connectors.QuickenServiceID || svc.ID == connectors.SignalServiceID {
 			continue
 		}
 		item := AdminService{

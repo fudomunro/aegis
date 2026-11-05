@@ -9,25 +9,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-func normalizeHandleList(in []string) []string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(in))
-	seen := map[string]bool{}
-	for _, h := range in {
-		n := types.NormalizeContactHandle(h)
-		if n == "" || seen[n] {
-			continue
-		}
-		seen[n] = true
-		out = append(out, n)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
 
 // unionStrings appends values from b that are not already in a.
 func unionStrings(a, b []string) []string {
@@ -61,7 +42,7 @@ func mergeContactInto(dst *types.Contact, src types.Contact) {
 	}
 	dst.Emails = types.NormalizeEmailList(unionStrings(dst.Emails, src.Emails))
 	dst.Phones = types.NormalizePhoneList(unionStrings(dst.Phones, src.Phones))
-	dst.Handles = normalizeHandleList(unionStrings(dst.Handles, src.Handles))
+	dst.Handles = types.NormalizeHandleList(unionStrings(dst.Handles, src.Handles))
 	dst.Sources = append(dst.Sources, src.Sources...)
 	if len(dst.Extra) == 0 && len(src.Extra) > 0 {
 		dst.Extra = src.Extra

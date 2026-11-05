@@ -18,18 +18,6 @@ func messageServiceName(m types.Message) string {
 	return ""
 }
 
-// messageExtraString reads a string Extra field.
-func messageExtraString(extra map[string]any, key string) string {
-	if extra == nil {
-		return ""
-	}
-	v, ok := extra[key]
-	if !ok || v == nil {
-		return ""
-	}
-	s, _ := v.(string)
-	return s
-}
 
 // messageSentNormalized parses RFC3339 (or RFC3339Nano) and re-emits it at
 // second precision in UTC so the same send time matches across services.
@@ -61,7 +49,7 @@ func messageIdentityKey(m types.Message) string {
 		return "msgid:" + id
 	}
 	for _, src := range m.Sources {
-		if id := types.NormalizeMessageID(messageExtraString(src.Extra, "message_id")); id != "" {
+		if id := types.NormalizeMessageID(types.ExtraString(src.Extra, "message_id")); id != "" {
 			return "msgid:" + id
 		}
 	}

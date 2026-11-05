@@ -3,8 +3,8 @@ package connectors
 // ServiceName returns the canonical display name for a connector-owned
 // service ID. aegis.json "name" is the per-instance label; this registry is
 // the canonical one services resolve to (issue #254). Services without a
-// connector — custom proxies and core-local import stores — return false so
-// the caller can fall back to config or the raw ID.
+// connector — custom proxies — return false so the caller can fall back to
+// config or the raw ID.
 func ServiceName(id string) (string, bool) {
 	name, ok := serviceNames[id]
 	return name, ok
@@ -27,4 +27,7 @@ var serviceNames = map[string]string{
 	CardDAVServiceID:        CardDAVServiceName,
 	PaperlessServiceID:      PaperlessServiceName,
 	SampleCalendarServiceID: SampleCalendarServiceName,
+	SignalServiceID:         SignalServiceName,
+	QuickenServiceID:        QuickenServiceName,
+	TimelineServiceID:       TimelineServiceName,
 }

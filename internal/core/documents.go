@@ -242,7 +242,7 @@ func (f DocumentFilters) cacheKeySuffix() string {
 }
 
 func documentDay(raw string) string {
-	return transactionDay(raw)
+	return types.TransactionDay(raw)
 }
 
 // matches reports whether a document passes every active filter.
@@ -252,12 +252,12 @@ func (f DocumentFilters) matches(d types.Document) bool {
 	}
 	day := documentDay(d.CreatedAt)
 	if f.After != "" {
-		if day == "" || !dateAtOrAfter(day, f.After) {
+		if day == "" || !types.DateAtOrAfter(day, f.After) {
 			return false
 		}
 	}
 	if f.Before != "" {
-		if day == "" || !dateBefore(day, f.Before) {
+		if day == "" || !types.DateBefore(day, f.Before) {
 			return false
 		}
 	}

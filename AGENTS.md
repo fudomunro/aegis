@@ -104,8 +104,8 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Tokens / OAuth / CSRF | `internal/core/tokens.go`, `internal/core/oauth.go`, `internal/core/statestore.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
 | Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
-| Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; core-owned `signal.go`, `quicken.go`, `timeline.go` | Register in `internal/core/run.go` `srv.connectors` |
-| Location history (places) | `internal/core/places.go`, `internal/core/timeline.go`, `internal/connectors/owntracks.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
+| Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; local import stores `signal.go`, `quicken.go`, `timeline.go` + shared `localstore.go` | Register in `internal/core/run.go` `srv.connectors`; stores share the `ServiceConnector` surface with a local-transport constructor (design: `docs/local-import-stores.md`) |
+| Location history (places) | `internal/core/places.go`, `internal/connectors/{timeline,owntracks}.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
 

@@ -25,10 +25,9 @@ import "github.com/fudomunro/aegis/internal/types"
 // on the page is what shows how narrow that is.
 
 // ConnectionMaturityCatalog returns the maturity declaration for every
-// connector-owned service. Core-local import stores declare theirs beside
-// the store and extend this list in core's aggregate catalog. Sample
-// fixtures and the drift-injection harness are excluded: they are test
-// surfaces, not connections to mature.
+// connector-owned service, whether the transport is a live API or a local
+// import store. Sample fixtures and the drift-injection harness are
+// excluded: they are test surfaces, not connections to mature.
 func ConnectionMaturityCatalog() []types.ConnectionMaturity {
 	return []types.ConnectionMaturity{
 		spotifyMaturity(),
@@ -46,8 +45,54 @@ func ConnectionMaturityCatalog() []types.ConnectionMaturity {
 		calDAVMaturity(),
 		cardDAVMaturity(),
 		paperlessMaturity(),
+		signalMaturity(),
+		quickenMaturity(),
+		timelineMaturity(),
 	}
 }
+
+func signalMaturity() types.ConnectionMaturity {
+	return types.ConnectionMaturity{
+		Service:   SignalServiceID,
+		Transport: types.TransportArchive,
+		DataTypes: []types.DataMaturity{
+			{Name: "messages", Description: "Imported chat messages", Supported: true,
+				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to",
+					"sent_at", "received_at", "direction", "read", "thread_id", "labels")},
+			{Name: "contacts", Description: "Imported contacts", Supported: true,
+				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
+			{Name: "groups", Description: "Group threads and members", Supported: false},
+			{Name: "attachments", Description: "Media and file attachments", Supported: false},
+		},
+	}
+}
+
+func quickenMaturity() types.ConnectionMaturity {
+	return types.ConnectionMaturity{
+		Service:   QuickenServiceID,
+		Transport: types.TransportArchive,
+		DataTypes: []types.DataMaturity{
+			{Name: "transactions", Description: "Imported QIF/QFX line items", Supported: true,
+				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
+					"merchant", "category", "memo", "account", "status", "entity_id")},
+			{Name: "accounts", Description: "Account registers and balances", Supported: false},
+			{Name: "investments", Description: "Holdings and investment activity", Supported: false},
+		},
+	}
+}
+
+func timelineMaturity() types.ConnectionMaturity {
+	return types.ConnectionMaturity{
+		Service:   TimelineServiceID,
+		Transport: types.TransportArchive,
+		DataTypes: []types.DataMaturity{
+			{Name: "places", Description: "Imported Timeline visits and trips", Supported: true,
+				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
+			{Name: "location_points", Description: "Raw Timeline location points", Supported: false},
+		},
+	}
+}
+
 
 func spotifyMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{

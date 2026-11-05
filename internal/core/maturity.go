@@ -31,12 +31,11 @@ import (
 // ConnectionMaturityCatalog returns the maturity declaration for every
 // real connection. Sample fixtures and the drift-injection harness are
 // excluded: they are test surfaces, not connections to mature.
+// ConnectionMaturityCatalog returns the maturity declaration for every
+// real connection. Sample fixtures and the drift-injection harness are
+// excluded: they are test surfaces, not connections to mature.
 func ConnectionMaturityCatalog() []types.ConnectionMaturity {
-	return append(connectors.ConnectionMaturityCatalog(),
-		signalMaturity(),
-		quickenMaturity(),
-		timelineMaturity(),
-	)
+	return connectors.ConnectionMaturityCatalog()
 }
 
 // MaturityByService indexes the catalog by connector ID.
@@ -49,44 +48,3 @@ func MaturityByService() map[string]types.ConnectionMaturity {
 	return out
 }
 
-func signalMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   signalServiceID,
-		Transport: types.TransportArchive,
-		DataTypes: []types.DataMaturity{
-			{Name: "messages", Description: "Imported chat messages", Supported: true,
-				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to",
-					"sent_at", "received_at", "direction", "read", "thread_id", "labels")},
-			{Name: "contacts", Description: "Imported contacts", Supported: true,
-				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
-			{Name: "groups", Description: "Group threads and members", Supported: false},
-			{Name: "attachments", Description: "Media and file attachments", Supported: false},
-		},
-	}
-}
-
-func quickenMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   quickenServiceID,
-		Transport: types.TransportArchive,
-		DataTypes: []types.DataMaturity{
-			{Name: "transactions", Description: "Imported QIF/QFX line items", Supported: true,
-				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
-					"merchant", "category", "memo", "account", "status", "entity_id")},
-			{Name: "accounts", Description: "Account registers and balances", Supported: false},
-			{Name: "investments", Description: "Holdings and investment activity", Supported: false},
-		},
-	}
-}
-
-func timelineMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   timelineServiceID,
-		Transport: types.TransportArchive,
-		DataTypes: []types.DataMaturity{
-			{Name: "places", Description: "Imported Timeline visits and trips", Supported: true,
-				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
-			{Name: "location_points", Description: "Raw Timeline location points", Supported: false},
-		},
-	}
-}

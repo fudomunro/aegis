@@ -132,9 +132,9 @@ func connectorAgentSamples(t *testing.T, host connectors.Host) []agentStringSamp
 		{"carddav", connectors.NewCardDAVConnector(host)},
 		{"caldav", connectors.NewCalDAVConnector(host)},
 		{"sample-calendar", connectors.NewSampleCalendarConnector()},
-		{"quicken", NewQuickenConnector(host, nil)},
-		{"google-timeline", NewTimelineConnector(nil)},
-		{"signal", NewSignalConnector(nil)},
+		{"quicken", connectors.NewQuickenConnector(nil)},
+		{"google-timeline", connectors.NewTimelineConnector(nil)},
+		{"signal", connectors.NewSignalConnector(nil)},
 	}
 
 	base := "https://aegis.example.com"

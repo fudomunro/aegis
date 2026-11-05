@@ -1,8 +1,6 @@
-package core
+package connectors
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"bufio"
 	"context"
 	"database/sql"
@@ -15,7 +13,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
@@ -28,16 +25,26 @@ import (
 // Aegis does not store statements or PDFs — only line-item metadata.
 
 const (
-	quickenServiceID   = "quicken"
-	quickenServiceName = "Quicken"
+	QuickenServiceID   = "quicken"
+	QuickenServiceName = "Quicken"
 )
+
+// QuickenService is the service card the local Quicken import store injects
+// into config (issue #266).
+func QuickenService() LocalStoreService {
+	return LocalStoreService{
+		ID:          QuickenServiceID,
+		Name:        QuickenServiceName,
+		Action:      "inject",
+		Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
+		GrantLimits: types.Permissions{"transactions": types.AccessRead},
+	}
+}
 
 // QuickenStore is a local SQLite store of imported Quicken transactions.
 // Empty path disables the store (like mail-archive).
 type QuickenStore struct {
-	db   *sql.DB
-	path string
-	mu   sync.RWMutex
+	localStore
 }
 
 // QuickenImportResult reports one import run.
@@ -51,37 +58,20 @@ type QuickenImportResult struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// OpenQuickenStore opens (or creates) the local Quicken SQLite store.
-// An empty path returns nil (disabled).
-func OpenQuickenStore(path string) (*QuickenStore, error) {
-	path = strings.TrimSpace(path)
-	if path == "" {
-		return nil, nil
-	}
-	if dir := filepath.Dir(path); dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("create quicken store dir: %w", err)
-		}
-	}
-	db, err := sql.Open("sqlite", path)
-	if err != nil {
-		return nil, err
-	}
-	// WAL lets import and live list share the file.
-	if _, err := db.Exec(`PRAGMA journal_mode=WAL`); err != nil {
-		db.Close()
-		return nil, err
-	}
-	s := &QuickenStore{db: db, path: path}
-	if err := s.init(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return s, nil
+// LogAttrs returns slog keyvals for one finished import run.
+func (r QuickenImportResult) LogAttrs() []any {
+	return []any{"scanned", r.Scanned, "stored", r.Stored,
+		"skipped", r.Skipped, "errors", r.Errors, "done", r.Done}
 }
 
-func (s *QuickenStore) init() error {
-	_, err := s.db.Exec(`
+// Failed reports a run that recorded errors but stored nothing.
+func (r QuickenImportResult) Failed() bool { return r.Errors > 0 && r.Stored == 0 }
+
+var _ ImportStore = (*QuickenStore)(nil)
+var _ ImportOutcome = QuickenImportResult{}
+
+// quickenSchema installs the imported-transaction table.
+const quickenSchema = `
 CREATE TABLE IF NOT EXISTS quicken_transactions (
   source_id TEXT PRIMARY KEY,
   file_path TEXT NOT NULL,
@@ -103,54 +93,44 @@ CREATE TABLE IF NOT EXISTS quicken_transactions (
 CREATE INDEX IF NOT EXISTS quicken_tx_posted ON quicken_transactions(posted_at);
 CREATE INDEX IF NOT EXISTS quicken_tx_merchant ON quicken_transactions(merchant);
 CREATE INDEX IF NOT EXISTS quicken_tx_amount ON quicken_transactions(amount);
-`)
-	return err
+`
+
+// OpenQuickenStore opens (or creates) the local Quicken SQLite store.
+// An empty path returns nil (disabled).
+func OpenQuickenStore(path string) (*QuickenStore, error) {
+	s := &QuickenStore{}
+	if err := s.openLocalStore(path, "quicken", quickenSchema); err != nil {
+		return nil, err
+	}
+	if !s.Enabled() {
+		return nil, nil
+	}
+	return s, nil
 }
 
-func (s *QuickenStore) Close() error {
-	if s == nil || s.db == nil {
-		return nil
-	}
-	return s.db.Close()
-}
-
-func (s *QuickenStore) Path() string {
-	if s == nil {
-		return ""
-	}
-	return s.path
-}
-
-func (s *QuickenStore) Enabled() bool { return s != nil && s.db != nil }
-
-// Upsert stores or replaces one imported transaction keyed by source_id.
-func (s *QuickenStore) Upsert(filePath string, tx types.Transaction) error {
-	if s == nil || s.db == nil {
-		return fmt.Errorf("quicken store disabled")
-	}
-	id := transactionSourceID(tx)
+// upsertTx stores or replaces one imported transaction keyed by source_id.
+func upsertQuickenTx(tx *sql.Tx, filePath string, t types.Transaction) error {
+	id := transactionSourceID(t)
 	if id == "" {
 		return fmt.Errorf("quicken transaction missing source id")
 	}
-	raw, err := json.Marshal(tx)
+	raw, err := json.Marshal(t)
 	if err != nil {
 		return err
 	}
 	accName, accType, accLast4 := "", "", ""
-	if tx.Account != nil {
-		accName, accType, accLast4 = tx.Account.Name, tx.Account.Type, tx.Account.Last4
+	if t.Account != nil {
+		accName, accType, accLast4 = t.Account.Name, t.Account.Type, t.Account.Last4
 	}
-	category := strings.Join(tx.Category, " | ")
+	category := strings.Join(t.Category, " | ")
 	fitid := ""
-	if len(tx.Sources) > 0 {
-		fitid = messageExtraString(tx.Sources[0].Extra, "fitid")
+	if len(t.Sources) > 0 {
+		fitid = types.ExtraString(t.Sources[0].Extra, "fitid")
 		if fitid == "" {
-			fitid = tx.EntityID
+			fitid = t.EntityID
 		}
 	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	_, err = s.db.Exec(`
+	_, err = tx.Exec(`
 INSERT INTO quicken_transactions(
   source_id, file_path, posted_at, authorized_at, amount, currency,
   description, merchant, category, memo,
@@ -173,32 +153,45 @@ ON CONFLICT(source_id) DO UPDATE SET
   fitid=excluded.fitid,
   raw_json=excluded.raw_json
 `,
-		id, filePath, tx.PostedAt, tx.AuthorizedAt, tx.Amount, tx.Currency,
-		tx.Description, tx.Merchant, category, tx.Memo,
-		accName, accType, accLast4, tx.Status, fitid, string(raw),
+		id, filePath, t.PostedAt, t.AuthorizedAt, t.Amount, t.Currency,
+		t.Description, t.Merchant, category, t.Memo,
+		accName, accType, accLast4, t.Status, fitid, string(raw),
 	)
 	return err
 }
 
+// Upsert stores or replaces one imported transaction keyed by source_id.
+func (s *QuickenStore) Upsert(filePath string, t types.Transaction) error {
+	if s == nil || s.db == nil {
+		return fmt.Errorf("quicken store disabled")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	if err := upsertQuickenTx(tx, filePath, t); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+const quickenHasQuery = `SELECT COUNT(1) FROM quicken_transactions WHERE source_id = ?`
+
 // Has reports whether source_id is already stored.
 func (s *QuickenStore) Has(sourceID string) bool {
-	if s == nil || s.db == nil {
-		return false
-	}
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var n int
-	err := s.db.QueryRow(`SELECT COUNT(1) FROM quicken_transactions WHERE source_id = ?`, sourceID).Scan(&n)
-	return err == nil && n > 0
+	return s.hasRow(quickenHasQuery, sourceID)
 }
 
 // List returns stored transactions (newest first), optional filters.
-func (s *QuickenStore) List(f TransactionFilters, limit int) ([]types.Transaction, error) {
+func (s *QuickenStore) List(f types.TransactionFilters, limit int) ([]types.Transaction, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("quicken store disabled")
 	}
-	if limit <= 0 || limit > libraryItemCap {
-		limit = libraryItemCap
+	if limit <= 0 || limit > LibraryItemCap {
+		limit = LibraryItemCap
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -220,7 +213,7 @@ LIMIT ?`, limit*4) // over-fetch then filter
 		if err := json.Unmarshal([]byte(raw), &tx); err != nil {
 			continue
 		}
-		if !f.matches(tx) {
+		if !f.Matches(tx) {
 			continue
 		}
 		out = append(out, tx)
@@ -253,7 +246,7 @@ func transactionSourceID(tx types.Transaction) string {
 		}
 	}
 	// Deterministic fallback so re-imports of the same line stay stable.
-	return "hash:" + transactionIdentityKey(tx)
+	return "hash:" + types.TransactionIdentityKey(tx)
 }
 
 // --- File parsers (QIF + QFX/OFX) ---
@@ -370,7 +363,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		// Stable per-file identity when Quicken omitted a check number.
 		fitid = "qif:" + shortHash(name+"|"+date+"|"+amountRaw+"|"+payee+"|"+memo)
 	}
-	amount := normalizeTransactionAmount(amountRaw)
+	amount := types.NormalizeTransactionAmount(amountRaw)
 	posted := types.NormalizeTransactionDate(qifDate(date))
 	accountName := filepath.Base(name)
 	accountName = strings.TrimSuffix(accountName, filepath.Ext(accountName))
@@ -386,7 +379,7 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		Status:      status,
 		EntityID:    fitid,
 	}
-	return types.NewTransaction(quickenServiceID, quickenServiceName, fitid, tx), true
+	return types.NewTransaction(QuickenServiceID, QuickenServiceName, fitid, tx), true
 }
 
 // qifDate normalizes Quicken date forms (MM/DD/YYYY, M/D/YY, DD/MM/YYYY with
@@ -577,7 +570,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 		fitid = "ofx:" + shortHash(name+"|"+dateRaw+"|"+amountRaw+"|"+payee)
 	}
 	posted := types.NormalizeTransactionDate(dateRaw)
-	if d := transactionDay(posted); d != "" {
+	if d := types.TransactionDay(posted); d != "" {
 		posted = d
 	}
 	accountName := filepath.Base(name)
@@ -588,7 +581,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	}
 	tx := types.Transaction{
 		PostedAt:    posted,
-		Amount:      normalizeTransactionAmount(amountRaw),
+		Amount:      types.NormalizeTransactionAmount(amountRaw),
 		Currency:    "USD",
 		Description: payee,
 		Merchant:    payee,
@@ -598,22 +591,13 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 		Status:      status,
 		EntityID:    fitid,
 	}
-	src := types.NewTransaction(quickenServiceID, quickenServiceName, fitid, tx)
+	src := types.NewTransaction(QuickenServiceID, QuickenServiceName, fitid, tx)
 	if len(src.Sources) == 1 {
 		src.Sources[0].Extra = map[string]any{"fitid": fitid, "trntype": trntype}
 	}
 	return src, true
 }
 
-// shortHash is a tiny non-crypto fingerprint for stable synthetic IDs.
-func shortHash(s string) string {
-	var h uint64 = 1469598103934665603
-	for i := 0; i < len(s); i++ {
-		h ^= uint64(s[i])
-		h *= 1099511628211
-	}
-	return fmt.Sprintf("%016x", h)
-}
 
 // ImportQuickenPath imports a QIF/QFX file or a directory of them.
 func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, error) {
@@ -651,19 +635,13 @@ func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, e
 			slog.Warn("quicken parse failed", "path", file, "error", err)
 			continue
 		}
-		for _, tx := range txs {
-			res.Scanned++
-			id := transactionSourceID(tx)
-			if id != "" && store.Has(id) {
-				res.Skipped++
-				continue
-			}
-			if err := store.Upsert(file, tx); err != nil {
-				res.Errors++
-				continue
-			}
-			res.Stored++
-		}
+		var st ImportStats
+		upsertRows(&store.localStore, &st, txs, transactionSourceID, quickenHasQuery,
+			func(tx *sql.Tx, t types.Transaction) error { return upsertQuickenTx(tx, file, t) })
+		res.Scanned += st.Scanned
+		res.Stored += st.Stored
+		res.Skipped += st.Skipped
+		res.Errors += st.Errors
 	}
 	res.Done = true
 	return res, nil
@@ -671,13 +649,12 @@ func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, e
 
 // QuickenConnector lists imported Quicken transactions from the local store.
 type QuickenConnector struct {
-	host  connectors.Host
 	store *QuickenStore
 }
 
-// NewQuickenConnector creates a connector wired to the given Host and local Quicken store.
-func NewQuickenConnector(host connectors.Host, store *QuickenStore) *QuickenConnector {
-	return &QuickenConnector{host: host, store: store}
+// NewQuickenConnector wraps the local Quicken import store.
+func NewQuickenConnector(store *QuickenStore) *QuickenConnector {
+	return &QuickenConnector{store: store}
 }
 
 // Capabilities returns Quicken import/list operations.
@@ -730,20 +707,20 @@ func (c *QuickenConnector) SystemInstructions(baseURL string) string {
 func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	store := c.store
 	if store == nil || !store.Enabled() {
-		writeJSONError(w, http.StatusNotFound, "quicken store disabled")
+		WriteJSONError(w, http.StatusNotFound, "quicken store disabled")
 		return
 	}
 	switch {
 	case r.Method == http.MethodGet && (remainingPath == "/import/status" || remainingPath == "import/status"):
 		n, err := store.Count()
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "quicken store error")
+			WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		writeJSON(w, map[string]any{"count": n, "path": store.Path()})
+		WriteJSON(w, map[string]any{"count": n, "path": store.Path()})
 	case r.Method == http.MethodGet && (remainingPath == "/transactions" || remainingPath == "transactions" || remainingPath == "" || remainingPath == "/"):
-		filters := ParseTransactionFilters(r)
-		limit := libraryItemCap
+		filters := types.ParseTransactionFilters(r)
+		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
 				limit = n
@@ -751,27 +728,27 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 		}
 		list, err := store.List(filters, limit)
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "quicken store error")
+			WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		writeJSON(w, types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		WriteJSON(w, types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && (remainingPath == "/import" || remainingPath == "import"):
 		var req struct {
 			Path string `json:"path"`
 		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err := json.Unmarshal(body, &req); err != nil || strings.TrimSpace(req.Path) == "" {
-			writeJSONError(w, http.StatusBadRequest, "path is required")
+			WriteJSONError(w, http.StatusBadRequest, "path is required")
 			return
 		}
 		res, err := ImportQuickenPath(store, req.Path)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		writeJSON(w, res)
+		WriteJSON(w, res)
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -781,7 +758,7 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 	if store == nil || !store.Enabled() {
 		return nil, false, nil
 	}
-	list, err := store.List(TransactionFilters{}, libraryItemCap)
+	list, err := store.List(types.TransactionFilters{}, LibraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}
@@ -800,6 +777,6 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 }
 
 var (
-	_ connectors.ServiceConnector = (*QuickenConnector)(nil)
+	_ ServiceConnector = (*QuickenConnector)(nil)
 	_ types.TransactionProvider   = (*QuickenConnector)(nil)
 )

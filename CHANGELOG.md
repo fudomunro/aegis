@@ -5,6 +5,28 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Changed
+
+- **Local import stores join the connector family (issue #266).** Signal,
+  Quicken, and Timeline — the SQLite-backed filestore imports behind
+  `-import-signal` / `-import-quicken` / `-import-timeline` — moved from
+  `internal/core` into `internal/connectors` beside the named-service
+  adapters. They keep the full `ServiceConnector` and provider-interface
+  surfaces (capabilities, maturity, data grants, library fan-in); what
+  differs is only transport (local files instead of upstream HTTP) and
+  lifecycle (one-shot import). The SQLite lifecycle, import batching, and
+  the item cap now have one owner in `internal/connectors/localstore.go`
+  (imports commit in 200-row transactions instead of one Exec per row).
+  Maturity rows and service names register beside their stores like every
+  other connector; the three near-identical admin handlers collapsed into
+  one import-store admin handler and the three CLI import runners into one
+  `runImportCLI`, both parameterized per store. Identity keys and list
+  filters (`TransactionFilters` / `PlaceVisitFilters`) moved to
+  `internal/types` beside `TrackIdentityKey` so both transports compute
+  them identically. Design note: `docs/local-import-stores.md`. No user-
+  visible behavior change; the mail archive / Google Takeout pair is
+  explicitly out of scope for this move.
+
 ### Fixed
 
 - **Denial audit rows now carry `client_ip`.** Auth denials (`denyStatus`)
