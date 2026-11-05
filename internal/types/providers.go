@@ -305,3 +305,53 @@ type LikedTrackWriteProvider interface {
 	// ErrUnauthorized when no valid token is available.
 	SaveLikedTracks(ctx context.Context, tracks []Track) (SaveLikedTracksResult, error)
 }
+
+// PlaceConflict is one item placement refused to overwrite: the remote
+// changed since the caller's watermark (If-Match / etag mismatch).
+type PlaceConflict struct {
+	Name    string `json:"name"`
+	Service string `json:"service"`
+	ID      string `json:"id,omitempty"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+// PlaceRecord is one successfully placed item with its target-side
+// watermark, so the caller can stamp copy-ledger state.
+type PlaceRecord struct {
+	Name       string `json:"name"`
+	ExternalID string `json:"external_id,omitempty"`
+	ETag       string `json:"etag,omitempty"`
+}
+
+// PlaceEntitiesResult reports an entity placement (contacts, events).
+type PlaceEntitiesResult struct {
+	// Copied is how many items were placed.
+	Copied int `json:"copied"`
+	// Placed carries per-item watermarks for the successful placements.
+	Placed []PlaceRecord `json:"placed,omitempty"`
+	// Skips are items that could not be placed (provider error per item).
+	Skips []PlaceSkip `json:"skips,omitempty"`
+	// Conflicts are items refused because the remote changed underfoot.
+	Conflicts []PlaceConflict `json:"conflicts,omitempty"`
+}
+
+// ContactWriteProvider is implemented by connectors that can place contacts
+// on the user's account. Placement is optimistic-concurrency safe: a record
+// carrying this service's local reference (and etag) in Sources is updated
+// with If-Match semantics and reported as a PlaceConflict when the remote
+// changed; records without one are created.
+type ContactWriteProvider interface {
+	// PlaceContacts creates or updates the given contacts. Return
+	// ErrUnauthorized when no valid token is available.
+	PlaceContacts(ctx context.Context, contacts []Contact) (PlaceEntitiesResult, error)
+}
+
+// CalendarEventWriteProvider is implemented by connectors that can place
+// events on the user's account, with the same create/update and conflict
+// semantics as ContactWriteProvider. The iCal UID falls back across sources
+// and EntityID so a copied event keeps its identity across services.
+type CalendarEventWriteProvider interface {
+	// PlaceEvents creates or updates the given events. Return
+	// ErrUnauthorized when no valid token is available.
+	PlaceEvents(ctx context.Context, events []CalendarEvent) (PlaceEntitiesResult, error)
+}

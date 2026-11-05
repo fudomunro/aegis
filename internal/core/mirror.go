@@ -20,6 +20,8 @@ import (
 const (
 	MirrorKindPlaylists = "playlists"
 	MirrorKindTracks    = "tracks"
+	MirrorKindContacts  = "contacts"
+	MirrorKindEvents    = "events"
 )
 
 // mirrorTrackCap bounds a single mirror call so a huge library cannot
@@ -57,6 +59,15 @@ type MirrorRef struct {
 type MirrorSkip struct {
 	Name   string `json:"name"`
 	Reason string `json:"reason"`
+}
+
+// MirrorConflict is one item the mirror refused to overwrite: the remote
+// changed since the watermark (If-Match / etag mismatch).
+type MirrorConflict struct {
+	Name    string `json:"name"`
+	Service string `json:"service"`
+	ID      string `json:"id,omitempty"`
+	Reason  string `json:"reason"`
 }
 
 // MirrorResult reports what a mirror planned or executed.
@@ -415,6 +426,29 @@ func toMirrorSkips(skips []types.PlaceSkip) []MirrorSkip {
 		out = append(out, MirrorSkip{Name: sk.Name, Reason: sk.Reason})
 	}
 	return out
+}
+
+// toMirrorConflicts projects placement conflicts onto the API shape.
+func toMirrorConflicts(conflicts []types.PlaceConflict) []MirrorConflict {
+	if len(conflicts) == 0 {
+		return nil
+	}
+	out := make([]MirrorConflict, 0, len(conflicts))
+	for _, c := range conflicts {
+		out = append(out, MirrorConflict{Name: c.Name, Service: c.Service, ID: c.ID, Reason: c.Reason})
+	}
+	return out
+}
+
+// mirrorOpFor resolves a provider operation surface P for a service from
+// the connector registry, naming what implements P on failure.
+func mirrorOpFor[P any](s *Server, serviceID, what string) (P, error) {
+	if conn, ok := any(s.connectors[serviceID]).(P); ok {
+		return conn, nil
+	}
+	var zero P
+	return zero, fmt.Errorf("%s %q is not supported yet (supported: %s)",
+		what, serviceID, mirrorSupportedFor[P](s))
 }
 
 // mirrorUpstream performs a raw JSON call to a service's configured endpoint

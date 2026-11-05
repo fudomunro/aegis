@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -117,4 +118,90 @@ func placeTrackLocalRef(t types.Track, serviceID string) (id, uri string) {
 		}
 	}
 	return id, uri
+}
+
+// placeContactDisplay names a contact in skip/conflict reports.
+func placeContactDisplay(c types.Contact) string {
+	if c.Name != "" {
+		return c.Name
+	}
+	if len(c.Emails) > 0 {
+		return c.Emails[0]
+	}
+	return ""
+}
+
+// placeContactRef returns the service-local resource handle and etag a
+// contact carries for this service, if any — the update path.
+func placeContactRef(c types.Contact, serviceID string) (id, etag string) {
+	for _, src := range c.Sources {
+		if src.Service != serviceID {
+			continue
+		}
+		if id == "" {
+			id = src.ID
+		}
+		if etag == "" {
+			etag, _ = src.Extra["etag"].(string)
+		}
+	}
+	return id, etag
+}
+
+// placeEventRef returns the service-local resource handle and etag an event
+// carries for this service, if any — the update path.
+func placeEventRef(ev types.CalendarEvent, serviceID string) (id, etag string) {
+	for _, src := range ev.Sources {
+		if src.Service != serviceID {
+			continue
+		}
+		if id == "" {
+			id = src.ID
+		}
+		if etag == "" {
+			etag, _ = src.Extra["etag"].(string)
+		}
+	}
+	return id, etag
+}
+
+// placeContactUID returns the cross-source contact UID carried in any
+// source's extras — the stable vCard identity that follows a copy.
+func placeContactUID(c types.Contact) string {
+	for _, src := range c.Sources {
+		if v, _ := src.Extra["uid"].(string); v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// placeEventUID returns the cross-source event identity: any source's uid,
+// else the catalog EntityID, else the first source's local id.
+func placeEventUID(ev types.CalendarEvent) string {
+	for _, src := range ev.Sources {
+		if v, _ := src.Extra["uid"].(string); v != "" {
+			return v
+		}
+	}
+	if ev.EntityID != "" {
+		return ev.EntityID
+	}
+	if len(ev.Sources) > 0 {
+		return ev.Sources[0].ID
+	}
+	return ""
+}
+
+// parseRFC3339 parses a neutral timestamp field for the encoder structs.
+func parseRFC3339(s string) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	parsed, err := time.Parse(time.RFC3339, s)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return parsed, true
 }
