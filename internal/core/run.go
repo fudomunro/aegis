@@ -20,6 +20,9 @@ import (
 
 func Run() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address (loopback by default; with Serve identity trust — auto/tailnet auth mode — a wildcard or LAN bind is refused at startup: bind loopback behind tailscale serve, the Tailscale IP, or use -auth-mode api-key)")
+	adminAddr := flag.String("admin-addr", "", "listen address for admin surfaces (tailnet/loopback only; empty = single-listener mode where admin shares -addr)")
+	adminBaseURL := flag.String("admin-base-url", "", "public base URL of the admin listener (required with -admin-addr; used for OAuth redirects and CSRF origin checks; reads AEGIS_ADMIN_BASE_URL env if empty)")
+	externalAccess := flag.Bool("external-access", false, "publish the API listener for external principals: invite/app tokens only on -addr (no ambient identity, no agent key), admin surfaces only on -admin-addr")
 	baseURL := flag.String("base-url", "", "public base URL of this Aegis instance (reads AEGIS_BASE_URL env if empty)")
 	apiKey := flag.String("api-key", "", "API key for LLM agents / library callers (reads AEGIS_API_KEY env if empty; optional in tailnet/auto modes; never admin)")
 	adminAPIKey := flag.String("admin-api-key", "", "API key for admin surfaces (reads AEGIS_ADMIN_API_KEY env if empty; distinct from -api-key so agents cannot rewrite data grants)")
@@ -200,9 +203,15 @@ func Run() {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
-	if err := validateListenAddr(*addr, *authMode); err != nil {
-		slog.Error(err.Error())
-		os.Exit(1)
+	// Under external access the API listener resolves no ambient identity
+	// (tokens only), so the Serve-header forgery risk that bind validation
+	// guards against does not apply — the public bind is the point. The
+	// admin listener is bound by validateSplitListeners instead.
+	if !*externalAccess {
+		if err := validateListenAddr(*addr, *authMode); err != nil {
+			slog.Error(err.Error())
+			os.Exit(1)
+		}
 	}
 
 	if *baseURL == "" {
@@ -210,6 +219,13 @@ func Run() {
 	}
 	if *baseURL == "" {
 		slog.Error("base-url is required (flag or AEGIS_BASE_URL env)")
+		os.Exit(1)
+	}
+	if *adminBaseURL == "" {
+		*adminBaseURL = os.Getenv("AEGIS_ADMIN_BASE_URL")
+	}
+	if err := validateSplitListeners(*adminAddr, *adminBaseURL, *externalAccess); err != nil {
+		slog.Error(err.Error())
 		os.Exit(1)
 	}
 
@@ -230,7 +246,7 @@ func Run() {
 		slog.Error("failed to load config", "path", paths.Config, "error", err)
 		os.Exit(1)
 	}
-	if err := validateEdgeTrust(*authMode, cfg.trustedNets()); err != nil {
+	if err := validateEdgeTrust(*authMode, *externalAccess, cfg.trustedNets()); err != nil {
 		slog.Error(err.Error())
 		os.Exit(1)
 	}
@@ -658,7 +674,10 @@ func Run() {
 
 	slog.Info("starting server",
 		"addr", *addr,
+		"admin_addr", *adminAddr,
+		"external_access", *externalAccess,
 		"base_url", *baseURL,
+		"admin_base_url", *adminBaseURL,
 		"auth_mode", *authMode,
 		"api_key_configured", *apiKey != "",
 		"admin_api_key_configured", *adminAPIKey != "",
@@ -666,8 +685,26 @@ func Run() {
 		"admin_logins", len(srv.adminLogins),
 		"data_dir", paths.Dir,
 	)
-	if err := runHTTPServer(*addr, handler, cfg); err != nil {
-		slog.Error("server failed", "error", err)
+	var serveErr error
+	if *adminAddr == "" {
+		// Single-listener mode (tailnet-only or edge-enforced split like the
+		// demo): one surface serves every route, as before.
+		serveErr = runHTTPServer(*addr, handler, cfg)
+	} else {
+		// Split listeners (docs/external-access.md): the API listener serves
+		// only the agent/external allowlist — unlisted routes 404 there and
+		// default to the admin side. The admin listener serves everything
+		// (admin tier + agent tier for tailnet callers) and stays in-tailnet.
+		apiHandler := listenerMiddleware(*baseURL, *externalAccess,
+			srv.demoLockdown(securityHeadersMiddleware(apiAllowlistGate(mux))))
+		adminHandler := listenerMiddleware(*adminBaseURL, false, handler)
+		serveErr = runHTTPServers([]namedListener{
+			{name: "api", addr: *addr, Handler: apiHandler},
+			{name: "admin", addr: *adminAddr, Handler: adminHandler},
+		}, cfg)
+	}
+	if serveErr != nil {
+		slog.Error("server failed", "error", serveErr)
 		os.Exit(1)
 	}
 }
@@ -755,15 +792,15 @@ func validatePublicCredentials(trusted []net.IPNet, apiKey, adminAPIKey string) 
 // means a non-Tailscale edge (nginx, Caddy, a tunnel) is in front: those
 // pass client-supplied Tailscale-User-Login straight through, while the
 // local-peer gate still trusts the loopback hop — one forged header is full
-// admin under the default admin rule. Only api-key mode (no ambient
-// identity) is sound behind such an edge. When the listener split lands,
-// -external-access (tokens only on the published listener, admin stays
-// tailnet-bound) joins the safe set.
-func validateEdgeTrust(authMode string, trusted []net.IPNet) error {
-	if len(trusted) == 0 || authMode == AuthModeAPIKey {
+// admin under the default admin rule. Sound behind such an edge: api-key
+// mode (no ambient identity at all), or -external-access (tokens only on
+// the published API listener; the admin listener stays tailnet-bound and is
+// never edge-facing).
+func validateEdgeTrust(authMode string, externalAccess bool, trusted []net.IPNet) error {
+	if len(trusted) == 0 || authMode == AuthModeAPIKey || externalAccess {
 		return nil
 	}
-	return fmt.Errorf("refusing trusted_proxies with Serve identity trust (auth-mode %s): a generic edge forwards client-supplied Tailscale-User-Login and the local-peer gate would trust it into admin — use -auth-mode api-key behind an edge, or drop trusted_proxies (see docs/external-access.md)", authMode)
+	return fmt.Errorf("refusing trusted_proxies with Serve identity trust (auth-mode %s): a generic edge forwards client-supplied Tailscale-User-Login and the local-peer gate would trust it into admin — use -auth-mode api-key or -external-access behind an edge, or drop trusted_proxies (see docs/external-access.md)", authMode)
 }
 
 // validateAuthCredentials checks auth-mode and the agent/admin key split

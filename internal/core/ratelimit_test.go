@@ -234,17 +234,22 @@ func TestValidateEdgeTrust(t *testing.T) {
 	}
 	// A generic edge plus Serve identity trust is admin takeover via a
 	// forged Tailscale-User-Login header.
-	if err := validateEdgeTrust(AuthModeAuto, trusted); err == nil {
+	if err := validateEdgeTrust(AuthModeAuto, false, trusted); err == nil {
 		t.Fatal("trusted_proxies + Serve trust must refuse startup")
 	}
-	if err := validateEdgeTrust(AuthModeTailnet, trusted); err == nil {
+	if err := validateEdgeTrust(AuthModeTailnet, false, trusted); err == nil {
 		t.Fatal("trusted_proxies + tailnet Serve trust must refuse startup")
 	}
 	// api-key mode resolves no ambient identity — safe behind an edge.
-	if err := validateEdgeTrust(AuthModeAPIKey, trusted); err != nil {
+	if err := validateEdgeTrust(AuthModeAPIKey, false, trusted); err != nil {
 		t.Fatalf("api-key mode must allow the edge: %v", err)
 	}
-	if err := validateEdgeTrust(AuthModeAuto, nil); err != nil {
+	// -external-access: the published listener resolves no ambient
+	// identity and the admin listener is tailnet-bound — safe behind an edge.
+	if err := validateEdgeTrust(AuthModeAuto, true, trusted); err != nil {
+		t.Fatalf("external access must allow the edge: %v", err)
+	}
+	if err := validateEdgeTrust(AuthModeAuto, false, nil); err != nil {
 		t.Fatalf("no trusted proxies: %v", err)
 	}
 }

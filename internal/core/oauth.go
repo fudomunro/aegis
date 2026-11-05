@@ -45,7 +45,7 @@ func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 	// service id so existing per-surface callback URIs remain valid.
 	s.oauthStates.Set(serviceID+":"+state, true, 10*time.Minute)
 
-	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURL, "/"), serviceID)
+	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURLFor(r), "/"), serviceID)
 	scopes := s.config.loginScopes(connectionID)
 
 	params := url.Values{
@@ -111,7 +111,7 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURL, "/"), serviceID)
+	callbackURL := fmt.Sprintf("%s/v1/auth/%s/callback", strings.TrimRight(s.baseURLFor(r), "/"), serviceID)
 
 	tok, err := s.exchangeCode(conn.toOAuth(), code, callbackURL)
 	if err != nil {
