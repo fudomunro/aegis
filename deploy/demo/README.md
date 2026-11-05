@@ -36,7 +36,7 @@ in both nginx configs; see the exception note above).
 |------|---------|
 | `/opt/aegis-demo/aegis` | linux/amd64 binary (`-demo` capable) |
 | `/etc/aegis-demo/aegis.json` | sample:// library services + datasets |
-| `/etc/aegis-demo/env` | `AEGIS_TOKEN_PASS`, `AEGIS_ADMIN_API_KEY` (0600) |
+| `/etc/aegis-demo/env` | `AEGIS_TOKEN_PASS`, `AEGIS_ADMIN_API_KEY` (0600) — the admin key must be **≥ 32 characters** (it is the public perimeter; short keys are refused at startup) |
 | `/var/lib/aegis-demo/data_scopes.json` | persona API keys (0640) — **under the data dir** |
 | `/var/lib/aegis-demo/data_grants.json` | places/documents/messages read |
 | `/var/lib/aegis-demo/mail-archive.db` | seeded LotR mail |

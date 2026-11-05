@@ -904,7 +904,9 @@ Two `aegis.json` fields harden a published API listener
   `tailnet` auth mode), a non-empty list also refuses startup: a generic
   edge forwards client-supplied `Tailscale-User-Login`, which the
   local-peer gate would trust into admin (see
-  [external-access.md](external-access.md)).
+  [external-access.md](external-access.md)). Behind a trusted edge,
+  `api-key` / `admin-api-key` must also be at least **32 characters** —
+  those keys are the perimeter and the rate caps only slow guessing.
 - `client_ip_header` selects which forwarded header carries the client
   address from a trusted proxy: `x-forwarded-for` (default) or
   `x-real-ip`. **Exactly one header is read** — never a fallback chain —

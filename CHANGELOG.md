@@ -5,6 +5,22 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Fixed
+
+- **Hardening follow-ups from the external-access security review (issue
+  #253).** Weak operator-chosen credentials are refused behind a trusted
+  edge (`api-key` / `admin-api-key` must be ≥ 32 characters — on a
+  published listener those keys are the perimeter and the rate caps only
+  slow guessing). Rate-limit counters evict in batches (~10% of the key
+  cap per pass) instead of one entry per insert. 429s coalesce to **one
+  audit row per key per window** (every damp still bumps the metrics
+  counter) so a flood cannot wash real evidence out of `audit_log.db`.
+  Failed-authentication counting now ignores credential-less 401s
+  ("tailnet identity required", probes) — only presented-credential
+  failures are guesswork. Deny logs carry both the raw peer and the
+  resolved `client_ip`; `client_ip` is flagged as personal data in the
+  observability docs; the fixed-window 2x burst is documented as accepted.
+
 ### Added
 
 - **External-access hardening (issue #253, phase 4).** The last contract
