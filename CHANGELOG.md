@@ -7,6 +7,12 @@ issue numbers; this file is where that context lives.
 
 ### Fixed
 
+- **Denial audit rows now carry `client_ip`.** Auth denials (`denyStatus`)
+  and service-proxy denials recorded through `recordAccess` directly, which
+  skipped the trusted-proxy client-IP fill that `recordAccessFrom` applies —
+  so `reason=auth` / proxy denial rows had an empty `client_ip` column while
+  every other request-path row resolved it. All five call sites fill it now.
+
 - **Hardening follow-ups from the external-access security review (issue
   #253).** Weak operator-chosen credentials are refused behind a trusted
   edge (`api-key` / `admin-api-key` must be ≥ 32 characters — on a

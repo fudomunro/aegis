@@ -458,3 +458,49 @@ func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 		t.Fatalf("agent = %q", rows[0].Agent)
 	}
 }
+
+func TestDenyAuditRows_CarryClientIP(t *testing.T) {
+	a, err := OpenAuditLog(filepath.Join(t.TempDir(), "audit.db"), 30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer a.Close()
+	srv := testServerWithBase(&Config{Services: []Service{
+		{ID: "sample", Name: "Sample", Action: "inject", Endpoint: "sample://library"},
+	}}, "https://aegis.example.com")
+	srv.audit = a
+
+	// Auth denial: bad credential, resolved client IP must land on the row.
+	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
+	req.RemoteAddr = "203.0.113.44:41000"
+	req.Header.Set("X-Api-Key", "wrong-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d", w.Code)
+	}
+
+	// Proxy denial: not a content path (audited — unlike the "unknown
+	// service" 404, which must not leak existence).
+	req = httptest.NewRequest(http.MethodPost, "/v1/services/sample/me/player", nil)
+	req.RemoteAddr = "203.0.113.44:41000"
+	req.Header.Set("X-Api-Key", "test-key")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleServiceProxy)(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("proxy status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	rows, err := a.List(AuditFilter{Limit: 10})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("rows = %d, want 2: %+v", len(rows), rows)
+	}
+	for _, row := range rows {
+		if row.ClientIP != "203.0.113.44" {
+			t.Fatalf("deny row missing client_ip: %+v", row)
+		}
+	}
+}
