@@ -18,6 +18,15 @@ func TestRateLimitConfig_Effective(t *testing.T) {
 	if custom.perMinute != 5 || custom.failPerIP != 0 || custom.window != time.Minute {
 		t.Fatalf("custom = %+v", custom)
 	}
+	// Negative window disables the failure caps — it must not mean
+	// "never expires" (a permanent lockout).
+	noFailCaps := RateLimitConfig{WindowSeconds: -1}.effective()
+	if noFailCaps.failPerIP != 0 || noFailCaps.failPerToken != 0 {
+		t.Fatalf("negative window must disable failure caps: %+v", noFailCaps)
+	}
+	if noFailCaps.window <= 0 {
+		t.Fatalf("negative window must not yield a never-expiring window: %+v", noFailCaps)
+	}
 }
 
 func TestRateLimiter_HitAndFailureCaps(t *testing.T) {
@@ -145,5 +154,96 @@ func TestAuthBruteForce_LocksOutTokenAcrossIPs(t *testing.T) {
 	h(w, req)
 	if w.Code != http.StatusTooManyRequests {
 		t.Fatalf("locked-out token from fresh IP = %d, want 429", w.Code)
+	}
+}
+
+func TestAuthBruteForce_SkipsPerIPForLoopbackEdge(t *testing.T) {
+	// Same-host edge (no trusted_proxies): every caller shares one bucket,
+	// so per-IP caps are skipped — one attacker must not lock out the host.
+	srv := testServerWithBase(&Config{
+		RateLimits: RateLimitConfig{AuthFailuresPerIP: 3, AuthFailuresPerToken: -1, WindowSeconds: 60},
+	}, "https://aegis.example.com")
+	srv.rl = newRateLimiter()
+	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	for i := 0; i < 6; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+		req.RemoteAddr = "127.0.0.1:52000"
+		req.Header.Set("X-Api-Key", fmt.Sprintf("wrong-key-%d", i))
+		w := httptest.NewRecorder()
+		h(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d = %d, want 401 (loopback edge must not per-IP lock out)", i, w.Code)
+		}
+	}
+}
+
+func TestAuthBruteForce_TailnetIdentityExempt(t *testing.T) {
+	// Resolved ambient identity is not a guessable credential: 401s from a
+	// disallowed tailnet login must not burn the lockout budget.
+	srv := testServerWithBase(&Config{
+		RateLimits: RateLimitConfig{AuthFailuresPerIP: 3, AuthFailuresPerToken: -1, WindowSeconds: 60},
+	}, "https://aegis.example.com")
+	srv.rl = newRateLimiter()
+	srv.authMode = AuthModeTailnet
+	srv.allowedLogins = []string{"alice@example.com"}
+	srv.identity = fakeIdentity{login: "bob@example.com"}
+	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	for i := 0; i < 6; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
+		w := httptest.NewRecorder()
+		h(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("failure %d = %d, want 401 (tailnet identity must not lock out)", i, w.Code)
+		}
+	}
+}
+
+func TestAdminBruteForce_LocksOutIP(t *testing.T) {
+	// Admin credential guessing gets the same damping as agent auth
+	// (the admin key is the most valuable credential).
+	srv := testServerWithBase(&Config{
+		RateLimits: RateLimitConfig{AuthFailuresPerIP: 3, AuthFailuresPerToken: -1, WindowSeconds: 60},
+	}, "https://aegis.example.com")
+	srv.rl = newRateLimiter()
+	h := srv.AdminMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
+
+	attempt := func(key string) int {
+		req := httptest.NewRequest(http.MethodGet, "/v1/admin/summary", nil)
+		req.Header.Set("X-Api-Key", key)
+		w := httptest.NewRecorder()
+		h(w, req)
+		return w.Code
+	}
+	for i := 0; i < 3; i++ {
+		if got := attempt(fmt.Sprintf("wrong-admin-%d", i)); got != http.StatusUnauthorized {
+			t.Fatalf("failure %d = %d, want 401", i, got)
+		}
+	}
+	if got := attempt("test-key"); got != http.StatusTooManyRequests {
+		t.Fatalf("locked-out IP on admin = %d, want 429", got)
+	}
+}
+
+func TestValidateEdgeTrust(t *testing.T) {
+	trusted, err := compileTrustedProxies([]string{"127.0.0.1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A generic edge plus Serve identity trust is admin takeover via a
+	// forged Tailscale-User-Login header.
+	if err := validateEdgeTrust(AuthModeAuto, trusted); err == nil {
+		t.Fatal("trusted_proxies + Serve trust must refuse startup")
+	}
+	if err := validateEdgeTrust(AuthModeTailnet, trusted); err == nil {
+		t.Fatal("trusted_proxies + tailnet Serve trust must refuse startup")
+	}
+	// api-key mode resolves no ambient identity — safe behind an edge.
+	if err := validateEdgeTrust(AuthModeAPIKey, trusted); err != nil {
+		t.Fatalf("api-key mode must allow the edge: %v", err)
+	}
+	if err := validateEdgeTrust(AuthModeAuto, nil); err != nil {
+		t.Fatalf("no trusted proxies: %v", err)
 	}
 }

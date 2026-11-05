@@ -434,7 +434,7 @@ func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 	srv := &Server{
 		metrics: NewAccessMetrics(8),
 		audit:   a,
-		config:  &Config{TrustedProxies: []string{"127.0.0.1"}},
+		config:  &Config{TrustedProxies: []string{"127.0.0.1"}, ClientIPHeader: "x-real-ip"},
 	}
 	if err := validateConfig(srv.config); err != nil {
 		t.Fatal(err)

@@ -12,6 +12,15 @@ import (
 // proxy — otherwise they are client-controlled forgery. RemoteAddr is the
 // accepted connection's address and cannot be forged.
 
+// Forwarded-header choices for trusted-proxy client-IP resolution. Exactly
+// one header is consulted (never a fallback chain): an edge that only
+// appends X-Forwarded-For passes client-supplied X-Real-IP through
+// unchanged, so consulting both makes the resolved IP forgeable.
+const (
+	ClientIPHeaderXFF     = "x-forwarded-for"
+	ClientIPHeaderXRealIP = "x-real-ip"
+)
+
 // compileTrustedProxies parses config entries (CIDR or single IP) into nets.
 // An empty list means forwarded headers are never trusted.
 func compileTrustedProxies(entries []string) ([]net.IPNet, error) {
@@ -45,10 +54,25 @@ func compileTrustedProxies(entries []string) ([]net.IPNet, error) {
 	return out, nil
 }
 
+// compileClientIPHeader validates the configured forwarded header. Empty
+// defaults to X-Forwarded-For.
+func compileClientIPHeader(header string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(header)) {
+	case "", ClientIPHeaderXFF:
+		return ClientIPHeaderXFF, nil
+	case ClientIPHeaderXRealIP:
+		return ClientIPHeaderXRealIP, nil
+	default:
+		return "", fmt.Errorf("client_ip_header: %q is not %q or %q", header, ClientIPHeaderXFF, ClientIPHeaderXRealIP)
+	}
+}
+
 // clientIP returns the request's client address (host only). Without trusted
-// proxies this is always the peer address; forwarded headers count only when
-// the peer is one of the configured proxies.
-func clientIP(r *http.Request, trusted []net.IPNet) string {
+// proxies this is always the peer address. With them, exactly one forwarded
+// header is read — whichever the edge is configured to overwrite — and a
+// missing or invalid value falls back to the peer, never to the other
+// header.
+func clientIP(r *http.Request, trusted []net.IPNet, header string) string {
 	if r == nil {
 		return ""
 	}
@@ -56,12 +80,16 @@ func clientIP(r *http.Request, trusted []net.IPNet) string {
 	if len(trusted) == 0 || !ipInNets(peer, trusted) {
 		return peer
 	}
-	// Demo nginx sets X-Real-IP; generic edges use X-Forwarded-For. Walk XFF
-	// right to left and stop at the first hop that is not a trusted proxy:
-	// everything left of that is client-controlled padding.
-	if host := hostOf(r.Header.Get("X-Real-IP")); host != "" && net.ParseIP(host) != nil {
-		return host
+	if header == ClientIPHeaderXRealIP {
+		if host := hostOf(r.Header.Get("X-Real-IP")); host != "" && net.ParseIP(host) != nil {
+			return host
+		}
+		return peer
 	}
+	// X-Forwarded-For: walk right to left and stop at the first hop that is
+	// not a trusted proxy — everything left of that is client-controlled
+	// padding. Demo nginx sets X-Real-IP instead; operators behind such an
+	// edge set client_ip_header to x-real-ip.
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		parts := strings.Split(xff, ",")
 		for i := len(parts) - 1; i >= 0; i-- {
@@ -114,4 +142,29 @@ func ipInNets(host string, nets []net.IPNet) bool {
 		}
 	}
 	return false
+}
+
+// ipBucket reduces a client address to its rate-limit key (issue #253).
+// IPv6 rotates per-device within a /64 (privacy extensions), so per-address
+// keys would make the caps meaningless — bucket the whole /64. IPv4 keys
+// stay per-address.
+func ipBucket(host string) string {
+	ip := net.ParseIP(host)
+	if ip == nil {
+		return host
+	}
+	if ip.To4() != nil {
+		return host
+	}
+	masked := ip.Mask(net.CIDRMask(64, 128))
+	if masked == nil {
+		return host
+	}
+	return masked.String() + "/64"
+}
+
+// isLoopbackHost reports whether a resolved client address is loopback.
+func isLoopbackHost(host string) bool {
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }

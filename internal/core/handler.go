@@ -313,6 +313,12 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	// identity from explicit admin API-key credentials (issue #182).
 	next = s.csrfGuard(next)
 	return func(w http.ResponseWriter, r *http.Request) {
+		// Brute-force damping (issue #253): the admin key is the most
+		// valuable credential and gets the same failure caps as agent auth.
+		if s.authLockedOut(r) {
+			s.rateLimited(w, r)
+			return
+		}
 		if app := s.authenticateApp(r); app != nil {
 			s.denyStatus(w, r, nil, http.StatusForbidden, "app token not permitted on admin endpoints")
 			return
@@ -528,7 +534,8 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 		s.recordHook(HookObservation{Action: "auth_fail", Host: requestHost(r)})
 	}
 	// Failed authentication counts against the brute-force caps (issue #253).
-	if status == http.StatusUnauthorized {
+	// Denials that came with a resolved tailnet identity are not guesses.
+	if status == http.StatusUnauthorized && id == nil {
 		s.recordAuthFailure(r)
 	}
 	// Durable auth denials (issue #105). Route family only — never the full path.

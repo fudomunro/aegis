@@ -59,7 +59,10 @@ func (c RateLimitConfig) effective() rateLimits {
 	if c.WindowSeconds > 0 {
 		out.window = time.Duration(c.WindowSeconds) * time.Second
 	} else if c.WindowSeconds < 0 {
-		out.window = 0
+		// Negative window disables the failure caps entirely (a zero
+		// window would mean "never expires" — a permanent lockout).
+		out.failPerIP = 0
+		out.failPerToken = 0
 	}
 	if c.AuthPerMinute != 0 {
 		out.perMinute = c.AuthPerMinute
@@ -207,8 +210,8 @@ func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 func (s *Server) rateLimitAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		lim := s.rateLimitPolicy()
-		if lim.perMinute > 0 && s.rl != nil {
-			if !s.rl.hit("route:"+s.clientIPFor(r), lim.perMinute, time.Minute) {
+		if lim.perMinute > 0 && s.rl != nil && !s.skipPerIPLimits(r) {
+			if !s.rl.hit("route:"+ipBucket(s.clientIPFor(r)), lim.perMinute, time.Minute) {
 				s.rateLimited(w, r)
 				return
 			}
@@ -226,26 +229,51 @@ func (s *Server) rateLimitPolicy() rateLimits {
 }
 
 // clientIPFor resolves the request's client address under the configured
-// trusted-proxy list.
+// trusted-proxy list and forwarded header.
 func (s *Server) clientIPFor(r *http.Request) string {
 	var trusted []net.IPNet
+	header := ClientIPHeaderXFF
 	if s != nil && s.config != nil {
 		trusted = s.config.trustedNets()
+		if h := s.config.clientIPHeader(); h != "" {
+			header = h
+		}
 	}
-	return clientIP(r, trusted)
+	return clientIP(r, trusted, header)
+}
+
+// skipPerIPLimits reports whether per-IP caps would be meaningless for this
+// request (issue #253): a loopback peer with no trusted proxies is a
+// same-host edge (tailscale serve / local nginx), so every caller shares one
+// bucket — locking that bucket out would take down the whole deployment
+// instead of damping one attacker. Per-token caps still apply.
+func (s *Server) skipPerIPLimits(r *http.Request) bool {
+	if s == nil || s.config == nil {
+		return true
+	}
+	if len(s.config.trustedNets()) > 0 {
+		return false
+	}
+	return isLoopbackHost(remoteHost(r.RemoteAddr))
 }
 
 // authLockedOut reports whether this request must be damped before any
 // credential work: the client IP or the presented credential has exceeded
-// its failure cap.
+// its failure cap. Requests that resolved a tailnet identity are exempt —
+// ambient identity is not a guessable credential, so damping it only locks
+// out honest tailnet callers sharing an IP bucket.
 func (s *Server) authLockedOut(r *http.Request) bool {
 	if s == nil || s.rl == nil {
 		return false
 	}
+	if id, _ := s.resolveIdentity(r); id != nil {
+		return false
+	}
 	lim := s.rateLimitPolicy()
-	ipKey := "ip:" + s.clientIPFor(r)
-	if s.rl.locked(ipKey, lim.failPerIP, lim.window) {
-		return true
+	if !s.skipPerIPLimits(r) {
+		if s.rl.locked("ip:"+ipBucket(s.clientIPFor(r)), lim.failPerIP, lim.window) {
+			return true
+		}
 	}
 	if key := presentedAPIKey(r); key != "" {
 		return s.rl.locked(tokenFailKey(key), lim.failPerToken, lim.window)
@@ -254,13 +282,16 @@ func (s *Server) authLockedOut(r *http.Request) bool {
 }
 
 // recordAuthFailure counts one failed authentication against the client IP
-// and, when a credential was presented, its hash.
+// and, when a credential was presented, its hash. Callers skip counting for
+// denials that came with a resolved tailnet identity (not guesswork).
 func (s *Server) recordAuthFailure(r *http.Request) {
 	if s == nil || s.rl == nil {
 		return
 	}
 	lim := s.rateLimitPolicy()
-	s.rl.recordFailure("ip:"+s.clientIPFor(r), lim.failPerIP, lim.window)
+	if !s.skipPerIPLimits(r) {
+		s.rl.recordFailure("ip:"+ipBucket(s.clientIPFor(r)), lim.failPerIP, lim.window)
+	}
 	if key := presentedAPIKey(r); key != "" {
 		s.rl.recordFailure(tokenFailKey(key), lim.failPerToken, lim.window)
 	}

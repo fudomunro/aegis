@@ -230,6 +230,13 @@ func Run() {
 		slog.Error("failed to load config", "path", paths.Config, "error", err)
 		os.Exit(1)
 	}
+	if err := validateEdgeTrust(*authMode, cfg.trustedNets()); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+	if len(cfg.trustedNets()) == 0 {
+		slog.Warn("trusted_proxies is empty — per-IP rate limits key on the peer address and are skipped for loopback peers (a same-host edge would share one bucket); set trusted_proxies when Aegis sits behind a reverse proxy")
+	}
 	if err := cfg.InitDataGrantsStore(paths.DataGrants); err != nil {
 		slog.Error("failed to load data grants overlay", "path", paths.DataGrants, "error", err)
 		os.Exit(1)
@@ -713,6 +720,22 @@ func validateListenAddr(addr, authMode string) error {
 		return nil
 	}
 	return fmt.Errorf("refusing -addr %q: with Serve identity trust (auth-mode %s) a non-loopback bind would accept forged Tailscale identity headers from the LAN — bind 127.0.0.1 and front with `tailscale serve`, bind the Tailscale IP, or use -auth-mode api-key", addr, authMode)
+}
+
+// validateEdgeTrust refuses a generic-edge deployment whose edge can forge
+// Serve identity headers into the listener (issue #253). trusted_proxies
+// means a non-Tailscale edge (nginx, Caddy, a tunnel) is in front: those
+// pass client-supplied Tailscale-User-Login straight through, while the
+// local-peer gate still trusts the loopback hop — one forged header is full
+// admin under the default admin rule. Only api-key mode (no ambient
+// identity) is sound behind such an edge. When the listener split lands,
+// -external-access (tokens only on the published listener, admin stays
+// tailnet-bound) joins the safe set.
+func validateEdgeTrust(authMode string, trusted []net.IPNet) error {
+	if len(trusted) == 0 || authMode == AuthModeAPIKey {
+		return nil
+	}
+	return fmt.Errorf("refusing trusted_proxies with Serve identity trust (auth-mode %s): a generic edge forwards client-supplied Tailscale-User-Login and the local-peer gate would trust it into admin — use -auth-mode api-key behind an edge, or drop trusted_proxies (see docs/external-access.md)", authMode)
 }
 
 // validateAuthCredentials checks auth-mode and the agent/admin key split

@@ -222,14 +222,25 @@ TLS and forwards plain HTTP to Aegis bound to loopback (or a private
 interface) — the admin listener stays tailnet-side and is never published.
 
 1. **Terminate TLS at the edge** (nginx, Caddy, a tunnel). Point it at
-   Aegis's API listener (`-api-addr` / `-addr`); never publish the admin
-   listener (`-admin-addr`).
+   Aegis's API listener (`-addr`, or the split `-addr` + `-admin-addr`
+   layout where only `-addr` is published); never publish the admin
+   listener. **Startup refuses** `trusted_proxies` together with Serve
+   identity trust (auth modes `auto`/`tailnet`): a generic edge forwards
+   client-supplied `Tailscale-User-Login` straight through, so that
+   combination would be admin takeover. Behind an edge use
+   `-auth-mode api-key` (or the split's `-external-access`, tokens only on
+   the published listener).
 2. **Forward the client identity hop.** Configure `trusted_proxies` with
-   the edge's address so Aegis believes its forwarded headers:
+   the edge's address so Aegis believes its forwarded headers, and set
+   `client_ip_header` to whichever header your edge *overwrites*
+   (`x-forwarded-for` by default; `x-real-ip` for the demo nginx shape).
+   Aegis reads exactly one of the two — never a fallback chain, so a
+   client-supplied value in the other header cannot forge the client IP.
 
 ```json
 {
   "trusted_proxies": ["127.0.0.1/32"],
+  "client_ip_header": "x-real-ip",
   "rate_limits": {
     "auth_per_minute": 60,
     "auth_failures_per_ip": 10,
@@ -239,10 +250,11 @@ interface) — the admin listener stays tailnet-side and is never published.
 }
 ```
 
-3. **At the edge**, set `X-Real-IP` (or a correctly appended
-   `X-Forwarded-For`) on proxied requests, keep body limits, and add a
-   coarse request rate limit of your own — Aegis's caps damp credential
-   guessing; availability is still the edge's job.
+3. **At the edge**, set the chosen client-IP header on proxied requests,
+   **strip Tailscale identity headers** (defense in depth — the startup
+   refusal above is the real gate), publish only the API route set, keep
+   body limits, and add a coarse request rate limit of your own — Aegis's
+   caps damp credential guessing; availability is still the edge's job.
 
 nginx sketch (the demo host uses this shape):
 
@@ -252,18 +264,37 @@ server {
     server_name aegis.example.com;
     # ...certificates...
 
-    location /v1/ {
-        proxy_pass http://127.0.0.1:8080;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    }
+    # Only the API surface is published. The listener split's allowlist
+    # (pre-request hook, library reads, content transport, mail agent
+    # routes, auth/status, app token redeem, health) is the authority —
+    # keep the edge in front of the same set so admin routes never appear.
+    location /v1/pre-request   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /v1/library/      { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /v1/services/     { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /v1/mail/         { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /v1/auth/status   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /v1/apps/token    { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /v1/apps/revoke   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
+    location /healthz          { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
 }
+
+# aegis-proxy.conf
+# proxy_set_header X-Real-IP $remote_addr;
+# proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+# proxy_set_header Tailscale-User-Login "";
+# proxy_set_header Tailscale-User-Name "";
+# proxy_set_header Tailscale-User-Profile-Pic "";
+# proxy_set_header Tailscale-Identity "";
+# proxy_set_header Tailscale-User-Login "";
 ```
 
-Without `trusted_proxies`, Aegis ignores forwarded headers entirely —
-per-IP caps then key on the proxy's own address (a single global bucket).
-Never widen `trusted_proxies` past the actual edge addresses: any client
-that can reach Aegis *from* a listed address may forge its client IP.
+Without `trusted_proxies`, Aegis ignores forwarded headers entirely and
+**skips per-IP rate limits for loopback peers** (a same-host edge would put
+every caller in one bucket — one attacker could lock out the whole
+deployment, including valid credentials); per-token failure caps still
+apply. Never widen `trusted_proxies` past the actual edge addresses: any
+client that can reach Aegis *from* a listed address may forge its client
+IP.
 
 ## What does not change
 

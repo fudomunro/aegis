@@ -28,12 +28,18 @@ type Config struct {
 	// forwarded client-IP headers are believed (issue #253). Empty:
 	// RemoteAddr only — forwarded headers are never trusted.
 	TrustedProxies []string `json:"trusted_proxies,omitempty"`
+	// ClientIPHeader selects which forwarded header carries the client
+	// address from a trusted proxy: x-forwarded-for (default) or x-real-ip.
+	// Exactly one header is read — never a fallback chain.
+	ClientIPHeader string `json:"client_ip_header,omitempty"`
 	// RateLimits tunes brute-force damping on auth/token routes (issue #253).
 	RateLimits RateLimitConfig `json:"rate_limits,omitempty"`
 	// hookSkip holds compiled Hook.SkipPatterns (not serialized).
 	hookSkip hookSkip
 	// trustedProxyNets holds compiled TrustedProxies (not serialized).
 	trustedProxyNets []net.IPNet
+	// clientIPHeaderKey holds the compiled ClientIPHeader (not serialized).
+	clientIPHeaderKey string
 	path     string
 	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
 	// Admin data-grant saves always write here — never aegis.json.
@@ -195,6 +201,8 @@ func (c *Config) Reload() error {
 	c.TrustedProxies = fresh.TrustedProxies
 	c.RateLimits = fresh.RateLimits
 	c.trustedProxyNets = fresh.trustedProxyNets
+	c.ClientIPHeader = fresh.ClientIPHeader
+	c.clientIPHeaderKey = fresh.clientIPHeaderKey
 	c.typePolicies = c.DataGrantsBootstrap
 	if err := c.applyDataGrantsOverlayLocked(); err != nil {
 		return err
@@ -227,6 +235,11 @@ func validateConfig(cfg *Config) error {
 		return err
 	}
 	cfg.trustedProxyNets = nets
+	headerKey, err := compileClientIPHeader(cfg.ClientIPHeader)
+	if err != nil {
+		return err
+	}
+	cfg.clientIPHeaderKey = headerKey
 	for _, svc := range services {
 		if err := types.ValidatePermissions(svc.GrantLimits); err != nil {
 			return fmt.Errorf("service %q: %w", svc.ID, err)
@@ -422,6 +435,13 @@ func (c *Config) trustedNets() []net.IPNet {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return c.trustedProxyNets
+}
+
+// clientIPHeaderKey returns the compiled forwarded-header name (issue #253).
+func (c *Config) clientIPHeader() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.clientIPHeaderKey
 }
 
 // DataGrants returns a snapshot of the agent data-grant map.

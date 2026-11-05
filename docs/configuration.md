@@ -885,6 +885,7 @@ Two `aegis.json` fields harden a published API listener
 ```json
 {
   "trusted_proxies": ["127.0.0.1/32"],
+  "client_ip_header": "x-forwarded-for",
   "rate_limits": {
     "auth_per_minute": 60,
     "auth_failures_per_ip": 10,
@@ -894,12 +895,23 @@ Two `aegis.json` fields harden a published API listener
 }
 ```
 
-- `trusted_proxies` lists proxy addresses (IP or CIDR) whose
-  `X-Real-IP` / `X-Forwarded-For` headers are believed when resolving the
-  client IP for rate limits and audit. Empty (default): forwarded headers
-  are ignored and the peer address is used — never widen this past your
-  actual edge, since any client connecting *from* a listed address can
-  forge its client IP. Invalid entries refuse config load.
+- `trusted_proxies` lists proxy addresses (IP or CIDR) whose forwarded
+  headers are believed when resolving the client IP for rate limits and
+  audit. Empty (default): forwarded headers are ignored and the peer
+  address is used — never widen this past your actual edge, since any
+  client connecting *from* a listed address can forge its client IP.
+  Invalid entries refuse config load. With Serve identity trust (`auto` /
+  `tailnet` auth mode), a non-empty list also refuses startup: a generic
+  edge forwards client-supplied `Tailscale-User-Login`, which the
+  local-peer gate would trust into admin (see
+  [external-access.md](external-access.md)).
+- `client_ip_header` selects which forwarded header carries the client
+  address from a trusted proxy: `x-forwarded-for` (default) or
+  `x-real-ip`. **Exactly one header is read** — never a fallback chain —
+  because an edge that only appends `X-Forwarded-For` passes a
+  client-supplied `X-Real-IP` through unchanged. Set it to whichever
+  header your edge *overwrites* (the demo nginx sets `X-Real-IP`). The
+  XFF walk takes the rightmost hop that is not itself a trusted proxy.
 - `rate_limits` tunes brute-force damping on authentication and token
   routes (`/v1/apps/token`, `/v1/apps/authorize`, `/v1/apps/revoke`,
   `/v1/auth/*`) plus failed authentications everywhere:
@@ -907,9 +919,15 @@ Two `aegis.json` fields harden a published API listener
   `auth_failures_per_ip` and `auth_failures_per_token` lock out a client
   IP or one presented credential after that many failed authentications in
   `window_seconds`. Lockouts answer **429**. Zero fields use the defaults
-  shown; a **negative** value disables that cap. Fail-open by design: the
-  counters bound credential guessing, not availability (body caps and edge
-  rate limits cover volume).
+  shown; a **negative** value disables that cap (`window_seconds: -1`
+  disables both failure caps — it does not mean "no expiry"). Per-IP keys
+  bucket IPv6 by `/64` (per-address keys would be meaningless against
+  privacy-extension rotation) and are **skipped for loopback peers when
+  `trusted_proxies` is empty**, since a same-host edge would put every
+  caller in one bucket; requests that resolve a tailnet identity are
+  exempt from lockouts entirely. Fail-open by design: the counters bound
+  credential guessing, not availability (body caps and edge rate limits
+  cover volume).
 
 ### Demo mode (public synthetic instance)
 
