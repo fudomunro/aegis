@@ -14,6 +14,11 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
+const (
+	YouTubeMusicServiceID   = "youtube-music"
+	YouTubeMusicServiceName = "YouTube Music"
+)
+
 // YouTubeMusicConnector provides intelligent proxying for the YouTube Data API v3
 // focused on music-related content. It transforms verbose YouTube responses into
 // LLM-friendly formats and generates rich system instructions for agents.

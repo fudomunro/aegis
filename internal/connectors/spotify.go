@@ -14,6 +14,11 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
+const (
+	SpotifyServiceID   = "spotify"
+	SpotifyServiceName = "Spotify"
+)
+
 // SpotifyConnector provides intelligent proxying for the Spotify API.
 // It transforms verbose Spotify responses into LLM-friendly formats
 // and generates rich system instructions for agents.
