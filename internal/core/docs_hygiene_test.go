@@ -2,9 +2,14 @@ package core
 
 import (
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -14,7 +19,9 @@ import (
 
 // User-facing docs and admin UI copy must not cite GitHub issue numbers or
 // glossary-avoid synonyms (docs/glossary.md). Code comments may still cite
-// issues; history belongs in maintainer docs / CHANGELOG.
+// issues; history belongs in maintainer docs / CHANGELOG. The Go literal scan
+// below extends the same rule to error strings, flag help, log warnings and
+// other string literals that reach operators or the admin UI.
 
 var docsForbidden = []string{
 	"home copy",
@@ -137,6 +144,67 @@ func TestUserFacingDocs_NoIssueRefs(t *testing.T) {
 	}
 	if len(failures) > 0 {
 		t.Fatalf("user-facing docs must not cite issues (use CHANGELOG.md):\n%s",
+			strings.Join(failures, "\n"))
+	}
+}
+
+// TestGoStringLiterals_NoIssueRefs scans every string literal in non-test Go
+// sources. Error strings, flag help, slog warnings, UI labels, onboarding
+// hints and generated sample copy all reach operators or the admin UI, so
+// they follow the same rule as docs: no GitHub issue refs outside comments.
+// (Run.go flag help and service-connection save errors are the regressions
+// this catches; keep those out of literals.)
+func TestGoStringLiterals_NoIssueRefs(t *testing.T) {
+	root := repoRoot(t)
+	goLiteralIssueRefRe := regexp.MustCompile(`(?i)\bissues?\s*#`)
+	fset := token.NewFileSet()
+	var failures []string
+	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		name := d.Name()
+		if d.IsDir() {
+			if name == ".git" || name == "testdata" || strings.HasPrefix(name, ".") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+			return nil
+		}
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return relErr
+		}
+		f, perr := parser.ParseFile(fset, path, nil, 0)
+		if perr != nil {
+			failures = append(failures, rel+": parse error: "+perr.Error())
+			return nil
+		}
+		ast.Inspect(f, func(n ast.Node) bool {
+			lit, ok := n.(*ast.BasicLit)
+			if !ok || lit.Kind != token.STRING {
+				return true
+			}
+			s, uerr := strconv.Unquote(lit.Value)
+			if uerr != nil {
+				return true
+			}
+			if loc := goLiteralIssueRefRe.FindString(s); loc != "" {
+				pos := fset.Position(lit.Pos())
+				failures = append(failures,
+					fmt.Sprintf("%s:%d: string literal cites %q: %s", rel, pos.Line, loc, truncateForTest(s, 120)))
+			}
+			return true
+		})
+		return nil
+	})
+	if walkErr != nil {
+		t.Fatalf("walk %s: %v", root, walkErr)
+	}
+	if len(failures) > 0 {
+		t.Fatalf("Go string literals must not cite issues (comments and CHANGELOG.md only):\n%s",
 			strings.Join(failures, "\n"))
 	}
 }

@@ -1,6 +1,10 @@
 # Binaries
 aegis
+/aegis.bak*
 *.exe
+
+# Coding-agent session state
+.mimocode/
 
 # Local live-test / runtime state (never commit; prefer OS data dir)
 # See AGENTS.md "Secrets stay out of git" and "Local state layout".
@@ -9,6 +13,7 @@ tokens.json
 entity_links.json
 data_grants.json
 apps.json
+data_scopes.json
 service_connections.json
 user_types.json
 user-types/
@@ -20,6 +25,8 @@ quicken.db
 timeline.db
 signal.db
 audit_log.db
+search-index.db
+maintenance/
 .aegis-token-pass
 logs/
 *.log

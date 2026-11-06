@@ -282,8 +282,9 @@ func (p *PromMetrics) promText() string {
 		"Seconds since process start.")
 	fmt.Fprintf(&b, "aegis_process_uptime_seconds %g\n", time.Since(p.start).Seconds())
 
+	// Help text is the /metrics surface operators read (attribution: issue #86).
 	writeMeta(&b, "aegis_build_info", "gauge",
-		"Build version and commit of the running binary (issue #86 signal attribution).")
+		"Build version and commit of the running binary.")
 	fmt.Fprintf(&b, "aegis_build_info{version=%q,commit=%q} 1\n", Version, Commit)
 
 	writeMeta(&b, "aegis_hook_outcomes_total", "counter",

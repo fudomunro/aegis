@@ -376,7 +376,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		}
 		if len(svc.CanonicalFor) > 0 {
 			node.Notes = append(node.Notes,
-				"Configured canonical for "+strings.Join(svc.CanonicalFor, ", ")+" (issue #16)")
+				"Configured canonical for "+strings.Join(svc.CanonicalFor, ", "))
 		}
 
 		if !strings.EqualFold(svc.Action, "block") {

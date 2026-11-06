@@ -247,7 +247,7 @@ func (c *Config) saveServiceHeadersLocked(id string, headers map[string]string) 
 		return c.secrets.DeleteSecret(key)
 	}
 	if c.secrets == nil {
-		return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
+		return fmt.Errorf("encrypted token store is required to save static credentials")
 	}
 	raw, err := json.Marshal(headers)
 	if err != nil {
@@ -433,7 +433,7 @@ func (c *Config) SetServiceConnection(id string, entry serviceConnectionEntry) e
 	}
 	if entry.Headers != nil {
 		if c.secrets == nil {
-			return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
+			return fmt.Errorf("encrypted token store is required to save static credentials")
 		}
 		if merged.Headers == nil {
 			merged.Headers = map[string]string{}
@@ -579,7 +579,7 @@ func (c *Config) SetTailscaleAdmin(entry tailscaleAdminEntry) error {
 	c.tailscaleAdmin = &merged
 
 	if c.secrets == nil && merged.APIKey != "" {
-		return fmt.Errorf("encrypted token store is required to save static credentials (issue #184)")
+		return fmt.Errorf("encrypted token store is required to save static credentials")
 	}
 	if c.secrets != nil {
 		// Secret first, entry second — same deliberate order as
