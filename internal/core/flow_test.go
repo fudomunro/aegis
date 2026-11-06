@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -563,5 +564,55 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 	}
 	if !strings.Contains(body, "truncateMapLabel") {
 		t.Fatal("expected agent label truncation")
+	}
+}
+
+// placesDocumentsConnector is a stub implementing exactly the provider
+// interfaces of the two kinds a hardcoded kind switch once dropped (issue #254).
+type placesDocumentsConnector struct {
+	stubConnector
+}
+
+func (placesDocumentsConnector) ListUserPlaceVisits(context.Context) ([]types.PlaceVisit, bool, error) {
+	return nil, false, nil
+}
+
+func (placesDocumentsConnector) ListUserDocuments(context.Context) ([]types.Document, bool, error) {
+	return nil, false, nil
+}
+
+func (placesDocumentsConnector) FetchDocumentText(context.Context, string) (string, bool, error) {
+	return "", false, nil
+}
+
+// TestFlowProvidesKind_CoversEveryProviderKind pins registry-driven
+// dispatch. The pre-#254 hardcoded switch in flowProvidesKind silently
+// dropped places and documents from the flow map's per-service kind list.
+func TestFlowProvidesKind_CoversEveryProviderKind(t *testing.T) {
+	conn := placesDocumentsConnector{}
+	for _, kind := range []string{"places", "documents"} {
+		if !flowProvidesKind(conn, kind) {
+			t.Errorf("flowProvidesKind(conn, %q) = false, want true", kind)
+		}
+	}
+	if flowProvidesKind(conn, "tracks") {
+		t.Error(`flowProvidesKind(conn, "tracks") = true, want false`)
+	}
+}
+
+// TestFlowProvidesKind_AgreesWithKindRuntime keeps the per-connector check
+// and the any-connector check in step: a kind one connector provides must
+// report providers for a server holding it.
+func TestFlowProvidesKind_AgreesWithKindRuntime(t *testing.T) {
+	conn := placesDocumentsConnector{}
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.connectors["stub"] = conn
+	for id, rt := range kindRuntime {
+		if rt.Provides == nil || rt.HasProviders == nil {
+			t.Fatalf("kind %q missing Provides/HasProviders", id)
+		}
+		if rt.Provides(conn) && !rt.HasProviders(srv) {
+			t.Errorf("kind %q: Provides(conn)=true but HasProviders(srv)=false", id)
+		}
 	}
 }

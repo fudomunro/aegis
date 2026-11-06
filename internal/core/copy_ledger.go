@@ -185,15 +185,14 @@ func (c *CopyLedger) DB() *sql.DB {
 	return c.db
 }
 
-// copySyncModeForKind picks the default fidelity (issue #76). Mail-like
-// kinds use optimistic snapshot watermarks; discrete objects use full.
+// copySyncModeForKind picks the default fidelity (issue #76). Kinds that
+// declare OptimisticCopies (mail-like streams) use snapshot watermarks;
+// discrete objects use full. The mode is type data (issue #254).
 func copySyncModeForKind(kind string) string {
-	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "messages", "mail", "message":
+	if k := LibraryKindByID(strings.TrimSpace(kind)); k != nil && k.OptimisticCopies {
 		return CopySyncModeOptimistic
-	default:
-		return CopySyncModeFull
 	}
+	return CopySyncModeFull
 }
 
 // normalizeCopyRecord fills defaults so callers can pass partial input.

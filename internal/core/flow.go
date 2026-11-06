@@ -705,36 +705,10 @@ func staticCredentialLabel(svc Service) string {
 	return ""
 }
 
+// flowProvidesKind reports whether the connector feeds the named library
+// kind. Dispatch is registry-driven (kindRuntime.Provides) so a new kind
+// cannot silently drop out of the flow map (issue #254).
 func flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
-	switch kindID {
-	case "playlists":
-		_, ok := connector.(types.PlaylistProvider)
-		return ok
-	case "tracks":
-		_, ok := connector.(types.LikedTrackProvider)
-		return ok
-	case "albums":
-		_, ok := connector.(types.AlbumProvider)
-		return ok
-	case "artists":
-		_, ok := connector.(types.ArtistProvider)
-		return ok
-	case "contacts":
-		_, ok := connector.(types.ContactProvider)
-		return ok
-	case "photos":
-		_, ok := connector.(types.PhotoProvider)
-		return ok
-	case "events":
-		_, ok := connector.(types.CalendarEventProvider)
-		return ok
-	case "messages":
-		_, ok := connector.(types.MessageProvider)
-		return ok
-	case "transactions":
-		_, ok := connector.(types.TransactionProvider)
-		return ok
-	default:
-		return false
-	}
+	rt, ok := kindRuntime[kindID]
+	return ok && rt.Provides != nil && rt.Provides(connector)
 }
