@@ -228,14 +228,15 @@ or `serviceProvidedTypes`.
     CanonicalAllowed: true,  // may appear in canonical_for
     AllowedLevels:    nil,   // optional: []string{types.AccessSummary, …}
     DefaultNone:      false, // true = opt-in like places (issue #142)
+    OptimisticCopies:  false, // true = copy ledger uses snapshot watermarks (mail-like streams, issue #76)
+    ExtraInstructions: "",    // kind-specific agent copy; "{root}" expands to the instance base URL (issue #254)
     Search:           &types.SearchSpec{Fields: []string{"name"}, TitleField: "name"}, // nil = no q= support
 },
 
 // kindRuntime (core-owned visibility predicates):
-"widgets": {
-    HasProviders: func(s *Server) bool { return s.hasProvider[WidgetProvider]() },
-    Readable:     func(s *Server) bool { return s.libraryReadableFor("widgets") },
-},
+"widgets": newKindRuntime[WidgetProvider]("widgets"),
+// Override HasProviders only when a local store can feed the kind with no
+// connector (mail archive / Timeline pattern); keep Provides as built.
 ```
 
 Field guidance:
@@ -251,12 +252,15 @@ Field guidance:
 | `CanonicalAllowed` | `true` when services can be the home copy for this kind |
 | `AllowedLevels` | Type-scoped redaction levels this kind can enforce (`AccessFreeBusy`, `AccessSummary`, `AccessCity`, `AccessPrecise`, `AccessMetadata`). Leave empty for none/read/write/read-write only. |
 | `DefaultNone` | `true` when the type stays hidden until a data grant names it (places pattern) |
+| `OptimisticCopies` | `true` for mail-like streams whose copy ledger tracks snapshot watermarks rather than per-object sync (issue #76) |
+| `ExtraInstructions` | Kind-specific agent copy appended to the system-message hint (issue #254). Carries its own leading separator (space or newline); `{root}` expands to the instance base URL. Keep per-kind copy here — core's `libraryInstructionsFor` does not branch on kind IDs. |
 | `Search` | `&types.SearchSpec` naming the neutral JSON fields `q=` full-text indexes (issue #178). Declare user-visible text only — identity/transport keys (`id`, `sources`, `entity_id`, …) are never indexed. Kinds with `AllowedLevels` must also set `libraryKindSpec.redactSearch` so index-hydrated hits re-apply fetch-time redaction. Nil means `q` is rejected. |
-| `kindRuntime` row | Wire `HasProviders` to `hasProvider[P]` and `Readable` to `libraryReadableFor` — do not hand-roll; keep IDs in sync with `types.BuiltinLibraryKinds` |
+| `kindRuntime` row | Use the generic `newKindRuntime` constructor, passing the provider interface as its type parameter and the kind ID as its argument. It wires `Provides` (the per-connector provider-interface check the flow map uses) together with `HasProviders` and `Readable`. Do not hand-roll; keep IDs in sync with `types.BuiltinLibraryKinds`. |
 
-`LibraryKind.Instructions` automatically adds truncated-flag wording and the
-canonical-source hint. `libraryInstructionsFor` appends the multi-source
-mutation rule. Do not duplicate those strings per kind.
+`LibraryKind.Instructions` automatically adds truncated-flag wording,
+`ExtraInstructions`, and the canonical-source hint. `libraryInstructionsFor`
+appends the multi-source mutation rule. Do not duplicate those strings per
+kind.
 
 Register the handler in `libraryRouteHandlers()`:
 
@@ -488,7 +492,7 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 
 - [ ] Neutral `Widget` / `WidgetSource` / `WidgetList` in `internal/types/models.go` (sources[], Match, Extra)
 - [ ] `WidgetProvider` in `internal/types/providers.go` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
-- [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone` / `Search`) **and** `kindRuntime` predicates
+- [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone` / `OptimisticCopies` / `ExtraInstructions` / `Search`) **and** a `kindRuntime` row (`newKindRuntime[P]`)
 - [ ] Route in `libraryRouteHandlers()`
 - [ ] `DataTypeForPath` rules use the same permission key (reserved automatically via the registry)
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
