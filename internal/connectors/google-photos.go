@@ -175,30 +175,7 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Generic authenticated pass-through for other Picker paths (/v1/…).
-	upstreamURL := c.GooglePhotosUpstreamBase() + remainingPath
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
-	}
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
-	if err != nil {
-		logger.Error("failed to build upstream request", "error", err)
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		req.Header.Set("Content-Type", ct)
-	}
-	resp, err := HTTPClient.Do(req)
-	if err != nil {
-		logger.Error("upstream request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Google Photos request failed")
-		return
-	}
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	StreamProxy(w, r, c.GooglePhotosUpstreamBase(), remainingPath, token, "Google Photos", logger)
 }
 
 func (c *GooglePhotosConnector) HandleCreateSession(w http.ResponseWriter, r *http.Request, token string) {

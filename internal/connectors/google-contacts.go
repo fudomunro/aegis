@@ -123,30 +123,7 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	}
 
 	// Generic authenticated pass-through for other People Library paths.
-	upstreamURL := c.GoogleContactsUpstreamBase() + remainingPath
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
-	}
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
-	if err != nil {
-		logger.Error("failed to build upstream request", "error", err)
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		req.Header.Set("Content-Type", ct)
-	}
-	resp, err := HTTPClient.Do(req)
-	if err != nil {
-		logger.Error("upstream request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
-		return
-	}
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	StreamProxy(w, r, c.GoogleContactsUpstreamBase(), remainingPath, token, "Google Contacts", logger)
 }
 
 // ContactIDFromProxyPath extracts a contact id from /contacts/{id} or

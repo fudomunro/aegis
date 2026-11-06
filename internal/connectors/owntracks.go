@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"math"
 	"net/http"
@@ -137,46 +136,20 @@ func (c *OwnTracksConnector) SystemInstructions(baseURL string) string {
 	return "OwnTracks visit history is aggregated at " + root + "/v1/library/places (visit windows with place names; coordinates require the precise permission). Prefer that endpoint over scraping Recorder paths."
 }
 
+// HandleProxy forwards Recorder API paths through the shared connector
+// pipeline. Recorder has no canonical host and answers to a static key, so
+// the credential is service headers first and the upstream bytes pass through
+// untransformed — the library surface, not this proxy, owns the visit model.
 func (c *OwnTracksConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", OwnTracksServiceID, "method", r.Method, "path", remainingPath)
-	token := c.OwnTracksToken(logger)
-	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
-			"no valid OwnTracks token — set Authorization/X-API-Key headers on the owntracks service")
-		return
-	}
-	upstreamBase := c.OwnTracksUpstreamBase()
-	upstreamURL := upstreamBase + remainingPath
-	if encoded := r.URL.Query().Encode(); encoded != "" {
-		upstreamURL += "?" + encoded
-	}
-	cacheKey := OwnTracksServiceID + ":" + r.URL.RequestURI()
-	if r.Method == http.MethodGet {
-		if cached, ok := c.host.CacheGet(cacheKey); ok {
-			logger.Debug("cache hit")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Aegis-Cache", "hit")
-			io.WriteString(w, cached)
-			return
-		}
-	}
-	data, status, err := DoUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
-	if err != nil {
-		logger.Error("owntracks request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, OwnTracksServiceName+" API request failed")
-		return
-	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
-		WriteJSONError(w, http.StatusUnauthorized,
-			OwnTracksServiceName+" rejected the request — set an API key in service headers")
-		return
-	}
-	if r.Method == http.MethodGet && status == http.StatusOK {
-		c.host.CacheSet(cacheKey, string(data), 60*time.Second)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	w.Write(data)
+	RunProxy(c.host, w, r, remainingPath, ProxyOpts{
+		serviceID:       OwnTracksServiceID,
+		displayName:     OwnTracksServiceName,
+		defaultTTL:      60 * time.Second,
+		token:           c.OwnTracksToken,
+		missingToken:    "no valid OwnTracks token — set Authorization/X-API-Key headers on the owntracks service",
+		rejectToken:     OwnTracksServiceName + " rejected the request — set an API key in service headers",
+		rejectForbidden: true,
+	})
 }
 
 // OwnTracksToken resolves static config headers (Authorization / X-API-Key)

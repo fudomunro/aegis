@@ -258,7 +258,7 @@ func TestYouTubeMapPath(t *testing.T) {
 func TestYouTubeTransformResponse_Default(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := connectors.NewYouTubeMusicConnector(srv)
-	out := conn.TransformResponse("/other", []byte(`{"items":[{"id":"1"}],"nextPageToken":"x","href":"drop"}`), slog.Default())
+	out := conn.TransformResponse("GET", "/other", []byte(`{"items":[{"id":"1"}],"nextPageToken":"x","href":"drop"}`), slog.Default())
 	m, ok := out.(map[string]any)
 	if !ok {
 		t.Fatalf("out = %#v", out)
@@ -271,7 +271,7 @@ func TestYouTubeTransformResponse_Default(t *testing.T) {
 func TestYouTubeTransformResponse_ErrorPassthrough(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := connectors.NewYouTubeMusicConnector(srv)
-	out := conn.TransformResponse("/me", []byte(`{"error":{"code":401}}`), slog.Default())
+	out := conn.TransformResponse("GET", "/me", []byte(`{"error":{"code":401}}`), slog.Default())
 	m := out.(map[string]any)
 	if _, ok := m["error"]; !ok {
 		t.Fatalf("out = %#v", out)

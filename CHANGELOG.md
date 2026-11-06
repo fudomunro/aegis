@@ -7,6 +7,26 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Connector `HandleProxy` implementations consolidate onto two shared
+  pipelines (issue #275).** `connectors.RunProxy` (buffered JSON: token →
+  cache → upstream → credential/rate-limit handling → transform →
+  cache-on-200) was only reachable from the three music connectors, while
+  OwnTracks and YNAB re-implemented the same pipeline line for line and four
+  Google connectors each carried an identical streaming tail. `RunProxy` now
+  takes the pieces those copies had diverged on — a credential resolver for
+  API-key services, provider-specific credential-failure copy, an opt-in
+  "403 means bad key" mapping (OAuth providers answer 403 for insufficient
+  scope, which must stay visible), and a transform that may decline a payload
+  so upstream error pages pass through un-re-marshaled. OwnTracks and YNAB
+  are on it now, which also gives OwnTracks upstream latency metrics,
+  shared 429 handling, and `ServiceConfig.CacheTTL` support — the three
+  places its copy had drifted. `connectors.StreamProxy` is the streaming
+  variant (forward with a bearer token, copy the response back) and replaces
+  the four identical Google tails; binary downloads (Immich, Paperless,
+  Google Drive export), Bluesky's mixed route table, local stores, and DAV
+  stay hand-rolled on purpose. Inventory and reasoning:
+  `docs/proxy-pipeline.md`.
+
 - **Local import stores join the connector family (issue #266).** Signal,
   Quicken, and Timeline — the SQLite-backed filestore imports behind
   `-import-signal` / `-import-quicken` / `-import-timeline` — moved from

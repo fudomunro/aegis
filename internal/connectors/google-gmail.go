@@ -243,30 +243,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Generic authenticated pass-through for other Gmail API paths under this base.
-	upstreamURL := c.GoogleGmailUpstreamBase() + remainingPath
-	if r.URL.RawQuery != "" {
-		upstreamURL += "?" + r.URL.RawQuery
-	}
-	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
-	if err != nil {
-		logger.Error("failed to build upstream request", "error", err)
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
-		return
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if ct := r.Header.Get("Content-Type"); ct != "" {
-		req.Header.Set("Content-Type", ct)
-	}
-	resp, err := HTTPClient.Do(req)
-	if err != nil {
-		logger.Error("upstream request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Gmail request failed")
-		return
-	}
-	defer resp.Body.Close()
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(resp.StatusCode)
-	io.Copy(w, resp.Body)
+	StreamProxy(w, r, c.GoogleGmailUpstreamBase(), remainingPath, token, "Gmail", logger)
 }
 
 // GmailBareIDFromProxyPath extracts an id from /messages/{id}, /me/messages/{id},

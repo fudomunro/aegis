@@ -208,7 +208,7 @@ func (c *SpotifyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 
 // TransformResponse converts Spotify's verbose JSON into a compact format
 // optimized for LLM consumption.
-func (c *SpotifyConnector) TransformResponse(path string, data []byte, logger *slog.Logger) any {
+func (c *SpotifyConnector) TransformResponse(method, path string, data []byte, logger *slog.Logger) any {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		// If it's not a map (e.g., an array), return as-is.
