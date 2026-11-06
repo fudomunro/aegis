@@ -6,15 +6,15 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](../aegis.example
 
 ```json
 {
- "id": "spotify",
- "name": "Spotify",
- "aliases": ["spotify music"],
- "action": "inject",
- "endpoint": "https://api.spotify.com/v1",
- "cache_ttl": "10m",
- "description": "Lists Spotify playlists and liked tracks into /v1/library/*",
- "connection": "spotify",
- "oauth_scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
+  "id": "spotify",
+  "name": "Spotify",
+  "aliases": ["spotify music"],
+  "action": "inject",
+  "endpoint": "https://api.spotify.com/v1",
+  "cache_ttl": "10m",
+  "description": "Lists Spotify playlists and liked tracks into /v1/library/*",
+  "connection": "spotify",
+  "oauth_scopes": ["user-library-read", "user-follow-read", "playlist-read-private"]
 }
 ```
 
@@ -77,32 +77,32 @@ multiple surfaces can share one provider registration and one token:
 
 ```json
 {
- "connections": {
- "google": {
- "name": "Google",
- "client_id": "…",
- "client_secret": "$ENV:GOOGLE_CLIENT_SECRET",
- "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
- "token_url": "https://oauth2.googleapis.com/token",
- "scopes": [
- "https://www.googleapis.com/auth/youtube.readonly",
- "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
- "https://www.googleapis.com/auth/contacts.readonly"
- ]
- }
- },
- "services": [
- {
- "id": "youtube-music",
- "connection": "google",
- "oauth_scopes": ["https://www.googleapis.com/auth/youtube.readonly"]
- },
- {
- "id": "google-photos",
- "connection": "google",
- "oauth_scopes": ["https://www.googleapis.com/auth/photospicker.mediaitems.readonly"]
- }
- ]
+  "connections": {
+    "google": {
+      "name": "Google",
+      "client_id": "…",
+      "client_secret": "$ENV:GOOGLE_CLIENT_SECRET",
+      "auth_url": "https://accounts.google.com/o/oauth2/v2/auth",
+      "token_url": "https://oauth2.googleapis.com/token",
+      "scopes": [
+        "https://www.googleapis.com/auth/youtube.readonly",
+        "https://www.googleapis.com/auth/photospicker.mediaitems.readonly",
+        "https://www.googleapis.com/auth/contacts.readonly"
+      ]
+    }
+  },
+  "services": [
+    {
+      "id": "youtube-music",
+      "connection": "google",
+      "oauth_scopes": ["https://www.googleapis.com/auth/youtube.readonly"]
+    },
+    {
+      "id": "google-photos",
+      "connection": "google",
+      "oauth_scopes": ["https://www.googleapis.com/auth/photospicker.mediaitems.readonly"]
+    }
+  ]
 }
 ```
 
@@ -177,19 +177,19 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 
 ```json
 "types": {
- "tracks": {
- "default": "read-write",
- "providers": {
- "spotify": "read"
- }
- },
- "player": { "default": "none" },
- "places": {
- "default": "none",
- "providers": {
- "google-timeline": "city"
- }
- }
+  "tracks": {
+    "default": "read-write",
+    "providers": {
+      "spotify": "read"
+    }
+  },
+  "player": { "default": "none" },
+  "places": {
+    "default": "none",
+    "providers": {
+      "google-timeline": "city"
+    }
+  }
 }
 ```
 
@@ -198,11 +198,11 @@ exists for that key):
 
 ```json
 "grant_limits": {
- "default": "read",
- "playlists": "read",
- "tracks": "read",
- "player": "none",
- "recommendations": "none"
+  "default": "read",
+  "playlists": "read",
+  "tracks": "read",
+  "player": "none",
+  "recommendations": "none"
 }
 ```
 
@@ -318,8 +318,8 @@ Two layers set the flag:
 
 ```json
 {
- "id": "spotify",
- "canonical_for": ["playlists", "tracks"]
+  "id": "spotify",
+  "canonical_for": ["playlists", "tracks"]
 }
 ```
 
@@ -350,20 +350,22 @@ deliberate copy to a secondary service.
 
 #### Mirror / backup sync
 
-To keep a **backup** of a playlist or liked-tracks list on another service:
+To keep a **backup** of a playlist or liked-tracks list on another service
+(admin surface — the agent key is refused; use the admin key or a tailnet
+admin login):
 
 ```
 POST /v1/library/mirror
-Authorization: Bearer <api-key> # or tailnet identity
+Authorization: Bearer <admin-key> # or tailnet admin login
 Content-Type: application/json
 
 {
- "kind": "playlists",
- "source_service": "spotify",
- "source_id": "37i9dQZF1DXcBWIGoYBM5M",
- "target_service": "youtube-music",
- "name": "Today's Top Hits (backup)",
- "dry_run": false
+  "kind": "playlists",
+  "source_service": "spotify",
+  "source_id": "37i9dQZF1DXcBWIGoYBM5M",
+  "target_service": "youtube-music",
+  "name": "Today's Top Hits (backup)",
+  "dry_run": false
 }
 ```
 
@@ -390,8 +392,7 @@ the target's API using the stored OAuth token.
 
 Immich is supported as a **local/foreign canonical photo source** (see
 [Immich](connect/immich.md)). Additional foreign-DB /
-professional-data connectors remain follow-up work on
-[](https://github.com/fudomunro/aegis/issues/16).
+professional-data connectors remain follow-up work.
 
 ### Copy ledger
 
@@ -415,7 +416,7 @@ copy:
 |------|------|---------------|------------------|
 | `photos` | `full` | `content_hash` / `modified_at` | Re-check metadata; change ⇒ stale |
 | `playlists`, `tracks` | `full` | `snapshot_id` / `item_count` | Snapshot mismatch ⇒ stale |
-| `messages` | `optimistic` | Takeout watermark / ingest cursor | Only material newer than the watermark; force-full is repair work ([#86](https://github.com/fudomunro/aegis/issues/86)) |
+| `messages` | `optimistic` | Takeout watermark / ingest cursor | Only material newer than the watermark; force-full is repair work |
 | `contacts`, `events` | `full` | etag / `updated` | Cheap metadata check |
 
 **Read surface:**
@@ -433,19 +434,18 @@ matches that `(service, id)`:
 
 ```json
 "copy": {
- "role": "mirror",
- "sync_mode": "full",
- "sync_status": "in_sync",
- "as_of": "2026-09-25T12:00:00Z",
- "provenance": "mirror"
+  "role": "mirror",
+  "sync_mode": "full",
+  "sync_status": "in_sync",
+  "as_of": "2026-09-25T12:00:00Z",
+  "provenance": "mirror"
 }
 ```
 
 Missing ledger rows never hide or alter library items (fail-open). Status
 values: `unknown`, `in_sync`, `stale`, `missing`. Freshness **checks**
 (`last_checked_at` / `stale`) are observational — Aegis still does not
-auto-sync secondary copies. Repair / re-mirror is
-[#86](https://github.com/fudomunro/aegis/issues/86).
+auto-sync secondary copies. Repair / re-mirror is a separate operator action.
 
 **Admin UI** surfaces the same fields read-only: library cards
 show a per-item copy badge (“2 copies · 1 stale”), source chips/detail show
@@ -598,9 +598,13 @@ Schedules live in the same SQLite file as the job queue and copy ledger.
 | `AEGIS_ALLOWED_LOGINS` | `-allowed-logins` | Comma-separated Tailscale logins allowed to call the API |
 | `AEGIS_ADMIN_LOGINS` | `-admin-logins` | Comma-separated Tailscale logins allowed to use admin surfaces |
 | `AEGIS_BASE_URL` | `-base-url` | Public URL of this Aegis instance |
+| `AEGIS_ADMIN_BASE_URL` | `-admin-base-url` | Public URL of the admin listener (OAuth redirects, CSRF origin checks) |
 | `AEGIS_APERTURE_URL` | `-aperture-url` | Optional public URL of the Aperture gateway (admin live links) |
 | `AEGIS_TOKEN_PASS` | `-token-pass` | Passphrase for token encryption |
 | `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](configuration.md)) |
+| `AEGIS_MAINTENANCE_REPO` | `-maintenance-repo` | GitHub repo (`owner/name`) for sync-maintenance tickets |
+| `AEGIS_DEMO` | `-demo` | `1` enables demo mode |
+| `AEGIS_USER_TYPES_DIR` | | User-defined type schema-pack directory (default `<data-dir>/user-types`) |
 
 ### Data directory
 
@@ -623,8 +627,8 @@ on first run with mode `0700` (it holds secrets).
  apps.json # third-party app registry (0600; token hashes only)
  data_scopes.json # principal → dataset registry (0600; invite key hashes)
  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (non-secret fields; secrets in tokens.json)
- user_types.json # admin UDT local-file selection overlay
- user-types/ # user-defined type schema packs
+ user_types.json # admin UDT local-file selection overlay (beside -config; see below)
+ user-types/ # user-defined type schema packs (or AEGIS_USER_TYPES_DIR)
  entity_links.json # confirmed playlist/entity links
  tokens.json # encrypted OAuth tokens + static credentials (0600;)
  copy_ledger.db # SQLite copy ledger + sync job queue (empty -copy-ledger / -sync-jobs disables)
@@ -657,6 +661,13 @@ An explicit flag always wins:
 | `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
+**`user_types.json` has no path flag** and is always written **beside
+`-config`** (same directory as `aegis.json`). It sits under the data directory
+only while `-config` keeps its default `<data-dir>/aegis.json`; an explicit
+`-config /elsewhere/aegis.json` moves it to `/elsewhere/user_types.json`. The
+`user-types/` schema-pack directory is a separate path: default
+`<data-dir>/user-types`, override with `AEGIS_USER_TYPES_DIR`.
+
 Startup logs the resolved data directory (`data directory ready` / `data_dir`
 on `starting server`). The admin **Runtime** panel shows the same path.
 
@@ -688,7 +699,10 @@ directory or keep passing the explicit path flags.
 | `-copy-ledger` | `<data-dir>/copy_ledger.db` | Copy ledger path; empty disables |
 | `-sync-jobs` | the `-copy-ledger` path | Sync job queue path (co-located with the copy ledger by default); empty disables |
 | `-sync-workers` | `2` | Sync worker pool size; `0` disables the worker |
+| `-sync-service-concurrency` | `1` per service | Per-service sync concurrency caps, e.g. `spotify=1,youtube-music=2` |
 | `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
+| `-import-takeout` | | Read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit |
+| `-import-takeout-batch` | `20000` | Max messages per `-import-takeout` call (repeat runs continue) |
 | `-search-index` | `<data-dir>/search-index.db` | Library search index path; empty disables `q=` search |
 | `-quicken-store` | `<data-dir>/quicken.db` | Quicken import store; empty disables |
 | `-import-quicken` | | Import a QIF/QFX file or directory, then exit |
@@ -700,6 +714,12 @@ directory or keep passing the explicit path flags.
 | `-audit-retention-days` | `30` | Days of audit events to retain before pruning |
 | `-maintenance-repo` | | GitHub repo (`owner/name`) where sync-maintenance tickets are opened as issues (via the `gh` CLI); empty disables ticketing |
 | `-fake-upstream` | | **Dev/test only** — serve an injectable fake provider at `/demo/fake-upstream` and seed placeholder tokens for services pointed at it. Never enable on a real instance |
+| `-seed-sample` | `false` | Write synthetic sample mail + library fixtures under the data directory, then exit |
+| `-seed-sample-count` | `24` | Mail messages to generate with `-seed-sample` |
+| `-seed-sample-stress` | `false` | With `-seed-sample`, generate the large stress set (10 000 mail rows) for local perf |
+| `-seed-lotr` | `false` | Write named demo dataset packs (`shire`, `gondor`, `lincoln`) under the data directory, then exit |
+| `-seed-demo-datasets` | `false` | Same as `-seed-lotr`: write all named demo dataset packs |
+| `-demo` | `false` | Demo mode: api-key + data scopes only, `sample://` fixtures only, read-only surface (`AEGIS_DEMO=1`) |
 | `-log-file` | `<data-dir>/logs/aegis.log` | Process log file; empty disables file logging |
 | `-aperture-url` | (none) | Aperture gateway base URL for admin setup links |
 | `-token-pass` | | Secret-encryption passphrase (required). Covers OAuth tokens **and** static service-connection credentials. Wrong passphrase refuses to start and never overwrites `tokens.json` |

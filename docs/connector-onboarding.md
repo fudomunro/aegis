@@ -19,7 +19,9 @@ floor 80%.
 
 The #254 cleanup moved connector-owned metadata, mirror placement, and
 freshness probes into `internal/connectors` (#261–#264). The biggest remaining
-provider-owned surface in core is **setup/onboarding**:
+provider-owned surface in core was **setup/onboarding** (design-time layout —
+historical; `immich_setup.go`, `tailscale_admin.go`, and `ynab_setup.go` no
+longer exist, and the connectors own these flows):
 
 | File | Lines | What it is |
 |------|-------|------------|

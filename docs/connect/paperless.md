@@ -6,12 +6,12 @@ API base (`…/api`) and a token:
 
 ```json
 {
- "id": "paperless",
- "name": "Paperless-ngx",
- "endpoint": "http://192.168.1.10:8000/api",
- "headers": {"Authorization": "Token …"},
- "canonical_for": ["documents"],
- "grant_limits": {"documents": "read"}
+  "id": "paperless",
+  "name": "Paperless-ngx",
+  "endpoint": "http://192.168.1.10:8000/api",
+  "headers": {"Authorization": "Token …"},
+  "canonical_for": ["documents"],
+  "grant_limits": {"documents": "read"}
 }
 ```
 

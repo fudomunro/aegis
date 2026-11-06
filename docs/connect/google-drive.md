@@ -7,12 +7,12 @@ conversion is deferred. Files stay on Drive (non-Aegis canonical).
 
 ```json
 {
- "id": "google-drive",
- "name": "Google Drive",
- "endpoint": "https://www.googleapis.com/drive/v3",
- "connection": "google",
- "oauth_scopes": ["https://www.googleapis.com/auth/drive.readonly"],
- "grant_limits": {"documents": "read"}
+  "id": "google-drive",
+  "name": "Google Drive",
+  "endpoint": "https://www.googleapis.com/drive/v3",
+  "connection": "google",
+  "oauth_scopes": ["https://www.googleapis.com/auth/drive.readonly"],
+  "grant_limits": {"documents": "read"}
 }
 ```
 

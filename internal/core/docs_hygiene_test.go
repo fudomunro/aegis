@@ -30,7 +30,9 @@ var docsForbidden = []string{
 	"type pack",
 }
 
-var issueRefRe = regexp.MustCompile(`(?i)\bissues?\s*#\d+`)
+// issueRefRe matches prose issue citations and the tracker-URL form
+// ([](…/issues/4), [#43](…/issues/43)) — the same citation in link shape.
+var issueRefRe = regexp.MustCompile(`(?i)(\bissues?\s*#\d+|github\.com/fudomunro/aegis/issues/\d+)`)
 
 func repoRoot(t *testing.T) string {
 	t.Helper()
@@ -156,7 +158,7 @@ func TestUserFacingDocs_NoIssueRefs(t *testing.T) {
 // this catches; keep those out of literals.)
 func TestGoStringLiterals_NoIssueRefs(t *testing.T) {
 	root := repoRoot(t)
-	goLiteralIssueRefRe := regexp.MustCompile(`(?i)\bissues?\s*#`)
+	goLiteralIssueRefRe := regexp.MustCompile(`(?i)(\bissues?\s*#|github\.com/fudomunro/aegis/issues/\d+)`)
 	fset := token.NewFileSet()
 	var failures []string
 	walkErr := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {

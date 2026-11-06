@@ -1,6 +1,7 @@
 # Local import stores: shape decision
 
-Status: accepted (this note is the design pass for the import-store work).
+Status: **landed** — Signal, Quicken, and Timeline live in
+`internal/connectors` as local import stores; this note is the design record.
 Scope: Signal (`-import-signal`), Quicken (`-import-quicken`), Google
 Timeline (`-import-timeline`). The mail archive / Google Takeout pair is
 decided below but not moved by this note.

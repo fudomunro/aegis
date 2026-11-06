@@ -404,7 +404,7 @@ A type is invisible until permissions and path classification know it.
      the content/ingest proxy and library; they never **add** capability.
 
 3. **Service proxy**  
-   Prefer `runConnectorProxy` / `doUpstreamRequest` / `aegisHTTPClient`. Read
+   Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `aegisHTTPClient`. Read
    the configured `GetService(id).Endpoint` — never hardcode provider base URLs.
 
 4. **Admin surface**  
@@ -530,7 +530,7 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 | `photos.go` | Non-name identity (hash/time+dim), "bytes stay upstream" sources |
 | `events.go` | Time-windowed items, iCalUID vs title+start matching |
 | `messages.go` | Snippet-only lists, Message-ID identity, bodies stay upstream |
-| `librarykind.go` | Registry + shared aggregate pipeline contract |
+| `internal/types/librarykinds.go` + `librarykind.go` | Registry (`BuiltinLibraryKinds`) + shared aggregate pipeline contract |
 | `sampledata.go` | Fixture style and merge-pair seeding |
 | `copy_ledger_stamp.go` | How location stamps stay fail-open |
 | `canonical.go` | Home-service stamping + agent write policy text |

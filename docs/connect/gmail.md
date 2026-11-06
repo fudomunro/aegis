@@ -37,7 +37,6 @@ text at `/v1/library/documents/{service}/{id}/text`.
 Message lists (`/me/messages`) are not agent API — use the library.
 This phase is **read-only**. Capabilities do not advertise agent write ops
 (send/delete), so the admin permissions form will not offer Editable for
-`messages` and mutations stay blocked
-([](https://github.com/fudomunro/aegis/issues/61)).
+`messages` and mutations stay blocked.
 Message bodies stay on Gmail as the **canonical** home copy.
 

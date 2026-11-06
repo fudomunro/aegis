@@ -103,12 +103,13 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
 | Tokens / OAuth / CSRF | `internal/core/tokens.go`, `internal/core/oauth.go`, `internal/core/statestore.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
-| Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
+| Merge / entity IDs | `internal/types/merge.go`, `internal/core/entity_links*.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; local import stores `signal.go`, `quicken.go`, `timeline.go` + shared `localstore.go` | Register in `internal/core/run.go` `srv.connectors`; stores share the `ServiceConnector` surface with a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/core/places.go`, `internal/connectors/{timeline,owntracks}.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
 | Onboarding runner | `internal/core/onboarding.go`; shapes `internal/types/onboarding.go`; impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
+| Maintenance dashboard generator | `cmd/aegis-dashboard` | Static sync-maintenance dashboard build for `pages.yml`; instance-level captures stay on the admin surface |
 
 ### Extension points agents must use
 
@@ -134,10 +135,10 @@ type ServiceConnector interface {
 - `DataTypeCapability.Operations` is `[]Operation` (method, path, parameters,
   response spec) — not `[]string`.
 - Empty `[]Operation{}` means “type recognized, not implemented”.
-- New library kinds plug into `LibraryKind` registry in `librarykind.go`.
+- New library kinds plug into the `BuiltinLibraryKinds` registry in `internal/types/librarykinds.go`.
 - Connectors must read **configured** `GetService(id).Endpoint` — never hardcode
   upstream base URLs (breaks mock tests and custom endpoints).
-- Prefer `runConnectorProxy` / `doUpstreamRequest` / `aegisHTTPClient`
+- Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `aegisHTTPClient`
   over new `http.DefaultClient` call sites.
 - **Connectors depend on `Host`** (`host.go`) — not `*Server`. That seam is
   how named services leave package main under #15. Extend `Host` only for
@@ -346,13 +347,13 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `libraryPageCap`, singleflight |
-| Sequential multi-provider or multi-kind work when already parallelizable | Follow `librarykind.go` fan-out; don’t serialize merge review without cause |
+| Sequential multi-provider or multi-kind work when already parallelizable | Follow `internal/core/librarykind.go` fan-out; don’t serialize merge review without cause |
 
 ## Where to look first
 
 | Task | Start here |
 |------|------------|
-| New library data type / kind | `docs/adding-data-types.md` (checklist), then `librarykind.go` |
+| New library data type / kind | `docs/adding-data-types.md` (checklist), then `internal/types/librarykinds.go` |
 | Hook behavior / system instructions | `internal/core/handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `internal/core/config.go`, `aegis.example.json`, README “Configuration” |

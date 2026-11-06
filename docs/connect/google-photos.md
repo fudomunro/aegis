@@ -32,8 +32,7 @@ GET /v1/services/google-photos/picker/mediaItems?sessionId={id}
 until the user has picked once). Metadata only — Aegis still never downloads
 or stores image bytes; `blob_url` values expire in about an hour.
 
-Ownership / provenance proofs for photos are intentionally deferred:
-[](https://github.com/fudomunro/aegis/issues/20). A **Bluesky share
-PoC** is available so a published photo carries a lightweight claim (content
+Ownership / provenance proofs for photos are intentionally deferred.
+A **Bluesky share PoC** is available so a published photo carries a lightweight claim (content
 hash + public post locator) — see [Photo share to Bluesky](bluesky.md).
 

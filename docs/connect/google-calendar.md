@@ -28,7 +28,6 @@ GET /v1/library/freebusy
 
 This phase is **read-only**. Capabilities do not advertise agent write ops
 (create/update/delete events), so the admin permissions form will not offer
-Editable for `events` and mutations stay blocked
-([](https://github.com/fudomunro/aegis/issues/61)).
+Editable for `events` and mutations stay blocked.
 Event content stays on Google Calendar.
 

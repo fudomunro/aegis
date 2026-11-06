@@ -4,8 +4,10 @@
 > data-grant rename (#174): `TypePolicy` is now `DataGrant`,
 > `permissions.json` is `data_grants.json`. Prefer `docs/glossary.md`.
 
-Status: **proposal** — start of work for the codebase split called for in #15,
-with #148 as the first product feature that lands on the type layer.
+Status: **landed** — the `internal/types` / `internal/core` /
+`internal/connectors` split is in the tree; this note is the design record
+for the work called for in #15, with #148 as the first product feature that
+landed on the type layer.
 
 Related issues: **#15** (user-defined types; designated split point),
 **#148** (permissions live with data types).  
