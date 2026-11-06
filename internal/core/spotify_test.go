@@ -414,37 +414,6 @@ func TestSpotifyConnector_HandleProxy_PassthroughForUnknownPaths(t *testing.T) {
 	}
 }
 
-func TestExtractNames(t *testing.T) {
-	obj := map[string]any{
-		"artists": []any{
-			map[string]any{"name": "Miles Davis"},
-			map[string]any{"name": "John Coltrane"},
-		},
-	}
-	names := connectors.ExtractNames(obj, "artists")
-	if len(names) != 2 || names[0] != "Miles Davis" || names[1] != "John Coltrane" {
-		t.Fatalf("names = %v", names)
-	}
-}
-
-func TestExtractNested(t *testing.T) {
-	obj := map[string]any{
-		"album": map[string]any{
-			"name": "Kind of Blue",
-		},
-	}
-	result := connectors.ExtractNested(obj, "album", "name")
-	if result != "Kind of Blue" {
-		t.Fatalf("result = %v", result)
-	}
-
-	// Missing nested key.
-	result = connectors.ExtractNested(obj, "album", "missing")
-	if result != nil {
-		t.Fatalf("expected nil, got %v", result)
-	}
-}
-
 func futureTime() time.Time {
 	return time.Now().Add(time.Hour)
 }

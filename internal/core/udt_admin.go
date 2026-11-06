@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -82,20 +83,20 @@ func (s *Server) HandleAdminUDT(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case path == "" || path == "status":
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		s.writeUDTStatus(w)
 	case path == "browse":
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		s.handleUDTBrowse(w, r)
 	case strings.HasPrefix(path, "kinds/"):
 		s.handleUDTKindRoutes(w, r, strings.TrimPrefix(path, "kinds/"))
 	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
 }
 
@@ -117,8 +118,8 @@ func (s *Server) writeUDTStatus(w http.ResponseWriter) {
 
 func (s *Server) udtStatus() udtAdminStatus {
 	st := udtAdminStatus{
-		Enabled:   s.udts != nil && len(s.udts.All()) > 0,
-		Overlay:   s.udtOverlayPath(),
+		Enabled: s.udts != nil && len(s.udts.All()) > 0,
+		Overlay: s.udtOverlayPath(),
 	}
 	if s.udts != nil {
 		st.UserTypes = s.udts.baseDir
@@ -194,13 +195,13 @@ func (s *Server) handleUDTBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 	dir := expandUserPath(raw)
 	if !filepath.IsAbs(dir) {
-		writeJSONError(w, http.StatusBadRequest, "path must be absolute (or ~)")
+		shared.WriteJSONError(w, http.StatusBadRequest, "path must be absolute (or ~)")
 		return
 	}
 	dir = filepath.Clean(dir)
 	st, err := os.Stat(dir)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("cannot read %s: %v", dir, err))
+		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("cannot read %s: %v", dir, err))
 		return
 	}
 	if !st.IsDir() {
@@ -208,7 +209,7 @@ func (s *Server) handleUDTBrowse(w http.ResponseWriter, r *http.Request) {
 	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("cannot list %s: %v", dir, err))
+		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("cannot list %s: %v", dir, err))
 		return
 	}
 	res := udtBrowseResult{Path: dir}
@@ -256,7 +257,7 @@ func (s *Server) handleUDTBrowse(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUDTKindRoutes(w http.ResponseWriter, r *http.Request, rest string) {
 	parts := strings.Split(strings.Trim(rest, "/"), "/")
 	if len(parts) < 2 {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
 	kindID := parts[0]
@@ -274,13 +275,13 @@ func (s *Server) handleUDTKindRoutes(w http.ResponseWriter, r *http.Request, res
 		}
 		s.handleUDTExtraUpdate(w, r, kindID, extraID)
 	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
 }
 
 func (s *Server) handleUDTSourceUpdate(w http.ResponseWriter, r *http.Request, kindID, sourceID string) {
 	if sourceID == "" {
-		writeJSONError(w, http.StatusBadRequest, "source id is required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source id is required")
 		return
 	}
 	var req udtSourceUpdateRequest
@@ -291,13 +292,13 @@ func (s *Server) handleUDTSourceUpdate(w http.ResponseWriter, r *http.Request, k
 			return
 		}
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 	case http.MethodDelete:
 		req.Clear = true
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	s.applyUDTFileSource(w, kindID, sourceID, req)
@@ -312,7 +313,7 @@ func (s *Server) handleUDTExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 			return
 		}
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 		if req.Extra != nil && extraID != "" {
@@ -324,7 +325,7 @@ func (s *Server) handleUDTExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 			req.Extra = &UDTExtraFile{ID: extraID}
 		}
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	s.applyUDTExtra(w, kindID, req)
@@ -359,19 +360,19 @@ func (s *Server) saveUDTOverlayLocked(ov *UserTypesOverlay) error {
 
 func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID string, req udtSourceUpdateRequest) {
 	if s.udts == nil {
-		writeJSONError(w, http.StatusBadRequest, "user-defined types not loaded")
+		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined types not loaded")
 		return
 	}
 	schema, ok := s.udts.Get(kindID)
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "unknown user-defined kind")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
 	s.udts.overlayMu.Lock()
 	defer s.udts.overlayMu.Unlock()
 	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	if !req.Clear {
@@ -383,12 +384,12 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 			}
 		}
 		if !known {
-			writeJSONError(w, http.StatusNotFound, "unknown file source for kind "+kindID)
+			shared.WriteJSONError(w, http.StatusNotFound, "unknown file source for kind "+kindID)
 			return
 		}
 		paths, perr := resolveUDTFilePaths(req.Paths)
 		if perr != nil {
-			writeJSONError(w, http.StatusBadRequest, perr.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, perr.Error())
 			return
 		}
 		kindOV.FileSources[sourceID] = UDTFileSourceOverlay{Paths: paths}
@@ -397,7 +398,7 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 	}
 	ov.Kinds[kindID] = kindOV
 	if err := s.saveUDTOverlayLocked(ov); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	s.invalidateLibraryKind(kindID)
@@ -408,18 +409,18 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 
 func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtraRequest) {
 	if s.udts == nil {
-		writeJSONError(w, http.StatusBadRequest, "user-defined types not loaded")
+		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined types not loaded")
 		return
 	}
 	if _, ok := s.udts.Get(kindID); !ok {
-		writeJSONError(w, http.StatusNotFound, "unknown user-defined kind")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
 	s.udts.overlayMu.Lock()
 	defer s.udts.overlayMu.Unlock()
 	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	id := ""
@@ -441,7 +442,7 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 	} else {
 		paths, perr := resolveUDTFilePaths([]string{req.Extra.Path})
 		if perr != nil {
-			writeJSONError(w, http.StatusBadRequest, perr.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, perr.Error())
 			return
 		}
 		ef := *req.Extra
@@ -464,7 +465,7 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 	}
 	ov.Kinds[kindID] = kindOV
 	if err := s.saveUDTOverlayLocked(ov); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	s.invalidateLibraryKind(kindID)

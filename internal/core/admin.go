@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -96,12 +97,12 @@ type AdminSummary struct {
 // (issue #62). Admin browsing must not look like agent traffic.
 func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	kindID := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/library/"), "/")
 	if kindID == "" || strings.Contains(kindID, "/") {
-		writeJSONError(w, http.StatusNotFound, "unknown library kind")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
 	var handler http.HandlerFunc
@@ -113,7 +114,7 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 		break
 	}
 	if handler == nil {
-		writeJSONError(w, http.StatusNotFound, "unknown library kind")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
 	handler(w, withSkipAccessMetrics(r))
@@ -146,11 +147,11 @@ var adminShellPaths = map[string]bool{
 // unauthenticated peers (issue #98). OAuth callback pages remain public.
 func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
 	if !adminShellPaths[r.URL.Path] {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -164,7 +165,7 @@ func (s *Server) HandleAdmin(w http.ResponseWriter, r *http.Request) {
 // GET /v1/admin/summary
 func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -284,7 +285,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 // GET /v1/admin/cache
 func (s *Server) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -307,7 +308,7 @@ func (s *Server) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 // POST /v1/admin/cache/clear
 func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	s.invalidateAllCaches()
@@ -356,7 +357,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 		var req adminDataGrantsRequest
 		if len(body) > 0 {
 			if err := json.Unmarshal(body, &req); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
@@ -367,7 +368,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 		if err := s.config.SetDataGrants(policies); err != nil {
 			withPeerLog(slog.With("handler", "admin_data_grants"), r).
 				Warn("failed to save data grants", "error", err)
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.invalidateCaches()
@@ -384,7 +385,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 			"status":      "saved",
 		})
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -398,13 +399,13 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 	id := strings.TrimSuffix(trimmed, "/grant-limits")
 	id = strings.Trim(id, "/")
 	if id == "" || strings.Contains(id, "/") {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
 
 	svc := s.config.GetService(id)
 	if svc == nil {
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", id))
+		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", id))
 		return
 	}
 
@@ -433,11 +434,11 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
-			"service_id":           id,
-			"grant_limits":         perms,
+			"service_id":             id,
+			"grant_limits":           perms,
 			"effective_grant_limits": effectiveOut,
-			"available_data_types": types,
-			"writable_data_types":  writable,
+			"available_data_types":   types,
+			"writable_data_types":    writable,
 		})
 	case http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
@@ -447,7 +448,7 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 		var req adminServiceLimitsRequest
 		if len(body) > 0 {
 			if err := json.Unmarshal(body, &req); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
@@ -461,7 +462,7 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 		if err := s.config.SetServicePermissions(id, saved); err != nil {
 			withPeerLog(slog.With("handler", "admin_permissions"), r).
 				Warn("failed to save permissions", "service", id, "error", err)
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		// Cache may hold responses that are now denied.
@@ -484,7 +485,7 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 			"status":      "saved",
 		})
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -498,20 +499,20 @@ func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		rep := s.hookHealth.Snapshot(s.baseURL)
 		sortHookIssues(rep.Issues)
-		writeJSON(w, rep)
+		shared.WriteJSON(w, rep)
 	case http.MethodPost:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
 		if len(strings.TrimSpace(string(body))) == 0 {
-			writeJSONError(w, http.StatusBadRequest, "paste Aperture policy/hooks JSON in the request body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "paste Aperture policy/hooks JSON in the request body")
 			return
 		}
 		rep := s.CheckApertureConfig(body)
 		sortHookIssues(rep.Issues)
-		writeJSON(w, rep)
+		shared.WriteJSON(w, rep)
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

@@ -8,6 +8,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Tailscale Admin API client (issue #124). Shared machinery for any connector
@@ -44,7 +46,7 @@ func NewTailscaleAdminClient(apiKey, tailnet string) *TailscaleAdminClient {
 		base:    TailscaleAdminAPIBase,
 		apiKey:  strings.TrimSpace(apiKey),
 		tailnet: t,
-		http:    HTTPClient,
+		http:    shared.HTTPClient,
 	}
 }
 

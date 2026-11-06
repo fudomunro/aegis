@@ -12,7 +12,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -309,7 +309,7 @@ func mapUserDefinedDocument(schema types.UserDefinedTypeSchema, src types.UserDe
 }
 
 // maxUserDefinedItems caps one source page so a hostile or huge feed cannot
-// pin memory (same spirit as libraryPageCap on named providers).
+// pin memory (same spirit as shared.LibraryPageCap on named providers).
 const maxUserDefinedItems = 500
 
 // maxUserDefinedBytes caps file_json and http_json payloads before decode.
@@ -347,7 +347,7 @@ func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSch
 			req.Header.Set(k, v)
 		}
 		if client == nil {
-			client = connectors.HTTPClient
+			client = shared.HTTPClient
 		}
 		resp, doErr := client.Do(req)
 		if doErr != nil {

@@ -8,6 +8,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // csrfTokenTTL bounds how long a rendered consent-page CSRF token stays valid.
@@ -119,11 +121,11 @@ func allowUnsafeContentType(w http.ResponseWriter, r *http.Request) bool {
 		if r.URL.Path == "/v1/apps/authorize" {
 			return true
 		}
-		writeJSONError(w, http.StatusForbidden,
+		shared.WriteJSONError(w, http.StatusForbidden,
 			"unsupported Content-Type for write request (use application/json)")
 		return false
 	default:
-		writeJSONError(w, http.StatusForbidden,
+		shared.WriteJSONError(w, http.StatusForbidden,
 			"unsupported Content-Type for write request (use application/json)")
 		return false
 	}
@@ -205,7 +207,7 @@ func (s *Server) requireFormCSRF(w http.ResponseWriter, r *http.Request, q url.V
 		token = r.Header.Get("X-CSRF-Token")
 	}
 	if !s.consumeCSRFToken(token) {
-		writeJSONError(w, http.StatusForbidden, "missing or invalid CSRF token")
+		shared.WriteJSONError(w, http.StatusForbidden, "missing or invalid CSRF token")
 		return false
 	}
 	return true

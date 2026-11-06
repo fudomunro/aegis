@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -109,17 +110,17 @@ func (f DashboardFix) FailureAt() time.Time {
 
 // DashboardService is one service/connection page's model.
 type DashboardService struct {
-	ID               string             `json:"id"`
-	Name             string             `json:"name,omitempty"`
-	Connection       string             `json:"connection,omitempty"`
-	FailureInjection bool               `json:"failure_injection,omitempty"`
-	Scores           DashboardScores    `json:"scores"`
-	Latest           SyncCounts         `json:"latest"`
+	ID               string          `json:"id"`
+	Name             string          `json:"name,omitempty"`
+	Connection       string          `json:"connection,omitempty"`
+	FailureInjection bool            `json:"failure_injection,omitempty"`
+	Scores           DashboardScores `json:"scores"`
+	Latest           SyncCounts      `json:"latest"`
 	// LastSeen is the newest capture that carried this service.
-	LastSeen  time.Time          `json:"last_seen,omitempty"`
-	History   []DashboardCapture `json:"history,omitempty"`
-	Failures  []DashboardFailure `json:"failures,omitempty"`
-	Fixes     []DashboardFix     `json:"fixes,omitempty"`
+	LastSeen time.Time          `json:"last_seen,omitempty"`
+	History  []DashboardCapture `json:"history,omitempty"`
+	Failures []DashboardFailure `json:"failures,omitempty"`
+	Fixes    []DashboardFix     `json:"fixes,omitempty"`
 	// Maturity is the connection's coverage declaration (issue #247): what
 	// the service offers and what Aegis serves. Nil when the catalog has
 	// no entry — test fixtures and the drift-injection harness.
@@ -147,8 +148,8 @@ type DashboardData struct {
 	// Captures is how many signal bundles fed the build.
 	Captures int `json:"captures"`
 	// WindowStart / WindowEnd bound the capture series.
-	WindowStart time.Time `json:"window_start,omitempty"`
-	WindowEnd   time.Time `json:"window_end,omitempty"`
+	WindowStart time.Time          `json:"window_start,omitempty"`
+	WindowEnd   time.Time          `json:"window_end,omitempty"`
 	Services    []DashboardService `json:"services"`
 	// Freshness is the latest capture's per-kind copy rollup.
 	Freshness []CopyFreshness `json:"freshness,omitempty"`
@@ -798,17 +799,17 @@ func (s *Server) dashboardServiceMetas() []DashboardServiceMeta {
 // scrape is fail-open: without it the build still lands, minus history.
 func (s *Server) HandleAdminMaintenanceDashboard(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.dataDir == "" {
-		writeJSONError(w, http.StatusInternalServerError, "data directory not configured")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "data directory not configured")
 		return
 	}
 	maintDir := filepath.Join(s.dataDir, dataDirMaintenanceSubdir)
 	bundles, err := loadSignalBundles(maintDir)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "load bundles failed: "+err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, "load bundles failed: "+err.Error())
 		return
 	}
 	series := make([]MaintenanceSignals, 0, len(bundles)+1)
@@ -833,14 +834,14 @@ func (s *Server) HandleAdminMaintenanceDashboard(w http.ResponseWriter, r *http.
 	outDir := filepath.Join(maintDir, "dashboard")
 	index, err := WriteMaintenanceDashboard(outDir, data, DashboardPrivateFileMode, DashboardPrivateDirMode)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "dashboard build failed: "+err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, "dashboard build failed: "+err.Error())
 		return
 	}
 	services := make([]string, 0, len(data.Services))
 	for _, svc := range data.Services {
 		services = append(services, svc.ID)
 	}
-	writeJSON(w, MaintenanceDashboardResult{
+	shared.WriteJSON(w, MaintenanceDashboardResult{
 		Path:            outDir,
 		Index:           index,
 		Services:        services,

@@ -16,11 +16,6 @@ const (
 	PlaceVisitMatchWindow     = "window_place"
 )
 
-
-
-
-
-
 // placeVisitMatchKind records how identity was established.
 func placeVisitMatchKind(key string) string {
 	switch {

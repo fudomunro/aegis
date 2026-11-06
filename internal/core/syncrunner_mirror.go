@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -279,7 +280,7 @@ func loadTargetIdentities(ctx context.Context, s *Server, targetService, targetI
 	}
 	out := make(map[string]bool)
 	cursor := ""
-	for i := 0; i < libraryPageCap; i++ {
+	for i := 0; i < shared.LibraryPageCap; i++ {
 		_, page, err := src.ListPlaylistItems(ctx, targetID, cursor, 100)
 		if err != nil {
 			return out, err

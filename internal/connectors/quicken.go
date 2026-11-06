@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
@@ -598,7 +599,6 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	return src, true
 }
 
-
 // ImportQuickenPath imports a QIF/QFX file or a directory of them.
 func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, error) {
 	res := QuickenImportResult{Path: path}
@@ -707,17 +707,17 @@ func (c *QuickenConnector) SystemInstructions(baseURL string) string {
 func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	store := c.store
 	if store == nil || !store.Enabled() {
-		WriteJSONError(w, http.StatusNotFound, "quicken store disabled")
+		shared.WriteJSONError(w, http.StatusNotFound, "quicken store disabled")
 		return
 	}
 	switch {
 	case r.Method == http.MethodGet && (remainingPath == "/import/status" || remainingPath == "import/status"):
 		n, err := store.Count()
 		if err != nil {
-			WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		WriteJSON(w, map[string]any{"count": n, "path": store.Path()})
+		shared.WriteJSON(w, map[string]any{"count": n, "path": store.Path()})
 	case r.Method == http.MethodGet && (remainingPath == "/transactions" || remainingPath == "transactions" || remainingPath == "" || remainingPath == "/"):
 		filters := types.ParseTransactionFilters(r)
 		limit := LibraryItemCap
@@ -728,27 +728,27 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 		}
 		list, err := store.List(filters, limit)
 		if err != nil {
-			WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		WriteJSON(w, types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		shared.WriteJSON(w, types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && (remainingPath == "/import" || remainingPath == "import"):
 		var req struct {
 			Path string `json:"path"`
 		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err := json.Unmarshal(body, &req); err != nil || strings.TrimSpace(req.Path) == "" {
-			WriteJSONError(w, http.StatusBadRequest, "path is required")
+			shared.WriteJSONError(w, http.StatusBadRequest, "path is required")
 			return
 		}
 		res, err := ImportQuickenPath(store, req.Path)
 		if err != nil {
-			WriteJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		WriteJSON(w, res)
+		shared.WriteJSON(w, res)
 	default:
-		WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -777,6 +777,6 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 }
 
 var (
-	_ ServiceConnector = (*QuickenConnector)(nil)
-	_ types.TransactionProvider   = (*QuickenConnector)(nil)
+	_ ServiceConnector          = (*QuickenConnector)(nil)
+	_ types.TransactionProvider = (*QuickenConnector)(nil)
 )

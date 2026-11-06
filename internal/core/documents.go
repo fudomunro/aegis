@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -449,7 +450,7 @@ func boolKey(v bool) string {
 // (issue #143).
 func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	kind := *LibraryKindByID("documents")
@@ -459,13 +460,13 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	serviceID := r.PathValue("service")
 	id := r.PathValue("id")
 	if serviceID == "" || id == "" {
-		writeJSONError(w, http.StatusNotFound, "expected /v1/library/documents/{service}/{id}/text")
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/library/documents/{service}/{id}/text")
 		return
 	}
 
 	app := AppIdentityFrom(r)
 	if app != nil && !appAllowsLibrary(app, kind.PermType, r.Method) {
-		writeJSONError(w, http.StatusForbidden,
+		shared.WriteJSONError(w, http.StatusForbidden,
 			"denied: app data grant for documents is "+app.Scopes.For(kind.PermType))
 		return
 	}
@@ -475,7 +476,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	if svc != nil {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
 		if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
-			writeJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
+			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}
 		level = s.requestLevel(r, svc, kind.PermType)
@@ -494,23 +495,23 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
 		})
-		writeJSONError(w, http.StatusForbidden,
+		shared.WriteJSONError(w, http.StatusForbidden,
 			"denied: document text requires documents=read (metadata is list-only)")
 		return
 	}
 
 	connector, ok := s.connectors[serviceID]
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 		return
 	}
 	provider, ok := connector.(types.DocumentProvider)
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "service does not provide documents")
+		shared.WriteJSONError(w, http.StatusNotFound, "service does not provide documents")
 		return
 	}
 	if svc != nil && svc.Action == "block" {
-		writeJSONError(w, http.StatusForbidden, "denied: service is blocked")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: service is blocked")
 		return
 	}
 
@@ -519,12 +520,12 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	case err == nil:
 		// ok
 	case errors.Is(err, types.ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized"):
-		writeJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"not authorized — connect at /v1/auth/"+serviceID+"/login")
 		return
 	default:
 		logger.Warn("document text failed", "service", serviceID, "id", id, "error", err)
-		writeJSONError(w, http.StatusBadGateway, "failed to fetch document text")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch document text")
 		return
 	}
 
@@ -534,7 +535,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 		Text:      text,
 		Truncated: truncated,
 	}
-	writeJSON(w, result)
+	shared.WriteJSON(w, result)
 	s.recordAccessFrom(r, AccessEvent{
 		Agent:    agent,
 		Surface:  MetricSurfaceLibrary,

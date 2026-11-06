@@ -6,6 +6,8 @@ import (
 	"io"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Admin sync surface (issue #227). Read model for the queue plus on-demand
@@ -59,7 +61,7 @@ func (s *Server) HandleAdminSync(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.handleSyncEnqueue(w, r)
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -95,7 +97,7 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 	if s.syncRunners != nil {
 		status.Kinds = s.syncRunners.Kinds()
 	}
-	writeJSON(w, status)
+	shared.WriteJSON(w, status)
 }
 
 // HandleAdminSyncPause holds work for a scope: POST /v1/admin/sync/pause
@@ -115,11 +117,11 @@ func (s *Server) HandleAdminSyncResume(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause bool) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.syncJobs == nil || !s.syncJobs.Enabled() {
-		writeJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
 		return
 	}
 	var req SyncPauseRequest
@@ -133,7 +135,7 @@ func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause b
 				return
 			}
 			if r.ContentLength != 0 {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
@@ -149,10 +151,10 @@ func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause b
 		err = s.syncJobs.Resume(scope)
 	}
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to update sync pause")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to update sync pause")
 		return
 	}
-	writeJSON(w, map[string]any{
+	shared.WriteJSON(w, map[string]any{
 		"paused": s.syncJobs.Paused(),
 		"scope":  scope,
 		"counts": s.syncJobs.Counts("", ""),
@@ -163,11 +165,11 @@ func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause b
 // POST /v1/admin/sync/schedules/{id}/enable | /disable
 func (s *Server) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.syncSchedules == nil || !s.syncSchedules.Enabled() {
-		writeJSONError(w, http.StatusServiceUnavailable, "sync schedules disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync schedules disabled")
 		return
 	}
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/sync/schedules/"), "/")
@@ -179,37 +181,37 @@ func (s *Server) HandleAdminSyncSchedule(w http.ResponseWriter, r *http.Request)
 		path = strings.TrimSuffix(path, "/disable")
 		enable = false
 	default:
-		writeJSONError(w, http.StatusNotFound, "unknown sync schedule action")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown sync schedule action")
 		return
 	}
 	id := strings.TrimSpace(path)
 	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "schedule id required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "schedule id required")
 		return
 	}
 	var sid int64
 	for _, ch := range id {
 		if ch < '0' || ch > '9' {
-			writeJSONError(w, http.StatusBadRequest, "schedule id must be numeric")
+			shared.WriteJSONError(w, http.StatusBadRequest, "schedule id must be numeric")
 			return
 		}
 		sid = sid*10 + int64(ch-'0')
 	}
 	sc, ok, err := s.syncSchedules.SetEnabled(sid, enable)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to update sync schedule")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to update sync schedule")
 		return
 	}
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "unknown sync schedule")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown sync schedule")
 		return
 	}
-	writeJSON(w, sc)
+	shared.WriteJSON(w, sc)
 }
 
 func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 	if s.syncJobs == nil || !s.syncJobs.Enabled() {
-		writeJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
 		return
 	}
 	var req SyncEnqueueRequest
@@ -223,7 +225,7 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if r.ContentLength != 0 {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
@@ -231,12 +233,12 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 	req.Kind = strings.TrimSpace(req.Kind)
 	req.JobType = strings.TrimSpace(req.JobType)
 	if req.Kind == "" || req.JobType == "" {
-		writeJSONError(w, http.StatusBadRequest, "kind and job_type are required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "kind and job_type are required")
 		return
 	}
 	if s.syncRunners != nil {
 		if _, ok := s.syncRunners.For(req.Kind, req.JobType); !ok {
-			writeJSONError(w, http.StatusBadRequest,
+			shared.WriteJSONError(w, http.StatusBadRequest,
 				"no sync runner for kind="+req.Kind+" job_type="+req.JobType)
 			return
 		}
@@ -251,39 +253,39 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 	job, err := s.syncJobs.Enqueue(syncEnqueueFromRequest(
 		req.Kind, req.JobType, req.Service, entityKey, req.Payload))
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to enqueue sync job")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to enqueue sync job")
 		return
 	}
 	if s.syncWorker != nil {
 		s.syncWorker.Kick()
 	}
-	writeJSON(w, job)
+	shared.WriteJSON(w, job)
 }
 
 // HandleAdminSyncCancel parks a queued or running job: POST /v1/admin/sync/{id}/cancel
 func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.syncJobs == nil || !s.syncJobs.Enabled() {
-		writeJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "sync queue disabled")
 		return
 	}
 	id := strings.TrimPrefix(r.URL.Path, "/v1/admin/sync/")
 	id = strings.TrimSuffix(strings.Trim(id, "/"), "/cancel")
 	id = strings.TrimSpace(id)
 	if id == "" {
-		writeJSONError(w, http.StatusBadRequest, "job id required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "job id required")
 		return
 	}
 	job, err := s.syncJobs.Cancel(id)
 	if errors.Is(err, ErrSyncJobNotFound) {
-		writeJSONError(w, http.StatusNotFound, "unknown sync job")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown sync job")
 		return
 	}
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to cancel sync job")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to cancel sync job")
 		return
 	}
 	// Stop the in-flight step too — parking the row alone would let a runner
@@ -291,5 +293,5 @@ func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 	if s.syncWorker != nil {
 		s.syncWorker.CancelJob(id)
 	}
-	writeJSON(w, job)
+	shared.WriteJSON(w, job)
 }

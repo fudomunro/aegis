@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -144,20 +145,6 @@ func (c *AmazonMusicConnector) TransformUser(raw map[string]any) map[string]any 
 	return result
 }
 
-func AsInt(v any) (int, bool) {
-	switch n := v.(type) {
-	case int:
-		return n, true
-	case int32:
-		return int(n), true
-	case int64:
-		return int(n), true
-	case float64:
-		return int(n), true
-	}
-	return 0, false
-}
-
 // ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
 // and returns them in Aegis's neutral format.
 func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
@@ -171,13 +158,13 @@ func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.P
 	nextURL := upstreamBase + "/me/playlists"
 	var all []types.Playlist
 	truncated := false
-	for page := 0; page < LibraryPageCap && nextURL != ""; page++ {
+	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -226,7 +213,7 @@ func (c *AmazonMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist 
 	description, _ := p["description"].(string)
 
 	trackCount := 0
-	if n, ok := AsInt(c.FirstNonNil(p, "track_count", "item_count", "total_tracks", "size")); ok {
+	if n, ok := shared.AsInt(c.FirstNonNil(p, "track_count", "item_count", "total_tracks", "size")); ok {
 		trackCount = n
 	}
 
@@ -262,7 +249,7 @@ func (c *AmazonMusicConnector) NeutralAmazonTrack(t map[string]any) types.Track 
 	name, _ := c.FirstNonNil(t, "name", "title").(string)
 	artist := c.ExtractArtistName(t)
 	album := c.ExtractAlbumName(t)
-	durationMs, _ := AsInt(t["duration_ms"])
+	durationMs, _ := shared.AsInt(t["duration_ms"])
 	duration, _ := t["duration"].(string)
 
 	extra := map[string]any{}
@@ -295,7 +282,7 @@ func (c *AmazonMusicConnector) NeutralAmazonTrack(t map[string]any) types.Track 
 			Service:     AmazonMusicServiceID,
 			ServiceName: "Amazon Music",
 			ID:          id,
-			Extra:       ExtraOrNil(extra),
+			Extra:       shared.ExtraOrNil(extra),
 		}},
 	}
 }
@@ -311,7 +298,7 @@ func (c *AmazonMusicConnector) TransformPlaylistList(raw map[string]any) types.P
 		playlists = append(playlists, c.NeutralPlaylist(p))
 	}
 	total := len(playlists)
-	if n, ok := AsInt(c.TotalCount(raw)); ok {
+	if n, ok := shared.AsInt(c.TotalCount(raw)); ok {
 		total = n
 	}
 	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}

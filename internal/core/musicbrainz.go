@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -70,7 +70,7 @@ func (s *Server) mbGetJSON(ctx context.Context, path, query string) ([]byte, boo
 	req.Header.Set("User-Agent", musicBrainzUserAgent)
 	req.Header.Set("Accept", "application/json")
 
-	resp, err := connectors.HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		slog.Debug("musicbrainz lookup failed", "path", path, "error", err)
 		return nil, false

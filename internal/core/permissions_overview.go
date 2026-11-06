@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -299,8 +300,8 @@ func serviceProvidedTypes(conn any) []string {
 // "what they have accessed" view; this endpoint is "what they may access".
 func (s *Server) HandleAdminPermissionsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	writeJSON(w, s.permissionsOverview())
+	shared.WriteJSON(w, s.permissionsOverview())
 }

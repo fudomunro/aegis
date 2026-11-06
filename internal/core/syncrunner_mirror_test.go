@@ -14,7 +14,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-
 // --- mirror runner ---
 
 type recordingMirrorTarget struct {
@@ -603,4 +602,3 @@ func TestParseServiceConcurrency(t *testing.T) {
 		t.Fatalf("empty parse = %v", got)
 	}
 }
-

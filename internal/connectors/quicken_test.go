@@ -291,4 +291,3 @@ func TestQIFDateFormats(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
-

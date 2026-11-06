@@ -70,4 +70,3 @@ func (s *Server) timelineStatus() TimelineImportStatus {
 	}
 	return st
 }
-

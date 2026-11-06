@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -157,7 +158,7 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream, body)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build Immich request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build Immich request")
 		return
 	}
 	if ct := r.Header.Get("Content-Type"); ct != "" {
@@ -165,22 +166,22 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 	}
 	c.ApplyImmichAuth(req, logger)
 
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("immich request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Immich request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Immich request failed")
 		return
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Immich response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Immich response")
 		return
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		WriteJSONError(w, resp.StatusCode,
+		shared.WriteJSONError(w, resp.StatusCode,
 			"Immich rejected the request — set an API key in service headers (X-API-Key)")
 		return
 	}
@@ -204,7 +205,7 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		if len(msg) > 240 {
 			msg = msg[:240] + "…"
 		}
-		WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Immich returned %d: %s", resp.StatusCode, msg))
+		shared.WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Immich returned %d: %s", resp.StatusCode, msg))
 		return
 	}
 
@@ -223,7 +224,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 	var all []types.Photo
 	truncated := false
 	nextPage := 1
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		payload := map[string]any{
 			"page":     nextPage,
 			"size":     immichPageSize,
@@ -241,7 +242,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 		req.Header.Set("Content-Type", "application/json")
 		c.ApplyImmichAuth(req, logger)
 
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -279,7 +280,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 		if !ok || next <= 0 {
 			return all, false, nil
 		}
-		if page == LibraryPageCap-1 {
+		if page == shared.LibraryPageCap-1 {
 			truncated = true
 		}
 		nextPage = next
@@ -349,7 +350,7 @@ func (c *ImmichConnector) FetchPhotoBytes(ctx context.Context, id string) ([]byt
 	}
 	c.ApplyImmichAuth(req, slog.Default())
 
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return nil, "", err
 	}

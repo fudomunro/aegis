@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -181,7 +182,7 @@ func (c *YNABConnector) APIGet(ctx context.Context, logger *slog.Logger, path st
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}

@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"os"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Demo mode (issue #217) is a deployment profile for a public synthetic
@@ -77,7 +79,7 @@ func (s *Server) demoLockdown(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if s.demoMode {
 			if p := r.URL.Path; strings.HasPrefix(p, "/v1/auth/") && p != "/v1/auth/status" {
-				writeJSONError(w, http.StatusForbidden, "demo mode: OAuth is disabled")
+				shared.WriteJSONError(w, http.StatusForbidden, "demo mode: OAuth is disabled")
 				return
 			}
 			switch r.Method {
@@ -87,7 +89,7 @@ func (s *Server) demoLockdown(next http.Handler) http.Handler {
 					next.ServeHTTP(w, r)
 					return
 				}
-				writeJSONError(w, http.StatusForbidden, "demo mode is read-only")
+				shared.WriteJSONError(w, http.StatusForbidden, "demo mode is read-only")
 				return
 			}
 		}

@@ -27,7 +27,8 @@ It does two jobs:
 Module: `github.com/fudomunro/aegis`  
 Layout: **`internal/types`** (data-type layer) + **`internal/core`**
 (runtime: auth, config, tokens, proxy, admin, state) +
-**`internal/connectors`** (named-service adapters on `Host`). Root
+**`internal/connectors`** (named-service adapters on `Host`) +
+**`internal/shared`** (stdlib-only transport/JSON/math plumbing). Root
 `main.go` is thin (`core.Run()`). See `docs/restructure-core-types-connectors.md`.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
@@ -101,6 +102,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
+| Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math utils) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens.go`, `internal/core/oauth.go`, `internal/core/statestore.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
 | Merge / entity IDs | `internal/types/merge.go`, `internal/core/entity_links*.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
@@ -138,7 +140,7 @@ type ServiceConnector interface {
 - New library kinds plug into the `BuiltinLibraryKinds` registry in `internal/types/librarykinds.go`.
 - Connectors must read **configured** `GetService(id).Endpoint` — never hardcode
   upstream base URLs (breaks mock tests and custom endpoints).
-- Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `connectors.HTTPClient`
+- Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `shared.HTTPClient`
   over new `http.DefaultClient` call sites.
 - **Connectors depend on `Host`** (`host.go`) — not `*Server`. That seam is
   how named services leave package main under #15. Extend `Host` only for
@@ -281,9 +283,11 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Packages follow the #15 split.** `internal/types`, `internal/core`, and
-  `internal/connectors` have landed. Do not invent other internal packages
-  outside `docs/restructure-core-types-connectors.md`.
+- **Packages follow the #15 split.** `internal/types`, `internal/core`,
+  `internal/connectors`, and `internal/shared` have landed. Do not invent
+  other internal packages outside `docs/restructure-core-types-connectors.md`.
+  `internal/shared` is stdlib-only transport/JSON/math plumbing — no domain
+  models, no `Host`, no service IDs, no provider knowledge, no policy.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -298,7 +302,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
   that can only tighten the type default (issue #148). Prefer **data grant** in
   product English (`docs/glossary.md`).
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
-- **Outbound HTTP.** Use `connectors.HTTPClient` and
+- **Outbound HTTP.** Use `shared.HTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
   token persist happens outside the map mutex; refresh uses singleflight.
 - **HTML in embed files.** Admin/setup markup belongs in `web/` +
@@ -338,7 +342,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Fail-closed on fetch/parse errors | Fail-open / allow, log, continue |
 | Agents prompting users for OAuth | Central connections + setup/admin flows |
 | Caching 401/404/502 bodies | Cache 200 GET only |
-| `http.DefaultClient` / `http.PostForm` without timeout | `connectors.HTTPClient` + context |
+| `http.DefaultClient` / `http.PostForm` without timeout | `shared.HTTPClient` + context |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
@@ -346,7 +350,8 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Provider copy in `admin.html` / `docs/` | Declare it in the connector's `Onboarder` spec; hygiene tests reject restatements (issue #265) |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
-| Unbounded cache / OAuth state / page loops | Caps, eviction, `libraryPageCap`, singleflight |
+| Unbounded cache / OAuth state / page loops | Caps, eviction, `shared.LibraryPageCap`, singleflight |
+| Re-growing `writeJSON` / page-cap / URL-trim twins in `core` or `connectors` | One owner: `internal/shared` (issue #280) |
 | Sequential multi-provider or multi-kind work when already parallelizable | Follow `internal/core/librarykind.go` fan-out; don’t serialize merge review without cause |
 
 ## Where to look first
@@ -367,6 +372,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); signals surface in `docs/observability.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
+| Shared plumbing helpers (HTTP client, JSON writers, URL/JSON/math utils) | `internal/shared` (issue #280). `DoUpstreamRequest` stays in `internal/connectors/http.go` |
 
 ## Open direction (do not assume closed)
 

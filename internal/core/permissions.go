@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -133,7 +134,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		if label == "" {
 			label = "this data"
 		}
-		writeJSONError(w, http.StatusForbidden, fmt.Sprintf(
+		shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf(
 			"denied: %s does not support write access to %s (method %s)",
 			svc.Name, label, r.Method,
 		))
@@ -146,7 +147,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 	if label == "" {
 		label = "this data"
 	}
-	writeJSONError(w, http.StatusForbidden, fmt.Sprintf(
+	shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf(
 		"denied: data grant for agent access to %s on %s is %q (method %s)",
 		label, svc.Name, level, r.Method,
 	))

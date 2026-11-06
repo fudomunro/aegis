@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // ProxyOpts is the connector-specific parts of the shared proxy path.
@@ -64,7 +66,7 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 		if msg == "" {
 			msg = "no valid " + opts.displayName + " token — authorize at /v1/auth/" + opts.serviceID + "/login"
 		}
-		WriteJSONError(w, http.StatusUnauthorized, msg)
+		shared.WriteJSONError(w, http.StatusUnauthorized, msg)
 		return
 	}
 
@@ -73,7 +75,7 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 	if opts.mapUpstream != nil {
 		mappedPath, mappedQuery, err := opts.mapUpstream(remainingPath, query.Clone())
 		if err != nil {
-			WriteJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		upstreamPath = mappedPath
@@ -105,7 +107,7 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 	s.ObserveUpstream(opts.serviceID, upstreamElapsed, StatusOrZero(status, err))
 	if err != nil {
 		logger.Error(opts.serviceID+" request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, opts.displayName+" API request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, opts.displayName+" API request failed")
 		return
 	}
 	logger.Debug(opts.serviceID+" response", "status", status, "bytes", len(data))
@@ -116,13 +118,13 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 		if msg == "" {
 			msg = opts.displayName + " token is invalid or expired — re-authorize at /v1/auth/" + opts.serviceID + "/login"
 		}
-		WriteJSONError(w, http.StatusUnauthorized, msg)
+		shared.WriteJSONError(w, http.StatusUnauthorized, msg)
 		return
 	}
 	if status == http.StatusTooManyRequests {
 		logger.Warn(opts.serviceID + " rate limited")
 		w.Header().Set("Retry-After", "30")
-		WriteJSONError(w, http.StatusTooManyRequests, opts.displayName+" rate limit exceeded — retry later")
+		shared.WriteJSONError(w, http.StatusTooManyRequests, opts.displayName+" rate limit exceeded — retry later")
 		return
 	}
 
@@ -142,7 +144,7 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 			marshaled, err := json.Marshal(transformed)
 			if err != nil {
 				logger.Error("failed to marshal transformed response", "error", err)
-				WriteJSONError(w, http.StatusInternalServerError, "response transformation failed")
+				shared.WriteJSONError(w, http.StatusInternalServerError, "response transformation failed")
 				return
 			}
 			result = marshaled
@@ -186,17 +188,17 @@ func StreamProxy(w http.ResponseWriter, r *http.Request, upstreamBase, remaining
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstreamURL, r.Body)
 	if err != nil {
 		logger.Error("failed to build upstream request", "error", err)
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("upstream request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, displayName+" request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, displayName+" request failed")
 		return
 	}
 	defer resp.Body.Close()

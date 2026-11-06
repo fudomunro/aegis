@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -188,7 +189,7 @@ type FlowTopology struct {
 // GET /v1/admin/flow[?window=5m|1h|24h]
 func (s *Server) HandleAdminFlow(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	window, windowLabel := parseFlowWindow(r.URL.Query().Get("window"))

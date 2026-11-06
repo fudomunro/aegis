@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -128,7 +129,7 @@ func (c *gmailArchiveSyncer) SyncMailArchive(ctx context.Context, archive *MailA
 			return c.finishMailSync(archive, res, cursor, err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := connectors.HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return c.finishMailSync(archive, res, cursor, err)
 		}

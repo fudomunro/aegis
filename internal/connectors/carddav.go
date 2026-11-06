@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -91,7 +92,7 @@ sources[] records where each contact lives (service, id, etag for conflict-safe 
 // HandleProxy serves the small agent-facing surface; DAV itself is library-only.
 func (c *CardDAVConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	_ = remainingPath
-	WriteJSONError(w, http.StatusNotFound,
+	shared.WriteJSONError(w, http.StatusNotFound,
 		"CardDAV is library-only — use GET /v1/library/contacts")
 }
 
@@ -190,7 +191,7 @@ func (c *CardDAVConnector) listViaPropfind(ctx context.Context, collection strin
 			continue
 		}
 		n++
-		if n > LibraryPageCap*5 {
+		if n > shared.LibraryPageCap*5 {
 			truncated = true
 			break
 		}

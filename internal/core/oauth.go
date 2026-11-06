@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // HandleAuthLogin initiates the OAuth flow for a service surface.
@@ -26,20 +26,20 @@ func (s *Server) HandleAuthLogin(w http.ResponseWriter, r *http.Request) {
 
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
+		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
 		return
 	}
 
 	connectionID, conn := s.config.ConnectionForService(serviceID)
 	if connectionID == "" || conn == nil {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q has no OAuth configuration", serviceID))
+		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q has no OAuth configuration", serviceID))
 		return
 	}
 
 	state, err := generateState()
 	if err != nil {
 		slog.Error("failed to generate state", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "internal error")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
@@ -91,25 +91,25 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	state := r.URL.Query().Get("state")
 
 	if code == "" || state == "" {
-		writeJSONError(w, http.StatusBadRequest, "missing code or state parameter")
+		shared.WriteJSONError(w, http.StatusBadRequest, "missing code or state parameter")
 		return
 	}
 
 	stateKey := serviceID + ":" + state
 	if !s.oauthStates.Delete(stateKey) {
-		writeJSONError(w, http.StatusBadRequest, "invalid or expired state parameter")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid or expired state parameter")
 		return
 	}
 
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured for OAuth", serviceID))
+		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured for OAuth", serviceID))
 		return
 	}
 
 	connectionID, conn := s.config.ConnectionForService(serviceID)
 	if connectionID == "" || conn == nil {
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured for OAuth", serviceID))
+		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured for OAuth", serviceID))
 		return
 	}
 
@@ -118,7 +118,7 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 	tok, err := s.exchangeCode(conn.toOAuth(), code, callbackURL)
 	if err != nil {
 		slog.Error("token exchange failed", "service", serviceID, "connection", connectionID, "error", err)
-		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
+		shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("token exchange failed: %v", err))
 		return
 	}
 
@@ -135,7 +135,7 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 
 	if err := s.tokens.Save(connectionID, tok); err != nil {
 		slog.Error("failed to store token", "service", serviceID, "connection", connectionID, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to store token")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to store token")
 		return
 	}
 	// A new token changes which services answer library/proxy calls (issue #104).
@@ -185,7 +185,7 @@ func (s *Server) HandleAuthRevoke(w http.ResponseWriter, r *http.Request) {
 	connectionID := s.config.connectionIDForService(serviceID)
 
 	if err := s.tokens.Delete(connectionID); err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to revoke token")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to revoke token")
 		return
 	}
 	// Drop cached responses that were fetched with the revoked token (issue #104).
@@ -273,7 +273,7 @@ func (s *Server) tokenRequest(tokenURL string, data url.Values) (*OAuthToken, er
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := connectors.HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token request: %w", err)
 	}

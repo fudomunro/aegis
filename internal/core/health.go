@@ -2,6 +2,8 @@ package core
 
 import (
 	"net/http"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Health and readiness probes (issue #105). Cheap, unauthenticated, and
@@ -11,7 +13,7 @@ import (
 // HandleHealthz reports liveness: the process is up and the HTTP stack works.
 func (s *Server) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -19,7 +21,7 @@ func (s *Server) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	writeJSON(w, map[string]string{"status": "ok"})
+	shared.WriteJSON(w, map[string]string{"status": "ok"})
 }
 
 // HandleReadyz reports readiness: config and the token store are loaded.
@@ -27,7 +29,7 @@ func (s *Server) HandleHealthz(w http.ResponseWriter, r *http.Request) {
 // sending traffic into a half-built Server.
 func (s *Server) HandleReadyz(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	ready := s != nil && s.config != nil && s.tokens != nil
@@ -42,5 +44,5 @@ func (s *Server) HandleReadyz(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodHead {
 		return
 	}
-	writeJSON(w, body)
+	shared.WriteJSON(w, body)
 }

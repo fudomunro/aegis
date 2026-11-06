@@ -47,4 +47,3 @@ func MaturityByService() map[string]types.ConnectionMaturity {
 	}
 	return out
 }
-

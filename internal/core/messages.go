@@ -18,7 +18,6 @@ func messageServiceName(m types.Message) string {
 	return ""
 }
 
-
 // messageSentNormalized parses RFC3339 (or RFC3339Nano) and re-emits it at
 // second precision in UTC so the same send time matches across services.
 func messageSentNormalized(raw string) string {

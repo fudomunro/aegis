@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -184,7 +185,7 @@ func (c *PaperlessConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream, body)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build Paperless request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build Paperless request")
 		return
 	}
 	if ct := r.Header.Get("Content-Type"); ct != "" {
@@ -192,22 +193,22 @@ func (c *PaperlessConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 	}
 	c.ApplyPaperlessAuth(req, logger)
 
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("paperless request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Paperless request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Paperless request failed")
 		return
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Paperless response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Paperless response")
 		return
 	}
 
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		WriteJSONError(w, resp.StatusCode,
+		shared.WriteJSONError(w, resp.StatusCode,
 			"Paperless rejected the request — set Authorization: Token <api-token> on the paperless service")
 		return
 	}
@@ -231,7 +232,7 @@ func (c *PaperlessConnector) HandleProxy(w http.ResponseWriter, r *http.Request,
 		if len(msg) > 240 {
 			msg = msg[:240] + "…"
 		}
-		WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Paperless returned %d: %s", resp.StatusCode, msg))
+		shared.WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Paperless returned %d: %s", resp.StatusCode, msg))
 		return
 	}
 
@@ -250,20 +251,20 @@ type paperlessPage struct {
 
 // paperlessDocument is the Paperless-ngx document serializer subset we map.
 type paperlessDocument struct {
-	ID                   int             `json:"id"`
-	Title                string          `json:"title"`
-	Content              string          `json:"content"`
-	Correspondent        json.RawMessage `json:"correspondent"`
-	DocumentType         json.RawMessage `json:"document_type"`
-	Tags                 json.RawMessage `json:"tags"`
-	Created              string          `json:"created"`
-	Modified             string          `json:"modified"`
-	Added                string          `json:"added"`
-	OriginalFileName     string          `json:"original_file_name"`
-	ArchiveSerialNumber  json.RawMessage `json:"archive_serial_number"`
-	MimeType             string          `json:"mime_type"`
-	Checksum             string          `json:"checksum"`
-	PageCount            json.RawMessage `json:"page_count"`
+	ID                  int             `json:"id"`
+	Title               string          `json:"title"`
+	Content             string          `json:"content"`
+	Correspondent       json.RawMessage `json:"correspondent"`
+	DocumentType        json.RawMessage `json:"document_type"`
+	Tags                json.RawMessage `json:"tags"`
+	Created             string          `json:"created"`
+	Modified            string          `json:"modified"`
+	Added               string          `json:"added"`
+	OriginalFileName    string          `json:"original_file_name"`
+	ArchiveSerialNumber json.RawMessage `json:"archive_serial_number"`
+	MimeType            string          `json:"mime_type"`
+	Checksum            string          `json:"checksum"`
+	PageCount           json.RawMessage `json:"page_count"`
 }
 
 // paperlessNamed is a tiny id/name row (tags, correspondents, types).
@@ -283,7 +284,7 @@ func (c *PaperlessConnector) apiGet(ctx context.Context, logger *slog.Logger, pa
 	}
 	req.Header.Set("Accept", "application/json")
 	c.ApplyPaperlessAuth(req, logger)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -495,7 +496,7 @@ func (c *PaperlessConnector) ListUserDocuments(ctx context.Context) ([]types.Doc
 	query.Set("page_size", strconv.Itoa(paperlessPageSize))
 	query.Set("ordering", "-created")
 
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		var envelope paperlessPage
 		path := nextPath
 		q := query
@@ -531,7 +532,7 @@ func (c *PaperlessConnector) ListUserDocuments(ctx context.Context) ([]types.Doc
 		if nextPath == "" {
 			break
 		}
-		if page == LibraryPageCap-1 && nextPath != "" {
+		if page == shared.LibraryPageCap-1 && nextPath != "" {
 			truncated = true
 		}
 	}

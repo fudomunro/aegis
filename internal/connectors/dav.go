@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -75,9 +76,9 @@ func (a davAuth) configured() bool {
 
 // davMultistatus is the RFC 4918 multistatus response body.
 type davMultistatus struct {
-	XMLName   xml.Name     `xml:"multistatus"`
+	XMLName   xml.Name      `xml:"multistatus"`
 	Responses []davResponse `xml:"response"`
-	SyncToken string       `xml:"sync-token"`
+	SyncToken string        `xml:"sync-token"`
 }
 
 // davResponse is one href + propstat block.
@@ -89,27 +90,27 @@ type davResponse struct {
 }
 
 type davPropstat struct {
-	Prop   davProp  `xml:"prop"`
-	Status string   `xml:"status"`
+	Prop   davProp `xml:"prop"`
+	Status string  `xml:"status"`
 }
 
 type davProp struct {
-	DisplayName      string   `xml:"displayname"`
-	CurrentUser      davHref  `xml:"current-user-principal>href"`
-	AddressbookHome  davHref  `xml:"addressbook-home-set>href"`
-	CalendarHome     davHref  `xml:"calendar-home-set>href"`
-	ResourceType     struct {
-		Collection bool `xml:"collection"`
+	DisplayName     string  `xml:"displayname"`
+	CurrentUser     davHref `xml:"current-user-principal>href"`
+	AddressbookHome davHref `xml:"addressbook-home-set>href"`
+	CalendarHome    davHref `xml:"calendar-home-set>href"`
+	ResourceType    struct {
+		Collection  bool `xml:"collection"`
 		Addressbook bool `xml:"addressbook"`
 		Calendar    bool `xml:"calendar"`
 	} `xml:"resourcetype"`
-	GetETag          string   `xml:"getetag"`
-	GetCTag          string   `xml:"getctag"`
-	GetContentType   string   `xml:"getcontenttype"`
-	SyncToken        string   `xml:"sync-token"`
-	CalendarData     string   `xml:"calendar-data"`
-	AddressData      string   `xml:"address-data"`
-	SupportedReport  []struct {
+	GetETag         string `xml:"getetag"`
+	GetCTag         string `xml:"getctag"`
+	GetContentType  string `xml:"getcontenttype"`
+	SyncToken       string `xml:"sync-token"`
+	CalendarData    string `xml:"calendar-data"`
+	AddressData     string `xml:"address-data"`
+	SupportedReport []struct {
 		Report struct {
 			Name xml.Name `xml:",any"`
 		} `xml:"report"`
@@ -138,7 +139,7 @@ func davRequest(ctx context.Context, method, rawURL string, auth davAuth, header
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
-	return HTTPClient.Do(req)
+	return shared.HTTPClient.Do(req)
 }
 
 // parseMultistatus decodes a DAV multistatus XML body.

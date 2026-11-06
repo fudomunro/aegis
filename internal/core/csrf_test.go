@@ -7,6 +7,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // extractCSRFToken pulls the per-render consent token from the HTML page.
@@ -68,7 +70,7 @@ func TestCSRFGuard_TailnetCrossOriginWriteRejected(t *testing.T) {
 	srv.identity = fakeIdentity{login: "user@example.com"}
 
 	inner := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	// Cross-origin form POST (classic CSRF simple request).
@@ -109,7 +111,7 @@ func TestCSRFGuard_SameOriginAdminWriteAllowed(t *testing.T) {
 	srv.identity = fakeIdentity{login: "user@example.com"}
 
 	inner := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
@@ -137,7 +139,7 @@ func TestCSRFGuard_APIKeyWithoutOriginAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	inner := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
@@ -163,7 +165,7 @@ func TestCSRFGuard_TextPlainRejectedOnJSONSurfaces(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	inner := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	for _, path := range []string{
@@ -198,7 +200,7 @@ func TestCSRFGuard_ContentTypeEmptyBodyAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	inner := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
@@ -393,7 +395,7 @@ func TestAppAuthorize_TailnetSameOriginFormWithCSRF(t *testing.T) {
 
 func TestAllowUnsafeContentType(t *testing.T) {
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	})
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
@@ -443,7 +445,7 @@ func TestAuthKindTracking(t *testing.T) {
 	var got authKind
 	inner := func(w http.ResponseWriter, r *http.Request) {
 		got = authKindFrom(r)
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
@@ -476,14 +478,13 @@ func (f fakeIdentity) Resolve(_ context.Context, _ *http.Request) (*PeerIdentity
 
 var _ IdentityResolver = fakeIdentity{}
 
-
 func TestCSRFGuard_HookPathSkipsOriginCheck(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.authMode = AuthModeTailnet
 	srv.identity = fakeIdentity{login: "user@example.com"}
 
 	inner := func(w http.ResponseWriter, r *http.Request) {
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	// Aperture webhook: Serve identity, JSON body, no browser Origin.
@@ -515,7 +516,7 @@ func TestCSRFGuard_TailnetWithAPIKeySkipsOriginCheck(t *testing.T) {
 		if kind := authKindFrom(r); kind != authKindAPIKey {
 			t.Errorf("auth kind = %q, want api-key", kind)
 		}
-		writeJSON(w, map[string]string{"status": "ok"})
+		shared.WriteJSON(w, map[string]string{"status": "ok"})
 	}
 
 	req := httptest.NewRequest("POST", "/v1/pre-request",

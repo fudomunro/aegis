@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -42,7 +43,7 @@ type PhotoShareRequest struct {
 // POST /v1/library/photos/share
 func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	var req PhotoShareRequest
@@ -52,7 +53,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 			writeBodyReadError(w, err)
 			return
 		}
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	req.SourceService = strings.TrimSpace(req.SourceService)
@@ -62,15 +63,15 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		req.TargetService = photoShareDefaultTarget
 	}
 	if req.SourceService == "" {
-		writeJSONError(w, http.StatusBadRequest, "source_service is required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_service is required")
 		return
 	}
 	if req.SourceID == "" {
-		writeJSONError(w, http.StatusBadRequest, "source_id is required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_id is required")
 		return
 	}
 	if req.SourceService == req.TargetService {
-		writeJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
 
@@ -81,33 +82,33 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		"dry_run", req.DryRun), r)
 
 	if err := s.requireMirrorReadable(req.SourceService, "photos"); err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	if err := s.requireMirrorWritable(req.TargetService, "photos"); err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
 	src, ok := s.connectors[req.SourceService]
 	if !ok {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.SourceService))
+		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.SourceService))
 		return
 	}
 	bytesProvider, ok := src.(types.PhotoBytesProvider)
 	if !ok {
-		writeJSONError(w, http.StatusBadRequest,
+		shared.WriteJSONError(w, http.StatusBadRequest,
 			fmt.Sprintf("service %q cannot fetch photo bytes for share yet (supported: immich)", req.SourceService))
 		return
 	}
 	dst, ok := s.connectors[req.TargetService]
 	if !ok {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.TargetService))
+		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.TargetService))
 		return
 	}
 	target, ok := dst.(types.PhotoShareTarget)
 	if !ok {
-		writeJSONError(w, http.StatusBadRequest,
+		shared.WriteJSONError(w, http.StatusBadRequest,
 			fmt.Sprintf("service %q cannot accept photo shares yet (supported: bluesky)", req.TargetService))
 		return
 	}
@@ -118,7 +119,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(data) == 0 {
-		writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("%s returned empty photo bytes", req.SourceService))
+		shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("%s returned empty photo bytes", req.SourceService))
 		return
 	}
 	sum := sha256.Sum256(data)
@@ -126,7 +127,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	logger = logger.With("bytes", len(data), "sha256", sha, "mime_type", mime)
 
 	if req.DryRun {
-		writeJSON(w, types.PhotoShareResponse{
+		shared.WriteJSON(w, types.PhotoShareResponse{
 			TargetService: req.TargetService,
 			SourceService: req.SourceService,
 			SourceID:      req.SourceID,
@@ -171,7 +172,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		req.SourceService, req.SourceID, req.TargetService,
 		result.PostID, result.PostURI, result.PostURL, sha, claim.Note)
 	logger.Info("photo shared", "post_uri", result.PostURI, "post_url", result.PostURL)
-	writeJSON(w, types.PhotoShareResponse{
+	shared.WriteJSON(w, types.PhotoShareResponse{
 		TargetService: req.TargetService,
 		SourceService: req.SourceService,
 		SourceID:      req.SourceID,
@@ -185,9 +186,9 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 func (s *Server) writePhotoShareUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
 	if errors.Is(err, types.ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
 		logger.Warn("photo share unauthorized upstream", "service", serviceID, "error", err)
-		writeJSONError(w, http.StatusUnauthorized, fmt.Sprintf("%s rejected the request — check its credentials", serviceID))
+		shared.WriteJSONError(w, http.StatusUnauthorized, fmt.Sprintf("%s rejected the request — check its credentials", serviceID))
 		return
 	}
 	logger.Error("photo share failed", "service", serviceID, "error", err)
-	writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("photo share failed on %s: %v", serviceID, err))
+	shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("photo share failed on %s: %v", serviceID, err))
 }

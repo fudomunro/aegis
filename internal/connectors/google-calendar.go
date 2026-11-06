@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -141,7 +142,7 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 	token := c.host.GetValidToken(GoogleCalendarServiceID, logger)
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 		return
 	}
@@ -149,7 +150,7 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	if remainingPath == "/me/events" || remainingPath == "/me/events/" ||
 		remainingPath == "/events" || remainingPath == "/events/" {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleListEvents(w, r)
@@ -159,7 +160,7 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	if remainingPath == "/me/calendars" || remainingPath == "/me/calendars/" ||
 		remainingPath == "/calendars" || remainingPath == "/calendars/" {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleListCalendars(w, r)
@@ -168,7 +169,7 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 	if calendarID, eventID, ok := CalendarEventPathParts(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		if eventID != "" {
@@ -181,7 +182,7 @@ func (c *GoogleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 	if id, ok := BareEventIDFromProxyPath(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleGetEvent(w, r, token, "primary", id)
@@ -262,12 +263,12 @@ func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *htt
 	events, truncated, err := c.ListEventsWithWindow(r.Context(), r.URL.Query())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			WriteJSONError(w, http.StatusUnauthorized,
+			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 			return
 		}
 		slog.Warn("google calendar list events failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
 		return
 	}
 	if events == nil {
@@ -291,7 +292,7 @@ func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *htt
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -301,14 +302,14 @@ func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *htt
 func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter, r *http.Request, calendarID string) {
 	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 		return
 	}
 	events, truncated, err := c.ListEventsForCalendar(r.Context(), token, calendarID, r.URL.Query())
 	if err != nil {
 		slog.Warn("google calendar list calendar events failed", "calendar", calendarID, "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch events from Google Calendar")
 		return
 	}
 	if events == nil {
@@ -332,7 +333,7 @@ func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build events list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -342,14 +343,14 @@ func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter
 func (c *GoogleCalendarConnector) HandleListCalendars(w http.ResponseWriter, r *http.Request) {
 	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 		return
 	}
 	calendars, truncated, err := c.ListCalendars(r.Context(), token, r.URL.Query())
 	if err != nil {
 		slog.Warn("google calendar list calendars failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch calendars from Google Calendar")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch calendars from Google Calendar")
 		return
 	}
 	result := map[string]any{
@@ -366,7 +367,7 @@ func (c *GoogleCalendarConnector) HandleListCalendars(w http.ResponseWriter, r *
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build calendars list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build calendars list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -378,19 +379,19 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 		"/events/" + url.PathEscape(eventID) + "?singleEvents=true"
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Google Calendar request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Calendar response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Google Calendar response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -401,7 +402,7 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 	}
 	var raw googleCalendarEvent
 	if err := json.Unmarshal(data, &raw); err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to parse Google Calendar response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse Google Calendar response")
 		return
 	}
 	ev := MapGoogleCalendarEvent(raw, calendarID, GoogleCalendarServiceName)
@@ -410,7 +411,7 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 	}
 	out, err := json.Marshal(ev)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode event")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode event")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -471,7 +472,7 @@ func (c *GoogleCalendarConnector) ListCalendars(ctx context.Context, token strin
 	}
 	var all []googleCalendarListItem
 	truncated := false
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := base + "?maxResults=250&showHidden=true"
 		if pageToken != "" {
 			u += "&pageToken=" + url.QueryEscape(pageToken)
@@ -481,7 +482,7 @@ func (c *GoogleCalendarConnector) ListCalendars(ctx context.Context, token strin
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -517,7 +518,7 @@ func (c *GoogleCalendarConnector) ListCalendars(ctx context.Context, token strin
 		if pageToken == "" {
 			break
 		}
-		if page == LibraryPageCap-1 && pageToken != "" {
+		if page == shared.LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
@@ -587,7 +588,7 @@ func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, tok
 	calName := calendarID
 	var all []types.CalendarEvent
 	truncated := false
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("singleEvents", "true")
 		values.Set("orderBy", "startTime")
@@ -607,7 +608,7 @@ func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, tok
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -634,7 +635,7 @@ func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, tok
 		if pageToken == "" {
 			break
 		}
-		if page == LibraryPageCap-1 && pageToken != "" {
+		if page == shared.LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}

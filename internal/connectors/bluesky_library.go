@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -165,7 +166,7 @@ func (c *BlueskyConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, b
 	var all []types.Photo
 	truncated := false
 	cursor := ""
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		q := url.Values{}
 		q.Set("actor", sess.Handle)
 		q.Set("limit", strconv.Itoa(blueskyLibraryCap))
@@ -187,7 +188,7 @@ func (c *BlueskyConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, b
 		if feed.Cursor == "" {
 			return all, truncated, nil
 		}
-		if page == LibraryPageCap-1 {
+		if page == shared.LibraryPageCap-1 {
 			truncated = true
 		}
 		cursor = feed.Cursor
@@ -463,7 +464,7 @@ func (c *BlueskyConnector) ListUserContacts(ctx context.Context) ([]types.Contac
 	var all []types.Contact
 	truncated := false
 	cursor := ""
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		q := url.Values{}
 		q.Set("actor", sess.Handle)
 		q.Set("limit", strconv.Itoa(blueskyLibraryCap))
@@ -486,7 +487,7 @@ func (c *BlueskyConnector) ListUserContacts(ctx context.Context) ([]types.Contac
 		if list.Cursor == "" {
 			break
 		}
-		if page == LibraryPageCap-1 {
+		if page == shared.LibraryPageCap-1 {
 			truncated = true
 		}
 		cursor = list.Cursor
@@ -541,7 +542,7 @@ func (c *BlueskyConnector) neutralContact(f blueskyProfile) types.Contact {
 
 // authedGet calls a PDS xrpc endpoint with the session JWT.
 func (c *BlueskyConnector) authedGet(ctx context.Context, accessJWT, path string, query url.Values) ([]byte, error) {
-	u := TrimRightSlash(c.BlueskyUpstreamBase()) + path
+	u := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}
@@ -550,7 +551,7 @@ func (c *BlueskyConnector) authedGet(ctx context.Context, accessJWT, path string
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+accessJWT)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -136,7 +137,7 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 
 	token := c.host.GetValidToken(GooglePhotosServiceID, logger)
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Google Photos token — authorize at /v1/auth/"+GooglePhotosServiceID+"/login")
 		return
 	}
@@ -144,7 +145,7 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	switch {
 	case remainingPath == "/picker/sessions" || remainingPath == "/picker/sessions/":
 		if r.Method != http.MethodPost {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed — use POST to create a session")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed — use POST to create a session")
 			return
 		}
 		c.HandleCreateSession(w, r, token)
@@ -152,7 +153,7 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 	case strings.HasPrefix(remainingPath, "/picker/sessions/"):
 		id := strings.Trim(strings.TrimPrefix(remainingPath, "/picker/sessions/"), "/")
 		if id == "" || strings.Contains(id, "/") {
-			WriteJSONError(w, http.StatusBadRequest, "missing session id")
+			shared.WriteJSONError(w, http.StatusBadRequest, "missing session id")
 			return
 		}
 		switch r.Method {
@@ -161,13 +162,13 @@ func (c *GooglePhotosConnector) HandleProxy(w http.ResponseWriter, r *http.Reque
 		case http.MethodDelete:
 			c.HandleDeleteSession(w, r, token, id)
 		default:
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	case remainingPath == "/picker/mediaItems" || remainingPath == "/picker/mediaItems/" ||
 		remainingPath == "/mediaItems" || remainingPath == "/mediaItems/":
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleListPickedMediaItems(w, r, token)
@@ -182,21 +183,21 @@ func (c *GooglePhotosConnector) HandleCreateSession(w http.ResponseWriter, r *ht
 	upstreamURL := c.GooglePhotosUpstreamBase() + "/sessions"
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, upstreamURL, strings.NewReader("{}"))
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		slog.Error("picker session create failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session create failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session create failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
@@ -205,7 +206,7 @@ func (c *GooglePhotosConnector) HandleCreateSession(w http.ResponseWriter, r *ht
 	}
 	var session googlePickerSession
 	if err := json.Unmarshal(data, &session); err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to parse picker session")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse picker session")
 		return
 	}
 	if session.ID != "" {
@@ -213,7 +214,7 @@ func (c *GooglePhotosConnector) HandleCreateSession(w http.ResponseWriter, r *ht
 	}
 	out, err := json.Marshal(MapPickerSession(session))
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode session")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode session")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -225,19 +226,19 @@ func (c *GooglePhotosConnector) HandleGetSession(w http.ResponseWriter, r *http.
 	upstreamURL := c.GooglePhotosUpstreamBase() + "/sessions/" + url.PathEscape(id)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session get failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session get failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -246,7 +247,7 @@ func (c *GooglePhotosConnector) HandleGetSession(w http.ResponseWriter, r *http.
 	}
 	var session googlePickerSession
 	if err := json.Unmarshal(data, &session); err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to parse picker session")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse picker session")
 		return
 	}
 	if session.MediaItemsSet {
@@ -254,7 +255,7 @@ func (c *GooglePhotosConnector) HandleGetSession(w http.ResponseWriter, r *http.
 	}
 	out, err := json.Marshal(MapPickerSession(session))
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode session")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode session")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -265,19 +266,19 @@ func (c *GooglePhotosConnector) HandleDeleteSession(w http.ResponseWriter, r *ht
 	upstreamURL := c.GooglePhotosUpstreamBase() + "/sessions/" + url.PathEscape(id)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodDelete, upstreamURL, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session delete failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Google Photos picker session delete failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Google Photos response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
@@ -294,7 +295,7 @@ func (c *GooglePhotosConnector) HandleListPickedMediaItems(w http.ResponseWriter
 		sessionID = c.GetLastSession()
 	}
 	if sessionID == "" {
-		WriteJSONError(w, http.StatusBadRequest,
+		shared.WriteJSONError(w, http.StatusBadRequest,
 			"missing sessionId — create a picker session at POST /picker/sessions, have the user open picker_uri, then pass sessionId")
 		return
 	}
@@ -303,7 +304,7 @@ func (c *GooglePhotosConnector) HandleListPickedMediaItems(w http.ResponseWriter
 	photos, truncated, err := c.ListSessionPhotos(r.Context(), token, sessionID)
 	if err != nil {
 		slog.Warn("google-photos picker list failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch picked photos from Google Photos")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch picked photos from Google Photos")
 		return
 	}
 	if photos == nil {
@@ -324,7 +325,7 @@ func (c *GooglePhotosConnector) HandleListPickedMediaItems(w http.ResponseWriter
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build photos list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build photos list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -349,7 +350,7 @@ func WriteGooglePhotosUpstreamError(w http.ResponseWriter, body []byte, status i
 				"(enable the Photos Picker API; Library API readonly no longer lists the full library for unverified apps)"
 		}
 	}
-	WriteJSONError(w, status, msg)
+	shared.WriteJSONError(w, status, msg)
 }
 
 // ListUserPhotos implements PhotoProvider. It returns the last completed
@@ -378,7 +379,7 @@ func (c *GooglePhotosConnector) ListSessionPhotos(ctx context.Context, token, se
 	var all []types.Photo
 	pageToken := ""
 	truncated := false
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/mediaItems?pageSize=100&sessionId=" + url.QueryEscape(sessionID)
 		if pageToken != "" {
 			u += "&pageToken=" + url.QueryEscape(pageToken)
@@ -388,7 +389,7 @@ func (c *GooglePhotosConnector) ListSessionPhotos(ctx context.Context, token, se
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -414,7 +415,7 @@ func (c *GooglePhotosConnector) ListSessionPhotos(ctx context.Context, token, se
 		if pageToken == "" {
 			break
 		}
-		if page == LibraryPageCap-1 && pageToken != "" {
+		if page == shared.LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}

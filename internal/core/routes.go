@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // registerRoutes wires every HTTP route on mux. Called once from Run after
@@ -82,12 +83,12 @@ func registerAuthRoutes(mux *http.ServeMux, srv *Server) {
 			srv.AdminMiddleware(srv.HandleAuthRevoke)(w, r)
 			return
 		}
-		writeJSONError(w, http.StatusNotFound, "unknown auth endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown auth endpoint")
 	}))
 	// Fallback: unlisted /v1/auth/* paths answer 404 JSON (the former
 	// handleAuthRoutes default case).
 	mux.HandleFunc("/v1/auth/", srv.rateLimitAuth(func(w http.ResponseWriter, r *http.Request) {
-		writeJSONError(w, http.StatusNotFound, "unknown auth endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown auth endpoint")
 	}))
 }
 
@@ -168,6 +169,6 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 	// handleAdminRoutes default case). Pattern specificity ensures every
 	// registered route above wins over this catch-all.
 	mux.HandleFunc("/v1/admin/", admin(func(w http.ResponseWriter, r *http.Request) {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}))
 }

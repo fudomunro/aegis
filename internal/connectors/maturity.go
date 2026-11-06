@@ -93,7 +93,6 @@ func timelineMaturity() types.ConnectionMaturity {
 	}
 }
 
-
 func spotifyMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   SpotifyServiceID,

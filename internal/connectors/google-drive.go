@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -124,7 +125,7 @@ func (c *GoogleDriveConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	logger := slog.With("service", GoogleDriveServiceID, "method", r.Method, "path", remainingPath)
 	token := c.host.GetValidToken(GoogleDriveServiceID, logger)
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Google Drive token — authorize at /v1/auth/"+GoogleDriveServiceID+"/login")
 		return
 	}
@@ -144,27 +145,27 @@ func (c *GoogleDriveConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	}
 	req, err := http.NewRequestWithContext(r.Context(), r.Method, upstream, body)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build Google Drive request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build Google Drive request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		req.Header.Set("Content-Type", ct)
 	}
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("google drive request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Google Drive request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Google Drive request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Drive response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Google Drive response")
 		return
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		WriteJSONError(w, resp.StatusCode,
+		shared.WriteJSONError(w, resp.StatusCode,
 			"Google Drive rejected the request — re-authorize at /v1/auth/"+GoogleDriveServiceID+"/login with drive.readonly")
 		return
 	}
@@ -173,7 +174,7 @@ func (c *GoogleDriveConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 		if len(msg) > 240 {
 			msg = msg[:240] + "…"
 		}
-		WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Google Drive returned %d: %s", resp.StatusCode, msg))
+		shared.WriteJSONError(w, resp.StatusCode, fmt.Sprintf("Google Drive returned %d: %s", resp.StatusCode, msg))
 		return
 	}
 	if isExport {
@@ -197,14 +198,14 @@ func (c *GoogleDriveConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 // googleDriveFile is the Drive files.list row subset we map.
 type googleDriveFile struct {
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	MimeType    string `json:"mimeType"`
-	CreatedTime string `json:"createdTime"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	MimeType     string `json:"mimeType"`
+	CreatedTime  string `json:"createdTime"`
 	ModifiedTime string `json:"modifiedTime"`
-	Description string `json:"description"`
-	WebViewLink string `json:"webViewLink"`
-	Owners      []struct {
+	Description  string `json:"description"`
+	WebViewLink  string `json:"webViewLink"`
+	Owners       []struct {
 		DisplayName string `json:"displayName"`
 		Email       string `json:"emailAddress"`
 	} `json:"owners"`
@@ -233,7 +234,7 @@ func (c *GoogleDriveConnector) apiGet(ctx context.Context, logger *slog.Logger, 
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -314,7 +315,7 @@ func (c *GoogleDriveConnector) ListUserDocuments(ctx context.Context) ([]types.D
 	truncated := false
 	pageToken := ""
 
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		q := url.Values{}
 		q.Set("q", "mimeType='"+googleDocsMime+"' and trashed=false")
 		q.Set("pageSize", fmt.Sprint(googleDriveListPageSize))
@@ -333,7 +334,7 @@ func (c *GoogleDriveConnector) ListUserDocuments(ctx context.Context) ([]types.D
 		if pageToken == "" {
 			break
 		}
-		if page == LibraryPageCap-1 {
+		if page == shared.LibraryPageCap-1 {
 			truncated = true
 		}
 	}
@@ -374,7 +375,7 @@ func (c *GoogleDriveConnector) exportFile(ctx context.Context, logger *slog.Logg
 		return "", err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}

@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -47,7 +48,7 @@ func (h *testHost) GetValidToken(serviceID string, logger *slog.Logger) string {
 
 func (h *testHost) UpstreamBaseFor(serviceID, fallback string) string {
 	if e := h.endpoints[serviceID]; e != "" {
-		return TrimRightSlash(e)
+		return shared.TrimRightSlash(e)
 	}
 	return fallback
 }

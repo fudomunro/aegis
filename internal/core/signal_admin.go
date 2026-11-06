@@ -35,7 +35,7 @@ func (s *Server) HandleAdminSignal(w http.ResponseWriter, r *http.Request) {
 		pathHint:  "a Signal export file or directory",
 		serviceID: connectors.SignalServiceID,
 		store:     s.signal,
-		status:   func() any { return s.signalStatus() },
+		status:    func() any { return s.signalStatus() },
 		importPath: func(path string) (any, error) {
 			return connectors.ImportSignalPath(s.signal, path)
 		},
@@ -76,4 +76,3 @@ func (s *Server) signalStatus() SignalImportStatus {
 	}
 	return st
 }
-

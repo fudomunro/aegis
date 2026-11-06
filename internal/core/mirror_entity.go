@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -51,7 +52,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun), r)
 
 	if err := s.requireMirrorWritable(req.TargetService, req.Kind); err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 	sourceService := req.SourceService
@@ -59,15 +60,15 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		sourceService = s.defaultMirrorSource(req.Kind)
 	}
 	if sourceService == "" {
-		writeJSONError(w, http.StatusBadRequest, "source_service is required (no canonical home configured)")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_service is required (no canonical home configured)")
 		return
 	}
 	if sourceService == req.TargetService {
-		writeJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
 	if err := s.requireMirrorReadable(sourceService, req.Kind); err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -81,12 +82,12 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 	case MirrorKindContacts:
 		src, err := mirrorOpFor[types.ContactProvider](s, sourceService, "contact mirror source")
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		dst, err := mirrorOpFor[types.ContactWriteProvider](s, req.TargetService, "contact mirror target")
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		items, tr, err := src.ListUserContacts(ctx)
@@ -102,7 +103,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		planned = len(items)
 		srcRef = MirrorRef{Service: sourceService, Name: "contacts", Count: planned}
 		if req.DryRun {
-			writeJSON(w, MirrorResult{
+			shared.WriteJSON(w, MirrorResult{
 				Kind: req.Kind, Source: srcRef, DryRun: true, Planned: planned,
 				Target:       MirrorRef{Service: req.TargetService, Name: "contacts"},
 				Truncated:    truncated,
@@ -121,23 +122,23 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		s.recordMirrorCopy(MirrorKindContacts, sourceService, "", req.TargetService, "", "contacts", res.Copied, "")
 		result = MirrorResult{
 			Kind: req.Kind, Source: srcRef,
-			Target:     MirrorRef{Service: req.TargetService, Name: "contacts", Count: res.Copied},
-			Copied:     res.Copied,
-			Skips:      toMirrorSkips(res.Skips),
-			Skipped:    len(res.Skips),
-			Conflicts:  toMirrorConflicts(res.Conflicts),
-			Planned:    planned,
-			Truncated:  truncated,
+			Target:    MirrorRef{Service: req.TargetService, Name: "contacts", Count: res.Copied},
+			Copied:    res.Copied,
+			Skips:     toMirrorSkips(res.Skips),
+			Skipped:   len(res.Skips),
+			Conflicts: toMirrorConflicts(res.Conflicts),
+			Planned:   planned,
+			Truncated: truncated,
 		}
 	case MirrorKindEvents:
 		src, err := mirrorOpFor[types.CalendarEventProvider](s, sourceService, "event mirror source")
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		dst, err := mirrorOpFor[types.CalendarEventWriteProvider](s, req.TargetService, "event mirror target")
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		items, tr, err := src.ListCalendarEvents(ctx)
@@ -153,7 +154,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		planned = len(items)
 		srcRef = MirrorRef{Service: sourceService, Name: "events", Count: planned}
 		if req.DryRun {
-			writeJSON(w, MirrorResult{
+			shared.WriteJSON(w, MirrorResult{
 				Kind: req.Kind, Source: srcRef, DryRun: true, Planned: planned,
 				Target:       MirrorRef{Service: req.TargetService, Name: "events"},
 				Truncated:    truncated,
@@ -172,13 +173,13 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		s.recordMirrorCopy(MirrorKindEvents, sourceService, "", req.TargetService, "", "events", res.Copied, "")
 		result = MirrorResult{
 			Kind: req.Kind, Source: srcRef,
-			Target:     MirrorRef{Service: req.TargetService, Name: "events", Count: res.Copied},
-			Copied:     res.Copied,
-			Skips:      toMirrorSkips(res.Skips),
-			Skipped:    len(res.Skips),
-			Conflicts:  toMirrorConflicts(res.Conflicts),
-			Planned:    planned,
-			Truncated:  truncated,
+			Target:    MirrorRef{Service: req.TargetService, Name: "events", Count: res.Copied},
+			Copied:    res.Copied,
+			Skips:     toMirrorSkips(res.Skips),
+			Skipped:   len(res.Skips),
+			Conflicts: toMirrorConflicts(res.Conflicts),
+			Planned:   planned,
+			Truncated: truncated,
 		}
 	}
 
@@ -187,5 +188,5 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		"source", sourceService, "target", req.TargetService,
 		"planned", result.Planned, "copied", result.Copied,
 		"skipped", result.Skipped, "conflicts", len(result.Conflicts))
-	writeJSON(w, result)
+	shared.WriteJSON(w, result)
 }

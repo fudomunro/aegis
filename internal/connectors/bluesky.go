@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -159,7 +160,7 @@ func (c *BlueskyConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 	}
 
 	logger.Info("bluesky proxy path not implemented; prefer library/share endpoints")
-	WriteJSONError(w, http.StatusNotFound,
+	shared.WriteJSONError(w, http.StatusNotFound,
 		"bluesky proxy path not implemented in this PoC — use POST /v1/library/photos/share or GET /v1/library/{photos,messages}")
 }
 
@@ -168,39 +169,39 @@ func (c *BlueskyConnector) handleGetBlob(w http.ResponseWriter, r *http.Request,
 	did := strings.TrimSpace(q.Get("did"))
 	cid := strings.TrimSpace(q.Get("cid"))
 	if did == "" || cid == "" {
-		WriteJSONError(w, http.StatusBadRequest, "did and cid query parameters are required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "did and cid query parameters are required")
 		return
 	}
 	sess, err := c.createSession(r.Context())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
+			shared.WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
 			return
 		}
-		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	u := TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.sync.getBlob?did=" +
+	u := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.sync.getBlob?did=" +
 		url.QueryEscape(did) + "&cid=" + url.QueryEscape(cid)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+sess.AccessJwt)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		WriteJSONError(w, http.StatusUnauthorized, "bluesky rejected the blob request")
+		shared.WriteJSONError(w, http.StatusUnauthorized, "bluesky rejected the blob request")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("bluesky getBlob returned %d: %s", resp.StatusCode, truncateBytes(body, 200)))
+		shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("bluesky getBlob returned %d: %s", resp.StatusCode, truncateBytes(body, 200)))
 		return
 	}
 	mime := resp.Header.Get("Content-Type")
@@ -222,35 +223,35 @@ func (c *BlueskyConnector) handleXRPCGet(w http.ResponseWriter, r *http.Request,
 	sess, err := c.createSession(r.Context())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
+			shared.WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
 			return
 		}
-		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
-	u := TrimRightSlash(c.BlueskyUpstreamBase()) + path
+	u := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + path
 	if r.URL.RawQuery != "" {
 		u += "?" + r.URL.RawQuery
 	}
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, u, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+sess.AccessJwt)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, err.Error())
+		shared.WriteJSONError(w, http.StatusBadGateway, err.Error())
 		return
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		WriteJSONError(w, http.StatusUnauthorized, "bluesky rejected the request")
+		shared.WriteJSONError(w, http.StatusUnauthorized, "bluesky rejected the request")
 		return
 	}
 	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
@@ -330,14 +331,14 @@ func (c *BlueskyConnector) createSession(ctx context.Context) (blueskySession, e
 	if err != nil {
 		return blueskySession{}, err
 	}
-	endpoint := TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.server.createSession"
+	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.server.createSession"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return blueskySession{}, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return blueskySession{}, err
 	}
@@ -428,7 +429,7 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req types.PhotoShareR
 		return types.PhotoShareResult{}, err
 	}
 
-	endpoint := TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.createRecord"
+	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.createRecord"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(createBody))
 	if err != nil {
 		return types.PhotoShareResult{}, err
@@ -436,7 +437,7 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req types.PhotoShareR
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+sess.AccessJwt)
 
-	resp, err := HTTPClient.Do(httpReq)
+	resp, err := shared.HTTPClient.Do(httpReq)
 	if err != nil {
 		return types.PhotoShareResult{}, err
 	}
@@ -474,7 +475,7 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req types.PhotoShareR
 }
 
 func (c *BlueskyConnector) uploadBlob(ctx context.Context, accessJWT string, data []byte, mime string) (blueskyBlob, error) {
-	endpoint := TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.uploadBlob"
+	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.uploadBlob"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(data))
 	if err != nil {
 		return blueskyBlob{}, err
@@ -482,7 +483,7 @@ func (c *BlueskyConnector) uploadBlob(ctx context.Context, accessJWT string, dat
 	req.Header.Set("Content-Type", mime)
 	req.Header.Set("Authorization", "Bearer "+accessJWT)
 
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return blueskyBlob{}, err
 	}

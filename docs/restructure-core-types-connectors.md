@@ -145,12 +145,13 @@ connectors ──► *Server ──► types (models, LibraryKind)
 
 ## 3. Target architecture
 
-Three packages under `internal/` (private service; no accidental imports).
+Four packages under `internal/` (private service; no accidental imports).
 Keep `package main` at repo root so `go build -o aegis .` and CI stay stable.
 
 ```text
 github.com/fudomunro/aegis/
   main.go, admin UI embed, flags, route wiring     (package main)
+  internal/shared/      stdlib-only transport/JSON/math plumbing (issue #280)
   internal/types/       pure data-type layer
   internal/core/        runtime: auth, config, tokens, proxy, cache, admin,
                         permission engine, library aggregate pipeline
@@ -161,13 +162,16 @@ github.com/fudomunro/aegis/
 
 | Layer | Owns | Must not own |
 |-------|------|--------------|
+| **shared** | `HTTPClient`, `LibraryPageCap`, `WriteJSON` / `WriteJSONError`, `TrimRightSlash`, generic map/JSON coercion (`ExtractNested`, `ExtractNames`, `ExtraOrNil`, `AsInt`), math helpers (`HaversineMeters`, `Iso8601DurationMs`) | Domain models, `Host`, service IDs, provider knowledge, policy — and it imports none of the other Aegis packages (stdlib only) |
 | **types** | Neutral models, identity/merge, `LibraryKind` *data*, type schema (including future UDT), `TypePolicy` / access levels, redaction *rules*, `DataTypeCapability` / `Operation` shapes, error sentinels (`ErrUnauthorized`) | HTTP, tokens, config file I/O, `*Server`, provider HTTP |
 | **core** | `Server` / host, auth, config + overlays, OAuth + tokens, proxy + cache + httpclient, permission *enforcement*, `handleLibraryAggregate`, admin/flow/metrics, state stores (copy ledger, entity links, mail, …) | Provider-specific JSON, per-kind merge logic, service brand knowledge |
-| **connectors** | `ServiceConnector` impls, `Capabilities()`, `SystemInstructions`, `HandleProxy`, `ListUser*` providers, setup flows (Immich, YNAB), sample calendar | Permission policy, neutral merge, admin HTML, token storage |
+| **connectors** | `ServiceConnector` impls, `Capabilities()`, `SystemInstructions`, `HandleProxy`, `ListUser*` providers, setup flows (Immich, YNAB), sample calendar, `DoUpstreamRequest` | Permission policy, neutral merge, admin HTML, token storage |
 
 ### Dependency rule
 
 ```text
+shared  ◄──imported by──  types / connectors / core   (shared imports stdlib only)
+
 connectors ──depends on──► types
      │
      └──depends on──► core.Host (narrow interface)
@@ -178,11 +182,12 @@ core ──depends on──► types │
 main ──wires──► core + connectors
 ```
 
-**No cycles.** `types` imports only stdlib (+ maybe `golang.org/x/…` if a
-future schema needs it). `connectors` never import `core` types beyond a small
-`Host` interface (or the interface is defined in `types` / `connectors` and
-implemented by core — pick one home and stick to it; recommend `core.Host`
-exported and documented).
+**No cycles.** `shared` and `types` import only stdlib (+ maybe `golang.org/x/…`
+if a future schema needs it). `shared` is importable by `types`, `connectors`,
+and `core`, and imports none of them. `connectors` never import `core` types
+beyond a small `Host` interface (or the interface is defined in `types` /
+`connectors` and implemented by core — pick one home and stick to it;
+recommend `core.Host` exported and documented).
 
 ### `core.Host` (connector seam — the first real code change)
 
@@ -381,7 +386,8 @@ ownership proofs (#20), multi-user (#149), replacing named connectors.
 
 ## 5. What to do first (immediate next actions)
 
-1. Agree package names (`internal/types`, `internal/core`, `internal/connectors`)
+1. Agree package names (`internal/types`, `internal/core`, `internal/connectors`;
+   `internal/shared` was added later for shared plumbing, issue #280)
    and `core.Host` home.
 2. Land **Phase 0 + Phase 1** on a `refactor/issue-15-host-seam` worktree —
    this is the only step that unblocks everything else and is reviewable alone.
@@ -421,6 +427,9 @@ ownership proofs (#20), multi-user (#149), replacing named connectors.
 - [ ] `internal/types`, `internal/core`, `internal/connectors` exist with the
       dependency rule above (enforced by `go list` / review, optionally a
       test that connectors do not import core internals).
+- [ ] `internal/shared` holds the stdlib-only plumbing (HTTP client, page cap,
+      JSON writers, URL/JSON/math utils) with no duplicates left in `core` or
+      `connectors` (issue #280).
 - [ ] Connectors depend on `Host` + `types`, not `*Server`.
 - [ ] `LibraryKind` data and type policy live in `types`; enforcement in `core`.
 - [ ] AGENTS.md + README + adding-data-types.md describe the new layout.

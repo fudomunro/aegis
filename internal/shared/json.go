@@ -1,4 +1,4 @@
-package connectors
+package shared
 
 import (
 	"encoding/json"

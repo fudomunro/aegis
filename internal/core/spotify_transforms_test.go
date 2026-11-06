@@ -281,50 +281,6 @@ func TestFetchAllPagesRaw(t *testing.T) {
 	}
 }
 
-func TestExtractNamesAndNested(t *testing.T) {
-	obj := map[string]any{
-		"artists": []any{
-			map[string]any{"name": "A"},
-			"skip",
-			map[string]any{"no_name": true},
-			map[string]any{"name": "B"},
-		},
-		"album": map[string]any{"name": "Al", "id": "1"},
-	}
-	names := connectors.ExtractNames(obj, "artists")
-	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
-		t.Fatalf("names = %v", names)
-	}
-	if connectors.ExtractNames(obj, "missing") != nil {
-		t.Fatal("missing key should be nil")
-	}
-	if got := connectors.ExtractNested(obj, "album", "name"); got != "Al" {
-		t.Fatalf("nested = %v", got)
-	}
-	if got := connectors.ExtractNested(obj, "album", "id"); got != "1" {
-		t.Fatalf("nested id = %v", got)
-	}
-	if got := connectors.ExtractNested(obj, "album", "missing"); got != nil {
-		t.Fatalf("missing nested = %v", got)
-	}
-	if got := connectors.ExtractNested(map[string]any{}, "a", "b"); got != nil {
-		t.Fatalf("empty = %v", got)
-	}
-}
-
-func TestExtraOrNil(t *testing.T) {
-	if connectors.ExtraOrNil(nil) != nil {
-		t.Fatal("nil map should stay nil")
-	}
-	if connectors.ExtraOrNil(map[string]any{}) != nil {
-		t.Fatal("empty map should be nil")
-	}
-	m := map[string]any{"uri": "x"}
-	if connectors.ExtraOrNil(m)["uri"] != "x" {
-		t.Fatal("non-empty map preserved")
-	}
-}
-
 func TestNewAlbum(t *testing.T) {
 	if types.NewAlbum("spotify", "Spotify", "1", "  ") != nil {
 		t.Fatal("blank album name should be nil")

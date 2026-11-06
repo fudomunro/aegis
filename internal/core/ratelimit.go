@@ -8,6 +8,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Brute-force damping for authentication and token-bearing routes
@@ -44,10 +46,10 @@ const (
 
 // rateLimits is the effective (resolved) configuration.
 type rateLimits struct {
-	perMinute        int
-	failPerIP        int
-	failPerToken     int
-	window           time.Duration
+	perMinute    int
+	failPerIP    int
+	failPerToken int
+	window       time.Duration
 }
 
 func (c RateLimitConfig) effective() rateLimits {
@@ -258,7 +260,7 @@ func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 	} else if s.prom != nil {
 		s.prom.observeAccess(ev)
 	}
-	writeJSONError(w, http.StatusTooManyRequests, "rate limited: too many requests")
+	shared.WriteJSONError(w, http.StatusTooManyRequests, "rate limited: too many requests")
 }
 
 // rateLimitAuth damps credential-guessing volume on auth and token routes.

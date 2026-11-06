@@ -1,13 +1,13 @@
 package core
 
 import (
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -30,7 +30,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// the upstream URL cannot diverge (issue #94). Non-canonical paths 400.
 	canonical, err := types.CanonicalProxyPath(remainingPath)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid request path")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid request path")
 		return
 	}
 	remainingPath = canonical
@@ -40,14 +40,14 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
 		logger.Warn("service not found")
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
+		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
 		return
 	}
 	// Data-scope isolation: foreign partitions look missing, never 403
 	// (docs/data-scopes.md).
 	if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
 		logger.Warn("service not found", "reason", "dataset partition")
-		writeJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
+		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
 		return
 	}
 
@@ -67,7 +67,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			ClientIP: s.clientIPFor(r),
 			Status:   http.StatusNotFound,
 		})
-		writeJSONError(w, http.StatusNotFound,
+		shared.WriteJSONError(w, http.StatusNotFound,
 			"service paths are content/ingest only (photo bytes, full message bodies, playlist items, local import); use /v1/library/{kind} for user data")
 		return
 	}
@@ -88,7 +88,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			ClientIP: s.clientIPFor(r),
 			Status:   http.StatusForbidden,
 		})
-		writeJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))
+		shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf("access to %s is not allowed: %s", svc.Name, svc.Description))
 		return
 	}
 
@@ -117,7 +117,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	connector, ok := s.connectors[serviceID]
 	if !ok {
 		logger.Warn("no connector for content path")
-		writeJSONError(w, http.StatusNotFound,
+		shared.WriteJSONError(w, http.StatusNotFound,
 			fmt.Sprintf("service %q has no connector for content/ingest", serviceID))
 		return
 	}
@@ -144,12 +144,6 @@ func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache s
 		Method:   r.Method,
 		ClientIP: s.clientIPFor(r),
 	})
-}
-
-func writeJSONError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]string{"error": message})
 }
 
 // GetValidToken returns a valid access token for the service's provider

@@ -18,10 +18,6 @@ const (
 	TransactionMatchAmountDateMerchant = "amount_date_merchant"
 )
 
-
-
-
-
 // unionTransactionCategories unions category labels, preserving order.
 func unionTransactionCategories(dst, src []string) []string {
 	if len(src) == 0 {
@@ -45,7 +41,6 @@ func unionTransactionCategories(dst, src []string) []string {
 	}
 	return out
 }
-
 
 // transactionMatchKind records how identity was established for multi-source merges.
 func transactionMatchKind(key string) string {

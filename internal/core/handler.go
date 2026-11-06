@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -89,9 +90,9 @@ type Server struct {
 	baseURL  string
 	// dataDir is the resolved local state directory (issue #74). Surfaced
 	// on the admin Runtime panel so the layout is discoverable.
-	dataDir     string
-	config      *Config
-	cache       *Cache
+	dataDir string
+	config  *Config
+	cache   *Cache
 	// mbCache holds MusicBrainz MBID lookups (issue #273). Separate from
 	// cache so library invalidation and aggregate churn never spend the
 	// rate-limited lookup budget re-resolving the same tracks.
@@ -347,7 +348,7 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// never served on the published API listener — the allowlist gate
 		// answers 404 first, and this refuses even a mis-gated route.
 		if externalAPIFrom(r) {
-			writeJSONError(w, http.StatusNotFound, "not found")
+			shared.WriteJSONError(w, http.StatusNotFound, "not found")
 			return
 		}
 		// Brute-force damping (issue #253): the admin key is the most
@@ -587,10 +588,10 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 		ClientIP: s.clientIPFor(r),
 	})
 	if status == http.StatusForbidden {
-		writeJSONError(w, status, "forbidden: admin credential required")
+		shared.WriteJSONError(w, status, "forbidden: admin credential required")
 		return
 	}
-	writeJSONError(w, status, "unauthorized")
+	shared.WriteJSONError(w, status, "unauthorized")
 }
 
 // recordHook records a pre-request hook outcome in both the admin ring and
@@ -703,7 +704,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		if errors.As(err, &maxErr) {
 			slog.Error("pre-request body too large", "limit", maxErr.Limit)
 			s.recordHook(HookObservation{Action: "parse_fail", Host: requestHost(r)})
-			writeJSONError(w, http.StatusRequestEntityTooLarge,
+			shared.WriteJSONError(w, http.StatusRequestEntityTooLarge,
 				fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
 			return
 		}

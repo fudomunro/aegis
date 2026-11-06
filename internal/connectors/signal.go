@@ -2,8 +2,8 @@ package connectors
 
 import (
 	"bufio"
-	"database/sql"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -123,8 +124,6 @@ CREATE TABLE IF NOT EXISTS signal_messages (
 CREATE INDEX IF NOT EXISTS signal_messages_sent ON signal_messages(sent_at);
 CREATE INDEX IF NOT EXISTS signal_messages_thread ON signal_messages(thread_id);
 `
-
-
 
 func (s *SignalStore) Enabled() bool { return s != nil && s.db != nil }
 
@@ -710,7 +709,6 @@ func importSignalJSON(store *SignalStore, file string, res *SignalImportResult, 
 	return fmt.Errorf("unrecognized Signal JSON shape in %s", file)
 }
 
-
 // signalBatch collects parsed rows for one import file so contacts and
 // messages are written in batched transactions (issue #266).
 type signalBatch struct {
@@ -1113,7 +1111,7 @@ func (c *SignalConnector) SystemInstructions(baseURL string) string {
 func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	store := c.store
 	if store == nil || !store.Enabled() {
-		WriteJSONError(w, http.StatusNotFound, "signal store disabled")
+		shared.WriteJSONError(w, http.StatusNotFound, "signal store disabled")
 		return
 	}
 	path := strings.Trim(remainingPath, "/")
@@ -1124,10 +1122,10 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 	case r.Method == http.MethodGet && (path == "import/status"):
 		contacts, messages, err := store.Counts()
 		if err != nil {
-			WriteJSONError(w, http.StatusInternalServerError, "signal store error")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		WriteJSON(w, map[string]any{"contacts": contacts, "messages": messages, "path": store.Path()})
+		shared.WriteJSON(w, map[string]any{"contacts": contacts, "messages": messages, "path": store.Path()})
 	case r.Method == http.MethodGet && (path == "messages" || path == "messages/"):
 		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
@@ -1137,10 +1135,10 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		}
 		list, err := store.ListMessages(limit)
 		if err != nil {
-			WriteJSONError(w, http.StatusInternalServerError, "signal store error")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		WriteJSON(w, types.MessageList{Messages: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		shared.WriteJSON(w, types.MessageList{Messages: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodGet && (path == "contacts" || path == "contacts/" || path == "me/contacts"):
 		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
@@ -1150,27 +1148,27 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 		}
 		list, err := store.ListContacts(limit)
 		if err != nil {
-			WriteJSONError(w, http.StatusInternalServerError, "signal store error")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		WriteJSON(w, types.ContactList{Contacts: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		shared.WriteJSON(w, types.ContactList{Contacts: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && path == "import":
 		var req struct {
 			Path string `json:"path"`
 		}
 		body, _ := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err := json.Unmarshal(body, &req); err != nil || strings.TrimSpace(req.Path) == "" {
-			WriteJSONError(w, http.StatusBadRequest, "path is required")
+			shared.WriteJSONError(w, http.StatusBadRequest, "path is required")
 			return
 		}
 		res, err := ImportSignalPath(store, req.Path)
 		if err != nil {
-			WriteJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		WriteJSON(w, res)
+		shared.WriteJSON(w, res)
 	default:
-		WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -1213,8 +1211,7 @@ func (c *SignalConnector) ListMessages(ctx context.Context) (messages []types.Me
 }
 
 var (
-	_ ServiceConnector = (*SignalConnector)(nil)
-	_ types.MessageProvider       = (*SignalConnector)(nil)
-	_ types.ContactProvider       = (*SignalConnector)(nil)
+	_ ServiceConnector      = (*SignalConnector)(nil)
+	_ types.MessageProvider = (*SignalConnector)(nil)
+	_ types.ContactProvider = (*SignalConnector)(nil)
 )
-

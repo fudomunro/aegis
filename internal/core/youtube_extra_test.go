@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"fmt"
@@ -67,10 +68,10 @@ func TestYouTubeGetLikedPlaylistID_NoToken(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
-	// getLikedPlaylistID may hit the real host; intercept via connectors.HTTPClient.
-	orig := connectors.HTTPClient
-	defer func() { connectors.HTTPClient = orig }()
-	connectors.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	// getLikedPlaylistID may hit the real host; intercept via shared.HTTPClient.
+	orig := shared.HTTPClient
+	defer func() { shared.HTTPClient = orig }()
+	shared.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if r.Header.Get("Authorization") != "Bearer tok" {
 			return &http.Response{
 				StatusCode: http.StatusUnauthorized,
@@ -103,9 +104,9 @@ func TestYouTubeGetLikedPlaylistID_Success(t *testing.T) {
 }
 
 func TestYouTubeGetLikedPlaylistID_NoChannel(t *testing.T) {
-	orig := connectors.HTTPClient
-	defer func() { connectors.HTTPClient = orig }()
-	connectors.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+	orig := shared.HTTPClient
+	defer func() { shared.HTTPClient = orig }()
+	shared.HTTPClient = &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		return &http.Response{
 			StatusCode: http.StatusOK,
 			Body:       io.NopCloser(strings.NewReader(`{"items":[]}`)),
@@ -305,23 +306,5 @@ func TestYouTubeFetchAllPages_EmptyItemsKey(t *testing.T) {
 	if _, ok := m["nextPageToken"]; !ok {
 		// If items key is empty, pagination is skipped and token remains.
 		t.Fatalf("got = %#v", m)
-	}
-}
-
-func TestAsInt(t *testing.T) {
-	if n, ok := connectors.AsInt(float64(42)); !ok || n != 42 {
-		t.Fatalf("float64 %v %v", n, ok)
-	}
-	if n, ok := connectors.AsInt(int(7)); !ok || n != 7 {
-		t.Fatalf("int %v %v", n, ok)
-	}
-	if n, ok := connectors.AsInt(int64(8)); !ok || n != 8 {
-		t.Fatalf("int64 %v %v", n, ok)
-	}
-	if _, ok := connectors.AsInt("nope"); ok {
-		t.Fatal("string should not convert")
-	}
-	if _, ok := connectors.AsInt(nil); ok {
-		t.Fatal("nil should not convert")
 	}
 }

@@ -6,6 +6,8 @@ import (
 	"net"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Split listeners (docs/external-access.md): the API listener carries the
@@ -67,7 +69,7 @@ func listenerMiddleware(base string, external bool, next http.Handler) http.Hand
 func apiAllowlistGate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !apiRouteAllowed(r.Method, r.URL.Path) {
-			writeJSONError(w, http.StatusNotFound, "not found")
+			shared.WriteJSONError(w, http.StatusNotFound, "not found")
 			return
 		}
 		next.ServeHTTP(w, r)
