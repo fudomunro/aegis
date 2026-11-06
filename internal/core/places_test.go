@@ -47,54 +47,8 @@ func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
 	}
 }
 
-func TestMergePlaceVisits_WindowAndDurableID(t *testing.T) {
-	merged := MergePlaceVisits(samplePlaces())
-	// Harbor evening merges across Timeline + OwnTracks (window+place).
-	// Lunenburg visit, drive trip, and a different-year harbour visit stay distinct.
-	if len(merged) != 4 {
-		t.Fatalf("merged = %d, want 4: %+v", len(merged), merged)
-	}
-	var harbor *types.PlaceVisit
-	for i := range merged {
-		if merged[i].EntityID == "tl-harbor-20230704" || containsService(merged[i], connectors.TimelineServiceID) {
-			if merged[i].Place.Name == "Halifax Harbour" && merged[i].StartAt == "2023-07-04T16:00:00Z" {
-				harbor = &merged[i]
-			}
-		}
-	}
-	if harbor == nil {
-		// Find by place name + date
-		for i := range merged {
-			if merged[i].Place.Name == "Halifax Harbour" && len(merged[i].Sources) > 1 {
-				harbor = &merged[i]
-			}
-		}
-	}
-	if harbor == nil {
-		t.Fatalf("harbour multi-source visit not found: %+v", merged)
-	}
-	if len(harbor.Sources) < 2 {
-		t.Fatalf("harbour sources = %d, want >= 2", len(harbor.Sources))
-	}
-	if harbor.Match != PlaceVisitMatchWindow && harbor.Match != PlaceVisitMatchProviderID {
-		// Cross-provider merge on window+place.
-		if harbor.Match != PlaceVisitMatchWindow {
-			t.Fatalf("match = %q", harbor.Match)
-		}
-	}
-}
-
-func containsService(v types.PlaceVisit, id string) bool {
-	for _, s := range v.Sources {
-		if s.Service == id {
-			return true
-		}
-	}
-	return false
-}
-
 func TestPlaceVisitFilters(t *testing.T) {
-	visits := MergePlaceVisits(samplePlaces())
+	visits := types.MergePlaceVisits(samplePlaces())
 	f := types.PlaceVisitFilters{Locality: "Lunenburg"}
 	got := filterPlaceVisits(visits, f)
 	if len(got) != 2 { // visit + drive trip to Lunenburg
@@ -204,7 +158,7 @@ func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
 // visit work on sample data.
 func TestPhotosPlacesJoinDemo(t *testing.T) {
 	lib := GenerateSampleLibrary()
-	merged := MergePlaceVisits(lib.Places)
+	merged := types.MergePlaceVisits(lib.Places)
 	var harbor, lunenburg *types.PlaceVisit
 	for i := range merged {
 		switch {

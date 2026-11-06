@@ -97,7 +97,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 
 	// Contact chain: email + phone + handle on Ada must union-find to one entity.
-	merged := MergeContacts(lib.Contacts)
+	merged := types.MergeContacts(lib.Contacts)
 	var ada *types.Contact
 	for i := range merged {
 		if strings.Contains(strings.ToLower(merged[i].Name), "ada") {
@@ -113,7 +113,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 
 	// Message-ID pair merges; subject+from+time pair merges without Message-ID.
-	mergedMsgs := MergeMessages(lib.Messages)
+	mergedMsgs := types.MergeMessages(lib.Messages)
 	var ship, invoice *types.Message
 	for i := range mergedMsgs {
 		switch mergedMsgs[i].Subject {
@@ -134,7 +134,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 
 	// Document checksum pair merges; same-title different-date must not.
-	mergedDocs := MergeDocuments(lib.Documents)
+	mergedDocs := types.MergeDocuments(lib.Documents)
 	leaseSources := 0
 	warrantyTitles := 0
 	for _, d := range mergedDocs {

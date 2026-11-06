@@ -283,66 +283,6 @@ func TestGoogleContactsConnector_ImplementsContactProvider(t *testing.T) {
 	var _ connectors.ServiceConnector = connectors.NewGoogleContactsConnector(srv)
 }
 
-func TestMergePhotoPeople_UnionsSharedIdentity(t *testing.T) {
-	a := types.Contact{
-		Name:    "Ada Lovelace",
-		Emails:  []string{"ada@example.com"},
-		Sources: []types.ContactSource{{Service: "google", ServiceName: "Google Contacts", ID: "people/c1"}},
-	}
-	b := types.Contact{
-		Name:   "Ada L.",
-		Emails: []string{"ADA@example.com"},
-		Phones: []string{"+15551234567"},
-		Sources: []types.ContactSource{
-			{Service: "google-photos", ServiceName: "Google Photos", ID: "tag1"},
-		},
-	}
-	merged := mergePhotoPeople([]types.Contact{a}, []types.Contact{b})
-	if len(merged) != 1 {
-		t.Fatalf("want 1 person, got %+v", merged)
-	}
-	if merged[0].Name != "Ada Lovelace" {
-		t.Fatalf("name = %q", merged[0].Name)
-	}
-	if len(merged[0].Emails) != 1 || merged[0].Emails[0] != "ada@example.com" {
-		t.Fatalf("emails = %v", merged[0].Emails)
-	}
-	if len(merged[0].Phones) != 1 {
-		t.Fatalf("phones = %v", merged[0].Phones)
-	}
-	if len(merged[0].Sources) != 2 {
-		t.Fatalf("sources = %+v", merged[0].Sources)
-	}
-}
-
-func TestMergePhotoPeople_DistinctPeopleStaySeparate(t *testing.T) {
-	a := types.Contact{Name: "Alex Kim", Emails: []string{"a@example.com"}}
-	b := types.Contact{Name: "Alex Kim", Emails: []string{"b@example.com"}}
-	merged := mergePhotoPeople([]types.Contact{a}, []types.Contact{b})
-	if len(merged) != 2 {
-		t.Fatalf("distinct emails must not merge by name: %+v", merged)
-	}
-}
-
-func TestMergePhotos_PreservesPeopleAcrossSources(t *testing.T) {
-	p1 := types.NewPhoto("google-photos", "Google Photos", "p1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
-	p1.People = []types.Contact{{Name: "Ada", Emails: []string{"ada@example.com"}}}
-	p2 := types.NewPhoto("icloud", "iCloud Photos", "p2", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10)
-	p2.People = []types.Contact{
-		{Name: "Ada", Emails: []string{"ada@example.com"}, Phones: []string{"+15550001111"}},
-		{Name: "Grace", Emails: []string{"grace@example.com"}},
-	}
-
-	merged := MergePhotos([]types.Photo{p1, p2})
-	if len(merged) != 1 {
-		t.Fatalf("want 1 photo, got %d", len(merged))
-	}
-	people := merged[0].People
-	if len(people) != 2 {
-		t.Fatalf("people = %+v", people)
-	}
-}
-
 func TestDataTypeForPath_PeopleAPI(t *testing.T) {
 	cases := map[string]string{
 		"/people/me/connections": "contacts",

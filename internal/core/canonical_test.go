@@ -141,7 +141,7 @@ func TestMergeTracksSync_CanonicalSortsFirst(t *testing.T) {
 }
 
 func TestMergeContacts_CanonicalSortsFirst(t *testing.T) {
-	merged := MergeContacts([]types.Contact{
+	merged := types.MergeContacts([]types.Contact{
 		{Name: "Alex", Emails: []string{"alex@example.com"},
 			Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook"}}},
 		{Name: "Alex", Emails: []string{"alex@example.com"},

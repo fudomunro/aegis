@@ -348,7 +348,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 	}
 
 	// Contacts: email → phone → handle → name union-find.
-	mergedContacts := MergeContacts(lib.Contacts)
+	mergedContacts := types.MergeContacts(lib.Contacts)
 	var ada *types.Contact
 	for i := range mergedContacts {
 		if strings.Contains(strings.ToLower(mergedContacts[i].Name), "ada") {
@@ -395,7 +395,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 	}
 
 	// Messages: Message-ID preferred; subject+from+time fallback.
-	mergedMsgs := MergeMessages(lib.Messages)
+	mergedMsgs := types.MergeMessages(lib.Messages)
 	bySubject := map[string]types.Message{}
 	for _, m := range mergedMsgs {
 		bySubject[m.Subject] = m
