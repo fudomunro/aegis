@@ -181,7 +181,7 @@ func (s *Server) applyOnboardingUpdates(spec types.OnboardingSpec, updates []typ
 	}
 	if touched {
 		// Library listings must not serve the old connection's view.
-		s.cache.Clear()
+		s.invalidateService(spec.ServiceID)
 	}
 	return nil
 }

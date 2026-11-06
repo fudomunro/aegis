@@ -48,7 +48,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			s.cache.Clear()
+			s.invalidateCaches()
 			withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 				Info("invite token minted", "scope_id", view.ID, "dataset", view.Dataset)
 			writeJSON(w, map[string]any{
@@ -86,7 +86,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.cache.Clear()
+		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 			Info("invite token rotated", "scope_id", id)
 		writeJSON(w, map[string]any{
@@ -116,7 +116,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.cache.Clear()
+		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 			Info("data scope updated", "scope_id", id, "disabled", view.Disabled)
 		writeJSON(w, map[string]any{"scope": view, "status": "saved"})

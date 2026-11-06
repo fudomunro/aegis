@@ -228,6 +228,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		authMode:    AuthModeAPIKey,
 		config:      cfg,
 		cache:       NewCache(),
+		mbCache:     NewCache(),
 		tokens:      mustTokens(t),
 		oauthStates: NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),

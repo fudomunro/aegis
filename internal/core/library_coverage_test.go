@@ -35,13 +35,24 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 	}
 }
 
+// seedLibraryAggregate stores a merged aggregate under the kind's cache key
+// so a handler request can be served from cache (issue #273 format).
+func seedLibraryAggregate[T any](t *testing.T, srv *Server, kindID string, items []T) {
+	t.Helper()
+	raw, err := json.Marshal(libraryFetch[T]{Items: items, BySvc: map[string]types.LibraryServiceStatus{}, NTargets: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv.cache.Set("library:"+kindID+"|agg", string(raw), time.Minute)
+}
+
 func TestLibraryTracks_CacheHit(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeLikedTrackProvider{tracks: []types.Track{{Name: "Solo"}}},
 	}
-	srv.cache.Set("library:tracks", `{"tracks":[{"name":"Cached"}],"total":1}`, time.Minute)
+	seedLibraryAggregate(t, srv, "tracks", []types.Track{{Name: "Cached"}})
 
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -707,7 +718,7 @@ func TestLibraryAlbums_CacheHit(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeAlbumProvider{albums: []types.Album{{Name: "Fresh"}}},
 	}
-	srv.cache.Set("library:albums", `{"albums":[{"name":"CachedAlbum"}],"total":1}`, time.Minute)
+	seedLibraryAggregate(t, srv, "albums", []types.Album{{Name: "CachedAlbum"}})
 
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")

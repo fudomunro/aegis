@@ -139,7 +139,7 @@ func (s *Server) HandleAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// A new token changes which services answer library/proxy calls (issue #104).
-	s.cache.Clear()
+	s.invalidateService(serviceID)
 
 	slog.Info("OAuth authorization complete",
 		"service", serviceID,
@@ -189,7 +189,7 @@ func (s *Server) HandleAuthRevoke(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Drop cached responses that were fetched with the revoked token (issue #104).
-	s.cache.Clear()
+	s.invalidateService(serviceID)
 
 	slog.Info("token revoked", "service", serviceID, "connection", connectionID)
 	w.Header().Set("Content-Type", "application/json")

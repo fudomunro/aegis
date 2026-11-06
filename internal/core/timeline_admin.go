@@ -32,6 +32,7 @@ func (s *Server) HandleAdminTimeline(w http.ResponseWriter, r *http.Request) {
 		prefix:     "/v1/admin/timeline",
 		flagName:   "-timeline-store",
 		pathHint:   "a Timeline JSON file, directory, or Takeout zip",
+		serviceID:  connectors.TimelineServiceID,
 		store:      s.timeline,
 		status:     func() any { return s.timelineStatus() },
 		importPath: func(path string) (any, error) { return connectors.ImportTimelinePath(s.timeline, path) },

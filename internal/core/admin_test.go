@@ -442,7 +442,10 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
-	srv.cache.Set("stale", "x", time.Minute)
+	srv.cache.Set("library:tracks", `{"tracks":[{"name":"stale"}]}`, time.Minute)
+	srv.cache.Set("spotify:/me", "stale", time.Minute)
+	srv.cache.Set("tidal:/me", "keep", time.Minute)
+	srv.mbCache.Set("mbid:artist:x", "keep", time.Minute)
 
 	body := `{"grant_limits":{"default":"read","player":"none","playlists":"read-write"}}`
 	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
@@ -472,8 +475,17 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	if got := cfg.GetService("spotify").GrantLimits.For("search"); got != types.AccessRead {
 		t.Fatalf("search permission = %q, want read (clamped; no agent write path)", got)
 	}
-	if live, _, _ := srv.cache.Stats(); live != 0 {
-		t.Fatalf("cache should be cleared after permission save, live=%d", live)
+	if _, ok := srv.cache.Get("library:tracks"); ok {
+		t.Fatal("library aggregate must not survive a permission save")
+	}
+	if _, ok := srv.cache.Get("spotify:/me"); ok {
+		t.Fatal("service transport cache must not survive its own permission save")
+	}
+	if v, ok := srv.cache.Get("tidal:/me"); !ok || v != "keep" {
+		t.Fatal("unrelated service transport cache must survive")
+	}
+	if v, ok := srv.mbCache.Get("mbid:artist:x"); !ok || v != "keep" {
+		t.Fatal("MBID lookups must survive permission saves")
 	}
 
 	// GET returns current map + available/writable types.

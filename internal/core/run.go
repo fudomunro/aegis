@@ -440,6 +440,7 @@ func Run() {
 		dataDir:       paths.Dir,
 		config:        cfg,
 		cache:         NewCache(),
+		mbCache:       NewCache(),
 		tokens:        tokens,
 		oauthStates:   NewStateStore(),
 		rl:            newRateLimiter(),
@@ -464,6 +465,10 @@ func Run() {
 		prom:          NewPromMetrics(),
 		apertureURL:   *apertureURL,
 	}
+
+	// Drain async search-index write-behind before searchIndex.Close (its
+	// defer runs later) — registered after the store's defer on purpose.
+	defer srv.waitIndex()
 
 	// Sync-maintenance tickets are GitHub issues (issue #86). An empty repo
 	// disables ticketing: scans still cluster and report, nothing external.
@@ -561,10 +566,11 @@ func Run() {
 			ServiceConcurrency: parseServiceConcurrency(*syncServiceConcurrency),
 			DefaultConcurrency: 1,
 			// Ingest changes what /v1/library/* would return; drop cached
-			// aggregates instead of waiting out the TTL (matches Signal import).
+			// aggregates (and that service's transport entries) instead of
+			// waiting out the TTL. MBID lookups survive (issue #273).
 			OnDone: func(job SyncJob, succeeded bool) {
 				if succeeded {
-					srv.cache.Clear()
+					srv.invalidateService(job.Service)
 				}
 			},
 		})

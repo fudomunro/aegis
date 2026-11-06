@@ -18,6 +18,7 @@ type importStoreAdmin struct {
 	prefix     string // URL prefix, e.g. "/v1/admin/quicken"
 	flagName   string // disabling flag, e.g. "-quicken-store"
 	pathHint   string // error copy for a missing import path
+	serviceID  string // service whose caches invalidate after import
 	store      connectors.ImportStore
 	status     func() any
 	importPath func(path string) (any, error)
@@ -77,7 +78,7 @@ func (s *Server) runAdminImportStore(w http.ResponseWriter, r *http.Request, spe
 		return
 	}
 	// Library cache must not serve the old empty list.
-	s.cache.Clear()
+	s.invalidateService(spec.serviceID)
 	attrs := []any{"path", req.Path}
 	if spec.logAttrs != nil {
 		attrs = append(attrs, spec.logAttrs(res)...)

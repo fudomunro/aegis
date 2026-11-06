@@ -47,7 +47,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 				writeJSONError(w, http.StatusBadRequest, err.Error())
 				return
 			}
-			s.cache.Clear()
+			s.invalidateCaches()
 			withPeerLog(slog.With("handler", "admin_apps"), r).
 				Info("third-party app created", "app_id", view.ID, "scopes", view.Scopes)
 			writeJSON(w, map[string]any{
@@ -85,7 +85,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.cache.Clear()
+		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_apps"), r).
 			Info("third-party app token rotated", "app_id", id)
 		writeJSON(w, map[string]any{
@@ -115,7 +115,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.cache.Clear()
+		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_apps"), r).
 			Info("third-party app updated", "app_id", id, "disabled", view.Disabled)
 		writeJSON(w, map[string]any{"app": view, "status": "saved"})
@@ -124,7 +124,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.cache.Clear()
+		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_apps"), r).
 			Info("third-party app deleted", "app_id", id)
 		writeJSON(w, map[string]string{"status": "deleted", "id": id})

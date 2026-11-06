@@ -400,7 +400,7 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.cache.Clear()
+	s.invalidateLibraryKind(kindID)
 	slog.Info("udt file selection saved",
 		"kind", kindID, "source", sourceID, "clear", req.Clear, "paths", req.Paths)
 	s.writeUDTStatus(w)
@@ -467,7 +467,7 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	s.cache.Clear()
+	s.invalidateLibraryKind(kindID)
 	slog.Info("udt extra file saved", "kind", kindID, "id", id, "clear", req.Clear)
 	s.writeUDTStatus(w)
 }

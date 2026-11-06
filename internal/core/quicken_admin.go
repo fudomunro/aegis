@@ -31,6 +31,7 @@ func (s *Server) HandleAdminQuicken(w http.ResponseWriter, r *http.Request) {
 		prefix:     "/v1/admin/quicken",
 		flagName:   "-quicken-store",
 		pathHint:   "a QIF/QFX file or directory",
+		serviceID:  connectors.QuickenServiceID,
 		store:      s.quicken,
 		status:     func() any { return s.quickenStatus() },
 		importPath: func(path string) (any, error) { return connectors.ImportQuickenPath(s.quicken, path) },
