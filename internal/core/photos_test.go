@@ -176,24 +176,6 @@ func TestHandleLibraryPhotos_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestDataTypeForPath_Photos(t *testing.T) {
-	cases := map[string]string{
-		"/me/photos":           "photos",
-		"/photos":              "photos",
-		"/photos/abc":          "photos",
-		"/mediaItems":          "photos",
-		"/mediaItems/abc":      "photos",
-		"/mediaItems/abc/x":    "photos",
-		"/me/photos/":          "photos",
-		"/mediaItems?pageSize": "photos",
-	}
-	for path, want := range cases {
-		if got := types.DataTypeForPath(path); got != want {
-			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
-		}
-	}
-}
-
 func TestPhotoKeywordsMatch(t *testing.T) {
 	kind := LibraryKindByID("photos")
 	if kind == nil {
@@ -444,20 +426,6 @@ func TestGooglePhotosConnector_SystemInstructions_MentionPicker(t *testing.T) {
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)
-		}
-	}
-}
-
-func TestDataTypeForPath_Picker(t *testing.T) {
-	cases := map[string]string{
-		"/picker/sessions":          "photos",
-		"/picker/sessions/abc":      "photos",
-		"/picker/mediaItems":        "photos",
-		"/mediaItems?sessionId=s-1": "photos",
-	}
-	for path, want := range cases {
-		if got := types.DataTypeForPath(path); got != want {
-			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }

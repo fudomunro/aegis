@@ -1,8 +1,6 @@
-package core
+package connectors
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -13,7 +11,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -79,16 +76,10 @@ func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg := &Config{Services: []Service{{
-		ID:       connectors.GoogleGmailServiceID,
-		Name:     connectors.GoogleGmailServiceName,
-		Action:   "inject",
-		Endpoint: upstream.URL,
-	}}}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	host := newTestHostWithService(GoogleGmailServiceID, upstream.URL, "https://aegis.example.com")
+	host.setToken(GoogleGmailServiceID, "test-token")
 
-	conn := connectors.NewGoogleGmailConnector(srv)
+	conn := NewGoogleGmailConnector(host)
 	messages, truncated, err := conn.ListMessages(context.Background())
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
@@ -121,7 +112,7 @@ func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
 	if inbox.SentAt != "2024-06-01T09:00:00Z" {
 		t.Fatalf("sent_at = %q", inbox.SentAt)
 	}
-	if len(inbox.Sources) != 1 || inbox.Sources[0].Service != connectors.GoogleGmailServiceID || inbox.Sources[0].ID != "m1" {
+	if len(inbox.Sources) != 1 || inbox.Sources[0].Service != GoogleGmailServiceID || inbox.Sources[0].ID != "m1" {
 		t.Fatalf("sources = %+v", inbox.Sources)
 	}
 	if inbox.Sources[0].Mailbox != "INBOX" || !inbox.Sources[0].Canonical {
@@ -134,10 +125,8 @@ func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
 }
 
 func TestGoogleGmailConnector_ListMessages_Unauthorized(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject",
-	}}}, "https://aegis.example.com")
-	conn := connectors.NewGoogleGmailConnector(srv)
+	host := newTestHostWithService(GoogleGmailServiceID, "", "https://aegis.example.com")
+	conn := NewGoogleGmailConnector(host)
 	_, _, err := conn.ListMessages(context.Background())
 	if !errors.Is(err, types.ErrUnauthorized) {
 		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
@@ -175,13 +164,10 @@ func TestGoogleGmailConnector_ListMessages_HydrateCapTruncates(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg := &Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject", Endpoint: upstream.URL,
-	}}}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	host := newTestHostWithService(GoogleGmailServiceID, upstream.URL, "https://aegis.example.com")
+	host.setToken(GoogleGmailServiceID, "test-token")
 
-	conn := connectors.NewGoogleGmailConnector(srv)
+	conn := NewGoogleGmailConnector(host)
 	messages, truncated, err := conn.ListMessages(context.Background())
 	if err != nil {
 		t.Fatalf("ListMessages: %v", err)
@@ -189,8 +175,8 @@ func TestGoogleGmailConnector_ListMessages_HydrateCapTruncates(t *testing.T) {
 	if !truncated {
 		t.Fatal("expected truncated after hydrate cap")
 	}
-	if len(messages) != connectors.GoogleGmailLibraryCap {
-		t.Fatalf("got %d messages, want %d", len(messages), connectors.GoogleGmailLibraryCap)
+	if len(messages) != GoogleGmailLibraryCap {
+		t.Fatalf("got %d messages, want %d", len(messages), GoogleGmailLibraryCap)
 	}
 }
 
@@ -222,12 +208,9 @@ func TestGoogleGmailConnector_HandleProxy_ListMessages(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg := &Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject", Endpoint: upstream.URL,
-	}}}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
-	conn := connectors.NewGoogleGmailConnector(srv)
+	host := newTestHostWithService(GoogleGmailServiceID, upstream.URL, "https://aegis.example.com")
+	host.setToken(GoogleGmailServiceID, "test-token")
+	conn := NewGoogleGmailConnector(host)
 
 	req := httptest.NewRequest("GET", "/me/messages", nil)
 	w := httptest.NewRecorder()
@@ -266,12 +249,9 @@ func TestGoogleGmailConnector_HandleProxy_GetMessageFull(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg := &Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject", Endpoint: upstream.URL,
-	}}}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
-	conn := connectors.NewGoogleGmailConnector(srv)
+	host := newTestHostWithService(GoogleGmailServiceID, upstream.URL, "https://aegis.example.com")
+	host.setToken(GoogleGmailServiceID, "test-token")
+	conn := NewGoogleGmailConnector(host)
 
 	req := httptest.NewRequest("GET", "/messages/abc?format=full", nil)
 	w := httptest.NewRecorder()
@@ -324,12 +304,9 @@ func TestGoogleGmailConnector_HandleProxy_ListAndGetThread(t *testing.T) {
 	}))
 	defer upstream.Close()
 
-	cfg := &Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject", Endpoint: upstream.URL,
-	}}}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
-	conn := connectors.NewGoogleGmailConnector(srv)
+	host := newTestHostWithService(GoogleGmailServiceID, upstream.URL, "https://aegis.example.com")
+	host.setToken(GoogleGmailServiceID, "test-token")
+	conn := NewGoogleGmailConnector(host)
 
 	req := httptest.NewRequest("GET", "/me/threads", nil)
 	w := httptest.NewRecorder()
@@ -368,11 +345,9 @@ func TestGoogleGmailConnector_HandleProxy_ListAndGetThread(t *testing.T) {
 }
 
 func TestGoogleGmailConnector_HandleProxy_MethodNotAllowed(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject",
-	}}}, "https://aegis.example.com")
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
-	conn := connectors.NewGoogleGmailConnector(srv)
+	host := newTestHostWithService(GoogleGmailServiceID, "", "https://aegis.example.com")
+	host.setToken(GoogleGmailServiceID, "test-token")
+	conn := NewGoogleGmailConnector(host)
 
 	req := httptest.NewRequest("POST", "/me/messages", strings.NewReader("{}"))
 	w := httptest.NewRecorder()
@@ -383,10 +358,8 @@ func TestGoogleGmailConnector_HandleProxy_MethodNotAllowed(t *testing.T) {
 }
 
 func TestGoogleGmailConnector_HandleProxy_Unauthorized(t *testing.T) {
-	srv := testServerWithBase(&Config{Services: []Service{{
-		ID: connectors.GoogleGmailServiceID, Name: connectors.GoogleGmailServiceName, Action: "inject",
-	}}}, "https://aegis.example.com")
-	conn := connectors.NewGoogleGmailConnector(srv)
+	host := newTestHostWithService(GoogleGmailServiceID, "", "https://aegis.example.com")
+	conn := NewGoogleGmailConnector(host)
 	req := httptest.NewRequest("GET", "/me/messages", nil)
 	w := httptest.NewRecorder()
 	conn.HandleProxy(w, req, "/me/messages")
@@ -396,8 +369,7 @@ func TestGoogleGmailConnector_HandleProxy_Unauthorized(t *testing.T) {
 }
 
 func TestGoogleGmailConnector_SystemInstructions_MentionLibrary(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := connectors.NewGoogleGmailConnector(srv)
+	conn := NewGoogleGmailConnector(newTestHost("https://aegis.example.com"))
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	for _, want := range []string{
 		"/v1/library/messages",
@@ -417,8 +389,7 @@ func TestGoogleGmailConnector_SystemInstructions_MentionLibrary(t *testing.T) {
 }
 
 func TestGoogleGmailConnector_Capabilities_ReadOnlyMessages(t *testing.T) {
-	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	conn := connectors.NewGoogleGmailConnector(srv)
+	conn := NewGoogleGmailConnector(newTestHost("https://aegis.example.com"))
 	caps := conn.Capabilities()
 	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "messages" {
 		t.Fatalf("caps = %+v", caps)
@@ -448,14 +419,14 @@ func TestGmailBareIDFromProxyPath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		for _, kind := range []string{"messages", "threads"} {
-			id, ok := connectors.GmailBareIDFromProxyPath(tc.path, kind)
+			id, ok := GmailBareIDFromProxyPath(tc.path, kind)
 			wantOK := tc.ok && strings.Contains(tc.path, kind)
 			wantID := ""
 			if wantOK {
 				wantID = tc.id
 			}
 			if ok != wantOK || id != wantID {
-				t.Errorf("connectors.GmailBareIDFromProxyPath(%q,%q) = (%q,%v), want (%q,%v)",
+				t.Errorf("GmailBareIDFromProxyPath(%q,%q) = (%q,%v), want (%q,%v)",
 					tc.path, kind, id, ok, wantID, wantOK)
 			}
 		}
@@ -463,43 +434,43 @@ func TestGmailBareIDFromProxyPath(t *testing.T) {
 }
 
 func TestGmailHelpers_HeaderAndDirection(t *testing.T) {
-	if got := connectors.GmailInternalDateRFC3339("1717232400000"); got != "2024-06-01T09:00:00Z" {
+	if got := GmailInternalDateRFC3339("1717232400000"); got != "2024-06-01T09:00:00Z" {
 		t.Fatalf("internalDate = %q", got)
 	}
-	if got := connectors.GmailInternalDateRFC3339(""); got != "" {
+	if got := GmailInternalDateRFC3339(""); got != "" {
 		t.Fatalf("empty internalDate = %q", got)
 	}
-	if got := connectors.GmailHeaderDateRFC3339("Sat, 01 Jun 2024 09:00:00 +0000"); got != "2024-06-01T09:00:00Z" {
+	if got := GmailHeaderDateRFC3339("Sat, 01 Jun 2024 09:00:00 +0000"); got != "2024-06-01T09:00:00Z" {
 		t.Fatalf("header date = %q", got)
 	}
-	if got := connectors.GmailDirectionFromLabels([]string{"SENT"}); got != "outbound" {
+	if got := GmailDirectionFromLabels([]string{"SENT"}); got != "outbound" {
 		t.Fatalf("direction = %q", got)
 	}
-	if got := connectors.GmailDirectionFromLabels([]string{"INBOX", "UNREAD"}); got != "inbound" {
+	if got := GmailDirectionFromLabels([]string{"INBOX", "UNREAD"}); got != "inbound" {
 		t.Fatalf("direction = %q", got)
 	}
-	if got := connectors.GmailDirectionFromLabels(nil); got != "unknown" {
+	if got := GmailDirectionFromLabels(nil); got != "unknown" {
 		t.Fatalf("direction = %q", got)
 	}
-	if connectors.GmailReadFromLabels([]string{"INBOX", "UNREAD"}) {
+	if GmailReadFromLabels([]string{"INBOX", "UNREAD"}) {
 		t.Fatal("unread should not be read")
 	}
-	if !connectors.GmailReadFromLabels([]string{"INBOX"}) {
+	if !GmailReadFromLabels([]string{"INBOX"}) {
 		t.Fatal("inbox without UNREAD should be read")
 	}
-	addrs := connectors.MapGmailAddressHeader("Ada Lovelace <ada@example.com>, grace@example.com")
+	addrs := MapGmailAddressHeader("Ada Lovelace <ada@example.com>, grace@example.com")
 	if len(addrs) != 2 || addrs[0].Emails[0] != "ada@example.com" || addrs[0].Name != "Ada Lovelace" {
 		t.Fatalf("addrs = %+v", addrs)
 	}
 	// Fail-open crude parse.
-	odd := connectors.MapGmailAddressHeader("not-an-address")
+	odd := MapGmailAddressHeader("not-an-address")
 	if len(odd) != 1 || odd[0].Name != "not-an-address" {
 		t.Fatalf("odd = %+v", odd)
 	}
 }
 
 func TestGmailListHTTPError(t *testing.T) {
-	disabled := connectors.GmailListHTTPError("messages list", 403, []byte(`{"error":{"status":"PERMISSION_DENIED","message":"Gmail API has not been used in project 123 before or it is disabled"}}`))
+	disabled := GmailListHTTPError("messages list", 403, []byte(`{"error":{"status":"PERMISSION_DENIED","message":"Gmail API has not been used in project 123 before or it is disabled"}}`))
 	if !strings.Contains(disabled.Error(), "Gmail API is not enabled") ||
 		!strings.Contains(disabled.Error(), "gmail.googleapis.com") {
 		t.Fatalf("disabled error = %v", disabled)
@@ -508,18 +479,18 @@ func TestGmailListHTTPError(t *testing.T) {
 		t.Fatalf("disabled error should keep op/status: %v", disabled)
 	}
 
-	quota := connectors.GmailListHTTPError("threads list", 429, []byte(`{"error":{"message":"Quota exceeded"}}`))
+	quota := GmailListHTTPError("threads list", 429, []byte(`{"error":{"message":"Quota exceeded"}}`))
 	if !strings.Contains(quota.Error(), "Quota exceeded") || !strings.Contains(quota.Error(), "threads list") {
 		t.Fatalf("quota error = %v", quota)
 	}
 
-	empty := connectors.GmailListHTTPError("message get", 500, nil)
+	empty := GmailListHTTPError("message get", 500, nil)
 	if empty.Error() != "gmail message get returned 500" {
 		t.Fatalf("empty body error = %v", empty)
 	}
 
 	longBody := bytes.Repeat([]byte("x"), 500)
-	long := connectors.GmailListHTTPError("messages list", 400, longBody)
+	long := GmailListHTTPError("messages list", 400, longBody)
 	if !strings.Contains(long.Error(), strings.Repeat("x", 400)) || strings.Contains(long.Error(), strings.Repeat("x", 401)) {
 		t.Fatalf("long body should clip at 400: len=%d", len(long.Error()))
 	}

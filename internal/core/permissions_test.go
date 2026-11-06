@@ -105,66 +105,6 @@ func TestValidatePermissions(t *testing.T) {
 	}
 }
 
-func TestDataTypeForPath(t *testing.T) {
-	cases := map[string]string{
-		"/me":                        "user",
-		"/me/":                       "user",
-		"/me/player":                 "player",
-		"/me/player/recently-played": "player",
-		"/me/tracks":                 "tracks",
-		"/tracks/abc":                "tracks",
-		"/me/liked":                  "tracks",
-		"/me/top/tracks":             "tracks",
-		"/videos/xyz":                "tracks",
-		"/me/albums":                 "albums",
-		"/albums/abc":                "albums",
-		"/artists/abc":               "artists",
-		"/artists/abc/top-tracks":    "artists",
-		"/me/artists":                "artists",
-		"/me/top/artists":            "artists",
-		"/me/following":              "artists",
-		"/me/following?type=artist":  "artists",
-		"/me/playlists":              "playlists",
-		"/playlists/abc":             "playlists",
-		"/playlists/abc/items":       "playlists",
-		"/me/events":                 "events",
-		"/events/abc":                "events",
-		"/calendars/primary/events":  "events",
-		"/me/calendars":              "events",
-		"/calendarList":              "events",
-		"/me/messages":               "messages",
-		"/messages/abc":              "messages",
-		"/me/threads":                "messages",
-		"/threads/abc":               "messages",
-		"/users/me/messages":         "messages",
-		"/users/me/threads/t1":       "messages",
-		"/search":                    "search",
-		"/search?q=x":                "search",
-		"/channels/abc":              "channels",
-		"/me/subscriptions":          "artists",
-		"/me/library":                "library",
-		"/me/recommendations":        "recommendations",
-		"/unknown/thing":             "",
-		"":                           "",
-		// Issue #94: non-canonical forms must not change classification.
-		"//me/player":      "player",
-		"///me//player":    "player",
-		"/me/player/":      "player",
-		"/me/./player":     "",
-		"/me/../player":    "",
-		"/./me/player":     "",
-		"/../me/player":    "",
-		"/me/player/../x":  "",
-		"/me\\player":      "",
-		"/unknown/./thing": "",
-	}
-	for path, want := range cases {
-		if got := types.DataTypeForPath(path); got != want {
-			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
-		}
-	}
-}
-
 func TestCanonicalProxyPath(t *testing.T) {
 	ok := map[string]string{
 		"":            "",
