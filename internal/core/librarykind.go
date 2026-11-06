@@ -287,6 +287,52 @@ type namedLister[T any] struct {
 	list func(ctx context.Context) (items []T, truncated bool, err error)
 }
 
+// ownerViewKey marks an internal owner-tier fetch (issue #272).
+type ownerViewKey struct{}
+
+// ownerViewRequest returns the request view used to materialize the search
+// index: app identity and scope-grant tightening are ignored, so items come
+// back at the partition's fullest detail. Data-scope dataset visibility is
+// preserved (docs/data-scopes.md). Read-path redaction (redactSearch) stays
+// the caller boundary — this view only decides what gets stored.
+func ownerViewRequest(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), ownerViewKey{}, true))
+}
+
+// ownerView reports whether r is an internal owner-tier fetch.
+func ownerView(r *http.Request) bool {
+	if r == nil {
+		return false
+	}
+	v, _ := r.Context().Value(ownerViewKey{}).(bool)
+	return v
+}
+
+// libraryIndexWriteable reports whether this request's fetch is already at
+// the partition's owner-tier view and may therefore write the search index.
+// App scopes and scope-grant tightening can redact or drop items below that
+// view; storing those would overwrite fuller rows with reduced ones, and only
+// another unredacted fetch would restore them (issue #272).
+func (s *Server) libraryIndexWriteable(r *http.Request, permType string) bool {
+	if AppIdentityFrom(r) != nil {
+		return false
+	}
+	sc := DataScopeFrom(r)
+	if sc == nil {
+		return true
+	}
+	for _, svc := range s.config.ServiceSnapshots() {
+		if !serviceVisibleToScope(&svc, sc) {
+			continue
+		}
+		owner := types.NormalizeAccess(s.effectivePermissions(&svc).AccessForDataType(permType))
+		if types.NormalizeAccess(s.requestLevel(r, &svc, permType)) != owner {
+			return false
+		}
+	}
+	return true
+}
+
 // collectProviders type-asserts each connector to P and builds fetch targets
 // that pass the permission check for permType. Services outside the request's
 // data-scope dataset partition are skipped silently (docs/data-scopes.md).
@@ -494,9 +540,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	}
 
 	// Write-behind: refresh the search index from this fetch (issue #178).
-	// Fail-open: a broken index must not fail the list response.
-	if kind.Search != nil && s.search.Enabled() {
-		if err := indexLibraryDocuments(s, spec, scopeDataset(r), merged); err != nil {
+	// Fail-open: a broken index must not fail the list response. Only an
+	// owner-tier fetch may write — a reduced (app/clamped) view would store
+	// rows below the detail the owner's query expects (issue #272).
+	if kind.Search != nil && s.search.Enabled() && s.libraryIndexWriteable(r, kind.PermType) {
+		if err := indexLibraryDocuments(s, spec, scopeDataset(r), fetched); err != nil {
 			logger.Warn("search index update failed", "error", err)
 		}
 	}
@@ -714,9 +762,12 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 		return
 	}
 	if n == 0 {
-		// Cold index: materialize from one live fetch, then query.
-		fetched := fetchLibrary(s, r, spec, logger, agent)
-		if err := indexLibraryDocuments(s, spec, dataset, fetched.items); err != nil {
+		// Cold index: materialize from one live fetch, then query. The fetch
+		// runs at owner tier (issue #272) so a reduced caller's first query
+		// still fills the index with the fullest rows; redactSearch narrows
+		// them on the way out.
+		fetched := fetchLibrary(s, ownerViewRequest(r), spec, logger, agent)
+		if err := indexLibraryDocuments(s, spec, dataset, fetched); err != nil {
 			logger.Warn("search index bootstrap failed", "error", err)
 		}
 	}
@@ -792,21 +843,35 @@ func searchHitReadable(services []string, readable, configured map[string]bool, 
 	return true
 }
 
-// indexLibraryDocuments flattens merged items into search documents and
-// upserts them into the search index.
-func indexLibraryDocuments[T any](s *Server, spec libraryKindSpec[T], dataset string, items []T) error {
+// indexLibraryDocuments flattens merged items into search documents and syncs
+// them into the search index, dropping rows this fetch refuted (issue #272).
+func indexLibraryDocuments[T any](s *Server, spec libraryKindSpec[T], dataset string, fetched libraryFetch[T]) error {
 	if !s.search.Enabled() || spec.kind.Search == nil {
 		return nil
 	}
-	docs := make([]types.SearchDocument, 0, len(items))
-	for _, item := range items {
+	docs := make([]types.SearchDocument, 0, len(fetched.items))
+	for _, item := range fetched.items {
 		doc, err := types.BuildSearchDocument(spec.sortKey(item), item, *spec.kind.Search)
 		if err != nil {
 			return err
 		}
 		docs = append(docs, doc)
 	}
-	return s.search.Upsert(spec.kind.ID, dataset, docs)
+	return s.search.Sync(spec.kind.ID, dataset, docs, completeServices(fetched.bySvc))
+}
+
+// completeServices lists the services whose fetch succeeded in full (status
+// ok, not truncated). Only those can refute an indexed row; a degraded or
+// truncated service leaves its rows untouched (issue #272).
+func completeServices(bySvc map[string]types.LibraryServiceStatus) []string {
+	out := make([]string, 0, len(bySvc))
+	for id, st := range bySvc {
+		if st.Status == types.LibraryStatusOK && !st.Truncated {
+			out = append(out, id)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // libraryAggregateDegraded reports whether any provider failed or was

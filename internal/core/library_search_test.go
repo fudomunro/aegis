@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -353,5 +354,219 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	}
 	if st.Total != 0 {
 		t.Fatalf("disabled total = %d", st.Total)
+	}
+}
+
+// documentsQuery runs GET path as bearer and returns the document hits.
+func documentsQuery(t *testing.T, srv *Server, bearer, path string) []types.Document {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("documents status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp types.DocumentList
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return resp.Documents
+}
+
+// eventsQuery runs GET path as bearer and returns the calendar-event hits.
+func eventsQuery(t *testing.T, srv *Server, bearer, path string) []types.CalendarEvent {
+	t.Helper()
+	req := httptest.NewRequest("GET", path, nil)
+	req.Header.Set("Authorization", "Bearer "+bearer)
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("events status = %d body=%s", w.Code, w.Body.String())
+	}
+	var resp types.CalendarEventList
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	return resp.Events
+}
+
+func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
+	cfg := &Config{Services: []Service{{
+		ID:          "google-calendar",
+		Name:        "Google Calendar",
+		Action:      "inject",
+		GrantLimits: types.Permissions{"events": types.AccessRead},
+	}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.search = newTestSearchIndex(t)
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"google-calendar": &fakeCalendarEventProvider{events: freeBusyTestEvents()},
+	}
+	store := testAppStore(t)
+	srv.apps = store
+	_, appToken := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessFreeBusy})
+
+	// A first query materializes the index at owner tier.
+	before := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
+	if len(before) != 1 || before[0].Title != "Doctor appointment" {
+		t.Fatalf("owner baseline = %+v", before)
+	}
+	beforeDocs, err := srv.search.Count("events", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// A free/busy-scoped app listing events must not rewrite those rows.
+	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	req.Header.Set("Authorization", "Bearer "+appToken)
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "Doctor") {
+		t.Fatalf("freebusy app leaked title: %s", w.Body.String())
+	}
+
+	srv.cache.Clear()
+	after := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
+	if len(after) != 1 || after[0].Title != "Doctor appointment" {
+		t.Fatalf("owner ?q= changed after freebusy fetch: before=%+v after=%+v", before, after)
+	}
+	afterDocs, err := srv.search.Count("events", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if afterDocs != beforeDocs {
+		t.Fatalf("index rows changed on a reduced fetch: %d -> %d", beforeDocs, afterDocs)
+	}
+}
+
+func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
+	cfg := &Config{Services: []Service{{
+		ID:          "paperless",
+		Name:        "Paperless-ngx",
+		Action:      "inject",
+		GrantLimits: types.Permissions{"documents": types.AccessRead},
+	}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.search = newTestSearchIndex(t)
+	srv.connectors = map[string]connectors.ServiceConnector{
+		"paperless": &fakeDocumentProvider{documents: []types.Document{
+			sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "sensitive excerpt"),
+		}},
+	}
+	store := testAppStore(t)
+	srv.apps = store
+	_, appToken := createTestApp(t, store, "reader", types.Permissions{"documents": types.AccessMetadata})
+
+	before := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
+	if len(before) != 1 || before[0].Excerpt != "sensitive excerpt" {
+		t.Fatalf("owner baseline = %+v", before)
+	}
+
+	// A metadata-scoped app sees titles only; its fetch must not demote the
+	// stored row to that view.
+	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
+	req.Header.Set("Authorization", "Bearer "+appToken)
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
+	}
+	if strings.Contains(w.Body.String(), "sensitive") {
+		t.Fatalf("metadata app leaked excerpt: %s", w.Body.String())
+	}
+
+	srv.cache.Clear()
+	after := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
+	if len(after) != 1 || after[0].Excerpt != "sensitive excerpt" {
+		t.Fatalf("owner ?q= returned a reduced payload: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestLibrarySearch_CompleteFetchDropsDeletedItems(t *testing.T) {
+	cfg := &Config{Services: []Service{{
+		ID: "paperless", Name: "Paperless-ngx", Action: "inject",
+	}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.search = newTestSearchIndex(t)
+	provider := &fakeDocumentProvider{documents: []types.Document{
+		sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "one"),
+		sampleDoc("paperless", "Paperless-ngx", "2", "Lease agreement", "2024-02-01T00:00:00Z", "two"),
+	}}
+	srv.connectors = map[string]connectors.ServiceConnector{"paperless": provider}
+
+	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 2 {
+		t.Fatalf("list = %+v", docs)
+	}
+
+	// The lease is deleted upstream; the next complete list fetch must drop
+	// its row instead of upserting around it.
+	provider.documents = provider.documents[:1]
+	srv.cache.Clear()
+	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 1 {
+		t.Fatalf("list after delete = %+v", docs)
+	}
+
+	srv.cache.Clear()
+	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 0 {
+		t.Fatalf("deleted item still matches q=: %+v", hits)
+	}
+	srv.cache.Clear()
+	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical"); len(hits) != 1 {
+		t.Fatalf("survivor missing from q=: %+v", hits)
+	}
+}
+
+func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
+	cfg := &Config{Services: []Service{{
+		ID: "paperless", Name: "Paperless-ngx", Action: "inject",
+	}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.search = newTestSearchIndex(t)
+	provider := &fakeDocumentProvider{documents: []types.Document{
+		sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "one"),
+		sampleDoc("paperless", "Paperless-ngx", "2", "Lease agreement", "2024-02-01T00:00:00Z", "two"),
+	}}
+	srv.connectors = map[string]connectors.ServiceConnector{"paperless": provider}
+
+	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 2 {
+		t.Fatalf("list = %+v", docs)
+	}
+
+	// A failing provider tells us nothing about deletions: rows stay.
+	provider.err = errors.New("upstream boom")
+	srv.cache.Clear()
+	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("degraded list status = %d body=%s", w.Code, w.Body.String())
+	}
+	if n, _ := srv.search.Count("documents", ""); n != 2 {
+		t.Fatalf("degraded fetch deleted rows: count=%d", n)
+	}
+	srv.cache.Clear()
+	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 1 {
+		t.Fatalf("degraded fetch dropped a hit: %+v", hits)
+	}
+
+	// A truncated fetch is incomplete for the same reason: rows stay.
+	provider.err = nil
+	provider.truncated = true
+	provider.documents = provider.documents[:1]
+	srv.cache.Clear()
+	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 1 {
+		t.Fatalf("truncated list = %+v", docs)
+	}
+	if n, _ := srv.search.Count("documents", ""); n != 2 {
+		t.Fatalf("truncated fetch deleted rows: count=%d", n)
+	}
+	srv.cache.Clear()
+	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 1 {
+		t.Fatalf("truncated fetch dropped a hit: %+v", hits)
 	}
 }
