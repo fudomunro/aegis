@@ -10,29 +10,29 @@ stores address-book or calendar content.
 
 ```json
 {
- "id": "dav-contacts",
- "name": "DAV Contacts",
- "endpoint": "https://cloud.example.com",
- "headers": {
- "X-DAV-Username": "alice",
- "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
- },
- "canonical_for": ["contacts"],
- "grant_limits": {"contacts": "read"}
+  "id": "dav-contacts",
+  "name": "DAV Contacts",
+  "endpoint": "https://cloud.example.com",
+  "headers": {
+    "X-DAV-Username": "alice",
+    "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
+  },
+  "canonical_for": ["contacts"],
+  "grant_limits": {"contacts": "read"}
 }
 ```
 
 ```json
 {
- "id": "dav-calendar",
- "name": "DAV Calendar",
- "endpoint": "https://cloud.example.com",
- "headers": {
- "X-DAV-Username": "alice",
- "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
- },
- "canonical_for": ["events"],
- "grant_limits": {"events": "read"}
+  "id": "dav-calendar",
+  "name": "DAV Calendar",
+  "endpoint": "https://cloud.example.com",
+  "headers": {
+    "X-DAV-Username": "alice",
+    "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
+  },
+  "canonical_for": ["events"],
+  "grant_limits": {"events": "read"}
 }
 ```
 

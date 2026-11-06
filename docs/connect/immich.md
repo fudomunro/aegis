@@ -11,14 +11,14 @@ enough.
 
 ```json
 {
- "id": "immich",
- "name": "Immich",
- "action": "inject",
- "endpoint": "https://immich.your-tailnet.ts.net/api",
- "headers": { "X-API-Key": "$ENV:IMMICH_API_KEY" },
- "cache_ttl": "5m",
- "canonical_for": ["photos"],
- "grant_limits": { "default": "read", "photos": "read" }
+  "id": "immich",
+  "name": "Immich",
+  "action": "inject",
+  "endpoint": "https://immich.your-tailnet.ts.net/api",
+  "headers": { "X-API-Key": "$ENV:IMMICH_API_KEY" },
+  "cache_ttl": "5m",
+  "canonical_for": ["photos"],
+  "grant_limits": { "default": "read", "photos": "read" }
 }
 ```
 
@@ -26,7 +26,7 @@ enough.
 `http://localhost:2283/api`, or MagicDNS + port
 `http://photos.home.ts.net:2283/api`. For a **friendly tailnet HTTPS name**
 (no `:2283`, real certs), host Immich as a Tailscale **VIP Service** — Admin → Services → Immich → Setup guide → **Tailnet URL**
-emits the copyable walk-through (issue [#124](https://github.com/fudomunro/aegis/issues/124)).
+emits the copyable walk-through.
 Serve is tailnet-only; never Funnel.
 
 **Tailscale Admin API automation (optional).** Paste a Tailscale access token

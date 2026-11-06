@@ -1,15 +1,18 @@
 # Photo share to Bluesky
 
+Admin surface — the agent key is refused; use the admin key or a tailnet
+admin login:
+
 ```
 POST /v1/library/photos/share
-Authorization: Bearer <api-key>
+Authorization: Bearer <admin-key> # or tailnet admin login
 Content-Type: application/json
 
 {
- "source_service": "immich",
- "source_id": "asset-uuid",
- "caption": "optional post text",
- "alt": "optional image alt text"
+  "source_service": "immich",
+  "source_id": "asset-uuid",
+  "caption": "optional post text",
+  "alt": "optional image alt text"
 }
 ```
 
@@ -19,20 +22,20 @@ to Bluesky, and creates an `app.bsky.feed.post` with an images embed. Response:
 
 ```json
 {
- "target_service": "bluesky",
- "source_service": "immich",
- "source_id": "asset-uuid",
- "post_uri": "at://did:plc:…/app.bsky.feed.post/…",
- "post_url": "https://bsky.app/profile/you.bsky.social/post/…",
- "claim": {
- "type": "sha256+public-post",
- "sha256": "…",
- "mime_type": "image/jpeg",
- "byte_size": 123456,
- "target_service": "bluesky",
- "post_uri": "at://…",
- "note": "PoC ownership claim for …"
- }
+  "target_service": "bluesky",
+  "source_service": "immich",
+  "source_id": "asset-uuid",
+  "post_uri": "at://did:plc:…/app.bsky.feed.post/…",
+  "post_url": "https://bsky.app/profile/you.bsky.social/post/…",
+  "claim": {
+    "type": "sha256+public-post",
+    "sha256": "…",
+    "mime_type": "image/jpeg",
+    "byte_size": 123456,
+    "target_service": "bluesky",
+    "post_uri": "at://…",
+    "note": "PoC ownership claim for …"
+  }
 }
 ```
 

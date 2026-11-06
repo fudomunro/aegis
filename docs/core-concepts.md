@@ -27,7 +27,7 @@ the most weight in product language.
 | **Aegis does not store media** / bytes stay on source | product rule |
 | **Type-centric surface; named-service connectors** | product rule |
 | **Connections, not per-surface OAuth** | product rule |
-| **No Tailscale Funnel** | product rule |
+| **Admin listener never published** (Funnel on the API listener only) | product rule |
 | Coverage floor (80%) | process |
 | Content/ingest only (`/v1/services`) | product rule |
 

@@ -5,11 +5,11 @@ Access Token on the service (or a stored OAuth token):
 
 ```json
 {
- "id": "ynab",
- "name": "YNAB",
- "endpoint": "https://api.ynab.com/v1",
- "headers": {"Authorization": "Bearer <your-ynab-personal-access-token>"},
- "grant_limits": {"transactions": "read"}
+  "id": "ynab",
+  "name": "YNAB",
+  "endpoint": "https://api.ynab.com/v1",
+  "headers": {"Authorization": "Bearer <your-ynab-personal-access-token>"},
+  "grant_limits": {"transactions": "read"}
 }
 ```
 

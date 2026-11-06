@@ -40,49 +40,49 @@ Returns the user's playlists from every connected music service in Aegis's **neu
 
 ```json
 {
- "playlists": [
- {
- "name": "Today's Top Hits",
- "description": "The hottest tracks right now.",
- "owner": "Spotify",
- "track_count": 50,
- "sources": [
- {
- "service": "spotify",
- "service_name": "Spotify",
- "id": "37i9dQZF1DXcBWIGoYBM5M",
- "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
- "extra": { "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "public": true }
- }
- ]
- },
- {
- "name": "Road Trip",
- "track_count": 15,
- "sources": [
- {
- "service": "spotify",
- "service_name": "Spotify",
- "id": "sp-roadtrip",
- "url": "https://open.spotify.com/playlist/sp-roadtrip"
- },
- {
- "service": "youtube-music",
- "service_name": "YouTube Music",
- "id": "PLxyz...",
- "url": "https://www.youtube.com/playlist?list=PLxyz...",
- "extra": { "published_at": "2024-01-15T00:00:00Z" }
- }
- ]
- }
- ],
- "total": 2,
- "synced": true,
- "by_service": {
- "spotify": { "status": "ok", "count": 2 },
- "youtube-music": { "status": "ok", "count": 1 },
- "amazon-music": { "status": "unauthorized", "error": "not authorized — connect at /v1/auth/amazon-music/login" }
- }
+  "playlists": [
+    {
+      "name": "Today's Top Hits",
+      "description": "The hottest tracks right now.",
+      "owner": "Spotify",
+      "track_count": 50,
+      "sources": [
+        {
+          "service": "spotify",
+          "service_name": "Spotify",
+          "id": "37i9dQZF1DXcBWIGoYBM5M",
+          "url": "https://open.spotify.com/playlist/37i9dQZF1DXcBWIGoYBM5M",
+          "extra": { "uri": "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M", "public": true }
+        }
+      ]
+    },
+    {
+      "name": "Road Trip",
+      "track_count": 15,
+      "sources": [
+        {
+          "service": "spotify",
+          "service_name": "Spotify",
+          "id": "sp-roadtrip",
+          "url": "https://open.spotify.com/playlist/sp-roadtrip"
+        },
+        {
+          "service": "youtube-music",
+          "service_name": "YouTube Music",
+          "id": "PLxyz...",
+          "url": "https://www.youtube.com/playlist?list=PLxyz...",
+          "extra": { "published_at": "2024-01-15T00:00:00Z" }
+        }
+      ]
+    }
+  ],
+  "total": 2,
+  "synced": true,
+  "by_service": {
+    "spotify": { "status": "ok", "count": 2 },
+    "youtube-music": { "status": "ok", "count": 1 },
+    "amazon-music": { "status": "unauthorized", "error": "not authorized — connect at /v1/auth/amazon-music/login" }
+  }
 }
 ```
 
@@ -121,8 +121,6 @@ Linked playlists merge even when names differ (`match: "link"`). Links persist i
 2. Name-only joins still happen; they are marked `match: "name"` and appear in `/v1/library/review`.
 3. Prefer durable IDs for identity; treat name merges as provisional until reviewed or linked.
 4. Clients that only compared display names should prefer `entity_id` + `sources[]` instead.
-
-Tracked in [](https://github.com/fudomunro/aegis/issues/4).
 
 Service-level playlist lists (`GET /v1/services/{id}/me/playlists`) are **not** agent API. Per-service status values in library `by_service` remain: `ok`, `unauthorized`, `error`, `skipped`.
 
@@ -173,7 +171,7 @@ GET /v1/library/documents?q=lease&after=2024-01-01
 
 - **Matching:** case-insensitive token AND over the kind's searchable fields (title, artists, tags, …). The final token is prefix-matched (`rain` finds “Raining Blood”). Operator characters are stripped — no phrase or boolean syntax.
 - **Result shape:** the same list envelope as the bare fetch (`total`, `next_cursor`, …). Kind-specific filters (`tag`, `after`, `before`, …) combine with `q`.
-- **Freshness:** `q` reads the local search index, which is refreshed whenever the library list is fetched. The first query for a kind materializes the index from one live fetch, so results are correct from the first request; a query may not see provider changes made since the last fetch.
+- **Freshness:** `q` reads the local search index, which is written whenever the library list is fetched. The first query for a kind materializes the index from one live fetch. A query may not see provider changes made since the last write, and two known gaps keep results from being exact: deleted items are never dropped from the index (they keep matching `q`), and a fetch made under a reduced view (free/busy events, city-level places) overwrites stored rows at that view, so a later query can miss fields the owner would see. Read-path redaction still ensures no caller gets more than its data grants allow.
 - **Enforcement:** identical to the list surface — data grants, app scopes, and data-scope dataset partitions all apply to search hits. A kind without a search spec answers `q` with `400`.
 - **Storage:** the index holds neutral item metadata (enough to return hits without a refetch) under the data directory; no media bytes. `GET /v1/mail/search` remains the full-history mail surface (body text, date/send filters).
 
@@ -191,7 +189,7 @@ Aegis aims to surface a user’s **full** library, not a prefix. Two layers matt
 | **YouTube Music albums** | No public saved-albums API. | `/v1/library/albums` simply has no YouTube source. |
 | **Amazon Music** | No public developer REST API; playlist pagination may return an unfollowed `nextToken`. | When `nextToken` is present and not followed, `truncated` is set rather than claiming completeness. |
 | **Playlist track bodies** | Library playlist entries carry `track_count` and metadata, not every track object. | `track_count` is authoritative; fetch items via content transport `GET /v1/services/{id}/playlists/{playlistId}/items`. |
-| **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — [](https://github.com/fudomunro/aegis/issues/4). |
+| **Cross-service entity resolution** | Tracks merge on ISRC when present; name+artist is the fallback. Artist MBIDs / playlist links not yet implemented. | Partial — name joins marked `match: "name"`. |
 
 **Always check `truncated` before answering “is this everything?”** Library system instructions tell agents to do the same. Admin Library badges turn orange and say `truncated` when a service hit its page cap.
 
@@ -206,30 +204,30 @@ Returns the user's liked/saved tracks from every connected music service in Aegi
 
 ```json
 {
- "tracks": [
- {
- "name": "Blinding Lights",
- "artists": [{ "name": "The Weeknd", "sources": [{ "service": "spotify", "name": "The Weeknd" }] }],
- "album": { "name": "After Hours", "sources": [{ "service": "spotify", "id": "al1", "name": "After Hours" }] },
- "sources": [
- { "service": "spotify", "service_name": "Spotify", "id": "t1", "url": "https://open.spotify.com/track/t1" },
- { "service": "youtube-music", "service_name": "YouTube Music", "id": "vid1", "url": "https://www.youtube.com/watch?v=vid1" }
- ]
- }
- ],
- "total": 1,
- "synced": true,
- "next_cursor": "MTAw",
- "by_service": {
- "spotify": { "status": "ok", "count": 120 },
- "youtube-music": { "status": "ok", "count": 45 }
- }
+  "tracks": [
+    {
+      "name": "Blinding Lights",
+      "artists": [{ "name": "The Weeknd", "sources": [{ "service": "spotify", "name": "The Weeknd" }] }],
+      "album": { "name": "After Hours", "sources": [{ "service": "spotify", "id": "al1", "name": "After Hours" }] },
+      "sources": [
+        { "service": "spotify", "service_name": "Spotify", "id": "t1", "url": "https://open.spotify.com/track/t1" },
+        { "service": "youtube-music", "service_name": "YouTube Music", "id": "vid1", "url": "https://www.youtube.com/watch?v=vid1" }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "next_cursor": "MTAw",
+  "by_service": {
+    "spotify": { "status": "ok", "count": 120 },
+    "youtube-music": { "status": "ok", "count": 45 }
+  }
 }
 ```
 
 `total` is the full filtered count; `next_cursor` (when present) continues the page walk — see [Pagination and filters](api.md). When any service hits its **upstream** page cap, the response also sets `"truncated": true` and that service’s `by_service` entry sets `"truncated": true`. That flag is independent of `next_cursor`.
 
-Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks ([#43](https://github.com/fudomunro/aegis/issues/43), [#4](https://github.com/fudomunro/aegis/issues/4)).
+Cross-service merge prefers shared **ISRC** (`entity_id`, `match: "isrc"`), then **title + primary artist** via `NormalizeIdentityKey` (`match: "name"`). Spotify maps `/me/tracks` (saved library) and supplies ISRC when present; YouTube Music maps the channel liked-videos playlist, keeps only music-shaped items (category Music or a `" - Topic"` catalog channel), and strips YouTube title decoration so music videos can name-match catalog tracks.
 
 ## Unified albums and artists
 
@@ -287,28 +285,28 @@ on the service proxy).
 
 ```json
 {
- "contacts": [
- {
- "name": "Ada Lovelace",
- "emails": ["ada@example.com"],
- "phones": ["+15551234567"],
- "organization": "Analytical Engines",
- "sources": [
- {
- "service": "google",
- "service_name": "Google Contacts",
- "id": "people/c123",
- "name": "Ada Lovelace",
- "emails": ["ada@example.com"]
- }
- ]
- }
- ],
- "total": 1,
- "synced": true,
- "by_service": {
- "google": { "status": "ok", "count": 1 }
- }
+  "contacts": [
+    {
+      "name": "Ada Lovelace",
+      "emails": ["ada@example.com"],
+      "phones": ["+15551234567"],
+      "organization": "Analytical Engines",
+      "sources": [
+        {
+          "service": "google",
+          "service_name": "Google Contacts",
+          "id": "people/c123",
+          "name": "Ada Lovelace",
+          "emails": ["ada@example.com"]
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "google": { "status": "ok", "count": 1 }
+  }
 }
 ```
 
@@ -319,8 +317,7 @@ Service identity lives in `sources[]`, same as playlists and contacts.
 
 **Aegis never stores photo bytes.** The authoritative copy stays on a
 non-Aegis service marked `canonical` (see
-[Canonical sources](configuration.md) /
-[](https://github.com/fudomunro/aegis/issues/16)).
+[Canonical sources](configuration.md)).
 `blob_url` points at the retrievable image when the source exposes one; Google
 Photos `baseUrl` values expire in about an hour, so agents must not treat them
 as permanent links.
@@ -351,32 +348,37 @@ Connectors opt in by implementing `PhotoProvider` (`ListUserPhotos`).
 Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, `/picker/*`, and
 `/me/photos` on the service proxy).
 
+**Photo share (admin):** `POST /v1/library/photos/share` publishes one photo
+to a share target (for example Bluesky) and returns a PoC ownership claim.
+This is an admin surface — the agent key is refused. See
+[bluesky.md](connect/bluesky.md) for the request shape.
+
 ```json
 {
- "photos": [
- {
- "taken_at": "2023-07-04T18:30:00Z",
- "width": 4032,
- "height": 3024,
- "mime_type": "image/jpeg",
- "filename": "beach.jpg",
- "sources": [
- {
- "service": "google-photos",
- "service_name": "Google Photos",
- "id": "AGxyz...",
- "canonical": true,
- "blob_url": "https://lh3.googleusercontent.com/...",
- "thumbnail_url": "https://lh3.googleusercontent.com/..."
- }
- ]
- }
- ],
- "total": 1,
- "synced": true,
- "by_service": {
- "google-photos": { "status": "ok", "count": 1 }
- }
+  "photos": [
+    {
+      "taken_at": "2023-07-04T18:30:00Z",
+      "width": 4032,
+      "height": 3024,
+      "mime_type": "image/jpeg",
+      "filename": "beach.jpg",
+      "sources": [
+        {
+          "service": "google-photos",
+          "service_name": "Google Photos",
+          "id": "AGxyz...",
+          "canonical": true,
+          "blob_url": "https://lh3.googleusercontent.com/...",
+          "thumbnail_url": "https://lh3.googleusercontent.com/..."
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "google-photos": { "status": "ok", "count": 1 }
+  }
 }
 ```
 
@@ -386,8 +388,7 @@ Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, `/picker/*`, and
 (meeting, appointment, all-day block). Service identity lives in `sources[]`,
 same as playlists, contacts, and photos. **Aegis does not store calendar
 content** — the authoritative copy stays on a non-Aegis service marked
-`canonical`. Initial provider: **Google Calendar**
-([](https://github.com/fudomunro/aegis/issues/65)).
+`canonical`. Initial provider: **Google Calendar**.
 
 Neutral calendar-event fields (user-facing):
 
@@ -423,44 +424,44 @@ service proxy).
 
 ```json
 {
- "events": [
- {
- "title": "Standup",
- "description": "Daily team sync",
- "start_at": "2024-06-01T09:00:00Z",
- "end_at": "2024-06-01T09:30:00Z",
- "location": "Room 1",
- "status": "confirmed",
- "calendar_id": "primary",
- "calendar_name": "Work",
- "entity_id": "standup@google.com",
- "organizer": {
- "name": "Ada Lovelace",
- "emails": ["ada@example.com"]
- },
- "attendees": [
- {
- "name": "Grace",
- "emails": ["grace@example.com"]
- }
- ],
- "sources": [
- {
- "service": "google-calendar",
- "service_name": "Google Calendar",
- "id": "ev1",
- "calendar_id": "primary",
- "url": "https://calendar.google.com/event?eid=...",
- "canonical": true
- }
- ]
- }
- ],
- "total": 1,
- "synced": true,
- "by_service": {
- "google-calendar": { "status": "ok", "count": 1 }
- }
+  "events": [
+    {
+      "title": "Standup",
+      "description": "Daily team sync",
+      "start_at": "2024-06-01T09:00:00Z",
+      "end_at": "2024-06-01T09:30:00Z",
+      "location": "Room 1",
+      "status": "confirmed",
+      "calendar_id": "primary",
+      "calendar_name": "Work",
+      "entity_id": "standup@google.com",
+      "organizer": {
+        "name": "Ada Lovelace",
+        "emails": ["ada@example.com"]
+      },
+      "attendees": [
+        {
+          "name": "Grace",
+          "emails": ["grace@example.com"]
+        }
+      ],
+      "sources": [
+        {
+          "service": "google-calendar",
+          "service_name": "Google Calendar",
+          "id": "ev1",
+          "calendar_id": "primary",
+          "url": "https://calendar.google.com/event?eid=...",
+          "canonical": true
+        }
+      ]
+    }
+  ],
+  "total": 1,
+  "synced": true,
+  "by_service": {
+    "google-calendar": { "status": "ok", "count": 1 }
+  }
 }
 ```
 
@@ -497,8 +498,7 @@ and calendar events. **Aegis does not store mailboxes or message bodies as
 the home copy** — the authoritative content stays on a non-Aegis service
 marked `canonical`. Library listings carry subject/snippet
 metadata; agents fetch full body through the service proxy.
-Initial provider: **Gmail**
-([](https://github.com/fudomunro/aegis/issues/60)); social posts and
+Initial provider: **Gmail**; social posts and
 replies via **Bluesky** (`channel: "social"`, `direction: "outbound"` for
 authored items).
 
@@ -525,8 +525,7 @@ Cross-service merge prefers **RFC Message-ID** when a provider supplies it
 (`match=subject_from_time`). Replies that share a subject but different
 Message-IDs or send times stay distinct.
 
-**Gmail and Google Takeout are sources of one mail collection**
-([](https://github.com/fudomunro/aegis/issues/139)). Live Gmail,
+**Gmail and Google Takeout are sources of one mail collection.** Live Gmail,
 Gmail archive sync, and Takeout import all feed the same identity space:
 either ingest order is safe, a Message-ID match attaches another `sources[]`
 entry instead of creating a second message, and `/v1/library/messages` plus
@@ -579,28 +578,28 @@ Example:
 
 ```json
 {
- "transactions": [
- {
- "posted_at": "2024-03-05",
- "amount": "-45.67",
- "currency": "USD",
- "description": "AMAZON.COM",
- "merchant": "Amazon",
- "category": ["Shopping"],
- "status": "posted",
- "account": {"name": "Everyday Checking", "type": "checking", "last4": "4421"},
- "entity_id": "AQB-20240305-0001",
- "sources": [{"service": "ynab", "service_name": "YNAB", "id": "ynab-tx-1"}]
- }
- ],
- "total": 1,
- "summary": {
- "count": 1,
- "currency": "USD",
- "total_amount": "-45.67",
- "by_category": {"Shopping": "-45.67"},
- "by_month": {"2024-03": "-45.67"}
- }
+  "transactions": [
+    {
+      "posted_at": "2024-03-05",
+      "amount": "-45.67",
+      "currency": "USD",
+      "description": "AMAZON.COM",
+      "merchant": "Amazon",
+      "category": ["Shopping"],
+      "status": "posted",
+      "account": {"name": "Everyday Checking", "type": "checking", "last4": "4421"},
+      "entity_id": "AQB-20240305-0001",
+      "sources": [{"service": "ynab", "service_name": "YNAB", "id": "ynab-tx-1"}]
+    }
+  ],
+  "total": 1,
+  "summary": {
+    "count": 1,
+    "currency": "USD",
+    "total_amount": "-45.67",
+    "by_category": {"Shopping": "-45.67"},
+    "by_month": {"2024-03": "-45.67"}
+  }
 }
 ```
 
@@ -620,15 +619,15 @@ not a firehose of GPS points. Query filters: `after`, `before`, `locality`,
 
 ```json
 {
- "visits": [{
- "start_at": "2023-07-04T16:00:00Z",
- "end_at": "2023-07-04T21:00:00Z",
- "place": {"name": "Halifax Harbour", "locality": "Halifax", "country": "Canada"},
- "kind": "visit",
- "confidence": "high",
- "sources": [{"service": "google-timeline", "service_name": "Google Timeline", "id": "tl-1"}]
- }],
- "total": 1
+  "visits": [{
+      "start_at": "2023-07-04T16:00:00Z",
+      "end_at": "2023-07-04T21:00:00Z",
+      "place": {"name": "Halifax Harbour", "locality": "Halifax", "country": "Canada"},
+      "kind": "visit",
+      "confidence": "high",
+      "sources": [{"service": "google-timeline", "service_name": "Google Timeline", "id": "tl-1"}]
+    }],
+  "total": 1
 }
 ```
 
@@ -655,27 +654,27 @@ Aegis never stores document bytes and never runs OCR.
 
 ```json
 {
- "documents": [{
- "title": "Apartment lease 2024",
- "mime_type": "application/pdf",
- "created_at": "2024-01-15T12:00:00Z",
- "modified_at": "2024-01-16T09:00:00Z",
- "correspondent": "Harbour Property Management",
- "document_type": "lease",
- "tags": ["housing", "legal"],
- "excerpt": "This lease agreement is entered into…",
- "people": [{"name": "Harbour Property Management"}],
- "entity_id": "sha256:…",
- "sources": [{
- "service": "paperless",
- "service_name": "Paperless-ngx",
- "id": "11",
- "url": "https://paperless.example.com/documents/11/details",
- "canonical": true,
- "blob_url": "https://paperless.example.com/api/documents/11/download"
- }]
- }],
- "total": 1
+  "documents": [{
+      "title": "Apartment lease 2024",
+      "mime_type": "application/pdf",
+      "created_at": "2024-01-15T12:00:00Z",
+      "modified_at": "2024-01-16T09:00:00Z",
+      "correspondent": "Harbour Property Management",
+      "document_type": "lease",
+      "tags": ["housing", "legal"],
+      "excerpt": "This lease agreement is entered into…",
+      "people": [{"name": "Harbour Property Management"}],
+      "entity_id": "sha256:…",
+      "sources": [{
+          "service": "paperless",
+          "service_name": "Paperless-ngx",
+          "id": "11",
+          "url": "https://paperless.example.com/documents/11/details",
+          "canonical": true,
+          "blob_url": "https://paperless.example.com/api/documents/11/download"
+        }]
+    }],
+  "total": 1
 }
 ```
 
@@ -764,6 +763,28 @@ POST /v1/admin/setup/{id}/{action} — run one declared verb ({"values":…,"fla
   verbs include probe (diagnose a candidate connection), save (persist it: service_connections.json + encrypted token store),
   check (re-run the acceptance checklist), and a connector's own VIP verbs (tailnet_save / tailnet_check / tailnet_apply)
   Each connector owns which verbs it declares; the panel renders them and must not restate their copy.
+GET /v1/admin/mail/status — mail archive status (count, ingest watermark, hints)
+POST /v1/admin/mail/sync — run mail ingest from connected sources
+POST /v1/admin/mail/import {"path":"…","max_messages":N} — read-only Google Takeout import
+GET /v1/admin/quicken/status — Quicken import store status (count, path hints)
+POST /v1/admin/quicken/import {"path":"…"} — import a QIF/QFX file or directory
+GET /v1/admin/signal/status — Signal import store status
+POST /v1/admin/signal/import {"path":"…"} — import a Signal export
+GET /v1/admin/timeline/status — Google Timeline import store status
+POST /v1/admin/timeline/import {"path":"…"} — import Timeline JSON, a directory, or a Takeout zip
+GET /v1/admin/udt/status — user-defined types: overlay path, loaded kinds, hints
+GET /v1/admin/udt/browse?path= — list local files for schema-pack file sources
+PUT /v1/admin/udt/kinds/{kind}/sources/{id} — set local files {"paths":[…]} ({"clear":true} resets)
+DELETE /v1/admin/udt/kinds/{kind}/sources/{id}
+POST /v1/admin/udt/kinds/{kind}/extra {"extra":{…}} — attach an extra local JSON file to a kind
+DELETE /v1/admin/udt/kinds/{kind}/extra/{id}
+GET /v1/admin/apps — list third-party apps (token hints only)
+POST /v1/admin/apps {"id","name","scopes"} — create an app; returns its token once
+GET /v1/admin/apps/{id} — inspect an app
+PATCH /v1/admin/apps/{id} — update {"name","scopes","disabled"}
+DELETE /v1/admin/apps/{id} — revoke an app
+POST /v1/admin/apps/{id}/rotate — issue a new token; the old one dies
+POST /v1/library/photos/share — publish one photo to a share target (admin; see connect/bluesky.md)
 ```
 
 Public brand assets (no auth;) are served from the process root:
