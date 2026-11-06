@@ -20,73 +20,74 @@ import (
 // kindRuntimeEntry is core-owned visibility wiring for one library kind.
 // Predicates stay here — not on types.LibraryKind (issue #15).
 type kindRuntimeEntry struct {
+	// Provides reports whether a single connector implements this kind's
+	// provider interface. The flow map lists a service's kinds through it
+	// (issue #254).
+	Provides func(c connectors.ServiceConnector) bool
 	// HasProviders reports whether any connector can feed this kind.
 	HasProviders func(s *Server) bool
 	// Readable reports whether any non-blocked service allows reads.
 	Readable func(s *Server) bool
 }
 
+// newKindRuntime wires a kind whose live sources are exactly the connectors
+// implementing P. Override HasProviders on the result when a local store can
+// feed the kind without a connector (mail archive, Timeline import).
+func newKindRuntime[P any](kind string) kindRuntimeEntry {
+	provides := func(c connectors.ServiceConnector) bool {
+		_, ok := any(c).(P)
+		return ok
+	}
+	return kindRuntimeEntry{
+		Provides: provides,
+		HasProviders: func(s *Server) bool {
+			for _, c := range s.connectors {
+				if provides(c) {
+					return true
+				}
+			}
+			return false
+		},
+		Readable: func(s *Server) bool { return s.libraryReadableFor(kind) },
+	}
+}
+
 // kindRuntime maps kind ID → visibility predicates. Keys must match
 // types.BuiltinLibraryKinds (TestLibraryKinds_KindRuntimeInSync).
 var kindRuntime = map[string]kindRuntimeEntry{
-	"playlists": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.PlaylistProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("playlists") },
-	},
-	"tracks": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.LikedTrackProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("tracks") },
-	},
-	"albums": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.AlbumProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("albums") },
-	},
-	"artists": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.ArtistProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("artists") },
-	},
-	"contacts": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.ContactProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("contacts") },
-	},
-	"photos": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.PhotoProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("photos") },
-	},
-	"events": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.CalendarEventProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("events") },
-	},
-	"messages": {
-		HasProviders: func(s *Server) bool {
-			if s.hasProvider[types.MessageProvider]() {
-				return true
-			}
-			// Local mail archive (Gmail sync + Takeout) is a collection source
-			// even without a live connector (issue #139).
-			return s.mail != nil && s.mailReadable()
-		},
-		Readable: func(s *Server) bool { return s.libraryReadableFor("messages") },
-	},
-	"transactions": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.TransactionProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("transactions") },
-	},
-	"places": {
-		HasProviders: func(s *Server) bool {
-			if s.hasProvider[types.PlaceVisitProvider]() {
-				return true
-			}
-			// Local Timeline import is a collection source even without a
-			// live connector (issue #142).
-			return s.timeline != nil && s.timeline.Enabled()
-		},
-		Readable: func(s *Server) bool { return s.libraryReadableFor("places") },
-	},
-	"documents": {
-		HasProviders: func(s *Server) bool { return s.hasProvider[types.DocumentProvider]() },
-		Readable:     func(s *Server) bool { return s.libraryReadableFor("documents") },
-	},
+	"playlists":    newKindRuntime[types.PlaylistProvider]("playlists"),
+	"tracks":       newKindRuntime[types.LikedTrackProvider]("tracks"),
+	"albums":       newKindRuntime[types.AlbumProvider]("albums"),
+	"artists":      newKindRuntime[types.ArtistProvider]("artists"),
+	"contacts":     newKindRuntime[types.ContactProvider]("contacts"),
+	"photos":       newKindRuntime[types.PhotoProvider]("photos"),
+	"events":       newKindRuntime[types.CalendarEventProvider]("events"),
+	"messages":     messagesKindRuntime(),
+	"transactions": newKindRuntime[types.TransactionProvider]("transactions"),
+	"places":       placesKindRuntime(),
+	"documents":    newKindRuntime[types.DocumentProvider]("documents"),
+}
+
+// messagesKindRuntime adds the local mail archive (Gmail sync + Takeout) as a
+// collection source even without a live connector (issue #139).
+func messagesKindRuntime() kindRuntimeEntry {
+	e := newKindRuntime[types.MessageProvider]("messages")
+	live := e.HasProviders
+	e.HasProviders = func(s *Server) bool {
+		return live(s) || (s.mail != nil && s.mailReadable())
+	}
+	return e
+}
+
+// placesKindRuntime adds the local Timeline import store as a collection
+// source even without a live connector (issue #142).
+func placesKindRuntime() kindRuntimeEntry {
+	e := newKindRuntime[types.PlaceVisitProvider]("places")
+	live := e.HasProviders
+	e.HasProviders = func(s *Server) bool {
+		return live(s) || (s.timeline != nil && s.timeline.Enabled())
+	}
+	return e
 }
 
 // kindHasProviders reports whether any connector can feed the kind.
@@ -149,27 +150,17 @@ func (s *Server) udtSchemaForKind(id string) (types.UserDefinedTypeSchema, bool)
 
 // libraryInstructionsFor returns kind instructions plus a configured canonical
 // service hint when the instance declares one for this kind, and the
-// multi-source mutation rule.
+// multi-source mutation rule. Kind-specific agent copy rides on
+// LibraryKind.ExtraInstructions (issue #254); this only adds the runtime
+// canonical hint.
 func (s *Server) libraryInstructionsFor(kindID string) string {
 	k := LibraryKindByID(kindID)
 	if k == nil {
 		return ""
 	}
 	text := k.Instructions(s.baseURL)
-	if kindID == "events" {
-		root := strings.TrimRight(s.baseURL, "/")
-		text += fmt.Sprintf(" For scheduling or availability-only questions use GET %s/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.", root)
-	}
 	if name := s.canonicalServiceName(kindID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the canonical home.", k.Label, name)
-	}
-	if kindID == "messages" {
-		text += " Prefer /v1/mail/search (FTS + from/to/after/before) to find specific mail; " +
-			"library lists are capped and newest-first. Fetch one message at " +
-			"/v1/services/{sources[].service}/messages/{sources[].id} or /v1/mail/messages/{service}/{id}."
-	}
-	if kindID == "photos" {
-		text += "\n" + types.PhotoSourceDiscipline()
 	}
 	text += "\n" + multiSourceMutationRule()
 	return text
@@ -180,16 +171,6 @@ func (s *Server) libraryInstructionsFor(kindID string) string {
 func anyServiceTruncated(bySvc map[string]types.LibraryServiceStatus) bool {
 	for _, st := range bySvc {
 		if st.Truncated {
-			return true
-		}
-	}
-	return false
-}
-
-// hasProvider reports whether any registered connector implements P.
-func (s *Server) hasProvider[P any]() bool {
-	for _, connector := range s.connectors {
-		if _, ok := any(connector).(P); ok {
 			return true
 		}
 	}

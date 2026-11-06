@@ -5,7 +5,8 @@ import "testing"
 // TestLibraryKinds_KindRuntimeInSync keeps the data registry and core
 // visibility predicates aligned (issue #15). A kind with no kindRuntime row
 // silently disappears from pre-request hints; a leftover runtime key is dead
-// code. Both fail this test.
+// code. Both fail this test. Provides is required so the flow map's
+// per-service kind listing cannot drift out of step either (issue #254).
 func TestLibraryKinds_KindRuntimeInSync(t *testing.T) {
 	seen := map[string]bool{}
 	for _, k := range libraryKinds {
@@ -20,6 +21,9 @@ func TestLibraryKinds_KindRuntimeInSync(t *testing.T) {
 		if !ok {
 			t.Errorf("kind %q missing kindRuntime entry", k.ID)
 			continue
+		}
+		if rt.Provides == nil {
+			t.Errorf("kind %q kindRuntime.Provides is nil", k.ID)
 		}
 		if rt.HasProviders == nil {
 			t.Errorf("kind %q kindRuntime.HasProviders is nil", k.ID)

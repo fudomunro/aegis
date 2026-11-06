@@ -292,6 +292,7 @@ func TestLibraryEventsInstructions_MentionEndpoint(t *testing.T) {
 		"/v1/library/events",
 		"calendar events",
 		"canonical",
+		"/v1/library/freebusy",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)

@@ -51,6 +51,16 @@ type LibraryKind struct {
 	// grant names it explicitly (places pattern, issue #142).
 	DefaultNone bool
 
+	// OptimisticCopies gives this kind optimistic snapshot watermarks in the
+	// copy ledger instead of full per-object sync (mail-like streams,
+	// issue #76).
+	OptimisticCopies bool
+
+	// ExtraInstructions is kind-specific agent copy appended to the system
+	// message hint (issue #254). "{root}" expands to the instance base URL.
+	// Kind copy lives here, not in core's dispatch.
+	ExtraInstructions string
+
 	// Search declares how this kind is searched (issue #178). Nil means
 	// the kind has no q= support. Builtin specs live with the registry;
 	// user-defined packs declare theirs in the schema file.
@@ -92,9 +102,16 @@ func (k LibraryKind) Instructions(baseURL string) string {
 			"when true, say so and note that some items may still be missing upstream. "+
 			"truncated means upstream page-cap incompleteness, not 'more pages in this response'.\n"+
 			"sources[].canonical marks the authoritative non-Aegis location for that item; "+
-			"prefer that service for writes or mirrors.",
+			"prefer that service for writes or mirrors.%s",
 		k.Label, k.Usage, root, k.Path, k.Summary, k.SyncRule, searchHint, k.ExampleQuestion,
+		k.instructionSuffix(root),
 	)
+}
+
+// instructionSuffix expands the kind's extra agent copy for the instance.
+// ExtraInstructions carries its own leading separator (space or newline).
+func (k LibraryKind) instructionSuffix(root string) string {
+	return strings.ReplaceAll(k.ExtraInstructions, "{root}", root)
 }
 
 // CacheKey is the in-memory cache key for the aggregate response.
