@@ -500,73 +500,7 @@
         <div class="perm-status" id="data-grant-status"></div>
       </div>
 
-      <div class="help-box" id="immich-setup-panel">
-        <div class="card-header" style="margin:0">
-          <h3 style="margin:0">Immich — local canonical photos</h3>
-          <div class="grow"></div>
-          <button class="btn btn-primary" id="immich-open-wizard" type="button">Setup guide</button>
-          <button class="btn" id="immich-test" type="button" hidden>Test</button>
-          <button class="btn" id="immich-check" type="button">Run checks</button>
-        </div>
-        <p class="meta" style="margin:0.55rem 0 0.35rem">
-          Self-hosted photo library as the canonical home for photos. Bytes stay on Immich.
-          <a href="https://docs.immich.app/overview/quick-start/" target="_blank" rel="noopener noreferrer">Immich docs</a>
-          · <code>docs/immich-live-testing.md</code>
-        </p>
-        <div class="meta" id="immich-status-meta">Loading Immich setup…</div>
-        <div class="card" id="immich-next-step" style="padding:0.55rem 0.85rem; margin:0.55rem 0 0">
-          <div style="display:flex; gap:0.55rem; align-items:flex-start">
-            <span style="color:var(--accent); font-weight:700">Next</span>
-            <div>
-              <div id="immich-next-step-text" style="font-size:0.9rem">Loading…</div>
-              <div id="immich-suggested-endpoint" class="meta" style="margin-top:0.3rem"></div>
-            </div>
-          </div>
-        </div>
-        <details style="margin-top:0.55rem">
-          <summary class="meta" style="cursor:pointer">Details: guided ladder, connection form, checks</summary>
-          <div class="card" id="immich-steps" style="padding:0.55rem 0.85rem; margin:0.55rem 0">
-            <div class="empty">Open the setup guide for full steps.</div>
-          </div>
-          <div class="card" style="padding:0.85rem 1rem; margin-bottom:0.55rem">
-            <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Immich endpoint
-                <input id="immich-endpoint" type="url" placeholder="http://photos.home.ts.net:2283/api" spellcheck="false" autocomplete="off">
-              </label>
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Immich API key
-                <input id="immich-api-key" type="password" placeholder="Account → API Keys" autocomplete="off" spellcheck="false">
-              </label>
-              <label style="display:flex; align-items:flex-end; gap:0.4rem; font-size:0.85rem; padding-bottom:0.35rem">
-                <input id="immich-claim-canonical" type="checkbox" checked>
-                Claim canonical for photos
-              </label>
-            </div>
-            <div class="toolbar" style="margin:0.65rem 0 0">
-              <button class="btn" id="immich-save" type="button">Save to Aegis</button>
-            </div>
-            <p class="meta" style="margin:0.55rem 0 0">
-              Saved to <code>service_connections.json</code> (not <code>aegis.json</code>).
-              API key is stored and never shown again after save.
-            </p>
-          </div>
-          <div id="immich-checks" class="card" style="padding:0.65rem 0.85rem; margin-bottom:0.55rem">
-            <div class="empty">Run checks after saving to verify the checklist.</div>
-          </div>
-          <details id="immich-snippet-wrap">
-            <summary class="meta" style="cursor:pointer">Prefer aegis.json? Show bootstrap snippet</summary>
-            <div class="card" style="padding:0.85rem 1rem; margin-top:0.45rem">
-              <div class="toolbar" style="margin-bottom:0.45rem">
-                <span class="meta">services[] entry</span>
-                <div class="grow"></div>
-                <button class="btn" id="copy-immich-snippet" type="button">Copy JSON</button>
-              </div>
-              <pre id="immich-snippet" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"></pre>
-            </div>
-          </details>
-        </details>
-      </div>
+      <div class="help-box" id="setup-immich" data-setup-service="immich"></div>
 
       <div class="help-box" id="setup-ynab" data-setup-service="ynab"></div>
 
@@ -1072,31 +1006,7 @@ immich-go --help</pre>
               <div class="grow"></div>
               <button class="btn" id="copy-immich-perms" type="button">Copy list</button>
             </div>
-            <pre id="immich-api-permissions" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5"># Single Immich key — Aegis library/proxy AND immich-go Takeout import
-
-# Aegis
-asset.read
-asset.view
-asset.download
-album.read
-user.read
-
-# immich-go upload from-google-photos
-asset.upload
-asset.update
-asset.copy
-asset.delete
-asset.statistics
-album.create
-albumAsset.create
-stack.create
-tag.create
-tag.asset
-server.about
-
-# immich-go pauses jobs during import (admin-linked key)
-job.create
-job.read</pre>
+            <pre id="immich-api-permissions" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5"></pre>
             <p class="meta" style="margin:0.5rem 0 0">Copy the secret once when Immich shows it — use it in the next step and in <code>immich-go --api-key=</code>.</p>
           </div>
         </section>
@@ -4356,7 +4266,8 @@ function selectTab(name, opts) {
   }
 
   function setupActionHTML(a) {
-    // Save/apply verbs are the panel's primary buttons; probes are secondary.
+    // Save/apply verbs are the panel's primary buttons; probes and checks are
+    // secondary.
     const primary = a.kind === "save" || a.kind === "apply";
     return (
       '<button class="btn' + (primary ? " btn-primary" : "") + '" type="button" data-setup-action="' +
@@ -4364,65 +4275,205 @@ function selectTab(name, opts) {
     );
   }
 
+  function setupFieldHTML(f, st, scope) {
+    const key = scope ? scope + "-" + f.id : f.id;
+    if (f.kind === "checkbox") {
+      return (
+        '<label style="display:flex; gap:0.45rem; align-items:center; font-size:0.85rem">' +
+        '<input data-setup-field="' + escapeHtml(f.id) + '" type="checkbox"' + (st.checked ? " checked" : "") + ">" +
+        escapeHtml(f.label) + "</label>" +
+        (f.help ? '<div class="meta">' + formatSetupText(f.help) + "</div>" : "")
+      );
+    }
+    const type = f.secret ? "password" : f.kind === "url" ? "url" : "text";
+    const value = f.secret ? "" : st.value || "";
+    let placeholder = f.placeholder || "";
+    if (f.secret && st.set) placeholder = "API key saved (leave blank to keep)";
+    return (
+      '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
+      escapeHtml(f.label) +
+      '<input data-setup-field="' + escapeHtml(f.id) + '" type="' + type + '"' +
+      (placeholder ? ' placeholder="' + escapeHtml(placeholder) + '"' : "") +
+      ' value="' + escapeHtml(value) + '" spellcheck="false" autocomplete="off">' +
+      (f.help ? '<span class="meta">' + formatSetupText(f.help) + "</span>" : "") +
+      "</label>"
+    );
+  }
+
+  function setupStepsHTML(spec, status) {
+    const rows = (status.steps || []).map((row) => {
+      const def = (spec.steps || []).find((x) => x.id === row.id) || {};
+      const icon = row.ok ? "✓" : row.current ? "→" : "○";
+      return (
+        "<div>" + icon + " " + escapeHtml(def.label || row.id) +
+        (row.detail ? '<div class="meta">' + escapeHtml(row.detail) + "</div>" : "") +
+        "</div>"
+      );
+    });
+    return rows.length ? '<div class="meta" style="display:grid; gap:0.35rem">' + rows.join("") + "</div>" : "";
+  }
+
+  function setupChecksHTML(spec, status) {
+    const rows = (status.checks || []).map((row) => {
+      const def = (spec.checks || []).find((x) => x.id === row.id) || {};
+      return (
+        "<div>" + (row.ok ? "✓" : "✗") + " <strong>" + escapeHtml(def.label || row.id) + "</strong>" +
+        (row.detail ? " — " + escapeHtml(row.detail) : "") + "</div>"
+      );
+    });
+    return rows.length ? '<div class="meta" style="display:grid; gap:0.35rem">' + rows.join("") + "</div>" : "";
+  }
+
+  function setupGuideHTML(g, state) {
+    const title = g.title ? "<strong>" + escapeHtml(g.title) + "</strong> " : "";
+    const body = g.body ? '<div class="meta">' + formatSetupText(g.body) + "</div>" : "";
+    const cmd = (state && state.command) || g.command;
+    let command = "";
+    if (cmd) {
+      const label = g.label ? escapeHtml(g.label) : "";
+      const button = g.button
+        ? '<button class="btn" type="button" data-setup-copy="1">' + escapeHtml(g.button) + "</button>"
+        : "";
+      command =
+        (label || button
+          ? '<div class="toolbar" style="margin:0.45rem 0 0.35rem"><span class="meta">' + label +
+            '</span><div class="grow"></div>' + button + "</div>"
+          : "") +
+        '<pre class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5">' +
+        escapeHtml(cmd) + "</pre>";
+    }
+    const inner = title + body + command;
+    if (g.collapsible) {
+      return "<details><summary>" + escapeHtml(g.title || "Details") + "</summary>" + body + command + "</details>";
+    }
+    return "<div>" + inner + "</div>";
+  }
+
+  function setupNextHTML(status, probe) {
+    if (!status.next) return "";
+    let extra = "";
+    if (probe && probe.suggested) {
+      extra +=
+        '<div class="meta" style="margin:0.35rem 0 0">Suggested endpoint: <code>' +
+        escapeHtml(probe.suggested) + "</code> " +
+        '<button class="btn" type="button" data-setup-use="1">Use this</button></div>';
+    }
+    if (probe && !probe.ok && probe.hint) {
+      extra += '<div class="meta" style="margin:0.35rem 0 0">' + escapeHtml(probe.hint) + "</div>";
+    }
+    return (
+      '<div class="card" style="margin:0.55rem 0 0"><div class="toolbar" style="margin:0">' +
+      '<span class="meta">Next</span></div>' +
+      '<div style="margin:0.35rem 0 0">' + escapeHtml(status.next) + "</div>" + extra + "</div>"
+    );
+  }
+
+  function wireSetupPanel(host, spec, status, probe) {
+    host.querySelectorAll("[data-setup-action]").forEach((btn) => {
+      btn.addEventListener("click", (e) => runSetupAction(host, spec, e.currentTarget));
+    });
+    host.querySelectorAll("[data-setup-copy]").forEach((btn) => {
+      const reset = btn.textContent;
+      btn.addEventListener("click", () => {
+        const block = btn.parentElement && btn.parentElement.parentElement
+          ? btn.parentElement.parentElement.querySelector("pre")
+          : null;
+        const text = block ? block.textContent : "";
+        const done = (ok) => {
+          btn.textContent = ok ? "Copied" : "Copy failed";
+          setTimeout(() => { btn.textContent = reset; }, 1200);
+        };
+        if (navigator.clipboard && text) {
+          navigator.clipboard.writeText(text).then(() => done(true), () => done(false));
+        } else {
+          done(false);
+        }
+      });
+    });
+    host.querySelectorAll("[data-setup-use]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        if (probe && probe.suggested) {
+          const input = host.querySelector('[data-setup-field="endpoint"]');
+          if (input) input.value = probe.suggested;
+        }
+      });
+    });
+  }
+
   function renderSetupPanel(host, spec, status, probe) {
     if (!host) return;
-    const fields = (spec.fields || []).map((f) => {
-      const st = (status.fields || {})[f.id] || {};
-      const type = f.secret ? "password" : f.kind === "url" ? "url" : "text";
-      const value = f.secret ? "" : st.value || "";
-      return (
-        '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
-        escapeHtml(f.label) +
-        '<input data-setup-field="' + escapeHtml(f.id) + '" type="' + type + '"' +
-        (f.placeholder ? ' placeholder="' + escapeHtml(f.placeholder) + '"' : "") +
-        ' value="' + escapeHtml(value) + '" spellcheck="false" autocomplete="off">' +
-        (f.help ? '<span class="meta">' + formatSetupText(f.help) + "</span>" : "") +
-        "</label>"
-      );
-    }).join("");
-    const guides = (spec.guides || []).map((g) => {
-      const title = g.title ? "<strong>" + escapeHtml(g.title) + "</strong> " : "";
-      const cmd = g.command
-        ? '<pre class="mono" style="margin:0.45rem 0 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
-          escapeHtml(g.command) + "</pre>"
-        : "";
-      return title + formatSetupText(g.body) + cmd;
-    }).join(" ");
-    const headerBtns = setupActionButtons(spec, "header").map(setupActionHTML).join("");
+    status = status || {};
+    probe = probe || status.probe || null;
+
+    const guides = (spec.guides || [])
+      .filter((g) => !g.walkthrough)
+      .map((g) => setupGuideHTML(g, (status.guides || {})[g.id]))
+      .join("");
+    const headerBtns =
+      (spec.walkthrough_label
+        ? '<button class="btn btn-primary" type="button" data-setup-open="1">' +
+          escapeHtml(spec.walkthrough_label) + "</button>"
+        : "") +
+      setupActionButtons(spec, "header").map(setupActionHTML).join("");
     const formBtns = setupActionButtons(spec, "form").map(setupActionHTML).join("");
-    const summary = (status.summary || []).join(" \u00b7 ");
+    const fields = (spec.fields || [])
+      .map((f) => setupFieldHTML(f, (status.fields || {})[f.id] || {}))
+      .join("");
+    const steps = setupStepsHTML(spec, status);
+    const checks = setupChecksHTML(spec, status);
+    const summary = (status.summary || []).join(" · ");
     const hints = (status.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
+
     let result = "";
     if (probe && probe.code && probe.code !== "unchecked") {
+      const text = probe.message || (probe.ok ? "ok" : "failed") + (probe.hint ? " — " + probe.hint : "");
       result = probe.ok
-        ? '<div class="meta">' + escapeHtml(probe.message || "ok") + "</div>"
-        : '<div class="error-box">' + escapeHtml(probe.message || "failed") + "</div>";
+        ? '<div class="meta">' + escapeHtml(probe.message || "ok") + (probe.hint ? " — " + escapeHtml(probe.hint) : "") + "</div>"
+        : '<div class="error-box">' + escapeHtml(probe.message || "failed") + (probe.hint ? " — " + escapeHtml(probe.hint) : "") + "</div>";
+      void text;
     }
-    host.innerHTML =
+
+    const body =
+      (guides ? '<div class="meta" style="margin:0.55rem 0 0.35rem">' + guides + "</div>" : "") +
+      '<div class="meta">' + escapeHtml(summary) + "</div>" +
+      setupNextHTML(status, probe) +
+      '<div class="setup-result meta" style="margin:0.55rem 0 0">' + result + "</div>" +
+      '<div class="setup-hints meta" style="margin:0.45rem 0 0">' + hints + "</div>" +
+      '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0">' +
+      (steps ? '<div style="margin:0 0 0.55rem">' + steps + "</div>" : "") +
+      '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">' + fields + "</div>" +
+      (formBtns ? '<div class="toolbar" style="margin:0.65rem 0 0">' + formBtns + "</div>" : "") +
+      "</div>" +
+      (checks
+        ? '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0"><div class="meta">Run checks after saving to verify the checklist.</div>' +
+          '<div style="margin:0.45rem 0 0">' + checks + "</div></div>"
+        : "");
+
+    const inner =
       '<div class="card-header" style="margin:0">' +
       '<h3 style="margin:0">' + escapeHtml(spec.title || spec.display_name || spec.service_id) + "</h3>" +
       '<div class="grow"></div>' + headerBtns + "</div>" +
-      (guides ? '<p class="meta" style="margin:0.55rem 0 0.35rem">' + guides + "</p>" : "") +
-      '<div class="meta">' + escapeHtml(summary) + "</div>" +
-      '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0">' +
-      '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">' + fields + "</div>" +
-      (formBtns ? '<div class="toolbar" style="margin:0.65rem 0 0">' + formBtns + "</div>" : "") +
-      '<div class="setup-result meta" style="margin:0.55rem 0 0"></div>' +
-      '<div class="setup-hints meta" style="margin:0.45rem 0 0">' + hints + "</div>" +
-      "</div>";
-    const resultBox = host.querySelector(".setup-result");
-    if (resultBox) resultBox.innerHTML = result;
-    host.querySelectorAll("[data-setup-action]").forEach((btn) => {
-      btn.addEventListener("click", (e) => runSetupAction(host, spec, e.currentTarget));
+      (spec.details_label
+        ? "<details><summary>" + escapeHtml(spec.details_label) + "</summary>" + body + "</details>"
+        : body);
+
+    host.innerHTML = inner;
+    wireSetupPanel(host, spec, status, probe);
+    host.querySelectorAll("[data-setup-open]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        // The panel announces the intent; the page decides the presentation.
+        host.dispatchEvent(new CustomEvent("setup-walkthrough", { detail: { spec, status, probe } }));
+      });
     });
   }
 
   async function loadSetupPanel(host) {
     if (!host) return;
-    host.innerHTML = '<div class="meta">Loading setup\u2026</div>';
+    host.innerHTML = '<div class="meta">Loading setup…</div>';
     const id = host.dataset.setupService;
     try {
       const view = await api("/v1/admin/setup/" + encodeURIComponent(id));
+      host._setupSpec = view.spec;
       renderSetupPanel(host, view.spec, view.status, view.status && view.status.probe);
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
@@ -4435,25 +4486,29 @@ function selectTab(name, opts) {
     const action = (spec.actions || []).find((a) => a.id === btn.dataset.setupAction);
     if (!action) return;
     const values = {};
+    const flags = {};
     (action.fields || []).forEach((fid) => {
       const input = host.querySelector('[data-setup-field="' + fid + '"]');
-      if (input) values[fid] = input.value;
+      if (!input) return;
+      if (input.type === "checkbox") flags[fid] = input.checked;
+      else values[fid] = input.value;
     });
     if (btn) btn.disabled = true;
     const result = host.querySelector(".setup-result");
-    if (result) result.textContent = action.busy_label || "Working\u2026";
+    if (result) result.textContent = action.busy_label || "Working…";
     try {
       const res = await api(
         "/v1/admin/setup/" + encodeURIComponent(id) + "/" + encodeURIComponent(action.id),
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ values }),
+          body: JSON.stringify({ values, flags }),
         }
       );
       // A save carries no probe of its own; show the post-save diagnosis the
       // status just computed. Re-rendering blanks every secret input.
       renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
+      if (typeof loadSummary === "function") loadSummary();
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
       else if (result) result.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed") + "</div>";
@@ -4897,165 +4952,154 @@ function selectTab(name, opts) {
   });
 
   // --- Immich setup guide (issues #39, #121) ---
-  function checksHTML(checks) {
+  // The connection card is a generic onboarding panel (issue #265). What is
+  // left here drives the wizard modal, which still owns its own layout; both
+  // speak the same connector-declared spec and the same /v1/admin/setup/immich
+  // runner. The VIP-Service page (page 5) is issue #124 and is not part of
+  // the onboarding seam yet.
+
+  function immichSpecOf(host) {
+    return (host && host._setupSpec) || null;
+  }
+
+  function immichGuideCommand(spec, id) {
+    if (!spec) return "";
+    const g = (spec.guides || []).find((x) => x.id === id);
+    return (g && g.command) || "";
+  }
+
+  function checksHTML(checks, spec) {
     if (!checks || !checks.length) {
       return '<div class="empty">Run checks after saving to verify the checklist.</div>';
     }
     return checks.map((c) => {
+      const def = ((spec && spec.checks) || []).find((x) => x.id === c.id) || {};
+      const label = c.label || def.label || c.id;
       const icon = c.ok ? "✓" : "✗";
       const color = c.ok ? "var(--accent)" : "#f85149";
       return (
         '<div style="display:flex; gap:0.55rem; align-items:flex-start; padding:0.28rem 0; font-size:0.88rem">' +
         '<span style="color:' + color + '; font-weight:700; min-width:1rem">' + icon + "</span>" +
-        "<span><strong>" + escapeHtml(c.label) + "</strong>" +
+        "<span><strong>" + escapeHtml(label) + "</strong>" +
         (c.detail ? ' <span class="meta">— ' + escapeHtml(c.detail) + "</span>" : "") +
         "</span></div>"
       );
     }).join("");
   }
 
-  function renderImmichChecks(checks) {
-    const html = checksHTML(checks);
-    if ($("immich-checks")) $("immich-checks").innerHTML = html;
-    if ($("wiz-immich-checks")) $("wiz-immich-checks").innerHTML = html;
-  }
+  // renderImmichWizardStatus paints the wizard's Connect/Verify pages from the
+  // generic onboarding envelope.
+  function renderImmichWizardStatus(view) {
+    const spec = view.spec;
+    const status = view.status || {};
+    const probe = view.probe || status.probe || null;
+    const checks = (status.checks || []).map((c) => Object.assign({}, c, { label: null }));
+    if ($("wiz-immich-checks")) $("wiz-immich-checks").innerHTML = checksHTML(checks, spec);
 
-  function renderImmichSteps(steps) {
-    const box = $("immich-steps");
-    if (!steps || !steps.length) {
-      box.innerHTML = '<div class="empty">Loading setup steps…</div>';
-      return;
-    }
-    box.innerHTML = steps.map((s, i) => {
-      const icon = s.ok ? "✓" : (s.current ? "→" : "○");
-      const color = s.ok ? "var(--accent)" : (s.current ? "#d29922" : "var(--dim)");
-      const weight = s.current ? "700" : "400";
-      return (
-        '<div style="display:flex; gap:0.55rem; align-items:flex-start; padding:0.32rem 0; font-size:0.88rem">' +
-        '<span style="color:' + color + '; font-weight:700; min-width:1.1rem">' + icon + "</span>" +
-        '<span style="flex:1"><strong style="font-weight:' + weight + '">' + (i + 1) + ". " + escapeHtml(s.label) + "</strong>" +
-        (s.detail ? '<div class="meta" style="margin-top:0.15rem">' + escapeHtml(s.detail) + "</div>" : "") +
-        "</span></div>"
-      );
-    }).join("");
-  }
-
-  function renderImmichNext(status) {
-    const text = $("immich-next-step-text");
-    const sug = $("immich-suggested-endpoint");
-    if (!status) return;
-    text.textContent = status.next_step || "—";
-    sug.innerHTML = "";
-    const probe = status.last_probe;
-    if (probe && probe.suggested_endpoint) {
-      const cur = $("immich-endpoint").value.trim();
-      if (probe.suggested_endpoint !== cur) {
-        sug.innerHTML =
-          'Suggested endpoint: <code>' + escapeHtml(probe.suggested_endpoint) + "</code> " +
-          '<button class="btn" type="button" id="immich-use-suggested" style="margin-left:0.35rem; padding:0.15rem 0.45rem; font-size:0.8rem">Use this</button>';
-        const btn = $("immich-use-suggested");
-        if (btn) {
-          btn.addEventListener("click", () => {
-            $("immich-endpoint").value = probe.suggested_endpoint;
-            sug.innerHTML = "";
-          });
-        }
-      }
-    }
-    if (probe && probe.hint && !probe.ok) {
-      sug.innerHTML += (sug.innerHTML ? "<br>" : "") +
-        '<span class="meta">' + escapeHtml(probe.hint) + "</span>";
-    }
-    if ($("wiz-immich-next")) {
-      $("wiz-immich-next").textContent = status.next_step || "—";
-    }
-    if ($("wiz-immich-status")) {
-      $("wiz-immich-status").textContent = partsForWiz(status).join(" · ");
-    }
-  }
-
-  function partsForWiz(status) {
-    const parts = [];
-    parts.push(status.configured ? "configured" : "not configured");
-    parts.push(status.has_api_key ? "API key set" : "no API key");
-    if (status.library_status) {
-      parts.push("library: " + status.library_status +
-        (status.library_count != null ? " (" + status.library_count + ")" : ""));
-    }
-    return parts;
-  }
-
-  function syncImmichForms(from) {
-    const map = [
-      ["immich-endpoint", "wiz-immich-endpoint"],
-      ["immich-api-key", "wiz-immich-api-key"],
+    const fields = status.fields || {};
+    const configured = (status.summary || []).indexOf("configured") >= 0;
+    const hasKey = !!(fields.api_key && fields.api_key.set);
+    const parts = [
+      configured ? "configured" : "not configured",
+      hasKey ? "API key set" : "no API key",
     ];
-    for (const [a, b] of map) {
-      const ea = $(a), eb = $(b);
-      if (!ea || !eb) continue;
-      if (from === a && ea.value !== eb.value) eb.value = ea.value;
-      if (from === b && eb.value !== ea.value) ea.value = eb.value;
+    const listing = (status.checks || []).find((c) => c.id === "library_listing");
+    parts.push("library: " + (listing ? (listing.ok ? "ok (" + ((status.metrics || {}).photo_count || 0) + ")" : "error") : "—"));
+    if ($("wiz-immich-status")) $("wiz-immich-status").textContent = parts.join(" · ");
+    if ($("wiz-immich-next")) $("wiz-immich-next").textContent = status.next || "…";
+
+    if (probe && $("wiz-immich-test-msg")) {
+      $("wiz-immich-test-msg").textContent =
+        (probe.message || (probe.ok ? "Immich OK" : "Immich test failed")) +
+        (probe.hint ? " — " + probe.hint : "");
     }
-    const ca = $("immich-claim-canonical"), cb = $("wiz-immich-claim-canonical");
-    if (ca && cb && ca.checked !== cb.checked) {
-      if (from === "immich-claim-canonical") cb.checked = ca.checked;
-      if (from === "wiz-immich-claim-canonical") ca.checked = cb.checked;
+  }
+
+  // Page 5 is the VIP-Service wizard (issue #124), served by
+  // /v1/admin/immich/tailnet/* until Phase 3 of issue #265 folds it in.
+  async function loadImmichTailnet() {
+    try {
+      const status = await api("/v1/admin/immich/tailnet/status");
+      if (status.tailnet) renderImmichTailnet(status.tailnet);
+      if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
     }
+  }
+
+  async function loadImmichWizardStatus() {
+    try {
+      const view = await api("/v1/admin/setup/immich");
+      const host = $("setup-immich");
+      if (host) host._setupSpec = view.spec;
+      renderImmichWizardStatus(view);
+      const perms = immichGuideCommand(view.spec, "api_key_permissions");
+      if (perms && $("immich-api-permissions")) $("immich-api-permissions").textContent = perms;
+      loadImmichTailnet();
+      return view;
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      return null;
+    }
+  }
+
+  // syncImmichForms mirrors the wizard's fields into the generic card panel so
+  // both views edit one draft.
+  function syncImmichForms(from) {
+    const host = $("setup-immich");
+    const pairs = [
+      ["wiz-immich-endpoint", "endpoint"],
+      ["wiz-immich-api-key", "api_key"],
+    ];
+    pairs.forEach(([wizId, field]) => {
+      const wiz = $(wizId);
+      const card = host && host.querySelector('[data-setup-field="' + field + '"]');
+      if (!wiz || !card) return;
+      if (from === wizId) card.value = wiz.value;
+      else wiz.value = card.value;
+    });
+    const wizClaim = $("wiz-immich-claim-canonical");
+    const cardClaim = host && host.querySelector('[data-setup-field="claim_canonical_for_photos"]');
+    if (wizClaim && cardClaim) {
+      if (from === "wiz-immich-claim-canonical") cardClaim.checked = wizClaim.checked;
+      else wizClaim.checked = cardClaim.checked;
+    }
+  }
+
+  function setWizStep(n) {
+    const pages = document.querySelectorAll("#immich-wizard .wizard-page");
+    pages.forEach((el) => {
+      const idx = parseInt(el.getAttribute("data-wiz-page"), 10);
+      if (!isNaN(idx)) el.hidden = idx !== n;
+    });
+    document.querySelectorAll("#immich-wizard .wizard-chip").forEach((chip) => {
+      const idx = parseInt(chip.getAttribute("data-wiz-step"), 10);
+      chip.classList.toggle("active", idx === n);
+    });
+    const next = $("immich-wizard-next");
+    if (next) next.textContent = n >= 7 ? "Done" : "Next";
+    const back = $("immich-wizard-back");
+    if (back) back.disabled = n <= 1;
+    return n;
   }
 
   let wizStep = 1;
-  const WIZ_MAX = 7;
-  function setWizStep(n) {
-    wizStep = Math.max(1, Math.min(WIZ_MAX, n));
-    document.querySelectorAll(".wizard-page").forEach((el) => {
-      el.hidden = Number(el.getAttribute("data-wiz-page")) !== wizStep;
-    });
-    document.querySelectorAll(".wizard-chip").forEach((el) => {
-      const step = Number(el.getAttribute("data-wiz-step"));
-      if (step === wizStep) el.setAttribute("aria-current", "step");
-      else el.removeAttribute("aria-current");
-      el.setAttribute("data-done", step < wizStep ? "true" : "false");
-    });
-    const back = $("immich-wizard-back");
-    const next = $("immich-wizard-next");
-    if (back) back.disabled = wizStep === 1;
-    if (next) next.textContent = wizStep === WIZ_MAX ? "Done" : "Next";
-  }
-
   function openImmichWizard() {
-    $("immich-wizard").hidden = false;
-    setWizStep(wizStep || 1);
+    const el = $("immich-wizard");
+    if (el) el.hidden = false;
+    wizStep = setWizStep(1);
+    loadImmichWizardStatus();
   }
   function closeImmichWizard() {
-    $("immich-wizard").hidden = true;
-    loadImmichSetup();
+    const el = $("immich-wizard");
+    if (el) el.hidden = true;
+    loadImmichWizardStatus();
+    const host = $("setup-immich");
+    if (host) loadSetupPanel(host);
   }
 
-  $("immich-open-wizard").addEventListener("click", openImmichWizard);
-  $("immich-wizard-close").addEventListener("click", closeImmichWizard);
-  $("immich-wizard-back").addEventListener("click", () => setWizStep(wizStep - 1));
-  $("immich-wizard-next").addEventListener("click", () => {
-    if (wizStep === WIZ_MAX) {
-      closeImmichWizard();
-      return;
-    }
-    setWizStep(wizStep + 1);
-  });
-  $("immich-wizard").addEventListener("click", (e) => {
-    if (e.target === $("immich-wizard")) closeImmichWizard();
-  });
-  ["immich-endpoint", "wiz-immich-endpoint"].forEach((id) => {
-    const el = $(id);
-    if (el) el.addEventListener("input", () => syncImmichForms(id));
-  });
-  ["immich-api-key", "wiz-immich-api-key"].forEach((id) => {
-    const el = $(id);
-    if (el) el.addEventListener("input", () => syncImmichForms(id));
-  });
-  ["immich-claim-canonical", "wiz-immich-claim-canonical"].forEach((id) => {
-    const el = $(id);
-    if (el) el.addEventListener("change", () => syncImmichForms(id));
-  });
+  // The generic panel announces the intent; this page owns the modal.
+  document.addEventListener("setup-walkthrough", (e) => openImmichWizard(), true);
 
   function renderImmichTailnet(guide) {
     if (!guide) return;
@@ -5201,7 +5245,7 @@ function selectTab(name, opts) {
         ? "Key saved. Running live checks…"
         : "Saved.";
       if ($("immich-ts-api-key")) $("immich-ts-api-key").value = "";
-      renderImmichStatus(status);
+      if (status.tailnet) renderImmichTailnet(status.tailnet);
       if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
     } catch (e) {
       $("immich-ts-msg").textContent = e.message || String(e);
@@ -5249,86 +5293,40 @@ function selectTab(name, opts) {
       if (res.failed && res.failed.length) parts.push("failed: " + res.failed.join(", "));
       $("immich-ts-msg").textContent = parts.join(" · ") || "Done.";
       if (res.live) renderImmichTailnetLive(res.live);
-      loadImmichSetup();
+      loadImmichWizardStatus();
     } catch (e) {
       $("immich-ts-msg").textContent = e.message || String(e);
     }
   }
 
-  function renderImmichStatus(status) {
-    if (!status) return;
-    const meta = $("immich-status-meta");
-    const parts = [];
-    parts.push(status.configured ? "configured" : "not configured");
-    parts.push(status.has_api_key ? "API key set" : "no API key");
-    if (status.canonical_for && status.canonical_for.length) {
-      parts.push("canonical: " + status.canonical_for.join(", "));
-    } else if (status.canonical_conflict) {
-      parts.push("photos home: " + status.canonical_conflict);
-    }
-    if (status.library_status) {
-      parts.push("library: " + status.library_status +
-        (status.library_count != null ? " (" + status.library_count + ")" : ""));
-    }
-    meta.textContent = parts.join(" · ");
-    if (status.endpoint && !$("immich-endpoint").value) {
-      $("immich-endpoint").value = status.endpoint;
-    }
-    if (status.snippet) {
-      $("immich-snippet").textContent = status.snippet;
-    }
-    if (status.checks) renderImmichChecks(status.checks);
-    if (status.steps) renderImmichSteps(status.steps);
-    if (status.tailnet) renderImmichTailnet(status.tailnet);
-    if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
-    renderImmichNext(status);
-    // Do not put stored API keys into the form.
-    if (status.has_api_key && $("immich-api-key").placeholder.indexOf("saved") < 0) {
-      $("immich-api-key").placeholder = "API key saved (leave blank to keep)";
-    }
-  }
-
-  async function loadImmichSetup() {
-    try {
-      const status = await api("/v1/admin/immich/setup");
-      renderImmichStatus(status);
-    } catch (e) {
-      $("immich-status-meta").textContent = "Immich setup unavailable";
-      $("immich-checks").innerHTML =
-        '<div class="empty">' + escapeHtml(e.message || String(e)) + "</div>";
-    }
-  }
-
+  // The wizard's Connect/Verify actions speak the connector-owned runner
+  // (issue #265) — the same verbs the generic card panel submits.
   async function immichRunTest(btn) {
-    const useWiz = btn && String(btn.id).indexOf("wiz-") === 0;
-    syncImmichForms(useWiz ? "wiz-immich-endpoint" : "immich-endpoint");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Testing…";
-    }
+    syncImmichForms(btn && btn.id && btn.id.indexOf("wiz-") === 0 ? "wiz-immich-endpoint" : null);
+    if (btn) btn.disabled = true;
+    const msg = $("wiz-immich-test-msg");
+    if (msg) msg.textContent = "Testing…";
     try {
-      const body = {
-        endpoint: ($("immich-endpoint") || {}).value ? $("immich-endpoint").value.trim() : "",
-        api_key: ($("immich-api-key") || {}).value ? $("immich-api-key").value.trim() : "",
-      };
-      const res = await api("/v1/admin/immich/test", {
+      const wiz = $("wiz-immich-endpoint");
+      const res = await api("/v1/admin/setup/immich/probe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          values: {
+            endpoint: (wiz && wiz.value || "").trim(),
+            api_key: (($("wiz-immich-api-key") || {}).value || "").trim(),
+          },
+        }),
       });
-      const msg = res.message || (res.ok ? "Immich OK" : "Immich test failed");
-      $("immich-status-meta").textContent = msg;
-      if ($("wiz-immich-test-msg")) $("wiz-immich-test-msg").textContent = msg + (res.hint ? " — " + res.hint : "");
-      renderImmichNext({ next_step: res.hint || (res.ok ? "Save the connection, then run checks." : res.message), last_probe: res, configured: false, has_api_key: !!body.api_key });
-      loadImmichSetup();
+      renderImmichWizardStatus(res);
+      loadImmichWizardStatus();
     } catch (e) {
-      const msg = "Test failed: " + (e.message || String(e));
-      $("immich-status-meta").textContent = msg;
-      if ($("wiz-immich-test-msg")) $("wiz-immich-test-msg").textContent = msg;
+      if (e.status === 401) showAuthGate(true);
+      else if (msg) msg.textContent = "Test failed: " + (e.message || String(e));
     } finally {
       if (btn) {
         btn.disabled = false;
-        btn.textContent = btn.id.indexOf("wiz-") === 0 ? "Test connection" : "Test";
+        btn.textContent = "Test connection";
       }
     }
   }
@@ -5340,21 +5338,24 @@ function selectTab(name, opts) {
       btn.textContent = "Saving…";
     }
     try {
-      const key = ($("immich-api-key") || {}).value ? $("immich-api-key").value.trim() : "";
-      const body = {
-        endpoint: ($("immich-endpoint") || {}).value ? $("immich-endpoint").value.trim() : "",
-        claim_canonical_for_photos: $("immich-claim-canonical") ? $("immich-claim-canonical").checked : true,
-      };
-      if (key) body.api_key = key;
-      const status = await api("/v1/admin/immich/config", {
+      const claim = $("wiz-immich-claim-canonical");
+      const res = await api("/v1/admin/setup/immich/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          values: {
+            endpoint: (($("wiz-immich-endpoint") || {}).value || "").trim(),
+            api_key: (($("wiz-immich-api-key") || {}).value || "").trim(),
+          },
+          flags: { claim_canonical_for_photos: claim ? claim.checked : true },
+        }),
       });
-      if ($("immich-api-key")) $("immich-api-key").value = "";
       if ($("wiz-immich-api-key")) $("wiz-immich-api-key").value = "";
-      renderImmichStatus(status);
-      loadSummary();
+      renderImmichWizardStatus(res);
+      const host = $("setup-immich");
+      if (host) renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
+      loadImmichWizardStatus();
+      if (typeof loadSummary === "function") loadSummary();
     } catch (e) {
       showGlobalError(e.message || "Failed to save Immich connection");
     } finally {
@@ -5371,11 +5372,16 @@ function selectTab(name, opts) {
       btn.textContent = "Checking…";
     }
     try {
-      const status = await api("/v1/admin/immich/check", { method: "POST" });
-      renderImmichStatus(status);
+      const res = await api("/v1/admin/setup/immich/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: "{}",
+      });
+      renderImmichWizardStatus(res);
+      const host = $("setup-immich");
+      if (host) renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
     } catch (e) {
       const html = '<div class="empty">' + escapeHtml(e.message || String(e)) + "</div>";
-      if ($("immich-checks")) $("immich-checks").innerHTML = html;
       if ($("wiz-immich-checks")) $("wiz-immich-checks").innerHTML = html;
     } finally {
       if (btn) {
@@ -5384,13 +5390,6 @@ function selectTab(name, opts) {
       }
     }
   }
-
-  $("immich-test").addEventListener("click", (e) => immichRunTest(e.currentTarget));
-  if ($("wiz-immich-test")) $("wiz-immich-test").addEventListener("click", (e) => immichRunTest(e.currentTarget));
-  $("immich-save").addEventListener("click", (e) => immichRunSave(e.currentTarget));
-  if ($("wiz-immich-save")) $("wiz-immich-save").addEventListener("click", (e) => immichRunSave(e.currentTarget));
-  $("immich-check").addEventListener("click", (e) => immichRunCheck(e.currentTarget));
-  if ($("wiz-immich-check")) $("wiz-immich-check").addEventListener("click", (e) => immichRunCheck(e.currentTarget));
 
   async function copyFromEl(btn, elId, resetLabel) {
     try {
@@ -5429,19 +5428,9 @@ function selectTab(name, opts) {
       copyFromEl($("copy-immich-vip-endpoint"), "immich-vip-endpoint", "Copy endpoint"));
   }
 
-  $("copy-immich-snippet").addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText($("immich-snippet").textContent);
-      $("copy-immich-snippet").textContent = "Copied";
-      setTimeout(() => { $("copy-immich-snippet").textContent = "Copy JSON"; }, 1200);
-    } catch (_) {
-      $("copy-immich-snippet").textContent = "Copy failed";
-    }
-  });
-
   loadSummary();
   loadTypePolicies();
-  loadImmichSetup();
+  loadImmichWizardStatus();
 })();
 </script>
 </body>

@@ -12,8 +12,9 @@ package types
 // (values core alone persists).
 //
 // Shape phasing: Field/Guide/Summary land with the YNAB flow (Phase 1);
-// Step/Check/Next arrive with Immich (Phase 2); live guide-step state and a
-// TailscaleAdmin state-update kind arrive with the VIP wizard (Phase 3).
+// Step/Check/Next/Suggested arrive with Immich (Phase 2); live guide-step
+// state and a TailscaleAdmin state-update kind arrive with the VIP wizard
+// (Phase 3). Each shape lands with the flow that uses it.
 
 // ActionKind classifies a declared onboarding verb for the core runner.
 type ActionKind string
@@ -49,13 +50,39 @@ type OnboardingSpec struct {
 	DisplayName string
 	// Title is the panel heading (e.g. "YNAB — budget transactions").
 	Title string
+	// WalkthroughLabel, when set, renders a button that opens the spec's
+	// guides as a stepped walkthrough. The label is provider copy ("Setup
+	// guide"); the modal chrome is the panel's.
+	WalkthroughLabel string
+	// DetailsLabel, when set, wraps the ladder / form / checklist in a
+	// disclosure with this summary (e.g. "Details: guided ladder,
+	// connection form, checks").
+	DetailsLabel string
 	// Connection is the non-secret half of a service-connections entry. Core
 	// assembles and persists the entry on save; secrets never appear here.
 	Connection ConnectionMetadata
 	Fields     []OnboardingField
+	// Steps is the guided ladder's declared rows: labels only, state is
+	// derived. Rendered in order.
+	Steps []OnboardingStepDef
+	// Checks is the acceptance checklist's declared rows.
+	Checks []OnboardingCheckDef
 	// Guides are static copyable blocks: walkthroughs, snippets, checkboxes.
 	Guides  []OnboardingGuide
 	Actions []OnboardingAction
+}
+
+// OnboardingStepDef declares one guided-ladder row. The label is contract
+// copy; whether the row is done and its detail are derived per request.
+type OnboardingStepDef struct {
+	ID    string
+	Label string
+}
+
+// OnboardingCheckDef declares one acceptance-checklist row.
+type OnboardingCheckDef struct {
+	ID    string
+	Label string
 }
 
 // ConnectionMetadata is the non-secret half of a service-connections entry
@@ -76,7 +103,7 @@ type ConnectionMetadata struct {
 type OnboardingField struct {
 	ID          string
 	Label       string
-	Kind        string // url | text | password
+	Kind        string // url | text | password | checkbox
 	Placeholder string
 	Help        string
 	Secret      bool
@@ -90,9 +117,19 @@ type OnboardingGuide struct {
 	ID string
 	// Title is optional; empty renders the body alone.
 	Title string
+	// Short is the walkthrough chip label when it differs from Title.
+	Short string
 	Body  string
-	// Command, when set, renders as a copyable command block.
+	// Command, when set, renders as a copyable block. Label is its caption
+	// and Button the copy-button text (the panel supplies neutral fallbacks).
 	Command string
+	Label   string
+	Button  string
+	// Collapsible wraps the guide in a disclosure on the card.
+	Collapsible bool
+	// Walkthrough marks a guide the stepped walkthrough renders as its own
+	// page. The card skips it — it is narrative copy, not panel chrome.
+	Walkthrough bool
 }
 
 // OnboardingAction is one declared verb and its button.
@@ -111,7 +148,8 @@ type OnboardingAction struct {
 // OnboardingInput carries the submitted form values for one action. Secret
 // values are present here and must never be echoed back.
 type OnboardingInput struct {
-	Values map[string]string // field id → submitted value
+	Values map[string]string // field id → submitted value (url/text/password)
+	Flags  map[string]bool   // field id → checked state (checkbox)
 }
 
 // OnboardingStatus is the live view the panel renders. Computed per request —
@@ -119,12 +157,47 @@ type OnboardingInput struct {
 type OnboardingStatus struct {
 	// Fields carries current values (secrets as Set flags only).
 	Fields map[string]OnboardingFieldState
+	// Steps and Checks are state keyed to the spec's declared rows. Labels
+	// come from the spec so provider copy has one owner.
+	Steps  []OnboardingStepState
+	Checks []OnboardingCheckState
 	// Summary is a one-line status the panel joins with " · ".
 	Summary []string
 	// Hints are short imperative prompts for what to do next.
 	Hints []string
+	// Next is the single imperative next action (the first undone step).
+	Next string
+	// Guides carries derived content for spec guides whose copyable block
+	// depends on live state (e.g. a bootstrap snippet for the current
+	// endpoint). Keyed by OnboardingGuide.ID.
+	Guides map[string]OnboardingGuideState
+	// Metrics are small named counts derived during status (photo_count,
+	// budget_count) for the summary and panel to show.
+	Metrics map[string]int
 	// Probe is the most recent diagnosis when the flow keeps one.
 	Probe *ProbeResult
+}
+
+// OnboardingStepState is the derived state of one spec step.
+type OnboardingStepState struct {
+	ID string
+	// OK reports the step as satisfied. Current marks the first undone step.
+	OK      bool
+	Current bool
+	Detail  string
+}
+
+// OnboardingCheckState is the derived state of one spec check.
+type OnboardingCheckState struct {
+	ID     string
+	OK     bool
+	Detail string
+}
+
+// OnboardingGuideState carries derived content for one spec guide. Only the
+// copyable block is overridable — a guide's prose is static contract copy.
+type OnboardingGuideState struct {
+	Command string
 }
 
 // OnboardingFieldState is the derived state of one spec field.
@@ -133,7 +206,9 @@ type OnboardingFieldState struct {
 	// Value is the non-secret current value. Empty for Secret fields.
 	Value string
 	// Set reports whether a secret field holds a value.
-	Set     bool
+	Set bool
+	// Checked is the state of a checkbox field.
+	Checked bool
 	Valid   bool
 	Error   string
 }
@@ -150,6 +225,9 @@ type ProbeResult struct {
 	Message string
 	// Hint is the actionable next step, when there is one.
 	Hint string
+	// Suggested is a normalized value when the submitted input was
+	// ambiguous (e.g. an endpoint missing its scheme or /api suffix).
+	Suggested string
 	// Metrics are small named counts (e.g. budget_count, photo_count).
 	Metrics map[string]int
 }

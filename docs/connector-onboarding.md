@@ -329,31 +329,37 @@ clean.
 ### Phase 2 — Immich setup core (`refactor/issue-265-immich-setup`)
 
 The stress case: checkbox contract, endpoint repair, 7-row acceptance
-checklist, guided ladder, immich-go guidance.
+checklist, guided ladder. **Lands with this phase.**
 
-1. `internal/connectors/immich_onboarding.go` — `immichAPIKeyPermissions`
-   (with per-item rationale), `normalizeImmichEndpoint`, `probeImmich` codes +
-   hints, `runImmichChecks`, `immichGuidedSteps` / `immichNextStepFrom`,
-   `immichConfigSnippet`, guide bodies (immich-go install, Takeout import,
-   starter `.env`).
-2. `immich_setup.go` disappears; its handlers become runner actions
-   (`probe`, `save`, `check`). Unchecking `canonical_for` still clears the
+1. `internal/connectors/immich_onboarding.go` — the permission set is
+   *generated* from grouped declarations (`immichPermissionGroups`), so the
+   copyable list an operator ticks in Immich and the set the connector
+   enforces are the same data. Beside it: `NormalizeImmichEndpoint`,
+   `probeImmich` codes + hints, `runImmichChecks`, `immichGuidedSteps` /
+   `immichNextStepFrom`, `immichConfigSnippet`, `immichStampSummary`.
+2. `immich_setup.go` disappears. Its handlers become runner actions
+   (`probe`, `save`, `check`); unchecking `canonical_for` still clears the
    claim (`ClearCanonicalFor` semantics preserved).
-3. `admin.html`: the Immich card + 7-page wizard become generic-panel
-   instances (guide groups + ladder). **Copy ported verbatim** — the
-   wizard's step chips, permission block, and hints must read identically.
-4. Contract pins rehome: `TestImmichAPIKeyPermissions_SingleKeyUnion` and the
-   Immich spec-content assertions move to the connector tests;
-   `TestAdminHTML_ImmichSetupPanel` is replaced by generic-renderer tests.
-   `TestImmichStarterEnv_File` keeps `docs/immich-starter.env` as the file's
-   home and gains an embed-parity assertion against the connector's copy.
-5. `docs/connect/immich.md` and `docs/immich-live-testing.md` stop enumerating
-   the checkbox set / step tables and point at Admin → Services → Immich.
+3. The **card** becomes a generic onboarding panel. The generic renderer
+   grows the capabilities Immich needs: checkbox fields, the guided ladder,
+   the acceptance checklist, the "Next" card, copyable command blocks, and a
+   `WalkthroughLabel` that opens the guide pages.
+4. **Wizard scope note.** The 7-page wizard modal keeps its own layout for
+   now — it is presentation, not the seam. What this phase removes from it is
+   the contract: its API-key page renders the checkbox block from the
+   connector's declaration, and its Connect/Verify pages submit the same
+   `/v1/admin/setup/immich/{probe,save,check}` verbs the card does. Its
+   narrative pages and the VIP page are Phase 3/4 debt.
+5. Contract pins rehome: the permission-union test moves beside the
+   connector; `TestAdminHTML_ImmichSetupPanel` becomes
+   `TestImmichAPIKeyContract_SingleOwner`, which asserts the permission names
+   appear in **neither** `admin.html` **nor** `docs/`, and that the old
+   `/v1/admin/immich/{setup,config,test,check}` routes are gone.
+6. `docs/connect/immich.md` and `docs/immich-live-testing.md` stop
+   enumerating the checkbox set and point at Admin → Services → Immich.
 
-**Done when:** Immich setup is behavior-identical through the seam, the
-checkbox set has exactly one owner (the connector), and a hygiene test
-(`docs_hygiene_test.go` pattern) rejects those contract strings in
-`admin.html` and docs.
+**Done when:** Immich setup behaves as before through the seam, the checkbox
+set has exactly one owner (the connector), and the hygiene test enforces it.
 
 ### Phase 3 — VIP-Service wizard (`refactor/issue-265-tailnet-wizard`)
 

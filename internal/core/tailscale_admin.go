@@ -9,7 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
-)
+
+	"github.com/fudomunro/aegis/internal/connectors")
 
 // Tailscale Admin API client for Immich VIP Service setup (issue #124).
 // Aegis holds an operator API key in service_connections.json and uses it to
@@ -607,13 +608,13 @@ func (s *Server) tsCheckServe(ctx context.Context, st *ImmichTailnetStepStatus) 
 	}
 	st.Checked = true
 	st.Fixable = false // still host-local; we only observe the result
-	suffix := tailnetDNSFromBaseURL(s.baseURL)
+	suffix := connectors.TailnetDNSFromBaseURL(s.baseURL)
 	candidates := []string{}
 	if ep := strings.TrimSpace(s.immichConfiguredEndpoint()); ep != "" {
 		candidates = append(candidates, ep)
 	}
 	if suffix != "" {
-		candidates = append(candidates, immichSuggestedEndpoint(suffix))
+		candidates = append(candidates, connectors.ImmichSuggestedEndpoint(suffix))
 	}
 	if len(candidates) == 0 {
 		st.OK = false
@@ -622,7 +623,7 @@ func (s *Server) tsCheckServe(ctx context.Context, st *ImmichTailnetStepStatus) 
 	}
 	var lastErr string
 	for _, ep := range candidates {
-		base, ok := normalizeImmichEndpoint(ep)
+		base, ok := connectors.NormalizeImmichEndpoint(ep)
 		if !ok || base == "" {
 			base = strings.TrimRight(ep, "/")
 		}
@@ -660,15 +661,15 @@ func (s *Server) tsCheckConnect(st *ImmichTailnetStepStatus) {
 	st.Checked = true
 	st.Fixable = true
 	ep := strings.TrimSpace(s.immichConfiguredEndpoint())
-	suffix := tailnetDNSFromBaseURL(s.baseURL)
-	want := immichSuggestedEndpoint(suffix)
+	suffix := connectors.TailnetDNSFromBaseURL(s.baseURL)
+	want := connectors.ImmichSuggestedEndpoint(suffix)
 	if ep != "" && strings.Contains(strings.ToLower(ep), "immich") &&
 		(strings.HasSuffix(strings.TrimRight(ep, "/"), "/api") || strings.Contains(ep, ".ts.net")) {
 		st.OK = true
 		st.Detail = "Aegis endpoint: " + ep
 		return
 	}
-	if ep != "" && mustNormalize(ep) != "" && strings.Contains(ep, ":2283") {
+	if ep != "" && mustNorm(ep) != "" && strings.Contains(ep, ":2283") {
 		st.OK = false
 		st.NeedsFix = true
 		st.Detail = "endpoint still uses host:port — switch to the VIP name when ready (" + want + ")"
@@ -890,8 +891,8 @@ func (s *Server) tsFixApprove(ctx context.Context, c *tailscaleAdminClient, host
 // tsFixConnect saves the suggested VIP endpoint into the Immich connection
 // without clobbering an existing API key.
 func (s *Server) tsFixConnect(tag string) error {
-	suffix := tailnetDNSFromBaseURL(s.baseURL)
-	ep := immichSuggestedEndpoint(suffix)
+	suffix := connectors.TailnetDNSFromBaseURL(s.baseURL)
+	ep := connectors.ImmichSuggestedEndpoint(suffix)
 	if suffix == "" {
 		return fmt.Errorf("cannot derive tailnet DNS name from -base-url")
 	}
@@ -908,7 +909,7 @@ func (s *Server) tsFixConnect(tag string) error {
 	}
 	// Keep any existing API key / canonical claim.
 	if svc := s.config.GetService("immich"); svc != nil {
-		if key := headerValue(svc.Headers, "X-API-Key"); key != "" {
+		if key := immichHeaderValue(svc.Headers); key != "" {
 			entry.Headers = map[string]string{"X-API-Key": key}
 		}
 		for _, k := range svc.CanonicalFor {
@@ -961,7 +962,7 @@ func (s *Server) handleImmichTailnetConfig(w http.ResponseWriter, r *http.Reques
 		"key_set", entry.APIKey != "", "host_device", entry.HostDeviceID != "")
 
 	// Return setup status including live checks when a key is present.
-	s.writeImmichSetupStatus(w, r, true)
+	s.writeImmichTailnetStatus(w)
 }
 
 // handleImmichTailnetCheck re-runs live step checks.
@@ -1000,6 +1001,12 @@ func (s *Server) handleImmichTailnetApply(w http.ResponseWriter, r *http.Request
 // ensureImmichTailnet routes are registered under /v1/admin/immich/.
 func dispatchImmichTailnetSubroute(s *Server, w http.ResponseWriter, r *http.Request, path string) bool {
 	switch path {
+	case "tailnet/status":
+		if r.Method != http.MethodGet {
+			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			return true
+		}
+		s.writeImmichTailnetStatus(w)
 	case "tailnet/config":
 		if r.Method != http.MethodPost {
 			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")

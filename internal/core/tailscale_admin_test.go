@@ -193,7 +193,7 @@ func TestTailscaleAdminKey_PersistPresenceOnly(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("config status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -241,7 +241,7 @@ func TestImmichTailnetSteps_CheckOnlyOffersFixWhereNeeded(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("apply status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -278,7 +278,7 @@ func TestImmichTailnetSteps_CheckOnlyOffersFixWhereNeeded(t *testing.T) {
 	req2.Header.Set("Authorization", "Bearer test-key")
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w2, req2)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w2, req2)
 	var res2 ImmichTailnetApplyResult
 	if err := json.Unmarshal(w2.Body.Bytes(), &res2); err != nil {
 		t.Fatal(err)
@@ -295,14 +295,14 @@ func TestImmichTailnetCheck_WithoutKey(t *testing.T) {
 	mock := newMockTailscaleAdmin()
 	srv, _ := tailscaleTestServer(t, mock)
 
-	req := httptest.NewRequest("GET", "/v1/admin/immich/setup", nil)
+	req := httptest.NewRequest("GET", "/v1/admin/immich/tailnet/status", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("setup status = %d body=%s", w.Code, w.Body.String())
 	}
-	var status ImmichSetupStatus
+	var status ImmichTailnetStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +332,7 @@ func TestImmichTailnetApply_RequiresKey(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("apply status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -370,7 +370,7 @@ func TestImmichTailnetSteps_SkipAlreadyOK(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/immich/tailnet/check", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	var live ImmichTailnetLiveStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &live); err != nil {
 		t.Fatal(err)
@@ -397,7 +397,7 @@ func TestImmichTailnetSteps_SkipAlreadyOK(t *testing.T) {
 	req2.Header.Set("Authorization", "Bearer test-key")
 	req2.Header.Set("Content-Type", "application/json")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w2, req2)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w2, req2)
 	var res ImmichTailnetApplyResult
 	if err := json.Unmarshal(w2.Body.Bytes(), &res); err != nil {
 		t.Fatal(err)
@@ -437,7 +437,7 @@ func TestImmichTailnetApply_FixesMissingTagFirst(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("apply status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -517,7 +517,7 @@ func TestImmichTailnetServe_ProbeVip(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/immich/tailnet/check", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminImmichSetup)(w, req)
+	srv.AuthMiddleware(srv.handleImmichTailnetRoutes)(w, req)
 	var live ImmichTailnetLiveStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &live); err != nil {
 		t.Fatal(err)

@@ -20,6 +20,10 @@ type ServiceInfo struct {
 	Headers     map[string]string
 	CacheTTL    time.Duration
 	GrantLimits types.Permissions
+	// CanonicalFor names the library kinds this service is the home copy
+	// for. Aegis stores metadata only; canonical content stays on the
+	// source service.
+	CanonicalFor []string
 }
 
 // Host is the runtime surface connectors may use (issue #15).
@@ -48,6 +52,10 @@ type Host interface {
 	// Setup flows use it to report readiness without reaching into core's
 	// registries.
 	LibraryReadable(kind string) bool
+	// CanonicalOwner returns the service id that claims the given kind as
+	// its home copy, or "" when none does. Setup flows use it for the
+	// single-owner conflict copy.
+	CanonicalOwner(kind string) string
 }
 
 // ServiceConnector is an optional interface for services that provide
