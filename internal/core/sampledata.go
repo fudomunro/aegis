@@ -1153,7 +1153,7 @@ func SeedMailArchive(a *MailArchive, recs []MailArchiveRecord) error {
 // importer (mail_takeout.go) can load the same synthetic set.
 func WriteSampleMbox(path string, recs []MailArchiveRecord) error {
 	var b strings.Builder
-	b.WriteString("# Aegis synthetic sample mailbox (issue #77). All messages are fictional.\n")
+	b.WriteString("# Aegis synthetic sample mailbox. All messages are fictional.\n")
 	for _, rec := range recs {
 		// mbox "From " separator line; content hash path covers missing Message-ID.
 		fmt.Fprintf(&b, "From MAILER-DAEMON %s\n", mboxFromLineDate(rec.SentAt))

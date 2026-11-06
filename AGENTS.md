@@ -250,12 +250,14 @@ go test -count=1 ./...
 go test -v -count=1 -run TestName ./...
 
 # Fuzz hostile-input parsers (issue #107). Seeds always run as unit tests;
-# -fuzz mutates them. Use a longer -fuzztime locally when hunting bugs.
-go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s .
-go test -run='^$' -fuzz='^FuzzRecordFromTakeoutMessage$' -fuzztime=30s .
-go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s .
-go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s .
-# Other targets: FuzzDetectBodyShape, FuzzInjectSystemMessage, FuzzIsMboxFromLine,
+# -fuzz mutates them. Targets live in ./internal/core (the repo root package
+# has no test files). Use a longer -fuzztime locally when hunting bugs.
+go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s ./internal/core
+go test -run='^$' -fuzz='^FuzzRecordFromTakeoutMessage$' -fuzztime=30s ./internal/core
+go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/core
+go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s ./internal/core
+# Other targets (CI fuzzes every one; list them all in ci.yml):
+# FuzzDetectBodyShape, FuzzInjectSystemMessage, FuzzIsMboxFromLine,
 # FuzzTakeoutMessageID, FuzzNormalizeIdentityKey, FuzzCleanYouTubeTitle,
 # FuzzTrackIdentityKey, FuzzMergePlaylistsSync, FuzzPlaylistLinkKey, FuzzMergeAlbumsSync
 

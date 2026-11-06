@@ -907,7 +907,7 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 			OK:      false,
 			Code:    immichCodeBadURL,
 			Message: "That does not look like a URL",
-			Hint:    "Use something like https://immich.your-tailnet.ts.net/api or http://photos.home.ts.net:2283/api (include http:// or https://). See the VIP Service guide for a friendly ts.net name (issue #124).",
+			Hint:    "Use something like https://immich.your-tailnet.ts.net/api or http://photos.home.ts.net:2283/api (include http:// or https://). See the VIP Service guide for a friendly ts.net name.",
 		}
 	}
 

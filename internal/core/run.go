@@ -42,23 +42,23 @@ func Run() {
 	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
 	searchIndexPath := flag.String("search-index", "", "path to local library search index (default: <data-dir>/search-index.db; empty disables q= search)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
-	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit (issue #141)")
+	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit")
 	timelinePath := flag.String("timeline-store", "", "path to local Google Timeline import store (default: <data-dir>/timeline.db; empty disables)")
-	importTimeline := flag.String("import-timeline", "", "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit (issue #142)")
+	importTimeline := flag.String("import-timeline", "", "Google Timeline JSON file, directory, or Takeout zip to import into the local store, then exit")
 	signalPath := flag.String("signal-store", "", "path to local Signal import store (default: <data-dir>/signal.db; empty disables)")
-	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit (issue #168)")
+	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	maintenanceRepo := flag.String("maintenance-repo", "", "GitHub repo (owner/name) where sync-maintenance tickets are opened as issues (reads AEGIS_MAINTENANCE_REPO if empty; empty disables ticketing)")
 	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
 	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
-	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit (issue #77)")
+	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit")
 	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
 	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
-	seedLotR := flag.Bool("seed-lotr", false, "write named demo dataset packs (shire, gondor, lincoln) under the data directory, then exit (issue #217)")
+	seedLotR := flag.Bool("seed-lotr", false, "write named demo dataset packs (shire, gondor, lincoln) under the data directory, then exit")
 	seedDemoDatasets := flag.Bool("seed-demo-datasets", false, "same as -seed-lotr: write all named demo dataset packs")
-	demoMode := flag.Bool("demo", false, "demo mode: api-key + data scopes only, sample:// fixtures only, read-only surface (issue #217; AEGIS_DEMO=1)")
+	demoMode := flag.Bool("demo", false, "demo mode: api-key + data scopes only, sample:// fixtures only, read-only surface (AEGIS_DEMO=1)")
 	tokenPass := flag.String("token-pass", "", "passphrase for token encryption (reads AEGIS_TOKEN_PASS env if empty)")
 	tokenNewPass := flag.String("token-new-pass", "", "if set, re-encrypt the token file under this passphrase (with current KDF parameters) and exit")
 	logLevel := flag.String("log-level", "info", "log level: debug, info, warn, error")
@@ -797,10 +797,10 @@ func validateAuthCredentials(authMode, apiKey, adminAPIKey string) error {
 		slog.Warn("no API key configured — only tailnet identity will be accepted")
 	}
 	if adminAPIKey != "" && apiKey != "" && constantTimeEqual(adminAPIKey, apiKey) {
-		slog.Warn("admin-api-key equals api-key — agent credentials can use admin surfaces; set a distinct admin-api-key (issue #181)")
+		slog.Warn("admin-api-key equals api-key — agent credentials can use admin surfaces; set a distinct admin-api-key")
 	}
 	if authMode == AuthModeAPIKey && adminAPIKey == "" {
-		slog.Warn("no admin-api-key in api-key mode — admin surfaces are unreachable; set -admin-api-key or use tailnet admin logins (issue #181)")
+		slog.Warn("no admin-api-key in api-key mode — admin surfaces are unreachable; set -admin-api-key or use tailnet admin logins")
 	}
 	return nil
 }
