@@ -58,7 +58,7 @@ func TestMergePlaylistsSync_SameNameMultiService(t *testing.T) {
 			Sources: []PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp2"}},
 		},
 	}
-	merged := MergePlaylistsSync(in)
+	merged := MergePlaylistsSyncLinked(in, nil)
 	if len(merged) != 2 {
 		t.Fatalf("got %d playlists, want 2", len(merged))
 	}

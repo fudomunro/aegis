@@ -49,22 +49,6 @@ type Accessor struct {
 	Disabled bool `json:"disabled,omitempty"`
 }
 
-// SortedLevels returns data-type keys in stable order for rendering.
-func (a Accessor) SortedLevels() []string {
-	if a.Levels == nil {
-		return nil
-	}
-	keys := make([]string, 0, len(a.Levels))
-	for k := range a.Levels {
-		if k == PermissionDefaultKey {
-			continue
-		}
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
-}
-
 // AccessorLevel returns the normalized level for a data type ("" when unset).
 func (a Accessor) AccessorLevel(dataType string) string {
 	if a.Levels == nil {

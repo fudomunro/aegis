@@ -935,26 +935,6 @@ func GenerateSampleLibraryFor(dataset string) SampleLibrarySet {
 	return set
 }
 
-// GenerateSampleMailFor builds a sample mail set tagged with a data-scope
-// dataset so archive queries can partition it (docs/data-scopes.md). Row ids
-// are namespaced so two datasets can share one archive without colliding on
-// UNIQUE(service, service_msg_id).
-func GenerateSampleMailFor(dataset string, n int) SampleMailSet {
-	set := GenerateSampleMail(n)
-	ds := strings.TrimSpace(dataset)
-	if ds == "" {
-		return set
-	}
-	suffix := " (" + ds + ")"
-	for i := range set.Records {
-		set.Records[i].Dataset = ds
-		set.Records[i].ID = ds + ":" + set.Records[i].ID
-		set.Records[i].Subject += suffix
-		set.Records[i].FromName += suffix
-	}
-	return set
-}
-
 // sampleDocuments builds deterministic document fixtures (issue #143) with
 // a shared-checksum merge pair, a title+created name pair, and a near-miss
 // that must not merge.

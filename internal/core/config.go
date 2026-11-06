@@ -366,20 +366,6 @@ func (c *Config) EnsureService(svc Service) {
 	c.Services = append(c.Services, svc)
 }
 
-// updateService applies mut to a service under the write lock. Intended for
-// tests that install mock endpoints; production mutates via LoadConfig,
-// Reload, and SetServicePermissions.
-func (c *Config) updateService(id string, mut func(*Service)) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	svc := c.serviceByID(id)
-	if svc == nil {
-		return false
-	}
-	mut(svc)
-	return true
-}
-
 // GetConnection returns a snapshot of the named shared provider connection, or nil.
 func (c *Config) GetConnection(id string) *Connection {
 	c.mu.RLock()

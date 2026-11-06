@@ -3,8 +3,6 @@ package connectors
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -546,10 +544,4 @@ func truncateBytes(b []byte, n int) string {
 		return s[:n] + "…"
 	}
 	return s
-}
-
-// SharePhotoSHA256 is the claim helper used by core: lowercase hex of the bytes.
-func SharePhotoSHA256(data []byte) string {
-	sum := sha256.Sum256(data)
-	return hex.EncodeToString(sum[:])
 }

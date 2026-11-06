@@ -155,7 +155,7 @@ Aegis does not expose channel/profile browsing, catalog search, or other YouTube
 // HandleProxy processes a YouTube Music API request through the connector.
 func (c *YouTubeMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	RunProxy(c.host, w, r, remainingPath, ProxyOpts{
-		serviceID:   "youtube-music",
+		serviceID:   YouTubeMusicServiceID,
 		displayName: "YouTube",
 		defaultBase: youtubeAPIBase,
 		defaultTTL:  60 * time.Second,
@@ -251,12 +251,12 @@ func (c *YouTubeMusicConnector) MapPath(path string, query map[string][]string) 
 
 // GetLikedPlaylistID fetches the user's channel to get the likedVideos playlist ID.
 func (c *YouTubeMusicConnector) GetLikedPlaylistID() (string, error) {
-	token := c.host.GetValidToken("youtube-music", slog.Default())
+	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
 		return "", fmt.Errorf("no valid token")
 	}
 
-	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 	url := upstreamBase + "/channels?part=contentDetails&mine=true"
 	data, status, err := DoUpstreamRequest(context.Background(), "GET", url, nil, token)
 	if err != nil {
@@ -347,12 +347,12 @@ func (c *YouTubeMusicConnector) TransformChannel(raw map[string]any) map[string]
 // ListUserFollowedArtists implements ArtistProvider. YouTube subscriptions
 // are the closest match to followed artists/channels.
 func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]types.Artist, bool, error) {
-	token := c.host.GetValidToken("youtube-music", slog.Default())
+	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
 
-	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
 	var all []types.Artist
 	pageToken := ""
@@ -399,7 +399,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 					channelID = id
 				}
 			}
-			a := types.NewArtist("youtube-music", "YouTube Music", channelID, title)
+			a := types.NewArtist(YouTubeMusicServiceID, "YouTube Music", channelID, title)
 			if len(a.Sources) > 0 && channelID != "" {
 				a.Sources[0].URL = "https://www.youtube.com/channel/" + channelID
 			}
@@ -484,7 +484,7 @@ func (c *YouTubeMusicConnector) FetchVideoSnippets(ctx context.Context, token, u
 // and mirror do not treat tutorials/vlogs as liked songs.
 // https://github.com/fudomunro/aegis/issues/43
 func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
-	token := c.host.GetValidToken("youtube-music", slog.Default())
+	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
@@ -494,7 +494,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 		return nil, false, err
 	}
 
-	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
 	var likedItems []map[string]any
 	var videoIDs []string
@@ -605,12 +605,12 @@ func YoutubePlaylistItemVideoID(item map[string]any) string {
 // ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
 // and returns them in Aegis's neutral format.
 func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
-	token := c.host.GetValidToken("youtube-music", slog.Default())
+	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
 
-	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
 	var all []types.Playlist
 	pageToken := ""
@@ -695,7 +695,7 @@ func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist
 		Owner:       owner,
 		TrackCount:  trackCount,
 		Sources: []types.PlaylistSource{
-			types.PrimaryPlaylistSource("youtube-music", "YouTube Music", id, YoutubePlaylistURL(id), extra),
+			types.PrimaryPlaylistSource(YouTubeMusicServiceID, "YouTube Music", id, YoutubePlaylistURL(id), extra),
 		},
 	}
 }
@@ -750,7 +750,7 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 
 	var artists []types.Artist
 	if channel != "" {
-		artists = []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", channel)}
+		artists = []types.Artist{types.NewArtist(YouTubeMusicServiceID, "YouTube Music", "", channel)}
 	}
 
 	url := ""
@@ -771,7 +771,7 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 		DurationMs: durationMs,
 		Duration:   duration,
 		Sources: []types.TrackSource{{
-			Service:     "youtube-music",
+			Service:     YouTubeMusicServiceID,
 			ServiceName: "YouTube Music",
 			ID:          videoID,
 			URL:         url,
@@ -992,7 +992,7 @@ func (c *YouTubeMusicConnector) FetchAllPagesRaw(ctx context.Context, path strin
 
 	allItems, _ := firstPage["items"].([]any)
 
-	upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
 	apiPath, extraParams, _ := c.MapPath(path, query)
 
@@ -1060,7 +1060,7 @@ func (c *YouTubeMusicConnector) FetchAllPages(ctx context.Context, path string, 
 	maxPages := LibraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		// Build the next page URL.
-		upstreamBase := c.host.UpstreamBaseFor("youtube-music", youtubeAPIBase)
+		upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
 		apiPath, extraParams, _ := c.MapPath(path, query)
 		q := map[string][]string{}

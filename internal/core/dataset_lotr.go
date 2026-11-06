@@ -23,15 +23,6 @@ const (
 	LotRDatasetGondor = "gondor"
 )
 
-// IsLotRDataset reports whether id names a LotR demo partition.
-func IsLotRDataset(id string) bool {
-	switch strings.TrimSpace(id) {
-	case LotRDatasetShire, LotRDatasetGondor:
-		return true
-	}
-	return false
-}
-
 // GenerateLotRDataset returns the library fixtures for one LotR partition.
 // The second result is false for unknown ids (callers fall back to the
 // generic sample set).

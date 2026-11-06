@@ -667,10 +667,6 @@ func decryptWith(key []byte, encoded string) ([]byte, error) {
 	return gcm.Open(nil, nonce, ciphertext, nil)
 }
 
-func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
-	return encryptWith(ts.key, plaintext)
-}
-
 func (ts *TokenStore) decrypt(encoded string) ([]byte, error) {
 	return decryptWith(ts.key, encoded)
 }

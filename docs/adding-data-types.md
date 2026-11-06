@@ -404,7 +404,7 @@ A type is invisible until permissions and path classification know it.
      the content/ingest proxy and library; they never **add** capability.
 
 3. **Service proxy**  
-   Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `aegisHTTPClient`. Read
+   Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `connectors.HTTPClient`. Read
    the configured `GetService(id).Endpoint` — never hardcode provider base URLs.
 
 4. **Admin surface**  

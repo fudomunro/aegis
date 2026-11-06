@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -346,7 +347,7 @@ func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSch
 			req.Header.Set(k, v)
 		}
 		if client == nil {
-			client = aegisHTTPClient
+			client = connectors.HTTPClient
 		}
 		resp, doErr := client.Do(req)
 		if doErr != nil {
@@ -377,61 +378,4 @@ func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSch
 		truncated = true
 	}
 	return items, truncated, nil
-}
-
-// listUserDefined fetches every source for one schema and returns the raw
-// pre-merge rows (the aggregate pipeline owns merge + encode).
-func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, baseDir string, client *http.Client) (items []types.UserDefinedItem, truncated bool, err error) {
-	// Preserve source declaration order for stable source stamps.
-	srcs := schema.Sources
-	if len(srcs) == 0 {
-		return nil, false, fmt.Errorf("no sources configured")
-	}
-	var (
-		mu sync.Mutex
-		wg sync.WaitGroup
-	)
-	errs := make([]error, 0, len(srcs))
-	all := make([]types.UserDefinedItem, 0, len(srcs)*8)
-	for _, src := range srcs {
-		src := src
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			// A bad source must not fail the whole list (fail-open).
-			items, trunc, ferr := fetchUserDefinedSource(ctx, schema, src, baseDir, client)
-			mu.Lock()
-			defer mu.Unlock()
-			if ferr != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", src.ID, ferr))
-				return
-			}
-			if trunc {
-				truncated = true
-			}
-			all = append(all, items...)
-		}()
-	}
-	wg.Wait()
-	// Fail-open: return partial rows even when some sources erred. Only
-	// return an error when every source failed and nothing was collected.
-	if len(all) == 0 && len(errs) > 0 {
-		return nil, truncated, errorsJoin(errs...)
-	}
-	return all, truncated, nil
-}
-
-// errorsJoin joins source errors for the empty-result case.
-func errorsJoin(errs ...error) error {
-	if len(errs) == 0 {
-		return nil
-	}
-	if len(errs) == 1 {
-		return errs[0]
-	}
-	parts := make([]string, 0, len(errs))
-	for _, e := range errs {
-		parts = append(parts, e.Error())
-	}
-	return fmt.Errorf("%s", strings.Join(parts, "; "))
 }

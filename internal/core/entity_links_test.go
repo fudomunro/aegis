@@ -91,10 +91,10 @@ func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	}
 
 	// Same name without link → match=name.
-	merged = types.MergePlaylistsSync([]types.Playlist{
+	merged = types.MergePlaylistsSyncLinked([]types.Playlist{
 		{Name: "Road Trip", Sources: []types.PlaylistSource{{Service: "spotify", ID: "a"}}},
 		{Name: "road trip", Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "b"}}},
-	})
+	}, nil)
 	if len(merged) != 1 || merged[0].Match != types.PlaylistMatchName {
 		t.Fatalf("name merge = %+v", merged)
 	}

@@ -953,15 +953,6 @@ func injectRequestInstructions(original []byte, content, provider, model string)
 	return res, nil
 }
 
-// injectSystemMessage inserts a system message into an OpenAI chat-completions body.
-func injectSystemMessage(original []byte, content string) (json.RawMessage, error) {
-	res, err := injectRequestInstructions(original, content, "", "")
-	if err != nil {
-		return nil, err
-	}
-	return res.Body, nil
-}
-
 // detectBodyShape prefers explicit Aperture metadata, then sniffs body keys.
 func detectBodyShape(full map[string]json.RawMessage, provider, model string) string {
 	_, hasMessages := full["messages"]

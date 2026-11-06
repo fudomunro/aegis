@@ -200,15 +200,6 @@ func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
 	}
 }
 
-func TestIsCityAndPreciseAccess(t *testing.T) {
-	if !types.IsCityAccess("city") || types.IsCityAccess("read") {
-		t.Fatal("types.IsCityAccess")
-	}
-	if !types.IsPreciseAccess("precise") || types.IsPreciseAccess("city") {
-		t.Fatal("types.IsPreciseAccess")
-	}
-}
-
 // TestPhotosPlacesJoinDemo is the issue #142 done-when: photos taken during a
 // visit work on sample data.
 func TestPhotosPlacesJoinDemo(t *testing.T) {

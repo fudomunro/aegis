@@ -132,8 +132,6 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
 	}
-	types.UnmarkOptInDataType("reading-list")
-	t.Cleanup(func() { types.UnmarkOptInDataType("reading-list") })
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
@@ -241,8 +239,6 @@ func TestHandleAdminUDT_ExtraFile(t *testing.T) {
 
 	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
 	reg, _ := LoadUserDefinedTypes(pack, overlayPath, nil)
-	types.UnmarkOptInDataType("notes")
-	t.Cleanup(func() { types.UnmarkOptInDataType("notes") })
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
 

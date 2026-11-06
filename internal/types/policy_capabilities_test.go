@@ -54,9 +54,6 @@ func TestPermissions_RedactionLists(t *testing.T) {
 	if !IsSummaryAccess(AccessSummary) || IsSummaryAccess(AccessRead) {
 		t.Fatal("IsSummaryAccess")
 	}
-	if !IsCityAccess(AccessCity) || !IsPreciseAccess(AccessPrecise) {
-		t.Fatal("IsCity/Precise")
-	}
 	if got := PlacesLevelForResponse(AccessCity); got != AccessCity {
 		t.Fatalf("PlacesLevelForResponse city = %q", got)
 	}

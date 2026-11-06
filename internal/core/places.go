@@ -385,36 +385,6 @@ func tighterPlacesLevel(a, b string) string {
 	return types.PlacesLevelForResponse(b)
 }
 
-// PhotosTakenDuring returns photos whose taken_at falls inside the visit or
-// trip window (issue #142). This is the photos/places join demo: sample
-// fixtures pair visits with photos captured during them.
-func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
-	start := types.NormalizePlaceVisitTime(v.StartAt)
-	end := types.NormalizePlaceVisitTime(v.EndAt)
-	if end == "" {
-		end = start
-	}
-	if start == "" {
-		return nil
-	}
-	out := make([]types.Photo, 0, 8)
-	for _, p := range photos {
-		taken := types.NormalizePlaceVisitTime(p.TakenAt)
-		if taken == "" {
-			continue
-		}
-		if taken < start {
-			continue
-		}
-		// Open-ended visit (no end_at): any photo at or after start.
-		if v.EndAt != "" && end != "" && taken > end {
-			continue
-		}
-		out = append(out, p)
-	}
-	return out
-}
-
 // HandleLibraryPlaceVisits returns the user's visits and trips from every
 // connected source: GET /v1/library/places
 // Query filters: after, before, locality, kind (issue #142).
