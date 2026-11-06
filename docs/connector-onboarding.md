@@ -142,9 +142,8 @@ type OnboardingResult struct {
 }
 
 type StateUpdate struct {
-	// Connection → SetServiceConnection (overlay + secret store). A
-	// TailscaleAdmin kind joins with the VIP wizard (Phase 3).
-	Connection *ConnectionUpdate
+	Connection     *ConnectionUpdate     // → SetServiceConnection
+	TailscaleAdmin *TailscaleAdminUpdate // → SetTailscaleAdmin (VIP wizard)
 }
 
 type ConnectionUpdate struct {
@@ -250,8 +249,9 @@ LibraryReadable(kind string) bool    // provider registered AND type policy allo
 ServiceInfo.CanonicalFor []string    // am I the canonical owner of these kinds?
 CanonicalOwner(kind string) string   // who claims it when I do not
 
-// Phase 3 (VIP wizard credential)
-SetupSecret(name string) string      // non-upstream setup credentials (Tailscale Admin API key)
+// Phase 3 (VIP wizard credential + operator settings)
+SetupSecret(name string) string          // e.g. the Tailscale Admin API key
+SetupSettings(name string) map[string]string // tailnet, host device, host tag
 ```
 
 No write methods join `Host`. That is the point of `StateUpdate`.
@@ -363,21 +363,31 @@ set has exactly one owner (the connector), and the hygiene test enforces it.
 
 ### Phase 3 — VIP-Service wizard (`refactor/issue-265-tailnet-wizard`)
 
-1. `internal/connectors/tailscale.go` — the generic Tailscale Admin API client
-   (`tailscaleAdminClient`, payload shapes, device list) as shared machinery,
-   the `localstore.go` analogue for VIP flows.
-2. Immich's `svc:immich` / `tag:immich-host` step check/fix moves into the
-   Immich onboarding (`tsCheck*` / `tsFix*` become guide-step verify/apply).
-   `tsFixConnect` returns a `ConnectionUpdate` instead of writing config.
-3. `ImmichTailnetLiveStatus` becomes `OnboardingGuideState`; the host picker
-   becomes a `select` field with live options.
-4. `tailscale_admin_test.go` rehomes: client tests beside the client,
-   step/apply tests beside the Immich onboarding.
-5. `tailscale_admin.go` is deleted; `SetTailscaleAdmin` stays core and is
-   reached only through `StateUpdate.TailscaleAdmin`.
+The issue #124 wizard joins the seam. **Lands with this phase.**
 
-**Done when:** the wizard's steps, checks, auto-fix rules, and copy are
-unchanged and owned by the connector; core holds no `svc:immich` knowledge.
+1. `internal/connectors/tailscale.go` — the generic Tailscale Admin API
+   client (`Do`/`DoRaw`, HuJSON policy parsing, device list, tag
+   declaration) as shared machinery, the `localstore.go` analogue for VIP
+   flows. Any connector that hosts a VIP Service reuses it.
+2. `internal/connectors/immich_tailnet.go` — Immich's `svc:immich` /
+   `tag:immich-host` walkthrough copy, the live step checks, and the auto-fix
+   rules. `tsFixConnect` returns a `ConnectionUpdate` instead of writing
+   config, and the host-selection save becomes a `TailscaleAdminUpdate`.
+   `ImmichTailnetLiveStatus` becomes `OnboardingGuideState` (live steps,
+   summary, error); the host picker becomes a `select` field with live
+   options.
+3. `tailscale_admin.go` and `immich_tailnet_guide.go` are deleted; core keeps
+   only `SetTailscaleAdmin`, reached through `StateUpdate.TailscaleAdmin`.
+   `/v1/admin/immich/*` is gone entirely — the wizard's verbs are
+   `tailnet_save` / `tailnet_check` / `tailnet_apply` on the generic runner.
+4. Wizard page 5 renders from the spec and guide state: its headings, field
+   labels, help text, step titles/details/commands and button labels are all
+   declared by the connector. `TestImmichVIPContract_SingleOwner` rejects
+   those contract strings in `admin.html` **and** in core.
+
+**Done when:** the wizard's steps, checks, auto-fix rules and copy are
+unchanged and owned by the connector, and core holds no `svc:immich`
+knowledge.
 
 ### Phase 4 — cleanup (`docs/issue-265-onboarding-docs`)
 

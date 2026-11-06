@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ObserveUpstream records upstream latency/status on the metrics ring.
@@ -83,6 +84,33 @@ func (s *Server) CanonicalOwner(kind string) string {
 		}
 	}
 	return ""
+}
+
+// SetupSecret returns a setup-time secret by name (issue #265). Only the
+// Tailscale Admin API key is such a secret today; it lives in the encrypted
+// token store and is never echoed by any API.
+func (s *Server) SetupSecret(name string) string {
+	if s == nil || s.config == nil {
+		return ""
+	}
+	if name != types.SetupSecretTailscaleAPIKey {
+		return ""
+	}
+	return s.config.TailscaleAdminAPIKey()
+}
+
+// SetupSettings returns the non-secret settings recorded for a named setup
+// flow (issue #265).
+func (s *Server) SetupSettings(name string) map[string]string {
+	if s == nil || s.config == nil || name != types.SetupFlowTailscale {
+		return nil
+	}
+	snap := s.config.TailscaleAdminSnapshot()
+	return map[string]string{
+		"tailnet":        snap.Tailnet,
+		"host_device_id": snap.HostDeviceID,
+		"host_tag":       snap.HostTag,
+	}
 }
 
 // Server implements connectors.Host (compile-time check).

@@ -34,6 +34,7 @@ type onboardingActionResult struct {
 	Spec   types.OnboardingSpec   `json:"spec"`
 	Status types.OnboardingStatus `json:"status"`
 	Probe  *types.ProbeResult     `json:"probe,omitempty"`
+	Detail string                 `json:"detail,omitempty"`
 }
 
 // handleAdminOnboarding serves the generic setup routes:
@@ -124,6 +125,7 @@ func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob 
 		Spec:   spec,
 		Status: s.onboardingStatus(r.Context(), spec, ob),
 		Probe:  result.Probe,
+		Detail: result.Detail,
 	})
 }
 
@@ -136,6 +138,7 @@ func (s *Server) applyOnboardingUpdates(spec types.OnboardingSpec, updates []typ
 	if len(updates) == 0 {
 		return nil
 	}
+	touched := false
 	for _, u := range updates {
 		if u.Connection == nil {
 			continue
@@ -157,9 +160,29 @@ func (s *Server) applyOnboardingUpdates(spec types.OnboardingSpec, updates []typ
 		if err := s.config.SetServiceConnection(spec.ServiceID, entry); err != nil {
 			return err
 		}
+		touched = true
 	}
-	// Library listings must not serve the old connection's view.
-	s.cache.Clear()
+	for _, u := range updates {
+		if u.TailscaleAdmin == nil {
+			continue
+		}
+		// The VIP wizard's credential and selections take the same path the
+		// admin save used: secret into the encrypted store, settings into the
+		// overlay's "tailscale" block (issue #124).
+		if err := s.config.SetTailscaleAdmin(tailscaleAdminEntry{
+			APIKey:       u.TailscaleAdmin.APIKey,
+			Tailnet:      u.TailscaleAdmin.Tailnet,
+			HostDeviceID: u.TailscaleAdmin.HostDeviceID,
+			HostTag:      u.TailscaleAdmin.HostTag,
+		}); err != nil {
+			return err
+		}
+		touched = true
+	}
+	if touched {
+		// Library listings must not serve the old connection's view.
+		s.cache.Clear()
+	}
 	return nil
 }
 

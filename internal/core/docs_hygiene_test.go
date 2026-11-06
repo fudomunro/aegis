@@ -398,16 +398,61 @@ func TestImmichAPIKeyContract_SingleOwner(t *testing.T) {
 	}
 
 	// The setup routes the contract used to be duplicated against are gone:
-	// connection setup speaks /v1/admin/setup/{id} (the tailnet wizard keeps
-	// its /v1/admin/immich/tailnet/* routes until Phase 3).
+	// connection setup speaks /v1/admin/setup/{id}, and the VIP wizard does
+	// too since Phase 3 (issue #265).
 	for _, gone := range []string{
 		"/v1/admin/immich/setup",
 		"/v1/admin/immich/config",
 		"/v1/admin/immich/test",
 		"/v1/admin/immich/check",
+		"/v1/admin/immich/tailnet",
 	} {
 		if strings.Contains(admin, gone) {
-			t.Errorf("web/admin.html still calls %q — connection setup moved to /v1/admin/setup/immich (issue #265)", gone)
+			t.Errorf("web/admin.html still calls %q — setup speaks /v1/admin/setup/immich (issue #265)", gone)
+		}
+	}
+}
+
+// TestImmichVIPContract_SingleOwner pins the same rule for the VIP-Service
+// wizard (issue #124): its walkthrough copy and fix rules live beside the
+// connector. Core holds no svc:immich knowledge and neither does the UI.
+func TestImmichVIPContract_SingleOwner(t *testing.T) {
+	root := repoRoot(t)
+	read := func(rel string) string {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		return string(b)
+	}
+	contract := []string{
+		"svc:immich",
+		"tag:immich-host",
+		"tagOwners",
+		"tskey-api-",
+		"tailscale serve --service",
+		"Create the VIP Service",
+		"Declare a host tag",
+		"never Funnel",
+	}
+	admin := read("internal/core/web/admin.html")
+	for _, rel := range []string{
+		"internal/core/host.go",
+		"internal/core/onboarding.go",
+		"internal/core/run.go",
+		"internal/core/service_connections.go",
+	} {
+		body := read(rel)
+		for _, c := range contract {
+			if strings.Contains(body, c) {
+				t.Errorf("%s holds VIP wizard contract %q — the connector owns it (issue #265)", rel, c)
+			}
+		}
+	}
+	for _, c := range contract {
+		if strings.Contains(admin, c) {
+			t.Errorf("web/admin.html restates VIP wizard contract %q — render it from the onboarding spec (issue #265)", c)
 		}
 	}
 }

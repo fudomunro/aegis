@@ -1012,83 +1012,12 @@ immich-go --help</pre>
         </section>
 
         <section class="wizard-page" data-wiz-page="5" hidden>
-          <h3>Friendly tailnet URL (VIP Service)</h3>
-          <p id="immich-tailnet-why">Give Immich a stable <code>https://…ts.net</code> name with a Tailscale <strong>VIP Service</strong> — no <code>:2283</code>, real certs, host-move safe. Tailnet-only Serve; never Funnel. Issue <a href="https://github.com/fudomunro/aegis/issues/124" target="_blank" rel="noopener noreferrer">#124</a>.</p>
-
-          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
-            <div class="meta" id="immich-tailnet-meta">Loading VIP Service guide…</div>
-            <ul id="immich-tailnet-reqs" class="meta" style="margin:0.55rem 0 0; padding-left:1.1rem"></ul>
-          </div>
-
-          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
-            <div class="toolbar" style="margin-bottom:0.45rem">
-              <span class="meta">Tailscale Admin API (optional — live checks &amp; one-click fixes)</span>
-            </div>
-            <p class="meta" style="margin:0 0 0.55rem">
-              Paste an access token from
-              <a href="https://console.tailscale.com/admin/settings/keys" target="_blank" rel="noopener noreferrer">Keys</a>
-              (scopes: <code>services</code>, <code>devices:core</code>). Stored in
-              <code>service_connections.json</code> (0600) — never echoed back. Aegis only offers to fix steps that still need work.
-            </p>
-            <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Tailscale API key
-                <input id="immich-ts-api-key" type="password" placeholder="tskey-api-…" autocomplete="off" spellcheck="false">
-              </label>
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Tailnet
-                <input id="immich-ts-tailnet" type="text" placeholder="- (default)" autocomplete="off" spellcheck="false">
-              </label>
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Immich host device
-                <select id="immich-ts-host">
-                  <option value="">(select after checking)</option>
-                </select>
-              </label>
-            </div>
-            <div class="toolbar" style="margin:0.65rem 0 0">
-              <button class="btn" id="immich-ts-save-key" type="button">Save key</button>
-              <button class="btn" id="immich-ts-check" type="button">Check steps</button>
-              <button class="btn btn-primary" id="immich-ts-apply" type="button">Fix needed steps</button>
-            </div>
-            <div class="meta" id="immich-ts-msg" style="margin-top:0.55rem"></div>
-          </div>
-
-          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
-            <div class="toolbar" style="margin-bottom:0.45rem">
-              <span class="meta">Live step status</span>
-              <div class="grow"></div>
-              <span class="meta" id="immich-ts-live-meta"></span>
-            </div>
-            <ol id="immich-ts-live" style="margin:0; padding-left:1.15rem; font-size:0.88rem">
-              <li class="meta">No Tailscale API key yet — add one above, or use the copyable walkthrough.</li>
-            </ol>
-          </div>
-
-          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
-            <div class="toolbar" style="margin-bottom:0.45rem">
-              <span class="meta">VIP Service walkthrough (copyable)</span>
-              <div class="grow"></div>
-              <button class="btn" id="copy-immich-tailnet" type="button">Copy all commands</button>
-            </div>
-            <ol id="immich-tailnet-steps" style="margin:0; padding-left:1.15rem; font-size:0.88rem"></ol>
-            <pre id="immich-tailnet-commands" class="mono" hidden></pre>
-          </div>
-          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
-            <div class="toolbar" style="margin-bottom:0.45rem">
-              <span class="meta">Suggested Aegis endpoint after hosting</span>
-              <div class="grow"></div>
-              <button class="btn" id="copy-immich-vip-endpoint" type="button">Copy endpoint</button>
-            </div>
-            <pre id="immich-vip-endpoint" class="mono" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px">https://immich.your-tailnet.ts.net/api</pre>
-            <p class="meta" style="margin:0.55rem 0 0">Confirm the exact host from <code>tailscale serve status</code> on the Immich machine. Endpoint must end in <code>/api</code>.</p>
-          </div>
-          <p class="meta">Skip this step if you already have a reachable endpoint (localhost, LAN, or MagicDNS + <code>:2283</code>). Optional upgrade later.</p>
+          <div id="immich-tailnet-page"></div>
         </section>
 
         <section class="wizard-page" data-wiz-page="6" hidden>
           <h3>Connect Aegis to Immich</h3>
-          <p class="meta">Endpoint must end in <code>/api</code> (we repair common pastes). Same machine: <code>http://localhost:2283/api</code>. VIP Service: <code>https://immich.&lt;tailnet&gt;.ts.net/api</code>.</p>
+          <p class="meta" id="wiz-immich-endpoint-help"></p>
           <div class="card" style="padding:0.85rem 1rem; margin:0.65rem 0">
             <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
               <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
@@ -5015,13 +4944,13 @@ function selectTab(name, opts) {
     }
   }
 
-  // Page 5 is the VIP-Service wizard (issue #124), served by
-  // /v1/admin/immich/tailnet/* until Phase 3 of issue #265 folds it in.
+  // Page 5 is the VIP-Service wizard (issue #124). Its copy, steps and
+  // fix rules are declared by the Immich connector and rendered from the
+  // onboarding spec (issue #265) — nothing on this page is hardcoded here.
   async function loadImmichTailnet() {
     try {
-      const status = await api("/v1/admin/immich/tailnet/status");
-      if (status.tailnet) renderImmichTailnet(status.tailnet);
-      if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
+      const view = await api("/v1/admin/setup/immich");
+      renderImmichTailnetPage(view.spec, view.status);
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
     }
@@ -5035,6 +4964,10 @@ function selectTab(name, opts) {
       renderImmichWizardStatus(view);
       const perms = immichGuideCommand(view.spec, "api_key_permissions");
       if (perms && $("immich-api-permissions")) $("immich-api-permissions").textContent = perms;
+      const epField = ((view.spec && view.spec.fields) || []).find((f) => f.id === "endpoint");
+      if (epField && epField.help && $("wiz-immich-endpoint-help")) {
+        $("wiz-immich-endpoint-help").innerHTML = formatSetupText(epField.help);
+      }
       loadImmichTailnet();
       return view;
     } catch (err) {
@@ -5101,293 +5034,188 @@ function selectTab(name, opts) {
   // The generic panel announces the intent; this page owns the modal.
   document.addEventListener("setup-walkthrough", (e) => openImmichWizard(), true);
 
-  function renderImmichTailnet(guide) {
-    if (!guide) return;
-    const meta = $("immich-tailnet-meta");
-    const why = $("immich-tailnet-why");
-    if (why && guide.why) {
-      why.innerHTML =
-        escapeHtml(guide.why) +
-        ' Issue <a href="https://github.com/fudomunro/aegis/issues/124" target="_blank" rel="noopener noreferrer">#124</a>.';
-    }
-    if (meta) {
-      const bits = ["service " + (guide.service_name || "svc:immich")];
-      if (guide.tailnet_dns) bits.push("DNS " + guide.tailnet_dns);
-      if (guide.display_name) bits.push(guide.display_name);
-      meta.textContent = bits.join(" · ");
-    }
-    const reqs = $("immich-tailnet-reqs");
-    if (reqs) {
-      reqs.innerHTML = (guide.requirements || [])
-        .map((r) => "<li>" + escapeHtml(r) + "</li>")
-        .join("");
-    }
-    const list = $("immich-tailnet-steps");
-    if (list) {
-      list.innerHTML = (guide.steps || [])
-        .map((st) => {
-          const cmd = st.command
-            ? '<pre class="mono" style="margin:0.35rem 0 0.55rem; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
-              escapeHtml(st.command) +
-              "</pre>"
-            : "";
-          return (
-            "<li style='margin-bottom:0.55rem'><strong>" +
-            escapeHtml(st.title) +
-            "</strong><div class='meta'>" +
-            escapeHtml(st.detail || "") +
-            "</div>" +
-            cmd +
-            "</li>"
-          );
-        })
-        .join("");
-    }
-    const cmds = $("immich-tailnet-commands");
-    if (cmds) cmds.textContent = guide.commands || "";
-    const ep = $("immich-vip-endpoint");
-    if (ep && guide.suggested_endpoint) ep.textContent = guide.suggested_endpoint;
+  function tailnetGuidesOf(spec) {
+    return (spec.guides || []).filter((g) => g.walkthrough);
   }
 
-  function renderImmichTailnetLive(live) {
-    const list = $("immich-ts-live");
-    const liveMeta = $("immich-ts-live-meta");
-    const hostSel = $("immich-ts-host");
-    if (!list) return;
-    if (!live) {
-      list.innerHTML = '<li class="meta">No live status.</li>';
-      return;
-    }
-    if (liveMeta) {
-      const bits = [];
-      bits.push(live.has_api_key ? "API key set" : "no API key");
-      if (live.checked) bits.push("live-checked");
-      if (live.host_tag) bits.push(live.host_tag);
-      liveMeta.textContent = bits.join(" · ");
-    }
-    if (hostSel && live.devices && live.devices.length) {
-      const prev = hostSel.value || live.host_device_id || "";
-      hostSel.innerHTML =
-        '<option value="">(select Immich host)</option>' +
-        live.devices
-          .map((d) => {
-            const label =
-              (d.hostname || d.name || d.id) +
-              (d.tags && d.tags.length ? " — " + d.tags.join(", ") : "");
-            return (
-              '<option value="' +
-              escapeHtml(d.id) +
-              '">' +
-              escapeHtml(label) +
-              "</option>"
-            );
-          })
+  function tailnetFieldsOf(spec) {
+    return (spec.fields || []).filter((f) => f.walkthrough);
+  }
+
+  function tailnetActionsOf(spec) {
+    return (spec.actions || []).filter((a) => a.walkthrough);
+  }
+
+  function tailnetStepHTML(step, live) {
+    const st = live || {};
+    let badge = '<span class="meta">manual</span>';
+    if (st.checked && st.ok) badge = '<span class="meta">OK</span>';
+    else if (st.needs_fix) badge = '<span class="meta">needs fix</span>';
+    else if (st.checked && !st.ok) badge = '<span class="meta">todo</span>';
+    const fix = st.needs_fix
+      ? '<button class="btn" type="button" data-ts-fix="' + escapeHtml(step.id) + '">Fix</button>'
+      : "";
+    return (
+      "<li><strong>" + escapeHtml(step.title) + "</strong> " + badge + fix +
+      (step.detail ? '<div class="meta">' + escapeHtml(step.detail) + "</div>" : "") +
+      (step.command
+        ? '<pre class="mono" style="margin:0.35rem 0 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
+          escapeHtml(step.command) + "</pre>"
+        : "") +
+      (st.detail && st.detail !== step.detail ? '<div class="meta">' + escapeHtml(st.detail) + "</div>" : "") +
+      "</li>"
+    );
+  }
+
+  function tailnetSettingsHTML(spec) {
+    const fields = tailnetFieldsOf(spec).map((f) => {
+      const st = { value: "", set: false, checked: false };
+      if (f.kind === "select") {
+        const opts = ['<option value="">' + escapeHtml(f.placeholder || "") + "</option>"]
+          .concat((f.options || []).map((o) =>
+            '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + "</option>"))
           .join("");
-      hostSel.value = prev;
-    }
-    if (live.error && !(live.steps && live.steps.length)) {
-      list.innerHTML = "<li class='meta'>" + escapeHtml(live.error) + "</li>";
-      return;
-    }
-    list.innerHTML = (live.steps || [])
-      .map((st) => {
-        let badge;
-        if (!st.checked) badge = '<span class="meta">manual</span>';
-        else if (st.ok) badge = "<span style='color:var(--ok,#2f9e44)'>OK</span>";
-        else if (st.needs_fix && st.fixable)
-          badge = "<span style='color:var(--warn,#e67700)'>needs fix</span>";
-        else badge = "<span style='color:var(--warn,#e67700)'>todo</span>";
-        const fixBtn =
-          st.needs_fix && st.fixable
-            ? ' <button class="btn immich-ts-fix" type="button" data-step="' +
-              escapeHtml(st.id) +
-              '" style="padding:0.1rem 0.4rem; font-size:0.78rem">Fix</button>'
-            : "";
         return (
-          "<li style='margin-bottom:0.45rem'><strong>" +
-          escapeHtml(st.title) +
-          "</strong> " +
-          badge +
-          fixBtn +
-          "<div class='meta'>" +
-          escapeHtml(st.detail || "") +
-          "</div></li>"
+          '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
+          escapeHtml(f.label) +
+          '<select data-ts-field="' + escapeHtml(f.id) + '">' + opts + "</select></label>"
         );
-      })
+      }
+      const type = f.secret ? "password" : f.kind === "url" ? "url" : "text";
+      return (
+        '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
+        escapeHtml(f.label) +
+        '<input data-ts-field="' + escapeHtml(f.id) + '" type="' + type + '"' +
+        (f.placeholder ? ' placeholder="' + escapeHtml(f.placeholder) + '"' : "") +
+        ' autocomplete="off" spellcheck="false"></label>'
+      );
+    }).join("");
+    const help = tailnetFieldsOf(spec)
+      .filter((f) => f.help)
+      .map((f) => '<div class="meta">' + formatSetupText(f.help) + "</div>")
       .join("");
-    if (live.error) {
-      list.innerHTML += "<li class='meta'>" + escapeHtml(live.error) + "</li>";
-    }
-    list.querySelectorAll(".immich-ts-fix").forEach((btn) => {
-      btn.addEventListener("click", () => applyImmichTailnetSteps([btn.getAttribute("data-step")]));
+    const buttons = tailnetActionsOf(spec).map((a) => {
+      const primary = a.kind === "apply" || a.kind === "save";
+      return (
+        '<button class="btn' + (primary ? " btn-primary" : "") + '" type="button" data-ts-action="' +
+        escapeHtml(a.id) + '">' + escapeHtml(a.label) + "</button>"
+      );
+    }).join("");
+    return (
+      help +
+      '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">' + fields + "</div>" +
+      '<div class="toolbar" style="margin:0.65rem 0 0">' + buttons + "</div>" +
+      '<div class="meta" id="immich-ts-msg" style="margin:0.45rem 0 0"></div>'
+    );
+  }
+
+  // renderImmichTailnetPage paints wizard page 5 from the connector's
+  // declared spec and live guide state.
+  function renderImmichTailnetPage(spec, status) {
+    const host = $("immich-tailnet-page");
+    if (!host || !spec) return;
+    const guides = tailnetGuidesOf(spec);
+    const states = (status && status.guides) || {};
+    const fields = (status && status.fields) || {};
+    // Live host options ride on the select's field state.
+    const hostField = (spec.fields || []).find((f) => f.id === "host_device");
+    if (hostField && fields.host_device) hostField.options = fields.host_device.options || [];
+
+    const walk = guides.find((g) => g.id === "tailnet") || {};
+    const admin = guides.find((g) => g.id === "tailnet_admin") || {};
+    const endpoint = guides.find((g) => g.id === "tailnet_endpoint") || {};
+    const walkState = states[walk.id] || {};
+    const endpointState = states[endpoint.id] || {};
+
+    const requirements = (walk.requirements || []).map((r) => "<li>" + escapeHtml(r) + "</li>").join("");
+    const steps = (walk.steps || []).map((step) => {
+      const live = (walkState.steps || []).find((x) => x.id === step.id);
+      return tailnetStepHTML(step, live);
+    }).join("");
+    const commands = (walkState.command || walk.command)
+      ? '<div class="toolbar" style="margin:0.45rem 0 0.35rem"><span class="meta">' +
+        escapeHtml(walk.label || "") + '</span><div class="grow"></div>' +
+        '<button class="btn" type="button" data-ts-copy="walk">' + escapeHtml(walk.button || "Copy") + "</button></div>" +
+        '<pre class="mono" id="immich-tailnet-commands" style="white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
+        escapeHtml(walkState.command || walk.command) + "</pre>"
+      : "";
+    const liveSummary = (walkState.summary || []).map(escapeHtml).join(" · ");
+    const liveList = walkState.error
+      ? '<li class="meta">' + escapeHtml(walkState.error) + "</li>"
+      : steps;
+
+    const endpointBody = formatSetupText(endpoint.body || "");
+    const endpointBlock = (endpointState.command || endpoint.command)
+      ? '<div class="toolbar" style="margin:0.45rem 0 0.35rem"><span class="meta">' +
+        escapeHtml(endpoint.label || "") + '</span><div class="grow"></div>' +
+        '<button class="btn" type="button" data-ts-copy="endpoint">' + escapeHtml(endpoint.button || "Copy") + "</button></div>" +
+        '<pre class="mono" id="immich-vip-endpoint" style="white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
+        escapeHtml(endpointState.command || endpoint.command) + "</pre>"
+      : "";
+
+    host.innerHTML =
+      "<h3>" + escapeHtml(walk.title || "") + "</h3>" +
+      '<div class="meta">' + formatSetupText(walk.body || "") + "</div>" +
+      (requirements
+        ? '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0"><ul class="meta" style="margin:0; padding-left:1.1rem">' + requirements + "</ul></div>"
+        : "") +
+      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' + tailnetSettingsHTML(spec) + "</div>" +
+      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' +
+      '<div class="meta">' + escapeHtml(walk.liveLabel || "") + "</div>" +
+      (liveSummary ? '<div class="meta">' + liveSummary + "</div>" : "") +
+      '<ol class="meta" id="immich-ts-live" style="margin:0.55rem 0 0; padding-left:1.1rem">' + liveList + "</ol></div>" +
+      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' +
+      '<ol class="meta" style="margin:0; padding-left:1.1rem">' + steps + "</ol>" + commands + "</div>" +
+      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' + endpointBody + endpointBlock + "</div>";
+
+    host.querySelectorAll("[data-ts-action]").forEach((btn) => {
+      btn.addEventListener("click", () => runImmichTailnetAction(btn.dataset.tsAction, btn));
+    });
+    host.querySelectorAll("[data-ts-fix]").forEach((btn) => {
+      btn.addEventListener("click", () => runImmichTailnetAction("tailnet_apply", btn, [btn.dataset.tsFix]));
+    });
+    host.querySelectorAll("[data-ts-copy]").forEach((btn) => {
+      const reset = btn.textContent;
+      btn.addEventListener("click", () => {
+        const pre = btn.closest(".card").querySelector("pre");
+        const done = (ok) => {
+          btn.textContent = ok ? "Copied" : "Copy failed";
+          setTimeout(() => { btn.textContent = reset; }, 1200);
+        };
+        if (navigator.clipboard && pre) {
+          navigator.clipboard.writeText(pre.textContent).then(() => done(true), () => done(false));
+        } else done(false);
+      });
     });
   }
 
-  async function saveImmichTailscaleKey() {
-    const key = ($("immich-ts-api-key") || {}).value || "";
-    const tailnet = ($("immich-ts-tailnet") || {}).value || "";
-    const host = ($("immich-ts-host") || {}).value || "";
-    const body = {};
-    if (key.trim()) body.api_key = key.trim();
-    if (tailnet.trim()) body.tailnet = tailnet.trim();
-    if (host) body.host_device_id = host;
-    if (!body.api_key && !body.tailnet && !body.host_device_id) {
-      $("immich-ts-msg").textContent = "Paste a Tailscale API key (or pick a host device) first.";
-      return;
-    }
-    try {
-      $("immich-ts-msg").textContent = "Saving…";
-      const status = await api("/v1/admin/immich/tailnet/config", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      $("immich-ts-msg").textContent = body.api_key
-        ? "Key saved. Running live checks…"
-        : "Saved.";
-      if ($("immich-ts-api-key")) $("immich-ts-api-key").value = "";
-      if (status.tailnet) renderImmichTailnet(status.tailnet);
-      if (status.tailnet_live) renderImmichTailnetLive(status.tailnet_live);
-    } catch (e) {
-      $("immich-ts-msg").textContent = e.message || String(e);
-    }
-  }
-
-  async function checkImmichTailnetSteps() {
-    try {
-      $("immich-ts-msg").textContent = "Checking…";
-      const live = await api("/v1/admin/immich/tailnet/check", { method: "POST" });
-      renderImmichTailnetLive(live);
-      $("immich-ts-msg").textContent = live && live.checked
-        ? "Live checks complete. Fix buttons appear only on steps that need work."
-        : (live && live.error) || "Checked.";
-    } catch (e) {
-      $("immich-ts-msg").textContent = e.message || String(e);
-    }
-  }
-
-  async function applyImmichTailnetSteps(steps) {
-    const host = ($("immich-ts-host") || {}).value || "";
-    const body = { steps: steps || [] };
-    if (host) body.host_device_id = host;
-    if (!body.steps.length) {
-      // Fix only steps that currently need work.
-      body.steps = [];
-      document.querySelectorAll("#immich-ts-live .immich-ts-fix").forEach((btn) => {
-        const id = btn.getAttribute("data-step");
-        if (id) body.steps.push(id);
-      });
-      if (!body.steps.length) {
-        $("immich-ts-msg").textContent = "Nothing to fix — all checked steps are OK (or manual).";
-        return;
-      }
-    }
-    try {
-      $("immich-ts-msg").textContent = "Applying " + body.steps.join(", ") + "…";
-      const res = await api("/v1/admin/immich/tailnet/apply", {
-        method: "POST",
-        body: JSON.stringify(body),
-      });
-      const parts = [];
-      if (res.applied && res.applied.length) parts.push("fixed: " + res.applied.join(", "));
-      if (res.skipped && res.skipped.length) parts.push("skipped: " + res.skipped.join(", "));
-      if (res.failed && res.failed.length) parts.push("failed: " + res.failed.join(", "));
-      $("immich-ts-msg").textContent = parts.join(" · ") || "Done.";
-      if (res.live) renderImmichTailnetLive(res.live);
-      loadImmichWizardStatus();
-    } catch (e) {
-      $("immich-ts-msg").textContent = e.message || String(e);
-    }
-  }
-
-  // The wizard's Connect/Verify actions speak the connector-owned runner
-  // (issue #265) — the same verbs the generic card panel submits.
-  async function immichRunTest(btn) {
-    syncImmichForms(btn && btn.id && btn.id.indexOf("wiz-") === 0 ? "wiz-immich-endpoint" : null);
+  // runImmichTailnetAction submits a VIP-wizard verb through the connector-
+  // owned onboarding runner (issue #265).
+  async function runImmichTailnetAction(action, btn, selected) {
+    const values = {};
+    document.querySelectorAll("[data-ts-field]").forEach((el) => {
+      values[el.dataset.tsField] = el.value;
+    });
+    const msg = $("immich-ts-msg");
+    const spec = ($("setup-immich") && $("setup-immich")._setupSpec) || null;
+    const actionDef = spec && (spec.actions || []).find((a) => a.id === action);
     if (btn) btn.disabled = true;
-    const msg = $("wiz-immich-test-msg");
-    if (msg) msg.textContent = "Testing…";
+    if (msg) msg.textContent = (actionDef && actionDef.busy_label) || "Working…";
     try {
-      const wiz = $("wiz-immich-endpoint");
-      const res = await api("/v1/admin/setup/immich/probe", {
+      const res = await api("/v1/admin/setup/immich/" + encodeURIComponent(action), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          values: {
-            endpoint: (wiz && wiz.value || "").trim(),
-            api_key: (($("wiz-immich-api-key") || {}).value || "").trim(),
-          },
-        }),
+        body: JSON.stringify({ values: values, selected: selected || [] }),
       });
+      if (msg) msg.textContent = res.detail || (action === "tailnet_apply" ? "Done." : "Saved.");
+      renderImmichTailnetPage(res.spec, res.status);
       renderImmichWizardStatus(res);
-      loadImmichWizardStatus();
-    } catch (e) {
-      if (e.status === 401) showAuthGate(true);
-      else if (msg) msg.textContent = "Test failed: " + (e.message || String(e));
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = "Test connection";
-      }
-    }
-  }
-
-  async function immichRunSave(btn) {
-    syncImmichForms("wiz-immich-endpoint");
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Saving…";
-    }
-    try {
-      const claim = $("wiz-immich-claim-canonical");
-      const res = await api("/v1/admin/setup/immich/save", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          values: {
-            endpoint: (($("wiz-immich-endpoint") || {}).value || "").trim(),
-            api_key: (($("wiz-immich-api-key") || {}).value || "").trim(),
-          },
-          flags: { claim_canonical_for_photos: claim ? claim.checked : true },
-        }),
-      });
-      if ($("wiz-immich-api-key")) $("wiz-immich-api-key").value = "";
-      renderImmichWizardStatus(res);
-      const host = $("setup-immich");
-      if (host) renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
-      loadImmichWizardStatus();
       if (typeof loadSummary === "function") loadSummary();
     } catch (e) {
-      showGlobalError(e.message || "Failed to save Immich connection");
+      if (e.status === 401) showAuthGate(true);
+      else if (msg) msg.textContent = e.message || String(e);
     } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = "Save to Aegis";
-      }
-    }
-  }
-
-  async function immichRunCheck(btn) {
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = "Checking…";
-    }
-    try {
-      const res = await api("/v1/admin/setup/immich/check", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}",
-      });
-      renderImmichWizardStatus(res);
-      const host = $("setup-immich");
-      if (host) renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
-    } catch (e) {
-      const html = '<div class="empty">' + escapeHtml(e.message || String(e)) + "</div>";
-      if ($("wiz-immich-checks")) $("wiz-immich-checks").innerHTML = html;
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = "Run checks";
-      }
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -5410,23 +5238,6 @@ function selectTab(name, opts) {
     copyFromEl($("copy-immich-perms"), "immich-api-permissions", "Copy list"));
   $("copy-immich-go-install").addEventListener("click", () =>
     copyFromEl($("copy-immich-go-install"), "immich-go-install", "Copy install"));
-  if ($("copy-immich-tailnet")) {
-    $("copy-immich-tailnet").addEventListener("click", () =>
-      copyFromEl($("copy-immich-tailnet"), "immich-tailnet-commands", "Copy all commands"));
-  }
-  if ($("immich-ts-save-key")) {
-    $("immich-ts-save-key").addEventListener("click", saveImmichTailscaleKey);
-  }
-  if ($("immich-ts-check")) {
-    $("immich-ts-check").addEventListener("click", checkImmichTailnetSteps);
-  }
-  if ($("immich-ts-apply")) {
-    $("immich-ts-apply").addEventListener("click", () => applyImmichTailnetSteps(null));
-  }
-  if ($("copy-immich-vip-endpoint")) {
-    $("copy-immich-vip-endpoint").addEventListener("click", () =>
-      copyFromEl($("copy-immich-vip-endpoint"), "immich-vip-endpoint", "Copy endpoint"));
-  }
 
   loadSummary();
   loadTypePolicies();

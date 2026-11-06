@@ -56,6 +56,14 @@ type Host interface {
 	// its home copy, or "" when none does. Setup flows use it for the
 	// single-owner conflict copy.
 	CanonicalOwner(kind string) string
+	// SetupSecret returns a setup-time secret by name (e.g.
+	// types.SetupSecretTailscaleAPIKey), or "" when unset. Values reach only
+	// connector verify/apply actions and are never included in responses.
+	SetupSecret(name string) string
+	// SetupSettings returns the non-secret settings recorded for a named
+	// setup flow (e.g. types.SetupFlowTailscale → tailnet, host device,
+	// host tag). Empty when the flow has none.
+	SetupSettings(name string) map[string]string
 }
 
 // ServiceConnector is an optional interface for services that provide

@@ -99,15 +99,25 @@ type ConnectionMetadata struct {
 	SecretHeaders []string
 }
 
+// OnboardingOption is one choice in a select or checkbox field. Options on a
+// spec are static; options on a field state are the live set.
+type OnboardingOption struct {
+	ID    string
+	Label string
+}
+
 // OnboardingField is one form input the admin panel collects.
 type OnboardingField struct {
 	ID          string
 	Label       string
-	Kind        string // url | text | password | checkbox
+	Kind        string // url | text | password | checkbox | select
 	Placeholder string
 	Help        string
-	Secret      bool
-	Required    bool
+	Secret   bool
+	Required bool
+	// Walkthrough marks a field the stepped walkthrough renders on its own
+	// page. The card skips it.
+	Walkthrough bool
 }
 
 // OnboardingGuide is a static copy block. Body is plain text with a minimal
@@ -130,6 +140,24 @@ type OnboardingGuide struct {
 	// Walkthrough marks a guide the stepped walkthrough renders as its own
 	// page. The card skips it — it is narrative copy, not panel chrome.
 	Walkthrough bool
+	// Steps are the guide's declared operator actions: titles and copyable
+	// commands the connector owns. Live per-step state arrives in
+	// OnboardingStatus.Guides[id].Steps.
+	Steps []OnboardingGuideStep
+	// LiveLabel names the live per-step status block the panel renders
+	// beside the copyable walkthrough.
+	LiveLabel string
+	// Requirements are the guide's hard preconditions, shown before the steps.
+	Requirements []string
+}
+
+// OnboardingGuideStep is one declared operator action inside a guide. The
+// connector owns the copy; whether the step is done is derived.
+type OnboardingGuideStep struct {
+	ID      string
+	Title   string
+	Detail  string
+	Command string
 }
 
 // OnboardingAction is one declared verb and its button.
@@ -141,6 +169,9 @@ type OnboardingAction struct {
 	BusyLabel string
 	Kind      ActionKind
 	Placement ActionPlacement
+	// Walkthrough marks an action the stepped walkthrough renders. The card
+	// skips it.
+	Walkthrough bool
 	// Fields lists the field IDs this action submits.
 	Fields []string
 }
@@ -150,6 +181,9 @@ type OnboardingAction struct {
 type OnboardingInput struct {
 	Values map[string]string // field id → submitted value (url/text/password)
 	Flags  map[string]bool   // field id → checked state (checkbox)
+	// Selected names the declared rows an action applies to (e.g. guide
+	// step ids to fix). Empty means "every row that needs it".
+	Selected []string
 }
 
 // OnboardingStatus is the live view the panel renders. Computed per request —
@@ -194,10 +228,38 @@ type OnboardingCheckState struct {
 	Detail string
 }
 
-// OnboardingGuideState carries derived content for one spec guide. Only the
-// copyable block is overridable — a guide's prose is static contract copy.
+// OnboardingGuideState carries derived content for one spec guide. Prose is
+// static contract copy; the copyable block and per-step state are derived.
 type OnboardingGuideState struct {
+	// Command overrides the guide's copyable block when it is generated.
 	Command string
+	// Steps is live state keyed to the guide's declared steps.
+	Steps []OnboardingGuideStepState
+	// Summary is the one-line live status the panel joins with " · ".
+	Summary []string
+	// Checked reports that live verification ran.
+	Checked bool
+	// Error is a flow-level diagnostic (e.g. no API key configured).
+	Error string
+}
+
+// OnboardingGuideStepState is the live state of one declared guide step.
+type OnboardingGuideStepState struct {
+	ID string
+	OK bool
+	// Checked reports that this step was verified.
+	Checked bool
+	// Fixable reports that the flow can repair this step automatically.
+	Fixable bool
+	// NeedsFix is Checked && !OK && Fixable.
+	NeedsFix bool
+	// Detail is the live diagnosis for this step.
+	Detail string
+	// Command is the copyable fallback, carried so the panel can render a
+	// step without the spec in hand.
+	Command string
+	// Title is the step's copy, carried for the same reason.
+	Title string
 }
 
 // OnboardingFieldState is the derived state of one spec field.
@@ -209,6 +271,8 @@ type OnboardingFieldState struct {
 	Set bool
 	// Checked is the state of a checkbox field.
 	Checked bool
+	// Options are the live choices for a select field (e.g. host candidates).
+	Options []OnboardingOption
 	Valid   bool
 	Error   string
 }
@@ -239,6 +303,9 @@ type ProbeResult struct {
 type OnboardingResult struct {
 	// Probe is the action's own diagnosis (probe / apply verbs).
 	Probe *ProbeResult
+	// Detail is what the action did, in operator language (e.g. an apply
+	// verb's fixed/skipped/failed report).
+	Detail string
 	// Updates are what core must persist before answering.
 	Updates []StateUpdate
 }
@@ -251,7 +318,29 @@ type StateUpdate struct {
 	// (metadata) plus these values. ClearCanonicalFor mirrors the uncheck
 	// semantics of admin saves: dropping the claim must strip it.
 	Connection *ConnectionUpdate
+	// TailscaleAdmin persists the VIP-wizard credential and the operator's
+	// tailnet/host selections (issue #124).
+	TailscaleAdmin *TailscaleAdminUpdate
 }
+
+// TailscaleAdminUpdate is the VIP-wizard state a save persists: the Admin
+// API credential (a secret, stored encrypted) and the operator's tailnet /
+// host selections (stored in the service-connections overlay).
+type TailscaleAdminUpdate struct {
+	APIKey       string
+	Tailnet      string
+	HostDeviceID string
+	HostTag      string
+}
+
+// Named setup secrets and settings namespaces. Core resolves these; the
+// strings are the seam's vocabulary, not provider copy.
+const (
+	// SetupSecretTailscaleAPIKey is the operator's Tailscale Admin API token.
+	SetupSecretTailscaleAPIKey = "tailscale.api_key"
+	// SetupFlowTailscale is the settings namespace for the VIP wizard.
+	SetupFlowTailscale = "tailscale"
+)
 
 // ConnectionUpdate carries the secret-bearing values of a connection save.
 type ConnectionUpdate struct {
