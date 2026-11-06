@@ -54,10 +54,15 @@ type OnboardingSpec struct {
 	// guides as a stepped walkthrough. The label is provider copy ("Setup
 	// guide"); the modal chrome is the panel's.
 	WalkthroughLabel string
+	// WalkthroughTitle is the walkthrough dialog's heading (e.g. "Immich
+	// setup guide").
+	WalkthroughTitle string
 	// DetailsLabel, when set, wraps the ladder / form / checklist in a
 	// disclosure with this summary (e.g. "Details: guided ladder,
 	// connection form, checks").
 	DetailsLabel string
+	// ChecksEmpty is the checklist's prompt before any run.
+	ChecksEmpty string
 	// Connection is the non-secret half of a service-connections entry. Core
 	// assembles and persists the entry on save; secrets never appear here.
 	Connection ConnectionMetadata
@@ -113,11 +118,14 @@ type OnboardingField struct {
 	Kind        string // url | text | password | checkbox | select
 	Placeholder string
 	Help        string
-	Secret   bool
-	Required bool
+	Secret      bool
+	Required    bool
 	// Walkthrough marks a field the stepped walkthrough renders on its own
 	// page. The card skips it.
 	Walkthrough bool
+	// WalkthroughPlaceholder overrides Placeholder on the walkthrough, where
+	// the copy can refer to earlier pages (e.g. "Paste the key from step 4").
+	WalkthroughPlaceholder string
 }
 
 // OnboardingGuide is a static copy block. Body is plain text with a minimal
@@ -149,6 +157,39 @@ type OnboardingGuide struct {
 	LiveLabel string
 	// Requirements are the guide's hard preconditions, shown before the steps.
 	Requirements []string
+	// Blocks is the general content form: ordered prose, headings, lists and
+	// copyable command blocks. When set, these render instead of Body and
+	// Command. Prose uses the guide's inline syntax.
+	Blocks []OnboardingBlock
+	// Terminal marks the page this guide closes as one of the walkthrough's
+	// action pages: "form" renders the panel's fields and actions,
+	// "settings" renders the walkthrough-scoped fields and actions, and
+	// "checks" renders the acceptance checklist and the next-step card.
+	Terminal string
+}
+
+// OnboardingBlockKind enumerates the content units a guide can carry.
+const (
+	BlockProse   = "prose"
+	BlockHeading = "heading"
+	BlockList    = "list"
+	BlockCommand = "command"
+)
+
+// OnboardingBlock is one content unit in a guide. Body is plain text with the
+// inline syntax the renderer escapes first, then rewrites: `code` spans and
+// [text](https://…) links.
+type OnboardingBlock struct {
+	Kind string // prose | heading | list | command
+	// Body is the prose or heading text.
+	Body string
+	// Items are the rows of a list block. Each uses the same inline syntax.
+	Items []string
+	// Command is the copyable text of a command block.
+	Command string
+	// Label is a command block's caption; Button its copy-button text.
+	Label  string
+	Button string
 }
 
 // OnboardingGuideStep is one declared operator action inside a guide. The
@@ -172,6 +213,9 @@ type OnboardingAction struct {
 	// Walkthrough marks an action the stepped walkthrough renders. The card
 	// skips it.
 	Walkthrough bool
+	// WalkthroughLabel overrides Label on the walkthrough, where the same
+	// verb can be worded more explicitly (e.g. "Test connection" for "Test").
+	WalkthroughLabel string
 	// Fields lists the field IDs this action submits.
 	Fields []string
 }

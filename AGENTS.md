@@ -106,7 +106,8 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Merge / entity IDs | `internal/types/merge.go`, `entity_links*.go`, `musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; local import stores `signal.go`, `quicken.go`, `timeline.go` + shared `localstore.go` | Register in `internal/core/run.go` `srv.connectors`; stores share the `ServiceConnector` surface with a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/core/places.go`, `internal/connectors/{timeline,owntracks}.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
-| Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers |
+| Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
+| Onboarding runner | `internal/core/onboarding.go`; shapes `internal/types/onboarding.go`; impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
 
 ### Extension points agents must use
@@ -146,6 +147,34 @@ type ServiceConnector interface {
   `internal/types/pathclass.go`. Do not reintroduce a `switch` or a second
   classifier. Agent-facing `/v1/services` paths must pass
   `types.IsAgentContentPath` (issue #119).
+
+**Advanced setup flows** go through the optional `Onboarder` interface
+(`internal/connectors/host.go`; design: `docs/connector-onboarding.md`).
+Immich and YNAB are the worked examples.
+
+```go
+type Onboarder interface {
+    Onboarding() types.OnboardingSpec
+    OnboardingStatus(ctx context.Context) types.OnboardingStatus
+    OnboardingRun(ctx context.Context, action string, in types.OnboardingInput) (types.OnboardingResult, error)
+}
+```
+
+- The spec is the contract: fields, copyable guides (prose/command blocks,
+  declared steps), ladder and checklist labels, and the verbs the flow runs.
+  Every provider-visible string lives there or in the status the connector
+  computes.
+- **A connector never ships HTML or JS** and never writes Aegis tokens or
+  config — save/apply verbs return `types.StateUpdate` values core alone
+  persists (`SetServiceConnection`, `SetTailscaleAdmin`).
+- Core hosts the flow generically (`internal/core/onboarding.go`,
+  `/v1/admin/setup/{id}`): admin routes and rendering, secret writes, the
+  permissions perimeter. The panel and the stepped walkthrough render from
+  the spec; `TestAdminHTML_RestatesNoOnboardingCopy` rejects any spec string
+  in `web/admin.html`.
+- Status is derived per request (ladder, checks, hints, probes) and the
+  runner recomputes it after applying updates — a save verb cannot see the
+  post-save world and must not try.
 
 ### Local state layout (issue #74)
 
@@ -311,6 +340,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
 | Large admin HTML pasted back into `admin.go` | Keep `internal/core/web/admin.html` embed |
+| Provider copy in `admin.html` / `docs/` | Declare it in the connector's `Onboarder` spec; hygiene tests reject restatements (issue #265) |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `libraryPageCap`, singleflight |

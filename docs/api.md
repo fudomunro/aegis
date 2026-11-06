@@ -759,13 +759,11 @@ GET /v1/admin/data-grants — agent data-grant map (primary,)
 PUT /v1/admin/data-grants — replace data grants {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
 GET /v1/admin/services/{id}/grant-limits — service override map + effective_permissions + available/writable types
 PUT /v1/admin/services/{id}/grant-limits — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
-GET /v1/admin/immich/setup — Immich connection status + checks
-POST /v1/admin/immich/test — probe Immich endpoint/API key (key not stored from this call)
-POST /v1/admin/immich/config — save Immich endpoint/API key/canonical claim (service_connections.json + encrypted token store)
-POST /v1/admin/immich/check — re-run the live acceptance checklist
-POST /v1/admin/immich/tailnet/config — save Tailscale Admin API key/host (encrypted token store; key never echoed)
-POST /v1/admin/immich/tailnet/check — live-check VIP Service setup steps
-POST /v1/admin/immich/tailnet/apply — fix only the named steps that still need work
+GET /v1/admin/setup/{id} — connector-declared setup spec + live status (fields, ladder, checklist, guides, probes)
+POST /v1/admin/setup/{id}/{action} — run one declared verb ({"values":…,"flags":…,"selected":[…]})
+  verbs include probe (diagnose a candidate connection), save (persist it: service_connections.json + encrypted token store),
+  check (re-run the acceptance checklist), and a connector's own VIP verbs (tailnet_save / tailnet_check / tailnet_apply)
+  Each connector owns which verbs it declares; the panel renders them and must not restate their copy.
 ```
 
 Public brand assets (no auth;) are served from the process root:

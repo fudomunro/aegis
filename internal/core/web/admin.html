@@ -104,7 +104,7 @@
   .meta { color: var(--dim); font-size: 0.88rem; line-height: 1.5; }
   .meta code { font-size: 0.8rem; }
   .actions { margin-top: 0.85rem; display: flex; flex-wrap: wrap; gap: 0.5rem; }
-  /* Setup guide modal (issue #121) */
+  /* Stepped setup walkthrough modal */
   .wizard-backdrop {
     position: fixed; inset: 0; background: rgba(1, 4, 9, 0.72); z-index: 80;
     display: flex; align-items: center; justify-content: center; padding: 1rem;
@@ -892,178 +892,15 @@
   <div class="wizard-backdrop" id="immich-wizard" hidden role="dialog" aria-modal="true" aria-labelledby="immich-wizard-title">
     <div class="wizard-modal">
       <div class="wizard-header">
-        <h2 id="immich-wizard-title">Immich setup guide</h2>
+        <h2 class="wizard-title" id="immich-wizard-title"></h2>
         <button class="btn" id="immich-wizard-close" type="button">Close</button>
       </div>
-      <div class="wizard-rail" id="immich-wizard-rail" aria-label="Wizard steps">
-        <span class="wizard-chip" data-wiz-step="1">1 · Why Immich</span>
-        <span class="wizard-chip" data-wiz-step="2">2 · Install</span>
-        <span class="wizard-chip" data-wiz-step="3">3 · Photos</span>
-        <span class="wizard-chip" data-wiz-step="4">4 · API key</span>
-        <span class="wizard-chip" data-wiz-step="5">5 · Tailnet URL</span>
-        <span class="wizard-chip" data-wiz-step="6">6 · Connect</span>
-        <span class="wizard-chip" data-wiz-step="7">7 · Verify</span>
-      </div>
-      <div class="wizard-body">
-        <section class="wizard-page" data-wiz-page="1">
-          <h3>Why connect Immich to Aegis?</h3>
-          <p><strong>Immich</strong> is a self-hosted photo/video library (open-source Google Photos on hardware you control) with web/mobile apps and a REST API on port <code>2283</code>.</p>
-          <p>Once it is the <em>local canonical</em> home for photos, agents can answer “my photos…” via Aegis without your Immich credentials. Aegis holds metadata + proxy URLs only — <strong>bytes stay on Immich</strong>. Immich can sit beside Google Photos; the same picture merges only on real identity (hash or capture time + size).</p>
-          <p class="meta">Prefer cloud-only photos? Skip Immich and use Google Photos. Agent-assisted multi-service setup: <a href="https://github.com/fudomunro/aegis/issues/122" target="_blank" rel="noopener noreferrer">#122</a>.</p>
-        </section>
-
-        <section class="wizard-page" data-wiz-page="2" hidden>
-          <h3>Install Immich (Docker)</h3>
-          <p>Official quick start: <a href="https://docs.immich.app/overview/quick-start/" target="_blank" rel="noopener noreferrer">docs.immich.app</a>. Use our starter <code>.env</code> so compose just works.</p>
-          <div class="card" style="padding:0.85rem 1rem; margin:0.65rem 0">
-            <div class="toolbar" style="margin-bottom:0.45rem">
-              <span class="meta">terminal</span>
-              <div class="grow"></div>
-              <button class="btn" id="copy-immich-install" type="button">Copy commands</button>
-            </div>
-            <pre id="immich-install-commands" class="mono" style="overflow-x:auto; margin:0 0 0.75rem; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45">mkdir -p immich-app &amp;&amp; cd immich-app
-curl -fsSL -o docker-compose.yml https://github.com/immich-app/immich/releases/latest/download/docker-compose.yml
-# save the .env below into this folder as  ./.env   BEFORE the first up
-docker compose up -d
-docker compose ps   # wait until immich_server is healthy (30–90s)
-# then open http://localhost:2283 and register the first account</pre>
-            <div class="toolbar" style="margin-bottom:0.45rem">
-              <span class="meta">.env — save as <code>immich-app/.env</code></span>
-              <div class="grow"></div>
-              <button class="btn" id="copy-immich-env" type="button">Copy .env</button>
-            </div>
-            <pre id="immich-starter-env" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45"># Aegis starter Immich .env — first install, no edits required
-# File MUST be named .env (not example.env) next to docker-compose.yml
-
-# Photos/videos library directory (relative path is fine; needs free space)
-UPLOAD_LOCATION=./library
-
-# Postgres data directory (metadata only; local disk, not a network share)
-DB_DATA_LOCATION=./postgres
-
-# Optional timezone — uncomment if your server is not UTC
-# TZ=America/Los_Angeles
-
-# Immich release tag
-IMMICH_VERSION=v3
-
-# Local database password (letters/digits only). Not your Immich login.
-DB_PASSWORD=postgres
-
-# Postgres user / database (defaults are fine for a new install)
-DB_USERNAME=postgres
-DB_DATABASE_NAME=immich</pre>
-            <p class="meta" style="margin:0.55rem 0 0"><strong>Write <code>.env</code> before the first</strong> <code>docker compose up</code> — Postgres only creates <code>DB_DATABASE_NAME</code> on first init.</p>
-          </div>
-          <h4>Need to send photos later?</h4>
-          <p class="meta">Skip ahead — connect to Aegis first. Next step covers seeding the library.</p>
-          <h4>Troubleshooting</h4>
-          <ul>
-            <li><code>variable is not set</code> / <code>empty section between colons</code> → <code>.env</code> missing or still named <code>example.env</code>.</li>
-            <li><code>ERR_CONNECTION_REFUSED</code> on <code>:2283</code> → <code>docker compose ps</code> (want <code>immich_server</code> healthy + port map); logs often show <code>database "immich" does not exist</code> if Postgres inited without the name — <code>CREATE DATABASE immich;</code> or wipe <code>./postgres</code> and re-up.</li>
-          </ul>
-        </section>
-
-        <section class="wizard-page" data-wiz-page="3" hidden>
-          <h3>Get photos into Immich</h3>
-          <p>An empty Immich is a successful install — Aegis checks look red until there is something to list.</p>
-          <ol>
-            <li><strong>Smoke test:</strong> web UI → Upload a few JPEGs.</li>
-            <li><strong>Phone:</strong> Immich app → sign in to <code>http://&lt;host&gt;:2283</code> → backup one album.</li>
-            <li><strong>Google Takeout (existing libraries):</strong>
-              <ol>
-                <li><a href="https://takeout.google.com/" target="_blank" rel="noopener noreferrer">takeout.google.com</a> → export only <strong>Google Photos</strong>.</li>
-                <li>Install <a href="https://github.com/simulot/immich-go" target="_blank" rel="noopener noreferrer">immich-go</a> (not bundled — AGPL app):
-                  <div class="toolbar" style="margin:0.45rem 0 0.35rem">
-                    <span class="meta">install immich-go</span>
-                    <div class="grow"></div>
-                    <button class="btn" id="copy-immich-go-install" type="button">Copy install</button>
-                  </div>
-                  <pre id="immich-go-install" class="mono" style="margin:0 0 0.55rem; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4"># macOS (Homebrew — easiest)
-brew install immich-go
-
-# or any OS: https://github.com/simulot/immich-go/releases → put binary on PATH
-immich-go --help</pre>
-                </li>
-                <li>Import with the <strong>same API key</strong> you create in the next step:
-                  <pre class="mono" style="margin:0.4rem 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">immich-go upload from-google-photos \
-  --server=http://localhost:2283 \
-  --api-key=YOUR_IMMICH_API_KEY \
-  /path/to/takeout-*.zip</pre>
-                </li>
-              </ol>
-            </li>
-          </ol>
-          <p class="meta">Keep the Takeout zip as backup. Aegis never stores photo bytes.</p>
-        </section>
-
-        <section class="wizard-page" data-wiz-page="4" hidden>
-          <h3>Create one Immich API key</h3>
-          <p>Immich → Account → API Keys → New key. The v3 form is a long <strong>permissions checkbox list</strong> — do <em>not</em> Select all. Tick the union below (Aegis + immich-go).</p>
-          <div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">
-            <div class="toolbar" style="margin-bottom:0.4rem">
-              <span class="meta">One API key for Aegis + immich-go</span>
-              <div class="grow"></div>
-              <button class="btn" id="copy-immich-perms" type="button">Copy list</button>
-            </div>
-            <pre id="immich-api-permissions" class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5"></pre>
-            <p class="meta" style="margin:0.5rem 0 0">Copy the secret once when Immich shows it — use it in the next step and in <code>immich-go --api-key=</code>.</p>
-          </div>
-        </section>
-
-        <section class="wizard-page" data-wiz-page="5" hidden>
-          <div id="immich-tailnet-page"></div>
-        </section>
-
-        <section class="wizard-page" data-wiz-page="6" hidden>
-          <h3>Connect Aegis to Immich</h3>
-          <p class="meta" id="wiz-immich-endpoint-help"></p>
-          <div class="card" style="padding:0.85rem 1rem; margin:0.65rem 0">
-            <div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Immich endpoint
-                <input id="wiz-immich-endpoint" type="url" placeholder="http://localhost:2283/api" spellcheck="false" autocomplete="off">
-              </label>
-              <label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">
-                Immich API key
-                <input id="wiz-immich-api-key" type="password" placeholder="Paste the key from step 4" autocomplete="off" spellcheck="false">
-              </label>
-              <label style="display:flex; align-items:flex-end; gap:0.4rem; font-size:0.85rem; padding-bottom:0.35rem">
-                <input id="wiz-immich-claim-canonical" type="checkbox" checked>
-                Claim canonical for photos
-              </label>
-            </div>
-            <div class="toolbar" style="margin:0.75rem 0 0">
-              <button class="btn" id="wiz-immich-test" type="button">Test connection</button>
-              <button class="btn btn-primary" id="wiz-immich-save" type="button">Save to Aegis</button>
-            </div>
-            <div class="meta" id="wiz-immich-test-msg" style="margin-top:0.55rem"></div>
-          </div>
-          <p class="meta">Saves to <code>service_connections.json</code> — never rewrites <code>aegis.json</code>. Optional: <a href="https://docs.immich.app/overview/quick-start/" target="_blank" rel="noopener noreferrer">Immich</a> phone apps for ongoing backup.</p>
-        </section>
-
-        <section class="wizard-page" data-wiz-page="7" hidden>
-          <h3>Verify</h3>
-          <p>Run the live checklist. Empty library means add photos (step 3), not a connector failure.</p>
-          <div class="toolbar" style="margin:0.55rem 0">
-            <button class="btn btn-primary" id="wiz-immich-check" type="button">Run checks</button>
-            <span class="meta" id="wiz-immich-status">…</span>
-          </div>
-          <div id="wiz-immich-checks" class="card" style="padding:0.65rem 0.85rem">
-            <div class="empty">Run checks to see the checklist.</div>
-          </div>
-          <div class="card" style="padding:0.65rem 0.85rem; margin-top:0.55rem">
-            <div style="display:flex; gap:0.55rem; align-items:flex-start">
-              <span style="color:var(--accent); font-weight:700">Next</span>
-              <div id="wiz-immich-next" style="font-size:0.92rem">…</div>
-            </div>
-          </div>
-        </section>
-      </div>
+      <div class="wizard-rail" id="immich-wizard-rail" aria-label="Wizard steps"></div>
+      <div class="wizard-body" id="immich-wizard-body"></div>
       <div class="wizard-footer">
-        <button class="btn" id="immich-wizard-back" type="button">Back</button>
+        <button class="btn wizard-back" id="immich-wizard-back" type="button">Back</button>
         <div class="grow"></div>
-        <button class="btn btn-primary" id="immich-wizard-next" type="button">Next</button>
+        <button class="btn btn-primary wizard-next" id="immich-wizard-next" type="button">Next</button>
       </div>
     </div>
   </div>
@@ -4253,9 +4090,63 @@ function selectTab(name, opts) {
     return rows.length ? '<div class="meta" style="display:grid; gap:0.35rem">' + rows.join("") + "</div>" : "";
   }
 
+  function setupBlockHTML(b) {
+    switch (b.kind) {
+      case "heading":
+        return '<h4 style="margin:0.85rem 0 0.35rem">' + escapeHtml(b.body || "") + "</h4>";
+      case "list":
+        return '<ul class="meta" style="margin:0.35rem 0; padding-left:1.1rem">' +
+          (b.items || []).map((it) => "<li>" + formatSetupText(it) + "</li>").join("") + "</ul>";
+      case "command": {
+        const label = b.label ? escapeHtml(b.label) : "";
+        const button = b.button
+          ? '<button class="btn" type="button" data-setup-copy="1">' + escapeHtml(b.button) + "</button>"
+          : "";
+        return (
+          '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' +
+          (label || button
+            ? '<div class="toolbar" style="margin:0 0 0.35rem"><span class="meta">' + label +
+              '</span><div class="grow"></div>' + button + "</div>"
+            : "") +
+          '<pre class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.45">' +
+          escapeHtml(b.command || "") + "</pre></div>"
+        );
+      }
+      default:
+        return '<div class="meta" style="margin:0.35rem 0">' + formatSetupText(b.body || "") + "</div>";
+    }
+  }
+
+  function setupStepsListHTML(g, state) {
+    if (!g.steps || !g.steps.length) return "";
+    const live = (state && state.steps) || [];
+    const rows = g.steps.map((step) => {
+      const st = live.find((x) => x.id === step.id) || {};
+      let badge = '<span class="meta">manual</span>';
+      if (st.checked && st.ok) badge = '<span class="meta">OK</span>';
+      else if (st.needs_fix) badge = '<span class="meta">needs fix</span>';
+      else if (st.checked && !st.ok) badge = '<span class="meta">todo</span>';
+      const fix = st.needs_fix
+        ? '<button class="btn" type="button" data-setup-fix="' + escapeHtml(step.id) + '">Fix</button>'
+        : "";
+      return (
+        "<li><strong>" + escapeHtml(step.title) + "</strong> " + badge + fix +
+        (step.detail ? '<div class="meta">' + escapeHtml(step.detail) + "</div>" : "") +
+        (step.command
+          ? '<pre class="mono" style="margin:0.35rem 0 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
+            escapeHtml(step.command) + "</pre>"
+          : "") +
+        (st.detail && st.detail !== step.detail ? '<div class="meta">' + escapeHtml(st.detail) + "</div>" : "") +
+        "</li>"
+      );
+    }).join("");
+    return '<ol class="meta" style="margin:0.35rem 0; padding-left:1.1rem">' + rows + "</ol>";
+  }
+
   function setupGuideHTML(g, state) {
     const title = g.title ? "<strong>" + escapeHtml(g.title) + "</strong> " : "";
     const body = g.body ? '<div class="meta">' + formatSetupText(g.body) + "</div>" : "";
+    const blocks = (g.blocks || []).map(setupBlockHTML).join("");
     const cmd = (state && state.command) || g.command;
     let command = "";
     if (cmd) {
@@ -4271,9 +4162,13 @@ function selectTab(name, opts) {
         '<pre class="mono" style="overflow-x:auto; margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5">' +
         escapeHtml(cmd) + "</pre>";
     }
-    const inner = title + body + command;
+    const reqs = (g.requirements || []).length
+      ? '<ul class="meta" style="margin:0.35rem 0; padding-left:1.1rem">' +
+        g.requirements.map((r) => "<li>" + escapeHtml(r) + "</li>").join("") + "</ul>"
+      : "";
+    const inner = title + body + blocks + command + reqs + setupStepsListHTML(g, state);
     if (g.collapsible) {
-      return "<details><summary>" + escapeHtml(g.title || "Details") + "</summary>" + body + command + "</details>";
+      return "<details><summary>" + escapeHtml(g.title || "Details") + "</summary>" + body + blocks + command + reqs + setupStepsListHTML(g, state) + "</details>";
     }
     return "<div>" + inner + "</div>";
   }
@@ -4374,7 +4269,8 @@ function selectTab(name, opts) {
       (formBtns ? '<div class="toolbar" style="margin:0.65rem 0 0">' + formBtns + "</div>" : "") +
       "</div>" +
       (checks
-        ? '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0"><div class="meta">Run checks after saving to verify the checklist.</div>' +
+        ? '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0 0"><div class="meta">' +
+          escapeHtml(spec.checks_empty || "") + "</div>" +
           '<div style="margin:0.45rem 0 0">' + checks + "</div></div>"
         : "");
 
@@ -4403,14 +4299,15 @@ function selectTab(name, opts) {
     try {
       const view = await api("/v1/admin/setup/" + encodeURIComponent(id));
       host._setupSpec = view.spec;
-      renderSetupPanel(host, view.spec, view.status, view.status && view.status.probe);
+      const rerender = host._setupRender || renderSetupPanel;
+      rerender(host, view.spec, view.status, view.status && view.status.probe);
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
       else host.innerHTML = '<div class="meta">Failed to load setup: ' + escapeHtml(err.message || err) + "</div>";
     }
   }
 
-  async function runSetupAction(host, spec, btn) {
+  async function runSetupAction(host, spec, btn, selected) {
     const id = spec.service_id;
     const action = (spec.actions || []).find((a) => a.id === btn.dataset.setupAction);
     if (!action) return;
@@ -4419,6 +4316,13 @@ function selectTab(name, opts) {
     (action.fields || []).forEach((fid) => {
       const input = host.querySelector('[data-setup-field="' + fid + '"]');
       if (!input) return;
+      if (input.type === "checkbox") flags[fid] = input.checked;
+      else values[fid] = input.value;
+    });
+    // A walkthrough action may also submit the page's other inputs.
+    host.querySelectorAll("[data-setup-field]").forEach((input) => {
+      const fid = input.dataset.setupField;
+      if (values[fid] !== undefined || flags[fid] !== undefined) return;
       if (input.type === "checkbox") flags[fid] = input.checked;
       else values[fid] = input.value;
     });
@@ -4431,12 +4335,13 @@ function selectTab(name, opts) {
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ values, flags }),
+          body: JSON.stringify({ values: values, flags: flags, selected: selected || [] }),
         }
       );
       // A save carries no probe of its own; show the post-save diagnosis the
       // status just computed. Re-rendering blanks every secret input.
-      renderSetupPanel(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
+      const rerender = host._setupRender || renderSetupPanel;
+      rerender(host, res.spec, res.status, res.probe || (res.status && res.status.probe));
       if (typeof loadSummary === "function") loadSummary();
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
@@ -4880,304 +4785,78 @@ function selectTab(name, opts) {
     savePermissions(serviceId, map);
   });
 
-  // --- Immich setup guide (issues #39, #121) ---
+  // --- Immich surfaces ---
   // The connection card is a generic onboarding panel (issue #265). What is
   // left here drives the wizard modal, which still owns its own layout; both
   // speak the same connector-declared spec and the same /v1/admin/setup/immich
   // runner. The VIP-Service page (page 5) is issue #124 and is not part of
   // the onboarding seam yet.
 
-  function immichSpecOf(host) {
-    return (host && host._setupSpec) || null;
+  // --- Stepped walkthrough (the generic form of the setup guide) ---
+  // Pages come from the connector's declared guides: those with a Short start
+  // a page (its rail chip), those without join the page before. A guide whose
+  // Terminal is set closes the page with the matching action surface.
+
+  function setupWalkthroughPages(spec) {
+    const pages = [];
+    (spec.guides || [])
+      .filter((g) => g.walkthrough)
+      .forEach((g) => {
+        if (g.short || pages.length === 0) pages.push({ chip: g.short || g.title || "", guides: [] });
+        pages[pages.length - 1].guides.push(g);
+      });
+    return pages;
   }
 
-  function immichGuideCommand(spec, id) {
-    if (!spec) return "";
-    const g = (spec.guides || []).find((x) => x.id === id);
-    return (g && g.command) || "";
-  }
-
-  function checksHTML(checks, spec) {
-    if (!checks || !checks.length) {
-      return '<div class="empty">Run checks after saving to verify the checklist.</div>';
+  function setupTerminalHTML(page, spec, status, probe) {
+    const terminals = page.guides.map((g) => g.terminal).filter(Boolean);
+    let out = "";
+    if (terminals.indexOf("settings") >= 0) {
+      const fields = (spec.fields || []).filter((f) => f.walkthrough);
+      const actions = (spec.actions || []).filter((a) => a.walkthrough);
+      const form = fields.map((f) => setupFieldHTML(f, (status.fields || {})[f.id] || {}, "wiz")).join("");
+      out +=
+        '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0">' +
+        '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">' + form + "</div>" +
+        '<div class="toolbar" style="margin:0.65rem 0 0">' +
+        actions.map((a) => setupActionHTML(Object.assign({}, a, {
+          label: a.walkthrough_label || a.label,
+        }), "wiz")).join("") + "</div>" +
+        '<div class="meta setup-msg" style="margin:0.45rem 0 0"></div></div>';
     }
-    return checks.map((c) => {
-      const def = ((spec && spec.checks) || []).find((x) => x.id === c.id) || {};
-      const label = c.label || def.label || c.id;
-      const icon = c.ok ? "✓" : "✗";
-      const color = c.ok ? "var(--accent)" : "#f85149";
-      return (
-        '<div style="display:flex; gap:0.55rem; align-items:flex-start; padding:0.28rem 0; font-size:0.88rem">' +
-        '<span style="color:' + color + '; font-weight:700; min-width:1rem">' + icon + "</span>" +
-        "<span><strong>" + escapeHtml(label) + "</strong>" +
-        (c.detail ? ' <span class="meta">— ' + escapeHtml(c.detail) + "</span>" : "") +
-        "</span></div>"
-      );
-    }).join("");
-  }
-
-  // renderImmichWizardStatus paints the wizard's Connect/Verify pages from the
-  // generic onboarding envelope.
-  function renderImmichWizardStatus(view) {
-    const spec = view.spec;
-    const status = view.status || {};
-    const probe = view.probe || status.probe || null;
-    const checks = (status.checks || []).map((c) => Object.assign({}, c, { label: null }));
-    if ($("wiz-immich-checks")) $("wiz-immich-checks").innerHTML = checksHTML(checks, spec);
-
-    const fields = status.fields || {};
-    const configured = (status.summary || []).indexOf("configured") >= 0;
-    const hasKey = !!(fields.api_key && fields.api_key.set);
-    const parts = [
-      configured ? "configured" : "not configured",
-      hasKey ? "API key set" : "no API key",
-    ];
-    const listing = (status.checks || []).find((c) => c.id === "library_listing");
-    parts.push("library: " + (listing ? (listing.ok ? "ok (" + ((status.metrics || {}).photo_count || 0) + ")" : "error") : "—"));
-    if ($("wiz-immich-status")) $("wiz-immich-status").textContent = parts.join(" · ");
-    if ($("wiz-immich-next")) $("wiz-immich-next").textContent = status.next || "…";
-
-    if (probe && $("wiz-immich-test-msg")) {
-      $("wiz-immich-test-msg").textContent =
-        (probe.message || (probe.ok ? "Immich OK" : "Immich test failed")) +
-        (probe.hint ? " — " + probe.hint : "");
+    if (terminals.indexOf("form") >= 0) {
+      const fields = (spec.fields || []).filter((f) => !f.walkthrough);
+      const actions = (spec.actions || []).filter((a) => !a.walkthrough && (a.placement || "header") === "form");
+      const form = fields.map((f) => setupFieldHTML(f, (status.fields || {})[f.id] || {}, "wiz")).join("");
+      out +=
+        '<div class="card" style="padding:0.85rem 1rem; margin:0.55rem 0">' +
+        '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(220px,1fr))">' + form + "</div>" +
+        '<div class="toolbar" style="margin:0.75rem 0 0">' +
+        actions.map((a) => setupActionHTML(Object.assign({}, a, {
+          label: a.walkthrough_label || a.label,
+        }), "wiz")).join("") + "</div>" +
+        '<div class="setup-result meta" style="margin:0.55rem 0 0"></div></div>';
     }
-  }
-
-  // Page 5 is the VIP-Service wizard (issue #124). Its copy, steps and
-  // fix rules are declared by the Immich connector and rendered from the
-  // onboarding spec (issue #265) — nothing on this page is hardcoded here.
-  async function loadImmichTailnet() {
-    try {
-      const view = await api("/v1/admin/setup/immich");
-      renderImmichTailnetPage(view.spec, view.status);
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
+    if (terminals.indexOf("checks") >= 0) {
+      const checkAction = (spec.actions || []).find((a) => a.kind === "check" && !a.walkthrough);
+      out +=
+        '<div class="toolbar" style="margin:0.55rem 0">' +
+        (checkAction ? setupActionHTML(Object.assign({}, checkAction, {
+          label: checkAction.walkthrough_label || checkAction.label,
+        }), "wiz") : "") +
+        '<span class="meta setup-summary">' + escapeHtml((status.summary || []).join(" · ")) + "</span></div>" +
+        '<div class="setup-checks card" style="padding:0.65rem 0.85rem">' + setupChecksHTML(spec, status) + "</div>" +
+        setupNextHTML(status, probe);
     }
+    return out;
   }
 
-  async function loadImmichWizardStatus() {
-    try {
-      const view = await api("/v1/admin/setup/immich");
-      const host = $("setup-immich");
-      if (host) host._setupSpec = view.spec;
-      renderImmichWizardStatus(view);
-      const perms = immichGuideCommand(view.spec, "api_key_permissions");
-      if (perms && $("immich-api-permissions")) $("immich-api-permissions").textContent = perms;
-      const epField = ((view.spec && view.spec.fields) || []).find((f) => f.id === "endpoint");
-      if (epField && epField.help && $("wiz-immich-endpoint-help")) {
-        $("wiz-immich-endpoint-help").innerHTML = formatSetupText(epField.help);
-      }
-      loadImmichTailnet();
-      return view;
-    } catch (err) {
-      if (err.status === 401) showAuthGate(true);
-      return null;
-    }
-  }
-
-  // syncImmichForms mirrors the wizard's fields into the generic card panel so
-  // both views edit one draft.
-  function syncImmichForms(from) {
-    const host = $("setup-immich");
-    const pairs = [
-      ["wiz-immich-endpoint", "endpoint"],
-      ["wiz-immich-api-key", "api_key"],
-    ];
-    pairs.forEach(([wizId, field]) => {
-      const wiz = $(wizId);
-      const card = host && host.querySelector('[data-setup-field="' + field + '"]');
-      if (!wiz || !card) return;
-      if (from === wizId) card.value = wiz.value;
-      else wiz.value = card.value;
-    });
-    const wizClaim = $("wiz-immich-claim-canonical");
-    const cardClaim = host && host.querySelector('[data-setup-field="claim_canonical_for_photos"]');
-    if (wizClaim && cardClaim) {
-      if (from === "wiz-immich-claim-canonical") cardClaim.checked = wizClaim.checked;
-      else wizClaim.checked = cardClaim.checked;
-    }
-  }
-
-  function setWizStep(n) {
-    const pages = document.querySelectorAll("#immich-wizard .wizard-page");
-    pages.forEach((el) => {
-      const idx = parseInt(el.getAttribute("data-wiz-page"), 10);
-      if (!isNaN(idx)) el.hidden = idx !== n;
-    });
-    document.querySelectorAll("#immich-wizard .wizard-chip").forEach((chip) => {
-      const idx = parseInt(chip.getAttribute("data-wiz-step"), 10);
-      chip.classList.toggle("active", idx === n);
-    });
-    const next = $("immich-wizard-next");
-    if (next) next.textContent = n >= 7 ? "Done" : "Next";
-    const back = $("immich-wizard-back");
-    if (back) back.disabled = n <= 1;
-    return n;
-  }
-
-  let wizStep = 1;
-  function openImmichWizard() {
-    const el = $("immich-wizard");
-    if (el) el.hidden = false;
-    wizStep = setWizStep(1);
-    loadImmichWizardStatus();
-  }
-  function closeImmichWizard() {
-    const el = $("immich-wizard");
-    if (el) el.hidden = true;
-    loadImmichWizardStatus();
-    const host = $("setup-immich");
-    if (host) loadSetupPanel(host);
-  }
-
-  // The generic panel announces the intent; this page owns the modal.
-  document.addEventListener("setup-walkthrough", (e) => openImmichWizard(), true);
-
-  function tailnetGuidesOf(spec) {
-    return (spec.guides || []).filter((g) => g.walkthrough);
-  }
-
-  function tailnetFieldsOf(spec) {
-    return (spec.fields || []).filter((f) => f.walkthrough);
-  }
-
-  function tailnetActionsOf(spec) {
-    return (spec.actions || []).filter((a) => a.walkthrough);
-  }
-
-  function tailnetStepHTML(step, live) {
-    const st = live || {};
-    let badge = '<span class="meta">manual</span>';
-    if (st.checked && st.ok) badge = '<span class="meta">OK</span>';
-    else if (st.needs_fix) badge = '<span class="meta">needs fix</span>';
-    else if (st.checked && !st.ok) badge = '<span class="meta">todo</span>';
-    const fix = st.needs_fix
-      ? '<button class="btn" type="button" data-ts-fix="' + escapeHtml(step.id) + '">Fix</button>'
-      : "";
-    return (
-      "<li><strong>" + escapeHtml(step.title) + "</strong> " + badge + fix +
-      (step.detail ? '<div class="meta">' + escapeHtml(step.detail) + "</div>" : "") +
-      (step.command
-        ? '<pre class="mono" style="margin:0.35rem 0 0; white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
-          escapeHtml(step.command) + "</pre>"
-        : "") +
-      (st.detail && st.detail !== step.detail ? '<div class="meta">' + escapeHtml(st.detail) + "</div>" : "") +
-      "</li>"
-    );
-  }
-
-  function tailnetSettingsHTML(spec) {
-    const fields = tailnetFieldsOf(spec).map((f) => {
-      const st = { value: "", set: false, checked: false };
-      if (f.kind === "select") {
-        const opts = ['<option value="">' + escapeHtml(f.placeholder || "") + "</option>"]
-          .concat((f.options || []).map((o) =>
-            '<option value="' + escapeHtml(o.id) + '">' + escapeHtml(o.label) + "</option>"))
-          .join("");
-        return (
-          '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
-          escapeHtml(f.label) +
-          '<select data-ts-field="' + escapeHtml(f.id) + '">' + opts + "</select></label>"
-        );
-      }
-      const type = f.secret ? "password" : f.kind === "url" ? "url" : "text";
-      return (
-        '<label style="display:flex; flex-direction:column; gap:0.25rem; font-size:0.85rem">' +
-        escapeHtml(f.label) +
-        '<input data-ts-field="' + escapeHtml(f.id) + '" type="' + type + '"' +
-        (f.placeholder ? ' placeholder="' + escapeHtml(f.placeholder) + '"' : "") +
-        ' autocomplete="off" spellcheck="false"></label>'
-      );
-    }).join("");
-    const help = tailnetFieldsOf(spec)
-      .filter((f) => f.help)
-      .map((f) => '<div class="meta">' + formatSetupText(f.help) + "</div>")
-      .join("");
-    const buttons = tailnetActionsOf(spec).map((a) => {
-      const primary = a.kind === "apply" || a.kind === "save";
-      return (
-        '<button class="btn' + (primary ? " btn-primary" : "") + '" type="button" data-ts-action="' +
-        escapeHtml(a.id) + '">' + escapeHtml(a.label) + "</button>"
-      );
-    }).join("");
-    return (
-      help +
-      '<div style="display:grid; gap:0.55rem; grid-template-columns:repeat(auto-fit,minmax(200px,1fr))">' + fields + "</div>" +
-      '<div class="toolbar" style="margin:0.65rem 0 0">' + buttons + "</div>" +
-      '<div class="meta" id="immich-ts-msg" style="margin:0.45rem 0 0"></div>'
-    );
-  }
-
-  // renderImmichTailnetPage paints wizard page 5 from the connector's
-  // declared spec and live guide state.
-  function renderImmichTailnetPage(spec, status) {
-    const host = $("immich-tailnet-page");
-    if (!host || !spec) return;
-    const guides = tailnetGuidesOf(spec);
-    const states = (status && status.guides) || {};
-    const fields = (status && status.fields) || {};
-    // Live host options ride on the select's field state.
-    const hostField = (spec.fields || []).find((f) => f.id === "host_device");
-    if (hostField && fields.host_device) hostField.options = fields.host_device.options || [];
-
-    const walk = guides.find((g) => g.id === "tailnet") || {};
-    const admin = guides.find((g) => g.id === "tailnet_admin") || {};
-    const endpoint = guides.find((g) => g.id === "tailnet_endpoint") || {};
-    const walkState = states[walk.id] || {};
-    const endpointState = states[endpoint.id] || {};
-
-    const requirements = (walk.requirements || []).map((r) => "<li>" + escapeHtml(r) + "</li>").join("");
-    const steps = (walk.steps || []).map((step) => {
-      const live = (walkState.steps || []).find((x) => x.id === step.id);
-      return tailnetStepHTML(step, live);
-    }).join("");
-    const commands = (walkState.command || walk.command)
-      ? '<div class="toolbar" style="margin:0.45rem 0 0.35rem"><span class="meta">' +
-        escapeHtml(walk.label || "") + '</span><div class="grow"></div>' +
-        '<button class="btn" type="button" data-ts-copy="walk">' + escapeHtml(walk.button || "Copy") + "</button></div>" +
-        '<pre class="mono" id="immich-tailnet-commands" style="white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
-        escapeHtml(walkState.command || walk.command) + "</pre>"
-      : "";
-    const liveSummary = (walkState.summary || []).map(escapeHtml).join(" · ");
-    const liveList = walkState.error
-      ? '<li class="meta">' + escapeHtml(walkState.error) + "</li>"
-      : steps;
-
-    const endpointBody = formatSetupText(endpoint.body || "");
-    const endpointBlock = (endpointState.command || endpoint.command)
-      ? '<div class="toolbar" style="margin:0.45rem 0 0.35rem"><span class="meta">' +
-        escapeHtml(endpoint.label || "") + '</span><div class="grow"></div>' +
-        '<button class="btn" type="button" data-ts-copy="endpoint">' + escapeHtml(endpoint.button || "Copy") + "</button></div>" +
-        '<pre class="mono" id="immich-vip-endpoint" style="white-space:pre-wrap; word-break:break-word; font-size:11px; line-height:1.4">' +
-        escapeHtml(endpointState.command || endpoint.command) + "</pre>"
-      : "";
-
-    host.innerHTML =
-      "<h3>" + escapeHtml(walk.title || "") + "</h3>" +
-      '<div class="meta">' + formatSetupText(walk.body || "") + "</div>" +
-      (requirements
-        ? '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0"><ul class="meta" style="margin:0; padding-left:1.1rem">' + requirements + "</ul></div>"
-        : "") +
-      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' + tailnetSettingsHTML(spec) + "</div>" +
-      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' +
-      '<div class="meta">' + escapeHtml(walk.liveLabel || "") + "</div>" +
-      (liveSummary ? '<div class="meta">' + liveSummary + "</div>" : "") +
-      '<ol class="meta" id="immich-ts-live" style="margin:0.55rem 0 0; padding-left:1.1rem">' + liveList + "</ol></div>" +
-      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' +
-      '<ol class="meta" style="margin:0; padding-left:1.1rem">' + steps + "</ol>" + commands + "</div>" +
-      '<div class="card" style="padding:0.75rem 1rem; margin:0.55rem 0">' + endpointBody + endpointBlock + "</div>";
-
-    host.querySelectorAll("[data-ts-action]").forEach((btn) => {
-      btn.addEventListener("click", () => runImmichTailnetAction(btn.dataset.tsAction, btn));
-    });
-    host.querySelectorAll("[data-ts-fix]").forEach((btn) => {
-      btn.addEventListener("click", () => runImmichTailnetAction("tailnet_apply", btn, [btn.dataset.tsFix]));
-    });
-    host.querySelectorAll("[data-ts-copy]").forEach((btn) => {
+  function setupWalkthroughCopyButtons(host) {
+    host.querySelectorAll("[data-setup-copy]").forEach((btn) => {
       const reset = btn.textContent;
       btn.addEventListener("click", () => {
-        const pre = btn.closest(".card").querySelector("pre");
+        const wrap = btn.closest("div") && btn.closest("div").parentElement;
+        const pre = wrap ? wrap.querySelector("pre") : null;
         const done = (ok) => {
           btn.textContent = ok ? "Copied" : "Copy failed";
           setTimeout(() => { btn.textContent = reset; }, 1200);
@@ -5187,35 +4866,105 @@ function selectTab(name, opts) {
         } else done(false);
       });
     });
+    host.querySelectorAll("[data-setup-fix]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const apply = (spec.actions || []).find((a) => a.kind === "apply");
+        if (!apply) return;
+        const values = {};
+        host.querySelectorAll("[data-setup-field]").forEach((el) => {
+          values[el.dataset.setupField] = el.type === "checkbox" ? el.checked : el.value;
+        });
+        runSetupAction(host, spec, {
+          dataset: { setupAction: apply.id },
+          disabled: false,
+          textContent: apply.walkthrough_label || apply.label,
+        }, [btn.dataset.setupFix]);
+      });
+    });
   }
 
-  // runImmichTailnetAction submits a VIP-wizard verb through the connector-
-  // owned onboarding runner (issue #265).
-  async function runImmichTailnetAction(action, btn, selected) {
-    const values = {};
-    document.querySelectorAll("[data-ts-field]").forEach((el) => {
-      values[el.dataset.tsField] = el.value;
-    });
-    const msg = $("immich-ts-msg");
-    const spec = ($("setup-immich") && $("setup-immich")._setupSpec) || null;
-    const actionDef = spec && (spec.actions || []).find((a) => a.id === action);
-    if (btn) btn.disabled = true;
-    if (msg) msg.textContent = (actionDef && actionDef.busy_label) || "Working…";
-    try {
-      const res = await api("/v1/admin/setup/immich/" + encodeURIComponent(action), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ values: values, selected: selected || [] }),
+  function renderSetupWalkthrough(modal, spec, status, probe) {
+    if (!modal || !spec) return;
+    const rail = modal.querySelector(".wizard-rail");
+    const body = modal.querySelector(".wizard-body");
+    const title = modal.querySelector(".wizard-title");
+    if (title) title.textContent = spec.walkthrough_title || spec.title || "";
+    status = status || {};
+    probe = probe || status.probe || null;
+
+    const pages = setupWalkthroughPages(spec);
+    if (!modal._wizStep || modal._wizStep > pages.length) modal._wizStep = 1;
+    const page = pages[modal._wizStep - 1] || { guides: [] };
+
+    if (rail) {
+      rail.innerHTML = pages.map((p, i) =>
+        '<span class="wizard-chip"' + (i + 1 === modal._wizStep ? ' aria-current="step"' : "") + ">" +
+        (i + 1) + " · " + escapeHtml(p.chip) + "</span>"
+      ).join("");
+    }
+    if (body) {
+      body.innerHTML =
+        page.guides.map((g) => setupGuideHTML(g, (status.guides || {})[g.id])).join("") +
+        setupTerminalHTML(page, spec, status, probe);
+      body._setupRender = renderSetupWalkthrough.bind(null, modal);
+      body._setupSpec = spec;
+      wireSetupPanel(body, spec, status, probe);
+      setupWalkthroughCopyButtons(body);
+      body.querySelectorAll("[data-setup-fix]").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          const apply = (spec.actions || []).find((a) => a.kind === "apply");
+          if (!apply) return;
+          const values = {};
+          body.querySelectorAll("[data-setup-field]").forEach((el) => {
+            values[el.dataset.setupField] = el.type === "checkbox" ? el.checked : el.value;
+          });
+          runSetupAction(body, spec, {
+            dataset: { setupAction: apply.id },
+            disabled: false,
+            textContent: apply.walkthrough_label || apply.label,
+          }, [btn.dataset.setupFix]);
+        });
       });
-      if (msg) msg.textContent = res.detail || (action === "tailnet_apply" ? "Done." : "Saved.");
-      renderImmichTailnetPage(res.spec, res.status);
-      renderImmichWizardStatus(res);
-      if (typeof loadSummary === "function") loadSummary();
-    } catch (e) {
-      if (e.status === 401) showAuthGate(true);
-      else if (msg) msg.textContent = e.message || String(e);
-    } finally {
-      if (btn) btn.disabled = false;
+    }
+    const back = modal.querySelector(".wizard-back");
+    const next = modal.querySelector(".wizard-next");
+    if (back) back.disabled = modal._wizStep <= 1;
+    if (next) next.textContent = modal._wizStep >= pages.length ? "Done" : "Next";
+    modal._wizPages = pages.length;
+  }
+
+  function openSetupWalkthrough(modal, spec, status, probe) {
+    if (!modal) return;
+    modal.hidden = false;
+    modal._wizStep = 1;
+    renderSetupWalkthrough(modal, spec, status, probe);
+  }
+
+  function closeSetupWalkthrough(modal) {
+    if (modal) modal.hidden = true;
+    const host = $("setup-immich");
+    if (host) loadSetupPanel(host);
+  }
+
+  // refreshSetupSurfaces loads the Immich onboarding view once and paints
+  // every surface that renders it: the card panel and, when open, the
+  // stepped walkthrough. Both are views over the same spec and status.
+  async function refreshSetupSurfaces() {
+    const host = $("setup-immich");
+    if (!host) return;
+    try {
+      const view = await api("/v1/admin/setup/immich");
+      host._setupSpec = view.spec;
+      renderSetupPanel(host, view.spec, view.status, view.status && view.status.probe);
+      const modal = $("immich-wizard");
+      if (modal && !modal.hidden) {
+        modal._wizStatus = view.status;
+        renderSetupWalkthrough(modal, view.spec, view.status, view.status && view.status.probe);
+      }
+      return view;
+    } catch (err) {
+      if (err.status === 401) showAuthGate(true);
+      return null;
     }
   }
 
@@ -5234,14 +4983,12 @@ function selectTab(name, opts) {
     copyFromEl($("copy-immich-install"), "immich-install-commands", "Copy commands"));
   $("copy-immich-env").addEventListener("click", () =>
     copyFromEl($("copy-immich-env"), "immich-starter-env", "Copy .env"));
-  $("copy-immich-perms").addEventListener("click", () =>
-    copyFromEl($("copy-immich-perms"), "immich-api-permissions", "Copy list"));
   $("copy-immich-go-install").addEventListener("click", () =>
     copyFromEl($("copy-immich-go-install"), "immich-go-install", "Copy install"));
 
   loadSummary();
   loadTypePolicies();
-  loadImmichWizardStatus();
+  refreshSetupSurfaces();
 })();
 </script>
 </body>

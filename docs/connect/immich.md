@@ -25,30 +25,24 @@ enough.
 `endpoint` must end in `/api`. Portable forms also work: same machine
 `http://localhost:2283/api`, or MagicDNS + port
 `http://photos.home.ts.net:2283/api`. For a **friendly tailnet HTTPS name**
-(no `:2283`, real certs), host Immich as a Tailscale **VIP Service**
-(`svc:immich`) — Admin → Services → Immich → Setup guide → **Tailnet URL**
+(no `:2283`, real certs), host Immich as a Tailscale **VIP Service** — Admin → Services → Immich → Setup guide → **Tailnet URL**
 emits the copyable walk-through (issue [#124](https://github.com/fudomunro/aegis/issues/124)).
 Serve is tailnet-only; never Funnel.
 
 **Tailscale Admin API automation (optional).** Paste a Tailscale access token
 (Keys page; scopes `services` + `devices:core`) in the same wizard step. Aegis
 stores it in the encrypted token store (`-token-pass`; presence-only in admin
-APIs, never echoed back), **checks each walkthrough step** against `api.tailscale.com`, and
-offers a **Fix** action only for steps that still need work:
+APIs, never echoed back), **checks each walkthrough step** against
+`api.tailscale.com`, and offers a **Fix** action only for steps that still
+need work. Apply is explicit and re-checks first, so already-OK steps are
+skipped; the tag is declared before any step that Tailscale would reject for
+being undeclared. Aegis never mutates tailnet topology from the pre-request
+hook.
 
-| Step | Check | Auto-fix |
-|------|-------|----------|
-| `acl_tag` | `tagOwners` has the host tag | yes — adds `tag → ["autogroup:admin"]` (prerequisite for the next three) |
-| `create_service` | `svc:immich` exists | yes — `PUT …/services/svc:immich` |
-| `tag_host` | selected host device carries the tag | yes — `POST /device/{id}/tags` (preserves existing tags) |
-| `serve` | probes the VIP/Immich `/api/server/ping` | no (mapping is host-local; probe turns green when it answers) |
-| `approve` | service host approved | yes — `POST …/device/{id}/approved` |
-| `connect` | Aegis Immich endpoint | yes — saves the VIP `…/api` endpoint |
-
-Apply is explicit (`POST /v1/admin/immich/tailnet/apply`) and re-checks first so
-already-OK steps are skipped. `create_service` / `tag_host` / `approve` first
-ensure the host tag is declared in `tagOwners` (Tailscale rejects undeclared
-tags). Aegis never mutates tailnet topology from the pre-request hook.
+The step list, the per-step check and the auto-fix rules are owned by the
+connector and rendered live in **Admin → Services → Immich → Setup guide →
+Tailnet URL** — read them there rather than from a table here, so the two
+cannot drift.
 
 Only **one** non-blocked service may claim `canonical_for: ["photos"]`. If
 Immich is the home copy, remove that key from `google-photos` (or omit it).
@@ -84,9 +78,9 @@ claim `canonical_for: ["photos"]`, then **Save to Aegis** / **Run checks**.
 The setup guide includes a **Tailnet URL** step (VIP Service commands for a
 stable `https://…ts.net` Immich name). Saves write `service_connections.json`
 under the data directory (never rewrites `aegis.json`); the API key is
-presence-only in admin APIs. Backing endpoints: `GET /v1/admin/immich/setup`,
-`POST /v1/admin/immich/test`, `POST /v1/admin/immich/config`,
-`POST /v1/admin/immich/check`.
+presence-only in admin APIs. Backing endpoint: `/v1/admin/setup/immich`
+(GET status; POST the `probe` / `save` / `check` and `tailnet_save` /
+`tailnet_check` / `tailnet_apply` verbs).
 
 Live acceptance checklist is documented in
 [docs/immich-live-testing.md](../immich-live-testing.md).

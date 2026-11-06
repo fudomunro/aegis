@@ -184,35 +184,32 @@ When the UI loads:
    `http://localhost:2283/api`. On a tailnet, use the tailnet name
    (e.g. `http://photos.home.ts.net:2283/api`) so you do not expose Immich publicly.
 
-### Friendly ts.net name (Tailscale VIP Service, issue #124)
+### Friendly ts.net name (Tailscale VIP Service)
 
 For a stable `https://immich.<tailnet>.ts.net` URL (no `:2283`, real TLS
 certs, independent of which machine runs Immich), host Immich as a
 **Tailscale VIP Service**. Aegis’s setup guide
-(**Admin → Services → Immich → Setup guide → Tailnet URL**) emits the same
-walkthrough with copy buttons:
+(**Admin → Services → Immich → Setup guide → Tailnet URL**) owns that
+walkthrough — the ordered steps, the exact commands, which steps Aegis can
+fix automatically and which stay operator-owned. Read and copy it there
+rather than from this file, so the two cannot drift.
 
-1. **Policy file** — declare a host tag, e.g. `"tagOwners": { "tag:immich-host": ["autogroup:admin"] }`.
-2. **Create the service** — Admin API
-   `PUT /api/v2/tailnet/{tailnet}/services/svc:immich` with
-   `ports: ["tcp:443"]` and that tag. OAuth scopes: `services`, `devices:core`.
-3. **Tag the Immich host** — `POST /api/v2/device/{id}/tags`.
-   Service hosts must be **tagged** nodes (user-owned nodes cannot host `svc:*`).
-4. **Serve on the Immich machine** —
-   `tailscale serve --service svc:immich --bg --https=443 http://127.0.0.1:2283`
-   then `tailscale serve status` for the exact HTTPS name.
-5. **Approve the host** if required —
-   `POST .../services/svc:immich/device/{id}/approved`.
-6. **Point Aegis** at `https://immich.<tailnet>.ts.net/api` (confirm host from serve status).
+What it involves in outline: declaring a host tag in the tailnet policy,
+creating the VIP Service, tagging the Immich host (service hosts must be
+tagged nodes), serving it from the Immich machine, approving the host, and
+pointing Aegis at the resulting HTTPS name. With a Tailscale Admin API key
+saved in the wizard, Aegis live-checks each step and offers to fix the ones
+it can.
 
 Notes:
 
 - This is **Serve**, not Funnel — traffic stays on the tailnet (product rule).
-- **Phase 2 (#124):** with a Tailscale Admin API key saved in the Immich
-  wizard, Aegis live-checks these steps and can fix `create_service`,
-  `tag_host`, `approve`, and the Aegis connect endpoint. `acl_tag` stays
-  operator-owned (copyable snippet); `serve` stays on the Immich host.
-  Apply is explicit and re-checks first so already-OK steps are skipped.
+- With a Tailscale Admin API key saved in the Immich wizard, Aegis live-checks
+  each step and offers to fix the ones that can be fixed automatically; the
+  copyable snippet and the host-local serve step stay operator-owned. The
+  live step list and the fix rules are owned by the connector and shown in
+  the wizard itself. Apply is explicit and re-checks first so already-OK
+  steps are skipped.
 - Skipping VIP Services is fine for first runs: `http://localhost:2283/api`
   or MagicDNS + `:2283` work immediately.
 

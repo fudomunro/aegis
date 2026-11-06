@@ -1,8 +1,8 @@
 # Connector-owned onboarding: the setup seam
 
-Status: **accepted** (this note is the design pass for the onboarding seam).
-Phase 1 — the seam plus YNAB through it — lands with this note. Later phases
-follow on `refactor/` branches.
+Status: **done** — all four phases have landed (#268 seam + YNAB, #269
+Immich setup, #270 VIP wizard, and this cleanup). The note is the contract
+for the seam; the worked examples are the Immich and YNAB connectors.
 
 Related issues: **#265** (this note), **#254** (the cleanup this completes),
 **#39** / **#121** (Immich setup), **#141** (YNAB setup), **#124** (Immich
@@ -389,16 +389,28 @@ The issue #124 wizard joins the seam. **Lands with this phase.**
 unchanged and owned by the connector, and core holds no `svc:immich`
 knowledge.
 
-### Phase 4 — cleanup (`docs/issue-265-onboarding-docs`)
+### Phase 4 — cleanup (`docs/issue-265-onboarding-cleanup`) — **landed**
 
-1. AGENTS.md: extension point gains the optional `Onboarder` interface
-   (with "declare, don't render" guidance); pitfalls row for "provider copy in
-   admin.html/docs".
-2. Residual per-service admin routes and dead JS removed; `README.md` /
-   `docs/api.md` updated if any admin endpoint they cite changed.
-3. Coverage re-baselined; full CI-shaped run green.
-
----
+1. The wizard's narrative pages move into the connector as structured guide
+   blocks (prose, headings, lists, copyable commands), so `web/admin.html`
+   renders setup through one generic panel and a generic stepped walkthrough
+   and contains **no provider copy**. Where the same field or verb is worded
+   differently in the compact card and the guided walkthrough (a placeholder
+   that names a step, a fuller button label), the spec carries both.
+2. `TestAdminHTML_RestatesNoOnboardingCopy` walks every string the
+   connectors declare in their specs and rejects each one in `admin.html`.
+   A small, documented allowance covers panel vocabulary another surface
+   independently owns (the Aperture panel's "Copy JSON", the generic "Saving…"
+   busy state).
+3. `docs/connect/immich.md`, `docs/immich-live-testing.md` and `docs/api.md`
+   stop enumerating the VIP step table, the checkbox set and the per-service
+   admin routes; they point at the admin surface and the generic
+   `/v1/admin/setup/{id}` routes instead.
+4. AGENTS.md documents the `Onboarder` extension point ("declare, don't
+   render"; connectors never ship HTML/JS or write Aegis state) and gains a
+   pitfalls row for provider copy in `admin.html` / `docs/`.
+5. Dead routes and bespoke wizard JS removed; the design note's definition
+   of done is now all true.
 
 ## 4. Risks and mitigations
 
