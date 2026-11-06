@@ -285,7 +285,7 @@ func (c *YouTubeMusicConnector) GetLikedPlaylistID() (string, error) {
 }
 
 // TransformResponse converts YouTube's verbose JSON into a compact format.
-func (c *YouTubeMusicConnector) TransformResponse(path string, data []byte, logger *slog.Logger) any {
+func (c *YouTubeMusicConnector) TransformResponse(method, path string, data []byte, logger *slog.Logger) any {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return string(data)

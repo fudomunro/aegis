@@ -85,7 +85,7 @@ func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 // Since Amazon Music doesn't have a documented public API, this uses
 // generic transformation patterns that work with common API response
 // structures. The transforms will be refined when a real API is wired up.
-func (c *AmazonMusicConnector) TransformResponse(path string, data []byte, logger *slog.Logger) any {
+func (c *AmazonMusicConnector) TransformResponse(method, path string, data []byte, logger *slog.Logger) any {
 	var raw map[string]any
 	if err := json.Unmarshal(data, &raw); err != nil {
 		// Try as array.

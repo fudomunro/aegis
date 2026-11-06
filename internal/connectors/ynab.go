@@ -108,78 +108,42 @@ sources[] records where each transaction lives for sync.`, root)
 }
 
 // HandleProxy forwards YNAB API paths through the shared connector pipeline.
+// Transaction listings come back in the neutral library shape; every other
+// payload keeps the upstream bytes.
 func (c *YNABConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	logger := slog.With("service", YNABServiceID, "method", r.Method, "path", remainingPath)
-	token := c.YnabToken(logger)
-	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
-			"no valid YNAB token — set Authorization header on the ynab service or authorize at /v1/auth/"+YNABServiceID+"/login")
-		return
+	RunProxy(c.host, w, r, remainingPath, ProxyOpts{
+		serviceID:    YNABServiceID,
+		displayName:  YNABServiceName,
+		defaultBase:  "https://api.ynab.com/v1",
+		defaultTTL:   60 * time.Second,
+		token:        c.YnabToken,
+		missingToken: "no valid YNAB token — set Authorization header on the ynab service or authorize at /v1/auth/" + YNABServiceID + "/login",
+		transform:    c.TransformProxyResponse,
+	})
+}
+
+// TransformProxyResponse maps a YNAB transaction listing to the neutral
+// library shape. Anything else returns nil so the shared pipeline passes the
+// upstream bytes through unchanged — including error pages, which are not
+// JSON and must not be re-marshaled.
+func (c *YNABConnector) TransformProxyResponse(method, path string, data []byte, logger *slog.Logger) any {
+	if method != http.MethodGet || !strings.HasSuffix(strings.TrimRight(path, "/"), "/transactions") {
+		return nil
 	}
-	upstreamBase := c.YnabUpstreamBase()
-	upstreamURL := upstreamBase + remainingPath
-	if encoded := r.URL.Query().Encode(); encoded != "" {
-		upstreamURL += "?" + encoded
+	var raw YnabTransactionsResponse
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil
 	}
-	cacheKey := YNABServiceID + ":" + r.URL.RequestURI()
-	if r.Method == http.MethodGet {
-		if cached, ok := c.host.CacheGet(cacheKey); ok {
-			logger.Debug("cache hit")
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("X-Aegis-Cache", "hit")
-			io.WriteString(w, cached)
-			return
+	var accounts []YNABAccount
+	// Account names may already be embedded on each row.
+	list := make([]types.Transaction, 0, len(raw.Data.Transactions))
+	for _, t := range raw.Data.Transactions {
+		if t.Deleted {
+			continue
 		}
+		list = append(list, c.NeutralTransaction("", accounts, t))
 	}
-	data, status, err := DoUpstreamRequest(r.Context(), r.Method, upstreamURL, r.Body, token)
-	if err != nil {
-		logger.Error("ynab request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, YNABServiceName+" API request failed")
-		return
-	}
-	if status == http.StatusUnauthorized {
-		WriteJSONError(w, http.StatusUnauthorized,
-			YNABServiceName+" token is invalid or expired — re-authorize at /v1/auth/"+YNABServiceID+"/login")
-		return
-	}
-	if status == http.StatusTooManyRequests {
-		w.Header().Set("Retry-After", "30")
-		WriteJSONError(w, http.StatusTooManyRequests, YNABServiceName+" rate limit exceeded — retry later")
-		return
-	}
-	// Prefer neutral library shape for transaction listings.
-	if strings.HasSuffix(strings.TrimRight(remainingPath, "/"), "/transactions") && r.Method == http.MethodGet {
-		var raw YnabTransactionsResponse
-		if err := json.Unmarshal(data, &raw); err == nil {
-			var accounts []YNABAccount
-			// Account names may already be embedded on each row.
-			list := make([]types.Transaction, 0, len(raw.Data.Transactions))
-			for _, t := range raw.Data.Transactions {
-				if t.Deleted {
-					continue
-				}
-				list = append(list, c.NeutralTransaction("", accounts, t))
-			}
-			result, err := json.Marshal(types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
-			if err != nil {
-				WriteJSONError(w, http.StatusInternalServerError, "response transformation failed")
-				return
-			}
-			if status == http.StatusOK {
-				c.host.CacheSet(cacheKey, string(result), 60*time.Second)
-			}
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(status)
-			w.Write(result)
-			return
-		}
-	}
-	if r.Method == http.MethodGet && status == http.StatusOK {
-		c.host.CacheSet(cacheKey, string(data), 60*time.Second)
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	w.Write(data)
+	return types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}}
 }
 
 // YnabToken resolves the Authorization token from static headers or OAuth.

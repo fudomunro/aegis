@@ -348,7 +348,7 @@ func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := connectors.NewSpotifyConnector(srv)
 
-	out := conn.TransformResponse("/unknown/path", []byte(`{"id":"1","name":"n","href":"drop"}`), slog.Default())
+	out := conn.TransformResponse("GET", "/unknown/path", []byte(`{"id":"1","name":"n","href":"drop"}`), slog.Default())
 	m, ok := out.(map[string]any)
 	if !ok || m["id"] != "1" || m["name"] != "n" {
 		t.Fatalf("out = %#v", out)
@@ -357,7 +357,7 @@ func TestSpotifyTransformResponse_DefaultAndError(t *testing.T) {
 		t.Fatal("simplify should drop href")
 	}
 
-	errOut := conn.TransformResponse("/me", []byte(`{"error":{"status":401}}`), slog.Default())
+	errOut := conn.TransformResponse("GET", "/me", []byte(`{"error":{"status":401}}`), slog.Default())
 	em, ok := errOut.(map[string]any)
 	if !ok {
 		t.Fatalf("errOut = %#v", errOut)
