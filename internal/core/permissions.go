@@ -88,11 +88,13 @@ func (s *Server) effectivePermissions(svc *Service) types.Permissions {
 // requestLevel returns the effective access level for a data type on a
 // service for this request: owner-tier effective permissions tightened by
 // the principal's scope grants (issue #253). Scope grants never open what
-// owner policy closed — the level is the stricter of both layers.
+// owner policy closed — the level is the stricter of both layers. Internal
+// owner-tier fetches (search-index writes) skip the tightening so the index
+// stores the partition's fullest rows (issue #272).
 func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) string {
 	level := s.effectivePermissions(svc).AccessForDataType(dataType)
 	sc := DataScopeFrom(r)
-	if sc == nil {
+	if sc == nil || ownerView(r) {
 		return level
 	}
 	provider := ""

@@ -482,9 +482,10 @@ func withAppIdentity(r *http.Request, app *App) *http.Request {
 }
 
 // AppIdentityFrom returns the third-party app identity when the request was
-// authenticated with an app token.
+// authenticated with an app token. Internal owner-tier fetches (search-index
+// writes) see no app identity, so app scope never clamps what gets stored.
 func AppIdentityFrom(r *http.Request) *AppIdentity {
-	if r == nil {
+	if r == nil || ownerView(r) {
 		return nil
 	}
 	id, _ := r.Context().Value(appIdentityKey{}).(*AppIdentity)

@@ -120,7 +120,8 @@ func (x *SearchIndex) Enabled() bool {
 	return x != nil && x.db != nil
 }
 
-// Upsert stores or replaces documents and refreshes their FTS rows.
+// Upsert stores or replaces documents and refreshes their FTS rows. It never
+// deletes: use Sync when a complete fetch can refute stale rows.
 func (x *SearchIndex) Upsert(kind, dataset string, docs []types.SearchDocument) error {
 	if !x.Enabled() {
 		return fmt.Errorf("search index disabled")
@@ -128,12 +129,72 @@ func (x *SearchIndex) Upsert(kind, dataset string, docs []types.SearchDocument) 
 	if kind == "" {
 		return fmt.Errorf("search index upsert requires kind")
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
 	tx, err := x.db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+	if err := upsertSearchDocs(tx, kind, dataset, docs, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// Sync refreshes (kind, dataset) from one fetch (issue #272). Documents are
+// upserted, then rows this fetch refutes are dropped: a row is refuted when it
+// is absent from docs and every source service that vouches for it appears in
+// complete (status ok, not truncated). Rows with a source that degraded,
+// truncated, or is absent from the fetch are kept — fail-open, so a sick
+// provider never deletes rows another source may still vouch for.
+//
+// complete is also the set of services whose membership this fetch may
+// rewrite: a vouch from a service outside complete is preserved on upsert,
+// so a merged row does not lose a degraded source and become refutable later.
+func (x *SearchIndex) Sync(kind, dataset string, docs []types.SearchDocument, complete []string) error {
+	if !x.Enabled() {
+		return fmt.Errorf("search index disabled")
+	}
+	if kind == "" {
+		return fmt.Errorf("search index sync requires kind")
+	}
+	tx, err := x.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	existing, err := searchDocMemberships(tx, kind, dataset)
+	if err != nil {
+		return err
+	}
+	known := make(map[string]bool, len(complete))
+	for _, svc := range complete {
+		known[svc] = true
+	}
+	fresh := make(map[string]bool, len(docs))
+	for i := range docs {
+		if docs[i].ItemID == "" {
+			continue
+		}
+		fresh[docs[i].ItemID] = true
+		docs[i].Services = mergeSearchDocServices(docs[i].Services, existing[docs[i].ItemID], known)
+	}
+	for itemID, svcs := range existing {
+		if fresh[itemID] || !searchRowRefuted(svcs, known) {
+			continue
+		}
+		if err := deleteSearchDoc(tx, kind, dataset, itemID); err != nil {
+			return err
+		}
+	}
+	if err := upsertSearchDocs(tx, kind, dataset, docs, time.Now().UTC().Format(time.RFC3339)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// upsertSearchDocs writes documents and refreshes their FTS rows inside tx.
+func upsertSearchDocs(tx *sql.Tx, kind, dataset string, docs []types.SearchDocument, now string) error {
 	for _, doc := range docs {
 		if doc.ItemID == "" {
 			continue
@@ -172,7 +233,99 @@ ON CONFLICT(kind, dataset, item_id) DO UPDATE SET
 			return err
 		}
 	}
-	return tx.Commit()
+	return nil
+}
+
+// searchDocMemberships reads item_id -> source services for one partition.
+func searchDocMemberships(tx *sql.Tx, kind, dataset string) (map[string][]string, error) {
+	rows, err := tx.Query(
+		`SELECT item_id, services_json FROM search_docs WHERE kind=? AND dataset=?`,
+		kind, dataset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string][]string{}
+	for rows.Next() {
+		var itemID, servicesRaw string
+		if err := rows.Scan(&itemID, &servicesRaw); err != nil {
+			return nil, err
+		}
+		out[itemID] = decodeSearchDocServices(servicesRaw)
+	}
+	return out, rows.Err()
+}
+
+func decodeSearchDocServices(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	var svcs []string
+	if err := json.Unmarshal([]byte(raw), &svcs); err != nil {
+		return nil
+	}
+	return svcs
+}
+
+// mergeSearchDocServices keeps vouches this fetch cannot speak for: services
+// outside known stay attributed to the row even when the fetch did not return
+// them, so a degraded source is never dropped and the row later refuted.
+func mergeSearchDocServices(fetched, old []string, known map[string]bool) []string {
+	if len(old) == 0 {
+		return fetched
+	}
+	seen := make(map[string]bool, len(fetched)+len(old))
+	out := append([]string(nil), fetched...)
+	for _, svc := range out {
+		seen[svc] = true
+	}
+	for _, svc := range old {
+		if known[svc] || seen[svc] {
+			continue
+		}
+		seen[svc] = true
+		out = append(out, svc)
+	}
+	return out
+}
+
+// searchRowRefuted reports whether every source that vouches for a row is
+// known to this fetch and none of them returned the item. Empty membership
+// never refutes: a row nothing vouches for is stale but not disproven.
+func searchRowRefuted(svcs []string, known map[string]bool) bool {
+	if len(svcs) == 0 {
+		return false
+	}
+	for _, svc := range svcs {
+		if !known[svc] {
+			return false
+		}
+	}
+	return true
+}
+
+func deleteSearchDoc(tx *sql.Tx, kind, dataset, itemID string) error {
+	var id int64
+	err := tx.QueryRow(
+		`SELECT id FROM search_docs WHERE kind=? AND dataset=? AND item_id=?`,
+		kind, dataset, itemID,
+	).Scan(&id)
+	if err == sql.ErrNoRows {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`DELETE FROM search_fts WHERE rowid=?`, id); err != nil {
+		return err
+	}
+	_, err = tx.Exec(
+		`DELETE FROM search_docs WHERE kind=? AND dataset=? AND item_id=?`,
+		kind, dataset, itemID,
+	)
+	return err
 }
 
 // Count reports how many documents are indexed for (kind, dataset). Used to

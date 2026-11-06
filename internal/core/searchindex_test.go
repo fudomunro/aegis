@@ -234,3 +234,89 @@ func TestSearchIndex_CountsByKind(t *testing.T) {
 		t.Fatal("disabled index must error")
 	}
 }
+
+func TestSearchIndex_SyncDropsRefutedRows(t *testing.T) {
+	x := newTestSearchIndex(t)
+	if err := x.Upsert("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
+		searchDoc("t2", "Grace", "Grace Hopper", "google"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A complete fetch that no longer returns t2 refutes it.
+	if err := x.Sync("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
+	}, []string{"google"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := x.Search(SearchIndexQuery{Kind: "contacts", Q: "grace"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Total != 0 {
+		t.Fatalf("refuted row still matches: %+v", res.Docs)
+	}
+	if res, err = x.Search(SearchIndexQuery{Kind: "contacts", Q: "ada"}); err != nil || res.Total != 1 {
+		t.Fatalf("survivor: %+v err=%v", res, err)
+	}
+}
+
+func TestSearchIndex_SyncKeepsRowsFromIncompleteServices(t *testing.T) {
+	x := newTestSearchIndex(t)
+	if err := x.Upsert("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
+		searchDoc("t2", "Secret", "Secret Person", "outlook"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// Only google completed; outlook's row must survive the fetch.
+	if err := x.Sync("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
+	}, []string{"google"}); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := x.Search(SearchIndexQuery{Kind: "contacts", Q: "secret"}); err != nil || res.Total != 1 {
+		t.Fatalf("row from incomplete service dropped: %+v err=%v", res, err)
+	}
+}
+
+func TestSearchIndex_SyncWithoutCompletionDeletesNothing(t *testing.T) {
+	x := newTestSearchIndex(t)
+	if err := x.Upsert("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := x.Sync("contacts", "", nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := x.Count("contacts", ""); n != 1 {
+		t.Fatalf("count = %d, want 1", n)
+	}
+}
+
+func TestSearchIndex_SyncPreservesUnknownMembership(t *testing.T) {
+	x := newTestSearchIndex(t)
+	if err := x.Upsert("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace", "google", "outlook"),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// google still returns the item but outlook is degraded: the vouch from
+	// outlook must stay so a later google-only fetch cannot refute the row.
+	if err := x.Sync("contacts", "", []types.SearchDocument{
+		searchDoc("t1", "Ada", "Ada Lovelace updated", "google"),
+	}, []string{"google"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := x.Sync("contacts", "", nil, []string{"google"}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := x.Search(SearchIndexQuery{Kind: "contacts", Q: "ada"})
+	if err != nil || res.Total != 1 {
+		t.Fatalf("row with unknown vouch was refuted: %+v err=%v", res, err)
+	}
+	if got := res.Docs[0].Services; len(got) != 2 {
+		t.Fatalf("services = %v, want google+outlook", got)
+	}
+}

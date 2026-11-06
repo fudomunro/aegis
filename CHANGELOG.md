@@ -29,6 +29,27 @@ issue numbers; this file is where that context lives.
 
 ### Fixed
 
+- **Search index no longer stores reduced views or keeps deleted items
+  (issue #272).** `indexLibraryDocuments` ran on every uncached library list
+  and wrote whatever the *caller* was allowed to see, keyed only on
+  `(kind, dataset, item_id)`. A free/busy app listing events (or a
+  metadata-only app listing documents) therefore overwrote the owner's full
+  rows with the redacted payloads, so a later `?q=` returned fewer fields
+  than the owner has — or missed matches on fields the redaction blanked.
+  Index writes are now gated on the request being at the partition's
+  owner-tier view (`libraryIndexWriteable`); a reduced fetch never touches
+  the index, and the cold-index bootstrap behind `?q=` fetches at owner tier
+  (`ownerViewRequest`, which drops the app identity and scope-grant
+  tightening while keeping data-scope dataset visibility). Separately,
+  `SearchIndex.Upsert` never deleted, so a contact removed upstream or a
+  deleted Paperless document kept matching `?q=` forever. `SearchIndex.Sync`
+  now upserts and then drops rows a complete fetch refutes — absent from the
+  fetch and vouched only by sources that answered `ok` without truncating.
+  Degraded, truncated, and unseen sources are fail-open: their rows survive,
+  and a vouch from a source outside the fetch is preserved on upsert so a
+  merged row cannot be refuted behind a sick provider's back. `docs/api.md`
+  freshness note rewritten to match.
+
 - **Denial audit rows now carry `client_ip`.** Auth denials (`denyStatus`)
   and service-proxy denials recorded through `recordAccess` directly, which
   skipped the trusted-proxy client-IP fill that `recordAccessFrom` applies —
