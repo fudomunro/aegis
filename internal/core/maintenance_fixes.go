@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/connectors"
 )
 
 // GitHub issue history for the sync-maintenance dashboard (issue #239). The
@@ -189,39 +191,15 @@ func signatureFromBody(body string) string {
 	return rest[:j]
 }
 
-// serviceTitleAliases map unambiguous title phrases onto canonical service
-// ids. A match is kept only when it resolves to a service in the dashboard.
-var serviceTitleAliases = map[string]string{
-	"spotify":          "spotify",
-	"youtube music":    "youtube-music",
-	"youtube":          "youtube-music",
-	"amazon music":     "amazon-music",
-	"gmail":            "google-gmail",
-	"google photos":    "google-photos",
-	"google contacts":  "google",
-	"google calendar":  "google-calendar",
-	"google drive":     "google-drive",
-	"immich":           "immich",
-	"bluesky":          "bluesky",
-	"ynab":             "ynab",
-	"owntracks":        "owntracks",
-	"paperless":        "paperless",
-	"quicken":          "quicken",
-	"signal messenger": "signal",
-}
-
-// commonWordIDs are configured ids that are also common English words. A
-// bare substring match would swallow unrelated titles ("maintenance signal
-// bundle"), so only their alias phrases may attribute them.
-var commonWordIDs = map[string]bool{"google": true, "signal": true}
-
 // matchServiceInTitle attributes an issue title to a known service. Every
 // id and alias-phrase candidate is ranked by match length — longest wins —
 // so "Google Photos" cannot fall to the bare "google" id and "YouTube
 // Music" beats a stray "spotify". Returns "" when the title names no known
-// service.
+// service. Alias phrases and common-word ids are connector-declared
+// (issue #254); only the ranking lives here.
 func matchServiceInTitle(title string, ids []string) string {
 	lower := strings.ToLower(title)
+	commonWordIDs := connectors.CommonWordIDs()
 	best, bestLen := "", 0
 	consider := func(id string, n int) {
 		if id == "" {
@@ -239,7 +217,7 @@ func matchServiceInTitle(title string, ids []string) string {
 			consider(id, len(id))
 		}
 	}
-	for a, canonical := range serviceTitleAliases {
+	for a, canonical := range connectors.ServiceTitleAliases() {
 		if strings.Contains(lower, a) {
 			consider(resolveServiceID(canonical, ids), len(a))
 		}

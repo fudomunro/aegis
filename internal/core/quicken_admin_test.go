@@ -32,7 +32,7 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status %d", w.Code)
 	}
-	var st QuickenImportStatus
+	var st connectors.ImportStoreStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatal(err)
 	}
@@ -47,8 +47,8 @@ func TestAdminQuicken_ImportFlow(t *testing.T) {
 		t.Fatalf("import %d body=%s", w2.Code, w2.Body.String())
 	}
 	var out struct {
-		Result connectors.QuickenImportResult `json:"result"`
-		Status QuickenImportStatus            `json:"status"`
+		Result connectors.QuickenImportResult  `json:"result"`
+		Status connectors.ImportStoreStatus    `json:"status"`
 	}
 	if err := json.Unmarshal(w2.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)

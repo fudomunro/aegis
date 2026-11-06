@@ -43,6 +43,44 @@ func TimelineService() LocalStoreService {
 	}
 }
 
+// Admin declares the Timeline import admin surface (issue #254).
+func (s *TimelineStore) Admin() ImportAdmin {
+	return ImportAdmin{
+		FlagName:    "-timeline-store",
+		PathHint:    "a Timeline JSON file, directory, or Takeout zip",
+		SamplePath:  "~/Downloads/Takeout/Location History/Semantic Location History (JSON files or a Takeout zip)",
+		LibraryPath: "/v1/library/places",
+		BareResult:  true,
+		Counts: func() map[string]int {
+			if s == nil || !s.Enabled() {
+				return nil
+			}
+			n, err := s.Count()
+			if err != nil {
+				return nil
+			}
+			return map[string]int{"count": n}
+		},
+		Hints: func(state ImportHintState) []string {
+			switch {
+			case !state.Enabled:
+				return []string{"Timeline store is disabled — restart with -timeline-store <path> (default under the data dir)."}
+			case state.Counts["count"] == 0:
+				return []string{
+					"Export Location History from Google Takeout (Timeline → Export), then import the Semantic Location History folder or zip below.",
+					"Re-import is safe: rows already stored are skipped. places permission defaults to none — enable city, read, or precise to let agents query it.",
+				}
+			default:
+				return []string{fmt.Sprintf("%d visit/trip window(s) imported. Agents can query them via %s when places permissions allow.",
+					state.Counts["count"], state.LibraryURL)}
+			}
+		},
+		Import: func(path string) (ImportOutcome, error) {
+			return ImportTimelinePath(s, path)
+		},
+	}
+}
+
 // TimelineStore is a local SQLite store of imported Timeline visits/trips.
 // Empty path disables the store (like mail-archive / quicken).
 type TimelineStore struct {
