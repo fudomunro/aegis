@@ -583,7 +583,7 @@ func TestHandleAdminRoutes_Unknown(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/definitely-not-a-route", nil)
 	req.Header.Set("Authorization", "Bearer admin-key")
 	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.handleAdminRoutes)(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("got %d, want 404; body=%s", w.Code, w.Body.String())
 	}
@@ -593,7 +593,7 @@ func TestHandleAuthRoutes_UnknownMethod(t *testing.T) {
 	srv := adminSplitServer(t)
 	req := httptest.NewRequest(http.MethodGet, "/v1/auth/spotify", nil)
 	w := httptest.NewRecorder()
-	srv.handleAuthRoutes(w, req)
+	dispatchAuth(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("got %d, want 404", w.Code)
 	}

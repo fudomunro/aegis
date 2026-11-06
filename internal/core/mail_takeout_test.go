@@ -189,7 +189,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	req.Header.Set("X-Api-Key", "test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("save path = %d body=%s", w.Code, w.Body.String())
 	}
@@ -201,7 +201,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	req.Header.Set("X-Api-Key", "test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync = %d body=%s", w.Code, w.Body.String())
 	}
@@ -235,7 +235,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	w = httptest.NewRecorder()
 	a2 := openTestMailArchive(t)
 	srv2 := mailTestServer(t, a2)
-	srv2.handleAdminRoutes(w, req)
+	dispatchAdmin(srv2, w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("missing path = %d body=%s", w.Code, w.Body.String())
 	}

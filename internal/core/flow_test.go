@@ -307,7 +307,7 @@ func TestAdminFlow_RouteRequiresAuth(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d, want 401", w.Code)
 	}
@@ -315,7 +315,7 @@ func TestAdminFlow_RouteRequiresAuth(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/flow", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("authorized status = %d, body=%s", w.Code, w.Body.String())
 	}

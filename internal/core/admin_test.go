@@ -212,42 +212,35 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 func TestAdminRoutes_AuthRequired(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
-	// HTML shell is public.
+	// Every admin route requires admin credentials (issues #98, #181).
+	for _, p := range []struct{ method, path string }{
+		{"GET", "/v1/admin/"},
+		{"GET", "/v1/admin/summary"},
+		{"POST", "/v1/admin/cache/clear"},
+		{"GET", "/v1/admin/library/playlists"},
+	} {
+		req := httptest.NewRequest(p.method, p.path, nil)
+		w := httptest.NewRecorder()
+		dispatchAdmin(srv, w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Fatalf("%s %s without auth = %d, want 401", p.method, p.path, w.Code)
+		}
+	}
+
+	// With admin credentials the HTML shell serves.
 	req := httptest.NewRequest("GET", "/v1/admin/", nil)
+	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("html shell status = %d, want 200", w.Code)
+		t.Fatalf("html shell with auth = %d, want 200", w.Code)
 	}
 
-	// Summary requires auth.
-	req = httptest.NewRequest("GET", "/v1/admin/summary", nil)
-	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("summary status = %d, want 401", w.Code)
-	}
-
-	// Clear requires auth.
-	req = httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
-	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("clear status = %d, want 401", w.Code)
-	}
-
-	// Library preview requires auth.
-	req = httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)
-	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
-	if w.Code != http.StatusUnauthorized {
-		t.Fatalf("library status = %d, want 401", w.Code)
-	}
-
-	// Unknown path.
+	// Unknown path with auth.
 	req = httptest.NewRequest("GET", "/v1/admin/nope", nil)
+	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown status = %d, want 404", w.Code)
 	}
@@ -299,7 +292,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("admin route status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -321,7 +314,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	req.Header.Set("X-Api-Key", "test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync = %d body=%s", w.Code, w.Body.String())
 	}
@@ -355,7 +348,7 @@ func TestHandleAdminMailDisabled(t *testing.T) {
 	req = httptest.NewRequest("POST", "/v1/admin/mail/sync", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("disabled sync = %d", w.Code)
 	}
@@ -451,7 +444,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
@@ -468,7 +461,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("clamp put status = %d, body=%s", w.Code, w.Body.String())
 	}
@@ -492,7 +485,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/services/spotify/grant-limits", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("get status = %d", w.Code)
 	}
@@ -520,7 +513,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(`{"grant_limits":{"tracks":"maybe"}}`))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("invalid level status = %d, want 400", w.Code)
 	}
@@ -529,7 +522,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	req = httptest.NewRequest("PUT", "/v1/admin/services/nope/grant-limits", strings.NewReader(`{"grant_limits":{}}`))
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown service status = %d, want 404", w.Code)
 	}

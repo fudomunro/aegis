@@ -1050,7 +1050,7 @@ func TestHandleAdminSync_RequiresAdminAuth(t *testing.T) {
 func TestSyncRoutes_Registered(t *testing.T) {
 	srv := syncAdminServer(t)
 	mux := http.NewServeMux()
-	mux.HandleFunc("/v1/admin/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
+	registerAdminRoutes(mux, srv)
 
 	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
 	w := httptest.NewRecorder()

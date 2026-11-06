@@ -138,35 +138,20 @@ func Run() {
 
 	// One-shot sample seeding, Takeout ingest, and token rekey do not need
 	// OAuth, base URL, or a listening server.
-	if *seedSample {
-		code := runSeedSampleCLI(paths.Dir, paths.MailArchive, *seedSampleCount, *seedSampleStress)
-		os.Exit(code)
-	}
-	if *seedLotR || *seedDemoDatasets {
-		code := runSeedDemoDatasetsCLI(paths.Dir, paths.MailArchive)
-		os.Exit(code)
-	}
-	if strings.TrimSpace(*importTakeout) != "" {
-		code := runImportTakeoutCLI(paths.MailArchive, paths.CopyLedger, *importTakeout, *importTakeoutBatch)
-		os.Exit(code)
-	}
-	if strings.TrimSpace(*importQuicken) != "" {
-		code := runImportQuickenCLI(paths.Quicken, *importQuicken)
-		os.Exit(code)
-	}
-	if strings.TrimSpace(*importTimeline) != "" {
-		code := runImportTimelineCLI(paths.Timeline, *importTimeline)
-		os.Exit(code)
-	}
-	if strings.TrimSpace(*importSignal) != "" {
-		code := runImportSignalCLI(paths.Signal, *importSignal)
-		os.Exit(code)
-	}
-	if strings.TrimSpace(*tokenNewPass) != "" {
-		if *tokenPass == "" {
-			*tokenPass = os.Getenv("AEGIS_TOKEN_PASS")
-		}
-		code := runTokenRekeyCLI(paths.Tokens, *tokenPass, *tokenNewPass)
+	if code, done := runCLIMode(cliModeOptions{
+		seedSample:         *seedSample,
+		seedSampleCount:    *seedSampleCount,
+		seedSampleStress:   *seedSampleStress,
+		seedLotR:           *seedLotR,
+		seedDemoDatasets:   *seedDemoDatasets,
+		importTakeout:      *importTakeout,
+		importTakeoutBatch: *importTakeoutBatch,
+		importQuicken:      *importQuicken,
+		importTimeline:     *importTimeline,
+		importSignal:       *importSignal,
+		tokenNewPass:       *tokenNewPass,
+		tokenPass:          *tokenPass,
+	}, paths); done {
 		os.Exit(code)
 	}
 
@@ -581,74 +566,13 @@ func Run() {
 	}
 
 	mux := http.NewServeMux()
-	registerBrandRoutes(mux, srv)
-	// Observability (issue #105). Health probes are unauthenticated so
-	// supervisors can poll cheaply; /metrics is admin-scoped (issue #181)
-	// because series include service ids and denial reasons.
-	mux.HandleFunc("GET /healthz", srv.HandleHealthz)
-	mux.HandleFunc("HEAD /healthz", srv.HandleHealthz)
-	mux.HandleFunc("GET /readyz", srv.HandleReadyz)
-	mux.HandleFunc("HEAD /readyz", srv.HandleReadyz)
-	mux.HandleFunc("GET /metrics", srv.AdminMiddleware(srv.HandleMetrics))
-	mux.HandleFunc("HEAD /metrics", srv.AdminMiddleware(srv.HandleMetrics))
-	mux.HandleFunc("POST /v1/pre-request", srv.AuthMiddleware(withBodyLimit(maxHookBodyBytes, srv.HandlePreRequest)))
-	// Third-party grant demo (issue #131). Consent GET + demo page are public
-	// like OAuth authorize; grant POST and token exchange have their own rules.
-	mux.HandleFunc("GET /demo/third-party", srv.HandleThirdPartyDemo)
-	mux.HandleFunc("HEAD /demo/third-party", srv.HandleThirdPartyDemo)
-	// Dev-only injectable fake provider (issue #86) for driving the
-	// sync-maintenance loop with synthetic drift. Data paths are open like
-	// the rest of /demo; control is admin-scoped.
+	var fu *connectors.FakeUpstream
 	if *fakeUpstream {
-		fu := connectors.NewFakeUpstream()
-		mux.HandleFunc("/demo/fake-upstream/control", srv.AdminMiddleware(fu.ServeControl))
-		mux.HandleFunc("/demo/fake-upstream/", fu.ServeHTTP)
+		fu = connectors.NewFakeUpstream()
 		seedFakeUpstreamTokens(srv)
 		slog.Warn("fake upstream enabled — dev/test only", "mount", fakeUpstreamMount)
 	}
-	// Auth/token routes carry credential exchange — brute-force damped
-	// (issue #253) per client IP.
-	mux.HandleFunc("GET /v1/apps/authorize", srv.rateLimitAuth(srv.HandleAppAuthorize))
-	// Minting an app token is admin-equivalent (issue #181).
-	mux.HandleFunc("POST /v1/apps/authorize", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAppAuthorize)))
-	mux.HandleFunc("POST /v1/apps/token", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppToken)))
-	mux.HandleFunc("POST /v1/apps/revoke", srv.rateLimitAuth(withBodyLimit(maxAdminBodyBytes, srv.HandleAppRevoke)))
-	for path, handler := range srv.libraryRouteHandlers() {
-		mux.HandleFunc(path, srv.AuthMiddleware(handler))
-	}
-	// Library writes are admin (issue #181); GET stays on AuthMiddleware above.
-	mux.HandleFunc("POST /v1/library/mirror", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
-	// Photo share / ownership-claim PoC (issue #20).
-	mux.HandleFunc("POST /v1/library/photos/share", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
-	mux.HandleFunc("POST /v1/library/links", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
-	mux.HandleFunc("DELETE /v1/library/links/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
-	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(withBodyLimit(maxMailBodyBytes, srv.handleMailRoutes)))
-	// Mail sync mutates the archive — admin only (issue #181).
-	mux.HandleFunc("POST /v1/mail/sync", srv.AdminMiddleware(withBodyLimit(maxMailBodyBytes, srv.HandleMailSync)))
-	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
-	mux.HandleFunc("/v1/auth/status", srv.AuthMiddleware(srv.HandleAuthStatus))
-	mux.HandleFunc("/v1/auth/", srv.rateLimitAuth(srv.handleAuthRoutes))
-	// Admin shell and JSON both require admin auth (issues #98, #181): the
-	// SPA is markup only, but unauthenticated peers should not learn the API
-	// surface and agent credentials must not open the admin UI.
-	// Friendly SPA routes (issue #150) are the durable URLs the client uses
-	// with history.pushState so refresh keeps the same section.
-	for _, path := range []string{
-		"/{$}",
-		"/home",
-		"/home/{$}",
-		"/library",
-		"/library/{$}",
-		"/services",
-		"/services/{$}",
-		"/advanced",
-		"/advanced/{$}",
-	} {
-		mux.HandleFunc("GET "+path, srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
-		mux.HandleFunc("HEAD "+path, srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
-	}
-	mux.HandleFunc("/v1/admin", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdmin)))
-	mux.HandleFunc("/v1/admin/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.handleAdminRoutes)))
+	registerRoutes(mux, srv, fu)
 
 	handler := securityHeadersMiddleware(mux)
 	// Demo lockdown is the outermost gate: synthetic + read-only profile
@@ -834,77 +758,53 @@ func buildIdentityResolver(authMode, tsSocket string) IdentityResolver {
 	return MultiResolver{Resolvers: resolvers}
 }
 
-// handleAdminRoutes dispatches /v1/admin. Registered under AdminMiddleware
-// (issues #98, #181): the HTML shell is markup-only with no secrets, but
-// unauthenticated peers must not learn the API surface and agent credentials
-// must not reach admin writes. Inner AdminMiddleware keeps direct handler
-// tests and future call sites honest.
-func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/")
-	path = strings.Trim(path, "/")
+// cliModeOptions holds the flag values that select a one-shot CLI mode
+// (issue #274). Extracted from Run so the dispatch is testable.
+type cliModeOptions struct {
+	seedSample         bool
+	seedSampleCount    int
+	seedSampleStress   bool
+	seedLotR           bool
+	seedDemoDatasets   bool
+	importTakeout      string
+	importTakeoutBatch int
+	importQuicken      string
+	importTimeline     string
+	importSignal       string
+	tokenNewPass       string
+	tokenPass          string
+}
 
-	switch {
-	case path == "":
-		s.HandleAdmin(w, r)
-	case path == "summary":
-		s.AdminMiddleware(s.HandleAdminSummary)(w, r)
-	case path == "flow":
-		s.AdminMiddleware(s.HandleAdminFlow)(w, r)
-	case path == "cache":
-		s.AdminMiddleware(s.HandleAdminCache)(w, r)
-	case path == "cache/clear":
-		s.AdminMiddleware(s.HandleAdminCacheClear)(w, r)
-	case path == "hook-health":
-		s.AdminMiddleware(s.HandleAdminHookHealth)(w, r)
-	case path == "maintenance/signals":
-		s.AdminMiddleware(s.HandleAdminMaintenanceSignals)(w, r)
-	case path == "maintenance/scan":
-		s.AdminMiddleware(s.HandleAdminMaintenanceScan)(w, r)
-	case path == "maintenance/dashboard":
-		s.AdminMiddleware(s.HandleAdminMaintenanceDashboard)(w, r)
-	case path == "mail/status":
-		s.AdminMiddleware(s.HandleAdminMailStatus)(w, r)
-	case path == "search/status":
-		s.AdminMiddleware(s.HandleAdminSearchStatus)(w, r)
-	case path == "mail/sync":
-		s.AdminMiddleware(s.HandleAdminMailSync)(w, r)
-	case path == "mail/import":
-		s.AdminMiddleware(s.HandleAdminMailImport)(w, r)
-	case path == "sync":
-		s.AdminMiddleware(s.HandleAdminSync)(w, r)
-	case path == "sync/pause":
-		s.AdminMiddleware(s.HandleAdminSyncPause)(w, r)
-	case path == "sync/resume":
-		s.AdminMiddleware(s.HandleAdminSyncResume)(w, r)
-	case strings.HasPrefix(path, "sync/schedules/"):
-		s.AdminMiddleware(s.HandleAdminSyncSchedule)(w, r)
-	case strings.HasPrefix(path, "sync/") && strings.HasSuffix(path, "/cancel"):
-		s.AdminMiddleware(s.HandleAdminSyncCancel)(w, r)
-	case strings.HasPrefix(path, "library/"):
-		s.AdminMiddleware(s.HandleAdminLibrary)(w, r)
-	case path == "permissions":
-		s.AdminMiddleware(s.HandleAdminPermissionsOverview)(w, r)
-	case path == "data-grants":
-		s.AdminMiddleware(s.HandleAdminDataGrants)(w, r)
-	case path == "data-scopes" || strings.HasPrefix(path, "data-scopes/"):
-		s.AdminMiddleware(s.HandleAdminDataScopes)(w, r)
-	case strings.HasPrefix(path, "services/") && strings.HasSuffix(path, "/grant-limits"):
-		s.AdminMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
-	case path == "apps" || strings.HasPrefix(path, "apps/"):
-		s.AdminMiddleware(s.HandleAdminApps)(w, r)
-	case strings.HasPrefix(path, "setup/"):
-		s.AdminMiddleware(s.handleAdminOnboarding)(w, r)
-	case path == "quicken" || strings.HasPrefix(path, "quicken/"):
-		s.AdminMiddleware(s.HandleAdminQuicken)(w, r)
-	case path == "timeline" || strings.HasPrefix(path, "timeline/"):
-		s.AdminMiddleware(s.HandleAdminTimeline)(w, r)
-	case path == "signal" || strings.HasPrefix(path, "signal/"):
-		s.AdminMiddleware(s.HandleAdminSignal)(w, r)
-	case path == "udt" || strings.HasPrefix(path, "udt/"):
-		s.AdminMiddleware(s.HandleAdminUDT)(w, r)
-	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+// runCLIMode checks whether a one-shot CLI flag was given and, if so, runs
+// the corresponding mode and returns its exit code. The second result is
+// true when the caller should exit immediately (issue #274).
+func runCLIMode(opts cliModeOptions, paths DataPaths) (code int, handled bool) {
+	if opts.seedSample {
+		return runSeedSampleCLI(paths.Dir, paths.MailArchive, opts.seedSampleCount, opts.seedSampleStress), true
 	}
+	if opts.seedLotR || opts.seedDemoDatasets {
+		return runSeedDemoDatasetsCLI(paths.Dir, paths.MailArchive), true
+	}
+	if strings.TrimSpace(opts.importTakeout) != "" {
+		return runImportTakeoutCLI(paths.MailArchive, paths.CopyLedger, opts.importTakeout, opts.importTakeoutBatch), true
+	}
+	if strings.TrimSpace(opts.importQuicken) != "" {
+		return runImportQuickenCLI(paths.Quicken, opts.importQuicken), true
+	}
+	if strings.TrimSpace(opts.importTimeline) != "" {
+		return runImportTimelineCLI(paths.Timeline, opts.importTimeline), true
+	}
+	if strings.TrimSpace(opts.importSignal) != "" {
+		return runImportSignalCLI(paths.Signal, opts.importSignal), true
+	}
+	if strings.TrimSpace(opts.tokenNewPass) != "" {
+		pass := opts.tokenPass
+		if pass == "" {
+			pass = os.Getenv("AEGIS_TOKEN_PASS")
+		}
+		return runTokenRekeyCLI(paths.Tokens, pass, opts.tokenNewPass), true
+	}
+	return 0, false
 }
 
 // runSeedSampleCLI writes synthetic sample fixtures under the data directory
@@ -1200,28 +1100,6 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 		"iterations", ts.kdfIterations,
 	)
 	return 0
-}
-
-// handleAuthRoutes dispatches /v1/auth/* to the correct handler.
-// Login and callback are public (no auth) to support OAuth redirects.
-// Status requires agent auth; revoke is admin (issue #181).
-func (s *Server) handleAuthRoutes(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/v1/auth/")
-
-	switch {
-	case strings.HasSuffix(path, "/login"):
-		s.HandleAuthLogin(w, r)
-	case strings.HasSuffix(path, "/callback"):
-		s.HandleAuthCallback(w, r)
-	case path == "status":
-		s.AuthMiddleware(s.HandleAuthStatus)(w, r)
-	default:
-		if r.Method == http.MethodDelete {
-			s.AdminMiddleware(s.HandleAuthRevoke)(w, r)
-		} else {
-			writeJSONError(w, http.StatusNotFound, "unknown auth endpoint")
-		}
-	}
 }
 
 func initLogger(level, format string, w io.Writer) *slog.Logger {
