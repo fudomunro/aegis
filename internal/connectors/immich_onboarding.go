@@ -120,6 +120,18 @@ const (
 	immichGuideHelp  = "help"
 	immichGuidePerms = "api_key_permissions"
 	immichGuideSnip  = "snippet"
+
+	// VIP-Service wizard (issue #124) — walkthrough-scoped.
+	immichFieldTSAPIKey  = "ts_api_key"
+	immichFieldTSTailnet = "ts_tailnet"
+	immichFieldHostDev   = "host_device"
+
+	immichActionTSSave  = "tailnet_save"
+	immichActionTSCheck = "tailnet_check"
+	immichActionTSApply = "tailnet_apply"
+
+	immichGuideTSAdmin    = "tailnet_admin"
+	immichGuideTSEndpoint = "tailnet_endpoint"
 )
 
 // Onboarding returns Immich's declared setup contract.
@@ -142,7 +154,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 			},
 			SecretHeaders: []string{"X-API-Key"},
 		},
-		Fields: []types.OnboardingField{
+		Fields: append([]types.OnboardingField{
 			{
 				ID:          immichFieldEndpoint,
 				Label:       "Immich endpoint",
@@ -163,7 +175,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 				Kind:  "checkbox",
 				Help:  "Saved to `service_connections.json` (not `aegis.json`). API key is stored and never shown again after save.",
 			},
-		},
+		}, immichTailnetFields()...),
 		Steps: []types.OnboardingStepDef{
 			{ID: immichStepInstall, Label: "Immich installed and reachable"},
 			{ID: immichStepAPIKey, Label: "Immich API key created"},
@@ -179,7 +191,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 			{ID: immichCheckStamp, Label: "Sources stamped canonical + proxy blob_url"},
 			{ID: immichCheckBytes, Label: "Photo bytes stay on Immich"},
 		},
-		Guides: []types.OnboardingGuide{
+		Guides: append([]types.OnboardingGuide{
 			{
 				ID: immichGuideHelp,
 				Body: "Self-hosted photo library as the canonical home for photos. Bytes stay on Immich. " +
@@ -201,8 +213,8 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 				Button:      "Copy JSON",
 				Collapsible: true,
 			},
-		},
-		Actions: []types.OnboardingAction{
+		}, immichTailnetGuides()...),
+		Actions: append([]types.OnboardingAction{
 			{
 				ID:        "probe",
 				Label:     "Test",
@@ -226,6 +238,82 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 				Kind:      types.ActionCheck,
 				Placement: types.ActionInHeader,
 			},
+		}, immichTailnetActions()...),
+	}
+}
+
+// immichTailnetGuides are the VIP-Service wizard's pages (issue #124): the
+// copyable walkthrough, the optional Tailscale Admin API settings, and the
+// endpoint to point Aegis at afterwards. Copy is generated beside the checks
+// that enforce it.
+func immichTailnetGuides() []types.OnboardingGuide {
+	return []types.OnboardingGuide{
+		immichTailnetGuide("", ""),
+		{
+			ID:          immichGuideTSAdmin,
+			Title:       "Tailscale Admin API (optional — live checks & one-click fixes)",
+			Walkthrough: true,
+		},
+		{
+			ID:          immichGuideTSEndpoint,
+			Title:       "Suggested Aegis endpoint after hosting",
+			Label:       "Suggested Aegis endpoint after hosting",
+			Button:      "Copy endpoint",
+			Walkthrough: true,
+			Body: "Confirm the exact host from `tailscale serve status` on the Immich machine. Endpoint must end in `/api`.\n\n" +
+				"Skip this step if you already have a reachable endpoint (localhost, LAN, or MagicDNS + `:2283`). Optional upgrade later.",
+		},
+	}
+}
+
+// immichTailnetFields are the wizard's Tailscale Admin settings.
+func immichTailnetFields() []types.OnboardingField {
+	return []types.OnboardingField{
+		{
+			ID:          immichFieldTSAPIKey,
+			Label:       "Tailscale API key",
+			Kind:        "password",
+			Placeholder: "tskey-api-…",
+			Secret:      true,
+			Walkthrough: true,
+			Help: "Paste an access token from [Keys](https://console.tailscale.com/admin/settings/keys) " +
+				"(scopes: `services`, `devices:core`). Stored in `service_connections.json` (0600) — never echoed back. " +
+				"Aegis only offers to fix steps that still need work.",
+		},
+		{
+			ID:          immichFieldTSTailnet,
+			Label:       "Tailnet",
+			Kind:        "text",
+			Placeholder: "- (default)",
+			Walkthrough: true,
+		},
+		{
+			ID:          immichFieldHostDev,
+			Label:       "Immich host device",
+			Kind:        "select",
+			Placeholder: "(select after checking)",
+			Walkthrough: true,
+		},
+	}
+}
+
+// immichTailnetActions are the wizard's verbs.
+func immichTailnetActions() []types.OnboardingAction {
+	return []types.OnboardingAction{
+		{
+			ID: immichActionTSSave, Label: "Save key", BusyLabel: "Saving…",
+			Kind: types.ActionSave, Placement: types.ActionInForm, Walkthrough: true,
+			Fields: []string{immichFieldTSAPIKey, immichFieldTSTailnet, immichFieldHostDev},
+		},
+		{
+			ID: immichActionTSCheck, Label: "Check steps", BusyLabel: "Checking…",
+			Kind: types.ActionCheck, Placement: types.ActionInForm, Walkthrough: true,
+			Fields: []string{immichFieldHostDev},
+		},
+		{
+			ID: immichActionTSApply, Label: "Fix needed steps", BusyLabel: "Applying…",
+			Kind: types.ActionApply, Placement: types.ActionInForm, Walkthrough: true,
+			Fields: []string{immichFieldHostDev},
 		},
 	}
 }
@@ -385,6 +473,33 @@ func (c *ImmichConnector) OnboardingStatus(ctx context.Context) types.Onboarding
 		Command: ImmichConfigSnippet(endpoint, c.host.BaseURL()),
 	}
 
+	// VIP-Service wizard state (issue #124): live per-step view and the host
+	// picker's candidate devices.
+	if tsKey := strings.TrimSpace(c.host.SetupSecret(types.SetupSecretTailscaleAPIKey)); tsKey != "" {
+		tsState := c.immichTailnetState(ctx)
+		tsState.Command = immichTailnetGuide(c.host.BaseURL(), endpoint).Command
+		status.Guides[immichGuideIDTailnet] = tsState
+		status.Guides[immichGuideTSEndpoint] = types.OnboardingGuideState{
+			Command: ImmichSuggestedEndpoint(TailnetDNSFromBaseURL(c.host.BaseURL())),
+		}
+		if opts := c.immichTailnetDeviceOptions(ctx); len(opts) > 0 {
+			st := status.Fields[immichFieldHostDev]
+			st.ID = immichFieldHostDev
+			st.Options = opts
+			st.Valid = true
+			status.Fields[immichFieldHostDev] = st
+		}
+	} else {
+		status.Guides[immichGuideIDTailnet] = types.OnboardingGuideState{
+			Command: immichTailnetGuide(c.host.BaseURL(), endpoint).Command,
+			Summary: immichTailnetSummary(false, false, "", ""),
+			Error:   "Tailscale API key not configured — paste one to enable live checks and one-click fixes.",
+		}
+		status.Guides[immichGuideTSEndpoint] = types.OnboardingGuideState{
+			Command: ImmichSuggestedEndpoint(TailnetDNSFromBaseURL(c.host.BaseURL())),
+		}
+	}
+
 	status.Checks = c.runImmichChecks(ctx, &status, configured, apiKey, endpoint)
 	status.Steps = c.immichGuidedSteps(&status, configured, endpoint)
 	status.Next = immichNextStepFrom(status.Steps, status.Probe, status.Checks)
@@ -459,6 +574,14 @@ func (c *ImmichConnector) OnboardingRun(ctx context.Context, action string, in t
 		return types.OnboardingResult{Probe: &res}, nil
 
 	case string(types.ActionSave):
+		if action == immichActionTSSave {
+			return types.OnboardingResult{Updates: []types.StateUpdate{{TailscaleAdmin: &types.TailscaleAdminUpdate{
+				APIKey:       strings.TrimSpace(in.Values[immichFieldTSAPIKey]),
+				Tailnet:      strings.TrimSpace(in.Values[immichFieldTSTailnet]),
+				HostDeviceID: strings.TrimSpace(in.Values[immichFieldHostDev]),
+				HostTag:      c.immichHostTag(),
+			}}}}, nil
+		}
 		update, err := c.immichConnectionUpdate(in)
 		if err != nil {
 			return types.OnboardingResult{}, err
@@ -466,7 +589,17 @@ func (c *ImmichConnector) OnboardingRun(ctx context.Context, action string, in t
 		return types.OnboardingResult{Updates: []types.StateUpdate{{Connection: &update}}}, nil
 
 	case string(types.ActionCheck):
+		// Read-only: the runner recomputes status, which carries the live
+		// checklist and the VIP wizard's per-step state.
 		return types.OnboardingResult{}, nil
+
+	case string(types.ActionApply):
+		if action != immichActionTSApply {
+			return types.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
+		}
+		res, updates := c.immichTailnetApply(ctx, in.Selected,
+			strings.TrimSpace(in.Values[immichFieldHostDev]), c.immichHostTag())
+		return types.OnboardingResult{Detail: res.Summary(), Updates: updates}, nil
 
 	default:
 		return types.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
@@ -883,4 +1016,23 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 			Suggested: suggested,
 		}
 	}
+}
+
+// immichHostTag is the service-host tag the wizard tags devices with.
+func (c *ImmichConnector) immichHostTag() string {
+	_, _, tag := c.immichTailnetSettings()
+	return tag
+}
+
+// immichTailnetDeviceOptions lists host candidates for the wizard's picker.
+func (c *ImmichConnector) immichTailnetDeviceOptions(ctx context.Context) []types.OnboardingOption {
+	cl := c.immichTailnetClient()
+	if cl == nil {
+		return nil
+	}
+	devices, err := cl.ListDevices(ctx)
+	if err != nil {
+		return nil
+	}
+	return immichDeviceOptions(devices)
 }

@@ -48,13 +48,13 @@ type serviceConnectionsFile struct {
 // (issue #184) and never echoed back. Legacy plaintext files may still
 // carry api_key; it is migrated on load.
 type tailscaleAdminEntry struct {
-	// APIKey is a tskey-api-… access token (or OAuth access token).
+	// APIKey is a Tailscale Admin API access token (or OAuth access token).
 	APIKey string `json:"api_key,omitempty"`
 	// Tailnet is the API tailnet path ("-" for the default tailnet).
 	Tailnet string `json:"tailnet,omitempty"`
 	// HostDeviceID is the device that runs Immich (for tagging / approval).
 	HostDeviceID string `json:"host_device_id,omitempty"`
-	// HostTag is the service-host tag (default tag:immich-host).
+	// HostTag is the service-host tag the wizard tags devices with.
 	HostTag string `json:"host_tag,omitempty"`
 }
 
