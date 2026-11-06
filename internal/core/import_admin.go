@@ -12,21 +12,14 @@ import (
 )
 
 // importStoreAdmin is one admin surface over a local import store: GET
-// status and POST import with per-store DTOs. The route shape and response
-// fields stay per-store (admin.html reads them); the HTTP plumbing lives
-// here once (issue #266).
+// status and POST import (issue #266). The route prefix is core's (it is
+// route layout); every provider-facing string and counter shape is declared
+// by the store in connectors.ImportAdmin (issue #254, the #265 pattern).
 type importStoreAdmin struct {
-	prefix     string // URL prefix, e.g. "/v1/admin/quicken"
-	flagName   string // disabling flag, e.g. "-quicken-store"
-	pathHint   string // error copy for a missing import path
-	serviceID  string // service whose caches invalidate after import
-	store      connectors.ImportStore
-	status     func() any
-	importPath func(path string) (any, error)
-	logAttrs   func(res any) []any
-	// bareResult returns the import result without the {result,status}
-	// envelope (Timeline's historical response shape).
-	bareResult bool
+	prefix    string // URL prefix, e.g. "/v1/admin/quicken"
+	serviceID string // service whose caches invalidate after import
+	store     connectors.ImportStore
+	admin     connectors.ImportAdmin
 }
 
 // HandleAdminImportStore serves GET <prefix>/status and POST <prefix>/import.
@@ -39,7 +32,7 @@ func (s *Server) HandleAdminImportStore(w http.ResponseWriter, r *http.Request, 
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(spec.status())
+		json.NewEncoder(w).Encode(spec.status(s.baseURL))
 	case path == "import":
 		if r.Method != http.MethodPost {
 			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -51,9 +44,38 @@ func (s *Server) HandleAdminImportStore(w http.ResponseWriter, r *http.Request, 
 	}
 }
 
+// status builds the admin status DTO from the store's declared copy and
+// live counts. The counter fields are per-store; unused ones stay zero.
+func (spec importStoreAdmin) status(baseURL string) connectors.ImportStoreStatus {
+	st := connectors.ImportStoreStatus{
+		Enabled:    spec.store != nil && spec.store.Enabled(),
+		SamplePath: spec.admin.SamplePath,
+	}
+	counts := map[string]int{"count": 0, "contacts": 0, "messages": 0}
+	if st.Enabled {
+		st.Path = spec.store.Path()
+		if spec.admin.Counts != nil {
+			for k, v := range spec.admin.Counts() {
+				counts[k] = v
+			}
+		}
+		st.Count, st.Contacts, st.Messages = counts["count"], counts["contacts"], counts["messages"]
+		st.StoreEmpty = st.Count == 0 && st.Contacts == 0 && st.Messages == 0
+	}
+	st.LibraryURL = strings.TrimRight(baseURL, "/") + spec.admin.LibraryPath
+	if spec.admin.Hints != nil {
+		st.Hints = spec.admin.Hints(connectors.ImportHintState{
+			Enabled:    st.Enabled,
+			Counts:     counts,
+			LibraryURL: st.LibraryURL,
+		})
+	}
+	return st
+}
+
 func (s *Server) runAdminImportStore(w http.ResponseWriter, r *http.Request, spec importStoreAdmin) {
 	if spec.store == nil || !spec.store.Enabled() {
-		shared.WriteJSONError(w, http.StatusBadRequest, "store disabled — set "+spec.flagName)
+		shared.WriteJSONError(w, http.StatusBadRequest, "store disabled — set "+spec.admin.FlagName)
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
@@ -70,10 +92,10 @@ func (s *Server) runAdminImportStore(w http.ResponseWriter, r *http.Request, spe
 	}
 	req.Path = strings.TrimSpace(req.Path)
 	if req.Path == "" {
-		shared.WriteJSONError(w, http.StatusBadRequest, "path is required — "+spec.pathHint)
+		shared.WriteJSONError(w, http.StatusBadRequest, "path is required — "+spec.admin.PathHint)
 		return
 	}
-	res, err := spec.importPath(req.Path)
+	res, err := spec.admin.Import(req.Path)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
@@ -81,17 +103,17 @@ func (s *Server) runAdminImportStore(w http.ResponseWriter, r *http.Request, spe
 	// Library cache must not serve the old empty list.
 	s.invalidateService(spec.serviceID)
 	attrs := []any{"path", req.Path}
-	if spec.logAttrs != nil {
-		attrs = append(attrs, spec.logAttrs(res)...)
+	if res != nil {
+		attrs = append(attrs, res.LogAttrs()...)
 	}
 	slog.Info(strings.TrimPrefix(spec.prefix, "/v1/admin/")+" import from admin UI", attrs...)
 	w.Header().Set("Content-Type", "application/json")
-	if spec.bareResult {
+	if spec.admin.BareResult {
 		json.NewEncoder(w).Encode(res)
 		return
 	}
 	json.NewEncoder(w).Encode(map[string]any{
 		"result": res,
-		"status": spec.status(),
+		"status": spec.status(s.baseURL),
 	})
 }

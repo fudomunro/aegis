@@ -23,7 +23,7 @@ func TestSignalLibraryKindRegistered(t *testing.T) {
 
 func TestSignalImportStatusHints(t *testing.T) {
 	srv := &Server{}
-	st := srv.signalStatus()
+	st := signalStatusOf(srv)
 	if st.Enabled {
 		t.Fatal("nil store should be disabled")
 	}
@@ -38,13 +38,28 @@ func TestSignalImportStatusHints(t *testing.T) {
 	}
 	defer store.Close()
 	srv = &Server{signal: store, baseURL: "http://aegis.test"}
-	st = srv.signalStatus()
+	st = signalStatusOf(srv)
 	if !st.Enabled || !st.StoreEmpty {
 		t.Fatalf("status = %+v", st)
 	}
 	if st.LibraryURL == "" {
 		t.Fatal("missing library url")
 	}
+}
+
+// signalStatusOf renders the Signal import status through the store's
+// declared connectors.ImportAdmin copy (issue #254).
+func signalStatusOf(srv *Server) connectors.ImportStoreStatus {
+	var store connectors.ImportStore
+	if srv.signal != nil {
+		store = srv.signal
+	}
+	return importStoreAdmin{
+		prefix:    "/v1/admin/signal",
+		serviceID: connectors.SignalServiceID,
+		store:     store,
+		admin:     srv.signal.Admin(),
+	}.status(srv.baseURL)
 }
 
 func TestPermissionsOverview_SignalImport(t *testing.T) {

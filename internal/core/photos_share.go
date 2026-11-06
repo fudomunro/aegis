@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -16,16 +17,13 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// photoShareDefaultTarget is the PoC share destination (issue #20).
-const photoShareDefaultTarget = connectors.BlueskyServiceID
-
 // PhotoShareRequest is the agent-facing body for POST /v1/library/photos/share.
 type PhotoShareRequest struct {
 	// SourceService is the photo source connector ID (e.g. "immich").
 	SourceService string `json:"source_service"`
 	// SourceID is the service-local photo/asset ID.
 	SourceID string `json:"source_id"`
-	// TargetService is the share destination (default "bluesky").
+	// TargetService is the share destination (default connectors.PhotoShareDefaultTarget).
 	TargetService string `json:"target_service,omitempty"`
 	// Caption is optional post text.
 	Caption string `json:"caption,omitempty"`
@@ -60,7 +58,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	req.SourceID = strings.TrimSpace(req.SourceID)
 	req.TargetService = strings.TrimSpace(req.TargetService)
 	if req.TargetService == "" {
-		req.TargetService = photoShareDefaultTarget
+		req.TargetService = connectors.PhotoShareDefaultTarget
 	}
 	if req.SourceService == "" {
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service is required")
@@ -98,7 +96,8 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	bytesProvider, ok := src.(types.PhotoBytesProvider)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest,
-			fmt.Sprintf("service %q cannot fetch photo bytes for share yet (supported: immich)", req.SourceService))
+			fmt.Sprintf("service %q cannot fetch photo bytes for share yet (supported: %s)",
+				req.SourceService, connectorIDsProviding[types.PhotoBytesProvider](s.connectors)))
 		return
 	}
 	dst, ok := s.connectors[req.TargetService]
@@ -109,7 +108,8 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	target, ok := dst.(types.PhotoShareTarget)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest,
-			fmt.Sprintf("service %q cannot accept photo shares yet (supported: bluesky)", req.TargetService))
+			fmt.Sprintf("service %q cannot accept photo shares yet (supported: %s)",
+				req.TargetService, connectorIDsProviding[types.PhotoShareTarget](s.connectors)))
 		return
 	}
 
@@ -191,4 +191,21 @@ func (s *Server) writePhotoShareUpstreamError(w http.ResponseWriter, logger *slo
 	}
 	logger.Error("photo share failed", "service", serviceID, "error", err)
 	shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("photo share failed on %s: %v", serviceID, err))
+}
+
+// connectorIDsProviding names the registered connectors that implement the
+// given provider interface, sorted. Used for "supported: …" copy so core
+// never hardcodes a provider name (issue #254).
+func connectorIDsProviding[T any](m map[string]connectors.ServiceConnector) string {
+	var ids []string
+	for id, c := range m {
+		if _, ok := any(c).(T); ok {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
+		return "none"
+	}
+	sort.Strings(ids)
+	return strings.Join(ids, ", ")
 }

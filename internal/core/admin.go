@@ -173,10 +173,9 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 	snapshots := s.config.ServiceSnapshots()
 	services := make([]AdminService, 0, len(snapshots))
 	for _, svc := range snapshots {
-		// Quicken and Signal are file-based imports (Advanced tab), not
-		// configured OAuth/static services — keep them off the services list
-		// (issues #141, #168).
-		if svc.ID == connectors.QuickenServiceID || svc.ID == connectors.SignalServiceID {
+		// Local import stores are file-based (Advanced tab), not configured
+		// OAuth/static services — keep them off the services list (issue #254).
+		if connectors.LocalImportStoreIDs()[svc.ID] {
 			continue
 		}
 		item := AdminService{

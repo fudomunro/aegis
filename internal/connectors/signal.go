@@ -46,6 +46,47 @@ func SignalService() LocalStoreService {
 	}
 }
 
+// Admin declares the Signal import admin surface (issue #254).
+func (s *SignalStore) Admin() ImportAdmin {
+	return ImportAdmin{
+		FlagName:    "-signal-store",
+		PathHint:    "a Signal export file or directory",
+		SamplePath:  "~/Downloads/signal-export (JSONL, or plaintext .db from signalbackup-tools)",
+		LibraryPath: "/v1/library/messages",
+		Counts: func() map[string]int {
+			if s == nil || !s.Enabled() {
+				return nil
+			}
+			c, m, err := s.Counts()
+			if err != nil {
+				return nil
+			}
+			return map[string]int{"contacts": c, "messages": m}
+		},
+		Hints: func(state ImportHintState) []string {
+			contacts, messages := state.Counts["contacts"], state.Counts["messages"]
+			switch {
+			case !state.Enabled:
+				return []string{"Signal store is disabled — restart with -signal-store <path> (default under the data dir)."}
+			case contacts == 0 && messages == 0:
+				return []string{
+					"Signal has no public chat API. Export on the device, decrypt if needed, then import the files below.",
+					"Android: Settings → Chats → Chat backups → Create backup, then decrypt with signalbackup-tools to a plaintext database.sqlite.",
+					"Desktop: copy the Signal data directory's sql/db.sqlite after decrypting it (community exporters can dump JSONL).",
+					`Aegis also accepts a JSONL export: one object per line with "type":"contact"|"message".`,
+					"Re-import is safe: rows already stored are skipped. Attachments are never stored.",
+				}
+			default:
+				return []string{fmt.Sprintf("%d contact(s) and %d message(s) imported. Agents can query them via %s when contacts/messages permissions allow.",
+					contacts, messages, state.LibraryURL)}
+			}
+		},
+		Import: func(path string) (ImportOutcome, error) {
+			return ImportSignalPath(s, path)
+		},
+	}
+}
+
 // SignalStore is a local SQLite store of imported Signal contacts/messages.
 // Empty path disables the store (like mail-archive / quicken / timeline).
 type SignalStore struct {

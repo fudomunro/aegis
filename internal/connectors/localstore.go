@@ -111,6 +111,58 @@ type ImportOutcome interface {
 	Failed() bool
 }
 
+// ImportAdmin is the declared admin surface of a local import store
+// (issue #265 pattern: declare, don't render). Core serves the status and
+// import routes generically and renders admin.html; every provider-facing
+// string — flag name, path hint, sample path, hint lines — lives here
+// beside the store it describes (issue #254).
+type ImportAdmin struct {
+	// FlagName is the disabling flag, e.g. "-quicken-store".
+	FlagName string
+	// PathHint is the error copy for a missing import path.
+	PathHint string
+	// SamplePath tells the operator where a typical export lives.
+	SamplePath string
+	// LibraryPath is the agent library route this store feeds,
+	// e.g. "/v1/library/transactions".
+	LibraryPath string
+	// BareResult returns the import result without the {result,status}
+	// envelope (Timeline's historical response shape).
+	BareResult bool
+	// Counts reports live row counts by counter name ("count", "contacts",
+	// "messages"). Counters a store does not use are absent. nil when the
+	// store is disabled.
+	Counts func() map[string]int
+	// Hints phrases the state-dependent provider-facing hint lines.
+	Hints func(state ImportHintState) []string
+	// Import runs a one-shot import from path into the store. The returned
+	// outcome carries the store-specific counters and log attrs.
+	Import func(path string) (ImportOutcome, error)
+}
+
+// ImportHintState is what ImportAdmin.Hints needs to phrase its copy.
+type ImportHintState struct {
+	Enabled    bool
+	Counts     map[string]int
+	LibraryURL string
+}
+
+// ImportStoreStatus is the admin status DTO for a local import store. The
+// counter fields are per-store — Quicken reports count, Signal reports
+// contacts and messages — so one shape carries all of them; unused counters
+// stay zero. admin.html reads the fields it needs and ignores the rest.
+type ImportStoreStatus struct {
+	Enabled    bool     `json:"enabled"`
+	Path       string   `json:"path,omitempty"`
+	Count      int      `json:"count"`
+	Contacts   int      `json:"contacts"`
+	Messages   int      `json:"messages"`
+	StoreEmpty bool     `json:"store_empty"`
+	LibraryURL string   `json:"library_url,omitempty"`
+	SamplePath string   `json:"sample_hint,omitempty"`
+	Hints      []string `json:"hints,omitempty"`
+}
+
 // LocalStoreService is the service card a local import store injects into
 // config so /v1/library fan-in sees it as a source (issue #266). Declared
 // beside the store so registration, naming, and grants read one table.

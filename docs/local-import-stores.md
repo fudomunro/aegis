@@ -76,8 +76,10 @@ One owner for what was copy-pasted three times:
 
 Per-store SQL schemas and parsers (QIF/QFX, Signal JSONL/JSON/SQLite,
 Timeline JSON/zip) stay beside their store — they are provider quirks, not
-shared machinery. The admin status DTOs are admin-UI contract and stay on
-the core side of the seam.
+shared machinery. Each store also declares its admin surface
+(`connectors.ImportAdmin`: flag name, path hint, sample path, library
+route, counters, hint copy, import runner), so core's admin handler
+renders no provider-facing string (issue #254).
 
 ### What core keeps
 
@@ -92,11 +94,11 @@ unchanged so `admin.html` keeps working. `Server` fields for the three
 stores stay (permissions overview and kind presence read them) but are
 typed as the connectors' store types.
 
-Service IDs/names, maturity rows, grant limits, and admin copy move
+Service IDs/names, maturity rows, grant limits, and admin copy live
 beside their store as one declaration per store, consumed by
-`services.go`, `maturity.go`, `run.go`, and the admin handler — the same
-"express themselves through the same surfaces" contract services already
-have.
+`services.go`, `maturity.go`, `run.go`, and the generic admin handler — the
+same "express themselves through the same surfaces" contract services
+already have.
 
 ## Mail archive / Google Takeout
 

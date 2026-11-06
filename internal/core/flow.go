@@ -688,17 +688,17 @@ func flowServiceStatus(svc Service, st TokenStatus) string {
 
 // staticCredentialLabel returns a short human label when the service holds a
 // static auth header (API token / key). Secrets never appear in the label.
+// The rule keys on header-name shape, never on a service id (issue #254).
 func staticCredentialLabel(svc Service) string {
 	for k, v := range svc.Headers {
 		if strings.TrimSpace(v) == "" {
 			continue
 		}
+		lower := strings.ToLower(k)
 		switch {
-		case strings.EqualFold(k, "Authorization"):
+		case strings.EqualFold(k, "Authorization"), strings.Contains(lower, "token"):
 			return "API token"
-		case strings.EqualFold(k, "X-YNAB-Token"):
-			return "API token"
-		case strings.EqualFold(k, "X-API-Key"), strings.EqualFold(k, "X-Immich-Api-Key"):
+		case strings.Contains(lower, "key"):
 			return "API key"
 		}
 	}

@@ -42,6 +42,43 @@ func QuickenService() LocalStoreService {
 	}
 }
 
+// Admin declares the Quicken import admin surface (issue #254).
+func (s *QuickenStore) Admin() ImportAdmin {
+	return ImportAdmin{
+		FlagName:    "-quicken-store",
+		PathHint:    "a QIF/QFX file or directory",
+		SamplePath:  "~/Downloads/Quicken (QIF / QFX / OFX file or directory)",
+		LibraryPath: "/v1/library/transactions",
+		Counts: func() map[string]int {
+			if s == nil || !s.Enabled() {
+				return nil
+			}
+			n, err := s.Count()
+			if err != nil {
+				return nil
+			}
+			return map[string]int{"count": n}
+		},
+		Hints: func(state ImportHintState) []string {
+			switch {
+			case !state.Enabled:
+				return []string{"Quicken store is disabled — restart with -quicken-store <path> (default under the data dir)."}
+			case state.Counts["count"] == 0:
+				return []string{
+					"Export QIF or QFX from Quicken (File → Export), then import the file or its folder below.",
+					"Re-import is safe: rows already stored (by FITID) are skipped.",
+				}
+			default:
+				return []string{fmt.Sprintf("%d line item(s) imported. Agents can query them via %s.",
+					state.Counts["count"], state.LibraryURL)}
+			}
+		},
+		Import: func(path string) (ImportOutcome, error) {
+			return ImportQuickenPath(s, path)
+		},
+	}
+}
+
 // QuickenStore is a local SQLite store of imported Quicken transactions.
 // Empty path disables the store (like mail-archive).
 type QuickenStore struct {

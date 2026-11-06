@@ -212,7 +212,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 	if err := os.WriteFile(path, []byte(sampleTimelineJSON), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	body, _ := json.Marshal(TimelineImportRequest{Path: path})
+	body, _ := json.Marshal(map[string]string{"path": path})
 	req2 := httptest.NewRequest("POST", "/v1/admin/timeline/import", bytes.NewReader(body))
 	w2 := httptest.NewRecorder()
 	srv.HandleAdminTimeline(w2, req2)
