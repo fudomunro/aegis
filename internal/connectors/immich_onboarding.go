@@ -143,6 +143,8 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 		// WalkthroughLabel opens the guided setup pages. The panel owns the
 		// modal chrome; this connector owns every page's copy.
 		WalkthroughLabel: "Setup guide",
+		WalkthroughTitle: "Immich setup guide",
+		ChecksEmpty:      "Run checks after saving to verify the checklist.",
 		Connection: types.ConnectionMetadata{
 			Name:        "Immich",
 			Action:      "inject",
@@ -156,18 +158,20 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 		},
 		Fields: append([]types.OnboardingField{
 			{
-				ID:          immichFieldEndpoint,
-				Label:       "Immich endpoint",
-				Kind:        "url",
-				Placeholder: "http://photos.home.ts.net:2283/api",
-				Help:        "Endpoint must end in `/api` (we repair common pastes). Same machine: `http://localhost:2283/api`. VIP Service: `https://immich.<tailnet>.ts.net/api`.",
+				ID:                     immichFieldEndpoint,
+				Label:                  "Immich endpoint",
+				Kind:                   "url",
+				Placeholder:            "http://photos.home.ts.net:2283/api",
+				WalkthroughPlaceholder: "http://localhost:2283/api",
+				Help:                   "Endpoint must end in `/api` (we repair common pastes). Same machine: `http://localhost:2283/api`. VIP Service: `https://immich.<tailnet>.ts.net/api`.",
 			},
 			{
-				ID:          immichFieldAPIKey,
-				Label:       "Immich API key",
-				Kind:        "password",
-				Placeholder: "Account → API Keys",
-				Secret:      true,
+				ID:                     immichFieldAPIKey,
+				Label:                  "Immich API key",
+				Kind:                   "password",
+				Placeholder:            "Account → API Keys",
+				WalkthroughPlaceholder: "Paste the key from step 4",
+				Secret:                 true,
 			},
 			{
 				ID:    immichFieldClaim,
@@ -200,6 +204,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 			{
 				ID:          immichGuidePerms,
 				Title:       "One API key for Aegis + immich-go",
+				Short:       "API key",
 				Button:      "Copy list",
 				Walkthrough: true,
 				Body:        "Copy the secret once when Immich shows it — use it in the next step and in `immich-go --api-key=`.",
@@ -216,12 +221,13 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 		}, immichTailnetGuides()...),
 		Actions: append([]types.OnboardingAction{
 			{
-				ID:        "probe",
-				Label:     "Test",
-				BusyLabel: "Testing…",
-				Kind:      types.ActionProbe,
-				Placement: types.ActionInHeader,
-				Fields:    []string{immichFieldEndpoint, immichFieldAPIKey},
+				ID:               "probe",
+				Label:            "Test",
+				WalkthroughLabel: "Test connection",
+				BusyLabel:        "Testing…",
+				Kind:             types.ActionProbe,
+				Placement:        types.ActionInHeader,
+				Fields:           []string{immichFieldEndpoint, immichFieldAPIKey},
 			},
 			{
 				ID:        "save",
@@ -253,6 +259,7 @@ func immichTailnetGuides() []types.OnboardingGuide {
 			ID:          immichGuideTSAdmin,
 			Title:       "Tailscale Admin API (optional — live checks & one-click fixes)",
 			Walkthrough: true,
+			Terminal:    "settings",
 		},
 		{
 			ID:          immichGuideTSEndpoint,

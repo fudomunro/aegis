@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // User-facing docs and admin UI copy must not cite GitHub issue numbers or
@@ -454,5 +455,99 @@ func TestImmichVIPContract_SingleOwner(t *testing.T) {
 		if strings.Contains(admin, c) {
 			t.Errorf("web/admin.html restates VIP wizard contract %q — render it from the onboarding spec (issue #265)", c)
 		}
+	}
+}
+
+// TestAdminHTML_RestatesNoOnboardingCopy walks every string the connectors
+// declare in their onboarding specs and rejects each one in web/admin.html.
+// That is the issue #265 end state: the panel and the stepped walkthrough
+// render provider copy from the spec, so the file that renders it cannot
+// also contain it.
+func TestAdminHTML_RestatesNoOnboardingCopy(t *testing.T) {
+	root := repoRoot(t)
+	b, err := os.ReadFile(filepath.Join(root, "internal/core/web/admin.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin := string(b)
+
+	specs := []types.OnboardingSpec{
+		connectors.NewImmichConnector(&Server{}).Onboarding(),
+		connectors.NewYNABConnector(&Server{}).Onboarding(),
+	}
+	seen := map[string]bool{}
+	// Panel vocabulary other surfaces legitimately share. These are not
+	// restatements of an onboarding spec: each is owned by a different
+	// admin surface (the Aperture panel's copy button; the generic busy
+	// state several forms use) and merely spells the same words.
+	sharedVocabulary := map[string]string{
+		"Copy JSON": "Aperture panel copy button",
+		"Saving…":   "generic busy state shared by admin forms",
+	}
+	check := func(s string) {
+		s = strings.TrimSpace(s)
+		if len(s) < 8 || seen[s] {
+			return
+		}
+		seen[s] = true
+		if why, shared := sharedVocabulary[s]; shared {
+			t.Logf("skipping shared panel vocabulary %q (%s)", s, why)
+			return
+		}
+		if strings.Contains(admin, s) {
+			t.Errorf("web/admin.html restates onboarding copy %q — render it from the spec instead (issue #265)", s)
+		}
+	}
+	for _, spec := range specs {
+		check(spec.Title)
+		check(spec.WalkthroughLabel)
+		check(spec.WalkthroughTitle)
+		check(spec.DetailsLabel)
+		check(spec.Connection.Description)
+		for _, f := range spec.Fields {
+			check(f.Label)
+			check(f.Placeholder)
+			check(f.WalkthroughPlaceholder)
+			check(f.Help)
+		}
+		for _, st := range spec.Steps {
+			check(st.Label)
+		}
+		for _, c := range spec.Checks {
+			check(c.Label)
+		}
+		for _, a := range spec.Actions {
+			check(a.Label)
+			check(a.WalkthroughLabel)
+			check(a.BusyLabel)
+		}
+		for _, g := range spec.Guides {
+			check(g.Title)
+			check(g.Short)
+			check(g.Body)
+			check(g.Label)
+			check(g.Button)
+			check(g.LiveLabel)
+			for _, r := range g.Requirements {
+				check(r)
+			}
+			for _, st := range g.Steps {
+				check(st.Title)
+				check(st.Detail)
+				check(st.Command)
+			}
+			for _, bl := range g.Blocks {
+				check(bl.Body)
+				check(bl.Command)
+				check(bl.Label)
+				check(bl.Button)
+				for _, it := range bl.Items {
+					check(it)
+				}
+			}
+		}
+	}
+	if len(seen) < 40 {
+		t.Fatalf("only %d distinct copy strings walked — the spec walk looks broken", len(seen))
 	}
 }
