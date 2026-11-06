@@ -50,92 +50,6 @@ func sampleDoc(service, name, id, title, created, excerpt string) types.Document
 	}
 }
 
-func TestDocumentIdentityKey_PrefersDurableIDs(t *testing.T) {
-	a := types.Document{EntityID: "SHA256:ABC", Title: "Lease", CreatedAt: "2024-01-01T00:00:00Z"}
-	b := types.Document{EntityID: "sha256:abc", Title: "Lease (scan)", CreatedAt: "2024-01-02T00:00:00Z"}
-	if documentIdentityKey(a) != documentIdentityKey(b) {
-		t.Fatalf("checksum entity IDs should match case-insensitively: %q vs %q",
-			documentIdentityKey(a), documentIdentityKey(b))
-	}
-
-	c := types.Document{
-		Title: "Warranty", CreatedAt: "2023-06-01T00:00:00Z",
-		Sources: []types.DocumentSource{{Service: "paperless", ID: "1", Extra: map[string]any{"archive_serial": "42"}}},
-	}
-	d := types.Document{
-		Title: "Warranty (other)", CreatedAt: "2023-06-02T00:00:00Z",
-		Sources: []types.DocumentSource{{Service: "paperless-archive", ID: "9", Extra: map[string]any{"archive_serial": "42"}}},
-	}
-	if documentIdentityKey(c) != documentIdentityKey(d) {
-		t.Fatalf("archive serial should match: %q vs %q", documentIdentityKey(c), documentIdentityKey(d))
-	}
-
-	// Same title + created merges; different created must not.
-	e := sampleDoc("paperless", "Paperless", "1", "Insurance", "2024-03-01T00:00:00Z", "")
-	f := sampleDoc("drive", "Drive", "2", "Insurance", "2024-03-01T00:00:00Z", "")
-	if documentIdentityKey(e) != documentIdentityKey(f) {
-		t.Fatal("title+created should match")
-	}
-	g := sampleDoc("paperless", "Paperless", "3", "Insurance", "2021-03-01T00:00:00Z", "")
-	if documentIdentityKey(e) == documentIdentityKey(g) {
-		t.Fatal("different created dates must not share a title key")
-	}
-
-	// No identity falls back to service:id.
-	h := sampleDoc("paperless", "Paperless", "x1", "", "", "")
-	i := sampleDoc("paperless", "Paperless", "x2", "", "", "")
-	if documentIdentityKey(h) == documentIdentityKey(i) {
-		t.Fatal("documents with no identity must stay distinct via service:id")
-	}
-}
-
-func TestMergeDocuments_CombinesSourcesAndRecordsMatch(t *testing.T) {
-	a := types.Document{
-		Title: "Lease", CreatedAt: "2024-01-15T00:00:00Z", Excerpt: "full excerpt",
-		Tags: []string{"housing"}, EntityID: "sha256:same",
-		Sources: []types.DocumentSource{{Service: "paperless", ServiceName: "Paperless-ngx", ID: "1", Canonical: true}},
-	}
-	b := types.Document{
-		Title: "Lease scan", CreatedAt: "2024-01-15T00:00:00Z", Excerpt: "other",
-		Tags: []string{"legal"}, EntityID: "sha256:same",
-		Sources: []types.DocumentSource{{Service: "drive", ServiceName: "Google Drive", ID: "2"}},
-	}
-	merged := MergeDocuments([]types.Document{a, b})
-	if len(merged) != 1 {
-		t.Fatalf("got %d documents, want 1: %+v", len(merged), merged)
-	}
-	if len(merged[0].Sources) != 2 {
-		t.Fatalf("want 2 sources, got %+v", merged[0].Sources)
-	}
-	if !merged[0].Sources[0].Canonical {
-		t.Fatalf("canonical source should sort first: %+v", merged[0].Sources)
-	}
-	if merged[0].Match == "" {
-		t.Fatal("multi-source merge should record match")
-	}
-	if merged[0].Excerpt != "full excerpt" {
-		t.Fatalf("excerpt = %q, want first non-empty", merged[0].Excerpt)
-	}
-	if len(merged[0].Tags) != 2 {
-		t.Fatalf("tags should union: %+v", merged[0].Tags)
-	}
-}
-
-func TestMergeDocuments_NearMissDoesNotMerge(t *testing.T) {
-	old := sampleDoc("paperless", "Paperless-ngx", "1", "Laptop warranty", "2021-06-01T00:00:00Z", "")
-	fresh := sampleDoc("paperless", "Paperless-ngx", "2", "Laptop warranty", "2023-06-01T00:00:00Z", "")
-	merged := MergeDocuments([]types.Document{old, fresh})
-	if len(merged) != 2 {
-		t.Fatalf("same title different dates must not merge: %+v", merged)
-	}
-}
-
-func TestMergeDocuments_Empty(t *testing.T) {
-	if MergeDocuments(nil) != nil {
-		t.Fatal("MergeDocuments(nil) should be nil")
-	}
-}
-
 func TestDocumentFilters_Match(t *testing.T) {
 	doc := types.Document{
 		Title:         "Apartment lease 2024",
@@ -490,7 +404,7 @@ func TestSampleDocuments_MergePairs(t *testing.T) {
 	if len(lib.Documents) == 0 {
 		t.Fatal("sample library must include documents")
 	}
-	merged := MergeDocuments(lib.Documents)
+	merged := types.MergeDocuments(lib.Documents)
 	byTitle := map[string]int{}
 	for _, d := range merged {
 		byTitle[d.Title]++

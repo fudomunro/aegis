@@ -67,18 +67,19 @@ These are non-negotiable (see `AGENTS.md`). New types inherit them.
 
 ## Anatomy of a data type
 
-A complete type touches these layers. Music types (`internal/types/merge.go`
-+ `library.go`) and people/media types (`contacts.go`, `photos.go`, …) are the
-two templates.
+A complete type touches these layers. Music types (`internal/types/merge.go`)
+and people/media types (`internal/types/merge_contacts.go`, `merge_photos.go`,
+…) are the two templates.
 
 ```text
 internal/types/models.go     Neutral item + *Source + *List
-internal/types/merge.go      Identity keys + Merge* algorithms
+internal/types/merge.go      Music identity keys + Merge* algorithms
+internal/types/merge_<kind>.go  Per-kind identity keys + Merge* (one file per kind)
 internal/types/providers.go  Provider interface (WidgetProvider) + ErrUnauthorized
 internal/types/kind.go       LibraryKind data helpers (already generic)
 internal/types/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
 internal/types/pathclass.go  dataTypePathRules for the provider's proxy paths
-<kind>.go                    Thin handler + kind-specific merge glue if any
+<kind>.go                    Thin handler + filters/redaction glue
 librarykind.go               kindRuntime predicates + libraryRouteHandlers
 <provider>.go                Connector: Capabilities + ListUser… + optional proxy
 canonical.go                 stamp*Canonical (if sources can be home)
@@ -282,8 +283,8 @@ func (s *Server) HandleLibraryWidgets(w http.ResponseWriter, r *http.Request) {
                 })
         },
         serviceOf: widgetServiceName,
-        sortKey:   widgetIdentityKey,
-        merge:     MergeWidgets,
+        sortKey:   types.WidgetIdentityKey,
+        merge:     types.MergeWidgets,
         encode: func(merged []Widget, bySvc map[string]LibraryServiceStatus) any {
             return WidgetList{Widgets: merged, Total: len(merged), Synced: true,
                 Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
@@ -492,7 +493,7 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 - [ ] `DataTypeForPath` rules use the same permission key (reserved automatically via the registry)
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
 - [ ] `redactSearch` on the `libraryKindSpec` when the kind has `AllowedLevels` (search hits hydrate from the index and skip fetch-time redaction)
-- [ ] Identity key + `MergeWidgets` (durable ID first; record `Match`)
+- [ ] Identity key + `MergeWidgets` in `internal/types/merge_widgets.go` (durable ID first; record `Match`) — merge logic does not live in core
 - [ ] Connector implements `WidgetProvider` + `Capabilities()` data type
 - [ ] `DataTypeForPath` cases for the provider's paths
 - [ ] Tests: merge cases, aggregate happy path + unauthorized/error/truncated, permission deny
@@ -527,10 +528,10 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 | Look at | When you need |
 |---------|----------------|
 | `library.go` + `internal/types/merge.go` | Music-shaped types: durable IDs, duration guard, playlist links |
-| `contacts.go` | Chained identity (email/phone/handle), union-find merge |
-| `photos.go` | Non-name identity (hash/time+dim), "bytes stay upstream" sources |
-| `events.go` | Time-windowed items, iCalUID vs title+start matching |
-| `messages.go` | Snippet-only lists, Message-ID identity, bodies stay upstream |
+| `internal/types/merge_contacts.go` | Chained identity (email/phone/handle), union-find merge |
+| `internal/types/merge_photos.go` | Non-name identity (hash/time+dim), "bytes stay upstream" sources |
+| `internal/types/merge_events.go` | Time-windowed items, iCalUID vs title+start matching |
+| `internal/types/merge_messages.go` | Snippet-only lists, Message-ID identity, bodies stay upstream |
 | `internal/types/librarykinds.go` + `librarykind.go` | Registry (`BuiltinLibraryKinds`) + shared aggregate pipeline contract |
 | `sampledata.go` | Fixture style and merge-pair seeding |
 | `copy_ledger_stamp.go` | How location stamps stay fail-open |

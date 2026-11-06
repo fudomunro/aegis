@@ -496,7 +496,7 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	// Collapse gmail + takeout (and other) source rows into one collection entry.
 	// FTS/filters may hit only one source; pull Message-ID siblings so the
 	// user still sees every source of that message (issue #139).
-	merged := MergeMessages(a.hydrateMessageSiblings(msgs, q.Dataset))
+	merged := types.MergeMessages(a.hydrateMessageSiblings(msgs, q.Dataset))
 	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
 	total := len(merged)
 	if offset >= total {
@@ -528,7 +528,7 @@ func sortMailMessages(msgs []types.Message, asc bool) {
 			}
 			return si > sj
 		}
-		ki, kj := messageIdentityKey(msgs[i]), messageIdentityKey(msgs[j])
+		ki, kj := types.MessageIdentityKey(msgs[i]), types.MessageIdentityKey(msgs[j])
 		if asc {
 			return ki < kj
 		}

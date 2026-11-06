@@ -48,69 +48,6 @@ func TestFormatMilliunitsAmount(t *testing.T) {
 	}
 }
 
-func TestMergeTransactions_ProviderID(t *testing.T) {
-	in := []types.Transaction{
-		{
-			PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", EntityID: "AQB-1",
-			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
-		},
-		{
-			PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon.com", EntityID: "AQB-1",
-			Sources: []types.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q1"}},
-		},
-	}
-	merged := MergeTransactions(in)
-	if len(merged) != 1 {
-		t.Fatalf("len = %d, want 1", len(merged))
-	}
-	if len(merged[0].Sources) != 2 {
-		t.Fatalf("sources = %d, want 2", len(merged[0].Sources))
-	}
-	if merged[0].Match != TransactionMatchProviderID {
-		t.Fatalf("match = %q, want %q", merged[0].Match, TransactionMatchProviderID)
-	}
-}
-
-func TestMergeTransactions_AmountDateMerchant(t *testing.T) {
-	in := []types.Transaction{
-		{
-			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
-		},
-		{
-			PostedAt: "2024-03-07", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Sources: []types.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q1"}},
-		},
-	}
-	merged := MergeTransactions(in)
-	if len(merged) != 1 {
-		t.Fatalf("len = %d, want 1 (adjacent-day merge)", len(merged))
-	}
-	if len(merged[0].Sources) != 2 {
-		t.Fatalf("sources = %d, want 2", len(merged[0].Sources))
-	}
-	if merged[0].Match != TransactionMatchAmountDateMerchant {
-		t.Fatalf("match = %q", merged[0].Match)
-	}
-}
-
-func TestMergeTransactions_NearMissDoesNotMerge(t *testing.T) {
-	in := []types.Transaction{
-		{
-			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y1"}},
-		},
-		{
-			PostedAt: "2024-03-06", Amount: "-24.00", Merchant: "Blue Bottle Coffee",
-			Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "y2"}},
-		},
-	}
-	merged := MergeTransactions(in)
-	if len(merged) != 2 {
-		t.Fatalf("len = %d, want 2 (different amounts must not merge)", len(merged))
-	}
-}
-
 func TestBuildTransactionSummary(t *testing.T) {
 	items := []types.Transaction{
 		{PostedAt: "2024-03-05", Amount: "-45.67", Category: []string{"Shopping"}, Currency: "USD"},
@@ -153,13 +90,6 @@ func TestBuildTransactionSummary_MultiCategorySplit(t *testing.T) {
 	}
 	if sum.TotalAmount != "-200.00" {
 		t.Fatalf("total = %q (line-item total must stay intact)", sum.TotalAmount)
-	}
-}
-
-func TestUnionTransactionCategories(t *testing.T) {
-	got := unionTransactionCategories([]string{"Coffee"}, []string{"Dining", "coffee", "Travel"})
-	if len(got) != 3 || got[0] != "Coffee" || got[1] != "Dining" || got[2] != "Travel" {
-		t.Fatalf("got %v", got)
 	}
 }
 
@@ -468,7 +398,7 @@ func TestGenerateSampleLibrary_TransactionsMerge(t *testing.T) {
 	if len(set.Transactions) == 0 {
 		t.Fatal("no sample transactions")
 	}
-	merged := MergeTransactions(set.Transactions)
+	merged := types.MergeTransactions(set.Transactions)
 	// Amazon durable-ID pair must merge; coffee adjacent-day pair must merge;
 	// coffee-2 near-miss stays distinct. Split Costco stays one row.
 	// Inputs: 8 → outputs: 6.

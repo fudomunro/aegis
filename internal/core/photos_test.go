@@ -16,62 +16,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-func TestPhotoContentKey_MergesOnHashAndTime(t *testing.T) {
-	a := types.NewPhoto("google-photos", "Google Photos", "a", "a.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
-	a.Extra = map[string]any{"content_hash": "ABC123"}
-	b := types.NewPhoto("other", "Other", "b", "copy.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
-	b.Extra = map[string]any{"content_hash": "abc123"}
-
-	if photoContentKey(a) != photoContentKey(b) {
-		t.Fatalf("hash keys should match case-insensitively: %q vs %q", photoContentKey(a), photoContentKey(b))
-	}
-
-	c := types.NewPhoto("google-photos", "Google Photos", "c", "c.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 100, 80)
-	d := types.NewPhoto("other", "Other", "d", "d.jpg", "image/jpeg", "2024-06-01T12:00:00.500Z", 100, 80)
-	if photoContentKey(c) != photoContentKey(d) {
-		t.Fatalf("same second + dims should match: %q vs %q", photoContentKey(c), photoContentKey(d))
-	}
-
-	// Different dimensions must not merge even with the same timestamp.
-	e := types.NewPhoto("google-photos", "Google Photos", "e", "e.jpg", "image/jpeg", "2024-06-01T12:00:00Z", 200, 80)
-	if photoContentKey(c) == photoContentKey(e) {
-		t.Fatal("different dimensions should not share a content key")
-	}
-
-	// Filename alone is never an identity.
-	f := types.NewPhoto("google-photos", "Google Photos", "f", "IMG_0001.jpg", "image/jpeg", "", 0, 0)
-	g := types.NewPhoto("google-photos", "Google Photos", "g", "IMG_0001.jpg", "image/jpeg", "", 0, 0)
-	if photoIdentityKey(f) == photoIdentityKey(g) {
-		t.Fatal("photos with no content key must stay distinct via service:id")
-	}
-}
-
-func TestMergePhotos_CombinesSourcesAndKeepsCanonical(t *testing.T) {
-	a := types.NewPhoto("google-photos", "Google Photos", "gp1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
-	if len(a.Sources) != 1 || !a.Sources[0].Canonical {
-		t.Fatalf("newPhoto should mark canonical source: %+v", a.Sources)
-	}
-	b := types.NewPhoto("icloud", "iCloud Photos", "ic1", "beach.jpg", "image/jpeg", "2023-07-04T18:30:00Z", 4032, 3024)
-	b.Sources[0].Canonical = false
-
-	merged := MergePhotos([]types.Photo{a, b})
-	if len(merged) != 1 {
-		t.Fatalf("got %d photos, want 1: %+v", len(merged), merged)
-	}
-	if len(merged[0].Sources) != 2 {
-		t.Fatalf("want 2 sources, got %+v", merged[0].Sources)
-	}
-	if !merged[0].Sources[0].Canonical {
-		t.Fatalf("canonical source should sort first: %+v", merged[0].Sources)
-	}
-}
-
-func TestMergePhotos_Empty(t *testing.T) {
-	if MergePhotos(nil) != nil {
-		t.Fatal("MergePhotos(nil) should be nil")
-	}
-}
-
 type fakePhotoProvider struct {
 	photos []types.Photo
 	err    error

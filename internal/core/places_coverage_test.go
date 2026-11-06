@@ -265,18 +265,6 @@ func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
 	}
 }
 
-func TestMergePlaceVisits_EmptyAndAnon(t *testing.T) {
-	if MergePlaceVisits(nil) != nil {
-		t.Fatal("nil in")
-	}
-	v := types.PlaceVisit{StartAt: "2023-01-01T00:00:00Z", Kind: types.PlaceKindVisit}
-	// No place / no sources → still returns a distinct slot when key exists.
-	out := MergePlaceVisits([]types.PlaceVisit{v})
-	if len(out) != 1 {
-		t.Fatalf("out = %+v", out)
-	}
-}
-
 func TestPhotosTakenDuring_Edges(t *testing.T) {
 	v := types.PlaceVisit{StartAt: "2023-07-04T16:00:00Z"} // no end
 	if PhotosTakenDuring(nil, v) != nil && len(PhotosTakenDuring(nil, v)) != 0 {
