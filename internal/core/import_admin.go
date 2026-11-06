@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // importStoreAdmin is one admin surface over a local import store: GET
@@ -34,47 +35,47 @@ func (s *Server) HandleAdminImportStore(w http.ResponseWriter, r *http.Request, 
 	switch {
 	case path == "" || path == "status":
 		if r.Method != http.MethodGet {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(spec.status())
 	case path == "import":
 		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		s.runAdminImportStore(w, r, spec)
 	default:
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 	}
 }
 
 func (s *Server) runAdminImportStore(w http.ResponseWriter, r *http.Request, spec importStoreAdmin) {
 	if spec.store == nil || !spec.store.Enabled() {
-		writeJSONError(w, http.StatusBadRequest, "store disabled — set "+spec.flagName)
+		shared.WriteJSONError(w, http.StatusBadRequest, "store disabled — set "+spec.flagName)
 		return
 	}
 	body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid body")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid body")
 		return
 	}
 	var req struct {
 		Path string `json:"path"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	req.Path = strings.TrimSpace(req.Path)
 	if req.Path == "" {
-		writeJSONError(w, http.StatusBadRequest, "path is required — "+spec.pathHint)
+		shared.WriteJSONError(w, http.StatusBadRequest, "path is required — "+spec.pathHint)
 		return
 	}
 	res, err := spec.importPath(req.Path)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	// Library cache must not serve the old empty list.

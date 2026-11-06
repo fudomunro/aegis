@@ -3,6 +3,8 @@ package core
 import (
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // CopyListResponse is GET /v1/library/copies.
@@ -19,7 +21,7 @@ type CopyListResponse struct {
 // GET /v1/library/copies?kind=&service=&status=&entity_key=
 func (s *Server) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	q := r.URL.Query()
@@ -51,5 +53,5 @@ func (s *Server) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
 			resp.ByService[rec.Service]++
 		}
 	}
-	writeJSON(w, resp)
+	shared.WriteJSON(w, resp)
 }

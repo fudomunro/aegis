@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -208,31 +209,31 @@ func (s *Server) HandleAppAuthorize(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		q := r.URL.Query()
 		if _, _, err := parseAuthorizeQuery(q); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if !isSafeRedirectURI(q.Get("redirect_uri")) {
-			writeJSONError(w, http.StatusBadRequest, "redirect_uri must be a path on this host")
+			shared.WriteJSONError(w, http.StatusBadRequest, "redirect_uri must be a path on this host")
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		token, err := s.issueCSRFToken()
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to issue CSRF token")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "failed to issue CSRF token")
 			return
 		}
 		fmt.Fprint(w, strings.Replace(appAuthorizeHTML, csrfTokenPlaceholder, token, 1))
 	case http.MethodPost:
 		s.handleAppAuthorizeGrant(w, r)
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
 func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request) {
 	if s.apps == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
 	// Accept form post (from the consent page) or JSON.
@@ -245,7 +246,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		}
 		var raw map[string]string
 		if err := json.Unmarshal(body, &raw); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 		q = url.Values{}
@@ -254,7 +255,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		}
 	} else {
 		if err := r.ParseForm(); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid form body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid form body")
 			return
 		}
 		q = r.Form
@@ -266,11 +267,11 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 	}
 	req, entries, err := parseAuthorizeQuery(q)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if !isSafeRedirectURI(req.RedirectURI) {
-		writeJSONError(w, http.StatusBadRequest, "redirect_uri must be a path on this host")
+		shared.WriteJSONError(w, http.StatusBadRequest, "redirect_uri must be a path on this host")
 		return
 	}
 	scopes := scopesFromEntries(entries)
@@ -283,16 +284,16 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 	if _, ok := s.apps.Get(req.ClientID); ok {
 		name := req.Name
 		if err := s.apps.Enable(req.ClientID); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		if _, err := s.apps.Update(req.ClientID, AppUpdateRequest{Name: &name, Scopes: &scopes}); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	} else {
 		if _, _, err := s.apps.Create(ensure); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 	}
@@ -307,7 +308,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		State:      req.State,
 	})
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to issue grant code")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to issue grant code")
 		return
 	}
 	s.invalidateCaches()
@@ -315,7 +316,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		Info("third-party data grant", "app_id", req.ClientID, "scopes", scopes)
 
 	if strings.Contains(ct, "application/json") {
-		writeJSON(w, map[string]any{
+		shared.WriteJSON(w, map[string]any{
 			"code":  code,
 			"state": req.State,
 			"app":   mustAppView(s.apps, req.ClientID),
@@ -336,11 +337,11 @@ func mustAppView(store *AppStore, id string) AppView {
 // POST /v1/apps/token  {"code":"aeg_grant_…"}
 func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.apps == nil || s.grants == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
 	body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
@@ -351,25 +352,25 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 		Code string `json:"code"`
 	}
 	if err := json.Unmarshal(body, &req); err != nil {
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	code := strings.TrimSpace(req.Code)
 	if code == "" {
-		writeJSONError(w, http.StatusBadRequest, "code is required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "code is required")
 		return
 	}
 	grant, ok := s.grants.consume(code)
 	if !ok {
-		writeJSONError(w, http.StatusBadRequest, "invalid or expired grant code")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid or expired grant code")
 		return
 	}
 	view, token, err := s.apps.Rotate(grant.AppID)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, map[string]any{
+	shared.WriteJSON(w, map[string]any{
 		"access_token": token,
 		"token_type":   "Bearer",
 		"app":          view,
@@ -384,11 +385,11 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 // POST /v1/apps/revoke   Authorization: Bearer aeg_app_…
 func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.apps == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
 	authz := r.Header.Get("Authorization")
@@ -400,18 +401,18 @@ func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 		token = strings.TrimSpace(r.Header.Get("X-Api-Key"))
 	}
 	if token == "" || !strings.HasPrefix(token, appTokenPrefix) {
-		writeJSONError(w, http.StatusUnauthorized, "app token required")
+		shared.WriteJSONError(w, http.StatusUnauthorized, "app token required")
 		return
 	}
 	id, err := s.apps.RevokeByToken(token)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	s.invalidateCaches()
 	withPeerLog(slog.With("handler", "app_revoke"), r).
 		Info("third-party app disconnected", "app_id", id)
-	writeJSON(w, map[string]any{"status": "revoked", "app_id": id})
+	shared.WriteJSON(w, map[string]any{"status": "revoked", "app_id": id})
 }
 
 // HandleThirdPartyDemo serves the hosted-SaaS demo page (issue #131).
@@ -421,7 +422,7 @@ func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 // GET /demo/third-party
 func (s *Server) HandleThirdPartyDemo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

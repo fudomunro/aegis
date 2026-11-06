@@ -1,9 +1,9 @@
 package connectors
 
 import (
-	"database/sql"
 	"archive/zip"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -107,8 +108,6 @@ CREATE TABLE IF NOT EXISTS timeline_visits (
 CREATE INDEX IF NOT EXISTS timeline_visits_start ON timeline_visits(start_at);
 CREATE INDEX IF NOT EXISTS timeline_visits_locality ON timeline_visits(place_locality);
 `
-
-
 
 // upsertTimelineTx stores or replaces one imported visit keyed by source_id.
 func upsertTimelineTx(tx *sql.Tx, filePath string, v types.PlaceVisit) error {
@@ -603,7 +602,7 @@ func (c *TimelineConnector) SystemInstructions(baseURL string) string {
 }
 
 func (c *TimelineConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
-	WriteJSONError(w, http.StatusNotFound, "google-timeline is import-only; use /v1/library/places")
+	shared.WriteJSONError(w, http.StatusNotFound, "google-timeline is import-only; use /v1/library/places")
 }
 
 // ListUserPlaceVisits returns imported visits as a PlaceVisitProvider.
@@ -626,4 +625,3 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []t
 	}
 	return out, truncated, nil
 }
-

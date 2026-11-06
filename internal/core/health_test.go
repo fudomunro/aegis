@@ -262,4 +262,3 @@ func TestPromText_CacheAndAccessSeries(t *testing.T) {
 		t.Fatal("nil registry should emit empty text")
 	}
 }
-

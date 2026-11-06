@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -97,7 +98,7 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 	token := c.host.GetValidToken(GoogleContactsServiceID, logger)
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Google Contacts token — authorize at /v1/auth/"+GoogleContactsServiceID+"/login")
 		return
 	}
@@ -106,7 +107,7 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 	if remainingPath == "/me/contacts" || remainingPath == "/me/contacts/" ||
 		remainingPath == "/contacts" || remainingPath == "/contacts/" {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleListContacts(w, r)
@@ -115,7 +116,7 @@ func (c *GoogleContactsConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 	if id, ok := ContactIDFromProxyPath(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleGetContact(w, r, token, id)
@@ -144,12 +145,12 @@ func (c *GoogleContactsConnector) HandleListContacts(w http.ResponseWriter, r *h
 	contacts, truncated, err := c.ListUserContacts(r.Context())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			WriteJSONError(w, http.StatusUnauthorized,
+			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Google Contacts token — authorize at /v1/auth/"+GoogleContactsServiceID+"/login")
 			return
 		}
 		slog.Warn("google contacts list failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch contacts from Google Contacts")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch contacts from Google Contacts")
 		return
 	}
 	if contacts == nil {
@@ -172,7 +173,7 @@ func (c *GoogleContactsConnector) HandleListContacts(w http.ResponseWriter, r *h
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build contacts list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build contacts list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -188,20 +189,20 @@ func (c *GoogleContactsConnector) HandleGetContact(w http.ResponseWriter, r *htt
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
 		logger.Error("failed to build contact request", "error", err)
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		logger.Error("contact request failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Google Contacts request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Google Contacts response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Google Contacts response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -212,13 +213,13 @@ func (c *GoogleContactsConnector) HandleGetContact(w http.ResponseWriter, r *htt
 	}
 	var person googlePeoplePerson
 	if err := json.Unmarshal(data, &person); err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to parse Google Contacts response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse Google Contacts response")
 		return
 	}
 	contact := MapGooglePerson(person)
 	out, err := json.Marshal(contact)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode contact")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode contact")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -252,7 +253,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 	var all []types.Contact
 	pageToken := ""
 	truncated := false
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/people/me/connections?pageSize=100&personFields=" + googleContactsPersonFields
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
@@ -262,7 +263,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -288,7 +289,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 		if pageToken == "" {
 			break
 		}
-		if page == LibraryPageCap-1 && pageToken != "" {
+		if page == shared.LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}

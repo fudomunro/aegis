@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"math"
 	"net/http"
 	"net/url"
 	"sort"
@@ -13,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -197,7 +197,7 @@ func (c *OwnTracksConnector) ListUserPlaceVisits(ctx context.Context) (visits []
 
 func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string, logger *slog.Logger) ([]types.PlaceVisit, bool, error) {
 	q := url.Values{}
-	q.Set("limit", strconv.Itoa(LibraryPageCap*2))
+	q.Set("limit", strconv.Itoa(shared.LibraryPageCap*2))
 	var parsed ownTracksVisitsResponse
 	if err := c.OwnTracksAPIGet(ctx, logger, base+"/api/v0/visit", q, &parsed); err != nil {
 		return nil, false, err
@@ -246,12 +246,12 @@ func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string
 
 func (c *OwnTracksConnector) ListRecorderLocations(ctx context.Context, base string, logger *slog.Logger) ([]OwnTracksLocation, bool, error) {
 	q := url.Values{}
-	q.Set("limit", strconv.Itoa(LibraryPageCap*4))
+	q.Set("limit", strconv.Itoa(shared.LibraryPageCap*4))
 	var parsed ownTracksLocationsResponse
 	if err := c.OwnTracksAPIGet(ctx, logger, base+"/api/v0/locations", q, &parsed); err != nil {
 		return nil, false, err
 	}
-	truncated := len(parsed.Data) >= LibraryPageCap*4
+	truncated := len(parsed.Data) >= shared.LibraryPageCap*4
 	return parsed.Data, truncated, nil
 }
 
@@ -273,7 +273,7 @@ func (c *OwnTracksConnector) OwnTracksAPIGet(ctx context.Context, logger *slog.L
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Accept", "application/json")
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -316,7 +316,7 @@ func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 	for _, loc := range sorted {
 		ts := time.Unix(loc.Tst, 0).UTC()
 		if cur != nil {
-			dist := HaversineMeters(cur.lat, cur.lng, loc.Lat, loc.Lon)
+			dist := shared.HaversineMeters(cur.lat, cur.lng, loc.Lat, loc.Lon)
 			gap := ts.Sub(cur.end)
 			if dist <= stayRadiusM && gap <= sampleTimeout {
 				cur.end = ts
@@ -384,7 +384,7 @@ func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 			next := clusters[i+1]
 			gap := next.start.Sub(cl.end)
 			if gap > sampleTimeout && gap <= tripMaxGap {
-				dist := HaversineMeters(cl.lat, cl.lng, next.lat, next.lng)
+				dist := shared.HaversineMeters(cl.lat, cl.lng, next.lat, next.lng)
 				if dist > stayRadiusM {
 					tid := "ott:" + strconv.FormatInt(cl.end.Unix(), 10) + ":" + strconv.FormatInt(next.start.Unix(), 10)
 					mode := types.TripModeDrive
@@ -414,15 +414,4 @@ func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 
 func SortOwnTracks(locs []OwnTracksLocation) {
 	sort.SliceStable(locs, func(i, j int) bool { return locs[i].Tst < locs[j].Tst })
-}
-
-// HaversineMeters returns the great-circle distance between two points.
-func HaversineMeters(lat1, lon1, lat2, lon2 float64) float64 {
-	const r = 6371000.0
-	toRad := func(v float64) float64 { return v * math.Pi / 180 }
-	dLat := toRad(lat2 - lat1)
-	dLon := toRad(lon2 - lon1)
-	a := math.Sin(dLat/2)*math.Sin(dLat/2) +
-		math.Cos(toRad(lat1))*math.Cos(toRad(lat2))*math.Sin(dLon/2)*math.Sin(dLon/2)
-	return 2 * r * math.Atan2(math.Sqrt(a), math.Sqrt(1-a))
 }

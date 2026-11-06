@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -129,7 +130,7 @@ func TestGoogleContactsConnector_ListUserContacts_PaginatesAndTruncates(t *testi
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		pages++
 		w.Header().Set("Content-Type", "application/json")
-		// Always emit another page so the connector hits connectors.LibraryPageCap.
+		// Always emit another page so the connector hits shared.LibraryPageCap.
 		json.NewEncoder(w).Encode(map[string]any{
 			"connections": []map[string]any{
 				{
@@ -157,8 +158,8 @@ func TestGoogleContactsConnector_ListUserContacts_PaginatesAndTruncates(t *testi
 	if !truncated {
 		t.Fatal("expected truncated after page cap")
 	}
-	if len(contacts) != connectors.LibraryPageCap {
-		t.Fatalf("got %d contacts, want %d", len(contacts), connectors.LibraryPageCap)
+	if len(contacts) != shared.LibraryPageCap {
+		t.Fatalf("got %d contacts, want %d", len(contacts), shared.LibraryPageCap)
 	}
 }
 

@@ -279,50 +279,6 @@ func TestFetchAllPagesRaw(t *testing.T) {
 	}
 }
 
-func TestExtractNamesAndNested(t *testing.T) {
-	obj := map[string]any{
-		"artists": []any{
-			map[string]any{"name": "A"},
-			"skip",
-			map[string]any{"no_name": true},
-			map[string]any{"name": "B"},
-		},
-		"album": map[string]any{"name": "Al", "id": "1"},
-	}
-	names := ExtractNames(obj, "artists")
-	if len(names) != 2 || names[0] != "A" || names[1] != "B" {
-		t.Fatalf("names = %v", names)
-	}
-	if ExtractNames(obj, "missing") != nil {
-		t.Fatal("missing key should be nil")
-	}
-	if got := ExtractNested(obj, "album", "name"); got != "Al" {
-		t.Fatalf("nested = %v", got)
-	}
-	if got := ExtractNested(obj, "album", "id"); got != "1" {
-		t.Fatalf("nested id = %v", got)
-	}
-	if got := ExtractNested(obj, "album", "missing"); got != nil {
-		t.Fatalf("missing nested = %v", got)
-	}
-	if got := ExtractNested(map[string]any{}, "a", "b"); got != nil {
-		t.Fatalf("empty = %v", got)
-	}
-}
-
-func TestExtraOrNil(t *testing.T) {
-	if ExtraOrNil(nil) != nil {
-		t.Fatal("nil map should stay nil")
-	}
-	if ExtraOrNil(map[string]any{}) != nil {
-		t.Fatal("empty map should be nil")
-	}
-	m := map[string]any{"uri": "x"}
-	if ExtraOrNil(m)["uri"] != "x" {
-		t.Fatal("non-empty map preserved")
-	}
-}
-
 func TestNewAlbum(t *testing.T) {
 	if types.NewAlbum("spotify", "Spotify", "1", "  ") != nil {
 		t.Fatal("blank album name should be nil")
@@ -383,12 +339,12 @@ func TestSpotify_NeutralPlaylistMissingExternalURL(t *testing.T) {
 func TestSpotifyTransformArtist(t *testing.T) {
 	conn := &SpotifyConnector{}
 	out := conn.TransformArtist(map[string]any{
-		"name": "Miles Davis",
-		"genres": []any{"jazz"},
-		"followers": map[string]any{"total": 12},
+		"name":       "Miles Davis",
+		"genres":     []any{"jazz"},
+		"followers":  map[string]any{"total": 12},
 		"popularity": 80,
-		"id": "artist-1",
-		"uri": "spotify:artist:artist-1",
+		"id":         "artist-1",
+		"uri":        "spotify:artist:artist-1",
 	})
 	if out["name"] != "Miles Davis" || out["id"] != "artist-1" {
 		t.Fatalf("out = %+v", out)

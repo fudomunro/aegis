@@ -5,6 +5,8 @@ import (
 	"io/fs"
 	"net/http"
 	"strconv"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Brand marks for favicon / logo (issue #87). Production derivatives live
@@ -34,17 +36,17 @@ var brandAssets = map[string]brandAsset{
 // request these without credentials, and the files contain no secrets.
 func (s *Server) HandleBrandAsset(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	asset, ok := brandAssets[r.URL.Path]
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "unknown brand asset")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown brand asset")
 		return
 	}
 	data, err := fs.ReadFile(brandFS, asset.name)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "brand asset missing")
+		shared.WriteJSONError(w, http.StatusNotFound, "brand asset missing")
 		return
 	}
 	w.Header().Set("Content-Type", asset.contentType)

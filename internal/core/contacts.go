@@ -9,7 +9,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-
 // unionStrings appends values from b that are not already in a.
 func unionStrings(a, b []string) []string {
 	if len(b) == 0 {

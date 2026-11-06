@@ -20,7 +20,7 @@ import (
 // lifecycle, the item cap, stable synthetic IDs, and batched import writes.
 
 // LibraryItemCap is the max rows a local store listing (Signal, Quicken,
-// Timeline) returns in one call. Distinct from LibraryPageCap — that is an
+// Timeline) returns in one call. Distinct from shared.LibraryPageCap — that is an
 // upstream page-loop valve, not a product slice (issue #185).
 const LibraryItemCap = 500
 

@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // HandleAdminApps manages third-party application credentials (issue #131).
@@ -20,7 +22,7 @@ import (
 // Plaintext tokens are returned only from create and rotate.
 func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 	if s.apps == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/apps")
@@ -29,7 +31,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, map[string]any{"apps": s.apps.List()})
+			shared.WriteJSON(w, map[string]any{"apps": s.apps.List()})
 		case http.MethodPost:
 			body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 			if !ok {
@@ -37,26 +39,26 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 			}
 			var req AppCreateRequest
 			if err := json.Unmarshal(body, &req); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 			view, token, err := s.apps.Create(req)
 			if err != nil {
 				withPeerLog(slog.With("handler", "admin_apps"), r).
 					Warn("failed to create app", "app_id", req.ID, "error", err)
-				writeJSONError(w, http.StatusBadRequest, err.Error())
+				shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 			s.invalidateCaches()
 			withPeerLog(slog.With("handler", "admin_apps"), r).
 				Info("third-party app created", "app_id", view.ID, "scopes", view.Scopes)
-			writeJSON(w, map[string]any{
+			shared.WriteJSON(w, map[string]any{
 				"app":   view,
 				"token": token,
 				"note":  "Store this token now — it is not shown again.",
 			})
 		default:
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	}
@@ -70,25 +72,25 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 		id = strings.Trim(id, "/")
 	}
 	if id == "" || strings.Contains(id, "/") {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
 
 	switch {
 	case rotate:
 		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		view, token, err := s.apps.Rotate(id)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_apps"), r).
 			Info("third-party app token rotated", "app_id", id)
-		writeJSON(w, map[string]any{
+		shared.WriteJSON(w, map[string]any{
 			"app":   view,
 			"token": token,
 			"note":  "Store this token now — it is not shown again. The previous token is invalid.",
@@ -96,10 +98,10 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodGet:
 		view, ok := s.apps.Get(id)
 		if !ok {
-			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("app %q not found", id))
+			shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("app %q not found", id))
 			return
 		}
-		writeJSON(w, map[string]any{"app": view})
+		shared.WriteJSON(w, map[string]any{"app": view})
 	case r.Method == http.MethodPatch || r.Method == http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
@@ -107,28 +109,28 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 		}
 		var req AppUpdateRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 		view, err := s.apps.Update(id, req)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_apps"), r).
 			Info("third-party app updated", "app_id", id, "disabled", view.Disabled)
-		writeJSON(w, map[string]any{"app": view, "status": "saved"})
+		shared.WriteJSON(w, map[string]any{"app": view, "status": "saved"})
 	case r.Method == http.MethodDelete:
 		if err := s.apps.Delete(id); err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_apps"), r).
 			Info("third-party app deleted", "app_id", id)
-		writeJSON(w, map[string]string{"status": "deleted", "id": id})
+		shared.WriteJSON(w, map[string]string{"status": "deleted", "id": id})
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

@@ -12,6 +12,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Inbound request body caps (issue #97). Generous for real agent payloads
@@ -58,11 +60,11 @@ func readBodyLimited(w http.ResponseWriter, r *http.Request, max int64) ([]byte,
 func writeBodyReadError(w http.ResponseWriter, err error) {
 	var maxErr *http.MaxBytesError
 	if errors.As(err, &maxErr) {
-		writeJSONError(w, http.StatusRequestEntityTooLarge,
+		shared.WriteJSONError(w, http.StatusRequestEntityTooLarge,
 			fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
 		return
 	}
-	writeJSONError(w, http.StatusBadRequest, "failed to read request body")
+	shared.WriteJSONError(w, http.StatusBadRequest, "failed to read request body")
 }
 
 // constantTimeEqual reports whether two strings are equal without leaking

@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -241,8 +242,8 @@ func TestGoogleCalendarConnector_ListCalendarEvents_PaginatesAndTruncates(t *tes
 	if !truncated {
 		t.Fatal("expected truncated after page cap")
 	}
-	if len(events) != connectors.LibraryPageCap {
-		t.Fatalf("got %d events, want %d", len(events), connectors.LibraryPageCap)
+	if len(events) != shared.LibraryPageCap {
+		t.Fatalf("got %d events, want %d", len(events), shared.LibraryPageCap)
 	}
 }
 

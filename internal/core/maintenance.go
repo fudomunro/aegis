@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Maintenance signals (issue #86): the phase-1 observation bundle the sync
@@ -142,21 +144,21 @@ func WriteMaintenanceSignals(dir string, sig MaintenanceSignals) (string, error)
 func (s *Server) HandleAdminMaintenanceSignals(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, s.CollectMaintenanceSignals())
+		shared.WriteJSON(w, s.CollectMaintenanceSignals())
 	case http.MethodPost:
 		if s.dataDir == "" {
-			writeJSONError(w, http.StatusInternalServerError, "data directory not configured")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "data directory not configured")
 			return
 		}
 		sig := s.CollectMaintenanceSignals()
 		path, err := WriteMaintenanceSignals(filepath.Join(s.dataDir, dataDirMaintenanceSubdir), sig)
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "capture failed: "+err.Error())
+			shared.WriteJSONError(w, http.StatusInternalServerError, "capture failed: "+err.Error())
 			return
 		}
-		writeJSON(w, MaintenanceCaptureResult{Path: path, Signals: sig})
+		shared.WriteJSON(w, MaintenanceCaptureResult{Path: path, Signals: sig})
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 

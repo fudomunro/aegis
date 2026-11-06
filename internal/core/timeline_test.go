@@ -30,12 +30,3 @@ func TestOwnTracksClusterVisits(t *testing.T) {
 		t.Fatalf("name = %q", visits[0].Place.Name)
 	}
 }
-
-func TestHaversineMeters(t *testing.T) {
-	// ~111m per 0.001° latitude.
-	d := connectors.HaversineMeters(44.0, -63.0, 44.001, -63.0)
-	if d < 100 || d > 130 {
-		t.Fatalf("haversine = %f", d)
-	}
-}
-

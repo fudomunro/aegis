@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -279,13 +280,13 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]types.Alb
 
 	var all []types.Album
 	nextURL := upstreamBase + "/me/albums?limit=50"
-	for page := 0; page < LibraryPageCap && nextURL != ""; page++ {
+	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -330,13 +331,13 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]types
 
 	var all []types.Artist
 	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
-	for page := 0; page < LibraryPageCap && nextURL != ""; page++ {
+	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -381,7 +382,7 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 	id, _ := album["id"].(string)
 	name, _ := album["name"].(string)
 	uri, _ := album["uri"].(string)
-	upc, _ := ExtractNested(album, "external_ids", "upc").(string)
+	upc, _ := shared.ExtractNested(album, "external_ids", "upc").(string)
 
 	var artists []types.Artist
 	if rawArtists, ok := album["artists"].([]any); ok {
@@ -402,7 +403,7 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 		}
 	}
 	if len(artists) == 0 {
-		for _, n := range ExtractNames(album, "artists") {
+		for _, n := range shared.ExtractNames(album, "artists") {
 			artists = append(artists, types.NewArtist("spotify", "Spotify", "", n))
 		}
 	}
@@ -429,7 +430,7 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 			ID:          id,
 			Name:        name,
 			URL:         url,
-			Extra:       ExtraOrNil(extra),
+			Extra:       shared.ExtraOrNil(extra),
 		}},
 	}
 }
@@ -461,13 +462,13 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]types.Tra
 
 	var all []types.Track
 	nextURL := upstreamBase + "/me/tracks?limit=50"
-	for page := 0; page < LibraryPageCap && nextURL != ""; page++ {
+	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -512,13 +513,13 @@ func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]types.Playl
 
 	var all []types.Playlist
 	nextURL := upstreamBase + "/me/playlists?limit=50"
-	for page := 0; page < LibraryPageCap && nextURL != ""; page++ {
+	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
 		if err != nil {
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -560,12 +561,12 @@ func SpotifyPlaylistURL(id string) string {
 func PlaylistTrackTotal(p map[string]any) int {
 	for _, key := range []string{"items", "tracks"} {
 		if obj, ok := p[key].(map[string]any); ok {
-			if n, ok := AsInt(obj["total"]); ok {
+			if n, ok := shared.AsInt(obj["total"]); ok {
 				return n
 			}
 		}
 	}
-	if n, ok := AsInt(p["track_count"]); ok {
+	if n, ok := shared.AsInt(p["track_count"]); ok {
 		return n
 	}
 	return 0
@@ -608,7 +609,7 @@ func (c *SpotifyConnector) NeutralPlaylist(p map[string]any) types.Playlist {
 
 	trackCount := PlaylistTrackTotal(p)
 
-	owner, _ := ExtractNested(p, "owner", "display_name").(string)
+	owner, _ := shared.ExtractNested(p, "owner", "display_name").(string)
 
 	extra := map[string]any{}
 	if uri != "" {
@@ -643,10 +644,10 @@ func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) types.Playl
 		playlists = append(playlists, c.NeutralPlaylist(p))
 	}
 	total := len(playlists)
-	if n, ok := AsInt(raw["total"]); ok {
+	if n, ok := shared.AsInt(raw["total"]); ok {
 		total = n
 	}
-	if n, ok := AsInt(raw["total_fetched"]); ok {
+	if n, ok := shared.AsInt(raw["total_fetched"]); ok {
 		total = n
 	}
 	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}
@@ -666,8 +667,8 @@ func (c *SpotifyConnector) TransformSavedTracks(raw map[string]any) map[string]a
 		}
 		tracks = append(tracks, map[string]any{
 			"name":    track["name"],
-			"artists": ExtractNames(track, "artists"),
-			"album":   ExtractNested(track, "album", "name"),
+			"artists": shared.ExtractNames(track, "artists"),
+			"album":   shared.ExtractNested(track, "album", "name"),
 			"id":      track["id"],
 			"uri":     track["uri"],
 		})
@@ -692,7 +693,7 @@ func (c *SpotifyConnector) TransformSavedAlbums(raw map[string]any) map[string]a
 		}
 		albums = append(albums, map[string]any{
 			"name":    album["name"],
-			"artists": ExtractNames(album, "artists"),
+			"artists": shared.ExtractNames(album, "artists"),
 			"id":      album["id"],
 			"uri":     album["uri"],
 		})
@@ -714,8 +715,8 @@ func (c *SpotifyConnector) TransformPlayer(raw map[string]any) map[string]any {
 	if item != nil {
 		result["track"] = map[string]any{
 			"name":    item["name"],
-			"artists": ExtractNames(item, "artists"),
-			"album":   ExtractNested(item, "album", "name"),
+			"artists": shared.ExtractNames(item, "artists"),
+			"album":   shared.ExtractNested(item, "album", "name"),
 		}
 	}
 	if device, ok := raw["device"].(map[string]any); ok {
@@ -742,8 +743,8 @@ func (c *SpotifyConnector) TransformRecentlyPlayed(raw map[string]any) map[strin
 		}
 		tracks = append(tracks, map[string]any{
 			"name":      track["name"],
-			"artists":   ExtractNames(track, "artists"),
-			"album":     ExtractNested(track, "album", "name"),
+			"artists":   shared.ExtractNames(track, "artists"),
+			"album":     shared.ExtractNested(track, "album", "name"),
 			"played_at": entry["played_at"],
 		})
 	}
@@ -760,8 +761,8 @@ func (c *SpotifyConnector) TransformTrackList(raw map[string]any) map[string]any
 		}
 		tracks = append(tracks, map[string]any{
 			"name":    t["name"],
-			"artists": ExtractNames(t, "artists"),
-			"album":   ExtractNested(t, "album", "name"),
+			"artists": shared.ExtractNames(t, "artists"),
+			"album":   shared.ExtractNested(t, "album", "name"),
 			"id":      t["id"],
 			"uri":     t["uri"],
 		})
@@ -807,10 +808,10 @@ func (c *SpotifyConnector) TransformSearch(raw map[string]any) map[string]any {
 				"uri":  obj["uri"],
 			}
 			if obj["artists"] != nil {
-				entry["artists"] = ExtractNames(obj, "artists")
+				entry["artists"] = shared.ExtractNames(obj, "artists")
 			}
 			if obj["album"] != nil {
-				entry["album"] = ExtractNested(obj, "album", "name")
+				entry["album"] = shared.ExtractNested(obj, "album", "name")
 			}
 			transformed = append(transformed, entry)
 		}
@@ -837,10 +838,10 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 	id, _ := track["id"].(string)
 	name, _ := track["name"].(string)
 	uri, _ := track["uri"].(string)
-	albumName, _ := ExtractNested(track, "album", "name").(string)
-	albumID, _ := ExtractNested(track, "album", "id").(string)
-	isrc, _ := ExtractNested(track, "external_ids", "isrc").(string)
-	durationMs, _ := AsInt(track["duration_ms"])
+	albumName, _ := shared.ExtractNested(track, "album", "name").(string)
+	albumID, _ := shared.ExtractNested(track, "album", "id").(string)
+	isrc, _ := shared.ExtractNested(track, "external_ids", "isrc").(string)
+	durationMs, _ := shared.AsInt(track["duration_ms"])
 
 	extra := map[string]any{}
 	if uri != "" {
@@ -869,7 +870,7 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 		}
 	}
 	if len(artists) == 0 {
-		for _, n := range ExtractNames(track, "artists") {
+		for _, n := range shared.ExtractNames(track, "artists") {
 			artists = append(artists, types.NewArtist("spotify", "Spotify", "", n))
 		}
 	}
@@ -891,16 +892,9 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 			ServiceName: "Spotify",
 			ID:          id,
 			URL:         url,
-			Extra:       ExtraOrNil(extra),
+			Extra:       shared.ExtraOrNil(extra),
 		}},
 	}
-}
-
-func ExtraOrNil(m map[string]any) map[string]any {
-	if len(m) == 0 {
-		return nil
-	}
-	return m
 }
 
 func (c *SpotifyConnector) TransformPlaylistDetail(raw map[string]any) types.PlaylistDetail {
@@ -928,8 +922,8 @@ func (c *SpotifyConnector) TransformPlaylistDetail(raw map[string]any) types.Pla
 func (c *SpotifyConnector) TransformTrack(raw map[string]any) map[string]any {
 	return map[string]any{
 		"name":        raw["name"],
-		"artists":     ExtractNames(raw, "artists"),
-		"album":       ExtractNested(raw, "album", "name"),
+		"artists":     shared.ExtractNames(raw, "artists"),
+		"album":       shared.ExtractNested(raw, "album", "name"),
 		"duration_ms": raw["duration_ms"],
 		"popularity":  raw["popularity"],
 		"preview_url": raw["preview_url"],
@@ -942,7 +936,7 @@ func (c *SpotifyConnector) TransformArtist(raw map[string]any) map[string]any {
 	return map[string]any{
 		"name":       raw["name"],
 		"genres":     raw["genres"],
-		"followers":  ExtractNested(raw, "followers", "total"),
+		"followers":  shared.ExtractNested(raw, "followers", "total"),
 		"popularity": raw["popularity"],
 		"id":         raw["id"],
 		"uri":        raw["uri"],
@@ -970,7 +964,7 @@ func (c *SpotifyConnector) TransformAlbum(raw map[string]any) map[string]any {
 	}
 	return map[string]any{
 		"name":         raw["name"],
-		"artists":      ExtractNames(raw, "artists"),
+		"artists":      shared.ExtractNames(raw, "artists"),
 		"release_date": raw["release_date"],
 		"total_tracks": raw["total_tracks"],
 		"tracks":       tracks,
@@ -1015,9 +1009,9 @@ func (c *SpotifyConnector) FetchAllPagesRaw(ctx context.Context, first map[strin
 	allItems, _ := first["items"].([]any)
 	nextURL, _ := first["next"].(string)
 
-	// Follow up to LibraryPageCap additional pages so large libraries are
+	// Follow up to shared.LibraryPageCap additional pages so large libraries are
 	// not silently cut off. Hit the cap → mark truncated for the caller.
-	maxPages := LibraryPageCap
+	maxPages := shared.LibraryPageCap
 	for i := 0; i < maxPages && nextURL != ""; i++ {
 		data, status, err := DoUpstreamRequest(ctx, "GET", nextURL, nil, token)
 		if err != nil || status != http.StatusOK {
@@ -1044,36 +1038,4 @@ func (c *SpotifyConnector) FetchAllPagesRaw(ctx context.Context, first map[strin
 	delete(first, "offset")
 	delete(first, "limit")
 	return first
-}
-
-// Helper functions for extracting nested Spotify response fields.
-
-func ExtractNames(obj map[string]any, key string) []string {
-	arr, ok := obj[key].([]any)
-	if !ok {
-		return nil
-	}
-	names := make([]string, 0, len(arr))
-	for _, item := range arr {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		if name, ok := m["name"].(string); ok {
-			names = append(names, name)
-		}
-	}
-	return names
-}
-
-func ExtractNested(obj map[string]any, keys ...string) any {
-	current := obj
-	for _, key := range keys[:len(keys)-1] {
-		next, ok := current[key].(map[string]any)
-		if !ok {
-			return nil
-		}
-		current = next
-	}
-	return current[keys[len(keys)-1]]
 }

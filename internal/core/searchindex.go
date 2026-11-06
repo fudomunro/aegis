@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -471,7 +472,7 @@ func (x *SearchIndex) CountsByKind() (map[string]int, error) {
 
 // SearchIndexKindStatus describes one library kind's search posture.
 type SearchIndexKindStatus struct {
-	ID   string `json:"id"`
+	ID    string `json:"id"`
 	Label string `json:"label"`
 	// Searchable reports whether the kind declares a SearchSpec.
 	Searchable bool `json:"searchable"`
@@ -481,9 +482,9 @@ type SearchIndexKindStatus struct {
 
 // SearchIndexStatus is the admin-facing search index summary.
 type SearchIndexStatus struct {
-	Enabled bool   `json:"enabled"`
-	Path    string `json:"path,omitempty"`
-	Total   int    `json:"total"`
+	Enabled bool                    `json:"enabled"`
+	Path    string                  `json:"path,omitempty"`
+	Total   int                     `json:"total"`
 	Kinds   []SearchIndexKindStatus `json:"kinds"`
 }
 
@@ -491,7 +492,7 @@ type SearchIndexStatus struct {
 // GET /v1/admin/search/status. Mirrors the mail-archive status surface.
 func (s *Server) HandleAdminSearchStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	st := SearchIndexStatus{Enabled: s.search.Enabled()}
@@ -503,7 +504,7 @@ func (s *Server) HandleAdminSearchStatus(w http.ResponseWriter, r *http.Request)
 		var err error
 		counts, err = s.search.CountsByKind()
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to read search index status")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "failed to read search index status")
 			return
 		}
 	}
@@ -517,5 +518,5 @@ func (s *Server) HandleAdminSearchStatus(w http.ResponseWriter, r *http.Request)
 		})
 		st.Total += n
 	}
-	writeJSON(w, st)
+	shared.WriteJSON(w, st)
 }

@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -34,8 +35,8 @@ type googlePeopleCreate struct {
 }
 
 type googlePeopleUpdate struct {
-	Person           googlePeopleCreate `json:"person"`
-	UpdatePersonFields string           `json:"updatePersonFields"`
+	Person             googlePeopleCreate `json:"person"`
+	UpdatePersonFields string             `json:"updatePersonFields"`
 }
 
 // googleCalendarEventWrite is the Calendar events.insert/update body subset.
@@ -55,9 +56,9 @@ type googleCalendarEventWrite struct {
 }
 
 type googleCalendarEventID struct {
-	ID      string `json:"id"`
+	ID       string `json:"id"`
 	HTMLLink string `json:"htmlLink"`
-	ETag    string `json:"etag"`
+	ETag     string `json:"etag"`
 }
 
 // CreateGoogleContact creates a person on Google Contacts and returns the
@@ -166,7 +167,7 @@ func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resou
 	if strings.TrimSpace(etag) != "" {
 		req.Header.Set("If-Match", etag)
 	}
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -293,7 +294,7 @@ func (c *GoogleCalendarConnector) UpdateGoogleEvent(ctx context.Context, calenda
 	if strings.TrimSpace(etag) != "" {
 		req.Header.Set("If-Match", etag)
 	}
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -325,7 +326,7 @@ func (c *GoogleContactsConnector) postJSON(ctx context.Context, token, u string,
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}
@@ -350,7 +351,7 @@ func (c *GoogleCalendarConnector) postJSON(ctx context.Context, token, u string,
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return err
 	}

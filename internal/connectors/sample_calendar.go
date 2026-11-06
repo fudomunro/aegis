@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -55,11 +56,11 @@ func (c *SampleCalendarConnector) SystemInstructions(baseURL string) string {
 
 func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	events := SampleCalendarEvents()
-	WriteJSON(w, types.CalendarEventList{
+	shared.WriteJSON(w, types.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 	})

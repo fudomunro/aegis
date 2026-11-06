@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -29,7 +30,7 @@ func (c *SpotifyConnector) GetPlaylistMeta(ctx context.Context, playlistID strin
 	name, _ := raw["name"].(string)
 	snapshot, _ := raw["snapshot_id"].(string)
 	tracks, _ := raw["tracks"].(map[string]any)
-	total, _ := AsInt(tracks["total"])
+	total, _ := shared.AsInt(tracks["total"])
 	return types.PlaylistMeta{Name: name, ItemCount: total, VersionToken: snapshot}, true, nil
 }
 
@@ -41,7 +42,7 @@ func (c *SpotifyConnector) SavedTrackCount(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	total, _ := AsInt(raw["total"])
+	total, _ := shared.AsInt(raw["total"])
 	return total, nil
 }
 
@@ -128,7 +129,7 @@ func spotifyItemsToTracks(raw map[string]any) ([]types.Track, int) {
 		}
 		out = append(out, NeutralSpotifyTrack(t))
 	}
-	total, _ := AsInt(raw["total"])
+	total, _ := shared.AsInt(raw["total"])
 	return out, total
 }
 

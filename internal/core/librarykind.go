@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -399,7 +400,7 @@ type libraryKindSpec[T any] struct {
 // method check, cache, permission-aware fan-out, merge, and JSON response.
 func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Request, spec libraryKindSpec[T]) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -409,12 +410,12 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 
 	pageReq, pageErr := types.ParsePageRequest(r.URL.Query().Get("limit"), r.URL.Query().Get("cursor"))
 	if pageErr != nil {
-		writeJSONError(w, http.StatusBadRequest, pageErr.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, pageErr.Error())
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
 	if q != "" && kind.Search == nil {
-		writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("%s does not support search", kind.ID))
+		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("%s does not support search", kind.ID))
 		return
 	}
 
@@ -435,7 +436,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
 		})
-		writeJSONError(w, http.StatusForbidden,
+		shared.WriteJSONError(w, http.StatusForbidden,
 			fmt.Sprintf("denied: app data grant for %s is %q", kind.ID, app.Scopes.For(kind.PermType)))
 		return
 	}
@@ -456,7 +457,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
 		})
-		writeJSONError(w, http.StatusForbidden,
+		shared.WriteJSONError(w, http.StatusForbidden,
 			fmt.Sprintf("denied: data scope grant for %s is %q", kind.ID, level))
 		return
 	}
@@ -484,7 +485,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			result, err := json.Marshal(spec.encode(agg.Items, pageReq, agg.BySvc))
 			if err != nil {
 				logger.Error("failed to marshal library "+kind.ID, "error", err)
-				writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")
+				shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -559,17 +560,17 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 				Method:   r.Method,
 				Status:   http.StatusForbidden,
 			})
-			writeJSONError(w, http.StatusForbidden, kind.DenyMsg)
+			shared.WriteJSONError(w, http.StatusForbidden, kind.DenyMsg)
 			return
 		}
-		writeJSONError(w, http.StatusNotFound, kind.EmptyMsg)
+		shared.WriteJSONError(w, http.StatusNotFound, kind.EmptyMsg)
 		return
 	}
 
 	result, err := json.Marshal(spec.encode(fetched.Items, pageReq, fetched.BySvc))
 	if err != nil {
 		logger.Error("failed to marshal library "+kind.ID, "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" list")
 		return
 	}
 
@@ -723,7 +724,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 	logger := withPeerLog(slog.With("handler", "library_"+kind.ID+"_search"), r)
 
 	if !s.search.Enabled() {
-		writeJSONError(w, http.StatusServiceUnavailable, "search index is disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "search index is disabled")
 		return
 	}
 	dataset := scopeDataset(r)
@@ -743,10 +744,10 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 				Method:   r.Method,
 				Status:   http.StatusForbidden,
 			})
-			writeJSONError(w, http.StatusForbidden, kind.DenyMsg)
+			shared.WriteJSONError(w, http.StatusForbidden, kind.DenyMsg)
 			return
 		}
-		writeJSONError(w, http.StatusNotFound, kind.EmptyMsg)
+		shared.WriteJSONError(w, http.StatusNotFound, kind.EmptyMsg)
 		return
 	}
 	readable := map[string]bool{}
@@ -786,7 +787,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 	n, err := s.search.Count(kind.ID, dataset)
 	if err != nil {
 		logger.Error("search index count failed", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "search index unavailable")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "search index unavailable")
 		return
 	}
 	if n == 0 {
@@ -803,7 +804,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 	res, err := s.search.Search(SearchIndexQuery{Kind: kind.ID, Dataset: dataset, Q: q, Limit: searchHitCap})
 	if err != nil {
 		logger.Error("search index query failed", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "search index unavailable")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "search index unavailable")
 		return
 	}
 	hits := make([]T, 0, len(res.Docs))
@@ -833,7 +834,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 	result, err := json.Marshal(spec.encode(hits, pageReq, bySvc))
 	if err != nil {
 		logger.Error("failed to marshal library "+kind.ID+" search", "error", err)
-		writeJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" search results")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build "+kind.Label+" search results")
 		return
 	}
 	s.cache.Set(cacheKey, string(result), 60*time.Second)

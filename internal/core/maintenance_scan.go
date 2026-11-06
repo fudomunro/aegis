@@ -11,6 +11,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Maintenance scanner (issue #86, phase 2): reads the signal bundles a
@@ -347,17 +349,17 @@ func clusterTitle(c *scanCluster) string {
 // /v1/admin — tickets name services and failure modes (issue #181).
 func (s *Server) HandleAdminMaintenanceScan(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if s.dataDir == "" {
-		writeJSONError(w, http.StatusInternalServerError, "data directory not configured")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "data directory not configured")
 		return
 	}
 	report, err := ScanMaintenanceDir(r.Context(), filepath.Join(s.dataDir, dataDirMaintenanceSubdir), s.maintenanceIssues)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "scan failed: "+err.Error())
+		shared.WriteJSONError(w, http.StatusInternalServerError, "scan failed: "+err.Error())
 		return
 	}
-	writeJSON(w, report)
+	shared.WriteJSON(w, report)
 }

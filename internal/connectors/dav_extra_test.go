@@ -196,7 +196,6 @@ func TestExpandICalEvent_Monthly(t *testing.T) {
 	}
 }
 
-
 func TestDavCollectionAndResourceURL(t *testing.T) {
 	if got := davCollectionURL("https://x/a"); got != "https://x/a/" {
 		t.Fatalf("collection = %q", got)
@@ -226,7 +225,6 @@ func TestContactCardName_Variants(t *testing.T) {
 		t.Fatalf("uid name = %q", n)
 	}
 }
-
 
 func TestDavDiscover_WellKnownAndWalk(t *testing.T) {
 	// Full discovery walk: well-known redirect → principal → home-set → collection.

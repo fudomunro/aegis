@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -86,10 +87,10 @@ func (c *SampleLibraryConnector) SystemInstructions(baseURL string) string {
 
 func (c *SampleLibraryConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	writeJSONError(w, http.StatusNotFound, "sample library data is only available through /v1/library")
+	shared.WriteJSONError(w, http.StatusNotFound, "sample library data is only available through /v1/library")
 }
 
 func (c *SampleLibraryConnector) ListUserPlaylists(context.Context) ([]types.Playlist, bool, error) {

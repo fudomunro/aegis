@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -47,7 +48,7 @@ type onboardingActionResult struct {
 func (s *Server) handleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
 	rest := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/setup/"), "/")
 	if rest == "" {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
 	id, action := rest, ""
@@ -57,7 +58,7 @@ func (s *Server) handleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
 
 	ob, ok := s.onboarder(id)
 	if !ok {
-		writeJSONError(w, http.StatusNotFound, "no setup flow for service "+id)
+		shared.WriteJSONError(w, http.StatusNotFound, "no setup flow for service "+id)
 		return
 	}
 
@@ -67,7 +68,7 @@ func (s *Server) handleAdminOnboarding(w http.ResponseWriter, r *http.Request) {
 	case action != "" && r.Method == http.MethodPost:
 		s.runOnboardingAction(w, r, ob, action)
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -84,7 +85,7 @@ func (s *Server) onboarder(id string) (connectors.Onboarder, bool) {
 // writeOnboardingView answers with the declared contract and live status.
 func (s *Server) writeOnboardingView(w http.ResponseWriter, ctx context.Context, ob connectors.Onboarder) {
 	spec := ob.Onboarding()
-	writeJSON(w, onboardingView{
+	shared.WriteJSON(w, onboardingView{
 		Spec:   spec,
 		Status: s.onboardingStatus(ctx, spec, ob),
 	})
@@ -97,12 +98,12 @@ func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob 
 	if r.Body != nil {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid body")
 			return
 		}
 		if strings.TrimSpace(string(body)) != "" {
 			if err := json.Unmarshal(body, &in); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
@@ -114,14 +115,14 @@ func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob 
 	spec := ob.Onboarding()
 	result, err := ob.OnboardingRun(r.Context(), action, in)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if err := s.applyOnboardingUpdates(spec, result.Updates); err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	writeJSON(w, onboardingActionResult{
+	shared.WriteJSON(w, onboardingActionResult{
 		Spec:   spec,
 		Status: s.onboardingStatus(r.Context(), spec, ob),
 		Probe:  result.Probe,

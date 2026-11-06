@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -92,7 +93,7 @@ type MirrorResult struct {
 // POST /v1/library/mirror
 func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	var req MirrorRequest
@@ -102,7 +103,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 			writeBodyReadError(w, err)
 			return
 		}
-		writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+		shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 	req.Kind = strings.ToLower(strings.TrimSpace(req.Kind))
@@ -113,15 +114,15 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	switch req.Kind {
 	case MirrorKindPlaylists, MirrorKindTracks, MirrorKindContacts, MirrorKindEvents:
 	default:
-		writeJSONError(w, http.StatusBadRequest, `kind must be "playlists", "tracks", "contacts", or "events"`)
+		shared.WriteJSONError(w, http.StatusBadRequest, `kind must be "playlists", "tracks", "contacts", or "events"`)
 		return
 	}
 	if req.TargetService == "" {
-		writeJSONError(w, http.StatusBadRequest, "target_service is required")
+		shared.WriteJSONError(w, http.StatusBadRequest, "target_service is required")
 		return
 	}
 	if req.Kind == MirrorKindPlaylists && req.SourceID == "" {
-		writeJSONError(w, http.StatusBadRequest, "source_id is required for kind=playlists")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_id is required for kind=playlists")
 		return
 	}
 	if req.Kind == MirrorKindContacts || req.Kind == MirrorKindEvents {
@@ -133,7 +134,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun), r)
 
 	if err := s.requireMirrorWritable(req.TargetService, req.Kind); err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
@@ -142,26 +143,26 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		sourceService = s.defaultMirrorSource(req.Kind)
 	}
 	if sourceService == "" {
-		writeJSONError(w, http.StatusBadRequest, "source_service is required (no canonical home configured)")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_service is required (no canonical home configured)")
 		return
 	}
 	if sourceService == req.TargetService {
-		writeJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
+		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
 	if err := s.requireMirrorReadable(sourceService, req.Kind); err != nil {
-		writeJSONError(w, http.StatusForbidden, err.Error())
+		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
 
 	src, err := s.mirrorSourceFor(sourceService, req.Kind)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	dst, err := s.mirrorTargetFor(req.TargetService, req.Kind)
 	if err != nil {
-		writeJSONError(w, http.StatusBadRequest, err.Error())
+		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -226,7 +227,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	if req.DryRun {
 		result.Target = MirrorRef{Service: req.TargetService, Name: name}
 		result.Skipped = 0
-		writeJSON(w, result)
+		shared.WriteJSON(w, result)
 		logger.Info("mirror dry-run", "source", sourceService, "planned", len(tracks))
 		return
 	}
@@ -260,22 +261,17 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	logger.Info("mirror complete",
 		"source", sourceService, "target", req.TargetService,
 		"planned", result.Planned, "copied", result.Copied, "skipped", result.Skipped)
-	writeJSON(w, result)
-}
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
+	shared.WriteJSON(w, result)
 }
 
 func (s *Server) writeMirrorUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
 	logger.Warn("mirror upstream failed", "service", serviceID, "error", err)
 	if errorsIsUnauthorized(err) {
-		writeJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			fmt.Sprintf("no valid token for %s — authorize at /v1/auth/%s/login", serviceID, serviceID))
 		return
 	}
-	writeJSONError(w, http.StatusBadGateway, fmt.Sprintf("mirror failed on %s: %v", serviceID, err))
+	shared.WriteJSONError(w, http.StatusBadGateway, fmt.Sprintf("mirror failed on %s: %v", serviceID, err))
 }
 
 func errorsIsUnauthorized(err error) bool {
@@ -380,13 +376,13 @@ func mirrorSupportedFor[P any](s *Server) string {
 }
 
 // loadMirrorPlaylistItems pages a source playlist through the items
-// operation, up to libraryPageCap pages. truncated reports the cap was hit
+// operation, up to shared.LibraryPageCap pages. truncated reports the cap was hit
 // with more items still upstream.
 func loadMirrorPlaylistItems(ctx context.Context, src types.PlaylistItemsProvider, id string) (types.Playlist, []types.Track, bool, error) {
 	var ref types.Playlist
 	var tracks []types.Track
 	cursor := ""
-	for page := 0; page < libraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		r, p, err := src.ListPlaylistItems(ctx, id, cursor, 100)
 		if err != nil {
 			return ref, tracks, false, err
@@ -447,4 +443,3 @@ func mirrorOpFor[P any](s *Server, serviceID, what string) (P, error) {
 	return zero, fmt.Errorf("%s %q is not supported yet (supported: %s)",
 		what, serviceID, mirrorSupportedFor[P](s))
 }
-

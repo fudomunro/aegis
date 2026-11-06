@@ -7,6 +7,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Prometheus-style metrics export (issue #105). Process-lifetime counters
@@ -250,7 +252,7 @@ func (p *PromMetrics) noteSyncSuccess(kind, service string, at time.Time) {
 // Auth-scoped like admin: series include service ids and denial reasons.
 func (s *Server) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	body := s.prom.promText()

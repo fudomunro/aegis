@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -39,7 +40,7 @@ func apiJSON(ctx context.Context, host Host, serviceID, method, path string, que
 		return nil, 0, types.ErrUnauthorized
 	}
 
-	u := TrimRightSlash(svc.Endpoint) + path
+	u := shared.TrimRightSlash(svc.Endpoint) + path
 	if len(query) > 0 {
 		u += "?" + query.Encode()
 	}

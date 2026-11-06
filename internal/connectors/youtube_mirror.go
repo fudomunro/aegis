@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -37,7 +38,7 @@ func (c *YouTubeMusicConnector) GetPlaylistMeta(ctx context.Context, playlistID 
 	snippet, _ := pl["snippet"].(map[string]any)
 	title, _ := snippet["title"].(string)
 	details, _ := pl["contentDetails"].(map[string]any)
-	count, _ := AsInt(details["itemCount"])
+	count, _ := shared.AsInt(details["itemCount"])
 	return types.PlaylistMeta{Name: title, ItemCount: count}, true, nil
 }
 
@@ -55,7 +56,7 @@ func (c *YouTubeMusicConnector) SavedTrackCount(ctx context.Context) (int, error
 	}
 	pl, _ := items[0].(map[string]any)
 	details, _ := pl["contentDetails"].(map[string]any)
-	count, _ := AsInt(details["itemCount"])
+	count, _ := shared.AsInt(details["itemCount"])
 	return count, nil
 }
 
@@ -87,7 +88,7 @@ func (c *YouTubeMusicConnector) ListPlaylistItems(ctx context.Context, playlistI
 		snippet, _ := pl["snippet"].(map[string]any)
 		ref.Name, _ = snippet["title"].(string)
 		details, _ := pl["contentDetails"].(map[string]any)
-		total, _ = AsInt(details["itemCount"])
+		total, _ = shared.AsInt(details["itemCount"])
 	}
 	q := url.Values{
 		"part":       []string{"snippet,contentDetails"},

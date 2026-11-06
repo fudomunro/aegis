@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -186,7 +187,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 	token := c.host.GetValidToken(GoogleGmailServiceID, logger)
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 		return
 	}
@@ -194,7 +195,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	if remainingPath == "/me/messages" || remainingPath == "/me/messages/" ||
 		remainingPath == "/messages" || remainingPath == "/messages/" {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleListMessages(w, r)
@@ -204,7 +205,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 	if remainingPath == "/me/threads" || remainingPath == "/me/threads/" ||
 		remainingPath == "/threads" || remainingPath == "/threads/" {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleListThreads(w, r)
@@ -213,7 +214,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 	if mid, aid, ok := matchGmailAttachmentRoute(remainingPath); ok {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		if aid == "" {
@@ -226,7 +227,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 	if id, ok := GmailBareIDFromProxyPath(remainingPath, "messages"); ok {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleGetMessage(w, r, token, id)
@@ -235,7 +236,7 @@ func (c *GoogleGmailConnector) HandleProxy(w http.ResponseWriter, r *http.Reques
 
 	if id, ok := GmailBareIDFromProxyPath(remainingPath, "threads"); ok {
 		if r.Method != http.MethodGet {
-			WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		c.HandleGetThread(w, r, token, id)
@@ -351,24 +352,24 @@ func SplitGmailAttachmentDocumentID(id string) (messageID, attachmentID string, 
 func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *http.Request, token, messageID string) {
 	if !validGmailBareID(messageID) {
 		slog.Warn("gmail list attachments rejected non-gmail id", "id", messageID)
-		WriteJSONError(w, http.StatusNotFound,
+		shared.WriteJSONError(w, http.StatusNotFound,
 			"not a Gmail message id — use sources[].service and sources[].id from the library list")
 		return
 	}
 	raw, err := c.FetchGmailMessage(r.Context(), token, messageID, "full")
 	if err != nil {
 		if isGmailInvalidIDError(err) {
-			WriteJSONError(w, http.StatusNotFound,
+			shared.WriteJSONError(w, http.StatusNotFound,
 				"message not found on Gmail — check sources[].service and sources[].id")
 			return
 		}
 		if isGmailQuotaError(err) {
-			WriteJSONError(w, http.StatusTooManyRequests,
+			shared.WriteJSONError(w, http.StatusTooManyRequests,
 				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
 			return
 		}
 		slog.Warn("gmail list attachments failed", "id", messageID, "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
 		return
 	}
 	atts := GmailAttachmentSummaries(raw)
@@ -381,7 +382,7 @@ func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *h
 		"total":       len(atts),
 	})
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode attachments")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode attachments")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -391,40 +392,40 @@ func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *h
 // HandleGetAttachment fetches one MIME attachment via the Gmail attachments API.
 func (c *GoogleGmailConnector) HandleGetAttachment(w http.ResponseWriter, r *http.Request, token, messageID, attachmentID string) {
 	if !validGmailBareID(messageID) || !validGmailAttachmentID(attachmentID) {
-		WriteJSONError(w, http.StatusNotFound, "not a Gmail attachment id")
+		shared.WriteJSONError(w, http.StatusNotFound, "not a Gmail attachment id")
 		return
 	}
 	upstreamURL := c.GoogleGmailUpstreamBase() + "/users/me/messages/" + url.PathEscape(messageID) +
 		"/attachments/" + url.PathEscape(attachmentID)
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		slog.Warn("gmail get attachment failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch attachment from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch attachment from Gmail")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read attachment from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read attachment from Gmail")
 		return
 	}
 	if resp.StatusCode == http.StatusNotFound {
-		WriteJSONError(w, http.StatusNotFound, "attachment not found on Gmail")
+		shared.WriteJSONError(w, http.StatusNotFound, "attachment not found on Gmail")
 		return
 	}
 	if resp.StatusCode == http.StatusTooManyRequests || isGmailQuotaError(fmt.Errorf("%s", data)) {
-		WriteJSONError(w, http.StatusTooManyRequests, "Gmail quota exceeded — retry shortly")
+		shared.WriteJSONError(w, http.StatusTooManyRequests, "Gmail quota exceeded — retry shortly")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
 		slog.Warn("gmail get attachment bad status", "status", resp.StatusCode)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch attachment from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch attachment from Gmail")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -452,12 +453,12 @@ func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http
 	messages, truncated, err := c.ListMessagesWithQuery(r.Context(), r.URL.Query())
 	if err != nil {
 		if err == types.ErrUnauthorized {
-			WriteJSONError(w, http.StatusUnauthorized,
+			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 			return
 		}
 		slog.Warn("gmail list messages failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch messages from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch messages from Gmail")
 		return
 	}
 	if messages == nil {
@@ -478,7 +479,7 @@ func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build messages list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build messages list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -488,14 +489,14 @@ func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http
 func (c *GoogleGmailConnector) HandleListThreads(w http.ResponseWriter, r *http.Request) {
 	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
-		WriteJSONError(w, http.StatusUnauthorized,
+		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 		return
 	}
 	threads, truncated, err := c.ListThreads(r.Context(), token, r.URL.Query())
 	if err != nil {
 		slog.Warn("gmail list threads failed", "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch threads from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch threads from Gmail")
 		return
 	}
 	if threads == nil {
@@ -511,7 +512,7 @@ func (c *GoogleGmailConnector) HandleListThreads(w http.ResponseWriter, r *http.
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build threads list")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build threads list")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -545,7 +546,7 @@ func (c *GoogleGmailConnector) ListThreads(ctx context.Context, token string, q 
 	}
 	var out []map[string]any
 	truncated := false
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("maxResults", fmt.Sprint(pageSize))
 		if query != "" {
@@ -560,7 +561,7 @@ func (c *GoogleGmailConnector) ListThreads(ctx context.Context, token string, q 
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -596,7 +597,7 @@ func (c *GoogleGmailConnector) ListThreads(ctx context.Context, token string, q 
 		if pageToken == "" {
 			break
 		}
-		if page == LibraryPageCap-1 && pageToken != "" {
+		if page == shared.LibraryPageCap-1 && pageToken != "" {
 			truncated = true
 		}
 	}
@@ -611,7 +612,7 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 	if !validGmailBareID(id) {
 		// Wrong-service id (or a concatenated path). Do not call Gmail.
 		slog.Warn("gmail get message rejected non-gmail id", "id", id)
-		WriteJSONError(w, http.StatusNotFound,
+		shared.WriteJSONError(w, http.StatusNotFound,
 			"not a Gmail message id — use sources[].service and sources[].id from the library list")
 		return
 	}
@@ -619,23 +620,23 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 	if err != nil {
 		if isGmailInvalidIDError(err) {
 			slog.Warn("gmail get message unknown id", "id", id)
-			WriteJSONError(w, http.StatusNotFound,
+			shared.WriteJSONError(w, http.StatusNotFound,
 				"message not found on Gmail — check sources[].service and sources[].id")
 			return
 		}
 		if isGmailQuotaError(err) {
-			WriteJSONError(w, http.StatusTooManyRequests,
+			shared.WriteJSONError(w, http.StatusTooManyRequests,
 				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
 			return
 		}
 		slog.Warn("gmail get message failed", "id", id, "error", err)
-		WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to fetch message from Gmail")
 		return
 	}
 	msg := MapGoogleGmailMessage(raw, format)
 	data, err := json.Marshal(msg)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode message")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode message")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -647,19 +648,19 @@ func (c *GoogleGmailConnector) HandleGetThread(w http.ResponseWriter, r *http.Re
 		"?format=metadata&metadataHeaders=" + strings.Join(GmailMetadataHeaders(), "&metadataHeaders=")
 	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, upstreamURL, nil)
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to build request")
 		return
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "Gmail thread request failed")
+		shared.WriteJSONError(w, http.StatusBadGateway, "Gmail thread request failed")
 		return
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to read Gmail thread response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to read Gmail thread response")
 		return
 	}
 	if resp.StatusCode != http.StatusOK {
@@ -670,7 +671,7 @@ func (c *GoogleGmailConnector) HandleGetThread(w http.ResponseWriter, r *http.Re
 	}
 	var raw googleGmailThread
 	if err := json.Unmarshal(data, &raw); err != nil {
-		WriteJSONError(w, http.StatusBadGateway, "failed to parse Gmail thread response")
+		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse Gmail thread response")
 		return
 	}
 	messages := make([]types.Message, 0, len(raw.Messages))
@@ -683,7 +684,7 @@ func (c *GoogleGmailConnector) HandleGetThread(w http.ResponseWriter, r *http.Re
 		"total":    len(messages),
 	})
 	if err != nil {
-		WriteJSONError(w, http.StatusInternalServerError, "failed to encode thread")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode thread")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
@@ -735,7 +736,7 @@ func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.
 	var all []types.Message
 	truncated := false
 	hydrated := 0
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("maxResults", fmt.Sprint(pageSize))
 		if query != "" {
@@ -750,7 +751,7 @@ func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -793,7 +794,7 @@ func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.
 		if pageToken == "" {
 			break
 		}
-		if hydrated >= hydrateCap || (page == LibraryPageCap-1 && pageToken != "") {
+		if hydrated >= hydrateCap || (page == shared.LibraryPageCap-1 && pageToken != "") {
 			truncated = true
 		}
 	}
@@ -823,7 +824,7 @@ func (c *GoogleGmailConnector) FetchGmailMessage(ctx context.Context, token, id,
 		return GoogleGmailMessage{}, err
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := HTTPClient.Do(req)
+	resp, err := shared.HTTPClient.Do(req)
 	if err != nil {
 		return GoogleGmailMessage{}, err
 	}
@@ -1270,7 +1271,7 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 	truncated := false
 	pageToken := ""
 	hydrated := 0
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		values := url.Values{}
 		values.Set("maxResults", fmt.Sprint(googleGmailListPageSize))
 		values.Set("q", googleGmailDefaultQuery)
@@ -1283,7 +1284,7 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 			return gmailDocumentsResult(out, truncated, hydrated, err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return gmailDocumentsResult(out, truncated, hydrated, err)
 		}
@@ -1328,7 +1329,7 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 		if pageToken == "" {
 			break
 		}
-		if hydrated >= GoogleGmailLibraryCap || (page == LibraryPageCap-1 && pageToken != "") {
+		if hydrated >= GoogleGmailLibraryCap || (page == shared.LibraryPageCap-1 && pageToken != "") {
 			truncated = true
 		}
 	}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -356,7 +357,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 
 	var all []types.Artist
 	pageToken := ""
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/subscriptions?part=snippet&mine=true&maxResults=50"
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
@@ -366,7 +367,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -393,7 +394,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 				continue
 			}
 			title, _ := snippet["title"].(string)
-			channelID, _ := ExtractNested(snippet, "resourceId", "channelId").(string)
+			channelID, _ := shared.ExtractNested(snippet, "resourceId", "channelId").(string)
 			if channelID == "" {
 				if id, ok := snippet["channelId"].(string); ok {
 					channelID = id
@@ -449,7 +450,7 @@ func (c *YouTubeMusicConnector) FetchVideoSnippets(ctx context.Context, token, u
 			return nil, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, err
 		}
@@ -500,7 +501,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 	var videoIDs []string
 	seenID := make(map[string]bool)
 	pageToken := ""
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/playlistItems?part=snippet,contentDetails&playlistId=" +
 			likedPlaylistID + "&maxResults=50"
 		if pageToken != "" {
@@ -511,7 +512,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -614,7 +615,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.
 
 	var all []types.Playlist
 	pageToken := ""
-	for page := 0; page < LibraryPageCap; page++ {
+	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/playlists?part=snippet,contentDetails&mine=true&maxResults=50"
 		if pageToken != "" {
 			u += "&pageToken=" + pageToken
@@ -624,7 +625,7 @@ func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.
 			return nil, false, err
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := HTTPClient.Do(req)
+		resp, err := shared.HTTPClient.Do(req)
 		if err != nil {
 			return nil, false, err
 		}
@@ -677,7 +678,7 @@ func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist
 	publishedAt, _ := snippet["publishedAt"].(string)
 
 	trackCount := 0
-	if n, ok := AsInt(contentDetails["itemCount"]); ok {
+	if n, ok := shared.AsInt(contentDetails["itemCount"]); ok {
 		trackCount = n
 	}
 
@@ -762,7 +763,7 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 	duration := ""
 	if iso, ok := contentDetails["duration"].(string); ok {
 		duration = iso
-		durationMs = Iso8601DurationMs(iso)
+		durationMs = shared.Iso8601DurationMs(iso)
 	}
 
 	return types.Track{
@@ -775,43 +776,9 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 			ServiceName: "YouTube Music",
 			ID:          videoID,
 			URL:         url,
-			Extra:       ExtraOrNil(extra),
+			Extra:       shared.ExtraOrNil(extra),
 		}},
 	}, true
-}
-
-// Iso8601DurationMs parses a YouTube ISO-8601 duration (e.g. PT3M42S) into ms.
-func Iso8601DurationMs(s string) int {
-	s = strings.TrimSpace(s)
-	if !strings.HasPrefix(s, "PT") {
-		return 0
-	}
-	s = s[2:]
-	total := 0
-	num := 0
-	hasDigit := false
-	for i := 0; i < len(s); i++ {
-		ch := s[i]
-		if ch >= '0' && ch <= '9' {
-			num = num*10 + int(ch-'0')
-			hasDigit = true
-			continue
-		}
-		if !hasDigit {
-			continue
-		}
-		switch ch {
-		case 'H':
-			total += num * 3600 * 1000
-		case 'M':
-			total += num * 60 * 1000
-		case 'S':
-			total += num * 1000
-		}
-		num = 0
-		hasDigit = false
-	}
-	return total
 }
 
 func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) types.PlaylistList {
@@ -825,10 +792,10 @@ func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) types.
 		playlists = append(playlists, c.NeutralPlaylist(p))
 	}
 	total := len(playlists)
-	if n, ok := AsInt(raw["total_fetched"]); ok {
+	if n, ok := shared.AsInt(raw["total_fetched"]); ok {
 		total = n
 	} else if pageInfo, ok := raw["pageInfo"].(map[string]any); ok {
-		if n, ok := AsInt(pageInfo["totalResults"]); ok {
+		if n, ok := shared.AsInt(pageInfo["totalResults"]); ok {
 			total = n
 		}
 	}
@@ -848,10 +815,10 @@ func (c *YouTubeMusicConnector) TransformPlaylistItems(raw map[string]any) map[s
 		}
 	}
 	total := len(tracks)
-	if n, ok := AsInt(raw["total_fetched"]); ok {
+	if n, ok := shared.AsInt(raw["total_fetched"]); ok {
 		total = n
 	} else if pageInfo, ok := raw["pageInfo"].(map[string]any); ok {
-		if n, ok := AsInt(pageInfo["totalResults"]); ok {
+		if n, ok := shared.AsInt(pageInfo["totalResults"]); ok {
 			total = n
 		}
 	}
@@ -876,7 +843,7 @@ func (c *YouTubeMusicConnector) TransformSubscriptions(raw map[string]any) map[s
 		channels = append(channels, map[string]any{
 			"title":       snippet["title"],
 			"description": snippet["description"],
-			"channel_id":  ExtractNested(snippet, "resourceId", "channelId"),
+			"channel_id":  shared.ExtractNested(snippet, "resourceId", "channelId"),
 		})
 	}
 	return map[string]any{
@@ -996,9 +963,9 @@ func (c *YouTubeMusicConnector) FetchAllPagesRaw(ctx context.Context, path strin
 
 	apiPath, extraParams, _ := c.MapPath(path, query)
 
-	// Follow up to LibraryPageCap additional pages so large libraries are
+	// Follow up to shared.LibraryPageCap additional pages so large libraries are
 	// not silently cut off. Hit the cap → mark truncated for the caller.
-	maxPages := LibraryPageCap
+	maxPages := shared.LibraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		q := map[string][]string{}
 		for k, v := range query {
@@ -1055,9 +1022,9 @@ func (c *YouTubeMusicConnector) FetchAllPages(ctx context.Context, path string, 
 
 	allItems, _ := page[itemsKey].([]any)
 
-	// Follow up to LibraryPageCap additional pages so large libraries are
+	// Follow up to shared.LibraryPageCap additional pages so large libraries are
 	// not silently cut off. Hit the cap → mark truncated for the caller.
-	maxPages := LibraryPageCap
+	maxPages := shared.LibraryPageCap
 	for i := 0; i < maxPages && nextToken != ""; i++ {
 		// Build the next page URL.
 		upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)

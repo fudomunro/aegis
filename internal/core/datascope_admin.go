@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // HandleAdminDataScopes manages invite tokens — the data-scope credentials
@@ -21,7 +23,7 @@ import (
 // SHA-256 hash is stored.
 func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 	if s.scopes == nil {
-		writeJSONError(w, http.StatusServiceUnavailable, "data scopes disabled")
+		shared.WriteJSONError(w, http.StatusServiceUnavailable, "data scopes disabled")
 		return
 	}
 	path := strings.TrimPrefix(r.URL.Path, "/v1/admin/data-scopes")
@@ -30,7 +32,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		switch r.Method {
 		case http.MethodGet:
-			writeJSON(w, map[string]any{"data_scopes": s.scopes.List()})
+			shared.WriteJSON(w, map[string]any{"data_scopes": s.scopes.List()})
 		case http.MethodPost:
 			body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 			if !ok {
@@ -38,26 +40,26 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			}
 			var req DataScopeCreateRequest
 			if err := json.Unmarshal(body, &req); err != nil {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 			view, token, err := s.scopes.Create(req)
 			if err != nil {
 				withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 					Warn("failed to mint invite token", "scope_id", req.ID, "error", err)
-				writeJSONError(w, http.StatusBadRequest, err.Error())
+				shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 				return
 			}
 			s.invalidateCaches()
 			withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 				Info("invite token minted", "scope_id", view.ID, "dataset", view.Dataset)
-			writeJSON(w, map[string]any{
-				"scope":       view,
+			shared.WriteJSON(w, map[string]any{
+				"scope":        view,
 				"invite_token": token,
-				"note":        "Store this invite token now — it is not shown again.",
+				"note":         "Store this invite token now — it is not shown again.",
 			})
 		default:
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		}
 		return
 	}
@@ -71,36 +73,36 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		id = strings.Trim(id, "/")
 	}
 	if id == "" || strings.Contains(id, "/") {
-		writeJSONError(w, http.StatusNotFound, "unknown admin endpoint")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
 		return
 	}
 
 	switch {
 	case rotate:
 		if r.Method != http.MethodPost {
-			writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+			shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
 		view, token, err := s.scopes.Rotate(id)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 			Info("invite token rotated", "scope_id", id)
-		writeJSON(w, map[string]any{
-			"scope":       view,
+		shared.WriteJSON(w, map[string]any{
+			"scope":        view,
 			"invite_token": token,
-			"note":        "Store this invite token now — it is not shown again. The previous token is invalid.",
+			"note":         "Store this invite token now — it is not shown again. The previous token is invalid.",
 		})
 	case r.Method == http.MethodGet:
 		view, ok := s.scopes.View(id)
 		if !ok {
-			writeJSONError(w, http.StatusNotFound, fmt.Sprintf("data scope %q not found", id))
+			shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("data scope %q not found", id))
 			return
 		}
-		writeJSON(w, map[string]any{"scope": view})
+		shared.WriteJSON(w, map[string]any{"scope": view})
 	case r.Method == http.MethodPatch || r.Method == http.MethodPut:
 		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
@@ -108,19 +110,19 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		}
 		var req DataScopeUpdateRequest
 		if err := json.Unmarshal(body, &req); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 		view, err := s.scopes.Update(id, req)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_data_scopes"), r).
 			Info("data scope updated", "scope_id", id, "disabled", view.Disabled)
-		writeJSON(w, map[string]any{"scope": view, "status": "saved"})
+		shared.WriteJSON(w, map[string]any{"scope": view, "status": "saved"})
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }

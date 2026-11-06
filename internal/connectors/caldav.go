@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -94,7 +95,7 @@ sources[] records where each event lives (service, id, etag for conflict-safe wr
 // HandleProxy is library-only for CalDAV.
 func (c *CalDAVConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	_ = remainingPath
-	WriteJSONError(w, http.StatusNotFound,
+	shared.WriteJSONError(w, http.StatusNotFound,
 		"CalDAV is library-only — use GET /v1/library/events or /v1/library/freebusy")
 }
 
@@ -209,7 +210,7 @@ func (c *CalDAVConnector) listViaPropfind(ctx context.Context, collection string
 			continue
 		}
 		n++
-		if n > LibraryPageCap*5 {
+		if n > shared.LibraryPageCap*5 {
 			truncated = true
 			break
 		}

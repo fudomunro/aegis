@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -17,7 +18,7 @@ import (
 //	DELETE /v1/library/links/{id}
 func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 	if s.links == nil {
-		writeJSONError(w, http.StatusNotFound, "entity links not configured")
+		shared.WriteJSONError(w, http.StatusNotFound, "entity links not configured")
 		return
 	}
 
@@ -26,7 +27,7 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 
 	switch {
 	case path == "" && r.Method == http.MethodGet:
-		writeJSON(w, map[string]any{
+		shared.WriteJSON(w, map[string]any{
 			"links": s.links.List(),
 			"total": len(s.links.List()),
 		})
@@ -37,7 +38,7 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 			Note    string             `json:"note"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 		if body.Kind == "" {
@@ -45,7 +46,7 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		}
 		link, err := s.links.Add(body.Kind, body.Sources, body.Note)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -53,20 +54,20 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(link)
 	case path != "" && r.Method == http.MethodDelete:
 		if !s.links.Delete(path) {
-			writeJSONError(w, http.StatusNotFound, "link not found")
+			shared.WriteJSONError(w, http.StatusNotFound, "link not found")
 			return
 		}
-		writeJSON(w, map[string]any{"deleted": path})
+		shared.WriteJSON(w, map[string]any{"deleted": path})
 	case path != "" && r.Method == http.MethodGet:
 		for _, link := range s.links.List() {
 			if link.ID == path {
-				writeJSON(w, link)
+				shared.WriteJSON(w, link)
 				return
 			}
 		}
-		writeJSONError(w, http.StatusNotFound, "link not found")
+		shared.WriteJSONError(w, http.StatusNotFound, "link not found")
 	default:
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 	}
 }
 
@@ -90,7 +91,7 @@ type MergeReviewResponse struct {
 // ISRC/UPC/MBID/explicit link). GET /v1/library/review
 func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 
@@ -217,7 +218,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 	}
 
 	wg.Wait()
-	writeJSON(w, MergeReviewResponse{Items: items, Total: len(items)})
+	shared.WriteJSON(w, MergeReviewResponse{Items: items, Total: len(items)})
 }
 
 // listProvidersParallel fans out named listers like handleLibraryAggregate.

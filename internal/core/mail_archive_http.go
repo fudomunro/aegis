@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -23,7 +24,7 @@ func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 	switch {
 	case path == "/" || path == "":
-		writeJSONError(w, http.StatusNotFound, "unknown mail archive route")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown mail archive route")
 	case path == "/search" || path == "/search/":
 		s.HandleMailSearch(w, r)
 	case path == "/status" || path == "/status/":
@@ -33,13 +34,13 @@ func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/messages/"):
 		s.HandleMailMessage(w, r, strings.TrimPrefix(path, "/messages/"))
 	default:
-		writeJSONError(w, http.StatusNotFound, "unknown mail archive route")
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown mail archive route")
 	}
 }
 
 func (s *Server) requireMailArchive(w http.ResponseWriter) *MailArchive {
 	if s.mail == nil {
-		writeJSONError(w, http.StatusNotFound,
+		shared.WriteJSONError(w, http.StatusNotFound,
 			"mail archive disabled — start Aegis with a mail archive path (default: <data-dir>/mail-archive.db)")
 		return nil
 	}
@@ -65,11 +66,11 @@ func (s *Server) mailReadableFor(r *http.Request) bool {
 // HandleMailStatus reports archive health: GET /v1/mail/status
 func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if !s.mailReadableFor(r) {
-		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -78,7 +79,7 @@ func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	st, err := a.Status()
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
 		return
 	}
 	writeMailJSON(w, st)
@@ -92,11 +93,11 @@ func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
 // from/to are sender/recipient addresses only — not time filters (issue #185).
 func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if !s.mailReadableFor(r) {
-		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -115,7 +116,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 	if v := strings.TrimSpace(q.Get("cursor")); v != "" {
 		n, err := types.DecodeCursor(v)
 		if err != nil {
-			writeJSONError(w, http.StatusBadRequest, err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		offset = n
@@ -140,7 +141,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	resp, err := a.Search(search)
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "mail archive search failed")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "mail archive search failed")
 		return
 	}
 	writeMailJSON(w, resp)
@@ -152,11 +153,11 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 //	GET /v1/mail/messages/{service}/{id}/raw       — gzip-decoded provider payload JSON
 func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest string) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if !s.mailReadableFor(r) {
-		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -166,7 +167,7 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 	rest = strings.Trim(rest, "/")
 	parts := strings.Split(rest, "/")
 	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		writeJSONError(w, http.StatusNotFound, "expected /v1/mail/messages/{service}/{id}")
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/mail/messages/{service}/{id}")
 		return
 	}
 	service, id := parts[0], parts[1]
@@ -174,19 +175,19 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 
 	rec, err := a.Get(service, id)
 	if err != nil {
-		writeJSONError(w, http.StatusNotFound, "message not found in mail archive")
+		shared.WriteJSONError(w, http.StatusNotFound, "message not found in mail archive")
 		return
 	}
 	// Data-scope isolation: a partitioned principal cannot fetch rows from
 	// another dataset even with a direct id (docs/data-scopes.md).
 	if ds := scopeDataset(r); ds != "" && rec.Dataset != ds {
-		writeJSONError(w, http.StatusNotFound, "message not found in mail archive")
+		shared.WriteJSONError(w, http.StatusNotFound, "message not found in mail archive")
 		return
 	}
 	if wantRaw {
 		payload, err := rec.Payload()
 		if err != nil {
-			writeJSONError(w, http.StatusInternalServerError, "failed to decompress archived payload")
+			shared.WriteJSONError(w, http.StatusInternalServerError, "failed to decompress archived payload")
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -217,11 +218,11 @@ type MailSyncRequest struct {
 // Resumable: the page cursor is stored in the archive. Repeat until done=true.
 func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	if !s.mailReadableFor(r) {
-		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	s.handleMailSyncRequest(w, r, true)
@@ -231,7 +232,7 @@ func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
 // Skips the agent messages permission gate — the operator owns the archive.
 func (s *Server) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	a := s.requireMailArchive(w)
@@ -240,7 +241,7 @@ func (s *Server) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	st, err := a.Status()
 	if err != nil {
-		writeJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
+		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
 		return
 	}
 	writeMailJSON(w, st)
@@ -250,7 +251,7 @@ func (s *Server) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request) {
 // Same body and resumable semantics as /v1/mail/sync, without the agent gate.
 func (s *Server) HandleAdminMailSync(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	s.handleMailSyncRequest(w, r, false)
@@ -273,7 +274,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 			}
 			// Empty body is fine; other decode errors are client faults.
 			if r.ContentLength != 0 {
-				writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
 			}
 		}
@@ -286,7 +287,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	if req.Service == takeoutServiceID {
 		if req.ResetCursor {
 			if err := a.ResetTakeoutCursor(); err != nil {
-				writeJSONError(w, http.StatusInternalServerError, "failed to reset takeout cursor")
+				shared.WriteJSONError(w, http.StatusInternalServerError, "failed to reset takeout cursor")
 				return
 			}
 		}
@@ -302,24 +303,24 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	}
 
 	if _, ok := s.connectors[req.Service]; !ok {
-		writeJSONError(w, http.StatusNotFound, "no connector for service "+req.Service)
+		shared.WriteJSONError(w, http.StatusNotFound, "no connector for service "+req.Service)
 		return
 	}
 	svc := s.config.GetService(req.Service)
 	if svc == nil || svc.Action == "block" {
-		writeJSONError(w, http.StatusForbidden, "service blocked")
+		shared.WriteJSONError(w, http.StatusForbidden, "service blocked")
 		return
 	}
 	// Admin sync is operator-owned; only the agent surface honors messages=read.
 	if requireAgentMessagesRead && !s.requestPermissions(r, svc).AllowsRead(mailPermType) {
-		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 
 	// Pre-flight shape of this route is its own contract: a connector that
 	// cannot sync the archive is 501, not a fail-open empty result.
 	if s.mailArchiveSyncer(req.Service) == nil {
-		writeJSONError(w, http.StatusNotImplemented, "service does not support mail archive sync")
+		shared.WriteJSONError(w, http.StatusNotImplemented, "service does not support mail archive sync")
 		return
 	}
 
@@ -347,12 +348,12 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	// Takeout is not a live service in aegis.json; agent reads still need
 	// messages permission on some configured message-capable service.
 	if requireAgentMessagesRead && !s.mailReadableFor(r) {
-		writeJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 		return
 	}
 	if strings.TrimSpace(req.Path) != "" {
 		if err := a.SetTakeoutPath(req.Path); err != nil {
-			writeJSONError(w, http.StatusBadRequest, "failed to set takeout path: "+err.Error())
+			shared.WriteJSONError(w, http.StatusBadRequest, "failed to set takeout path: "+err.Error())
 			return
 		}
 	}
@@ -361,7 +362,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 		path = strings.TrimSpace(req.Path)
 	}
 	if path == "" {
-		writeJSONError(w, http.StatusBadRequest,
+		shared.WriteJSONError(w, http.StatusBadRequest,
 			"takeout path not configured — set path in this request or via the admin UI")
 		return
 	}
@@ -390,7 +391,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 // POST /v1/admin/mail/import {"path":"…","max_messages":N}
 func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
 	// Force Takeout: this route is only for the export sync location.
@@ -404,7 +405,7 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 				writeBodyReadError(w, err)
 				return
 			}
-			writeJSONError(w, http.StatusBadRequest, "invalid JSON body")
+			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return
 		}
 	}
