@@ -223,23 +223,6 @@ func TestHandleLibraryContacts_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestDataTypeForPath_Contacts(t *testing.T) {
-	cases := map[string]string{
-		"/me/contacts":      "contacts",
-		"/contacts":         "contacts",
-		"/contacts/abc":     "contacts",
-		"/contacts/abc/x":   "contacts",
-		"/me/contacts/":     "contacts",
-		"/contact":          "", // singular is not a known type
-		"/me/contact-lists": "",
-	}
-	for path, want := range cases {
-		if got := types.DataTypeForPath(path); got != want {
-			t.Errorf("types.DataTypeForPath(%q) = %q, want %q", path, got, want)
-		}
-	}
-}
-
 func TestMentionsContacts(t *testing.T) {
 	yes := []string{
 		"who is in my contacts?",

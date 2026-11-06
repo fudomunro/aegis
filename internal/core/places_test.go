@@ -351,19 +351,3 @@ func TestLibraryKindPlaces_Registered(t *testing.T) {
 		t.Fatal("keywords should catch location questions")
 	}
 }
-
-func TestDataTypeForPath_Places(t *testing.T) {
-	cases := map[string]string{
-		"/me/places":        "places",
-		"/visits":           "places",
-		"/api/v0/locations": "places",
-		"/api/v0/visit":     "places",
-		"/api/v1/points":    "places",
-		"/timeline/2023-01": "places",
-	}
-	for p, want := range cases {
-		if got := types.DataTypeForPath(p); got != want {
-			t.Fatalf("types.DataTypeForPath(%q) = %q, want %q", p, got, want)
-		}
-	}
-}

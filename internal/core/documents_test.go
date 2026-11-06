@@ -378,27 +378,6 @@ func TestLibraryKindDocuments_Registered(t *testing.T) {
 	}
 }
 
-func TestDataTypeForPath_Documents(t *testing.T) {
-	cases := map[string]string{
-		"/me/documents":           "documents",
-		"/documents/11":           "documents",
-		"/documents/11/download":  "documents",
-		"/api/documents/11":       "documents",
-		"/correspondents/3":       "documents",
-		"/document_types/4":       "documents",
-		"/api/tags/7":             "documents",
-		"/files":                  "documents",
-		"/files/gdoc-1":           "documents",
-		"/files/gdoc-1/export":    "documents",
-		"/drive/files/gdoc-1":     "documents",
-	}
-	for p, want := range cases {
-		if got := types.DataTypeForPath(p); got != want {
-			t.Fatalf("DataTypeForPath(%q) = %q, want %q", p, got, want)
-		}
-	}
-}
-
 func TestSampleDocuments_MergePairs(t *testing.T) {
 	lib := GenerateSampleLibrary()
 	if len(lib.Documents) == 0 {

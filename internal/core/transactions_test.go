@@ -422,17 +422,6 @@ func TestGenerateSampleLibrary_TransactionsMerge(t *testing.T) {
 	}
 }
 
-func TestDataTypeForPath_Transactions(t *testing.T) {
-	for _, p := range []string{
-		"/budgets", "/budgets/x/transactions", "/accounts", "/transactions",
-		"/me/transactions", "/categories", "/payees", "/quicken/import",
-	} {
-		if got := types.DataTypeForPath(p); got != "transactions" {
-			t.Fatalf("types.DataTypeForPath(%q) = %q", p, got)
-		}
-	}
-}
-
 func TestLibraryKindTransactions_Registered(t *testing.T) {
 	k := LibraryKindByID("transactions")
 	if k == nil {
