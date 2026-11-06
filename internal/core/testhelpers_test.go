@@ -1,0 +1,174 @@
+package core
+
+// Test-only helpers, moved out of production sources so they stop shipping
+// in the binary. They were unreachable from any non-test call site.
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"sync"
+
+	"github.com/fudomunro/aegis/internal/types"
+)
+
+// AccessEventToAudit projects a redacted access event onto the durable
+// audit row (issue #105).
+func AccessEventToAudit(ev AccessEvent) AuditEvent {
+	return AuditEvent{
+		At:       ev.At,
+		Agent:    ev.Agent,
+		Surface:  ev.Surface,
+		Target:   ev.Target,
+		DataType: ev.DataType,
+		Decision: ev.Decision,
+		Reason:   ev.Reason,
+		Cache:    ev.Cache,
+		Method:   ev.Method,
+		Status:   ev.Status,
+		ClientIP: ev.ClientIP,
+	}
+}
+
+// canonicalServiceIDs returns the set of non-blocked service IDs declared as
+// the authoritative location for kind.
+func (c *Config) canonicalServiceIDs(kind string) map[string]bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	out := map[string]bool{}
+	for _, svc := range c.Services {
+		if svc.IsCanonicalFor(kind) {
+			out[svc.ID] = true
+		}
+	}
+	return out
+}
+
+// updateService applies mut to a service under the write lock. Tests use it
+// to install mock endpoints.
+func (c *Config) updateService(id string, mut func(*Service)) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	svc := c.serviceByID(id)
+	if svc == nil {
+		return false
+	}
+	mut(svc)
+	return true
+}
+
+// newMessage builds a single-source neutral message.
+func newMessage(service, serviceName, id, channel, subject, snippet, sentAt string) types.Message {
+	src := types.MessageSource{
+		Service:     service,
+		ServiceName: serviceName,
+		ID:          id,
+		Canonical:   true,
+	}
+	return types.Message{
+		Channel: channel,
+		Subject: subject,
+		Snippet: snippet,
+		SentAt:  sentAt,
+		Sources: []types.MessageSource{src},
+	}
+}
+
+// PhotosTakenDuring returns photos whose taken_at falls inside the visit or
+// trip window (issue #142). This is the photos/places join demo: sample
+// fixtures pair visits with photos captured during them.
+func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
+	start := types.NormalizePlaceVisitTime(v.StartAt)
+	end := types.NormalizePlaceVisitTime(v.EndAt)
+	if end == "" {
+		end = start
+	}
+	if start == "" {
+		return nil
+	}
+	out := make([]types.Photo, 0, 8)
+	for _, p := range photos {
+		taken := types.NormalizePlaceVisitTime(p.TakenAt)
+		if taken == "" {
+			continue
+		}
+		if taken < start {
+			continue
+		}
+		// Open-ended visit (no end_at): any photo at or after start.
+		if v.EndAt != "" && end != "" && taken > end {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// GenerateSampleMailFor builds a sample mail set tagged with a data-scope
+// dataset so archive queries can partition it (docs/data-scopes.md). Row ids
+// are namespaced so two datasets can share one archive without colliding on
+// UNIQUE(service, service_msg_id).
+func GenerateSampleMailFor(dataset string, n int) SampleMailSet {
+	set := GenerateSampleMail(n)
+	ds := strings.TrimSpace(dataset)
+	if ds == "" {
+		return set
+	}
+	suffix := " (" + ds + ")"
+	for i := range set.Records {
+		set.Records[i].Dataset = ds
+		set.Records[i].ID = ds + ":" + set.Records[i].ID
+		set.Records[i].Subject += suffix
+		set.Records[i].FromName += suffix
+	}
+	return set
+}
+
+// listUserDefined fetches every source for one schema and returns the raw
+// pre-merge rows (the aggregate pipeline owns merge + encode).
+func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, baseDir string, client *http.Client) (items []types.UserDefinedItem, truncated bool, err error) {
+	// Preserve source declaration order for stable source stamps.
+	srcs := schema.Sources
+	if len(srcs) == 0 {
+		return nil, false, fmt.Errorf("no sources configured")
+	}
+	var (
+		mu sync.Mutex
+		wg sync.WaitGroup
+	)
+	errs := make([]error, 0, len(srcs))
+	all := make([]types.UserDefinedItem, 0, len(srcs)*8)
+	for _, src := range srcs {
+		src := src
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			// A bad source must not fail the whole list (fail-open).
+			items, trunc, ferr := fetchUserDefinedSource(ctx, schema, src, baseDir, client)
+			mu.Lock()
+			defer mu.Unlock()
+			if ferr != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", src.ID, ferr))
+				return
+			}
+			if trunc {
+				truncated = true
+			}
+			all = append(all, items...)
+		}()
+	}
+	wg.Wait()
+	// Fail-open: return partial rows even when some sources erred. Only
+	// return an error when every source failed and nothing was collected.
+	if len(all) == 0 && len(errs) > 0 {
+		return nil, truncated, errors.Join(errs...)
+	}
+	return all, truncated, nil
+}
+
+// encrypt seals plaintext under the store master key.
+func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
+	return encryptWith(ts.key, plaintext)
+}

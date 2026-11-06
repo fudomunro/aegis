@@ -138,7 +138,7 @@ type ServiceConnector interface {
 - New library kinds plug into the `BuiltinLibraryKinds` registry in `internal/types/librarykinds.go`.
 - Connectors must read **configured** `GetService(id).Endpoint` — never hardcode
   upstream base URLs (breaks mock tests and custom endpoints).
-- Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `aegisHTTPClient`
+- Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `connectors.HTTPClient`
   over new `http.DefaultClient` call sites.
 - **Connectors depend on `Host`** (`host.go`) — not `*Server`. That seam is
   how named services leave package main under #15. Extend `Host` only for
@@ -258,7 +258,7 @@ go test -run='^$' -fuzz='^FuzzRecordFromTakeoutMessage$' -fuzztime=30s ./interna
 go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/core
 go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s ./internal/core
 # Other targets (CI fuzzes every one; list them all in ci.yml):
-# FuzzDetectBodyShape, FuzzInjectSystemMessage, FuzzIsMboxFromLine,
+# FuzzDetectBodyShape, FuzzIsMboxFromLine,
 # FuzzTakeoutMessageID, FuzzNormalizeIdentityKey, FuzzCleanYouTubeTitle,
 # FuzzTrackIdentityKey, FuzzMergePlaylistsSync, FuzzPlaylistLinkKey, FuzzMergeAlbumsSync
 
@@ -298,7 +298,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
   that can only tighten the type default (issue #148). Prefer **data grant** in
   product English (`docs/glossary.md`).
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
-- **Outbound HTTP.** Use `aegisHTTPClient` and
+- **Outbound HTTP.** Use `connectors.HTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
   token persist happens outside the map mutex; refresh uses singleflight.
 - **HTML in embed files.** Admin/setup markup belongs in `web/` +
@@ -338,7 +338,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Fail-closed on fetch/parse errors | Fail-open / allow, log, continue |
 | Agents prompting users for OAuth | Central connections + setup/admin flows |
 | Caching 401/404/502 bodies | Cache 200 GET only |
-| `http.DefaultClient` / `http.PostForm` without timeout | `aegisHTTPClient` + context |
+| `http.DefaultClient` / `http.PostForm` without timeout | `connectors.HTTPClient` + context |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |

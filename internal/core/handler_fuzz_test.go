@@ -84,22 +84,3 @@ func FuzzDetectBodyShape(f *testing.F) {
 		_ = instructionCarrierText(full, shape)
 	})
 }
-
-func FuzzInjectSystemMessage(f *testing.F) {
-	f.Add([]byte(`{"messages":[{"role":"user","content":"hi"}]}`), "SYS")
-	f.Add([]byte(`{"system":"x","messages":[]}`), "SYS")
-	f.Add([]byte(`not json`), "SYS")
-	f.Add([]byte(`{}`), "")
-	f.Fuzz(func(t *testing.T, original []byte, content string) {
-		out, err := injectSystemMessage(original, content)
-		if err != nil {
-			return
-		}
-		if len(out) > 0 {
-			var v any
-			if err := json.Unmarshal(out, &v); err != nil {
-				t.Fatalf("injectSystemMessage returned invalid JSON: %v", err)
-			}
-		}
-	})
-}

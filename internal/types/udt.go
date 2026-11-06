@@ -211,22 +211,6 @@ var nonKindDataTypeKeys = map[string]bool{
 	"recommendations": true, "search": true, "user": true,
 }
 
-// ReservedDataTypeKeys returns permission / path-classification keys owned
-// by built-in types: every BuiltinLibraryKinds ID plus non-kind proxy keys.
-// A UDT id (and therefore perm_type) must not collide with these —
-// MarkOptInDataType on a built-in key would hide that data (issue #15
-// review). Derived from the registry (issue #183).
-func ReservedDataTypeKeys() map[string]bool {
-	out := make(map[string]bool, len(BuiltinLibraryKinds)+len(nonKindDataTypeKeys))
-	for _, k := range BuiltinLibraryKinds {
-		out[k.ID] = true
-	}
-	for id := range nonKindDataTypeKeys {
-		out[id] = true
-	}
-	return out
-}
-
 // IsReservedDataTypeKey reports whether the key is a built-in data-type key.
 func IsReservedDataTypeKey(id string) bool {
 	if BuiltinKindByID(id) != nil {

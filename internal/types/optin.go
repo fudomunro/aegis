@@ -10,16 +10,3 @@ func MarkOptInDataType(dataType string) {
 	}
 	optInDefaultNone[dataType] = true
 }
-
-// UnmarkOptInDataType removes an opt-in mark. Intended for tests and for
-// unloading a user-defined kind at runtime.
-func UnmarkOptInDataType(dataType string) {
-	delete(optInDefaultNone, dataType)
-}
-
-// IsOptInDataType reports whether the data-type key requires explicit enable.
-// Built-in kinds use LibraryKind.DefaultNone; user-defined kinds are marked
-// at load (issue #15 / #183).
-func IsOptInDataType(dataType string) bool {
-	return isOptInDefaultNone(dataType)
-}

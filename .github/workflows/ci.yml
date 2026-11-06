@@ -98,7 +98,6 @@ jobs:
             FuzzIsMboxFromLine
             FuzzTakeoutMessageID
             FuzzInjectRequestInstructions
-            FuzzInjectSystemMessage
             FuzzDetectBodyShape
             FuzzNormalizeIdentityKey
             FuzzCleanYouTubeTitle

@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -44,7 +45,7 @@ func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) ht
 						list: func(ctx context.Context) ([]types.UserDefinedItem, bool, error) {
 							// Fail-open per source: fetch errors surface as
 							// by_service status, never a hard 500 for the list.
-							return fetchUserDefinedSource(ctx, schema, src, baseDir, aegisHTTPClient)
+							return fetchUserDefinedSource(ctx, schema, src, baseDir, connectors.HTTPClient)
 						},
 					})
 				}

@@ -112,10 +112,10 @@ func TestCanonicalServiceHelpers(t *testing.T) {
 }
 
 func TestMergePlaylistsSync_CanonicalSortsFirst(t *testing.T) {
-	merged := types.MergePlaylistsSync([]types.Playlist{
+	merged := types.MergePlaylistsSyncLinked([]types.Playlist{
 		{Name: "Mix", Sources: []types.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "y1"}}},
 		{Name: "Mix", Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "s1", Canonical: true}}},
-	})
+	}, nil)
 	if len(merged) != 1 {
 		t.Fatalf("merged len = %d", len(merged))
 	}

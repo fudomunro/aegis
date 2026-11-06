@@ -236,23 +236,6 @@ func MergeMessages(in []types.Message) []types.Message {
 	return out
 }
 
-// newMessage builds a single-source neutral message.
-func newMessage(service, serviceName, id, channel, subject, snippet, sentAt string) types.Message {
-	src := types.MessageSource{
-		Service:     service,
-		ServiceName: serviceName,
-		ID:          id,
-		Canonical:   true,
-	}
-	return types.Message{
-		Channel: channel,
-		Subject: subject,
-		Snippet: snippet,
-		SentAt:  sentAt,
-		Sources: []types.MessageSource{src},
-	}
-}
-
 // libraryArchiveMessageCap bounds archive rows feeding /v1/library/messages.
 // Full history stays on /v1/mail/search; the library page is the merged
 // collection overview (issue #139).

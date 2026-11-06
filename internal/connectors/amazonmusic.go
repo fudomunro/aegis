@@ -73,7 +73,7 @@ Aegis does not expose catalog search, recommendations, profiles, or other Amazon
 // HandleProxy processes an Amazon Music API request through the connector.
 func (c *AmazonMusicConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {
 	RunProxy(c.host, w, r, remainingPath, ProxyOpts{
-		serviceID:   "amazon-music",
+		serviceID:   AmazonMusicServiceID,
 		displayName: "Amazon Music",
 		defaultBase: amazonMusicAPIBase,
 		defaultTTL:  60 * time.Second,
@@ -161,12 +161,12 @@ func AsInt(v any) (int, bool) {
 // ListUserPlaylists implements PlaylistProvider. Fetches Amazon Music playlists
 // and returns them in Aegis's neutral format.
 func (c *AmazonMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
-	token := c.host.GetValidToken("amazon-music", slog.Default())
+	token := c.host.GetValidToken(AmazonMusicServiceID, slog.Default())
 	if token == "" {
 		return nil, false, types.ErrUnauthorized
 	}
 
-	upstreamBase := c.host.UpstreamBaseFor("amazon-music", amazonMusicAPIBase)
+	upstreamBase := c.host.UpstreamBaseFor(AmazonMusicServiceID, amazonMusicAPIBase)
 
 	nextURL := upstreamBase + "/me/playlists"
 	var all []types.Playlist
@@ -251,7 +251,7 @@ func (c *AmazonMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist 
 		Owner:       owner,
 		TrackCount:  trackCount,
 		Sources: []types.PlaylistSource{
-			types.PrimaryPlaylistSource("amazon-music", "Amazon Music", id, "", extra),
+			types.PrimaryPlaylistSource(AmazonMusicServiceID, "Amazon Music", id, "", extra),
 		},
 	}
 }
@@ -281,18 +281,18 @@ func (c *AmazonMusicConnector) NeutralAmazonTrack(t map[string]any) types.Track 
 
 	var artists []types.Artist
 	if artist != "" {
-		artists = []types.Artist{types.NewArtist("amazon-music", "Amazon Music", "", artist)}
+		artists = []types.Artist{types.NewArtist(AmazonMusicServiceID, "Amazon Music", "", artist)}
 	}
 
 	return types.Track{
 		Name:       name,
 		Artists:    artists,
-		Album:      types.NewAlbum("amazon-music", "Amazon Music", "", album),
+		Album:      types.NewAlbum(AmazonMusicServiceID, "Amazon Music", "", album),
 		DurationMs: durationMs,
 		Duration:   duration,
 		EntityID:   isrc,
 		Sources: []types.TrackSource{{
-			Service:     "amazon-music",
+			Service:     AmazonMusicServiceID,
 			ServiceName: "Amazon Music",
 			ID:          id,
 			Extra:       ExtraOrNil(extra),

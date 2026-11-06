@@ -322,15 +322,6 @@ func BuiltinKindIDs() []string {
 	return out
 }
 
-// BuiltinKindPaths returns every built-in agent path in registry order.
-func BuiltinKindPaths() []string {
-	out := make([]string, 0, len(BuiltinLibraryKinds))
-	for _, k := range BuiltinLibraryKinds {
-		out = append(out, k.Path)
-	}
-	return out
-}
-
 // AppReadableKindPaths returns list paths third-party app tokens may GET.
 func AppReadableKindPaths() []string {
 	out := make([]string, 0, len(BuiltinLibraryKinds))

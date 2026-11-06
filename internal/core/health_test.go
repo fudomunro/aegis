@@ -263,24 +263,3 @@ func TestPromText_CacheAndAccessSeries(t *testing.T) {
 	}
 }
 
-func TestStatusCodeOrZero(t *testing.T) {
-	if statusCodeOrZero(nil, nil) != 0 {
-		t.Fatal("nil resp should be 0")
-	}
-	if statusCodeOrZero(nil, errTest) != 0 {
-		t.Fatal("error should be 0")
-	}
-	resp := &http.Response{StatusCode: 502}
-	if statusCodeOrZero(resp, nil) != 502 {
-		t.Fatal("want 502")
-	}
-	if statusOrZero(200, errTest) != 0 || statusOrZero(200, nil) != 200 {
-		t.Fatal("statusOrZero wrong")
-	}
-}
-
-var errTest = errTestType{}
-
-type errTestType struct{}
-
-func (errTestType) Error() string { return "test error" }

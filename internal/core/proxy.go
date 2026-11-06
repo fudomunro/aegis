@@ -146,15 +146,6 @@ func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache s
 	})
 }
 
-// statusCodeOrZero returns the upstream status, or 0 when the request failed
-// before a response arrived (issue #105 latency metrics).
-func statusCodeOrZero(resp *http.Response, err error) int {
-	if err != nil || resp == nil {
-		return 0
-	}
-	return resp.StatusCode
-}
-
 func writeJSONError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

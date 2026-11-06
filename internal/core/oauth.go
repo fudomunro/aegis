@@ -12,6 +12,8 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/connectors"
 )
 
 // HandleAuthLogin initiates the OAuth flow for a service surface.
@@ -271,7 +273,7 @@ func (s *Server) tokenRequest(tokenURL string, data url.Values) (*OAuthToken, er
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := aegisHTTPClient.Do(req)
+	resp, err := connectors.HTTPClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("token request: %w", err)
 	}

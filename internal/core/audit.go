@@ -55,24 +55,6 @@ CREATE INDEX IF NOT EXISTS audit_events_target ON audit_events(target, at);
 CREATE INDEX IF NOT EXISTS audit_events_client_ip ON audit_events(client_ip, at);
 `
 
-// AccessEventToAudit projects a redacted access event onto the durable
-// audit row (issue #105).
-func AccessEventToAudit(ev AccessEvent) AuditEvent {
-	return AuditEvent{
-		At:       ev.At,
-		Agent:    ev.Agent,
-		Surface:  ev.Surface,
-		Target:   ev.Target,
-		DataType: ev.DataType,
-		Decision: ev.Decision,
-		Reason:   ev.Reason,
-		Cache:    ev.Cache,
-		Method:   ev.Method,
-		Status:   ev.Status,
-		ClientIP: ev.ClientIP,
-	}
-}
-
 // AuditEvent is one redacted access record. Mirrors AccessEvent plus
 // HTTP method/status for denials and the resolved client IP. Never holds
 // tokens or bodies.

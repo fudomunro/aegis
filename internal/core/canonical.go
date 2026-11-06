@@ -82,20 +82,6 @@ func validateCanonicalFor(services []Service) error {
 	return nil
 }
 
-// canonicalServiceIDs returns the set of non-blocked service IDs declared as
-// the authoritative location for kind.
-func (c *Config) canonicalServiceIDs(kind string) map[string]bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	out := map[string]bool{}
-	for _, svc := range c.Services {
-		if svc.IsCanonicalFor(kind) {
-			out[svc.ID] = true
-		}
-	}
-	return out
-}
-
 // canonicalServiceName returns the display name of the configured canonical
 // service for kind, or "".
 func (s *Server) canonicalServiceName(kind string) string {

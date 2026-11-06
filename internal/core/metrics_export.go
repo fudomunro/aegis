@@ -441,15 +441,6 @@ func (p *PromMetrics) promText() string {
 	return b.String()
 }
 
-// statusOrZero returns the upstream status code, or 0 when the call failed
-// before a status arrived (issue #105 latency metrics).
-func statusOrZero(status int, err error) int {
-	if err != nil {
-		return 0
-	}
-	return status
-}
-
 func writeMeta(b *strings.Builder, name, typ, help string) {
 	fmt.Fprintf(b, "# HELP %s %s\n", name, help)
 	fmt.Fprintf(b, "# TYPE %s %s\n", name, typ)

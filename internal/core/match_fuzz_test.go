@@ -118,7 +118,7 @@ func FuzzMergePlaylistsSync(f *testing.F) {
 			p.Sources = []types.PlaylistSource{{Service: service, ID: id}}
 		}
 		in := []types.Playlist{p, p, {Name: name + " "}}
-		out := types.MergePlaylistsSync(in)
+		out := types.MergePlaylistsSyncLinked(in, nil)
 		if len(out) > len(in) {
 			t.Fatalf("playlist merge grew list: %d -> %d", len(out), len(in))
 		}

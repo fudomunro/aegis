@@ -128,7 +128,7 @@ func (c *gmailArchiveSyncer) SyncMailArchive(ctx context.Context, archive *MailA
 			return c.finishMailSync(archive, res, cursor, err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := aegisHTTPClient.Do(req)
+		resp, err := connectors.HTTPClient.Do(req)
 		if err != nil {
 			return c.finishMailSync(archive, res, cursor, err)
 		}

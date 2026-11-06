@@ -354,7 +354,7 @@ func TestHandlePreRequest_MultipleServices(t *testing.T) {
 	}
 }
 
-func TestInjectSystemMessage(t *testing.T) {
+func TestInjectRequestInstructions_Chat(t *testing.T) {
 	original := map[string]any{
 		"model": "gpt-4",
 		"messages": []map[string]string{
@@ -364,10 +364,11 @@ func TestInjectSystemMessage(t *testing.T) {
 	}
 	origBytes, _ := json.Marshal(original)
 
-	modified, err := injectSystemMessage(origBytes, "injected context")
+	injected, err := injectRequestInstructions(origBytes, "injected context", "", "")
 	if err != nil {
-		t.Fatalf("injectSystemMessage: %v", err)
+		t.Fatalf("injectRequestInstructions: %v", err)
 	}
+	modified := injected.Body
 
 	var result map[string]any
 	json.Unmarshal(modified, &result)
@@ -395,8 +396,8 @@ func TestInjectSystemMessage(t *testing.T) {
 	}
 }
 
-func TestInjectSystemMessage_InvalidJSON(t *testing.T) {
-	_, err := injectSystemMessage([]byte("{bad"), "test")
+func TestInjectRequestInstructions_InvalidJSON(t *testing.T) {
+	_, err := injectRequestInstructions([]byte("{bad"), "test", "", "")
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}

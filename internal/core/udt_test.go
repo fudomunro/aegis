@@ -32,10 +32,6 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	if schema.Path != "/v1/library/reading-list" {
 		t.Errorf("path = %q", schema.Path)
 	}
-	if !types.IsOptInDataType("reading-list") {
-		t.Error("reading-list should be marked opt-in")
-	}
-	t.Cleanup(func() { types.UnmarkOptInDataType("reading-list") })
 
 	items, truncated, err := listUserDefined(context.Background(), schema, reg.DirFor("reading-list"), nil)
 	if err != nil {
@@ -86,7 +82,6 @@ func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
 		"identity": {"fields": ["name"]},
 		"sources": [{"id": "s", "kind": "file_json", "path": "plants.json", "field_map": {"name": "name"}}]
 	}`)
-	types.UnmarkOptInDataType("garden-plants")
 	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded %d schemas, want 1: %+v", len(loaded), loaded)
@@ -97,10 +92,6 @@ func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
 	if _, ok := reg.Get("tracks"); ok {
 		t.Fatal("built-in id must not be replaced")
 	}
-	if !types.IsOptInDataType("garden-plants") {
-		t.Error("garden-plants should be opt-in")
-	}
-	t.Cleanup(func() { types.UnmarkOptInDataType("garden-plants") })
 }
 
 func TestDottedPath(t *testing.T) {
@@ -234,8 +225,6 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 			"field_map": {"id": "id", "title": "title", "author": "author", "status": "status"}
 		}]
 	}`)
-	types.UnmarkOptInDataType("reading-list")
-	t.Cleanup(func() { types.UnmarkOptInDataType("reading-list") })
 
 	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) != 1 {
@@ -294,8 +283,6 @@ func TestServer_UDTDeniedWhenNotEnabled(t *testing.T) {
 		"sources": [{"id": "s", "kind": "file_json", "path": "x.json", "field_map": {"title": "t"}}]
 	}`)
 	writeSchemaFile(t, dir, "x.json", `{"t": "hi"}`)
-	types.UnmarkOptInDataType("secret-log")
-	t.Cleanup(func() { types.UnmarkOptInDataType("secret-log") })
 
 	reg, _ := LoadUserDefinedTypes(dir, "", nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")

@@ -354,29 +354,6 @@ func matchGmailAttachmentRoute(remainingPath string) (messageID, attachmentID st
 	return "", "", false
 }
 
-// GmailAttachmentPath parses messages/{mid}/attachments/{aid}.
-func GmailAttachmentPath(remainingPath string) (messageID, attachmentID string, ok bool) {
-	messageID, attachmentID, ok = matchGmailAttachmentRoute(remainingPath)
-	if !ok || attachmentID == "" {
-		return "", "", false
-	}
-	if !validGmailBareID(messageID) || !validGmailAttachmentID(attachmentID) {
-		return "", "", false
-	}
-	return messageID, attachmentID, true
-}
-
-// GmailAttachmentListPath parses messages/{mid}/attachments (list form).
-// The message id is returned even when it is not a Gmail id so the caller can
-// 404 with a sources hint instead of generic pass-through.
-func GmailAttachmentListPath(remainingPath string) (messageID string, ok bool) {
-	messageID, attachmentID, ok := matchGmailAttachmentRoute(remainingPath)
-	if !ok || attachmentID != "" {
-		return "", false
-	}
-	return messageID, true
-}
-
 // GmailAttachmentDocumentID joins message and attachment ids into a path-safe
 // library document id (the text route is a single path segment).
 func GmailAttachmentDocumentID(messageID, attachmentID string) string {

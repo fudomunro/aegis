@@ -675,18 +675,6 @@ func IsSummaryAccess(level string) bool {
 	return NormalizeAccess(level) == AccessSummary
 }
 
-// IsCityAccess reports whether the level is the places city-only view
-// (issue #142).
-func IsCityAccess(level string) bool {
-	return NormalizeAccess(level) == AccessCity
-}
-
-// IsPreciseAccess reports whether the level is the places precise view
-// (coordinates included, issue #142).
-func IsPreciseAccess(level string) bool {
-	return NormalizeAccess(level) == AccessPrecise
-}
-
 // IsMetadataAccess reports whether the level is the documents metadata-only
 // view (titles/dates/tags, no text; issue #143).
 func IsMetadataAccess(level string) bool {

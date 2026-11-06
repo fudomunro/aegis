@@ -132,13 +132,6 @@ func PrimaryPlaylistSource(service, serviceName, id, url string, extra map[strin
 	}
 }
 
-// MergePlaylistsSync groups playlists that share a normalized name into a
-// single user-facing playlist with multiple Sources. Prefer
-// MergePlaylistsSyncLinked when explicit entity links are available.
-func MergePlaylistsSync(in []Playlist) []Playlist {
-	return MergePlaylistsSyncLinked(in, nil)
-}
-
 // MergePlaylistsSyncLinked merges playlists using explicit user-confirmed
 // links first (issue #4), then falls back to normalized name equality.
 // linkKey may be nil. Multi-source name merges set Match=name; linked
