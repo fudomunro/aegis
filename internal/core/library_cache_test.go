@@ -254,7 +254,7 @@ func TestHandleAdminCacheClear_FlushesBothCaches(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/admin/cache/clear", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}

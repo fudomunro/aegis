@@ -188,7 +188,7 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/admin/permissions", nil)
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("unauth status = %d, want 401", w.Code)
 	}
@@ -196,7 +196,7 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	req = httptest.NewRequest(http.MethodGet, "/v1/admin/permissions", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -229,7 +229,7 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	req = httptest.NewRequest(http.MethodPost, "/v1/admin/permissions", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("POST status = %d, want 405", w.Code)
 	}

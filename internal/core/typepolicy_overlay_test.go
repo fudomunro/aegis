@@ -190,7 +190,7 @@ func TestHandleAdminDataGrants(t *testing.T) {
 	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -198,7 +198,7 @@ func TestHandleAdminDataGrants(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/admin/data-grants", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w = httptest.NewRecorder()
-	srv.handleAdminRoutes(w, req)
+	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}

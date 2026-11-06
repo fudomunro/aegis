@@ -383,7 +383,7 @@ func TestHandleAuthRoutes_Dispatch(t *testing.T) {
 	// login is public
 	req := httptest.NewRequest("GET", "/v1/auth/spotify/login", nil)
 	w := httptest.NewRecorder()
-	srv.handleAuthRoutes(w, req)
+	dispatchAuth(srv, w, req)
 	if w.Code != http.StatusTemporaryRedirect {
 		t.Fatalf("login status = %d", w.Code)
 	}
@@ -391,14 +391,14 @@ func TestHandleAuthRoutes_Dispatch(t *testing.T) {
 	// status requires auth
 	req = httptest.NewRequest("GET", "/v1/auth/status", nil)
 	w = httptest.NewRecorder()
-	srv.handleAuthRoutes(w, req)
+	dispatchAuth(srv, w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status without auth = %d", w.Code)
 	}
 	req = httptest.NewRequest("GET", "/v1/auth/status", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.handleAuthRoutes(w, req)
+	dispatchAuth(srv, w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status with auth = %d", w.Code)
 	}
@@ -406,7 +406,7 @@ func TestHandleAuthRoutes_Dispatch(t *testing.T) {
 	// unknown path
 	req = httptest.NewRequest("GET", "/v1/auth/nope", nil)
 	w = httptest.NewRecorder()
-	srv.handleAuthRoutes(w, req)
+	dispatchAuth(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unknown = %d", w.Code)
 	}
@@ -415,7 +415,7 @@ func TestHandleAuthRoutes_Dispatch(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/auth/spotify", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.handleAuthRoutes(w, req)
+	dispatchAuth(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("GET revoke = %d", w.Code)
 	}
