@@ -310,7 +310,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		writeJSONError(w, http.StatusInternalServerError, "failed to issue grant code")
 		return
 	}
-	s.cache.Clear()
+	s.invalidateCaches()
 	withPeerLog(slog.With("handler", "app_authorize"), r).
 		Info("third-party data grant", "app_id", req.ClientID, "scopes", scopes)
 
@@ -408,7 +408,7 @@ func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	s.cache.Clear()
+	s.invalidateCaches()
 	withPeerLog(slog.With("handler", "app_revoke"), r).
 		Info("third-party app disconnected", "app_id", id)
 	writeJSON(w, map[string]any{"status": "revoked", "app_id": id})

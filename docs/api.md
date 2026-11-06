@@ -742,8 +742,8 @@ GET /v1/admin/maintenance/signals — sync-maintenance signal bundle: build stam
 POST /v1/admin/maintenance/signals — capture the bundle as <data-dir>/maintenance/signals-<UTC>.json (0600) and return its path
 POST /v1/admin/maintenance/scan — scan captured bundles; ticket recurrent failures as GitHub issues (label sync-failure; body carries the structured contract)
 POST /v1/admin/maintenance/dashboard — build the static sync-maintenance dashboard under <data-dir>/maintenance/dashboard/: index plus one page per service connection with capture history, the maintenance record (sync tickets and reported problems scraped from repo issues), and record-derived success/stability/confidence marks
-GET /v1/admin/cache — in-memory cache inventory
-POST /v1/admin/cache/clear — clear the response cache
+GET /v1/admin/cache — in-memory cache inventory (response cache and MusicBrainz lookups)
+POST /v1/admin/cache/clear — clear the response cache and MusicBrainz lookups
 GET /v1/admin/sync — sync job queue rollup + recent jobs (state, attempts, progress, next run), copy freshness per kind, and recurring schedules
 POST /v1/admin/sync — enqueue a sync job {"kind":"messages","job_type":"ingest","service":"google-gmail"}
 POST /v1/admin/sync/{id}/cancel — park a queued or running sync job

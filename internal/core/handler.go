@@ -92,13 +92,23 @@ type Server struct {
 	dataDir     string
 	config      *Config
 	cache       *Cache
+	// mbCache holds MusicBrainz MBID lookups (issue #273). Separate from
+	// cache so library invalidation and aggregate churn never spend the
+	// rate-limited lookup budget re-resolving the same tracks.
+	mbCache     *Cache
 	tokens      *TokenStore
 	oauthStates *StateStore
 	// rl damps credential guessing on auth/token surfaces (issue #253).
 	rl *rateLimiter
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
 	refreshFlight tokenFlight
-	connectors    map[string]connectors.ServiceConnector
+	// libraryFlight coalesces concurrent aggregate fetches per cache key
+	// (issue #273) so parallel identical requests share one provider fan-out.
+	libraryFlight flightGroup[any]
+	// indexWG tracks async search-index write-behind goroutines (issue #273)
+	// so tests and shutdown can wait for them.
+	indexWG    sync.WaitGroup
+	connectors map[string]connectors.ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).

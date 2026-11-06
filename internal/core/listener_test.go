@@ -125,6 +125,7 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 		authMode:    AuthModeAuto,
 		config:      &Config{},
 		cache:       NewCache(),
+		mbCache:     NewCache(),
 		scopes:      scopes,
 		identity:    ServeHeaderResolver{},
 	}

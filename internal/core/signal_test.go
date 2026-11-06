@@ -131,6 +131,7 @@ func TestHandleAdminSignal(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.signal = store
 	srv.cache = NewCache()
+	srv.mbCache = NewCache()
 
 	// Status
 	req := httptest.NewRequest("GET", "/v1/admin/signal/status", nil)
@@ -177,10 +178,10 @@ func TestHandleAdminSignal(t *testing.T) {
 	// Disabled store import
 	srv2 := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv2.cache = NewCache()
+	srv2.mbCache = NewCache()
 	w6 := httptest.NewRecorder()
 	srv2.HandleAdminSignal(w6, httptest.NewRequest("POST", "/v1/admin/signal/import", strings.NewReader(`{"path":"/tmp/x"}`)))
 	if w6.Code != http.StatusBadRequest {
 		t.Fatalf("disabled import code %d", w6.Code)
 	}
 }
-

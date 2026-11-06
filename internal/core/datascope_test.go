@@ -158,6 +158,7 @@ func scopeServer(t *testing.T, scopes []DataScope) *Server {
 		authMode:   AuthModeAPIKey,
 		config:     cfg,
 		cache:      NewCache(),
+		mbCache:    NewCache(),
 		connectors: make(map[string]connectors.ServiceConnector),
 		scopes:     loaded,
 		mail:       archive,
@@ -214,7 +215,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
 	}
-	srv := &Server{authMode: AuthModeAPIKey, scopes: scopes, config: &Config{}, cache: NewCache()}
+	srv := &Server{authMode: AuthModeAPIKey, scopes: scopes, config: &Config{}, cache: NewCache(), mbCache: NewCache()}
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	w := httptest.NewRecorder()

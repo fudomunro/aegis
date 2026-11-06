@@ -7,6 +7,25 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Library cache: aggregates not pages, coalesced fetches, targeted
+  invalidation (issue #273).** The in-memory cache used to store one encoded
+  response per page, so paging through N pages re-ran the full provider
+  fan-out N times and concurrent identical requests (the common agent
+  parallel-tool-call pattern) each fanned out on their own. The pipeline now
+  caches one merged aggregate per kind+view (`library:{id}|agg` — app and
+  data-scope suffixes kept) and slices agent pages from it; parallel misses
+  for the same key share one fetch via a flight group (a leader disconnect
+  no longer poisons the shared result). Blanket `Clear()` at the ~20
+  admin/save/sync sites is replaced with targeted invalidation — by kind
+  (`invalidateLibraryKind`), by service (`invalidateService`), or all
+  response entries (`invalidateCaches`) — so scheduled sync jobs no longer
+  wipe unrelated caches on every completion. MusicBrainz MBID lookups moved
+  to their own cache and survive library invalidation (they keep the 24h/2h
+  TTLs and the lookup budget), and the search-index write-behind runs off the
+  response path. Degraded aggregates are still never cached, GET+200 only,
+  and cache errors never fail a response. The admin cache view lists both
+  caches; the admin flush-all endpoint clears both.
+
 - **Connector `HandleProxy` implementations consolidate onto two shared
   pipelines (issue #275).** `connectors.RunProxy` (buffered JSON: token →
   cache → upstream → credential/rate-limit handling → transform →

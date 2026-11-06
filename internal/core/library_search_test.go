@@ -52,11 +52,13 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 		},
 	)
 
-	// A bare list fetch materializes the index (write-behind).
+	// A bare list fetch materializes the index (write-behind, off the
+	// response path — wait for it before asserting index state).
 	w, _ := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts")
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
+	srv.waitIndex()
 	n, err := srv.search.Count("contacts", "")
 	if err != nil || n != 2 {
 		t.Fatalf("index count = %d err=%v, want 2", n, err)
@@ -147,6 +149,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("shire list status = %d body=%s", w.Code, w.Body.String())
 	}
+	srv.waitIndex()
 
 	req = withDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), shire)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -215,6 +218,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
+	srv.waitIndex()
 	if err := srv.search.Upsert("contacts", "", []types.SearchDocument{{
 		ItemID:   "secret",
 		Title:    "Secret Person",
@@ -298,6 +302,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
+	srv.waitIndex()
 
 	req = httptest.NewRequest("GET", "/v1/admin/search/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -501,6 +506,7 @@ func TestLibrarySearch_CompleteFetchDropsDeletedItems(t *testing.T) {
 	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 2 {
 		t.Fatalf("list = %+v", docs)
 	}
+	srv.waitIndex()
 
 	// The lease is deleted upstream; the next complete list fetch must drop
 	// its row instead of upserting around it.
@@ -509,6 +515,7 @@ func TestLibrarySearch_CompleteFetchDropsDeletedItems(t *testing.T) {
 	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 1 {
 		t.Fatalf("list after delete = %+v", docs)
 	}
+	srv.waitIndex()
 
 	srv.cache.Clear()
 	if hits := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=lease"); len(hits) != 0 {
@@ -535,6 +542,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 2 {
 		t.Fatalf("list = %+v", docs)
 	}
+	srv.waitIndex()
 
 	// A failing provider tells us nothing about deletions: rows stay.
 	provider.err = errors.New("upstream boom")
@@ -546,6 +554,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("degraded list status = %d body=%s", w.Code, w.Body.String())
 	}
+	srv.waitIndex()
 	if n, _ := srv.search.Count("documents", ""); n != 2 {
 		t.Fatalf("degraded fetch deleted rows: count=%d", n)
 	}
@@ -562,6 +571,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	if docs := documentsQuery(t, srv, "test-key", "/v1/library/documents"); len(docs) != 1 {
 		t.Fatalf("truncated list = %+v", docs)
 	}
+	srv.waitIndex()
 	if n, _ := srv.search.Count("documents", ""); n != 2 {
 		t.Fatalf("truncated fetch deleted rows: count=%d", n)
 	}

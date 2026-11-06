@@ -253,7 +253,7 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 		services = append(services, item)
 	}
 
-	live, total, bytes := s.cache.Stats()
+	live, total, bytes := s.cacheStats()
 	allowed := s.allowedLogins
 	if allowed == nil {
 		allowed = []string{}
@@ -288,11 +288,11 @@ func (s *Server) HandleAdminCache(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := s.cache.Snapshot()
+	items := s.cacheSnapshot()
 	if items == nil {
 		items = []CacheItem{}
 	}
-	live, total, bytes := s.cache.Stats()
+	live, total, bytes := s.cacheStats()
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]any{
@@ -310,7 +310,7 @@ func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	s.cache.Clear()
+	s.invalidateAllCaches()
 	withPeerLog(slog.With("handler", "admin_cache_clear"), r).Info("admin cache cleared")
 
 	w.Header().Set("Content-Type", "application/json")
@@ -370,7 +370,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		s.cache.Clear()
+		s.invalidateCaches()
 		withPeerLog(slog.With("handler", "admin_data_grants"), r).
 			Info("data grants updated", "types", len(policies))
 		saved := s.config.DataGrants()
@@ -465,7 +465,7 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 			return
 		}
 		// Cache may hold responses that are now denied.
-		s.cache.Clear()
+		s.invalidateService(id)
 		withPeerLog(slog.With("handler", "admin_permissions"), r).
 			Info("service grant limits updated", "service", id, "keys", len(req.GrantLimits))
 

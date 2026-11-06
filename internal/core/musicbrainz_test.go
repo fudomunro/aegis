@@ -157,13 +157,13 @@ func TestMBIDCacheNegative(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 	// Negative cache stores "-"
-	if v, ok := g.cache.Get(artistMBIDCacheKey("Nobody")); !ok || v != "-" {
+	if v, ok := g.mbCache.Get(artistMBIDCacheKey("Nobody")); !ok || v != "-" {
 		t.Fatalf("neg cache = %q ok=%v", v, ok)
 	}
 	// Short TTL sanity
-	g.cache.Set("x", "y", 10*time.Millisecond)
+	g.mbCache.Set("x", "y", 10*time.Millisecond)
 	time.Sleep(20 * time.Millisecond)
-	if _, ok := g.cache.Get("x"); ok {
+	if _, ok := g.mbCache.Get("x"); ok {
 		t.Fatal("expected expiry")
 	}
 }

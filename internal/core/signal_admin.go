@@ -30,10 +30,11 @@ type SignalImportRequest struct {
 // HandleAdminSignal serves /v1/admin/signal/*.
 func (s *Server) HandleAdminSignal(w http.ResponseWriter, r *http.Request) {
 	s.HandleAdminImportStore(w, r, importStoreAdmin{
-		prefix:   "/v1/admin/signal",
-		flagName: "-signal-store",
-		pathHint: "a Signal export file or directory",
-		store:    s.signal,
+		prefix:    "/v1/admin/signal",
+		flagName:  "-signal-store",
+		pathHint:  "a Signal export file or directory",
+		serviceID: connectors.SignalServiceID,
+		store:     s.signal,
 		status:   func() any { return s.signalStatus() },
 		importPath: func(path string) (any, error) {
 			return connectors.ImportSignalPath(s.signal, path)

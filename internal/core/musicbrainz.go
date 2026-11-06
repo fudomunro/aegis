@@ -106,15 +106,15 @@ func mbPickHit(hits []mbHit, want string) string {
 
 func (s *Server) cacheMBID(key, value string) string {
 	if value == "" {
-		s.cache.Set(key, "-", mbNegTTL)
+		s.mbCache.Set(key, "-", mbNegTTL)
 		return ""
 	}
-	s.cache.Set(key, value, mbCacheTTL)
+	s.mbCache.Set(key, value, mbCacheTTL)
 	return value
 }
 
 func (s *Server) cachedMBID(key string) (string, bool) {
-	v, ok := s.cache.Get(key)
+	v, ok := s.mbCache.Get(key)
 	if !ok {
 		return "", false
 	}
@@ -237,7 +237,7 @@ func (s *Server) resolveArtistEntities(ctx context.Context, artists []types.Arti
 		if lookups >= mbLookupBudget {
 			break
 		}
-		if _, ok := s.cache.Get(artistMBIDCacheKey(q)); !ok {
+		if _, ok := s.mbCache.Get(artistMBIDCacheKey(q)); !ok {
 			lookups++
 		}
 		if mbid := s.lookupArtistMBID(ctx, name); mbid != "" {
@@ -264,7 +264,7 @@ func (s *Server) resolveTrackEntities(ctx context.Context, tracks []types.Track)
 			continue
 		}
 		key := recordingMBIDCacheKey(title, artist)
-		if _, ok := s.cache.Get(key); !ok {
+		if _, ok := s.mbCache.Get(key); !ok {
 			if lookups >= mbLookupBudget {
 				break
 			}
@@ -293,7 +293,7 @@ func (s *Server) resolveAlbumEntities(ctx context.Context, albums []types.Album)
 			continue
 		}
 		key := releaseGroupMBIDCacheKey(title, artist)
-		if _, ok := s.cache.Get(key); !ok {
+		if _, ok := s.mbCache.Get(key); !ok {
 			if lookups >= mbLookupBudget {
 				break
 			}

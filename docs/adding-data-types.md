@@ -295,7 +295,8 @@ func (s *Server) HandleLibraryWidgets(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-The shared pipeline already handles: method check, cache (`library:{id}`),
+The shared pipeline already handles: method check, cache (one merged
+aggregate per kind under `library:{id}|agg`, pages sliced per request),
 permission-aware fan-out, panic isolation per provider, unauthorized vs error
 status, stable sort, merge, canonical/copy stamping, JSON encode, metrics.
 
