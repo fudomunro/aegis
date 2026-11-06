@@ -24,12 +24,13 @@ func (s *Server) ServiceConfig(serviceID string) *connectors.ServiceInfo {
 		return nil
 	}
 	return &connectors.ServiceInfo{
-		ID:          svc.ID,
-		Action:      svc.Action,
-		Endpoint:    svc.Endpoint,
-		Headers:     svc.Headers,
-		CacheTTL:    svc.CacheTTL.Duration,
-		GrantLimits: s.effectivePermissions(svc),
+		ID:           svc.ID,
+		Action:       svc.Action,
+		Endpoint:     svc.Endpoint,
+		Headers:      svc.Headers,
+		CacheTTL:     svc.CacheTTL.Duration,
+		GrantLimits:  s.effectivePermissions(svc),
+		CanonicalFor: append([]string(nil), svc.CanonicalFor...),
 	}
 }
 
@@ -66,6 +67,22 @@ func (s *Server) LibraryReadable(kind string) bool {
 	}
 	rt, ok := kindRuntime[kind]
 	return ok && rt.HasProviders(s) && rt.Readable(s)
+}
+
+// CanonicalOwner returns the service id claiming kind as its home copy.
+// Backs connectors.Host for setup conflict reporting (issue #265).
+func (s *Server) CanonicalOwner(kind string) string {
+	if s == nil || s.config == nil {
+		return ""
+	}
+	for _, svc := range s.config.ServiceSnapshots() {
+		for _, k := range svc.CanonicalFor {
+			if k == kind {
+				return svc.ID
+			}
+		}
+	}
+	return ""
 }
 
 // Server implements connectors.Host (compile-time check).

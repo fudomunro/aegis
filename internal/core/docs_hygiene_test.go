@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
 )
 
 // User-facing docs and admin UI copy must not cite GitHub issue numbers or
@@ -352,5 +354,60 @@ func TestMarkdownLocalLinks_Resolve(t *testing.T) {
 	}
 	if len(failures) > 0 {
 		t.Fatalf("local markdown links must resolve:\n%s", strings.Join(failures, "\n"))
+	}
+}
+
+// TestImmichAPIKeyContract_SingleOwner pins the issue #265 seam rule: the
+// Immich single-key checkbox set has exactly one owner — the connector. The
+// admin UI renders it from the declared spec and docs point at that surface;
+// neither may restate the permission names, or the three copies drift again.
+func TestImmichAPIKeyContract_SingleOwner(t *testing.T) {
+	root := repoRoot(t)
+	perms := connectors.ImmichAPIKeyPermissions()
+	if len(perms) < 10 {
+		t.Fatalf("permission set looks truncated: %v", perms)
+	}
+
+	read := func(rel string) string {
+		t.Helper()
+		b, err := os.ReadFile(filepath.Join(root, rel))
+		if err != nil {
+			t.Fatalf("read %s: %v", rel, err)
+		}
+		return string(b)
+	}
+
+	admin := read("internal/core/web/admin.html")
+	for _, rel := range []string{
+		"docs/immich-live-testing.md",
+		"docs/connect/immich.md",
+		"docs/api.md",
+		"docs/configuration.md",
+	} {
+		body := read(rel)
+		for _, p := range perms {
+			if strings.Contains(body, p) {
+				t.Errorf("%s restates Immich API-key permission %q — the connector owns the set (issue #265)", rel, p)
+			}
+		}
+	}
+	for _, p := range perms {
+		if strings.Contains(admin, p) {
+			t.Errorf("web/admin.html restates Immich API-key permission %q — render it from the onboarding spec instead (issue #265)", p)
+		}
+	}
+
+	// The setup routes the contract used to be duplicated against are gone:
+	// connection setup speaks /v1/admin/setup/{id} (the tailnet wizard keeps
+	// its /v1/admin/immich/tailnet/* routes until Phase 3).
+	for _, gone := range []string{
+		"/v1/admin/immich/setup",
+		"/v1/admin/immich/config",
+		"/v1/admin/immich/test",
+		"/v1/admin/immich/check",
+	} {
+		if strings.Contains(admin, gone) {
+			t.Errorf("web/admin.html still calls %q — connection setup moved to /v1/admin/setup/immich (issue #265)", gone)
+		}
 	}
 }

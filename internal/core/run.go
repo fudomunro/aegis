@@ -886,8 +886,10 @@ func (s *Server) handleAdminRoutes(w http.ResponseWriter, r *http.Request) {
 		s.AdminMiddleware(s.HandleAdminServiceGrantLimits)(w, r)
 	case path == "apps" || strings.HasPrefix(path, "apps/"):
 		s.AdminMiddleware(s.HandleAdminApps)(w, r)
-	case path == "immich" || strings.HasPrefix(path, "immich/"):
-		s.AdminMiddleware(s.HandleAdminImmichSetup)(w, r)
+	case strings.HasPrefix(path, "immich/"):
+		// VIP-Service wizard only (issue #124). Connection setup speaks the
+		// connector-owned seam at /v1/admin/setup/{id} (issue #265).
+		s.AdminMiddleware(s.handleImmichTailnetRoutes)(w, r)
 	case strings.HasPrefix(path, "setup/"):
 		s.AdminMiddleware(s.handleAdminOnboarding)(w, r)
 	case path == "quicken" || strings.HasPrefix(path, "quicken/"):

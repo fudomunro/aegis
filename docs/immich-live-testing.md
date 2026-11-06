@@ -165,27 +165,17 @@ When the UI loads:
        /path/to/takeout-*.zip
      ```
 
-     Import with the **same** API key you give Aegis — the single-key permission
-     set below already includes upload/album/tag for `immich-go`. Keep the Takeout
-     zip as a backup; Aegis never stores photo bytes.
+     Import with the **same** API key you give Aegis — the one-key set covers
+     `immich-go` upload/album/tag too. Keep the Takeout zip as a backup; Aegis
+     never stores photo bytes.
 3. **Create an API key** for Aegis **and** `immich-go` (one key):
    Immich web UI → **Account** → **API Keys** → create.
    Immich v3 shows a **permissions checkbox list** (not a single “read-only”
-   switch). Do **not** use Select all. Tick this union:
-
-   | Permission | Why |
-   |------------|-----|
-   | `asset.read` | Aegis list (`POST /search/metadata`) |
-   | `asset.view` | Aegis thumbnails |
-   | `asset.download` | Aegis original bytes via proxy |
-   | `album.read` | Aegis album list |
-   | `user.read` | Connection test (`GET /users/me`) |
-   | `asset.upload` | `immich-go` import |
-   | `asset.update` / `asset.copy` / `asset.delete` / `asset.statistics` | `immich-go` Takeout import (dedupe / sidecar / metadata) |
-   | `album.create` / `albumAsset.create` | `immich-go` recreates Takeout albums |
-   | `stack.create` / `tag.create` / `tag.asset` | `immich-go` stacking + tags |
-   | `server.about` | `immich-go` server checks |
-   | `job.create` / `job.read` | `immich-go` pauses jobs during import (admin-linked key) |
+   switch). Do **not** use Select all. Tick the **single-key union** that
+   **Admin → Services → Immich → Setup guide → API key** lists — the connector
+   owns that set (one key for Aegis and `immich-go`, each permission annotated
+   with why it is needed) and the admin surface renders it with a **Copy list**
+   button. Do not transcribe it elsewhere; it is generated.
 
    Copy the secret immediately — Immich shows it only once. Paste that same
    secret into Aegis and into `immich-go --api-key=…`.
