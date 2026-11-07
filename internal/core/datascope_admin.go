@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // HandleAdminDataScopes manages invite tokens — the data-scope credentials
@@ -38,7 +39,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			var req DataScopeCreateRequest
+			var req scopes.CreateRequest
 			if err := json.Unmarshal(body, &req); err != nil {
 				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
@@ -108,7 +109,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		var req DataScopeUpdateRequest
+		var req scopes.UpdateRequest
 		if err := json.Unmarshal(body, &req); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 func TestResolveDemoMode(t *testing.T) {
@@ -27,7 +28,7 @@ func TestValidateDemoConfig_RejectsLiveServices(t *testing.T) {
 	cfg := &Config{Services: []Service{
 		{ID: "spotify", Action: "inject", Endpoint: "https://api.spotify.com/v1"},
 	}}
-	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
+	scopes, err := scopes.NewStore(writeDataScopes(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
 	}))
 	if err != nil {
@@ -42,7 +43,7 @@ func TestValidateDemoConfig_RequiresScopes(t *testing.T) {
 	cfg := &Config{Services: []Service{
 		{ID: "sample-library-shire", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "shire"},
 	}}
-	empty, err := NewDataScopeStore(filepath.Join(t.TempDir(), "none.json"))
+	empty, err := scopes.NewStore(filepath.Join(t.TempDir(), "none.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -57,7 +58,7 @@ func TestValidateDemoConfig_AllowsSampleOnly(t *testing.T) {
 		{ID: "sample-calendar", Action: "inject", Endpoint: "sample://calendar"},
 		{ID: "blocked-live", Action: "block", Endpoint: "https://api.spotify.com/v1"},
 	}}
-	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
+	scopes, err := scopes.NewStore(writeDataScopes(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
 	}))
 	if err != nil {
@@ -69,11 +70,11 @@ func TestValidateDemoConfig_AllowsSampleOnly(t *testing.T) {
 }
 
 func TestForceReadOnlyAll(t *testing.T) {
-	path := writeDataScopes(t, []DataScope{
+	path := writeDataScopes(t, []scopes.Scope{
 		{ID: "a", Dataset: "a", APIKey: "YOUR_A_KEY"},
 		{ID: "b", Dataset: "b", APIKey: "YOUR_B_KEY", ReadOnly: true},
 	})
-	s, err := NewDataScopeStore(path)
+	s, err := scopes.NewStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,7 +130,7 @@ func TestDemoStartup_RejectsLiveService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
+	scopes, err := scopes.NewStore(writeDataScopes(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
 	}))
 	if err != nil {

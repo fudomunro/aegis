@@ -24,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 func Run() {
@@ -286,7 +287,7 @@ func Run() {
 		os.Exit(1)
 	}
 
-	scopes, err := NewDataScopeStore(paths.DataScopes)
+	scopes, err := scopes.NewStore(paths.DataScopes)
 	if err != nil {
 		slog.Error("failed to load data scopes", "path", paths.DataScopes, "error", err)
 		os.Exit(1)

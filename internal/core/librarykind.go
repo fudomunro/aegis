@@ -17,6 +17,7 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // kindRuntimeEntry is core-owned visibility wiring for one library kind.
@@ -205,7 +206,7 @@ func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 		if !kindHasProviders(k.ID, s) || !kindReadable(k.ID, s) {
 			continue
 		}
-		if !scopeAllows(r, k.PermType, http.MethodGet) {
+		if !scopes.Allows(r, k.PermType, http.MethodGet) {
 			continue
 		}
 		if schema, ok := s.udtSchemaForKind(k.ID); ok {
@@ -301,12 +302,12 @@ func (s *Server) libraryIndexWriteable(r *http.Request, permType string) bool {
 	if AppIdentityFrom(r) != nil {
 		return false
 	}
-	sc := DataScopeFrom(r)
+	sc := scopes.From(r)
 	if sc == nil {
 		return true
 	}
 	for _, svc := range s.config.ServiceSnapshots() {
-		if !serviceVisibleToScope(&svc, sc) {
+		if !scopes.ServiceVisible(svc.Dataset, sc) {
 			continue
 		}
 		owner := types.NormalizeAccess(s.effectivePermissions(&svc).AccessForDataType(permType))
@@ -326,13 +327,13 @@ func collectProviders[T any, P any](
 	permType string,
 	lister func(P) func(ctx context.Context) ([]T, bool, error),
 ) (targets []namedLister[T], denied []string) {
-	scope := DataScopeFrom(r)
+	scope := scopes.From(r)
 	for id, connector := range s.connectors {
 		svc := s.config.GetService(id)
 		if svc == nil || svc.Action == "block" {
 			continue
 		}
-		if !serviceVisibleToScope(svc, scope) {
+		if !scopes.ServiceVisible(svc.Dataset, scope) {
 			continue
 		}
 		provider, ok := any(connector).(P)
@@ -426,7 +427,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 
 	// Data-scope grants are deny-by-default (issue #253): an unlisted kind is
 	// none for the principal, mirroring the app-scope gate above.
-	if sc := DataScopeFrom(r); sc != nil && !scopeAllows(r, kind.PermType, r.Method) {
+	if sc := scopes.From(r); sc != nil && !scopes.Allows(r, kind.PermType, r.Method) {
 		level := types.ScopeGrantsAccess(sc.Grants, kind.PermType, "")
 		logger.Info("library "+kind.ID+" denied by scope grant", "scope", sc.ID, "grant", level)
 		s.recordAccessFrom(r, AccessEvent{
@@ -459,7 +460,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		aggKey = spec.cacheKey
 	}
 	aggKey += appLibraryCacheSuffix(app, kind.PermType)
-	aggKey += scopeCacheSuffix(DataScopeFrom(r))
+	aggKey += scopes.CacheSuffix(scopes.From(r))
 	aggKey += "|agg"
 	if cached, ok := s.cache.Get(aggKey); ok {
 		var agg libraryFetch[T]
@@ -504,7 +505,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 		// reduced (app/clamped) view would store rows below the detail the
 		// owner's query expects (issue #272).
 		if kind.Search != nil && s.search.Enabled() && s.libraryIndexWriteable(r, kind.PermType) {
-			indexLibraryAsync(s, spec, scopeDataset(r), fetched)
+			indexLibraryAsync(s, spec, scopes.Dataset(r), fetched)
 		}
 		return fetched, nil
 	})
@@ -710,7 +711,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "search index is disabled")
 		return
 	}
-	dataset := scopeDataset(r)
+	dataset := scopes.Dataset(r)
 
 	// Grant gate mirrors the aggregate: without any readable target, search
 	// has nothing legitimate to return.
@@ -750,7 +751,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 
 	cacheKey := kind.CacheKey() + "|q=" + q
 	cacheKey += appLibraryCacheSuffix(app, kind.PermType)
-	cacheKey += scopeCacheSuffix(DataScopeFrom(r))
+	cacheKey += scopes.CacheSuffix(scopes.From(r))
 	cacheKey += pageReq.CacheSuffix()
 	if cached, ok := s.cache.Get(cacheKey); ok {
 		logger.Debug("search cache hit")

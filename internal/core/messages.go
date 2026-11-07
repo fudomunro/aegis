@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // messageServiceName returns the first source service name for stable pre-sort.
@@ -34,7 +35,7 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 			// the archive is disabled (issue #139).
 			if s.mail != nil && s.mailReadableFor(r) {
 				archive := s.mail
-				dataset := scopeDataset(r)
+				dataset := scopes.Dataset(r)
 				targets = append(targets, namedLister[types.Message]{
 					id: "mail-archive",
 					list: func(context.Context) ([]types.Message, bool, error) {

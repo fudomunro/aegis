@@ -18,6 +18,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
@@ -248,4 +249,18 @@ func mustCopyLedger(t *testing.T) *copies.Ledger {
 	}
 	t.Cleanup(func() { l.Close() })
 	return l
+}
+
+// writeDataScopes writes a data_scopes.json fixture and returns its path.
+func writeDataScopes(t *testing.T, list []scopes.Scope) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"version": 2, "data_scopes": list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "data_scopes.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

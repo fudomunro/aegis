@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 	"time"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // Metric surfaces for access stats.
@@ -308,7 +309,7 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 // "api-key". Never returns token material.
 func agentForRequest(r *http.Request) string {
 	if r != nil {
-		if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
+		if sc := scopes.From(r); sc != nil && sc.ID != "" {
 			// External principals (invite tokens) audit by scope id, never
 			// the shared agent-key label (issue #253).
 			return "scope:" + sc.ID

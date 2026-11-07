@@ -21,6 +21,7 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -176,7 +177,7 @@ type Server struct {
 	apps *AppStore
 	// scopes resolves data-scope API keys to principal → dataset partitions
 	// (docs/data-scopes.md). May be nil (legacy single-user).
-	scopes *DataScopeStore
+	scopes *scopes.Store
 	// demoMode locks the instance to synthetic fixtures and a read-only
 	// surface (issue #217). See demo.go.
 	demoMode bool
@@ -266,7 +267,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// principal with a dataset partition. They are agent-tier and never
 		// admin. Prefer them over the shared -api-key when both could match.
 		if sc := s.authenticateScope(r); sc != nil {
-			r = withDataScope(r, sc)
+			r = scopes.WithDataScope(r, sc)
 			if !s.allowScopeMethod(w, r, sc) {
 				return
 			}
@@ -507,7 +508,7 @@ func presentedAPIKey(r *http.Request) string {
 // authenticateScope resolves a data-scope API key to its principal scope
 // (docs/data-scopes.md). Nil when the store is missing or the key is not a
 // scope key (legacy shared agent key falls through to checkAPIKey).
-func (s *Server) authenticateScope(r *http.Request) *DataScope {
+func (s *Server) authenticateScope(r *http.Request) *scopes.Scope {
 	if s == nil || s.scopes == nil {
 		return nil
 	}
@@ -517,7 +518,7 @@ func (s *Server) authenticateScope(r *http.Request) *DataScope {
 // allowScopeMethod enforces read_only scopes. Mutating agent methods are
 // rejected except the Aperture pre-request hook, which is a read-only
 // classification webhook. Writes the deny response and returns false.
-func (s *Server) allowScopeMethod(w http.ResponseWriter, r *http.Request, sc *DataScope) bool {
+func (s *Server) allowScopeMethod(w http.ResponseWriter, r *http.Request, sc *scopes.Scope) bool {
 	if sc == nil || !sc.ReadOnly {
 		return true
 	}
@@ -571,7 +572,7 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, 
 func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIdentity, status int, reason string) {
 	attrs := []any{"remote", s.clientIPFor(r), "peer", r.RemoteAddr, "path", r.URL.Path, "reason", reason, "status", status}
 	agent := "api-key"
-	if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
+	if sc := scopes.From(r); sc != nil && sc.ID != "" {
 		agent = "scope:" + sc.ID
 		attrs = append(attrs, "scope", sc.ID)
 	} else if id != nil {
@@ -773,10 +774,10 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 	// Data-scope isolation: never match (or block on) services outside this
 	// principal's dataset partition (docs/data-scopes.md).
-	if scope := DataScopeFrom(r); scope != nil {
+	if scope := scopes.From(r); scope != nil {
 		visible := make([]Service, 0, len(matched))
 		for i := range matched {
-			if serviceVisibleToScope(&matched[i], scope) {
+			if scopes.ServiceVisible(matched[i].Dataset, scope) {
 				visible = append(visible, matched[i])
 			}
 		}

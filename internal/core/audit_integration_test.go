@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 
@@ -180,7 +181,7 @@ func TestAgentForRequest_ScopePrincipal(t *testing.T) {
 	if got := agentForRequest(req); got != "api-key" {
 		t.Fatalf("bare = %q", got)
 	}
-	req = withDataScope(req, &DataScope{ID: "family"})
+	req = scopes.WithDataScope(req, &scopes.Scope{ID: "family"})
 	if got := agentForRequest(req); got != "scope:family" {
 		t.Fatalf("scope principal = %q", got)
 	}

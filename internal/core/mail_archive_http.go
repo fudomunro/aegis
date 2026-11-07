@@ -11,6 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // mailPermType is the permission key for the local mail archive surface.
@@ -58,7 +59,7 @@ func (s *Server) mailReadable() bool {
 // principal's scope grants messages (deny-by-default) and the owner tier
 // allows message reads.
 func (s *Server) mailReadableFor(r *http.Request) bool {
-	if !scopeAllows(r, mailPermType, http.MethodGet) {
+	if !scopes.Allows(r, mailPermType, http.MethodGet) {
 		return false
 	}
 	return s.mailReadable()
@@ -138,7 +139,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		Offset:   offset,
 		WithBody: withBody,
 		Sort:     q.Get("sort"),
-		Dataset:  scopeDataset(r),
+		Dataset:  scopes.Dataset(r),
 	}
 	resp, err := a.Search(search)
 	if err != nil {
@@ -181,7 +182,7 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 	}
 	// Data-scope isolation: a partitioned principal cannot fetch rows from
 	// another dataset even with a direct id (docs/data-scopes.md).
-	if ds := scopeDataset(r); ds != "" && rec.Dataset != ds {
+	if ds := scopes.Dataset(r); ds != "" && rec.Dataset != ds {
 		shared.WriteJSONError(w, http.StatusNotFound, "message not found in mail archive")
 		return
 	}

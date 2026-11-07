@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // documentServiceName returns the first source service name for stable pre-sort.
@@ -297,7 +298,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	svc := s.config.GetService(serviceID)
 	if svc != nil {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
-		if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
+		if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}
