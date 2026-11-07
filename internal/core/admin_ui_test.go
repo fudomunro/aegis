@@ -260,6 +260,11 @@ func TestAdminHTML_OwnershipPanel(t *testing.T) {
 			t.Fatalf("admin HTML still contains %q — the toggle is the state", gone)
 		}
 	}
+	// A fetch POST without a Content-Type sends text/plain and the write
+	// guard rejects it; the toggle must declare JSON like every other write.
+	if !strings.Contains(body, `method: "POST", body: "{}", headers: { "Content-Type": "application/json" }`) {
+		t.Fatal("ownership toggle POST must set Content-Type: application/json")
+	}
 	// Provider copy stays with the connectors: the panel must not restate
 	// the declared route labels (issue #254).
 	for _, label := range []string{

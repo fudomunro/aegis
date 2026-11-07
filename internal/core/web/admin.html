@@ -1811,7 +1811,9 @@
         btn.setAttribute("aria-checked", String(!wasOn));
         if (card) card.classList.toggle("confirmed", !wasOn);
         try {
-          const opts = wasOn ? { method: "DELETE" } : { method: "POST", body: "{}" };
+          const opts = wasOn
+            ? { method: "DELETE" }
+            : { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } };
           await api("/v1/admin/ownership/" + encodeURIComponent(kind), opts);
           await loadOwnership();
         } catch (err) {
