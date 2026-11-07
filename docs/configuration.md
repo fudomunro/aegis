@@ -589,9 +589,10 @@ POST   /v1/admin/ownership/{kind}   # confirm {"note":"…"}
 DELETE /v1/admin/ownership/{kind}   # reopen (clear the confirmation)
 ```
 
-Unconfirmed ownership never blocks reads. The admin UI (Advanced → Library
-datasets) shows one card per type with its sources, copy freshness, the
-declared call-to-action routes, and the confirm/reopen control.
+Unconfirmed ownership never blocks reads. The admin UI merges the controls
+into the Library tab's sources display: the box showing a type's configured
+sources also carries the "I have all my …" toggle (tinting the box when
+on) and the declared call-to-action routes.
 
 ### Schedules
 

@@ -113,9 +113,11 @@ not need a second fetch (the onboarding-runner pattern).
   derives the action from `Onboarder` or transport class. Tests pin the
   declarations against the seams they name (setup ↔ `Onboarder`, import ↔
   the local-store connectors, connect otherwise).
-- **Phase 3 (this PR)** — admin UI: ownership cards in Library datasets with
-  the call to action and the confirm/reopen control. Labels render from the
-  API (connector-declared copy is never restated in `admin.html`).
+- **Phase 3 (this PR)** — admin UI: the controls merge into the Library
+  tab's sources display — the box listing a type's configured sources also
+  carries the "I have all my …" toggle (which tints the box) and the
+  call-to-action routes. Labels render from the API (connector-declared
+  copy is never restated in `admin.html`).
 - **Stretch** — surface unconfirmed kinds in agent instructions or
   `/v1/admin/summary`. Not required for #165's bar.
 

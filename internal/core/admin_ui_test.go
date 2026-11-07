@@ -216,10 +216,10 @@ func TestHandleSetup_Removed(t *testing.T) {
 	}
 }
 
-// TestAdminHTML_OwnershipPanel pins the data-ownership surface (issue #165):
-// the mount points, the toggle that carries the confirmation state, and that
-// the panel renders connector-declared labels from the API rather than
-// restating them.
+// TestAdminHTML_OwnershipPanel pins the data-ownership surface (issue #165)
+// where it now lives: merged into the library sources display, with the
+// toggle that carries the confirmation state, and rendering connector-
+// declared labels from the API rather than restating them.
 func TestAdminHTML_OwnershipPanel(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
@@ -231,33 +231,38 @@ func TestAdminHTML_OwnershipPanel(t *testing.T) {
 	body := w.Body.String()
 
 	for _, want := range []string{
-		`id="ownership-kinds"`,
-		`id="ownership-summary"`,
-		`id="reload-ownership"`,
+		`id="library-sources"`,
+		"renderLibrarySourceOverview",
+		"renderOwnershipIntoSources",
+		"ownershipByKind",
+		"ensureLibraryKindEntry",
 		"loadOwnership",
-		"renderOwnership",
 		"ownershipHref",
 		"data-ownership-toggle",
 		`role="switch"`,
 		"aria-checked",
-		"ownership-card",
-		"confirmed",
 		"/v1/admin/ownership",
-		"Data ownership",
 		"I have all my ",
+		// Kinds that used to have no library page stay confirmable.
+		`data-library-kind="documents"`,
+		`data-library-kind="places"`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing ownership marker %q", want)
 		}
 	}
-	// The toggle carries the state, so status badges on the box are gone.
+	// The toggle carries the state, so status badges and the old standalone
+	// panel are gone.
 	for _, gone := range []string{
 		"needs confirmation",
 		"data-ownership-confirm",
 		"data-ownership-reopen",
+		`id="ownership-kinds"`,
+		`id="ownership-summary"`,
+		`id="reload-ownership"`,
 	} {
 		if strings.Contains(body, gone) {
-			t.Fatalf("admin HTML still contains %q — the toggle is the state", gone)
+			t.Fatalf("admin HTML still contains %q — the toggle in the sources box is the state", gone)
 		}
 	}
 	// A fetch POST without a Content-Type sends text/plain and the write

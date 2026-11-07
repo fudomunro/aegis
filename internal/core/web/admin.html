@@ -196,9 +196,10 @@
     display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
   }
-  /* Data ownership cards: the toggle state is the state. */
-  .ownership-card { transition: border-color 0.15s ease, background 0.15s ease; }
-  .ownership-card.confirmed {
+  /* Data ownership controls in the library sources box: the toggle state
+     is the state, and it tints the box. */
+  .source-overview { transition: border-color 0.15s ease, background 0.15s ease; }
+  .source-overview.confirmed {
     border-color: rgba(63,185,80,0.45);
     background: rgba(63,185,80,0.05);
   }
@@ -228,12 +229,12 @@
   .ownership-toggle[aria-checked="true"] .ownership-switch::after {
     transform: translateX(15px); background: var(--green);
   }
-  .ownership-routes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.55rem 0 0.15rem; }
-  .ownership-card.confirmed .ownership-routes a {
+  .ownership-routes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.15rem 0 0.15rem; }
+  .source-overview.confirmed .ownership-routes a {
     background: none; border-color: transparent; color: var(--dim);
     font-size: 0.82rem; padding: 0.15rem 0.35rem;
   }
-  .ownership-card.confirmed .ownership-routes a:hover { color: var(--accent); }
+  .source-overview.confirmed .ownership-routes a:hover { color: var(--accent); }
   .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
   .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
@@ -564,6 +565,8 @@
           <button type="button" class="kind-btn" data-library-kind="events" aria-pressed="false">Events</button>
           <button type="button" class="kind-btn" data-library-kind="messages" aria-pressed="false">Messages</button>
           <button type="button" class="kind-btn" data-library-kind="transactions" aria-pressed="false">Transactions</button>
+          <button type="button" class="kind-btn" data-library-kind="documents" aria-pressed="false">Documents</button>
+          <button type="button" class="kind-btn" data-library-kind="places" aria-pressed="false">Places</button>
         </div>
         <div class="grow">
           <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
@@ -669,17 +672,6 @@
       </div>
 
       <h2 class="section-heading" id="section-library-datasets">Library datasets</h2>
-      <div class="help-box">
-        <h3>Data ownership</h3>
-        <p>Aegis aims to hold all the data of each type you care about. A type you have not confirmed keeps a call to action to bring more of it under management — connect a service, run a setup flow, or import an export.</p>
-      </div>
-      <div class="toolbar">
-        <span class="meta" id="ownership-summary">Loading…</span>
-        <div class="grow"></div>
-        <button class="btn" id="reload-ownership" type="button">Refresh</button>
-      </div>
-      <div id="ownership-kinds" class="map-libraries"><div class="empty">Loading data ownership…</div></div>
-
       <div id="map-libraries" class="map-libraries"><div class="empty">Open Home to load topology details.</div></div>
 
       <div id="map-recent" class="map-recent" hidden></div>
@@ -1754,91 +1746,74 @@
     return "/v1/auth/" + target + "/login";
   }
 
-  function renderOwnership(statuses) {
-    const root = $("ownership-kinds");
-    const summary = $("ownership-summary");
-    if (!root) return;
-    if (!statuses || !statuses.length) {
-      root.innerHTML = '<div class="empty">No data types registered.</div>';
-      if (summary) summary.textContent = "";
-      return;
-    }
-    const unconfirmed = statuses.filter((st) => !st.confirmed);
-    if (summary) {
-      summary.textContent = unconfirmed.length
-        ? unconfirmed.length + " of " + statuses.length + " types not yet confirmed complete"
-        : "All " + statuses.length + " types confirmed complete";
-    }
-    root.innerHTML = statuses.map((st) => {
-      const on = !!st.confirmed;
-      const label = st.label || st.kind;
-      const sources = (st.under_management || []).map((s) => s.name);
-      const sourceTxt = sources.length
-        ? sources.length + (sources.length === 1 ? " source" : " sources") + ": " + sources.join(", ")
-        : "No sources under management yet";
-      const freshness = st.freshness && st.freshness.total
-        ? '<div class="meta">Copies: ' + st.freshness.in_sync + " in sync · " + st.freshness.stale + " stale · " + st.freshness.missing + " missing</div>"
-        : "";
-      const note = st.note ? ' · <em>' + escapeHtml(st.note) + "</em>" : "";
-      const routes = (st.unused_routes || []).map((r) => {
-        const href = ownershipHref(r.action);
-        return '<a class="btn" href="' + href + '">' + escapeHtml(r.action.label || r.name) + "</a>";
-      }).join("");
-      const routesTxt = routes
-        ? '<div class="ownership-routes">' + routes + "</div>"
-        : '<div class="meta">No unused routes declared for this type.</div>';
-      return (
-        '<article class="card ownership-card' + (on ? " confirmed" : "") + '">' +
-        '<div class="card-header"><h3>' + escapeHtml(label) + "</h3>" +
+  // Ownership state for every kind, fetched once and rendered into the
+  // library sources box for the kind in view.
+  let ownershipByKind = {};
+
+  function renderOwnershipIntoSources(el, st) {
+    if (!st) return;
+    const on = !!st.confirmed;
+    el.classList.toggle("confirmed", on);
+    const routes = (st.unused_routes || []).map((r) => {
+      const href = ownershipHref(r.action);
+      return '<a class="btn" href="' + href + '">' + escapeHtml(r.action.label || r.name) + "</a>";
+    }).join("");
+    const routesTxt = routes
+      ? '<div class="ownership-routes">' + routes + "</div>"
+      : "";
+    const label = st.label || st.kind;
+    const title = el.querySelector(".source-overview-title");
+    if (title) {
+      title.insertAdjacentHTML("beforeend",
         '<button type="button" role="switch" aria-checked="' + on + '" class="ownership-toggle"' +
         ' data-ownership-toggle="' + escapeHtml(st.kind) + '"' +
         ' aria-label="I have all my ' + escapeHtml(label) + '">' +
         '<span class="ownership-switch" aria-hidden="true"></span>' +
         "<span>I have all my " + escapeHtml(label) + "</span>" +
-        "</button></div>" +
-        '<div class="meta">' + escapeHtml(sourceTxt) + note + "</div>" +
-        freshness +
-        routesTxt +
-        "</article>"
-      );
-    }).join("");
-    root.querySelectorAll("[data-ownership-toggle]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const kind = btn.getAttribute("data-ownership-toggle");
-        const wasOn = btn.getAttribute("aria-checked") === "true";
-        const card = btn.closest(".ownership-card");
-        // Flip the box immediately; the request confirms or rolls it back.
-        btn.setAttribute("aria-checked", String(!wasOn));
-        if (card) card.classList.toggle("confirmed", !wasOn);
-        try {
-          const opts = wasOn
-            ? { method: "DELETE" }
-            : { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } };
-          await api("/v1/admin/ownership/" + encodeURIComponent(kind), opts);
-          await loadOwnership();
-        } catch (err) {
-          btn.setAttribute("aria-checked", String(wasOn));
-          if (card) card.classList.toggle("confirmed", wasOn);
-          showGlobalError(err.message || "Failed to update ownership");
-        }
-      });
+        "</button>");
+    }
+    if (routesTxt) el.insertAdjacentHTML("beforeend", routesTxt);
+    const btn = el.querySelector("[data-ownership-toggle]");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const kind = btn.getAttribute("data-ownership-toggle");
+      const wasOn = btn.getAttribute("aria-checked") === "true";
+      // Flip the box immediately; the request confirms or rolls it back.
+      btn.setAttribute("aria-checked", String(!wasOn));
+      el.classList.toggle("confirmed", !wasOn);
+      try {
+        const opts = wasOn
+          ? { method: "DELETE" }
+          : { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } };
+        await api("/v1/admin/ownership/" + encodeURIComponent(kind), opts);
+        await loadOwnership();
+      } catch (err) {
+        btn.setAttribute("aria-checked", String(wasOn));
+        el.classList.toggle("confirmed", wasOn);
+        showGlobalError(err.message || "Failed to update ownership");
+      }
     });
   }
 
   async function loadOwnership() {
-    const summary = $("ownership-summary");
-    if (summary) summary.textContent = "Loading data ownership…";
     try {
       const res = await api("/v1/admin/ownership");
-      renderOwnership(res.ownership || []);
+      const list = res.ownership || [];
+      ownershipByKind = {};
+      list.forEach((st) => {
+        ownershipByKind[st.kind] = st;
+        ensureLibraryKindEntry(st);
+      });
+      // Re-render the sources box so the toggle reflects the fresh state.
+      const el = $("library-sources");
+      if (el && !el.hidden) {
+        const byService = (libraryDataByKind[libraryKind] || {}).by_service;
+        renderLibrarySourceOverview(byService);
+      }
     } catch (err) {
       if (err.status === 401) {
         showAuthGate(true);
-        return;
       }
-      const root = $("ownership-kinds");
-      if (root) root.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "Failed to load data ownership") + "</div>";
-      if (summary) summary.textContent = "";
     }
   }
 
@@ -2716,7 +2691,53 @@
       emptyAll: "No transactions found. Connect YNAB (Services → YNAB) or import Quicken files (Advanced → Quicken import), then reload.",
       emptyFilter: "No transactions match this filter.",
     },
+    documents: {
+      path: "/v1/admin/library/documents",
+      key: "documents",
+      label: "documents",
+      filterPlaceholder: "Filter documents…",
+      emptyAll: "No documents found. Connect Google Drive or Paperless, then reload.",
+      emptyFilter: "No documents match this filter.",
+    },
+    places: {
+      path: "/v1/admin/library/places",
+      key: "visits",
+      label: "places",
+      filterPlaceholder: "Filter places…",
+      emptyAll: "No places found. Import a Timeline export (Advanced → Timeline import) or connect OwnTracks, then reload.",
+      emptyFilter: "No places match this filter.",
+    },
   };
+
+  // ensureLibraryKindEntry registers a kind the switcher does not know —
+  // user-defined types arrive with the ownership status and serve through
+  // the generic item payload.
+  function ensureLibraryKindEntry(st) {
+    if (!st || !st.kind || LIBRARY_KINDS[st.kind]) return;
+    const label = st.label || st.kind;
+    LIBRARY_KINDS[st.kind] = {
+      path: "/v1/admin/library/" + encodeURIComponent(st.kind),
+      key: "items",
+      label: label,
+      filterPlaceholder: "Filter " + label + "…",
+      emptyAll: "No " + label + " found yet.",
+      emptyFilter: "Nothing matches this filter.",
+    };
+    const group = document.querySelector("[data-library-kind]");
+    if (!group || !group.parentElement || document.querySelector('[data-library-kind="' + st.kind.replace(/"/g, "") + '"]')) {
+      return;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "kind-btn";
+    btn.setAttribute("data-library-kind", st.kind);
+    btn.setAttribute("aria-pressed", "false");
+    btn.textContent = label;
+    const d = FLOW_ICONS[st.kind];
+    if (d) btn.insertAdjacentHTML("afterbegin", iconHTML(d, 14, "type-icon"));
+    btn.addEventListener("click", () => setLibraryKind(st.kind));
+    group.parentElement.appendChild(btn);
+  }
 
   let libraryKind = "playlists";
   let libraryCopyFilter = "";
@@ -2889,13 +2910,14 @@
   function renderLibrarySourceOverview(byService) {
     const el = $("library-sources");
     if (!el) return;
+    const st = ownershipByKind[libraryKind];
     const entries = Object.keys(byService || {}).map((id) => {
       return { id: id, st: byService[id] };
     });
     // Hide the synthetic mail-archive rollup when real source rows exist.
     const real = entries.filter((e) => e.id !== "mail-archive");
     const shown = real.length ? real : entries;
-    if (!shown.length) {
+    if (!shown.length && !st) {
       el.hidden = true;
       el.innerHTML = "";
       return;
@@ -2921,6 +2943,7 @@
       '<div class="source-overview-title">' + kindIcon + "Sources · " + total.toLocaleString() + " items " +
       searchBadgeFor(libraryKind) + "</div>" +
       roots.map(rowHtml).join("");
+    renderOwnershipIntoSources(el, st);
   }
 
   function libraryStatusBadges(byService) {
@@ -4124,7 +4147,6 @@ function selectTab(name, opts) {
   });
   $("reload-summary").addEventListener("click", () => loadSummary());
   $("reload-flow").addEventListener("click", () => loadFlow());
-  $("reload-ownership").addEventListener("click", () => loadOwnership());
   document.querySelectorAll("[data-flow-window]").forEach((btn) => {
     btn.addEventListener("click", () => {
       flowWindow = btn.getAttribute("data-flow-window") || "1h";
@@ -4134,7 +4156,7 @@ function selectTab(name, opts) {
       loadFlow();
     });
   });
-  $("reload-library").addEventListener("click", () => loadAllLibraryKinds());
+  $("reload-library").addEventListener("click", () => { loadAllLibraryKinds(); loadOwnership(); });
   $("reload-cache").addEventListener("click", () => loadCache());
   $("reload-mail-archive").addEventListener("click", () => loadMailArchive());
   $("sync-mail-archive").addEventListener("click", () => runMailArchiveSync({ reset: false }));
