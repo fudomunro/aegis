@@ -573,6 +573,24 @@ error is not evidence about the copy, so the row is skipped.
 `in_sync`, `stale`, `missing`, `unknown`, `unchecked`, `total`,
 `last_checked_at`. That is the data to show a user where their copies stand.
 
+### Data ownership
+
+Per-kind completeness feedback (see `docs/data-ownership.md`): until the
+user confirms that Aegis already holds all the data of a kind they care
+about, the admin surface keeps a call to action to bring more of that kind
+under management. The only persisted state is the confirmation itself —
+`ownership.json` under the data directory. Sources currently in use, unused
+declared routes (from the connection-maturity catalog and the ingest-source
+declarations), and the copy-freshness rollup are derived at read time.
+
+```
+GET    /v1/admin/ownership          # per-kind status
+POST   /v1/admin/ownership/{kind}   # confirm {"note":"…"}
+DELETE /v1/admin/ownership/{kind}   # reopen (clear the confirmation)
+```
+
+Unconfirmed ownership never blocks reads.
+
 ### Schedules
 
 Recurring work feeds the queue on its own so freshness accumulates without
@@ -630,6 +648,7 @@ on first run with mode `0700` (it holds secrets).
  user_types.json # admin UDT local-file selection overlay (beside -config; see below)
  user-types/ # user-defined type schema packs (or AEGIS_USER_TYPES_DIR)
  entity_links.json # confirmed playlist/entity links
+ ownership.json # per-kind data-ownership confirmation (issue #165; see docs/data-ownership.md)
  tokens.json # encrypted OAuth tokens + static credentials (0600;)
  copy_ledger.db # SQLite copy ledger + sync job queue (empty -copy-ledger / -sync-jobs disables)
  mail-archive.db # SQLite+FTS mail archive (omit -mail-archive to disable)

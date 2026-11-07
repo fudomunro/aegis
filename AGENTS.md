@@ -63,7 +63,8 @@ them away.
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
   `entity_links.json`, `data_grants.json`, `apps.json`, `data_scopes.json`,
-  `service_connections.json`, `user_types.json`, `.aegis-token-pass`, or live
+  `service_connections.json`, `user_types.json`, `ownership.json`,
+  `.aegis-token-pass`, or live
   binaries. Example config only via `aegis.example.json`. Prefer the OS data
   directory (issue #74) over the git worktree for runtime state.
 - **External access is invite-only and split-listener.** The API listener may
@@ -216,7 +217,7 @@ All mutable local state defaults under one data directory (override with
 
 ```
 <data-dir>/aegis.json, data_grants.json, apps.json, data_scopes.json,
-entity_links.json, tokens.json,
+entity_links.json, ownership.json, tokens.json,
 user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-archive.db,
 search-index.db, quicken.db, timeline.db, signal.db, audit_log.db, maintenance/, logs/aegis.log
 ```
@@ -394,6 +395,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
 | Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors/mail_ingest.go`, `internal/core/mail_ingest.go` |
 | Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
+| Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/types/ownership.go`, `internal/core/ownership.go` | Per-kind user confirmation + derived evidence; distinct from connection maturity |
 | Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |

@@ -62,6 +62,7 @@ You should see neutral playlist objects with `sources[]` provenance. Vocabulary 
 | [docs/connect/](docs/connect/) | Per-service OAuth and import guides |
 | [docs/api.md](docs/api.md) | Agent-facing HTTP surface (library, hook, transport) |
 | [docs/configuration.md](docs/configuration.md) | Config schema, data grants, flags, token encryption |
+| [docs/data-ownership.md](docs/data-ownership.md) | Per-kind data-ownership completeness feedback |
 | [docs/observability.md](docs/observability.md) | Health, metrics, audit log |
 | [SECURITY.md](SECURITY.md) | Auth model (tailnet and external access), ACLs, operational guidance |
 | [docs/external-access.md](docs/external-access.md) | Publishing the API listener: split listeners, invite tokens, deny-by-default grants |
