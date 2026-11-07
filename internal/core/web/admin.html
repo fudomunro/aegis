@@ -5093,24 +5093,6 @@ function selectTab(name, opts) {
     }
   }
 
-  async function copyFromEl(btn, elId, resetLabel) {
-    try {
-      await navigator.clipboard.writeText($(elId).textContent);
-      btn.textContent = "Copied";
-      setTimeout(() => { btn.textContent = resetLabel; }, 1200);
-    } catch (_) {
-      btn.textContent = "Copy failed";
-      setTimeout(() => { btn.textContent = resetLabel; }, 1200);
-    }
-  }
-
-  $("copy-immich-install").addEventListener("click", () =>
-    copyFromEl($("copy-immich-install"), "immich-install-commands", "Copy commands"));
-  $("copy-immich-env").addEventListener("click", () =>
-    copyFromEl($("copy-immich-env"), "immich-starter-env", "Copy .env"));
-  $("copy-immich-go-install").addEventListener("click", () =>
-    copyFromEl($("copy-immich-go-install"), "immich-go-install", "Copy install"));
-
   loadSummary();
   loadTypePolicies();
   loadOwnership();
