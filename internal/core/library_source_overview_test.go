@@ -72,13 +72,13 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 			t.Fatalf("upsert takeout: %v", err)
 		}
 	}
-	if err := mail.SaveSyncCursor(connectors.GoogleGmailServiceID, MailSyncCursor{
+	if err := mail.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
 		LastSyncAt: "2026-10-11T00:00:00Z",
 		Done:       true,
 	}); err != nil {
 		t.Fatalf("save gmail cursor: %v", err)
 	}
-	if err := mail.SaveSyncCursor(connectors.TakeoutServiceID, MailSyncCursor{
+	if err := mail.SaveSyncCursor(connectors.TakeoutServiceID, types.MailIngestCursor{
 		LastSyncAt: "2026-08-24T00:00:00Z",
 		Done:       true,
 	}); err != nil {

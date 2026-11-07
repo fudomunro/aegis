@@ -1,12 +1,14 @@
 package core
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -168,10 +170,8 @@ func TestWriteSampleMbox_ImportRoundTrip(t *testing.T) {
 	}
 
 	a := openTestMailArchive(t)
-	if err := a.SetTakeoutPath(path); err != nil {
-		t.Fatalf("set takeout path: %v", err)
-	}
-	res, err := a.ImportTakeout(path, 1000)
+	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mailSink{a},
+		types.MailIngestOptions{Path: path, MaxMessages: 1000})
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}

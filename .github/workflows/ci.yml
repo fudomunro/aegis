@@ -94,9 +94,6 @@ jobs:
         run: |
           set -euo pipefail
           core_targets=(
-            FuzzRecordFromTakeoutMessage
-            FuzzWalkMboxFrom
-            FuzzIsMboxFromLine
             FuzzInjectRequestInstructions
             FuzzDetectBodyShape
             FuzzNormalizeIdentityKey
@@ -112,6 +109,9 @@ jobs:
             go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/core
           done
           connectors_targets=(
+            FuzzParseTakeoutMessage
+            FuzzWalkMboxFrom
+            FuzzIsMboxFromLine
             FuzzTakeoutMessageID
           )
           for t in "${connectors_targets[@]}"; do

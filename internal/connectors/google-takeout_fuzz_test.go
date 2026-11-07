@@ -1,4 +1,4 @@
-package core
+package connectors
 
 import (
 	"bytes"
@@ -9,7 +9,7 @@ import (
 // Fuzz targets for hostile/irregular Takeout + mbox input (issue #107).
 // These parsers run on user-supplied archives; they must never panic.
 
-func FuzzRecordFromTakeoutMessage(f *testing.F) {
+func FuzzParseTakeoutMessage(f *testing.F) {
 	f.Add([]byte("From: a@b.c\nSubject: hi\nMessage-ID: <x@y>\nDate: Mon, 02 Jan 2006 15:04:05 -0700\n\nbody\n"))
 	f.Add([]byte("From: a@b.c\nSubject: =?utf-8?B?5pel5pys6Kqe?=\n\nmultipart-ish"))
 	f.Add([]byte("\nFrom: x\nSubject: x\n\n"))
@@ -18,22 +18,19 @@ func FuzzRecordFromTakeoutMessage(f *testing.F) {
 	f.Add([]byte("From: a\nSubject: \x00\xff\nDate: not-a-date\nMessage-ID: <>\n\n\x00\x01\x02"))
 	f.Add([]byte("From: a\nX-GM-LABELS: \\Inbox \\Sent UNREAD\nContent-Type: text/plain; charset=utf-8\n\nhello"))
 	f.Fuzz(func(t *testing.T, raw []byte) {
-		rec, err := recordFromTakeoutMessage(raw, "mbox/test")
+		msg, err := parseTakeoutMessage(raw, "mbox/test")
 		if err != nil {
 			return
 		}
-		if rec.ID == "" {
+		if len(msg.Sources) == 0 || msg.Sources[0].ID == "" {
 			t.Fatalf("successful parse produced empty ID for %q", raw)
 		}
-		if rec.Service == "" {
+		if msg.Sources[0].Service == "" {
 			t.Fatalf("successful parse produced empty service")
 		}
-		// Snippet must stay a prefix-safe truncation of BodyText or empty.
-		if rec.Snippet != "" && !strings.HasPrefix(rec.BodyText, rec.Snippet) && rec.Snippet != rec.BodyText {
-			// Snippet is body[:200]; if body shorter they match, else prefix.
-			if !strings.HasPrefix(rec.BodyText, rec.Snippet) {
-				t.Fatalf("snippet is not a prefix of body")
-			}
+		// Snippet must stay a prefix-safe truncation of Body or empty.
+		if msg.Snippet != "" && !strings.HasPrefix(msg.Body, msg.Snippet) && msg.Snippet != msg.Body {
+			t.Fatalf("snippet is not a prefix of body")
 		}
 	})
 }
@@ -64,7 +61,7 @@ func FuzzWalkMboxFrom(f *testing.F) {
 		}
 		// Nested parse of each extracted blob must also be panic-free.
 		for _, raw := range msgs {
-			_, _ = recordFromTakeoutMessage(raw, "fuzz")
+			_, _ = parseTakeoutMessage(raw, "fuzz")
 		}
 		// isMboxFromLine is total.
 		_ = isMboxFromLine(data)
@@ -85,5 +82,3 @@ func FuzzIsMboxFromLine(f *testing.F) {
 		}
 	})
 }
-
-

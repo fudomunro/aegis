@@ -258,10 +258,6 @@ func (s *Server) HandleAdminMailSync(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, requireAgentMessagesRead bool) {
-	a := s.requireMailArchive(w)
-	if a == nil {
-		return
-	}
 	var req MailSyncRequest
 	if r.Body != nil {
 		dec := json.NewDecoder(r.Body)
@@ -282,108 +278,68 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	if req.Service == "" {
 		req.Service = connectors.GoogleGmailServiceID
 	}
+	s.handleMailSyncPayload(w, r, req, requireAgentMessagesRead)
+}
 
-	// Takeout is a read-only sync location (mbox / zip / directory on disk).
-	if req.Service == connectors.TakeoutServiceID {
-		if req.ResetCursor {
-			if err := a.ResetTakeoutCursor(); err != nil {
-				shared.WriteJSONError(w, http.StatusInternalServerError, "failed to reset takeout cursor")
-				return
-			}
-		}
-		s.handleTakeoutSyncRequest(w, r, req, requireAgentMessagesRead)
+// handleMailSyncPayload runs one already-decoded sync request so callers
+// that own their decode (the admin import route) cannot drift from the
+// shared route mechanics (issue #227).
+func (s *Server) handleMailSyncPayload(w http.ResponseWriter, r *http.Request, req MailSyncRequest, requireAgentMessagesRead bool) {
+	if s.requireMailArchive(w) == nil {
 		return
 	}
-
-	if req.MaxMessages <= 0 {
-		req.MaxMessages = 200
-	}
-	if req.MaxMessages > 1000 {
-		req.MaxMessages = 1000
-	}
-
-	if _, ok := s.connectors[req.Service]; !ok {
+	// Pre-flight shape of this route is its own contract: a service that
+	// cannot sync the archive is 501, an unknown one 404, not a fail-open
+	// empty result. Ingest sources are connector-declared (issue #286).
+	if _, live := s.connectors[req.Service]; !live && s.mailIngestFor(req.Service) == nil {
 		shared.WriteJSONError(w, http.StatusNotFound, "no connector for service "+req.Service)
 		return
 	}
 	svc := s.config.GetService(req.Service)
-	if svc == nil || svc.Action == "block" {
-		shared.WriteJSONError(w, http.StatusForbidden, "service blocked")
-		return
+	if _, live := s.connectors[req.Service]; live {
+		if svc == nil || svc.Action == "block" {
+			shared.WriteJSONError(w, http.StatusForbidden, "service blocked")
+			return
+		}
 	}
 	// Admin sync is operator-owned; only the agent surface honors messages=read.
-	if requireAgentMessagesRead && !s.requestPermissions(r, svc).AllowsRead(mailPermType) {
-		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-		return
+	// Ingest-only sync locations (the Takeout export) have no config entry —
+	// agent reads then need messages read on some message-capable service.
+	if requireAgentMessagesRead {
+		if svc != nil {
+			if !s.requestPermissions(r, svc).AllowsRead(mailPermType) {
+				shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+				return
+			}
+		} else if !s.mailReadableFor(r) {
+			shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
+			return
+		}
 	}
-
-	// Pre-flight shape of this route is its own contract: a connector that
-	// cannot sync the archive is 501, not a fail-open empty result.
-	if s.mailArchiveSyncer(req.Service) == nil {
+	if s.mailIngestFor(req.Service) == nil {
 		shared.WriteJSONError(w, http.StatusNotImplemented, "service does not support mail archive sync")
 		return
 	}
 
 	// One ingest implementation, shared with the sync queue runner
 	// (issue #227): the mechanics live in doMailIngest so the route and the
-	// queue cannot drift.
-	result, _ := s.doMailIngest(r.Context(), mailIngestPayload{
+	// queue cannot drift. Path/query/reset are per-source knobs the ingest
+	// interprets (issue #286).
+	result, err := s.doMailIngest(r.Context(), mailIngestPayload{
 		Service:     req.Service,
 		MaxMessages: req.MaxMessages,
 		Query:       req.Query,
+		Path:        req.Path,
 		ResetCursor: req.ResetCursor,
 	})
+	if errors.Is(err, types.ErrMailConfig) {
+		// Missing or rejected ingest location is a client error, not a
+		// fail-open result.
+		shared.WriteJSONError(w, http.StatusBadRequest, result.Error)
+		return
+	}
 	// Fail-open: report what was stored even when the upstream call failed
 	// mid-run. doMailIngest has already filled result.Error from the error.
-	writeMailJSON(w, result)
-}
-
-// handleTakeoutSyncRequest ingests from the configured read-only Takeout export.
-// No provider OAuth and no connector — the export is already on disk.
-func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request, req MailSyncRequest, requireAgentMessagesRead bool) {
-	a := s.requireMailArchive(w)
-	if a == nil {
-		return
-	}
-	// Takeout is not a live service in aegis.json; agent reads still need
-	// messages permission on some configured message-capable service.
-	if requireAgentMessagesRead && !s.mailReadableFor(r) {
-		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-		return
-	}
-	if strings.TrimSpace(req.Path) != "" {
-		if err := a.SetTakeoutPath(req.Path); err != nil {
-			shared.WriteJSONError(w, http.StatusBadRequest, "failed to set takeout path: "+err.Error())
-			return
-		}
-	}
-	path := a.TakeoutPath()
-	if strings.TrimSpace(req.Path) != "" {
-		path = strings.TrimSpace(req.Path)
-	}
-	if path == "" {
-		shared.WriteJSONError(w, http.StatusBadRequest,
-			"takeout path not configured — set path in this request or via the admin UI")
-		return
-	}
-
-	// max_messages=0 with an explicit path is save-path-only (admin UI).
-	if req.MaxMessages == 0 && strings.TrimSpace(req.Path) != "" {
-		writeMailJSON(w, MailSyncResult{
-			Service: connectors.TakeoutServiceID,
-			Query:   "takeout:" + path,
-			Done:    true,
-		})
-		return
-	}
-
-	// One ingest implementation, shared with the sync queue runner
-	// (issue #227). doTakeoutIngest also stamps the optimistic snapshot.
-	result, _ := s.doMailIngest(r.Context(), mailIngestPayload{
-		Service:     connectors.TakeoutServiceID,
-		MaxMessages: req.MaxMessages,
-		Query:       path,
-	})
 	writeMailJSON(w, result)
 }
 
@@ -410,7 +366,7 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	req.Service = connectors.TakeoutServiceID
-	s.handleTakeoutSyncRequest(w, r, req, false)
+	s.handleMailSyncPayload(w, r, req, false)
 }
 
 func writeMailJSON(w http.ResponseWriter, v any) {

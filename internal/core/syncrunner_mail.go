@@ -3,11 +3,12 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Mail archive ingest (issue #227). doMailIngest is the single implementation
@@ -24,7 +25,17 @@ type mailIngestPayload struct {
 	Service     string `json:"service,omitempty"`
 	MaxMessages int    `json:"max_messages,omitempty"`
 	Query       string `json:"query,omitempty"`
+	Path        string `json:"path,omitempty"`
 	ResetCursor bool   `json:"reset_cursor,omitempty"`
+}
+
+func (p mailIngestPayload) options() types.MailIngestOptions {
+	return types.MailIngestOptions{
+		MaxMessages: p.MaxMessages,
+		Query:       p.Query,
+		Path:        p.Path,
+		ResetCursor: p.ResetCursor,
+	}
 }
 
 // mailIngestRunner runs ingest and import_snapshot jobs for the local mail
@@ -71,9 +82,10 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 		// Leave step.Payload empty so a retry keeps the job's payload as-is,
 		// including reset_cursor — a failed first step must not silently
 		// resume from the saved cursor instead of starting over.
-		if connectors.IsGmailQuotaError(err) {
-			step.RetryAfter = quotaSyncBackoff
-			return step, &SyncRetryAfter{Err: err, After: quotaSyncBackoff}
+		// RetryAfter is provider knowledge the ingest reports (issue #286).
+		if result.RetryAfter > 0 {
+			step.RetryAfter = result.RetryAfter
+			return step, &SyncRetryAfter{Err: err, After: result.RetryAfter}
 		}
 		return step, err
 	}
@@ -84,6 +96,7 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 			Service:     p.Service,
 			MaxMessages: p.MaxMessages,
 			Query:       p.Query,
+			Path:        p.Path,
 		}
 		if b, merr := json.Marshal(next); merr == nil {
 			step.Payload = b
@@ -117,24 +130,26 @@ func parseMailIngestPayload(job SyncJob) (mailIngestPayload, error) {
 }
 
 // doMailIngest runs one bounded ingest and reports the raw mail result. Both
-// the HTTP sync route and the queue runner go through here.
-func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (MailSyncResult, error) {
+// the HTTP sync route and the queue runner go through here. The ingest is a
+// connector-owned implementation behind the MailSink (issue #286).
+func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (types.MailIngestResult, error) {
 	if s.mail == nil {
-		return MailSyncResult{Service: p.Service, Error: "mail archive disabled"},
+		return types.MailIngestResult{Service: p.Service, Error: "mail archive disabled"},
 			fmt.Errorf("%w: mail archive disabled", ErrSyncTerminal)
 	}
-	if p.Service == connectors.TakeoutServiceID {
-		return s.doTakeoutIngest(ctx, p)
-	}
-	syncer := s.mailArchiveSyncer(p.Service)
-	if syncer == nil {
-		return MailSyncResult{Service: p.Service},
+	ingest := s.mailIngestFor(p.Service)
+	if ingest == nil {
+		return types.MailIngestResult{Service: p.Service},
 			fmt.Errorf("%w: service %s cannot sync the mail archive", ErrSyncTerminal, p.Service)
 	}
-	svc := s.config.GetService(p.Service)
-	if svc == nil || svc.Action == "block" {
-		return MailSyncResult{Service: p.Service},
-			fmt.Errorf("%w: service %s is blocked", ErrSyncTerminal, p.Service)
+	// Live (connector-backed) sources must have a non-blocked config entry;
+	// ingest-only sync locations like the Takeout export are not services.
+	if _, live := s.connectors[p.Service]; live {
+		svc := s.config.GetService(p.Service)
+		if svc == nil || svc.Action == "block" {
+			return types.MailIngestResult{Service: p.Service},
+				fmt.Errorf("%w: service %s is blocked", ErrSyncTerminal, p.Service)
+		}
 	}
 
 	// Serialize with every other ingest so two page cursors cannot interleave
@@ -142,94 +157,21 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (MailSyn
 	s.mailSyncMu.Lock()
 	defer s.mailSyncMu.Unlock()
 
-	max := clampMailSyncMax(p.MaxMessages)
-	result, err := syncer.SyncMailArchive(ctx, s.mail, MailSyncOptions{
-		MaxMessages: max,
-		Query:       p.Query,
-		ResetCursor: p.ResetCursor,
-	})
+	result, err := ingest.IngestMail(ctx, mailSink{s.mail}, p.options())
 	if err != nil && result.Error == "" {
 		result.Error = err.Error()
+	}
+	// An ingest whose location is missing or rejected is terminal for the
+	// queue and a client error on the HTTP surface.
+	if errors.Is(err, types.ErrMailConfig) {
+		err = fmt.Errorf("%w: %w", ErrSyncTerminal, err)
+	}
+	if err == nil && result.Snapshot != nil {
+		s.recordTakeoutSnapshot(result.Snapshot.Path, result.Snapshot.Scanned,
+			result.Snapshot.Stored, result.Snapshot.Skipped, result.Snapshot.Done)
 	}
 	// Fail-open: report what was stored even when the run failed mid-batch.
 	return result, err
-}
-
-// doTakeoutIngest imports one bounded batch from the read-only Takeout export
-// and stamps its optimistic snapshot on the copy ledger.
-func (s *Server) doTakeoutIngest(_ context.Context, p mailIngestPayload) (MailSyncResult, error) {
-	a := s.mail
-	path := strings.TrimSpace(p.Query)
-	if strings.HasPrefix(path, "takeout:") {
-		path = strings.TrimSpace(strings.TrimPrefix(path, "takeout:"))
-	}
-	if path == "" {
-		path = a.TakeoutPath()
-	}
-	if path == "" {
-		return MailSyncResult{Service: connectors.TakeoutServiceID},
-			fmt.Errorf("%w: takeout path not configured", ErrSyncTerminal)
-	}
-
-	s.mailSyncMu.Lock()
-	defer s.mailSyncMu.Unlock()
-
-	max := p.MaxMessages
-	if max <= 0 {
-		max = 5000
-	}
-	if max > 20000 {
-		max = 20000
-	}
-	res, err := a.ImportTakeout(path, max)
-	if err == nil && res.Error == "" {
-		s.recordTakeoutSnapshot(path, res.Scanned, res.Stored, res.Skipped, res.Done)
-	}
-	// Shape as a mail sync result so the HTTP route and the admin UI share
-	// one renderer with the Gmail path.
-	result := MailSyncResult{
-		Service:   connectors.TakeoutServiceID,
-		Listed:    res.Scanned,
-		Stored:    res.Stored,
-		Skipped:   res.Skipped,
-		Failed:    res.Failed,
-		Truncated: res.Truncated,
-		Done:      res.Done,
-		Query:     "takeout:" + path,
-		Error:     res.Error,
-	}
-	if err != nil && result.Error == "" {
-		result.Error = err.Error()
-	}
-	return result, err
-}
-
-// clampMailSyncMax bounds one Gmail ingest batch.
-func clampMailSyncMax(max int) int {
-	if max <= 0 {
-		return 200
-	}
-	if max > 1000 {
-		return 1000
-	}
-	return max
-}
-
-// quotaSyncBackoff waits out a provider per-user rate quota window.
-const quotaSyncBackoff = 5 * time.Minute
-
-// mailArchiveSyncer builds the ingest adapter for a service, mirroring the
-// construction the HTTP route used. Returns nil for non-syncable services.
-func (s *Server) mailArchiveSyncer(service string) MailArchiveSyncer {
-	connector, ok := s.connectors[service]
-	if !ok {
-		return nil
-	}
-	gc, ok := connector.(*connectors.GoogleGmailConnector)
-	if !ok {
-		return nil
-	}
-	return &gmailArchiveSyncer{GoogleGmailConnector: gc, host: s}
 }
 
 // newSyncRunnerRegistry wires the runners this build supports.

@@ -292,3 +292,12 @@ func issueNumberFromURL(url string) int {
 	n, _ := strconv.Atoi(url[i+1:])
 	return n
 }
+
+func hasLabel(labels []string, want string) bool {
+	for _, l := range labels {
+		if strings.EqualFold(l, want) {
+			return true
+		}
+	}
+	return false
+}

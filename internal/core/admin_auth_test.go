@@ -624,15 +624,6 @@ func TestRequestMethodAndHost_NilSafe(t *testing.T) {
 }
 
 func TestSmallHelpers_Coverage(t *testing.T) {
-	if !looksLikeMboxName("inbox.mbox") {
-		t.Fatal("inbox.mbox should look like mbox")
-	}
-	if looksLikeMboxName("notes.txt") {
-		t.Fatal("notes.txt is not mbox")
-	}
-	if !looksLikeMboxName("All Mail") {
-		t.Fatal("All Mail should look like mbox")
-	}
 	cfg := &Config{}
 	cfg.EnsureService(Service{ID: "x", Name: "X", Action: "inject"})
 	if cfg.GetService("x") == nil {

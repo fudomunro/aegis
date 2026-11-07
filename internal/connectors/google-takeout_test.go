@@ -102,6 +102,51 @@ func FuzzTakeoutMessageID(f *testing.F) {
 	})
 }
 
+func TestParseTakeoutMessageMultipart(t *testing.T) {
+	raw := []byte(strings.Join([]string{
+		"From: Ada <ada@example.com>",
+		"To: me@example.com",
+		"Subject: Multipart note",
+		"Message-ID: <mp@example.com>",
+		"Date: Fri, 01 Jan 2024 10:00:00 +0000",
+		"MIME-Version: 1.0",
+		`Content-Type: multipart/alternative; boundary="b"`,
+		"",
+		"--b",
+		"Content-Type: text/plain; charset=utf-8",
+		"",
+		"plain body here",
+		"--b",
+		"Content-Type: text/html; charset=utf-8",
+		"",
+		"<p>html body</p>",
+		"--b--",
+		"",
+	}, "\n"))
+	msg, err := parseTakeoutMessage(raw, "mail.mbox")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if msg.Body != "plain body here" {
+		t.Fatalf("body = %q", msg.Body)
+	}
+	if len(msg.Sources) != 1 || msg.Sources[0].ID != "msgid:mp@example.com" {
+		t.Fatalf("id = %+v", msg.Sources)
+	}
+}
+
+func TestLooksLikeMboxName(t *testing.T) {
+	if !looksLikeMboxName("inbox.mbox") {
+		t.Fatal("inbox.mbox should look like mbox")
+	}
+	if looksLikeMboxName("notes.txt") {
+		t.Fatal("notes.txt is not mbox")
+	}
+	if !looksLikeMboxName("All Mail") {
+		t.Fatal("All Mail should look like mbox")
+	}
+}
+
 func TestIsGmailQuotaError(t *testing.T) {
 	if IsGmailQuotaError(nil) {
 		t.Fatal("nil is not a quota error")

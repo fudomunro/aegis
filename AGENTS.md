@@ -257,12 +257,11 @@ go test -v -count=1 -run TestName ./...
 # (the repo root package has no test files). Use a longer -fuzztime locally
 # when hunting bugs.
 go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s ./internal/core
-go test -run='^$' -fuzz='^FuzzRecordFromTakeoutMessage$' -fuzztime=30s ./internal/core
-go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/core
 go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s ./internal/core
-go test -run='^$' -fuzz='^FuzzTakeoutMessageID$' -fuzztime=30s ./internal/connectors
+go test -run='^$' -fuzz='^FuzzParseTakeoutMessage$' -fuzztime=30s ./internal/connectors
+go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/connectors
 # Other targets (CI fuzzes every one; list them all in ci.yml):
-# FuzzDetectBodyShape, FuzzIsMboxFromLine,
+# FuzzDetectBodyShape, FuzzIsMboxFromLine, FuzzTakeoutMessageID,
 # FuzzNormalizeIdentityKey, FuzzCleanYouTubeTitle,
 # FuzzTrackIdentityKey, FuzzMergePlaylistsSync, FuzzPlaylistLinkKey, FuzzMergeAlbumsSync
 
