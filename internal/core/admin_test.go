@@ -318,7 +318,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync = %d body=%s", w.Code, w.Body.String())
 	}
-	var res MailSyncResult
+	var res types.MailIngestResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("sync json: %v", err)
 	}

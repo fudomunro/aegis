@@ -135,6 +135,9 @@ type Server struct {
 	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
 	// mail is the optional local compressed mail archive (/v1/mail/*).
 	mail *MailArchive
+	// mailIngests are the archive ingest sources keyed by service id
+	// (issue #286). Wired beside connectors; see mail_ingest.go.
+	mailIngests map[string]connectors.MailIngest
 	// search is the local library search index (issue #178). May be disabled.
 	search *SearchIndex
 	// quicken is the optional local Quicken import store (issue #141).

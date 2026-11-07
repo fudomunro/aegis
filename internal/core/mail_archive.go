@@ -160,14 +160,6 @@ type MailArchiveStatus struct {
 	TakeoutPath string `json:"takeout_path,omitempty"`
 }
 
-// MailSyncCursor is the durable per-service ingest cursor.
-type MailSyncCursor struct {
-	PageToken  string `json:"page_token,omitempty"`
-	Done       bool   `json:"done,omitempty"`
-	LastSyncAt string `json:"last_sync_at,omitempty"`
-	Error      string `json:"error,omitempty"`
-}
-
 // OpenMailArchive opens (creating if needed) the SQLite mail archive at path.
 // An empty path returns (nil, nil) so callers can treat the archive as disabled.
 func OpenMailArchive(path string) (*MailArchive, error) {
@@ -656,7 +648,9 @@ func (a *MailArchive) Status() (MailArchiveStatus, error) {
 	}
 	st.LastSyncAt, _ = a.getMeta("sync:last_at")
 	st.LastSyncError, _ = a.getMeta("sync:last_error")
-	st.TakeoutPath = a.TakeoutPath()
+	// The export location is ingest-owned meta (issue #286); the status
+	// response field shape stays.
+	st.TakeoutPath, _ = a.getMeta(connectors.TakeoutPathMetaKey)
 	metaRows, err := a.db.Query(`SELECT key, value FROM mail_meta WHERE key LIKE 'sync:%:page_token' OR key LIKE 'sync:%:done'`)
 	if err != nil {
 		return st, err
@@ -680,8 +674,8 @@ func (a *MailArchive) Status() (MailArchiveStatus, error) {
 }
 
 // LoadSyncCursor reads the durable ingest cursor for a service.
-func (a *MailArchive) LoadSyncCursor(service string) (MailSyncCursor, error) {
-	var cur MailSyncCursor
+func (a *MailArchive) LoadSyncCursor(service string) (types.MailIngestCursor, error) {
+	var cur types.MailIngestCursor
 	if a == nil || a.db == nil {
 		return cur, fmt.Errorf("mail archive disabled")
 	}
@@ -694,7 +688,7 @@ func (a *MailArchive) LoadSyncCursor(service string) (MailSyncCursor, error) {
 }
 
 // SaveSyncCursor persists ingest progress (fail-open callers still record errors).
-func (a *MailArchive) SaveSyncCursor(service string, cur MailSyncCursor) error {
+func (a *MailArchive) SaveSyncCursor(service string, cur types.MailIngestCursor) error {
 	if a == nil || a.db == nil {
 		return fmt.Errorf("mail archive disabled")
 	}
@@ -872,6 +866,23 @@ func mailServiceName(service string) string {
 	default:
 		return service
 	}
+}
+
+// hasSourceRecord reports whether *this* source already stores the message.
+// Cross-service Message-ID matches are source attachment, not duplicates:
+// Gmail and Takeout may both hold the same RFC Message-ID as separate sources
+// (issue #139).
+func (a *MailArchive) hasSourceRecord(rec MailArchiveRecord) (bool, error) {
+	if id := types.NormalizeMessageID(rec.MessageID); id != "" {
+		var n int
+		err := a.db.QueryRow(`SELECT COUNT(*) FROM mail_messages WHERE message_id=? AND service=?`,
+			id, rec.Service).Scan(&n)
+		return n > 0, err
+	}
+	var n int
+	err := a.db.QueryRow(`SELECT COUNT(*) FROM mail_messages WHERE service=? AND service_msg_id=?`,
+		rec.Service, rec.ID).Scan(&n)
+	return n > 0, err
 }
 
 // RecordFromMessage builds an archive row from a neutral Message plus optional

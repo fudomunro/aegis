@@ -57,14 +57,15 @@ func syncGmailShared(t *testing.T, srv *Server, a *MailArchive) {
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 	conn := connectors.NewGoogleGmailConnector(srv)
-	if _, err := (&gmailArchiveSyncer{GoogleGmailConnector: conn, host: srv}).SyncMailArchive(context.Background(), a, MailSyncOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
+	if _, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
 		t.Fatalf("gmail sync: %v", err)
 	}
 }
 
-func importTakeout(t *testing.T, a *MailArchive, path string) TakeoutSyncResult {
+func importTakeout(t *testing.T, a *MailArchive, path string, reset bool) types.MailIngestResult {
 	t.Helper()
-	res, err := a.ImportTakeout(path, 50)
+	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mailSink{a},
+		types.MailIngestOptions{Query: path, MaxMessages: 50, ResetCursor: reset})
 	if err != nil {
 		t.Fatalf("takeout import: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestMailSources_TakeoutThenGmail_MergesOnMessageID(t *testing.T) {
 	srv := mailTestServer(t, a)
 
 	path := takeoutMboxWithShared(t)
-	tres := importTakeout(t, a, path)
+	tres := importTakeout(t, a, path, false)
 	if tres.Stored < 4 {
 		t.Fatalf("takeout stored = %+v", tres)
 	}
@@ -137,7 +138,7 @@ func TestMailSources_GmailThenTakeout_AttachesTakeoutSource(t *testing.T) {
 
 	syncGmailShared(t, srv, a)
 	path := takeoutMboxWithShared(t)
-	tres := importTakeout(t, a, path)
+	tres := importTakeout(t, a, path, false)
 	// sample mbox (3) + shared dual-source (1) — shared attaches, not skipped.
 	if tres.Stored != 4 || tres.Skipped != 0 {
 		t.Fatalf("takeout stored (expected shared attached) = %+v", tres)
@@ -149,10 +150,7 @@ func TestMailSources_GmailThenTakeout_AttachesTakeoutSource(t *testing.T) {
 	}
 
 	// Re-import still skips this source's own copies (read-only Takeout).
-	if err := a.ResetTakeoutCursor(); err != nil {
-		t.Fatalf("reset: %v", err)
-	}
-	tres2 := importTakeout(t, a, path)
+	tres2 := importTakeout(t, a, path, true)
 	if tres2.Stored != 0 || tres2.Skipped != 4 {
 		t.Fatalf("takeout re-import = %+v", tres2)
 	}
@@ -166,7 +164,7 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 
 	syncGmailShared(t, srv, a)
 	path := takeoutMboxWithShared(t)
-	importTakeout(t, a, path)
+	importTakeout(t, a, path, false)
 
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")

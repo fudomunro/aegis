@@ -178,7 +178,7 @@ func TestMailArchiveUpsertGetSearch(t *testing.T) {
 
 func TestMailArchiveSyncCursor(t *testing.T) {
 	a := openTestMailArchive(t)
-	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, MailSyncCursor{
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
 		PageToken:  "tok1",
 		LastSyncAt: "2024-06-01T00:00:00Z",
 	}); err != nil {
@@ -191,7 +191,7 @@ func TestMailArchiveSyncCursor(t *testing.T) {
 	if cur.PageToken != "tok1" || cur.Done || cur.LastSyncAt != "2024-06-01T00:00:00Z" {
 		t.Fatalf("cursor = %+v", cur)
 	}
-	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, MailSyncCursor{PageToken: "tok1", Done: true}); err != nil {
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{PageToken: "tok1", Done: true}); err != nil {
 		t.Fatalf("save done: %v", err)
 	}
 	cur, _ = a.LoadSyncCursor(connectors.GoogleGmailServiceID)
@@ -238,6 +238,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 	}
 	srv.connectors[connectors.GoogleGmailServiceID] = connectors.NewGoogleGmailConnector(srv)
+	srv.wireMailIngests()
 	return srv
 }
 

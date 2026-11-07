@@ -2,7 +2,9 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/types"
 
+	"context"
 	"database/sql"
 	"flag"
 	"fmt"
@@ -530,6 +532,10 @@ func Run() {
 		srv.connectors[svc.ID] = NewSampleLibraryConnector(svc.ID, svc.Dataset, set)
 	}
 
+	// Mail ingest sources (issue #286) beside the connector map: the Gmail
+	// connector is its own ingest; Takeout is ingest-only.
+	srv.wireMailIngests()
+
 	// Sync worker (issue #227): drains the job queue in-process. Runners
 	// need the connector map above, so this starts after registration. The
 	// registry lives on the Server too, so admin enqueue can validate a
@@ -940,31 +946,31 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 	if copies != nil {
 		defer copies.Close()
 	}
-	if err := a.SetTakeoutPath(takeoutPath); err != nil {
-		slog.Error("failed to record takeout path", "path", takeoutPath, "error", err)
-		return 1
-	}
 	if batch <= 0 {
 		batch = 20000
 	}
+	ingest := connectors.NewTakeoutIngest()
+	sink := mailSink{a}
 	var stored, skipped, scanned, failed int
 	done := false
 	for {
-		res, err := a.ImportTakeout(takeoutPath, batch)
+		// Path persists the export location (the CLI's -import-takeout contract).
+		res, err := ingest.IngestMail(context.Background(), sink,
+			types.MailIngestOptions{Path: takeoutPath, MaxMessages: batch})
 		stored += res.Stored
 		skipped += res.Skipped
-		scanned += res.Scanned
+		scanned += res.Listed
 		failed += res.Failed
 		slog.Info("takeout import batch",
 			"path", takeoutPath,
-			"scanned", res.Scanned,
+			"scanned", res.Listed,
 			"stored", res.Stored,
 			"skipped", res.Skipped,
 			"failed", res.Failed,
 			"done", res.Done,
 			"error", res.Error,
 		)
-		if err != nil && res.Error != "" && res.Stored == 0 && res.Scanned == 0 {
+		if err != nil && res.Error != "" && res.Stored == 0 && res.Listed == 0 {
 			return 1
 		}
 		if res.Done {

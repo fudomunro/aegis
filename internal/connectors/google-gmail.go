@@ -345,6 +345,171 @@ func PaceGmailArchiveGet(ctx context.Context) error {
 	}
 }
 
+// GmailArchiveListPage is the provider ID page size during archive ingest.
+const GmailArchiveListPage = 100
+
+// GmailQuotaBackoff waits out a provider per-user rate quota window.
+const GmailQuotaBackoff = 5 * time.Minute
+
+// IngestMail implements MailIngest: one bounded list+hydrate run into the
+// local mail archive (docs/mail-ingest.md). Each call lists up to
+// MaxMessages IDs (continuing the stored page token) and stores full
+// payloads. Callers repeat until Result.Done.
+func (c *GoogleGmailConnector) IngestMail(ctx context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error) {
+	res := types.MailIngestResult{Service: GoogleGmailServiceID}
+	maxMsgs := opts.MaxMessages
+	if maxMsgs <= 0 {
+		maxMsgs = 200
+	}
+	if maxMsgs > 1000 {
+		maxMsgs = 1000
+	}
+	query := strings.TrimSpace(opts.Query)
+	if query == "" {
+		query = GmailArchiveDefaultQuery
+	}
+	res.Query = query
+
+	logger := slog.With("service", GoogleGmailServiceID, "handler", "mail_archive_sync")
+	token := c.host.GetValidToken(GoogleGmailServiceID, logger)
+	if token == "" {
+		res.Error = "no valid Gmail token"
+		_ = sink.SaveCursor(GoogleGmailServiceID, types.MailIngestCursor{Error: res.Error})
+		return res, types.ErrUnauthorized
+	}
+
+	cursor, err := sink.LoadCursor(GoogleGmailServiceID)
+	if err != nil {
+		cursor = types.MailIngestCursor{}
+	}
+	if opts.ResetCursor {
+		cursor = types.MailIngestCursor{}
+	}
+	pageToken := cursor.PageToken
+
+	for res.Stored+res.Failed < maxMsgs {
+		pageSize := GmailArchiveListPage
+		if remaining := maxMsgs - res.Stored - res.Failed; remaining > 0 && remaining < pageSize {
+			pageSize = remaining
+		}
+		values := url.Values{}
+		values.Set("maxResults", fmt.Sprint(pageSize))
+		if query != "" {
+			values.Set("q", query)
+		}
+		if pageToken != "" {
+			values.Set("pageToken", pageToken)
+		}
+		listURL := c.GoogleGmailUpstreamBase() + "/users/me/messages?" + values.Encode()
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, listURL, nil)
+		if err != nil {
+			return c.finishMailSync(sink, res, cursor, err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := shared.HTTPClient.Do(req)
+		if err != nil {
+			return c.finishMailSync(sink, res, cursor, err)
+		}
+		data, err := readMailBody(resp)
+		if err != nil {
+			return c.finishMailSync(sink, res, cursor, err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			listErr := GmailListHTTPError("messages list", resp.StatusCode, data)
+			// Keep the fetch page token so a quota blip retries this page.
+			return c.finishMailSync(sink, res, cursor, listErr)
+		}
+		var raw GoogleGmailMessageList
+		if err := json.Unmarshal(data, &raw); err != nil {
+			return c.finishMailSync(sink, res, cursor, err)
+		}
+		// pageFetchToken is the token that produced this page. Only advance the
+		// durable cursor after the whole page is stored (or permanently skipped).
+		pageFetchToken := pageToken
+		for _, item := range raw.Messages {
+			if res.Stored+res.Failed >= maxMsgs {
+				res.Truncated = true
+				break
+			}
+			if item.ID == "" {
+				continue
+			}
+			res.Listed++
+			if err := c.storeGmailMessageArchive(ctx, sink, token, item.ID); err != nil {
+				if IsGmailQuotaError(err) || ctx.Err() != nil {
+					// Rate quota: stop now and leave the cursor on this page so
+					// the remaining IDs are retried after the window resets.
+					logger.Warn("mail archive sync paused", "id", item.ID, "error", err)
+					res.Truncated = true
+					retry := cursor
+					retry.PageToken = pageFetchToken
+					retry.Done = false
+					return c.finishMailSync(sink, res, retry, err)
+				}
+				// Fail-open per message: one bad item must not drop the batch.
+				logger.Warn("mail archive store failed", "id", item.ID, "error", err)
+				res.Failed++
+				continue
+			}
+			res.Stored++
+			res.LastStored = item.ID
+			if err := PaceGmailArchiveGet(ctx); err != nil {
+				retry := cursor
+				retry.PageToken = pageFetchToken
+				retry.Done = false
+				return c.finishMailSync(sink, res, retry, err)
+			}
+		}
+		pageToken = raw.NextPageToken
+		if pageToken == "" {
+			res.Done = true
+			break
+		}
+		if res.Stored+res.Failed >= maxMsgs {
+			res.Truncated = true
+		}
+	}
+
+	now := time.Now().UTC().Format(time.RFC3339)
+	cursor.PageToken = pageToken
+	cursor.Done = res.Done
+	cursor.LastSyncAt = now
+	cursor.Error = res.Error
+	if err := sink.SaveCursor(GoogleGmailServiceID, cursor); err != nil {
+		logger.Warn("mail archive cursor save failed", "error", err)
+	}
+	return res, nil
+}
+
+func (c *GoogleGmailConnector) finishMailSync(sink MailSink, res types.MailIngestResult, cursor types.MailIngestCursor, err error) (types.MailIngestResult, error) {
+	res.Error = err.Error()
+	if IsGmailQuotaError(err) {
+		res.RetryAfter = GmailQuotaBackoff
+	}
+	cursor.LastSyncAt = time.Now().UTC().Format(time.RFC3339)
+	cursor.Error = res.Error
+	_ = sink.SaveCursor(GoogleGmailServiceID, cursor)
+	return res, err
+}
+
+func (c *GoogleGmailConnector) storeGmailMessageArchive(ctx context.Context, sink MailSink, token, id string) error {
+	raw, err := c.FetchGmailMessage(ctx, token, id, "full")
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(raw)
+	if err != nil {
+		return err
+	}
+	msg := MapGoogleGmailMessage(raw, "full")
+	return sink.Store(GoogleGmailServiceID, msg, payload)
+}
+
+func readMailBody(resp *http.Response) ([]byte, error) {
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
+}
+
 // matchGmailAttachmentRoute reports whether remainingPath is the attachments
 // subresource of a message. attachmentID is empty for the list form
 // (messages/{mid}/attachments). IDs are raw path segments and may be foreign.

@@ -178,16 +178,16 @@ func TestMailIngestRunner_QuotaReturnsRetryAfter(t *testing.T) {
 	if err == nil {
 		t.Fatal("quota must return an error")
 	}
-	if step.RetryAfter != quotaSyncBackoff {
-		t.Fatalf("step.RetryAfter = %v, want %v", step.RetryAfter, quotaSyncBackoff)
+	if step.RetryAfter != connectors.GmailQuotaBackoff {
+		t.Fatalf("step.RetryAfter = %v, want %v", step.RetryAfter, connectors.GmailQuotaBackoff)
 	}
 	var ra *SyncRetryAfter
-	if !errors.As(err, &ra) || ra.After != quotaSyncBackoff {
-		t.Fatalf("err = %v, want a SyncRetryAfter of %v", err, quotaSyncBackoff)
+	if !errors.As(err, &ra) || ra.After != connectors.GmailQuotaBackoff {
+		t.Fatalf("err = %v, want a SyncRetryAfter of %v", err, connectors.GmailQuotaBackoff)
 	}
 	class, after := classifySyncError(err, 1, step.RetryAfter)
-	if class != SyncErrorClassRetry || after != quotaSyncBackoff {
-		t.Fatalf("classify = (%s,%v), want (retryable,%v)", class, after, quotaSyncBackoff)
+	if class != SyncErrorClassRetry || after != connectors.GmailQuotaBackoff {
+		t.Fatalf("classify = (%s,%v), want (retryable,%v)", class, after, connectors.GmailQuotaBackoff)
 	}
 }
 
@@ -227,18 +227,22 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 	}
 }
 
-func TestMailArchiveSyncer_BuildsOnlyGmail(t *testing.T) {
+func TestMailIngestFor_Wired(t *testing.T) {
 	srv, _, _ := mailRunnerServer(t, gmailListThenEmpty("m1"))
-	if srv.mailArchiveSyncer(connectors.GoogleGmailServiceID) == nil {
-		t.Fatal("google-gmail must build a syncer")
+	if srv.mailIngestFor(connectors.GoogleGmailServiceID) == nil {
+		t.Fatal("google-gmail must build an ingest")
 	}
-	if srv.mailArchiveSyncer("nope") != nil {
-		t.Fatal("unknown service must not build a syncer")
+	if srv.mailIngestFor(connectors.TakeoutServiceID) == nil {
+		t.Fatal("takeout must build an ingest")
 	}
-	// A connector that is not the Gmail adapter yields nil.
+	if srv.mailIngestFor("nope") != nil {
+		t.Fatal("unknown service must not build an ingest")
+	}
+	// A connector that does not implement MailIngest yields nil.
 	srv.connectors["quickenish"] = connectors.NewQuickenConnector(nil)
-	if srv.mailArchiveSyncer("quickenish") != nil {
-		t.Fatal("non-Gmail connector must not build a mail syncer")
+	srv.wireMailIngests()
+	if srv.mailIngestFor("quickenish") != nil {
+		t.Fatal("non-Gmail connector must not build a mail ingest")
 	}
 }
 
@@ -315,7 +319,7 @@ func TestMailSyncRouteAndRunnerShareOnePath(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("route status = %d body=%s", w.Code, w.Body.String())
 	}
-	var routeResult MailSyncResult
+	var routeResult types.MailIngestResult
 	if err := json.Unmarshal(w.Body.Bytes(), &routeResult); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
