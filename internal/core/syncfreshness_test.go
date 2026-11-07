@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -427,7 +428,7 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	c := &musicMirrorChecker{srv: srv, service: "spotify"}
@@ -484,7 +485,7 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 
 	c := &musicMirrorChecker{srv: srv, service: "youtube-music"}
@@ -1029,7 +1030,7 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {

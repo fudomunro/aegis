@@ -1,4 +1,4 @@
-package core
+package tokens
 
 import (
 	"crypto/aes"
@@ -168,13 +168,13 @@ var errPassphrase = errors.New("token passphrase incorrect (or token file corrup
 // If a token file exists but the passphrase cannot unlock it, returns an error
 // and never hands back a store that would overwrite the file on the next Save.
 func NewTokenStore(path, passphrase string) (*TokenStore, error) {
-	return newTokenStore(path, passphrase, pbkdf2IterDefault)
+	return NewStoreWithIterations(path, passphrase, pbkdf2IterDefault)
 }
 
-// newTokenStore is NewTokenStore with an explicit preferred PBKDF2 cost for
+// NewStoreWithIterations is NewTokenStore with an explicit preferred PBKDF2 cost for
 // new key material. Used by tests to keep the suite fast; production passes
 // pbkdf2IterDefault.
-func newTokenStore(path, passphrase string, preferredIterations int) (*TokenStore, error) {
+func NewStoreWithIterations(path, passphrase string, preferredIterations int) (*TokenStore, error) {
 	if preferredIterations < 1 {
 		return nil, fmt.Errorf("pbkdf2 iterations must be positive, got %d", preferredIterations)
 	}
@@ -484,6 +484,13 @@ func (ts *TokenStore) ensurePersistable() error {
 // IsExpired returns true if the token is expired or will expire within the grace period.
 func (t *OAuthToken) IsExpired(grace time.Duration) bool {
 	return time.Now().Add(grace).After(t.Expiry)
+}
+
+// KDFIterations reports the PBKDF2 cost backing the current master key.
+func (ts *TokenStore) KDFIterations() int {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+	return ts.kdfIterations
 }
 
 // Status returns a summary of all stored tokens (without revealing secrets).

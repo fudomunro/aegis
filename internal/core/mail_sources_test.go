@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -55,7 +56,7 @@ func syncGmailShared(t *testing.T, srv *Server, a *MailArchive) {
 	up := httptest.NewServer(mux)
 	t.Cleanup(up.Close)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 	conn := connectors.NewGoogleGmailConnector(srv)
 	if _, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
 		t.Fatalf("gmail sync: %v", err)

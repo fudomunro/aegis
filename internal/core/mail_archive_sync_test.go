@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -80,7 +81,7 @@ func TestGmailSyncMailArchive(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
 	res, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 2})
@@ -151,7 +152,7 @@ func TestGmailSyncListErrorIsFailOpen(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
 	res, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 5})
@@ -192,7 +193,7 @@ func TestGmailSyncSkipsBadMessage(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
 	res, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 10})
@@ -220,7 +221,7 @@ func TestMailHTTPSyncRunsIngest(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	w := doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
 	if w.Code != http.StatusOK {
@@ -274,7 +275,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
 	res, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 10})

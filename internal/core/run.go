@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"io"
 	"log/slog"
@@ -249,7 +250,7 @@ func Run() {
 	}
 	slog.Info("config loaded", "path", paths.Config, "services", cfg.ServiceCount(), "data_grants_file", paths.DataGrants)
 
-	tokens, err := NewTokenStore(paths.Tokens, *tokenPass)
+	tokens, err := tokens.NewTokenStore(paths.Tokens, *tokenPass)
 	if err != nil {
 		slog.Error("failed to load token store", "path", paths.Tokens, "error", err)
 		os.Exit(1)
@@ -435,7 +436,7 @@ func Run() {
 		cache:         NewCache(),
 		mbCache:       NewCache(),
 		tokens:        tokens,
-		oauthStates:   NewStateStore(),
+		oauthStates:   shared.NewStateStore(),
 		rl:            newRateLimiter(),
 		connectors:    make(map[string]connectors.ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
@@ -445,7 +446,7 @@ func Run() {
 		scopes:        scopes,
 		demoMode:      *demoMode,
 		grants:        NewGrantStore(),
-		csrfTokens:    NewStateStore(),
+		csrfTokens:    shared.NewStateStore(),
 		copies:        copies,
 		syncJobs:      syncStore,
 		syncSchedules: scheduleStore,
@@ -1097,7 +1098,7 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 		slog.Error("token-new-pass must not be empty")
 		return 1
 	}
-	ts, err := NewTokenStore(path, currentPass)
+	ts, err := tokens.NewTokenStore(path, currentPass)
 	if err != nil {
 		slog.Error("failed to load token store for rekey", "path", path, "error", err)
 		return 1
@@ -1110,7 +1111,7 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 		"path", path,
 		"services", len(ts.Tokens),
 		"secrets", len(ts.Secrets),
-		"iterations", ts.kdfIterations,
+		"iterations", ts.KDFIterations(),
 	)
 	return 0
 }

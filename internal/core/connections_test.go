@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -202,7 +203,7 @@ func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	// Token only has YouTube scope — Photos surface must not use it.
-	srv.tokens.Save("google", &OAuthToken{
+	srv.tokens.Save("google", &tokens.OAuthToken{
 		AccessToken:  "yt-only",
 		RefreshToken: "r",
 		Expiry:       time.Now().Add(time.Hour),
@@ -220,7 +221,7 @@ func TestGetValidToken_SharedConnectionScopeGate(t *testing.T) {
 	}
 
 	// Full union grants every Google surface.
-	srv.tokens.Save("google", &OAuthToken{
+	srv.tokens.Save("google", &tokens.OAuthToken{
 		AccessToken:  "full",
 		RefreshToken: "r",
 		Expiry:       time.Now().Add(time.Hour),

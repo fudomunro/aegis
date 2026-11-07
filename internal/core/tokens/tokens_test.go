@@ -1,4 +1,4 @@
-package core
+package tokens
 
 import (
 	"crypto/rand"
@@ -15,7 +15,7 @@ import (
 // newTestTokenStore opens a store with a tiny PBKDF2 cost so the suite stays
 // fast. Production uses NewTokenStore / pbkdf2IterDefault.
 func newTestTokenStore(path, passphrase string) (*TokenStore, error) {
-	return newTokenStore(path, passphrase, 1_000)
+	return NewStoreWithIterations(path, passphrase, 1_000)
 }
 
 // mustSecretStore returns a TokenStore suitable for InitServiceConnectionsStore
@@ -31,7 +31,7 @@ func mustSecretStore(t *testing.T, path string) *TokenStore {
 
 func TestTokenStore_SaveAndGet(t *testing.T) {
 	dir := t.TempDir()
-	ts, err := newTokenStore(filepath.Join(dir, "tokens.json"), "test-passphrase", 1_000)
+	ts, err := NewStoreWithIterations(filepath.Join(dir, "tokens.json"), "test-passphrase", 1_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -491,7 +491,7 @@ func TestTokenStore_NewFileRecordsKDFParams(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	ts, err := newTokenStore(path, "pass", 2_000)
+	ts, err := NewStoreWithIterations(path, "pass", 2_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -550,7 +550,7 @@ func TestTokenStore_PerEntrySaltsAreUnique(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	ts, err := newTokenStore(path, "pass", 1_000)
+	ts, err := NewStoreWithIterations(path, "pass", 1_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -573,7 +573,7 @@ func TestTokenStore_LegacyV1FileLoadsAndMigratesOnWrite(t *testing.T) {
 		"spotify": `{"access_token":"legacy-secret","refresh_token":"","token_type":"Bearer","expiry":"2030-01-01T00:00:00Z","scopes":null}`,
 	})
 
-	loaded, err := newTokenStore(path, "correct", 1_000)
+	loaded, err := NewStoreWithIterations(path, "correct", 1_000)
 	if err != nil {
 		t.Fatalf("v1 file must load: %v", err)
 	}
@@ -606,7 +606,7 @@ func TestTokenStore_LegacyV1FileLoadsAndMigratesOnWrite(t *testing.T) {
 		t.Fatal("migrated entry must gain a per-entry salt")
 	}
 
-	reloaded, err := newTokenStore(path, "correct", 1_000)
+	reloaded, err := NewStoreWithIterations(path, "correct", 1_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -622,7 +622,7 @@ func TestTokenStore_LegacyV1WrongPassphraseStillRefused(t *testing.T) {
 		"spotify": `{"access_token":"secret"}`,
 	})
 
-	if _, err := newTokenStore(path, "wrong", 1_000); err == nil {
+	if _, err := NewStoreWithIterations(path, "wrong", 1_000); err == nil {
 		t.Fatal("expected error for wrong passphrase on v1 file")
 	}
 }
@@ -631,7 +631,7 @@ func TestTokenStore_ChangePassphrase(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	ts, err := newTokenStore(path, "old-pass", 1_000)
+	ts, err := NewStoreWithIterations(path, "old-pass", 1_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -650,10 +650,10 @@ func TestTokenStore_ChangePassphrase(t *testing.T) {
 		t.Fatal("rekey must rotate the master salt")
 	}
 
-	if _, err := newTokenStore(path, "old-pass", 1_000); err == nil {
+	if _, err := NewStoreWithIterations(path, "old-pass", 1_000); err == nil {
 		t.Fatal("old passphrase must stop working after rekey")
 	}
-	reloaded, err := newTokenStore(path, "new-pass", 1_000)
+	reloaded, err := NewStoreWithIterations(path, "new-pass", 1_000)
 	if err != nil {
 		t.Fatalf("new passphrase: %v", err)
 	}
@@ -666,7 +666,7 @@ func TestTokenStore_ChangePassphraseUpgradesBelowPreferredIterations(t *testing.
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	ts, err := newTokenStore(path, "pass", 50_000)
+	ts, err := NewStoreWithIterations(path, "pass", 50_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -692,7 +692,7 @@ func TestTokenStore_ChangePassphraseNeverDowngradesIterations(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	ts, err := newTokenStore(path, "pass", 500)
+	ts, err := NewStoreWithIterations(path, "pass", 500)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -714,7 +714,7 @@ func TestTokenStore_ChangePassphraseNeverDowngradesIterations(t *testing.T) {
 }
 
 func TestTokenStore_ChangePassphraseRejectsEmpty(t *testing.T) {
-	ts, err := newTokenStore("", "pass", 1_000)
+	ts, err := NewStoreWithIterations("", "pass", 1_000)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -734,7 +734,7 @@ func TestTokenStore_UnsupportedVersionAndKDF(t *testing.T) {
 		"salt":       base64.StdEncoding.EncodeToString(make([]byte, 16)),
 		"tokens":     map[string]string{},
 	})
-	if _, err := newTokenStore(path, "pass", 1_000); err == nil {
+	if _, err := NewStoreWithIterations(path, "pass", 1_000); err == nil {
 		t.Fatal("unsupported version must fail")
 	}
 
@@ -745,7 +745,7 @@ func TestTokenStore_UnsupportedVersionAndKDF(t *testing.T) {
 		"salt":       base64.StdEncoding.EncodeToString(make([]byte, 16)),
 		"tokens":     map[string]string{},
 	})
-	if _, err := newTokenStore(path, "pass", 1_000); err == nil {
+	if _, err := NewStoreWithIterations(path, "pass", 1_000); err == nil {
 		t.Fatal("unsupported kdf must fail")
 	}
 
@@ -755,7 +755,7 @@ func TestTokenStore_UnsupportedVersionAndKDF(t *testing.T) {
 		"salt":    base64.StdEncoding.EncodeToString(make([]byte, 16)),
 		"tokens":  map[string]string{},
 	})
-	if _, err := newTokenStore(path, "pass", 1_000); err == nil {
+	if _, err := NewStoreWithIterations(path, "pass", 1_000); err == nil {
 		t.Fatal("missing iterations must fail on v2")
 	}
 }
@@ -764,7 +764,7 @@ func TestTokenStore_LoadsRecordedIterations(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "tokens.json")
 
-	ts, err := newTokenStore(path, "pass", 1_500)
+	ts, err := NewStoreWithIterations(path, "pass", 1_500)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -775,7 +775,7 @@ func TestTokenStore_LoadsRecordedIterations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	loaded, err := newTokenStore(path, "pass", 10_000) // preferred ignored on load
+	loaded, err := NewStoreWithIterations(path, "pass", 10_000) // preferred ignored on load
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,54 +808,6 @@ func writeJSONFile(t *testing.T, path string, v any) {
 	}
 }
 
-func TestRunTokenRekeyCLI(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "tokens.json")
-
-	ts, err := newTokenStore(path, "old-pass", 1_000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := ts.Save("spotify", &OAuthToken{
-		AccessToken: "cli-token",
-		Expiry:      time.Now().Add(time.Hour),
-	}); err != nil {
-		t.Fatal(err)
-	}
-
-	// Wrong current passphrase must fail and leave the file alone.
-	if code := runTokenRekeyCLI(path, "wrong", "new-pass"); code == 0 {
-		t.Fatal("rekey with wrong current passphrase should fail")
-	}
-	if _, err := newTokenStore(path, "old-pass", 1_000); err != nil {
-		t.Fatalf("token file must survive failed rekey: %v", err)
-	}
-
-	if code := runTokenRekeyCLI(path, "old-pass", "new-pass"); code != 0 {
-		t.Fatal("rekey should succeed")
-	}
-	if _, err := newTokenStore(path, "old-pass", 1_000); err == nil {
-		t.Fatal("old passphrase must stop working")
-	}
-	reloaded, err := newTokenStore(path, "new-pass", 1_000)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := reloaded.Get("spotify"); got == nil || got.AccessToken != "cli-token" {
-		t.Fatalf("token after CLI rekey = %+v", got)
-	}
-
-	if code := runTokenRekeyCLI("", "old", "new"); code == 0 {
-		t.Fatal("missing path should fail")
-	}
-	if code := runTokenRekeyCLI(path, "", "new"); code == 0 {
-		t.Fatal("missing current passphrase should fail")
-	}
-	if code := runTokenRekeyCLI(path, "new-pass", "  "); code == 0 {
-		t.Fatal("blank new passphrase should fail")
-	}
-}
-
 // writeLegacyV1TokenFile builds a pre-issue-101 tokens.json: version 1, bare
 // string ciphertexts, implicit 100k PBKDF2, no kdf fields.
 func writeLegacyV1TokenFile(t *testing.T, path, passphrase string, tokens map[string]string) {
@@ -883,4 +835,30 @@ func writeLegacyV1TokenFile(t *testing.T, path, passphrase string, tokens map[st
 		"key_check": keyCheck,
 		"tokens":    encTokens,
 	})
+}
+
+func TestTokenStoreEncryptDecryptRoundtrip(t *testing.T) {
+	ts, err := newTestTokenStore(t.TempDir()+"/tokens.json", "passphrase")
+	if err != nil {
+		t.Fatal(err)
+	}
+	enc, err := encryptWith(ts.key, []byte("secret-token-payload"))
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	if enc == "" || strings.Contains(enc, "secret-token-payload") {
+		t.Fatalf("ciphertext = %q", enc)
+	}
+	dec, err := ts.decrypt(enc)
+	if err != nil {
+		t.Fatalf("decrypt: %v", err)
+	}
+	if string(dec) != "secret-token-payload" {
+		t.Fatalf("decrypted = %q", dec)
+	}
+
+	// Tampered ciphertext fails.
+	if _, err := ts.decrypt(enc[:4] + "AAAA" + enc[8:]); err == nil {
+		t.Fatal("expected decrypt failure on tamper")
+	}
 }

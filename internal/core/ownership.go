@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -310,7 +311,7 @@ type ownershipUse struct {
 // imported rows, so an empty Signal or Quicken store stays a call to action.
 func (s *Server) ownershipServiceUse() map[string]ownershipUse {
 	out := map[string]ownershipUse{}
-	var tokenStatus map[string]TokenStatus
+	var tokenStatus map[string]tokens.TokenStatus
 	if s.tokens != nil {
 		tokenStatus = s.tokens.Status()
 	}

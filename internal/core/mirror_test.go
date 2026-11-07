@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -32,11 +33,11 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "sp-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})

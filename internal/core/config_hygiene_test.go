@@ -9,6 +9,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -267,7 +268,7 @@ func TestSetServiceConnection_WritesSecretAndEntry(t *testing.T) {
 	}
 
 	// The header secret must be in the encrypted store, not the JSON file.
-	raw := cfg.secrets.GetSecret(ServiceHeadersSecretKey("immich"))
+	raw := cfg.secrets.GetSecret(tokens.ServiceHeadersSecretKey("immich"))
 	if !strings.Contains(raw, "hunter2") {
 		t.Fatalf("secret blob = %q, want it to carry the X-API-Key value", raw)
 	}

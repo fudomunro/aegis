@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func canaryTestServer(t *testing.T, mode string) (*Server, *connectors.FakeUpstream) {
@@ -22,7 +23,7 @@ func canaryTestServer(t *testing.T, mode string) (*Server, *connectors.FakeUpstr
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	return srv, fu
 }

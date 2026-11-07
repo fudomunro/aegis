@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -230,7 +232,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 		cache:       NewCache(),
 		mbCache:     NewCache(),
 		tokens:      mustTokens(t),
-		oauthStates: NewStateStore(),
+		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		links:       mustLinks(t),
@@ -242,7 +244,7 @@ func mailTestServer(t *testing.T, archive *MailArchive) *Server {
 	return srv
 }
 
-func mustTokens(t *testing.T) *TokenStore {
+func mustTokens(t *testing.T) *tokens.TokenStore {
 	t.Helper()
 	ts, err := newTestTokenStore("", "pass")
 	if err != nil {

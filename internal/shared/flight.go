@@ -1,11 +1,11 @@
-package core
+package shared
 
 import "sync"
 
-// flightGroup coalesces concurrent work for the same key so one call serves
+// FlightGroup coalesces concurrent work for the same key so one call serves
 // every waiter (token refresh per connection, library aggregates per cache
 // key).
-type flightGroup[T any] struct {
+type FlightGroup[T any] struct {
 	mu    sync.Mutex
 	calls map[string]*flightCall[T]
 }
@@ -16,7 +16,7 @@ type flightCall[T any] struct {
 	err error
 }
 
-func (f *flightGroup[T]) Do(key string, fn func() (T, error)) (T, error) {
+func (f *FlightGroup[T]) Do(key string, fn func() (T, error)) (T, error) {
 	f.mu.Lock()
 	if f.calls == nil {
 		f.calls = make(map[string]*flightCall[T])
@@ -39,7 +39,3 @@ func (f *flightGroup[T]) Do(key string, fn func() (T, error)) (T, error) {
 	f.mu.Unlock()
 	return c.val, c.err
 }
-
-// tokenFlight coalesces concurrent refresh/exchange work for the same key
-// (provider connection ID) so one upstream call serves every waiter.
-type tokenFlight = flightGroup[*OAuthToken]

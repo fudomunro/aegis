@@ -4,6 +4,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -79,7 +80,7 @@ func TestYouTubeMusicConnector_Playlists_ReadList(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -155,7 +156,7 @@ func TestYouTubeMusicConnector_Playlists_ReadList_Cached(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -225,7 +226,7 @@ func TestYouTubeMusicConnector_Playlists_GetByID(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -310,7 +311,7 @@ func TestYouTubeMusicConnector_Playlists_ReadItems(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -391,7 +392,7 @@ func TestYouTubeMusicConnector_HandleProxy_WithMockYouTube(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "mock-yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})

@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,10 +16,10 @@ func TestTokenStore_SecretsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.SetSecret(ServiceHeadersSecretKey("immich"), `{"X-API-Key":"round-trip"}`); err != nil {
+	if err := ts.SetSecret(tokens.ServiceHeadersSecretKey("immich"), `{"X-API-Key":"round-trip"}`); err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.SetSecret(TailscaleAPIKeySecretKey(), "tskey-api-round-trip"); err != nil {
+	if err := ts.SetSecret(tokens.TailscaleAPIKeySecretKey(), "tskey-api-round-trip"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -26,10 +27,10 @@ func TestTokenStore_SecretsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.GetSecret(ServiceHeadersSecretKey("immich")); got != `{"X-API-Key":"round-trip"}` {
+	if got := reloaded.GetSecret(tokens.ServiceHeadersSecretKey("immich")); got != `{"X-API-Key":"round-trip"}` {
 		t.Fatalf("headers secret = %q", got)
 	}
-	if got := reloaded.GetSecret(TailscaleAPIKeySecretKey()); got != "tskey-api-round-trip" {
+	if got := reloaded.GetSecret(tokens.TailscaleAPIKeySecretKey()); got != "tskey-api-round-trip" {
 		t.Fatalf("tailscale secret = %q", got)
 	}
 
@@ -50,7 +51,7 @@ func TestTokenStore_SecretsIncludedInRekey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ts.SetSecret(ServiceHeadersSecretKey("immich"), "stay-secret"); err != nil {
+	if err := ts.SetSecret(tokens.ServiceHeadersSecretKey("immich"), "stay-secret"); err != nil {
 		t.Fatal(err)
 	}
 	if err := ts.ChangePassphrase("new-pass"); err != nil {
@@ -64,7 +65,7 @@ func TestTokenStore_SecretsIncludedInRekey(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := reloaded.GetSecret(ServiceHeadersSecretKey("immich")); got != "stay-secret" {
+	if got := reloaded.GetSecret(tokens.ServiceHeadersSecretKey("immich")); got != "stay-secret" {
 		t.Fatalf("secret after rekey = %q", got)
 	}
 }
@@ -124,10 +125,10 @@ func TestServiceConnections_MigratesPlaintextSecrets(t *testing.T) {
 	}
 
 	// Encrypted store holds them.
-	if secrets.GetSecret(ServiceHeadersSecretKey("immich")) == "" {
+	if secrets.GetSecret(tokens.ServiceHeadersSecretKey("immich")) == "" {
 		t.Fatal("headers not in token store")
 	}
-	if secrets.GetSecret(TailscaleAPIKeySecretKey()) != "tskey-api-plain" {
+	if secrets.GetSecret(tokens.TailscaleAPIKeySecretKey()) != "tskey-api-plain" {
 		t.Fatal("tailscale key not in token store")
 	}
 
@@ -173,7 +174,7 @@ func TestServiceConnections_WrongPassphraseRefuses(t *testing.T) {
 	}
 
 	// Wrong passphrase must refuse to load the token store (matches tokens.json).
-	if _, err := newTokenStore(tokensPath, "wrong-pass", 1_000); err == nil {
+	if _, err := tokens.NewStoreWithIterations(tokensPath, "wrong-pass", 1_000); err == nil {
 		t.Fatal("wrong passphrase must refuse to open token store")
 	}
 
@@ -182,7 +183,7 @@ func TestServiceConnections_WrongPassphraseRefuses(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if ok.GetSecret(ServiceHeadersSecretKey("immich")) == "" {
+	if ok.GetSecret(tokens.ServiceHeadersSecretKey("immich")) == "" {
 		t.Fatal("correct passphrase lost secrets")
 	}
 }

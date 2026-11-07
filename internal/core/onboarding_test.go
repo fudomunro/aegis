@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 // mockYNABUpstream serves the budgets listing YNAB's probe calls.
@@ -93,11 +94,11 @@ func TestAdminOnboarding_YNABStatusAndConfig(t *testing.T) {
 	if strings.Contains(string(raw), "test-pat") {
 		t.Fatal("token must not be written in plaintext to service_connections.json")
 	}
-	if srv.tokens.GetSecret(ServiceHeadersSecretKey("ynab")) == "" {
+	if srv.tokens.GetSecret(tokens.ServiceHeadersSecretKey("ynab")) == "" {
 		t.Fatal("token not persisted to encrypted token store")
 	}
 	var hdrs map[string]string
-	if err := json.Unmarshal([]byte(srv.tokens.GetSecret(ServiceHeadersSecretKey("ynab"))), &hdrs); err != nil {
+	if err := json.Unmarshal([]byte(srv.tokens.GetSecret(tokens.ServiceHeadersSecretKey("ynab"))), &hdrs); err != nil {
 		t.Fatal(err)
 	}
 	if hdrs["Authorization"] != "Bearer test-pat" {
@@ -305,7 +306,7 @@ func TestAdminOnboarding_ImmichStatusAndConfig(t *testing.T) {
 	if strings.Contains(string(raw), "good-key") {
 		t.Fatal("api key must not be written in plaintext to service_connections.json")
 	}
-	if srv.tokens.GetSecret(ServiceHeadersSecretKey("immich")) == "" {
+	if srv.tokens.GetSecret(tokens.ServiceHeadersSecretKey("immich")) == "" {
 		t.Fatal("api key not persisted to encrypted token store")
 	}
 	saved := w2.Body.String()

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -40,20 +41,20 @@ type AdminService struct {
 	// HasAPIKey is true when static API-key headers are present (presence only).
 	HasAPIKey bool `json:"has_api_key,omitempty"`
 	// ConnectionID is the shared provider connection this surface uses (issue #26).
-	ConnectionID   string       `json:"connection_id,omitempty"`
-	HasClientID    bool         `json:"has_client_id"`
-	HasSecret      bool         `json:"has_client_secret"`
-	OAuthScopes    []string     `json:"oauth_scopes,omitempty"`
-	Token          *TokenStatus `json:"token,omitempty"`
-	HasPlaylist    bool         `json:"has_playlist_provider"`
-	HasLikedTrack  bool         `json:"has_liked_track_provider"`
-	HasAlbum       bool         `json:"has_album_provider"`
-	HasArtist      bool         `json:"has_artist_provider"`
-	HasContact     bool         `json:"has_contact_provider"`
-	HasPhoto       bool         `json:"has_photo_provider"`
-	HasEvent       bool         `json:"has_event_provider"`
-	HasMessage     bool         `json:"has_message_provider"`
-	HasTransaction bool         `json:"has_transaction_provider"`
+	ConnectionID   string              `json:"connection_id,omitempty"`
+	HasClientID    bool                `json:"has_client_id"`
+	HasSecret      bool                `json:"has_client_secret"`
+	OAuthScopes    []string            `json:"oauth_scopes,omitempty"`
+	Token          *tokens.TokenStatus `json:"token,omitempty"`
+	HasPlaylist    bool                `json:"has_playlist_provider"`
+	HasLikedTrack  bool                `json:"has_liked_track_provider"`
+	HasAlbum       bool                `json:"has_album_provider"`
+	HasArtist      bool                `json:"has_artist_provider"`
+	HasContact     bool                `json:"has_contact_provider"`
+	HasPhoto       bool                `json:"has_photo_provider"`
+	HasEvent       bool                `json:"has_event_provider"`
+	HasMessage     bool                `json:"has_message_provider"`
+	HasTransaction bool                `json:"has_transaction_provider"`
 	// SupportsPhotoPicker is true when the connector exposes a picker session
 	// create operation (e.g. Google Photos Picker API).
 	SupportsPhotoPicker bool `json:"supports_photo_picker,omitempty"`

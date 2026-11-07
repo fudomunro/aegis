@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -98,7 +99,7 @@ func TestOwnershipStatuses_ConnectedServiceIsUnderManagement(t *testing.T) {
 	srv.ownership = mustOwnershipStore(t, "")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
-	srv.tokens.Tokens["spotify"] = &OAuthToken{AccessToken: "at"}
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{AccessToken: "at"}
 
 	statuses := srv.ownershipStatuses()
 	byKind := ownershipByKind(t, statuses)

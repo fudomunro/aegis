@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"log/slog"
 	"os"
@@ -141,9 +142,9 @@ func saveServiceConnections(path string, ov *serviceConnectionsFile) error {
 // InitServiceConnectionsStore sets the overlay path, attaches the encrypted
 // secret store, migrates any legacy plaintext credentials into it, and
 // applies existing entries onto bootstrap services. Production startup passes
-// the data-dir default next to aegis.json and the TokenStore unlocked with
+// the data-dir default next to aegis.json and the tokens.TokenStore unlocked with
 // -token-pass (issue #184).
-func (c *Config) InitServiceConnectionsStore(path string, secrets *TokenStore) error {
+func (c *Config) InitServiceConnectionsStore(path string, secrets *tokens.TokenStore) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.svcConnPath = path
@@ -214,7 +215,7 @@ func (c *Config) hydrateServiceConnectionSecretsLocked(ov *serviceConnectionsFil
 		}
 	}
 	if ov.Tailscale != nil && ov.Tailscale.APIKey == "" {
-		ov.Tailscale.APIKey = c.secrets.GetSecret(TailscaleAPIKeySecretKey())
+		ov.Tailscale.APIKey = c.secrets.GetSecret(tokens.TailscaleAPIKeySecretKey())
 	}
 }
 
@@ -224,7 +225,7 @@ func (c *Config) loadServiceHeadersLocked(id string) map[string]string {
 	if c.secrets == nil {
 		return nil
 	}
-	raw := c.secrets.GetSecret(ServiceHeadersSecretKey(id))
+	raw := c.secrets.GetSecret(tokens.ServiceHeadersSecretKey(id))
 	if raw == "" {
 		return nil
 	}
@@ -240,7 +241,7 @@ func (c *Config) loadServiceHeadersLocked(id string) map[string]string {
 // encrypted token store (never into service_connections.json).
 // Caller must hold c.mu.
 func (c *Config) saveServiceHeadersLocked(id string, headers map[string]string) error {
-	key := ServiceHeadersSecretKey(id)
+	key := tokens.ServiceHeadersSecretKey(id)
 	if len(headers) == 0 {
 		if c.secrets == nil {
 			return nil
@@ -287,7 +288,7 @@ func (c *Config) migratePlaintextServiceSecretsLocked() error {
 	}
 	if ov.Tailscale != nil && strings.TrimSpace(ov.Tailscale.APIKey) != "" {
 		key := resolveSecret("service_connections.tailscale.api_key", ov.Tailscale.APIKey)
-		if err := c.secrets.SetSecret(TailscaleAPIKeySecretKey(), key); err != nil {
+		if err := c.secrets.SetSecret(tokens.TailscaleAPIKeySecretKey(), key); err != nil {
 			return fmt.Errorf("migrating tailscale api key: %w", err)
 		}
 		migrated++
@@ -585,7 +586,7 @@ func (c *Config) SetTailscaleAdmin(entry tailscaleAdminEntry) error {
 	if c.secrets != nil {
 		// Secret first, entry second — same deliberate order as
 		// SetServiceConnection; see the comment there (issue #71).
-		if err := c.secrets.SetSecret(TailscaleAPIKeySecretKey(), merged.APIKey); err != nil {
+		if err := c.secrets.SetSecret(tokens.TailscaleAPIKeySecretKey(), merged.APIKey); err != nil {
 			return err
 		}
 	}

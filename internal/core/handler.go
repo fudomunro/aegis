@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -97,15 +98,15 @@ type Server struct {
 	// cache so library invalidation and aggregate churn never spend the
 	// rate-limited lookup budget re-resolving the same tracks.
 	mbCache     *Cache
-	tokens      *TokenStore
-	oauthStates *StateStore
+	tokens      *tokens.TokenStore
+	oauthStates *shared.StateStore
 	// rl damps credential guessing on auth/token surfaces (issue #253).
 	rl *rateLimiter
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
-	refreshFlight tokenFlight
+	refreshFlight shared.FlightGroup[*tokens.OAuthToken]
 	// libraryFlight coalesces concurrent aggregate fetches per cache key
 	// (issue #273) so parallel identical requests share one provider fan-out.
-	libraryFlight flightGroup[any]
+	libraryFlight shared.FlightGroup[any]
 	// indexWG tracks async search-index write-behind goroutines (issue #273)
 	// so tests and shutdown can wait for them.
 	indexWG    sync.WaitGroup
@@ -176,7 +177,7 @@ type Server struct {
 	// grants holds short-lived consent codes from the authorize page.
 	grants *GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
-	csrfTokens *StateStore
+	csrfTokens *shared.StateStore
 	// udts holds user-defined type schemas loaded from the user-types
 	// directory (issue #15). May be nil when none are configured.
 	udts *userDefinedRegistry

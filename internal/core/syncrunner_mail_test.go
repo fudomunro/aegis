@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -33,7 +34,7 @@ func mailRunnerServer(t *testing.T, upstream http.Handler) (*Server, *JobStore, 
 	if up != nil {
 		srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	}
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{
 		AccessToken: "access-token", Expiry: time.Now().Add(time.Hour),
 	})
 	store := testJobStore(t)
@@ -314,7 +315,7 @@ func TestMailSyncRouteAndRunnerShareOnePath(t *testing.T) {
 	a1 := openTestMailArchive(t)
 	srv1 := mailTestServer(t, a1)
 	srv1.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv1.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv1.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	w := doMailReq(t, srv1, http.MethodPost, "/v1/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("route status = %d body=%s", w.Code, w.Body.String())
@@ -328,7 +329,7 @@ func TestMailSyncRouteAndRunnerShareOnePath(t *testing.T) {
 	a2 := openTestMailArchive(t)
 	srv2 := mailTestServer(t, a2)
 	srv2.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv2.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv2.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	runnerResult, err := srv2.doMailIngest(context.Background(), mailIngestPayload{
 		Service: connectors.GoogleGmailServiceID, MaxMessages: 5, ResetCursor: true,
 	})

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -621,7 +622,7 @@ func TestSpotifyProviders_HTTPError(t *testing.T) {
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn := connectors.NewSpotifyConnector(srv)
 
 	if _, _, err := conn.ListUserSavedAlbums(context.Background()); err == nil {
@@ -651,7 +652,7 @@ func TestYouTubeProviders_UnauthorizedAndError(t *testing.T) {
 	defer mock.Close()
 	cfg := &Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL}}}
 	srv2 := testServerWithBase(cfg, "https://aegis.example.com")
-	srv2.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv2.tokens.Save("youtube-music", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	conn2 := connectors.NewYouTubeMusicConnector(srv2)
 	if _, _, err := conn2.ListUserFollowedArtists(context.Background()); err == nil {
 		t.Fatal("expected artists HTTP error")
@@ -671,7 +672,7 @@ func TestSpotifyFollowing_FlatItemsShape(t *testing.T) {
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	artists, _, err := connectors.NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
 	if err != nil {
@@ -690,7 +691,7 @@ func TestSpotifyFollowing_MissingFollowScopeExplainsReconnect(t *testing.T) {
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	_, _, err := connectors.NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
 	if err == nil {

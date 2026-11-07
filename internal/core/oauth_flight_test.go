@@ -8,6 +8,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func TestRefreshToken_Singleflight(t *testing.T) {
@@ -36,7 +38,7 @@ func TestRefreshToken_Singleflight(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken:  "old",
 		RefreshToken: "rt",
 		Expiry:       time.Now().Add(-time.Minute),
@@ -67,31 +69,5 @@ func TestRefreshToken_Singleflight(t *testing.T) {
 	tok := srv.tokens.Get("spotify")
 	if tok == nil || tok.AccessToken != "shared" {
 		t.Fatalf("stored token = %+v", tok)
-	}
-}
-
-func TestTokenFlight_DoSharesResult(t *testing.T) {
-	var f tokenFlight
-	var calls atomic.Int32
-	fn := func() (*OAuthToken, error) {
-		calls.Add(1)
-		time.Sleep(20 * time.Millisecond)
-		return &OAuthToken{AccessToken: "ok"}, nil
-	}
-
-	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			tok, err := f.Do("k", fn)
-			if err != nil || tok.AccessToken != "ok" {
-				t.Errorf("Do = (%v, %v)", tok, err)
-			}
-		}()
-	}
-	wg.Wait()
-	if calls.Load() != 1 {
-		t.Fatalf("fn calls = %d, want 1", calls.Load())
 	}
 }

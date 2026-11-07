@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -182,7 +183,7 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "tok",
 		Expiry:      futureTime(),
 	})

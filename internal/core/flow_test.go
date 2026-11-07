@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -76,13 +77,13 @@ func flowTestServer() *Server {
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 	srv.connectors["google-photos"] = connectors.NewGooglePhotosConnector(srv)
-	srv.tokens.Tokens["spotify"] = &OAuthToken{
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{
 		AccessToken:  "access-token-secret",
 		RefreshToken: "refresh-token-secret",
 		Expiry:       time.Now().Add(time.Hour),
 		Scopes:       []string{"user-library-read"},
 	}
-	srv.tokens.Tokens["google"] = &OAuthToken{
+	srv.tokens.Tokens["google"] = &tokens.OAuthToken{
 		AccessToken:  "yt-access-secret",
 		RefreshToken: "yt-refresh-secret",
 		Expiry:       time.Now().Add(-time.Hour),

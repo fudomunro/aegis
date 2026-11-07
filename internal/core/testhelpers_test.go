@@ -5,12 +5,16 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
+	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -168,7 +172,31 @@ func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, ba
 	return all, truncated, nil
 }
 
-// encrypt seals plaintext under the store master key.
-func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
-	return encryptWith(ts.key, plaintext)
+// newTestTokenStore opens a token store with a tiny PBKDF2 cost so the suite
+// stays fast. Production uses tokens.NewTokenStore.
+func newTestTokenStore(path, passphrase string) (*tokens.TokenStore, error) {
+	return tokens.NewStoreWithIterations(path, passphrase, 1_000)
+}
+
+// mustSecretStore returns a TokenStore suitable for InitServiceConnectionsStore
+// tests. Use a real path when the test reloads secrets from disk (issue #184).
+func mustSecretStore(t *testing.T, path string) *tokens.TokenStore {
+	t.Helper()
+	ts, err := newTestTokenStore(path, "test-pass")
+	if err != nil {
+		t.Fatalf("newTestTokenStore(%q): %v", path, err)
+	}
+	return ts
+}
+
+// writeJSONFile writes v as indented JSON to path (test fixtures).
+func writeJSONFile(t *testing.T, path string, v any) {
+	t.Helper()
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
 }
