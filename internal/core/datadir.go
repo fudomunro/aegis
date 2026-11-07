@@ -64,7 +64,7 @@ type DataPaths struct {
 	SyncJobs string
 	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
-	// SearchIndex is the SQLite library search-index path (issue #178).
+	// search.Index is the SQLite library search-index path (issue #178).
 	// Empty disables q= on /v1/library/{kind}.
 	SearchIndex string
 	// Quicken is the SQLite Quicken import store path (issue #141).

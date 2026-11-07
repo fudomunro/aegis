@@ -10,11 +10,13 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -200,4 +202,15 @@ func writeJSONFile(t *testing.T, path string, v any) {
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// newTestSearchIndex opens an in-temp-dir search index for Server tests.
+func newTestSearchIndex(t *testing.T) *search.Index {
+	t.Helper()
+	idx, err := search.Open(filepath.Join(t.TempDir(), "search-index.db"))
+	if err != nil {
+		t.Fatalf("search.Open: %v", err)
+	}
+	t.Cleanup(func() { idx.Close() })
+	return idx
 }

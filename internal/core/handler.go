@@ -18,6 +18,7 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/search"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -146,7 +147,7 @@ type Server struct {
 	// (issue #286). Wired beside connectors; see mail_ingest.go.
 	mailIngests map[string]connectors.MailIngest
 	// search is the local library search index (issue #178). May be disabled.
-	search *SearchIndex
+	search *search.Index
 	// quicken is the optional local Quicken import store (issue #141).
 	quicken *connectors.QuickenStore
 	// timeline is the optional local Google Timeline import store (issue #142).

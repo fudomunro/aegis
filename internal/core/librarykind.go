@@ -16,6 +16,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/search"
 )
 
 // kindRuntimeEntry is core-owned visibility wiring for one library kind.
@@ -783,7 +784,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	res, err := s.search.Search(SearchIndexQuery{Kind: kind.ID, Dataset: dataset, Q: q, Limit: searchHitCap})
+	res, err := s.search.Search(search.Query{Kind: kind.ID, Dataset: dataset, Q: q, Limit: searchHitCap})
 	if err != nil {
 		logger.Error("search index query failed", "error", err)
 		shared.WriteJSONError(w, http.StatusInternalServerError, "search index unavailable")

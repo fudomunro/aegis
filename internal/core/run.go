@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/search"
 )
 
 func Run() {
@@ -357,7 +358,7 @@ func Run() {
 		slog.Info("mail archive disabled")
 	}
 
-	searchIndex, err := OpenSearchIndex(paths.SearchIndex)
+	searchIndex, err := search.Open(paths.SearchIndex)
 	if err != nil {
 		slog.Error("failed to open search index", "path", paths.SearchIndex, "error", err)
 		os.Exit(1)

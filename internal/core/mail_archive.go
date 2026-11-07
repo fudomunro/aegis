@@ -17,6 +17,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
+	"github.com/fudomunro/aegis/internal/core/search"
 )
 
 // MailArchive is Aegis's local queryable mail mirror.
@@ -791,7 +792,7 @@ func mailParticipantsText(rec MailArchiveRecord) string {
 // with the search index (issue #178): both stores must strip operator
 // characters so agents cannot inject NEAR/OR/column filters.
 func mailFTSMatch(q string) (string, []any) {
-	return ftsMatchExpr(q)
+	return search.FTSMatchExpr(q)
 }
 
 func normalizeMailTimeBound(raw string, lower bool) string {
