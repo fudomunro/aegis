@@ -183,6 +183,12 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		`id="panel-runtime"`,
 		`id="tab-map"`,
 		`id="panel-map"`,
+		// Dead boot-time listeners on elements the onboarding seam removed:
+		// a null addEventListener aborts the whole init sequence.
+		"copyFromEl",
+		"copy-immich-install",
+		"copy-immich-env",
+		"copy-immich-go-install",
 		// Aperture is under Advanced, not a top-level tab (issue #150)
 		`id="tab-aperture"`,
 		"Setup wizard",
