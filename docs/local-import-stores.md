@@ -106,11 +106,12 @@ The mail archive is the clearest service+store pair (Gmail is canonical;
 the mbox archive is the companion input path and search mirror), which is
 exactly why it is not a simple third import store: it has a different
 lifecycle (continuous mirror + FTS + `/v1/mail`), not a one-shot import.
-It stays core-owned for now. It is the intended first adopter of the
-shared local-store machinery where that fits (open/WAL/path semantics);
-folding `/v1/mail` and the search index into the connector family is a
-follow-up, not part of this shape. `-import-takeout` keeps its own CLI
-runner for the same reason.
+That carve-out is resolved by `docs/mail-ingest.md` (issue #286, landed):
+the archive stays core-owned — sibling to `copy_ledger.db`, not to the
+Quicken importer — while the Gmail+Takeout pair moved into
+`internal/connectors` as two `MailIngest` implementations behind a
+core-owned `MailSink`. `-import-takeout` keeps its own CLI runner as a
+thin wrapper over the ingest.
 
 ## Import flags and data-dir stores
 

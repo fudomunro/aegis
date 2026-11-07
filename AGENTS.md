@@ -179,6 +179,31 @@ type Onboarder interface {
   runner recomputes it after applying updates — a save verb cannot see the
   post-save world and must not try.
 
+### Mail ingest (local archive sources)
+
+Feed the local mail archive by implementing `MailIngest` beside the
+connector (`internal/connectors/mail_ingest.go`; design:
+`docs/mail-ingest.md`). The Gmail connector's live paging and the Google
+Takeout export walk are the worked examples.
+
+```go
+type MailIngest interface {
+    IngestMail(ctx context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error)
+}
+```
+
+- The source writes through core's `MailSink` (store, cursor round-trip,
+  ingest-private meta) and never sees the archive type or its SQL. Core
+  owns the archive store and `/v1/mail`; the ingest owns the walk and the
+  provider semantics.
+- Source grouping and canonical-ness are **declared, never branched on**:
+  `MailSource{ServiceID, Parent, Canonical}` beside the ingest, display
+  names in the `serviceNames` registry, freshness through
+  `types.SnapshotProber`. Core renders and registers generically
+  (`mail_provider_hygiene_test.go` rejects provider literals in core).
+- Provider quota/pacing surfaces only as `types.MailIngestResult.RetryAfter`;
+  core never classifies provider errors.
+
 ### Local state layout (issue #74)
 
 All mutable local state defaults under one data directory (override with
@@ -353,6 +378,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `shared.LibraryPageCap`, singleflight |
 | Re-growing `writeJSON` / page-cap / URL-trim twins in `core` or `connectors` | One owner: `internal/shared` (issue #280) |
+| Service-ID switches or provider literals growing back into `core` mail paths | Declare grouping/canonical/freshness beside the ingest (`MailSource`, `types.SnapshotProber`); `mail_provider_hygiene_test.go` rejects provider literals (issue #286) |
 | Sequential multi-provider or multi-kind work when already parallelizable | Follow `internal/core/librarykind.go` fan-out; don’t serialize merge review without cause |
 
 ## Where to look first
@@ -366,6 +392,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Admin data-grant writes | `internal/core/permissions_overlay.go`, `internal/core/config.go` `SetDataGrants` / `SetServicePermissions`, `docs/configuration.md` “Data grants” |
 | OAuth / connections / refresh | `internal/core/oauth.go`, `internal/core/connections.go`, `internal/core/tokens.go` |
 | Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
+| Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors/mail_ingest.go`, `internal/core/mail_ingest.go` |
 | Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
 | Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
