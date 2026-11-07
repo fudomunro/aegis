@@ -8,8 +8,6 @@ import (
 	"archive/zip"
 	"bufio"
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,8 +27,6 @@ import (
 // back to the export; canonical home stays the live provider (issue #16).
 
 const (
-	takeoutServiceID   = "google-takeout"
-	takeoutServiceName = "Google Takeout"
 	// takeoutPathMetaKey stores the configured export path in mail_meta.
 	takeoutPathMetaKey = "takeout:path"
 	// takeoutCursorMetaKey stores a durable walk cursor so multi-batch imports
@@ -130,7 +126,7 @@ func (a *MailArchive) saveTakeoutCursor(cur takeoutCursor) error {
 // messages), not a full re-scan (issue #75). maxMessages bounds one call
 // (0 = 5000); repeat until Done.
 func (a *MailArchive) ImportTakeout(path string, maxMessages int) (TakeoutSyncResult, error) {
-	res := TakeoutSyncResult{Service: takeoutServiceID, Path: path}
+	res := TakeoutSyncResult{Service: connectors.TakeoutServiceID, Path: path}
 	if a == nil || a.db == nil {
 		res.Error = "mail archive disabled"
 		return res, fmt.Errorf("mail archive disabled")
@@ -485,14 +481,14 @@ func recordFromTakeoutMessage(raw []byte, source string) (MailArchiveRecord, err
 	if len(snippet) > 200 {
 		snippet = snippet[:200]
 	}
-	labels := takeoutLabels(msg, source)
+	labels := connectors.TakeoutLabels(msg, source)
 
 	out := MailArchiveRecord{
-		Service:     takeoutServiceID,
-		ServiceName: takeoutServiceName,
-		ID:          takeoutMessageID(messageID, raw),
+		Service:     connectors.TakeoutServiceID,
+		ServiceName: connectors.TakeoutServiceName,
+		ID:          connectors.TakeoutMessageID(messageID, raw),
 		MessageID:   messageID,
-		Mailbox:     takeoutMailboxFromLabels(labels),
+		Mailbox:     connectors.TakeoutMailboxFromLabels(labels),
 		Labels:      labels,
 		Subject:     subject,
 		Snippet:     snippet,
@@ -500,8 +496,8 @@ func recordFromTakeoutMessage(raw []byte, source string) (MailArchiveRecord, err
 		CC:          ccList,
 		SentAt:      sentAt,
 		ReceivedAt:  sentAt,
-		Direction:   takeoutDirection(labels),
-		Read:        !hasLabel(labels, "UNREAD"),
+		Direction:   connectors.TakeoutDirection(labels),
+		Read:        connectors.TakeoutRead(labels),
 		BodyText:    body,
 	}
 	if len(fromList) > 0 {
@@ -514,58 +510,6 @@ func recordFromTakeoutMessage(raw []byte, source string) (MailArchiveRecord, err
 		out.PayloadGzip = gz
 	}
 	return out, nil
-}
-
-func takeoutMessageID(messageID string, raw []byte) string {
-	if messageID != "" {
-		return "msgid:" + messageID
-	}
-	sum := sha256.Sum256(raw)
-	return "blob:" + hex.EncodeToString(sum[:8])
-}
-
-func takeoutLabels(msg *mail.Message, source string) []string {
-	var labels []string
-	// Gmail Takeout often preserves X-GM-LABELS.
-	if raw := msg.Header.Get("X-GM-LABELS"); raw != "" {
-		for _, part := range strings.FieldsFunc(raw, func(r rune) bool {
-			return r == ' ' || r == ','
-		}) {
-			part = strings.Trim(part, `"`)
-			if part != "" {
-				labels = append(labels, strings.ToUpper(part))
-			}
-		}
-	}
-	if len(labels) == 0 {
-		base := strings.ToUpper(strings.TrimSuffix(filepath.Base(source), filepath.Ext(source)))
-		base = strings.ReplaceAll(base, " ", "_")
-		if base != "" {
-			labels = append(labels, base)
-		}
-	}
-	labels = append(labels, "TAKEOUT")
-	return labels
-}
-
-func takeoutMailboxFromLabels(labels []string) string {
-	for _, l := range labels {
-		switch strings.ToUpper(l) {
-		case "INBOX", "SENT", "DRAFT", "SPAM", "TRASH", "STARRED", "IMPORTANT":
-			return strings.ToUpper(l)
-		}
-	}
-	return "TAKEOUT"
-}
-
-func takeoutDirection(labels []string) string {
-	if hasLabel(labels, "SENT") {
-		return "outbound"
-	}
-	if hasLabel(labels, "INBOX") {
-		return "inbound"
-	}
-	return "unknown"
 }
 
 func hasLabel(labels []string, want string) bool {

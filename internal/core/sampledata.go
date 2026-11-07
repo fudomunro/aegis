@@ -453,7 +453,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			From:     &types.Contact{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}},
 			Labels:   []string{"INBOX", "TAKEOUT"},
 			Sources: []types.MessageSource{
-				{Service: takeoutServiceID, ServiceName: takeoutServiceName, ID: "msgid:ship-release@synthetic.example", Extra: map[string]any{"message_id": "<ship-release@synthetic.example>"}},
+				{Service: connectors.TakeoutServiceID, ServiceName: connectors.TakeoutServiceName, ID: "msgid:ship-release@synthetic.example", Extra: map[string]any{"message_id": "<ship-release@synthetic.example>"}},
 			},
 		},
 		{
@@ -475,7 +475,7 @@ func GenerateSampleLibrary() SampleLibrarySet {
 			From:    &types.Contact{Name: "Billing", Emails: []string{"billing@example.com"}},
 			Labels:  []string{"INBOX", "TAKEOUT"},
 			Sources: []types.MessageSource{
-				{Service: takeoutServiceID, ServiceName: takeoutServiceName, ID: "blob:invoice-reminder"},
+				{Service: connectors.TakeoutServiceID, ServiceName: connectors.TakeoutServiceName, ID: "blob:invoice-reminder"},
 			},
 		},
 		{

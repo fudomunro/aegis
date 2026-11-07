@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -204,7 +205,7 @@ func TestServer_RecordTakeoutSnapshot(t *testing.T) {
 	if rec.Watermark != "complete" {
 		t.Fatalf("watermark = %q", rec.Watermark)
 	}
-	if rec.Service != takeoutServiceID {
+	if rec.Service != connectors.TakeoutServiceID {
 		t.Fatalf("service = %q", rec.Service)
 	}
 }
@@ -232,7 +233,7 @@ func TestHandleLibraryCopies_ListAndFilter(t *testing.T) {
 	}
 	if _, err := c.Upsert(CopyRecord{
 		Kind: "messages", EntityKey: "snapshot:google-takeout:/tmp/x",
-		Service: takeoutServiceID, ExternalID: "/tmp/x",
+		Service: connectors.TakeoutServiceID, ExternalID: "/tmp/x",
 		Role: CopyRoleImport, SyncMode: CopySyncModeOptimistic, Status: CopyStatusStale,
 	}); err != nil {
 		t.Fatal(err)

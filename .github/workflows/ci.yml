@@ -86,17 +86,17 @@ jobs:
       # Short CI fuzz runs over the hostile-input parsers (issue #107).
       # Seeds in f.Add / testdata/fuzz always run as ordinary tests in the
       # Test job; this job spends a bounded budget mutating them.
-      # Targets live in ./internal/core — the repo root package has no test
-      # files, so fuzzing `.` exits 0 with "[no test files]" and mutates
-      # nothing. Keep this list in sync with `go test -run='^$' -list='^Fuzz' ./internal/core`.
+      # Targets live in ./internal/core and ./internal/connectors — the repo
+      # root package has no test files, so fuzzing `.` exits 0 with
+      # "[no test files]" and mutates nothing. Keep these lists in sync with
+      # `go test -run='^$' -list='^Fuzz' ./internal/core ./internal/connectors`.
       - name: Fuzz parsers
         run: |
           set -euo pipefail
-          targets=(
+          core_targets=(
             FuzzRecordFromTakeoutMessage
             FuzzWalkMboxFrom
             FuzzIsMboxFromLine
-            FuzzTakeoutMessageID
             FuzzInjectRequestInstructions
             FuzzDetectBodyShape
             FuzzNormalizeIdentityKey
@@ -107,9 +107,16 @@ jobs:
             FuzzPlaylistLinkKey
             FuzzMergeAlbumsSync
           )
-          for t in "${targets[@]}"; do
+          for t in "${core_targets[@]}"; do
             echo "==> ${t}"
             go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/core
+          done
+          connectors_targets=(
+            FuzzTakeoutMessageID
+          )
+          for t in "${connectors_targets[@]}"; do
+            echo "==> ${t}"
+            go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/connectors
           done
 
   build:

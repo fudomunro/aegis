@@ -421,7 +421,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 		{ID: "amazon-music", Name: "Amazon Music", Action: "inject"},
 		{ID: "google-contacts", Name: "Google Contacts", Action: "inject"},
 		{ID: "google-gmail", Name: "Gmail", Action: "inject"},
-		{ID: takeoutServiceID, Name: takeoutServiceName, Action: "inject"},
+		{ID: connectors.TakeoutServiceID, Name: connectors.TakeoutServiceName, Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
@@ -445,8 +445,8 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 		"google-gmail": &sampleMessageProvider{
 			messages: filterMessagesByService(lib.Messages, connectors.GoogleGmailServiceID),
 		},
-		takeoutServiceID: &sampleMessageProvider{
-			messages: filterMessagesByService(lib.Messages, takeoutServiceID),
+		connectors.TakeoutServiceID: &sampleMessageProvider{
+			messages: filterMessagesByService(lib.Messages, connectors.TakeoutServiceID),
 		},
 	}
 

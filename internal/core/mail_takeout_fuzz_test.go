@@ -86,22 +86,4 @@ func FuzzIsMboxFromLine(f *testing.F) {
 	})
 }
 
-func FuzzTakeoutMessageID(f *testing.F) {
-	f.Add("", []byte("raw"))
-	f.Add("<abc@x>", []byte("raw"))
-	f.Add("  <>  ", []byte{})
-	f.Add("weird id", []byte("payload"))
-	f.Fuzz(func(t *testing.T, messageID string, raw []byte) {
-		id := takeoutMessageID(messageID, raw)
-		if id == "" {
-			t.Fatal("empty takeout id")
-		}
-		if !strings.HasPrefix(id, "msgid:") && !strings.HasPrefix(id, "blob:") {
-			t.Fatalf("unexpected id prefix: %q", id)
-		}
-		// Same inputs → same id (stable hashing).
-		if again := takeoutMessageID(messageID, raw); again != id {
-			t.Fatalf("unstable id: %q vs %q", id, again)
-		}
-	})
-}
+

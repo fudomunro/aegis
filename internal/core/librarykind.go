@@ -956,8 +956,8 @@ func librarySourceDisplayName(s *Server, id string) string {
 	switch id {
 	case "mail-archive":
 		return "Mail archive"
-	case takeoutServiceID:
-		return takeoutServiceName
+	case connectors.TakeoutServiceID:
+		return connectors.TakeoutServiceName
 	}
 	if name, ok := connectors.ServiceName(id); ok {
 		return name
@@ -973,12 +973,12 @@ func librarySourceLastSyncedAt(s *Server, id string) string {
 		return ""
 	}
 	switch id {
-	case "mail-archive", takeoutServiceID, connectors.GoogleGmailServiceID:
+	case "mail-archive", connectors.TakeoutServiceID, connectors.GoogleGmailServiceID:
 		st, err := s.mail.Status()
 		if err != nil {
 			return ""
 		}
-		if id == takeoutServiceID || id == connectors.GoogleGmailServiceID {
+		if id == connectors.TakeoutServiceID || id == connectors.GoogleGmailServiceID {
 			if cur, err := s.mail.LoadSyncCursor(id); err == nil && cur.LastSyncAt != "" {
 				return cur.LastSyncAt
 			}
@@ -1014,7 +1014,7 @@ func expandMailArchiveSources(s *Server, bySvc map[string]types.LibraryServiceSt
 		// Takeout is a historical export nested under the live Gmail home when
 		// Gmail is present; otherwise it stands alone.
 		parent := ""
-		if id == takeoutServiceID {
+		if id == connectors.TakeoutServiceID {
 			if _, ok := bySvc[connectors.GoogleGmailServiceID]; ok {
 				parent = connectors.GoogleGmailServiceID
 			} else if _, ok := bySvc["mail-archive"]; ok {

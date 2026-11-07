@@ -373,7 +373,7 @@ func TestTakeoutChecker(t *testing.T) {
 		t.Fatal(err)
 	}
 	c := takeoutChecker{}
-	if got := c.Services(); len(got) != 1 || got[0] != takeoutServiceID {
+	if got := c.Services(); len(got) != 1 || got[0] != connectors.TakeoutServiceID {
 		t.Fatalf("Services = %v", got)
 	}
 
@@ -687,13 +687,13 @@ func TestCopyLedger_FreshnessRollup(t *testing.T) {
 		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Status: CopyStatusInSync})
 	_, _ = ledger.Upsert(CopyRecord{Kind: "playlists", EntityKey: "b", Service: "spotify", ExternalID: "2",
 		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Status: CopyStatusStale})
-	_, _ = ledger.Upsert(CopyRecord{Kind: "messages", EntityKey: "c", Service: takeoutServiceID, ExternalID: "/tmp/x",
+	_, _ = ledger.Upsert(CopyRecord{Kind: "messages", EntityKey: "c", Service: connectors.TakeoutServiceID, ExternalID: "/tmp/x",
 		Role: CopyRoleImport, SyncMode: CopySyncModeOptimistic})
 	if err := ledger.MarkChecked("playlists", "a", "spotify", "1", CopyStatusInSync); err != nil {
 		t.Fatalf("MarkChecked: %v", err)
 	}
 	// MarkChecked can also record an inconclusive result as `unknown`.
-	if err := ledger.MarkChecked("messages", "c", takeoutServiceID, "/tmp/x", CopyStatusUnknown); err != nil {
+	if err := ledger.MarkChecked("messages", "c", connectors.TakeoutServiceID, "/tmp/x", CopyStatusUnknown); err != nil {
 		t.Fatalf("MarkChecked(unknown): %v", err)
 	}
 
