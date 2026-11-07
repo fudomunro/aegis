@@ -10,6 +10,8 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 func searchTestServer(t *testing.T, contacts ...types.Contact) *Server {
@@ -138,11 +140,11 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 		Name:    "Frodo Baggins",
 		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
 	})
-	shire := &DataScope{ID: "shire", Dataset: "shire", Grants: readAllGrants()}
-	gondor := &DataScope{ID: "gondor", Dataset: "gondor", Grants: readAllGrants()}
+	shire := &scopes.Scope{ID: "shire", Dataset: "shire", Grants: readAllGrants()}
+	gondor := &scopes.Scope{ID: "gondor", Dataset: "gondor", Grants: readAllGrants()}
 
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
-	req = withDataScope(req, shire)
+	req = scopes.WithDataScope(req, shire)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
@@ -151,7 +153,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	}
 	srv.waitIndex()
 
-	req = withDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), shire)
+	req = scopes.WithDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), shire)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
@@ -177,7 +179,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	req = withDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), gondor)
+	req = scopes.WithDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), gondor)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
 	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
@@ -311,7 +313,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var st SearchIndexStatus
+	var st search.Status
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("status json: %v", err)
 	}
@@ -321,7 +323,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	if st.Path == "" {
 		t.Fatal("status must include the index path")
 	}
-	var contacts, tracks *SearchIndexKindStatus
+	var contacts, tracks *search.KindStatus
 	for i := range st.Kinds {
 		switch st.Kinds[i].ID {
 		case "contacts":
@@ -350,7 +352,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("disabled status = %d body=%s", w.Code, w.Body.String())
 	}
-	st = SearchIndexStatus{}
+	st = search.Status{}
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatal(err)
 	}

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 func TestAPIRouteAllowed(t *testing.T) {
@@ -112,10 +113,10 @@ func TestAPIAllowlistGate_UnlistedRoutes404(t *testing.T) {
 }
 
 func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
-	path := writeDataScopes(t, []DataScope{
+	path := writeDataScopes(t, []scopes.Scope{
 		{ID: "ext", Dataset: "", APIKey: "YOUR_EXT_KEY", ReadOnly: true},
 	})
-	scopes, err := NewDataScopeStore(path)
+	scopeStore, err := scopes.NewStore(path)
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
 	}
@@ -126,14 +127,14 @@ func TestAuthMiddleware_ExternalAPI_TokensOnly(t *testing.T) {
 		config:      &Config{},
 		cache:       NewCache(),
 		mbCache:     NewCache(),
-		scopes:      scopes,
+		scopes:      scopeStore,
 		identity:    ServeHeaderResolver{},
 	}
 
 	called := false
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		called = true
-		if DataScopeFrom(r) == nil {
+		if scopes.From(r) == nil {
 			t.Error("expected data scope attached")
 		}
 	})

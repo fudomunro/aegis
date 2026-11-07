@@ -7,8 +7,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // HandleServiceProxy is the /v1/services/{id}/{path} transport. After issue
@@ -45,7 +47,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 	// Data-scope isolation: foreign partitions look missing, never 403
 	// (docs/data-scopes.md).
-	if !serviceVisibleToScope(svc, DataScopeFrom(r)) {
+	if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
 		logger.Warn("service not found", "reason", "dataset partition")
 		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", serviceID))
 		return
@@ -61,7 +63,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
 			DataType: types.DataTypeForPath(remainingPath),
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "not_content_path",
 			Method:   r.Method,
 			ClientIP: s.clientIPFor(r),
@@ -82,7 +84,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
 			DataType: dataType,
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "service_blocked",
 			Method:   r.Method,
 			ClientIP: s.clientIPFor(r),
@@ -103,7 +105,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
 			DataType: dataType,
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
 			ClientIP: s.clientIPFor(r),

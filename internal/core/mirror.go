@@ -100,7 +100,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		var maxErr *http.MaxBytesError
 		if errors.As(err, &maxErr) {
-			writeBodyReadError(w, err)
+			shared.WriteBodyReadError(w, err)
 			return
 		}
 		shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")

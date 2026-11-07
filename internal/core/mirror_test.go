@@ -13,7 +13,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*Server, *httptest.Server) {
@@ -32,19 +34,19 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "sp-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "yt-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
-	if ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db")); err == nil {
+	if ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db")); err == nil {
 		t.Cleanup(func() { ledger.Close() })
-		srv.copies = ledger
+		srv.copyLedger = ledger
 	}
 	return srv, ts
 }
@@ -225,21 +227,21 @@ func TestHandleLibraryMirror_SpotifyToYouTubePlaylist(t *testing.T) {
 		t.Fatalf("skips = %+v", res.Skips)
 	}
 	// Successful mirror records a copy-ledger row (issue #76).
-	if srv.copies == nil || !srv.copies.Enabled() {
+	if srv.copyLedger == nil || !srv.copyLedger.Enabled() {
 		t.Fatal("expected copy ledger on mirror server")
 	}
-	rec, ok := srv.copies.Get("playlists", "youtube-music", "yt-pl-1")
+	rec, ok := srv.copyLedger.Get("playlists", "youtube-music", "yt-pl-1")
 	if !ok {
 		t.Fatal("expected copy ledger row for mirrored playlist")
 	}
 	if rec.SourceService != "spotify" || rec.SourceID != "p1" {
 		t.Fatalf("source = %s:%s", rec.SourceService, rec.SourceID)
 	}
-	if rec.Role != CopyRoleMirror || rec.Status != CopyStatusInSync {
+	if rec.Role != copies.CopyRoleMirror || rec.Status != copies.CopyStatusInSync {
 		t.Fatalf("record = %+v", rec)
 	}
 	info := srv.copyInfoFor("playlists", "youtube-music", "yt-pl-1")
-	if info == nil || info.SyncMode != CopySyncModeFull {
+	if info == nil || info.SyncMode != copies.CopySyncModeFull {
 		t.Fatalf("stamp = %+v", info)
 	}
 }

@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -157,7 +158,7 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (types.M
 	s.mailSyncMu.Lock()
 	defer s.mailSyncMu.Unlock()
 
-	result, err := ingest.IngestMail(ctx, mailSink{s.mail}, p.options())
+	result, err := ingest.IngestMail(ctx, mail.Sink{A: s.mail}, p.options())
 	if err != nil && result.Error == "" {
 		result.Error = err.Error()
 	}

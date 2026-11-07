@@ -4,88 +4,17 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
-
-func TestOwnershipStore_ConfirmReopenRoundTrip(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "ownership.json")
-	store, err := NewOwnershipStore(path)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	entry, err := store.Confirm("messages", "work mail only")
-	if err != nil {
-		t.Fatalf("confirm: %v", err)
-	}
-	if !entry.Confirmed || entry.ConfirmedAt == "" || entry.Note != "work mail only" {
-		t.Fatalf("entry = %+v, want confirmed with note and timestamp", entry)
-	}
-
-	reloaded, err := NewOwnershipStore(path)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	got := reloaded.Get("messages")
-	if !got.Confirmed || got.Note != "work mail only" {
-		t.Fatalf("reloaded = %+v, want confirmed entry", got)
-	}
-
-	// Reopen keeps the note but clears the confirmation.
-	reopened, err := reloaded.Reopen("messages")
-	if err != nil {
-		t.Fatalf("reopen: %v", err)
-	}
-	if reopened.Confirmed || reopened.ConfirmedAt != "" {
-		t.Fatalf("reopened = %+v, want unconfirmed", reopened)
-	}
-	if reopened.Note != "work mail only" {
-		t.Fatalf("reopened note = %q, want kept note", reopened.Note)
-	}
-
-	again, err := NewOwnershipStore(path)
-	if err != nil {
-		t.Fatalf("reload after reopen: %v", err)
-	}
-	if got := again.Get("messages"); got.Confirmed {
-		t.Fatalf("persisted reopen still confirmed: %+v", got)
-	}
-}
-
-func TestOwnershipStore_EmptyPathStaysInMemory(t *testing.T) {
-	store, err := NewOwnershipStore("")
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	if _, err := store.Confirm("photos", ""); err != nil {
-		t.Fatalf("confirm: %v", err)
-	}
-	if !store.Get("photos").Confirmed {
-		t.Fatal("expected in-memory confirmation")
-	}
-}
-
-func TestOwnershipStore_RejectsBadInput(t *testing.T) {
-	store, err := NewOwnershipStore(filepath.Join(t.TempDir(), "ownership.json"))
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-	if _, err := store.Confirm("  ", ""); err == nil {
-		t.Fatal("expected error for empty kind")
-	}
-	path := filepath.Join(t.TempDir(), "ownership.json")
-	if err := os.WriteFile(path, []byte(`{"version":99,"ownership":{}}`), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := NewOwnershipStore(path); err == nil {
-		t.Fatal("expected unsupported-version error")
-	}
-}
 
 func TestOwnershipStatuses_ConnectedServiceIsUnderManagement(t *testing.T) {
 	cfg := &Config{
@@ -98,7 +27,7 @@ func TestOwnershipStatuses_ConnectedServiceIsUnderManagement(t *testing.T) {
 	srv.ownership = mustOwnershipStore(t, "")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
-	srv.tokens.Tokens["spotify"] = &OAuthToken{AccessToken: "at"}
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{AccessToken: "at"}
 
 	statuses := srv.ownershipStatuses()
 	byKind := ownershipByKind(t, statuses)
@@ -157,8 +86,8 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.ownership = mustOwnershipStore(t, "")
 	srv.connectors[connectors.GoogleGmailServiceID] = connectors.NewGoogleGmailConnector(srv)
-	mail := openTestMailArchive(t)
-	srv.mail = mail
+	mailArch := openTestMailArchive(t)
+	srv.mail = mailArch
 
 	// No Takeout path and no rows: Takeout stays a route.
 	byKind := ownershipByKind(t, srv.ownershipStatuses())
@@ -166,7 +95,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 
 	// Gmail is not connected, so it is a route too — until the archive
 	// holds Gmail rows, which is evidence the data is under management.
-	if err := mail.Upsert(MailArchiveRecord{
+	if err := mailArch.Upsert(mail.Record{
 		Service: connectors.GoogleGmailServiceID, ServiceName: connectors.GoogleGmailServiceName,
 		ID: "g1", Subject: "hello",
 	}); err != nil {
@@ -176,7 +105,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	assertOwnershipSource(t, byKind["messages"].UnderManagement, connectors.GoogleGmailServiceID)
 
 	// Importing Takeout rows moves Takeout from route to source.
-	if err := mail.Upsert(MailArchiveRecord{
+	if err := mailArch.Upsert(mail.Record{
 		Service: connectors.TakeoutServiceID, ServiceName: connectors.TakeoutServiceName,
 		ID: "t1", Subject: "old",
 	}); err != nil {
@@ -193,16 +122,16 @@ func TestOwnershipStatuses_FreshnessPassthrough(t *testing.T) {
 	cfg := &Config{Services: []Service{}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.ownership = mustOwnershipStore(t, "")
-	srv.copies = mustCopyLedger(t)
-	if _, err := srv.copies.Upsert(CopyRecord{
+	srv.copyLedger = mustCopyLedger(t)
+	if _, err := srv.copyLedger.Upsert(copies.Record{
 		Kind:          "playlists",
 		EntityKey:     "playlists:spotify:p1",
 		SourceService: "spotify",
 		SourceID:      "p1",
 		Service:       "youtube-music",
 		ExternalID:    "y1",
-		Role:          CopyRoleMirror,
-		Version:       CopyVersion{ItemCount: 1},
+		Role:          copies.CopyRoleMirror,
+		Version:       copies.Version{ItemCount: 1},
 	}); err != nil {
 		t.Fatalf("upsert copy: %v", err)
 	}
@@ -336,58 +265,6 @@ func TestOwnershipRoutes_ActionsMatchSeams(t *testing.T) {
 
 // --- helpers ---
 
-func mustOwnershipStore(t *testing.T, path string) *OwnershipStore {
-	t.Helper()
-	s, err := NewOwnershipStore(path)
-	if err != nil {
-		t.Fatalf("ownership store: %v", err)
-	}
-	return s
-}
-
-func ownershipByKind(t *testing.T, statuses []types.OwnershipStatus) map[string]types.OwnershipStatus {
-	t.Helper()
-	out := make(map[string]types.OwnershipStatus, len(statuses))
-	for _, st := range statuses {
-		out[st.Kind] = st
-	}
-	for _, want := range types.BuiltinLibraryKinds {
-		if _, ok := out[want.ID]; !ok {
-			t.Fatalf("missing kind %q in ownership status", want.ID)
-		}
-	}
-	return out
-}
-
-func assertOwnershipSource(t *testing.T, sources []types.OwnershipSource, serviceID string) {
-	t.Helper()
-	for _, s := range sources {
-		if s.ServiceID == serviceID {
-			return
-		}
-	}
-	t.Fatalf("service %q not in under_management: %+v", serviceID, sources)
-}
-
-func assertOwnershipRoute(t *testing.T, routes []types.OwnershipRoute, serviceID string) {
-	t.Helper()
-	for _, r := range routes {
-		if r.ServiceID == serviceID {
-			return
-		}
-	}
-	t.Fatalf("service %q not in unused_routes: %+v", serviceID, routes)
-}
-
-func hasRoute(routes []types.OwnershipRoute, serviceID string) bool {
-	for _, r := range routes {
-		if r.ServiceID == serviceID {
-			return true
-		}
-	}
-	return false
-}
-
 // TestOwnershipStartDeclarationsAreReal pins the connector-declared
 // call-to-action (issue #165 phase 2) against the seams it names: "setup"
 // connectors implement Onboarder, "import" sources expose an import panel,
@@ -499,4 +376,56 @@ func TestHandleAdminOwnership_BrowserWritePath(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("same-origin DELETE: %d %s", w.Code, w.Body.String())
 	}
+}
+
+func mustOwnershipStore(t *testing.T, path string) *ownership.Store {
+	t.Helper()
+	s, err := ownership.NewStore(path)
+	if err != nil {
+		t.Fatalf("ownership store: %v", err)
+	}
+	return s
+}
+
+func ownershipByKind(t *testing.T, statuses []types.OwnershipStatus) map[string]types.OwnershipStatus {
+	t.Helper()
+	out := make(map[string]types.OwnershipStatus, len(statuses))
+	for _, st := range statuses {
+		out[st.Kind] = st
+	}
+	for _, want := range types.BuiltinLibraryKinds {
+		if _, ok := out[want.ID]; !ok {
+			t.Fatalf("missing kind %q in ownership status", want.ID)
+		}
+	}
+	return out
+}
+
+func assertOwnershipSource(t *testing.T, sources []types.OwnershipSource, serviceID string) {
+	t.Helper()
+	for _, s := range sources {
+		if s.ServiceID == serviceID {
+			return
+		}
+	}
+	t.Fatalf("service %q not in under_management: %+v", serviceID, sources)
+}
+
+func assertOwnershipRoute(t *testing.T, routes []types.OwnershipRoute, serviceID string) {
+	t.Helper()
+	for _, r := range routes {
+		if r.ServiceID == serviceID {
+			return
+		}
+	}
+	t.Fatalf("service %q not in unused_routes: %+v", serviceID, routes)
+}
+
+func hasRoute(routes []types.OwnershipRoute, serviceID string) bool {
+	for _, r := range routes {
+		if r.ServiceID == serviceID {
+			return true
+		}
+	}
+	return false
 }

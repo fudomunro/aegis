@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/shared"
 	"strings"
 	"time"
 )
@@ -194,7 +195,7 @@ WHERE kind=? AND job_type=? AND service=? AND entity_key=?
 const syncScheduleColumns = `id, name, kind, job_type, service, entity_key, payload,
   every_seconds, enabled, next_run_at, last_enqueued_at, created_at, updated_at`
 
-func scanSyncSchedule(row rowScanner) (SyncSchedule, error) {
+func scanSyncSchedule(row shared.RowScanner) (SyncSchedule, error) {
 	var (
 		sc                   SyncSchedule
 		payload              string

@@ -2,10 +2,12 @@ package core
 
 import (
 	"context"
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"sort"
 	"sync"
 	"time"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // Metric surfaces for access stats.
@@ -36,7 +38,7 @@ type AccessEvent struct {
 	Target   string // service id or library kind id
 	DataType string
 	Cache    string // hit, miss, or empty
-	// Decision is DecisionAllow or DecisionDeny. Empty is treated as allow
+	// Decision is audit.DecisionAllow or audit.DecisionDeny. Empty is treated as allow
 	// for compatibility with older in-memory events.
 	Decision string
 	// Reason is a short redacted denial reason (permission, app_scope,
@@ -307,7 +309,7 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 // "api-key". Never returns token material.
 func agentForRequest(r *http.Request) string {
 	if r != nil {
-		if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
+		if sc := scopes.From(r); sc != nil && sc.ID != "" {
 			// External principals (invite tokens) audit by scope id, never
 			// the shared agent-key label (issue #253).
 			return "scope:" + sc.ID
@@ -336,13 +338,13 @@ func (s *Server) recordAccess(ev AccessEvent) {
 		ev.At = time.Now()
 	}
 	if ev.Decision == "" {
-		ev.Decision = DecisionAllow
+		ev.Decision = audit.DecisionAllow
 	}
 	if s.metrics != nil {
 		s.metrics.Record(ev)
 	}
 	if s.audit != nil {
-		s.audit.Write(AuditEvent{
+		s.audit.Write(audit.Event{
 			At:       ev.At,
 			Agent:    ev.Agent,
 			Surface:  ev.Surface,

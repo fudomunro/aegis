@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,7 +78,7 @@ func TestServiceConnectionsOverlay_PersistAndReload(t *testing.T) {
 	if strings.Contains(string(raw), "secret-key") {
 		t.Fatal("service_connections.json must not contain plaintext credentials")
 	}
-	if !secrets.HasSecret(ServiceHeadersSecretKey("immich")) {
+	if !secrets.HasSecret(tokens.ServiceHeadersSecretKey("immich")) {
 		t.Fatal("expected encrypted header secret in token store")
 	}
 

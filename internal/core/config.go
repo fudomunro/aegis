@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -40,7 +41,7 @@ type Config struct {
 	trustedProxyNets []net.IPNet
 	// clientIPHeaderKey holds the compiled ClientIPHeader (not serialized).
 	clientIPHeaderKey string
-	path     string
+	path              string
 	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
 	// Admin data-grant saves always write here — never aegis.json.
 	dataGrantsPath string
@@ -64,7 +65,7 @@ type Config struct {
 	// secrets is the encrypted token store used for static credentials from
 	// the service-connections overlay (issue #184). Attached at startup via
 	// InitServiceConnectionsStore alongside -token-pass.
-	secrets *TokenStore
+	secrets *tokens.TokenStore
 }
 
 // defaultDataGrantsPath returns the overlay path beside a aegis.json path.

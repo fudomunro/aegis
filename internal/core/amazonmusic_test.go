@@ -4,6 +4,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -57,7 +58,7 @@ func TestAmazonMusicConnector_HandleProxy_WithMockAPI(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("amazon-music", &OAuthToken{
+	srv.tokens.Save("amazon-music", &tokens.OAuthToken{
 		AccessToken: "mock-amz-token",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -114,7 +115,7 @@ func TestAmazonMusicConnector_HandleProxy_UpstreamDown(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("amazon-music", &OAuthToken{
+	srv.tokens.Save("amazon-music", &tokens.OAuthToken{
 		AccessToken: "token",
 		Expiry:      time.Now().Add(time.Hour),
 	})

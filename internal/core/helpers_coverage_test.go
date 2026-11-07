@@ -1,10 +1,10 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 )
@@ -139,7 +139,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 	}
 
 	// Missing required scope.
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "scoped",
 		Expiry:      time.Now().Add(time.Hour),
 		Scopes:      []string{"user-library-read"},
@@ -149,7 +149,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 	}
 
 	// Valid token with required scopes.
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "good",
 		Expiry:      time.Now().Add(time.Hour),
 		Scopes:      []string{"user-library-read", "playlist-modify"},
@@ -159,7 +159,7 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 	}
 
 	// Expired without refresh.
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "stale",
 		Expiry:      time.Now().Add(-time.Hour),
 		Scopes:      []string{"user-library-read", "playlist-modify"},
@@ -172,32 +172,6 @@ func TestGetValidToken_ScopeAndExpiry(t *testing.T) {
 	srv.tokens = nil
 	if srv.GetValidToken("spotify", logger) != "" {
 		t.Fatal("nil store should be empty")
-	}
-}
-
-func TestTokenStoreEncryptDecryptRoundtrip(t *testing.T) {
-	ts, err := newTestTokenStore(t.TempDir()+"/tokens.json", "passphrase")
-	if err != nil {
-		t.Fatal(err)
-	}
-	enc, err := ts.encrypt([]byte("secret-token-payload"))
-	if err != nil {
-		t.Fatalf("encrypt: %v", err)
-	}
-	if enc == "" || strings.Contains(enc, "secret-token-payload") {
-		t.Fatalf("ciphertext = %q", enc)
-	}
-	dec, err := ts.decrypt(enc)
-	if err != nil {
-		t.Fatalf("decrypt: %v", err)
-	}
-	if string(dec) != "secret-token-payload" {
-		t.Fatalf("decrypted = %q", dec)
-	}
-
-	// Tampered ciphertext fails.
-	if _, err := ts.decrypt(enc[:4] + "AAAA" + enc[8:]); err == nil {
-		t.Fatal("expected decrypt failure on tamper")
 	}
 }
 

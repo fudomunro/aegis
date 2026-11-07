@@ -1,4 +1,4 @@
-package core
+package links
 
 import (
 	"crypto/rand"
@@ -13,47 +13,48 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// EntityLink is a user-confirmed cross-service identity. Playlists have no
+// Link is a user-confirmed cross-service identity. Playlists have no
 // catalog IDs, so the user explicitly says "these two playlists are the same"
 // instead of relying on name equality (issue #4).
-type EntityLink struct {
-	ID        string             `json:"id"`
-	Kind      string             `json:"kind"` // "playlist"
-	Sources   []EntityLinkSource `json:"sources"`
-	CreatedAt time.Time          `json:"created_at"`
-	Note      string             `json:"note,omitempty"`
+type Link struct {
+	ID        string    `json:"id"`
+	Kind      string    `json:"kind"` // "playlist"
+	Sources   []Source  `json:"sources"`
+	CreatedAt time.Time `json:"created_at"`
+	Note      string    `json:"note,omitempty"`
 }
 
-// EntityLinkSource pins one service-local object into a link group.
-type EntityLinkSource struct {
+// Source pins one service-local object into a link group.
+type Source struct {
 	Service string `json:"service"`
 	ID      string `json:"id"`
 }
 
-func (s EntityLinkSource) key() string {
+func (s Source) key() string {
 	return s.Service + ":" + s.ID
 }
 
-// EntityLinkStore persists user-confirmed identity links on disk.
-type EntityLinkStore struct {
+// Store persists user-confirmed identity links on disk.
+type Store struct {
 	mu    sync.RWMutex
 	path  string
-	Links []EntityLink `json:"links"`
+	Links []Link `json:"links"`
 }
 
-type entityLinkFile struct {
-	Version int          `json:"version"`
-	Links   []EntityLink `json:"links"`
+type file struct {
+	Version int    `json:"version"`
+	Links   []Link `json:"links"`
 }
 
 const entityLinkFileVersion = 1
 
-// NewEntityLinkStore loads or creates a link file (plain JSON; not secrets).
-func NewEntityLinkStore(path string) (*EntityLinkStore, error) {
-	st := &EntityLinkStore{path: path}
+// NewStore loads or creates a link file (plain JSON; not secrets).
+func NewStore(path string) (*Store, error) {
+	st := &Store{path: path}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -62,7 +63,7 @@ func NewEntityLinkStore(path string) (*EntityLinkStore, error) {
 		}
 		return nil, fmt.Errorf("reading entity link file: %w", err)
 	}
-	var f entityLinkFile
+	var f file
 	if err := json.Unmarshal(data, &f); err != nil {
 		return nil, fmt.Errorf("parsing entity link file: %w", err)
 	}
@@ -70,11 +71,11 @@ func NewEntityLinkStore(path string) (*EntityLinkStore, error) {
 	return st, nil
 }
 
-func (st *EntityLinkStore) saveLocked() error {
+func (st *Store) saveLocked() error {
 	if st.path == "" {
 		return nil
 	}
-	f := entityLinkFile{Version: entityLinkFileVersion, Links: st.Links}
+	f := file{Version: entityLinkFileVersion, Links: st.Links}
 	data, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
@@ -87,17 +88,17 @@ func (st *EntityLinkStore) saveLocked() error {
 	}
 	// Atomic: a crash mid-write must never leave a truncated link file,
 	// which would silently drop the user's confirmed identities.
-	return atomicWriteFile(st.path, append(data, '\n'), 0o644)
+	return shared.AtomicWriteFile(st.path, append(data, '\n'), 0o644)
 }
 
 // List returns a copy of all links.
-func (st *EntityLinkStore) List() []EntityLink {
+func (st *Store) List() []Link {
 	if st == nil {
 		return nil
 	}
 	st.mu.RLock()
 	defer st.mu.RUnlock()
-	out := make([]EntityLink, len(st.Links))
+	out := make([]Link, len(st.Links))
 	copy(out, st.Links)
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
@@ -105,28 +106,28 @@ func (st *EntityLinkStore) List() []EntityLink {
 
 // Add creates a link group. Sources must be unique service:id pairs and
 // include at least two entries.
-func (st *EntityLinkStore) Add(kind string, sources []EntityLinkSource, note string) (EntityLink, error) {
+func (st *Store) Add(kind string, sources []Source, note string) (Link, error) {
 	if st == nil {
-		return EntityLink{}, fmt.Errorf("entity links not configured")
+		return Link{}, fmt.Errorf("entity links not configured")
 	}
 	kind = strings.TrimSpace(kind)
 	if kind != "playlist" {
-		return EntityLink{}, fmt.Errorf("unsupported link kind %q (only playlist)", kind)
+		return Link{}, fmt.Errorf("unsupported link kind %q (only playlist)", kind)
 	}
 	if len(sources) < 2 {
-		return EntityLink{}, fmt.Errorf("need at least two sources to link")
+		return Link{}, fmt.Errorf("need at least two sources to link")
 	}
 	seen := map[string]bool{}
-	clean := make([]EntityLinkSource, 0, len(sources))
+	clean := make([]Source, 0, len(sources))
 	for _, src := range sources {
 		src.Service = strings.TrimSpace(src.Service)
 		src.ID = strings.TrimSpace(src.ID)
 		if src.Service == "" || src.ID == "" {
-			return EntityLink{}, fmt.Errorf("source service and id are required")
+			return Link{}, fmt.Errorf("source service and id are required")
 		}
 		k := src.key()
 		if seen[k] {
-			return EntityLink{}, fmt.Errorf("duplicate source %s", k)
+			return Link{}, fmt.Errorf("duplicate source %s", k)
 		}
 		seen[k] = true
 		clean = append(clean, src)
@@ -138,12 +139,12 @@ func (st *EntityLinkStore) Add(kind string, sources []EntityLinkSource, note str
 	for _, existing := range st.Links {
 		for _, src := range existing.Sources {
 			if seen[src.key()] {
-				return EntityLink{}, fmt.Errorf("source %s already linked in %s", src.key(), existing.ID)
+				return Link{}, fmt.Errorf("source %s already linked in %s", src.key(), existing.ID)
 			}
 		}
 	}
 	id := "lnk_" + randomHexID()
-	link := EntityLink{
+	link := Link{
 		ID:        id,
 		Kind:      kind,
 		Sources:   clean,
@@ -153,14 +154,14 @@ func (st *EntityLinkStore) Add(kind string, sources []EntityLinkSource, note str
 	st.Links = append(st.Links, link)
 	if err := st.saveLocked(); err != nil {
 		st.Links = st.Links[:len(st.Links)-1]
-		return EntityLink{}, err
+		return Link{}, err
 	}
 	slog.Info("entity link created", "id", id, "kind", kind, "sources", len(clean))
 	return link, nil
 }
 
 // Delete removes a link by id.
-func (st *EntityLinkStore) Delete(id string) bool {
+func (st *Store) Delete(id string) bool {
 	if st == nil {
 		return false
 	}
@@ -181,7 +182,7 @@ func (st *EntityLinkStore) Delete(id string) bool {
 
 // PlaylistLinkKey returns a stable merge key when any playlist source is in
 // an explicit link group; otherwise "".
-func (st *EntityLinkStore) PlaylistLinkKey(p types.Playlist) string {
+func (st *Store) PlaylistLinkKey(p types.Playlist) string {
 	if st == nil || len(p.Sources) == 0 {
 		return ""
 	}

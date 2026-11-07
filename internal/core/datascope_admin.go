@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // HandleAdminDataScopes manages invite tokens — the data-scope credentials
@@ -34,11 +35,11 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			shared.WriteJSON(w, map[string]any{"data_scopes": s.scopes.List()})
 		case http.MethodPost:
-			body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+			body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 			if !ok {
 				return
 			}
-			var req DataScopeCreateRequest
+			var req scopes.CreateRequest
 			if err := json.Unmarshal(body, &req); err != nil {
 				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
@@ -104,11 +105,11 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		}
 		shared.WriteJSON(w, map[string]any{"scope": view})
 	case r.Method == http.MethodPatch || r.Method == http.MethodPut:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
-		var req DataScopeUpdateRequest
+		var req scopes.UpdateRequest
 		if err := json.Unmarshal(body, &req); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return

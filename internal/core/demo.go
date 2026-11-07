@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // Demo mode (issue #217) is a deployment profile for a public synthetic
@@ -44,7 +45,7 @@ func isDemoServiceEndpoint(svc *Service) bool {
 
 // validateDemoConfig enforces demo lockdown after config + scopes load.
 // It returns a fatal error when the instance is not safe to expose.
-func validateDemoConfig(cfg *Config, scopes *DataScopeStore) error {
+func validateDemoConfig(cfg *Config, scopes *scopes.Store) error {
 	if cfg != nil {
 		for _, svc := range cfg.ServiceSnapshots() {
 			if svc.Action == "block" {
@@ -61,17 +62,6 @@ func validateDemoConfig(cfg *Config, scopes *DataScopeStore) error {
 	return nil
 }
 
-// ForceReadOnlyAll marks every data scope read-only (demo lockdown).
-func (s *DataScopeStore) ForceReadOnlyAll() {
-	if s == nil {
-		return
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	for _, sc := range s.byID {
-		sc.ReadOnly = true
-	}
-}
 
 // demoLockdown refuses mutating admin/OAuth routes in demo mode. GET/HEAD
 // stay available for health and read-only admin views.

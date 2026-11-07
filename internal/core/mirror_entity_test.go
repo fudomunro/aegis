@@ -8,7 +8,9 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // davWriteMock is a CardDAV PUT sink for mirror tests (issue #146).
@@ -60,14 +62,14 @@ func (d *davWriteMock) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestRecordMirrorItemCopy_StoresETagWatermark(t *testing.T) {
-	ledger, err := OpenCopyLedger(t.TempDir() + "/copy_ledger.db")
+	ledger, err := copies.Open(t.TempDir() + "/copy_ledger.db")
 	if err != nil {
-		t.Fatalf("OpenCopyLedger: %v", err)
+		t.Fatalf("copies.Open: %v", err)
 	}
 	defer ledger.Close()
-	s := &Server{copies: ledger}
+	s := &Server{copyLedger: ledger}
 	s.recordMirrorItemCopy(MirrorKindContacts, "Ada Lovelace", "dav-contacts", "ada.vcf", "Ada Lovelace", `"etag-1"`)
-	recs := ledger.List(CopyFilter{Kind: MirrorKindContacts})
+	recs := ledger.List(copies.Filter{Kind: MirrorKindContacts})
 	if len(recs) != 1 {
 		t.Fatalf("got %d records", len(recs))
 	}
@@ -116,8 +118,8 @@ func TestHandleEntityMirror_ContactsDryRun(t *testing.T) {
 
 	srv := testServerWithBase(&Config{Services: []Service{
 		{ID: connectors.CardDAVServiceID, Name: "DAV Contacts", Action: "inject",
-			Endpoint: ts.URL + "/remote.php/dav/addressbooks/alice/default/",
-			Headers:  map[string]string{"X-DAV-Username": "u", "X-DAV-Password": "p"},
+			Endpoint:    ts.URL + "/remote.php/dav/addressbooks/alice/default/",
+			Headers:     map[string]string{"X-DAV-Username": "u", "X-DAV-Password": "p"},
 			GrantLimits: types.Permissions{"contacts": types.AccessRead}},
 		{ID: "google", Name: "Google Contacts", Action: "inject",
 			Endpoint:    people.URL,
@@ -125,7 +127,7 @@ func TestHandleEntityMirror_ContactsDryRun(t *testing.T) {
 	}}, "https://aegis.example.com")
 	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
 	srv.connectors["google"] = connectors.NewGoogleContactsConnector(srv)
-	srv.tokens.Save("google", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("google", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.CacheSet("carddav:collection", ts.URL+"/remote.php/dav/addressbooks/alice/default/", time.Hour)
 
 	req := MirrorRequest{Kind: MirrorKindContacts, SourceService: connectors.CardDAVServiceID,

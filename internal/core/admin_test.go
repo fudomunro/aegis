@@ -10,6 +10,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -155,7 +157,7 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Tokens["spotify"] = &OAuthToken{
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{
 		AccessToken:  "access-token-secret",
 		RefreshToken: "refresh-token-secret",
 		Expiry:       time.Now().Add(time.Hour),
@@ -280,7 +282,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var st MailArchiveStatus
+	var st mail.Status
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("status json: %v", err)
 	}
@@ -308,7 +310,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	}))
 	t.Cleanup(up.Close)
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
-	srv.tokens.Save(connectors.GoogleGmailServiceID, &OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	req = httptest.NewRequest("POST", "/v1/admin/mail/sync", strings.NewReader(`{"max_messages":5,"reset_cursor":true}`))
 	req.Header.Set("X-Api-Key", "test-key")

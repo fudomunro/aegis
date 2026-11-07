@@ -106,14 +106,14 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 		t.Fatalf("Dir = %q, want %q", paths.Dir, dir)
 	}
 	checks := map[string]string{
-		"Config":      filepath.Join(dir, "aegis.json"),
-		"DataGrants":  filepath.Join(dir, "data_grants.json"),
-		"Tokens":      filepath.Join(dir, "tokens.json"),
-		"Links":       filepath.Join(dir, "entity_links.json"),
-		"CopyLedger":  filepath.Join(dir, "copy_ledger.db"),
-		"MailArchive": filepath.Join(dir, "mail-archive.db"),
-		"LogFile":     filepath.Join(dir, "logs", "aegis.log"),
-		"LogsDir":     filepath.Join(dir, "logs"),
+		"Config":       filepath.Join(dir, "aegis.json"),
+		"DataGrants":   filepath.Join(dir, "data_grants.json"),
+		"Tokens":       filepath.Join(dir, "tokens.json"),
+		"Links":        filepath.Join(dir, "entity_links.json"),
+		"copies.Ledger":   filepath.Join(dir, "copy_ledger.db"),
+		"mail.Archive": filepath.Join(dir, "mail-archive.db"),
+		"LogFile":      filepath.Join(dir, "logs", "aegis.log"),
+		"LogsDir":      filepath.Join(dir, "logs"),
 	}
 	// Reflect without getters: compare via struct fields explicitly.
 	if paths.Config != checks["Config"] {
@@ -128,11 +128,11 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	if paths.Links != checks["Links"] {
 		t.Fatalf("Links = %q, want %q", paths.Links, checks["Links"])
 	}
-	if paths.CopyLedger != checks["CopyLedger"] {
-		t.Fatalf("CopyLedger = %q, want %q", paths.CopyLedger, checks["CopyLedger"])
+	if paths.CopyLedger != checks["copies.Ledger"] {
+		t.Fatalf("copies.Ledger = %q, want %q", paths.CopyLedger, checks["copies.Ledger"])
 	}
-	if paths.MailArchive != checks["MailArchive"] {
-		t.Fatalf("MailArchive = %q, want %q", paths.MailArchive, checks["MailArchive"])
+	if paths.MailArchive != checks["mail.Archive"] {
+		t.Fatalf("mail.Archive = %q, want %q", paths.MailArchive, checks["mail.Archive"])
 	}
 	if paths.LogFile != checks["LogFile"] {
 		t.Fatalf("LogFile = %q, want %q", paths.LogFile, checks["LogFile"])
@@ -146,12 +146,12 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 	dir := t.TempDir()
 	ext := t.TempDir()
 	paths, err := ResolveStatePaths(StatePathOverrides{
-		Dir:         dir,
-		Config:      filepath.Join(ext, "custom.json"),
+		Dir:        dir,
+		Config:     filepath.Join(ext, "custom.json"),
 		DataGrants: filepath.Join(ext, "data_grants.json"),
-		Tokens:      filepath.Join(ext, "tok.json"),
-		Links:       filepath.Join(ext, "links.json"),
-		CopyLedger:  filepath.Join(ext, "copy.db"),
+		Tokens:     filepath.Join(ext, "tok.json"),
+		Links:      filepath.Join(ext, "links.json"),
+		CopyLedger: filepath.Join(ext, "copy.db"),
 		// CopyLedgerSet true with non-empty path
 		CopyLedgerSet: true,
 		MailArchive:   filepath.Join(ext, "mail.db"),
@@ -174,10 +174,10 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 		t.Fatalf("Links = %q", paths.Links)
 	}
 	if paths.CopyLedger != filepath.Join(ext, "copy.db") {
-		t.Fatalf("CopyLedger = %q", paths.CopyLedger)
+		t.Fatalf("copies.Ledger = %q", paths.CopyLedger)
 	}
 	if paths.MailArchive != filepath.Join(ext, "mail.db") {
-		t.Fatalf("MailArchive = %q", paths.MailArchive)
+		t.Fatalf("mail.Archive = %q", paths.MailArchive)
 	}
 	// Defaults still under data dir when not overridden.
 	if paths.LogsDir != filepath.Join(dir, "logs") {
@@ -196,7 +196,7 @@ func TestResolveStatePaths_MailArchiveExplicitEmptyDisables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if paths.MailArchive != "" {
-		t.Fatalf("MailArchive = %q, want empty (disabled)", paths.MailArchive)
+		t.Fatalf("mail.Archive = %q, want empty (disabled)", paths.MailArchive)
 	}
 }
 
@@ -211,7 +211,7 @@ func TestResolveStatePaths_CopyLedgerExplicitEmptyDisables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if paths.CopyLedger != "" {
-		t.Fatalf("CopyLedger = %q, want empty (disabled)", paths.CopyLedger)
+		t.Fatalf("copies.Ledger = %q, want empty (disabled)", paths.CopyLedger)
 	}
 }
 
@@ -257,25 +257,6 @@ func TestEnsureDataDir_CreatesPrivateTree(t *testing.T) {
 func TestEnsureDataDir_Empty(t *testing.T) {
 	if err := EnsureDataDir(""); err == nil {
 		t.Fatal("expected error for empty data dir")
-	}
-}
-
-func TestExpandUserPath(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("no home dir")
-	}
-	if got := expandUserPath("~/x.json"); got != filepath.Join(home, "x.json") {
-		t.Fatalf("got %q", got)
-	}
-	if got := expandUserPath("~"); got != home {
-		t.Fatalf("got %q", got)
-	}
-	if got := expandUserPath("/abs/path"); got != "/abs/path" {
-		t.Fatalf("got %q", got)
-	}
-	if got := expandUserPath("  "); got != "" {
-		t.Fatalf("got %q", got)
 	}
 }
 

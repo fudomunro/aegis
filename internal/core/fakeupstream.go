@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"log/slog"
 	"strings"
 	"time"
@@ -30,7 +31,7 @@ func seedFakeUpstreamTokens(srv *Server) int {
 		if srv.GetValidToken(svc.ID, slog.Default()) != "" {
 			continue
 		}
-		srv.tokens.Save(svc.ID, &OAuthToken{
+		srv.tokens.Save(svc.ID, &tokens.OAuthToken{
 			AccessToken: "fake-upstream-token",
 			Expiry:      time.Now().Add(10 * 365 * 24 * time.Hour),
 		})

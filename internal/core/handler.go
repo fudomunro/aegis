@@ -12,8 +12,16 @@ import (
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -97,15 +105,15 @@ type Server struct {
 	// cache so library invalidation and aggregate churn never spend the
 	// rate-limited lookup budget re-resolving the same tracks.
 	mbCache     *Cache
-	tokens      *TokenStore
-	oauthStates *StateStore
+	tokens      *tokens.TokenStore
+	oauthStates *shared.StateStore
 	// rl damps credential guessing on auth/token surfaces (issue #253).
 	rl *rateLimiter
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
-	refreshFlight tokenFlight
+	refreshFlight shared.FlightGroup[*tokens.OAuthToken]
 	// libraryFlight coalesces concurrent aggregate fetches per cache key
 	// (issue #273) so parallel identical requests share one provider fan-out.
-	libraryFlight flightGroup[any]
+	libraryFlight shared.FlightGroup[any]
 	// indexWG tracks async search-index write-behind goroutines (issue #273)
 	// so tests and shutdown can wait for them.
 	indexWG    sync.WaitGroup
@@ -113,12 +121,12 @@ type Server struct {
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
-	links *EntityLinkStore
+	links *links.Store
 	// ownership holds per-kind user confirmation that Aegis already manages
 	// all the data of that kind the user cares about (issue #165).
-	ownership *OwnershipStore
+	ownership *ownership.Store
 	// copies is the durable copy ledger (issue #76). May be disabled.
-	copies *CopyLedger
+	copyLedger *copies.Ledger
 	// syncJobs is the durable sync job queue (issue #227). May be disabled.
 	// Co-located with copies by default so completion and copy stamps share
 	// one transaction.
@@ -137,12 +145,12 @@ type Server struct {
 	mirrorSourceFn func(serviceID, kind string) (mirrorSource, error)
 	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
 	// mail is the optional local compressed mail archive (/v1/mail/*).
-	mail *MailArchive
+	mail *mail.Archive
 	// mailIngests are the archive ingest sources keyed by service id
 	// (issue #286). Wired beside connectors; see mail_ingest.go.
 	mailIngests map[string]connectors.MailIngest
 	// search is the local library search index (issue #178). May be disabled.
-	search *SearchIndex
+	search *search.Index
 	// quicken is the optional local Quicken import store (issue #141).
 	quicken *connectors.QuickenStore
 	// timeline is the optional local Google Timeline import store (issue #142).
@@ -155,7 +163,7 @@ type Server struct {
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *HookHealth
 	// audit is the durable access audit log (issue #105). May be disabled.
-	audit *AuditLog
+	audit *audit.Log
 	// prom holds process-lifetime counters for GET /metrics (issue #105).
 	prom *PromMetrics
 	// maintenanceIssues is the GitHub-issue ticket surface for the sync
@@ -169,14 +177,14 @@ type Server struct {
 	apps *AppStore
 	// scopes resolves data-scope API keys to principal → dataset partitions
 	// (docs/data-scopes.md). May be nil (legacy single-user).
-	scopes *DataScopeStore
+	scopes *scopes.Store
 	// demoMode locks the instance to synthetic fixtures and a read-only
 	// surface (issue #217). See demo.go.
 	demoMode bool
 	// grants holds short-lived consent codes from the authorize page.
 	grants *GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
-	csrfTokens *StateStore
+	csrfTokens *shared.StateStore
 	// udts holds user-defined type schemas loaded from the user-types
 	// directory (issue #15). May be nil when none are configured.
 	udts *userDefinedRegistry
@@ -259,7 +267,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 		// principal with a dataset partition. They are agent-tier and never
 		// admin. Prefer them over the shared -api-key when both could match.
 		if sc := s.authenticateScope(r); sc != nil {
-			r = withDataScope(r, sc)
+			r = scopes.WithDataScope(r, sc)
 			if !s.allowScopeMethod(w, r, sc) {
 				return
 			}
@@ -500,7 +508,7 @@ func presentedAPIKey(r *http.Request) string {
 // authenticateScope resolves a data-scope API key to its principal scope
 // (docs/data-scopes.md). Nil when the store is missing or the key is not a
 // scope key (legacy shared agent key falls through to checkAPIKey).
-func (s *Server) authenticateScope(r *http.Request) *DataScope {
+func (s *Server) authenticateScope(r *http.Request) *scopes.Scope {
 	if s == nil || s.scopes == nil {
 		return nil
 	}
@@ -510,7 +518,7 @@ func (s *Server) authenticateScope(r *http.Request) *DataScope {
 // allowScopeMethod enforces read_only scopes. Mutating agent methods are
 // rejected except the Aperture pre-request hook, which is a read-only
 // classification webhook. Writes the deny response and returns false.
-func (s *Server) allowScopeMethod(w http.ResponseWriter, r *http.Request, sc *DataScope) bool {
+func (s *Server) allowScopeMethod(w http.ResponseWriter, r *http.Request, sc *scopes.Scope) bool {
 	if sc == nil || !sc.ReadOnly {
 		return true
 	}
@@ -564,7 +572,7 @@ func (s *Server) deny(w http.ResponseWriter, r *http.Request, id *PeerIdentity, 
 func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIdentity, status int, reason string) {
 	attrs := []any{"remote", s.clientIPFor(r), "peer", r.RemoteAddr, "path", r.URL.Path, "reason", reason, "status", status}
 	agent := "api-key"
-	if sc := DataScopeFrom(r); sc != nil && sc.ID != "" {
+	if sc := scopes.From(r); sc != nil && sc.ID != "" {
 		agent = "scope:" + sc.ID
 		attrs = append(attrs, "scope", sc.ID)
 	} else if id != nil {
@@ -587,7 +595,7 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 		Agent:    agent,
 		Surface:  MetricSurfaceAuth,
 		Target:   auditRouteFamily(r),
-		Decision: DecisionDeny,
+		Decision: audit.DecisionDeny,
 		Reason:   "auth",
 		Method:   requestMethod(r),
 		Status:   status,
@@ -766,10 +774,10 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 	matched := s.config.FindMatchingServices(payload.UserMessage)
 	// Data-scope isolation: never match (or block on) services outside this
 	// principal's dataset partition (docs/data-scopes.md).
-	if scope := DataScopeFrom(r); scope != nil {
+	if scope := scopes.From(r); scope != nil {
 		visible := make([]Service, 0, len(matched))
 		for i := range matched {
-			if serviceVisibleToScope(&matched[i], scope) {
+			if scopes.ServiceVisible(matched[i].Dataset, scope) {
 				visible = append(visible, matched[i])
 			}
 		}

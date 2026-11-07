@@ -33,7 +33,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			shared.WriteJSON(w, map[string]any{"apps": s.apps.List()})
 		case http.MethodPost:
-			body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+			body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 			if !ok {
 				return
 			}
@@ -103,7 +103,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 		}
 		shared.WriteJSON(w, map[string]any{"app": view})
 	case r.Method == http.MethodPatch || r.Method == http.MethodPut:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}

@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -312,7 +313,7 @@ func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
 		Endpoint: upstream.URL,
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("google-photos", &OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("google-photos", &tokens.OAuthToken{AccessToken: "test-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGooglePhotosConnector(srv)
 

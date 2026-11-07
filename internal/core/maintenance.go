@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Maintenance signals (issue #86): the phase-1 observation bundle the sync
@@ -40,7 +41,7 @@ type MaintenanceSignals struct {
 	Version    string           `json:"version"`
 	Commit     string           `json:"commit"`
 	Sync       *MaintenanceSync `json:"sync,omitempty"`
-	Freshness  []CopyFreshness  `json:"freshness,omitempty"`
+	Freshness  []copies.Freshness  `json:"freshness,omitempty"`
 }
 
 // MaintenanceSync is the sync-queue slice of a signal bundle.
@@ -109,8 +110,8 @@ func (s *Server) CollectMaintenanceSignals() MaintenanceSignals {
 		}
 		sig.Sync = sync
 	}
-	if s.copies != nil {
-		sig.Freshness = s.copies.FreshnessRollup()
+	if s.copyLedger != nil {
+		sig.Freshness = s.copyLedger.FreshnessRollup()
 	}
 	return sig
 }

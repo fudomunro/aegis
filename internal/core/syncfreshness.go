@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Copy freshness checks (issue #227 phase 2, closing the observational
@@ -27,7 +28,7 @@ type CopyChecker interface {
 	// CheckFetches the current version descriptor for one copy. ok is false
 	// when the check could not be made (auth, transient error, unsupported
 	// shape) and the ledger row must be left alone.
-	Check(ctx context.Context, rec CopyRecord) (cur CopyVersion, exists bool, ok bool, err error)
+	Check(ctx context.Context, rec copies.Record) (cur copies.Version, exists bool, ok bool, err error)
 }
 
 // CheckerRegistry maps a copy-location service id to its checker.
@@ -80,26 +81,26 @@ func (r *CheckerRegistry) Services() []string {
 // Optimistic copies (mail-like snapshots) can only report presence — their
 // contract is "material newer than the watermark is expected", so a check
 // confirms the copy still exists and leaves drift to a re-import.
-func compareCopyVersion(mode string, want, got CopyVersion, exists bool) string {
+func compareCopyVersion(mode string, want, got copies.Version, exists bool) string {
 	if !exists {
-		return CopyStatusMissing
+		return copies.CopyStatusMissing
 	}
-	if strings.EqualFold(mode, CopySyncModeOptimistic) {
-		return CopyStatusInSync
+	if strings.EqualFold(mode, copies.CopySyncModeOptimistic) {
+		return copies.CopyStatusInSync
 	}
 	if want.SnapshotID != "" && got.SnapshotID != "" && want.SnapshotID != got.SnapshotID {
-		return CopyStatusStale
+		return copies.CopyStatusStale
 	}
 	if want.ETag != "" && got.ETag != "" && want.ETag != got.ETag {
-		return CopyStatusStale
+		return copies.CopyStatusStale
 	}
 	if want.ContentHash != "" && got.ContentHash != "" && want.ContentHash != got.ContentHash {
-		return CopyStatusStale
+		return copies.CopyStatusStale
 	}
 	if want.ItemCount > 0 && got.ItemCount > 0 && want.ItemCount != got.ItemCount {
-		return CopyStatusStale
+		return copies.CopyStatusStale
 	}
-	return CopyStatusInSync
+	return copies.CopyStatusInSync
 }
 
 // freshnessOutcome is what one row's check produced.
@@ -128,7 +129,7 @@ func NewFreshnessEngine(srv *Server, checkers *CheckerRegistry) *FreshnessEngine
 
 // checkOne evaluates a single copy row. ok is false when the row must be left
 // as-is (no checker, no auth, transient failure).
-func (e *FreshnessEngine) checkOne(ctx context.Context, rec CopyRecord) freshnessOutcome {
+func (e *FreshnessEngine) checkOne(ctx context.Context, rec copies.Record) freshnessOutcome {
 	checker, ok := e.checkers.For(rec.Service)
 	if !ok {
 		return freshnessOutcome{Skip: "no_checker"}
@@ -162,14 +163,14 @@ type FreshnessBatch struct {
 // one job step.
 func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int64, limit int) (FreshnessBatch, error) {
 	out := FreshnessBatch{Kind: kind, AfterID: afterID, NextAfter: afterID}
-	if e == nil || e.srv == nil || e.srv.copies == nil || !e.srv.copies.Enabled() {
+	if e == nil || e.srv == nil || e.srv.copyLedger == nil || !e.srv.copyLedger.Enabled() {
 		out.Done = true
 		return out, nil
 	}
 	if limit <= 0 || limit > 200 {
 		limit = 50
 	}
-	rows := e.srv.copies.ListForCheck(kind, afterID, limit)
+	rows := e.srv.copyLedger.ListForCheck(kind, afterID, limit)
 	for _, row := range rows {
 		rec := row.Rec
 		if err := ctx.Err(); err != nil {
@@ -184,17 +185,17 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 					"external_id", rec.ExternalID, "reason", res.Skip)
 			}
 		} else {
-			if err := e.srv.copies.MarkChecked(rec.Kind, rec.EntityKey, rec.Service, rec.ExternalID, res.Status); err != nil {
+			if err := e.srv.copyLedger.MarkChecked(rec.Kind, rec.EntityKey, rec.Service, rec.ExternalID, res.Status); err != nil {
 				e.logger.Warn("copy freshness stamp failed",
 					"kind", rec.Kind, "service", rec.Service, "error", err)
 			}
 			out.Checked++
 			switch res.Status {
-			case CopyStatusStale:
+			case copies.CopyStatusStale:
 				out.Stale++
-			case CopyStatusMissing:
+			case copies.CopyStatusMissing:
 				out.Missing++
-			case CopyStatusInSync:
+			case copies.CopyStatusInSync:
 				out.InSync++
 			}
 		}
@@ -222,28 +223,28 @@ type musicMirrorChecker struct {
 func (c *musicMirrorChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
-func (c *musicMirrorChecker) Check(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+func (c *musicMirrorChecker) Check(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
 	p, ok := c.srv.connectors[c.service].(types.PlaylistMetaProvider)
 	if !ok {
-		return CopyVersion{}, false, false, nil
+		return copies.Version{}, false, false, nil
 	}
 	// Liked-tracks mirrors have no target id; the only comparable token is
 	// how many items the target's saved list holds now.
 	if strings.TrimSpace(rec.ExternalID) == "" {
 		n, err := p.SavedTrackCount(ctx)
 		if err != nil {
-			return CopyVersion{}, false, false, err
+			return copies.Version{}, false, false, err
 		}
-		return CopyVersion{ItemCount: n}, true, true, nil
+		return copies.Version{ItemCount: n}, true, true, nil
 	}
 	meta, found, err := p.GetPlaylistMeta(ctx, rec.ExternalID)
 	if err != nil {
-		return CopyVersion{}, false, false, err
+		return copies.Version{}, false, false, err
 	}
 	if !found {
-		return CopyVersion{}, false, true, nil
+		return copies.Version{}, false, true, nil
 	}
-	return CopyVersion{
+	return copies.Version{
 		ExternalID: rec.ExternalID,
 		SnapshotID: meta.VersionToken,
 		ItemCount:  meta.ItemCount,
@@ -265,23 +266,23 @@ type snapshotChecker struct {
 func (c *snapshotChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
-func (c *snapshotChecker) Check(_ context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
 	p, ok := c.srv.mailIngestFor(c.service).(types.SnapshotProber)
 	if !ok {
-		return CopyVersion{}, false, false, nil
+		return copies.Version{}, false, false, nil
 	}
 	path := strings.TrimSpace(rec.ExternalID)
 	if path == "" {
-		return CopyVersion{}, false, false, nil
+		return copies.Version{}, false, false, nil
 	}
 	exists, name, err := p.SnapshotProbe(path)
 	if err != nil {
-		return CopyVersion{}, false, false, err
+		return copies.Version{}, false, false, err
 	}
 	if !exists {
-		return CopyVersion{}, false, true, nil
+		return copies.Version{}, false, true, nil
 	}
-	return CopyVersion{ExternalID: path, Name: name}, true, true, nil
+	return copies.Version{ExternalID: path, Name: name}, true, true, nil
 }
 
 // newCheckerRegistry wires the checkers this build supports. Music services

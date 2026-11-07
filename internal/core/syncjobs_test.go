@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 func testJobStore(t *testing.T) *JobStore {
@@ -1112,9 +1113,9 @@ func TestPromMetrics_SyncSeries(t *testing.T) {
 func TestJobStore_SharedHandleCoLocates(t *testing.T) {
 	dir := t.TempDir()
 	ledgerPath := filepath.Join(dir, "copy_ledger.db")
-	ledger, err := OpenCopyLedger(ledgerPath)
+	ledger, err := copies.Open(ledgerPath)
 	if err != nil {
-		t.Fatalf("OpenCopyLedger: %v", err)
+		t.Fatalf("copies.Open: %v", err)
 	}
 	defer ledger.Close()
 	if ledger.DB() == nil {
@@ -1142,7 +1143,7 @@ func TestJobStore_SharedHandleCoLocates(t *testing.T) {
 
 	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
 	// Both tables live in one file: a copy row and a job row share the handle.
-	if _, err := ledger.Upsert(CopyRecord{
+	if _, err := ledger.Upsert(copies.Record{
 		Kind: "messages", EntityKey: "m1", Service: "google-gmail", ExternalID: "g1",
 	}); err != nil {
 		t.Fatalf("Upsert on shared handle: %v", err)
@@ -1194,9 +1195,9 @@ func TestEnqueue_UpsertResolvesOwnRow(t *testing.T) {
 
 	// Same hazard with a shared handle: a copy-ledger insert between the two
 	// enqueues must not leak its rowid into the job lookup.
-	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
+	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
-		t.Fatalf("OpenCopyLedger: %v", err)
+		t.Fatalf("copies.Open: %v", err)
 	}
 	defer ledger.Close()
 	shared, err := OpenJobStore(ledger.DB(), ledger.Path())
@@ -1204,13 +1205,13 @@ func TestEnqueue_UpsertResolvesOwnRow(t *testing.T) {
 		t.Fatalf("OpenJobStore(shared): %v", err)
 	}
 	x := mustEnqueue(t, shared, SyncEnqueue{Kind: "photos", JobType: "ingest", Service: "x"})
-	if _, err := ledger.Upsert(CopyRecord{
+	if _, err := ledger.Upsert(copies.Record{
 		Kind: "photos", EntityKey: "p1", Service: "x", ExternalID: "e1",
 	}); err != nil {
 		t.Fatalf("Upsert: %v", err)
 	}
 	y := mustEnqueue(t, shared, SyncEnqueue{Kind: "photos", JobType: "ingest", Service: "y"})
-	if _, err := ledger.Upsert(CopyRecord{
+	if _, err := ledger.Upsert(copies.Record{
 		Kind: "photos", EntityKey: "p2", Service: "y", ExternalID: "e2",
 	}); err != nil {
 		t.Fatalf("Upsert: %v", err)

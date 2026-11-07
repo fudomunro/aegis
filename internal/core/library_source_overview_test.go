@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -46,39 +47,39 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	mail := openTestMailArchive(t)
-	srv.mail = mail
+	mailArch := openTestMailArchive(t)
+	srv.mail = mailArch
 
 	// Inventory: 3 Gmail-synced + 5 Takeout rows in the archive.
 	for i := 0; i < 3; i++ {
-		rec := MailArchiveRecord{
+		rec := mail.Record{
 			Service:     connectors.GoogleGmailServiceID,
 			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          "g" + string(rune('a'+i)),
 			Subject:     "Gmail " + string(rune('a'+i)),
 		}
-		if err := mail.Upsert(rec); err != nil {
+		if err := mailArch.Upsert(rec); err != nil {
 			t.Fatalf("upsert gmail: %v", err)
 		}
 	}
 	for i := 0; i < 5; i++ {
-		rec := MailArchiveRecord{
+		rec := mail.Record{
 			Service:     connectors.TakeoutServiceID,
 			ServiceName: connectors.TakeoutServiceName,
 			ID:          "t" + string(rune('a'+i)),
 			Subject:     "Takeout " + string(rune('a'+i)),
 		}
-		if err := mail.Upsert(rec); err != nil {
+		if err := mailArch.Upsert(rec); err != nil {
 			t.Fatalf("upsert takeout: %v", err)
 		}
 	}
-	if err := mail.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
+	if err := mailArch.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
 		LastSyncAt: "2026-10-11T00:00:00Z",
 		Done:       true,
 	}); err != nil {
 		t.Fatalf("save gmail cursor: %v", err)
 	}
-	if err := mail.SaveSyncCursor(connectors.TakeoutServiceID, types.MailIngestCursor{
+	if err := mailArch.SaveSyncCursor(connectors.TakeoutServiceID, types.MailIngestCursor{
 		LastSyncAt: "2026-08-24T00:00:00Z",
 		Done:       true,
 	}); err != nil {

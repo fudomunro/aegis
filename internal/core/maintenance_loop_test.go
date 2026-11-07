@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 // TestMaintenanceLoop_FakeDriftToTicket drives the sync-maintenance loop
@@ -23,7 +24,7 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{
 		ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: up.URL,
 	}}}, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.syncJobs = testJobStore(t)
 	srv.syncRunners = NewRunnerRegistry()

@@ -181,7 +181,7 @@ func (s *Server) issueCSRFToken() (string, error) {
 	}
 	token := "aeg_csrf_" + base64.RawURLEncoding.EncodeToString(raw)
 	if s.csrfTokens == nil {
-		s.csrfTokens = NewStateStore()
+		s.csrfTokens = shared.NewStateStore()
 	}
 	s.csrfTokens.Set(token, true, csrfTokenTTL)
 	return token, nil

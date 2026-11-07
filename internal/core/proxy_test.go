@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -306,13 +308,13 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		config:      cfg,
 		cache:       NewCache(),
 		mbCache:     NewCache(),
-		tokens:      &TokenStore{Tokens: make(map[string]*OAuthToken), Secrets: make(map[string]string)},
-		oauthStates: NewStateStore(),
+		tokens:      &tokens.TokenStore{Tokens: make(map[string]*tokens.OAuthToken), Secrets: make(map[string]string)},
+		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
 		metrics:     NewAccessMetrics(defaultMetricsCapacity),
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 		prom:        NewPromMetrics(),
-		csrfTokens:  NewStateStore(),
+		csrfTokens:  shared.NewStateStore(),
 		grants:      NewGrantStore(),
 	}
 }

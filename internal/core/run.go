@@ -8,6 +8,13 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 	"io"
 	"log/slog"
 	"net"
@@ -16,6 +23,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 func Run() {
@@ -51,7 +60,7 @@ func Run() {
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	maintenanceRepo := flag.String("maintenance-repo", "", "GitHub repo (owner/name) where sync-maintenance tickets are opened as issues (reads AEGIS_MAINTENANCE_REPO if empty; empty disables ticketing)")
 	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
-	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
+	auditRetentionDays := flag.Int("audit-retention-days", audit.DefaultRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
 	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit")
@@ -248,7 +257,7 @@ func Run() {
 	}
 	slog.Info("config loaded", "path", paths.Config, "services", cfg.ServiceCount(), "data_grants_file", paths.DataGrants)
 
-	tokens, err := NewTokenStore(paths.Tokens, *tokenPass)
+	tokens, err := tokens.NewTokenStore(paths.Tokens, *tokenPass)
 	if err != nil {
 		slog.Error("failed to load token store", "path", paths.Tokens, "error", err)
 		os.Exit(1)
@@ -260,13 +269,13 @@ func Run() {
 		os.Exit(1)
 	}
 
-	links, err := NewEntityLinkStore(paths.Links)
+	linkStore, err := links.NewStore(paths.Links)
 	if err != nil {
 		slog.Error("failed to load entity link store", "path", paths.Links, "error", err)
 		os.Exit(1)
 	}
 
-	ownership, err := NewOwnershipStore(paths.Ownership)
+	ownership, err := ownership.NewStore(paths.Ownership)
 	if err != nil {
 		slog.Error("failed to load ownership state", "path", paths.Ownership, "error", err)
 		os.Exit(1)
@@ -278,7 +287,7 @@ func Run() {
 		os.Exit(1)
 	}
 
-	scopes, err := NewDataScopeStore(paths.DataScopes)
+	scopes, err := scopes.NewStore(paths.DataScopes)
 	if err != nil {
 		slog.Error("failed to load data scopes", "path", paths.DataScopes, "error", err)
 		os.Exit(1)
@@ -295,14 +304,14 @@ func Run() {
 		slog.Info("demo mode: all data scopes forced read-only")
 	}
 
-	copies, err := OpenCopyLedger(paths.CopyLedger)
+	copyLedger, err := copies.Open(paths.CopyLedger)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", paths.CopyLedger, "error", err)
 		os.Exit(1)
 	}
-	if copies != nil {
-		defer copies.Close()
-		slog.Info("copy ledger ready", "path", copies.Path(), "enabled", copies.Enabled())
+	if copyLedger != nil {
+		defer copyLedger.Close()
+		slog.Info("copy ledger ready", "path", copyLedger.Path(), "enabled", copyLedger.Enabled())
 	}
 
 	// Sync job queue (issue #227). Defaults to the copy-ledger file so a
@@ -311,7 +320,7 @@ func Run() {
 	// explicit -sync-jobs opens its own file.
 	var syncShared *sql.DB
 	if paths.SyncJobs != "" && paths.SyncJobs == paths.CopyLedger {
-		syncShared = copies.DB()
+		syncShared = copyLedger.DB()
 	}
 	syncStore, err := OpenJobStore(syncShared, paths.SyncJobs)
 	if err != nil {
@@ -340,7 +349,7 @@ func Run() {
 		}
 	}
 
-	mailArchive, err := OpenMailArchive(paths.MailArchive)
+	mailArchive, err := mail.Open(paths.MailArchive)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
 		os.Exit(1)
@@ -352,7 +361,7 @@ func Run() {
 		slog.Info("mail archive disabled")
 	}
 
-	searchIndex, err := OpenSearchIndex(paths.SearchIndex)
+	searchIndex, err := search.Open(paths.SearchIndex)
 	if err != nil {
 		slog.Error("failed to open search index", "path", paths.SearchIndex, "error", err)
 		os.Exit(1)
@@ -408,7 +417,7 @@ func Run() {
 		slog.Info("signal store disabled")
 	}
 
-	auditLog, err := OpenAuditLog(paths.AuditLog, *auditRetentionDays)
+	auditLog, err := audit.Open(paths.AuditLog, *auditRetentionDays)
 	if err != nil {
 		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
 		os.Exit(1)
@@ -434,18 +443,18 @@ func Run() {
 		cache:         NewCache(),
 		mbCache:       NewCache(),
 		tokens:        tokens,
-		oauthStates:   NewStateStore(),
+		oauthStates:   shared.NewStateStore(),
 		rl:            newRateLimiter(),
 		connectors:    make(map[string]connectors.ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
-		links:         links,
+		links:         linkStore,
 		ownership:     ownership,
 		apps:          apps,
 		scopes:        scopes,
 		demoMode:      *demoMode,
 		grants:        NewGrantStore(),
-		csrfTokens:    NewStateStore(),
-		copies:        copies,
+		csrfTokens:    shared.NewStateStore(),
+		copyLedger:    copyLedger,
 		syncJobs:      syncStore,
 		syncSchedules: scheduleStore,
 		mail:          mailArchive,
@@ -475,7 +484,7 @@ func Run() {
 	// skipped and logged; built-in kinds always stay available.
 	userTypesDir := filepath.Join(paths.Dir, "user-types")
 	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
-		userTypesDir = expandUserPath(v)
+		userTypesDir = shared.ExpandUserPath(v)
 	}
 	udtReg, udtLoaded := LoadUserDefinedTypes(userTypesDir, defaultUserTypesOverlayPath(paths.Config), slog.Default())
 	srv.udts = udtReg
@@ -890,7 +899,7 @@ func runSeedDemoDatasetsCLI(dataDir, archivePath string) int {
 		slog.Error("failed to create demo dataset dir", "dir", outDir, "error", err)
 		return 1
 	}
-	archive, err := OpenMailArchive(archivePath)
+	archive, err := mail.Open(archivePath)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
 		return 1
@@ -935,7 +944,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		slog.Error("mail-archive path is required for -import-takeout")
 		return 1
 	}
-	a, err := OpenMailArchive(archivePath)
+	a, err := mail.Open(archivePath)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
 		return 1
@@ -945,19 +954,19 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		return 1
 	}
 	defer a.Close()
-	copies, err := OpenCopyLedger(copyLedgerPath)
+	copyLedger, err := copies.Open(copyLedgerPath)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", copyLedgerPath, "error", err)
 		return 1
 	}
-	if copies != nil {
-		defer copies.Close()
+	if copyLedger != nil {
+		defer copyLedger.Close()
 	}
 	if batch <= 0 {
 		batch = 20000
 	}
 	ingest := connectors.NewTakeoutIngest()
-	sink := mailSink{a}
+	sink := mail.Sink{A: a}
 	var stored, skipped, scanned, failed int
 	done := false
 	for {
@@ -988,7 +997,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 			break
 		}
 	}
-	copies.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done)
+	copyLedger.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done)
 	slog.Info("takeout import finished",
 		"path", takeoutPath,
 		"scanned", scanned,
@@ -1096,7 +1105,7 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 		slog.Error("token-new-pass must not be empty")
 		return 1
 	}
-	ts, err := NewTokenStore(path, currentPass)
+	ts, err := tokens.NewTokenStore(path, currentPass)
 	if err != nil {
 		slog.Error("failed to load token store for rekey", "path", path, "error", err)
 		return 1
@@ -1109,7 +1118,7 @@ func runTokenRekeyCLI(path, currentPass, newPass string) int {
 		"path", path,
 		"services", len(ts.Tokens),
 		"secrets", len(ts.Secrets),
-		"iterations", ts.kdfIterations,
+		"iterations", ts.KDFIterations(),
 	)
 	return 0
 }

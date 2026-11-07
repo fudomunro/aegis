@@ -4,16 +4,12 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
-	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
-
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Inbound request body caps (issue #97). Generous for real agent payloads
@@ -31,7 +27,7 @@ const (
 
 // withBodyLimit wraps r.Body with http.MaxBytesReader so oversized inbound
 // bodies cannot be buffered into memory (issue #97). Callers that ReadAll
-// should use writeBodyReadError / readBodyLimited to map overflow to 413.
+// should use shared.WriteBodyReadError / shared.ReadBodyLimited to map overflow to 413.
 func withBodyLimit(n int64, next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Body != nil {
@@ -39,32 +35,6 @@ func withBodyLimit(n int64, next http.HandlerFunc) http.HandlerFunc {
 		}
 		next(w, r)
 	}
-}
-
-// readBodyLimited reads r.Body under a cap. On overflow writes 413 and
-// returns ok=false. On other read errors writes 400 and returns ok=false.
-func readBodyLimited(w http.ResponseWriter, r *http.Request, max int64) ([]byte, bool) {
-	if r.Body == nil {
-		return nil, true
-	}
-	r.Body = http.MaxBytesReader(w, r.Body, max)
-	data, err := io.ReadAll(r.Body)
-	if err != nil {
-		writeBodyReadError(w, err)
-		return nil, false
-	}
-	return data, true
-}
-
-// writeBodyReadError maps body-read failures to 413 (too large) or 400.
-func writeBodyReadError(w http.ResponseWriter, err error) {
-	var maxErr *http.MaxBytesError
-	if errors.As(err, &maxErr) {
-		shared.WriteJSONError(w, http.StatusRequestEntityTooLarge,
-			fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
-		return
-	}
-	shared.WriteJSONError(w, http.StatusBadRequest, "failed to read request body")
 }
 
 // constantTimeEqual reports whether two strings are equal without leaking

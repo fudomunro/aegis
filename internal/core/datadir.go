@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/fudomunro/aegis/internal/shared"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -55,15 +56,15 @@ type DataPaths struct {
 	// Ownership is the per-kind data-ownership confirmation store
 	// (issue #165; ownership.json).
 	Ownership string
-	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
+	// copies.Ledger is the SQLite copy-ledger path (issue #76). Empty disables it.
 	CopyLedger string
 	// SyncJobs is the SQLite sync-job queue path (issue #227). Empty disables
 	// the sync worker. Defaults to the copy-ledger path so job completion and
 	// copy stamps can commit in one transaction.
 	SyncJobs string
-	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
+	// mail.Archive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
-	// SearchIndex is the SQLite library search-index path (issue #178).
+	// search.Index is the SQLite library search-index path (issue #178).
 	// Empty disables q= on /v1/library/{kind}.
 	SearchIndex string
 	// Quicken is the SQLite Quicken import store path (issue #141).
@@ -143,31 +144,12 @@ func defaultDataDir() (string, error) {
 	}
 }
 
-// expandUserPath expands a leading ~ or ~/ to the user's home directory.
-func expandUserPath(p string) string {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return ""
-	}
-	if p == "~" || strings.HasPrefix(p, "~/") || strings.HasPrefix(p, `~\`) {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return p
-		}
-		if p == "~" {
-			return home
-		}
-		return filepath.Join(home, p[2:])
-	}
-	return p
-}
-
 // resolveDataDir picks the data directory: flag, then AEGIS_DATA_DIR, then OS default.
 func resolveDataDir(flagValue string) (string, error) {
-	if v := expandUserPath(flagValue); v != "" {
+	if v := shared.ExpandUserPath(flagValue); v != "" {
 		return filepath.Clean(v), nil
 	}
-	if v := expandUserPath(os.Getenv("AEGIS_DATA_DIR")); v != "" {
+	if v := shared.ExpandUserPath(os.Getenv("AEGIS_DATA_DIR")); v != "" {
 		return filepath.Clean(v), nil
 	}
 	dir, err := defaultDataDir()
@@ -180,7 +162,7 @@ func resolveDataDir(flagValue string) (string, error) {
 // resolveUnderDataDir returns explicit when set, otherwise name under dataDir.
 func resolveUnderDataDir(explicit, dataDir, name string) string {
 	if v := strings.TrimSpace(explicit); v != "" {
-		return expandUserPath(v)
+		return shared.ExpandUserPath(v)
 	}
 	return filepath.Join(dataDir, name)
 }
@@ -210,7 +192,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.CopyLedger) == "":
 		paths.CopyLedger = ""
 	default:
-		paths.CopyLedger = expandUserPath(ov.CopyLedger)
+		paths.CopyLedger = shared.ExpandUserPath(ov.CopyLedger)
 	}
 	// Sync jobs: omitted → the copy-ledger file (co-located, so a job's
 	// completion and its copy stamp can commit in one transaction); explicitly
@@ -221,7 +203,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.SyncJobs) == "":
 		paths.SyncJobs = ""
 	default:
-		paths.SyncJobs = expandUserPath(ov.SyncJobs)
+		paths.SyncJobs = shared.ExpandUserPath(ov.SyncJobs)
 	}
 	// Mail archive: omitted → default under data dir; explicitly empty → disabled.
 	switch {
@@ -230,7 +212,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.MailArchive) == "":
 		paths.MailArchive = ""
 	default:
-		paths.MailArchive = expandUserPath(ov.MailArchive)
+		paths.MailArchive = shared.ExpandUserPath(ov.MailArchive)
 	}
 	// Search index: omitted → default under data dir; explicitly empty →
 	// q= search disabled (issue #178).
@@ -240,7 +222,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.SearchIndex) == "":
 		paths.SearchIndex = ""
 	default:
-		paths.SearchIndex = expandUserPath(ov.SearchIndex)
+		paths.SearchIndex = shared.ExpandUserPath(ov.SearchIndex)
 	}
 	// Quicken import store: omitted → default under data dir; explicitly empty → disabled.
 	switch {
@@ -249,7 +231,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.Quicken) == "":
 		paths.Quicken = ""
 	default:
-		paths.Quicken = expandUserPath(ov.Quicken)
+		paths.Quicken = shared.ExpandUserPath(ov.Quicken)
 	}
 	// Timeline import store: omitted → default under data dir; explicitly empty → disabled.
 	switch {
@@ -258,7 +240,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.Timeline) == "":
 		paths.Timeline = ""
 	default:
-		paths.Timeline = expandUserPath(ov.Timeline)
+		paths.Timeline = shared.ExpandUserPath(ov.Timeline)
 	}
 	// Signal import store: omitted → default under data dir; explicitly empty → disabled.
 	switch {
@@ -267,7 +249,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.Signal) == "":
 		paths.Signal = ""
 	default:
-		paths.Signal = expandUserPath(ov.Signal)
+		paths.Signal = shared.ExpandUserPath(ov.Signal)
 	}
 	// Audit log: omitted → default under data dir; explicitly empty → disabled.
 	switch {
@@ -276,7 +258,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.AuditLog) == "":
 		paths.AuditLog = ""
 	default:
-		paths.AuditLog = expandUserPath(ov.AuditLog)
+		paths.AuditLog = shared.ExpandUserPath(ov.AuditLog)
 	}
 	// Log file: omitted → logs/aegis.log under data dir; explicitly empty → stderr only.
 	switch {
@@ -285,7 +267,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 	case strings.TrimSpace(ov.LogFile) == "":
 		paths.LogFile = ""
 	default:
-		paths.LogFile = expandUserPath(ov.LogFile)
+		paths.LogFile = shared.ExpandUserPath(ov.LogFile)
 	}
 	return paths, nil
 }

@@ -4,6 +4,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -58,7 +59,7 @@ func TestSpotifyConnector_HandleProxy_WithMockSpotify(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	// Store a mock token.
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "mock-token",
 		Expiry:      futureTime(),
 	})

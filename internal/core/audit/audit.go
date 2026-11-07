@@ -1,4 +1,4 @@
-package core
+package audit
 
 import (
 	"database/sql"
@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 // Durable access audit trail (issue #105). Append-only SQLite store of who
@@ -19,9 +21,9 @@ const (
 	DecisionAllow = "allow"
 	DecisionDeny  = "deny"
 
-	// defaultAuditRetentionDays is the documented retention window for
+	// DefaultRetentionDays is the documented retention window for
 	// audit rows. Older rows are pruned on open and periodically on write.
-	defaultAuditRetentionDays = 30
+	DefaultRetentionDays = 30
 
 	// defaultAuditMaxRows is a hard cap so a noisy agent cannot fill the
 	// disk. Oldest rows are dropped first once the cap is hit.
@@ -55,10 +57,10 @@ CREATE INDEX IF NOT EXISTS audit_events_target ON audit_events(target, at);
 CREATE INDEX IF NOT EXISTS audit_events_client_ip ON audit_events(client_ip, at);
 `
 
-// AuditEvent is one redacted access record. Mirrors AccessEvent plus
+// Event is one redacted access record. Mirrors AccessEvent plus
 // HTTP method/status for denials and the resolved client IP. Never holds
 // tokens or bodies.
-type AuditEvent struct {
+type Event struct {
 	At       time.Time
 	Agent    string
 	Surface  string
@@ -72,9 +74,9 @@ type AuditEvent struct {
 	ClientIP string
 }
 
-// AuditLog is the SQLite-backed durable audit sink. Empty path disables
+// Log is the SQLite-backed durable audit sink. Empty path disables
 // persistence (tests, opt-out); writes then become no-ops (fail-open).
-type AuditLog struct {
+type Log struct {
 	db         *sql.DB
 	path       string
 	retention  time.Duration
@@ -123,14 +125,14 @@ func migrateAuditColumns(db *sql.DB) error {
 	return nil
 }
 
-// OpenAuditLog opens or creates the audit database at path. Empty path
+// Open opens or creates the audit database at path. Empty path
 // returns a disabled log so call sites can stay unconditional.
-func OpenAuditLog(path string, retentionDays int) (*AuditLog, error) {
+func Open(path string, retentionDays int) (*Log, error) {
 	if path == "" {
-		return &AuditLog{}, nil
+		return &Log{}, nil
 	}
 	if retentionDays <= 0 {
-		retentionDays = defaultAuditRetentionDays
+		retentionDays = DefaultRetentionDays
 	}
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o700); err != nil && !os.IsExist(err) {
@@ -160,7 +162,7 @@ func OpenAuditLog(path string, retentionDays int) (*AuditLog, error) {
 		db.Close()
 		return nil, fmt.Errorf("audit schema: %w", err)
 	}
-	a := &AuditLog{
+	a := &Log{
 		db:         db,
 		path:       path,
 		retention:  time.Duration(retentionDays) * 24 * time.Hour,
@@ -178,7 +180,7 @@ func OpenAuditLog(path string, retentionDays int) (*AuditLog, error) {
 }
 
 // Close releases the database handle.
-func (a *AuditLog) Close() error {
+func (a *Log) Close() error {
 	if a == nil || a.db == nil {
 		return nil
 	}
@@ -186,7 +188,7 @@ func (a *AuditLog) Close() error {
 }
 
 // Path returns the on-disk location ("" when disabled).
-func (a *AuditLog) Path() string {
+func (a *Log) Path() string {
 	if a == nil {
 		return ""
 	}
@@ -194,12 +196,12 @@ func (a *AuditLog) Path() string {
 }
 
 // Enabled reports whether the log can persist rows.
-func (a *AuditLog) Enabled() bool {
+func (a *Log) Enabled() bool {
 	return a != nil && a.db != nil
 }
 
 // Retention returns the configured retention window (0 when disabled).
-func (a *AuditLog) Retention() time.Duration {
+func (a *Log) Retention() time.Duration {
 	if a == nil {
 		return 0
 	}
@@ -209,7 +211,7 @@ func (a *AuditLog) Retention() time.Duration {
 // Write appends one audit event. Safe for concurrent use. Fail-open: any
 // database error is logged and swallowed so agent traffic is never blocked
 // by the audit sink.
-func (a *AuditLog) Write(ev AuditEvent) {
+func (a *Log) Write(ev Event) {
 	if a == nil || a.db == nil {
 		return
 	}
@@ -244,7 +246,7 @@ INSERT INTO audit_events (
 // maybePrune applies retention when the prune interval has elapsed. Uses
 // wall-clock time for the schedule so backdated events cannot suppress
 // pruning.
-func (a *AuditLog) maybePrune() {
+func (a *Log) maybePrune() {
 	now := time.Now()
 	a.mu.Lock()
 	due := a.lastPrune.IsZero() || now.Sub(a.lastPrune) >= a.pruneEvery
@@ -259,7 +261,7 @@ func (a *AuditLog) maybePrune() {
 }
 
 // prune deletes rows past the retention window and enforces the row cap.
-func (a *AuditLog) prune(now time.Time) error {
+func (a *Log) prune(now time.Time) error {
 	if a == nil || a.db == nil {
 		return nil
 	}
@@ -282,7 +284,7 @@ DELETE FROM audit_events WHERE id IN (
 }
 
 // Count returns the number of retained audit rows (0 when disabled).
-func (a *AuditLog) Count() int {
+func (a *Log) Count() int {
 	if a == nil || a.db == nil {
 		return 0
 	}
@@ -293,8 +295,8 @@ func (a *AuditLog) Count() int {
 	return n
 }
 
-// AuditFilter narrows List queries.
-type AuditFilter struct {
+// Filter narrows List queries.
+type Filter struct {
 	Agent    string
 	Decision string
 	Target   string
@@ -303,7 +305,7 @@ type AuditFilter struct {
 
 // List returns recent audit rows newest-first. Used by tests and admin
 // tooling; never returns token material.
-func (a *AuditLog) List(f AuditFilter) ([]AuditEvent, error) {
+func (a *Log) List(f Filter) ([]Event, error) {
 	if a == nil || a.db == nil {
 		return nil, nil
 	}
@@ -334,10 +336,10 @@ FROM audit_events WHERE 1=1`
 		return nil, err
 	}
 	defer rows.Close()
-	var out []AuditEvent
+	var out []Event
 	for rows.Next() {
 		var (
-			ev AuditEvent
+			ev Event
 			at string
 		)
 		if err := rows.Scan(&at, &ev.Agent, &ev.Surface, &ev.Target, &ev.DataType,

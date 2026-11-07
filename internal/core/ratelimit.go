@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -249,7 +250,7 @@ func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 		Agent:    agentForRequest(r),
 		Surface:  MetricSurfaceAuth,
 		Target:   auditRouteFamily(r),
-		Decision: DecisionDeny,
+		Decision: audit.DecisionDeny,
 		Reason:   "rate_limited",
 		Method:   requestMethod(r),
 		Status:   http.StatusTooManyRequests,

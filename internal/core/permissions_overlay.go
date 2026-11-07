@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -90,7 +91,7 @@ func saveDataGrantsOverlay(path string, ov *dataGrantsOverlayFile) error {
 		return err
 	}
 	data = append(data, '\n')
-	if err := atomicWriteFile(path, data, 0o644); err != nil {
+	if err := shared.AtomicWriteFile(path, data, 0o644); err != nil {
 		return err
 	}
 	slog.Info("data grants overlay saved", "path", path,

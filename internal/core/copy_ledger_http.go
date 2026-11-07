@@ -5,11 +5,12 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // CopyListResponse is GET /v1/library/copies.
 type CopyListResponse struct {
-	Copies    []CopyRecord   `json:"copies"`
+	Copies    []copies.Record   `json:"copies"`
 	Total     int            `json:"total"`
 	ByStatus  map[string]int `json:"by_status,omitempty"`
 	SyncModes map[string]int `json:"sync_modes,omitempty"`
@@ -25,15 +26,15 @@ func (s *Server) HandleLibraryCopies(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	q := r.URL.Query()
-	filter := CopyFilter{
+	filter := copies.Filter{
 		Kind:      strings.TrimSpace(q.Get("kind")),
 		Service:   strings.TrimSpace(q.Get("service")),
 		Status:    strings.TrimSpace(q.Get("status")),
 		EntityKey: strings.TrimSpace(q.Get("entity_key")),
 	}
-	var rows []CopyRecord
-	if s != nil && s.copies != nil {
-		rows = s.copies.List(filter)
+	var rows []copies.Record
+	if s != nil && s.copyLedger != nil {
+		rows = s.copyLedger.List(filter)
 	}
 	resp := CopyListResponse{
 		Copies:    rows,

@@ -8,6 +8,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // writableDataSet reports data types the admin form may offer as Editable:
@@ -94,7 +95,7 @@ func (s *Server) effectivePermissions(svc *Service) types.Permissions {
 // stores the partition's fullest rows (issue #272).
 func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) string {
 	level := s.effectivePermissions(svc).AccessForDataType(dataType)
-	sc := DataScopeFrom(r)
+	sc := scopes.From(r)
 	if sc == nil || ownerView(r) {
 		return level
 	}
@@ -110,7 +111,7 @@ func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) st
 // feeds notices and all-denied checks.
 func (s *Server) requestPermissions(r *http.Request, svc *Service) types.Permissions {
 	owner := s.effectivePermissions(svc)
-	sc := DataScopeFrom(r)
+	sc := scopes.From(r)
 	if sc == nil {
 		return owner
 	}

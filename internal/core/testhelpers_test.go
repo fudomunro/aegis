@@ -5,19 +5,29 @@ package core
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
+	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
 // AccessEventToAudit projects a redacted access event onto the durable
 // audit row (issue #105).
-func AccessEventToAudit(ev AccessEvent) AuditEvent {
-	return AuditEvent{
+func AccessEventToAudit(ev AccessEvent) audit.Event {
+	return audit.Event{
 		At:       ev.At,
 		Agent:    ev.Agent,
 		Surface:  ev.Surface,
@@ -168,7 +178,89 @@ func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, ba
 	return all, truncated, nil
 }
 
-// encrypt seals plaintext under the store master key.
-func (ts *TokenStore) encrypt(plaintext []byte) (string, error) {
-	return encryptWith(ts.key, plaintext)
+// newTestTokenStore opens a token store with a tiny PBKDF2 cost so the suite
+// stays fast. Production uses tokens.NewTokenStore.
+func newTestTokenStore(path, passphrase string) (*tokens.TokenStore, error) {
+	return tokens.NewStoreWithIterations(path, passphrase, 1_000)
+}
+
+// mustSecretStore returns a TokenStore suitable for InitServiceConnectionsStore
+// tests. Use a real path when the test reloads secrets from disk (issue #184).
+func mustSecretStore(t *testing.T, path string) *tokens.TokenStore {
+	t.Helper()
+	ts, err := newTestTokenStore(path, "test-pass")
+	if err != nil {
+		t.Fatalf("newTestTokenStore(%q): %v", path, err)
+	}
+	return ts
+}
+
+// writeJSONFile writes v as indented JSON to path (test fixtures).
+func writeJSONFile(t *testing.T, path string, v any) {
+	t.Helper()
+	data, err := json.MarshalIndent(v, "", "  ")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// newTestSearchIndex opens an in-temp-dir search index for Server tests.
+func newTestSearchIndex(t *testing.T) *search.Index {
+	t.Helper()
+	idx, err := search.Open(filepath.Join(t.TempDir(), "search-index.db"))
+	if err != nil {
+		t.Fatalf("search.Open: %v", err)
+	}
+	t.Cleanup(func() { idx.Close() })
+	return idx
+}
+
+// openTestMailArchive opens a mail archive in a temp dir for Server tests.
+func openTestMailArchive(t *testing.T) *mail.Archive {
+	t.Helper()
+	a, err := mail.Open(filepath.Join(t.TempDir(), "mail-archive.db"))
+	if err != nil {
+		t.Fatalf("mail.Open: %v", err)
+	}
+	t.Cleanup(func() { a.Close() })
+	return a
+}
+
+// sampleMailRecord builds a minimal mail.Record fixture for Server tests.
+func sampleMailRecord(id, subject, body string) mail.Record {
+	return mail.Record{
+		ID:       id,
+		Service:  "google-gmail",
+		Subject:  subject,
+		BodyText: body,
+		SentAt:   "2024-06-01T09:00:00Z",
+	}
+}
+
+// mustCopyLedger opens a copy ledger in a temp dir for Server tests.
+func mustCopyLedger(t *testing.T) *copies.Ledger {
+	t.Helper()
+	l, err := copies.Open(filepath.Join(t.TempDir(), "copy-ledger.db"))
+	if err != nil {
+		t.Fatalf("copies.Open: %v", err)
+	}
+	t.Cleanup(func() { l.Close() })
+	return l
+}
+
+// writeDataScopes writes a data_scopes.json fixture and returns its path.
+func writeDataScopes(t *testing.T, list []scopes.Scope) string {
+	t.Helper()
+	raw, err := json.Marshal(map[string]any{"version": 2, "data_scopes": list})
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "data_scopes.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -670,7 +671,7 @@ func (s *Server) tokenDisplayName(connID string) string {
 	return strings.Join(parts, " ")
 }
 
-func flowServiceStatus(svc Service, st TokenStatus) string {
+func flowServiceStatus(svc Service, st tokens.TokenStatus) string {
 	if st.HasToken {
 		if st.Expired {
 			return FlowStatusExpired

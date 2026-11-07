@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -261,7 +262,7 @@ func TestSpotifyConnector_ListUserPlaylists_MockAPI(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -594,7 +595,7 @@ func TestSpotifyConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{
+	srv.tokens.Save("spotify", &tokens.OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -654,7 +655,7 @@ func TestYouTubeConnector_ListUserLikedTracks_MockAPI(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -720,7 +721,7 @@ func TestYouTubeConnector_ListUserLikedTracks_FiltersNonMusic(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{
 		AccessToken: "tok",
 		Expiry:      time.Now().Add(time.Hour),
 	})
@@ -971,7 +972,7 @@ func TestSpotifyConnector_ListUserSavedAlbums_MockAPI(t *testing.T) {
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	albums, _, err := connectors.NewSpotifyConnector(srv).ListUserSavedAlbums(context.Background())
 	if err != nil {
@@ -998,7 +999,7 @@ func TestSpotifyConnector_ListUserFollowedArtists_MockAPI(t *testing.T) {
 
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: mock.URL}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("spotify", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	artists, _, err := connectors.NewSpotifyConnector(srv).ListUserFollowedArtists(context.Background())
 	if err != nil {
@@ -1026,7 +1027,7 @@ func TestYouTubeConnector_ListUserFollowedArtists_MockAPI(t *testing.T) {
 
 	cfg := &Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: mock.URL}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("youtube-music", &OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("youtube-music", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 
 	artists, _, err := connectors.NewYouTubeMusicConnector(srv).ListUserFollowedArtists(context.Background())
 	if err != nil {

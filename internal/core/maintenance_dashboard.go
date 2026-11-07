@@ -15,6 +15,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Sync-maintenance dashboard (issue #239): an entirely build-time generated
@@ -152,7 +153,7 @@ type DashboardData struct {
 	WindowEnd   time.Time          `json:"window_end,omitempty"`
 	Services    []DashboardService `json:"services"`
 	// Freshness is the latest capture's per-kind copy rollup.
-	Freshness []CopyFreshness `json:"freshness,omitempty"`
+	Freshness []copies.Freshness `json:"freshness,omitempty"`
 	// Fixes is every mapped maintenance record, newest first.
 	Fixes []DashboardFix `json:"fixes,omitempty"`
 	// FixHistoryError notes a fail-open scrape problem, if any.
@@ -599,7 +600,7 @@ var dashboardFuncs = template.FuncMap{
 		}
 	},
 	"pageFile": servicePageFile,
-	"sumDegraded": func(rows []CopyFreshness) int {
+	"sumDegraded": func(rows []copies.Freshness) int {
 		n := 0
 		for _, r := range rows {
 			n += r.Stale + r.Missing

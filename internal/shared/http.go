@@ -6,6 +6,9 @@
 package shared
 
 import (
+	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -27,4 +30,31 @@ func TrimRightSlash(s string) string {
 		s = s[:len(s)-1]
 	}
 	return s
+}
+
+// ReadBodyLimited reads an inbound request body up to max bytes. Overflow is
+// reported to the caller as a 413; other read failures as a 400. ok is false
+// when the response has already been written.
+func ReadBodyLimited(w http.ResponseWriter, r *http.Request, max int64) ([]byte, bool) {
+	if r.Body == nil {
+		return nil, true
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, max)
+	data, err := io.ReadAll(r.Body)
+	if err != nil {
+		WriteBodyReadError(w, err)
+		return nil, false
+	}
+	return data, true
+}
+
+// WriteBodyReadError maps body-read failures to 413 (too large) or 400.
+func WriteBodyReadError(w http.ResponseWriter, err error) {
+	var maxErr *http.MaxBytesError
+	if errors.As(err, &maxErr) {
+		WriteJSONError(w, http.StatusRequestEntityTooLarge,
+			fmt.Sprintf("request body exceeds %d bytes", maxErr.Limit))
+		return
+	}
+	WriteJSONError(w, http.StatusBadRequest, "failed to read request body")
 }

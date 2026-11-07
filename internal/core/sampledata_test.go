@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -30,7 +31,7 @@ func TestGenerateSampleMail_Deterministic(t *testing.T) {
 
 func TestGenerateSampleMail_IncludesEdgeCases(t *testing.T) {
 	set := GenerateSampleMail(3)
-	byID := map[string]MailArchiveRecord{}
+	byID := map[string]mail.Record{}
 	for _, r := range set.Records {
 		byID[r.ID] = r
 	}
@@ -170,7 +171,7 @@ func TestWriteSampleMbox_ImportRoundTrip(t *testing.T) {
 	}
 
 	a := openTestMailArchive(t)
-	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mailSink{a},
+	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mail.Sink{A: a},
 		types.MailIngestOptions{Path: path, MaxMessages: 1000})
 	if err != nil {
 		t.Fatalf("import: %v", err)
@@ -221,7 +222,7 @@ func TestSeedSampleArchiveAndFiles(t *testing.T) {
 		t.Fatalf("seeded %d records, files wrote %d", len(seeded.Records), len(set.Records))
 	}
 
-	a, err := OpenMailArchive(archive)
+	a, err := mail.Open(archive)
 	if err != nil {
 		t.Fatalf("reopen: %v", err)
 	}
@@ -271,7 +272,7 @@ func TestRunSeedSampleCLI(t *testing.T) {
 	if code := runSeedSampleCLI(dir, archive, 3, false); code != 0 {
 		t.Fatalf("seed cli exit = %d", code)
 	}
-	a, err := OpenMailArchive(archive)
+	a, err := mail.Open(archive)
 	if err != nil {
 		t.Fatalf("open seeded archive: %v", err)
 	}

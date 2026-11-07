@@ -9,75 +9,9 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
-
-// entity_links.json was the one state store still written with plain
-// os.WriteFile, so a crash could truncate it and silently drop the operator's
-// confirmed identities. This asserts the atomic write path: no temp litter,
-// and a well-formed file after every save.
-func TestEntityLinkStore_SaveIsAtomic(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "entity_links.json")
-	st, err := NewEntityLinkStore(path)
-	if err != nil {
-		t.Fatalf("NewEntityLinkStore: %v", err)
-	}
-
-	var ids []string
-	for i := 0; i < 5; i++ {
-		link, err := st.Add("playlist", []EntityLinkSource{
-			{Service: "spotify", ID: fmt.Sprint("pl", i)},
-			{Service: "youtube-music", ID: fmt.Sprint("yt", i)},
-		}, "test")
-		if err != nil {
-			t.Fatalf("Add(%d): %v", i, err)
-		}
-		ids = append(ids, link.ID)
-		// A same-directory temp file is how atomicWriteFile works; a
-		// successful save must leave none behind.
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			t.Fatal(err)
-		}
-		for _, e := range entries {
-			if strings.Contains(e.Name(), ".tmp") {
-				t.Fatalf("temp file left behind after save: %s", e.Name())
-			}
-		}
-
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			t.Fatalf("ReadFile: %v", err)
-		}
-		var f entityLinkFile
-		if err := json.Unmarshal(raw, &f); err != nil {
-			t.Fatalf("saved file is not valid JSON (truncated write?): %v", err)
-		}
-		if len(f.Links) != i+1 {
-			t.Fatalf("links = %d, want %d", len(f.Links), i+1)
-		}
-		if !strings.HasSuffix(string(raw), "\n") {
-			t.Fatal("saved file must keep its trailing newline")
-		}
-	}
-
-	// Deletes persist the same way.
-	if !st.Delete(ids[0]) {
-		t.Fatalf("Delete(%s) must report the row was removed", ids[0])
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var f entityLinkFile
-	if err := json.Unmarshal(raw, &f); err != nil {
-		t.Fatalf("file corrupt after delete: %v", err)
-	}
-	if len(f.Links) != 4 {
-		t.Fatalf("links = %d, want 4", len(f.Links))
-	}
-}
 
 // hygieneConfig writes a bootstrap config and loads it, for the race tests
 // below.
@@ -267,7 +201,7 @@ func TestSetServiceConnection_WritesSecretAndEntry(t *testing.T) {
 	}
 
 	// The header secret must be in the encrypted store, not the JSON file.
-	raw := cfg.secrets.GetSecret(ServiceHeadersSecretKey("immich"))
+	raw := cfg.secrets.GetSecret(tokens.ServiceHeadersSecretKey("immich"))
 	if !strings.Contains(raw, "hunter2") {
 		t.Fatalf("secret blob = %q, want it to carry the X-API-Key value", raw)
 	}

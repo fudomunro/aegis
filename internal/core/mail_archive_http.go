@@ -8,8 +8,10 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // mailPermType is the permission key for the local mail archive surface.
@@ -38,7 +40,7 @@ func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) requireMailArchive(w http.ResponseWriter) *MailArchive {
+func (s *Server) requireMailArchive(w http.ResponseWriter) *mail.Archive {
 	if s.mail == nil {
 		shared.WriteJSONError(w, http.StatusNotFound,
 			"mail archive disabled — start Aegis with a mail archive path (default: <data-dir>/mail-archive.db)")
@@ -57,7 +59,7 @@ func (s *Server) mailReadable() bool {
 // principal's scope grants messages (deny-by-default) and the owner tier
 // allows message reads.
 func (s *Server) mailReadableFor(r *http.Request) bool {
-	if !scopeAllows(r, mailPermType, http.MethodGet) {
+	if !scopes.Allows(r, mailPermType, http.MethodGet) {
 		return false
 	}
 	return s.mailReadable()
@@ -126,7 +128,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	withBody := q.Get("include_body") == "1" || strings.EqualFold(q.Get("include_body"), "true")
-	search := MailSearchQuery{
+	search := mail.SearchQuery{
 		Q:        q.Get("q"),
 		From:     q.Get("from"),
 		To:       q.Get("to"),
@@ -137,7 +139,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		Offset:   offset,
 		WithBody: withBody,
 		Sort:     q.Get("sort"),
-		Dataset:  scopeDataset(r),
+		Dataset:  scopes.Dataset(r),
 	}
 	resp, err := a.Search(search)
 	if err != nil {
@@ -180,7 +182,7 @@ func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest 
 	}
 	// Data-scope isolation: a partitioned principal cannot fetch rows from
 	// another dataset even with a direct id (docs/data-scopes.md).
-	if ds := scopeDataset(r); ds != "" && rec.Dataset != ds {
+	if ds := scopes.Dataset(r); ds != "" && rec.Dataset != ds {
 		shared.WriteJSONError(w, http.StatusNotFound, "message not found in mail archive")
 		return
 	}
@@ -265,7 +267,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		if err := dec.Decode(&req); err != nil && err.Error() != "EOF" {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
-				writeBodyReadError(w, err)
+				shared.WriteBodyReadError(w, err)
 				return
 			}
 			// Empty body is fine; other decode errors are client faults.
@@ -358,7 +360,7 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 		if err := dec.Decode(&req); err != nil && r.ContentLength != 0 {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
-				writeBodyReadError(w, err)
+				shared.WriteBodyReadError(w, err)
 				return
 			}
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")

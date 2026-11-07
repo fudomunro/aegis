@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -57,8 +58,8 @@ func writeTakeoutMbox(t *testing.T, dir string) string {
 
 // ingestTakeout runs one bounded Takeout export ingest against the archive
 // sink (issue #286: the parser lives in connectors; core pins integration).
-func ingestTakeout(a *MailArchive, opts types.MailIngestOptions) (types.MailIngestResult, error) {
-	return connectors.NewTakeoutIngest().IngestMail(context.Background(), mailSink{a}, opts)
+func ingestTakeout(a *mail.Archive, opts types.MailIngestOptions) (types.MailIngestResult, error) {
+	return connectors.NewTakeoutIngest().IngestMail(context.Background(), mail.Sink{A: a}, opts)
 }
 
 func TestTakeoutImportMboxFile(t *testing.T) {
@@ -69,7 +70,7 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
-	if stored, _ := a.getMeta(connectors.TakeoutPathMetaKey); stored == "" {
+	if stored, _ := a.GetMeta(connectors.TakeoutPathMetaKey); stored == "" {
 		t.Fatal("expected stored takeout path")
 	}
 	if res.Listed != 3 || res.Stored != 3 || !res.Done {
@@ -94,7 +95,7 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 		t.Fatalf("res3 = %+v", res3)
 	}
 
-	hits, err := a.Search(MailSearchQuery{Q: "takeout", WithBody: true})
+	hits, err := a.Search(mail.SearchQuery{Q: "takeout", WithBody: true})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
@@ -197,7 +198,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("save path = %d body=%s", w.Code, w.Body.String())
 	}
-	if stored, _ := a.getMeta(connectors.TakeoutPathMetaKey); stored == "" {
+	if stored, _ := a.GetMeta(connectors.TakeoutPathMetaKey); stored == "" {
 		t.Fatal("path not saved")
 	}
 
@@ -225,7 +226,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var st MailArchiveStatus
+	var st mail.Status
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("status json: %v", err)
 	}
@@ -289,4 +290,3 @@ func TestTakeoutImportResumesWithoutFullRescan(t *testing.T) {
 		t.Fatalf("batch4 after reset = %+v", res4)
 	}
 }
-

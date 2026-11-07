@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -197,7 +198,7 @@ func (s *Server) HandleAuthRevoke(w http.ResponseWriter, r *http.Request) {
 }
 
 // exchangeCode exchanges an authorization code for tokens.
-func (s *Server) exchangeCode(oauth *OAuthConfig, code, redirectURI string) (*OAuthToken, error) {
+func (s *Server) exchangeCode(oauth *OAuthConfig, code, redirectURI string) (*tokens.OAuthToken, error) {
 	data := url.Values{
 		"grant_type":    {"authorization_code"},
 		"code":          {code},
@@ -211,8 +212,8 @@ func (s *Server) exchangeCode(oauth *OAuthConfig, code, redirectURI string) (*OA
 
 // RefreshToken refreshes an expired access token for a provider connection.
 // Concurrent callers for the same connection share one upstream exchange.
-func (s *Server) RefreshToken(connectionID string) (*OAuthToken, error) {
-	return s.refreshFlight.Do(connectionID, func() (*OAuthToken, error) {
+func (s *Server) RefreshToken(connectionID string) (*tokens.OAuthToken, error) {
+	return s.refreshFlight.Do(connectionID, func() (*tokens.OAuthToken, error) {
 		// Another waiter may have already refreshed while we queued.
 		if tok := s.tokens.Get(connectionID); tok != nil && !tok.IsExpired(30*time.Second) {
 			return tok, nil
@@ -221,7 +222,7 @@ func (s *Server) RefreshToken(connectionID string) (*OAuthToken, error) {
 	})
 }
 
-func (s *Server) refreshTokenOnce(connectionID string) (*OAuthToken, error) {
+func (s *Server) refreshTokenOnce(connectionID string) (*tokens.OAuthToken, error) {
 	tok := s.tokens.Get(connectionID)
 	if tok == nil || tok.RefreshToken == "" {
 		return nil, fmt.Errorf("no refresh token for %s", connectionID)
@@ -261,7 +262,7 @@ func (s *Server) refreshTokenOnce(connectionID string) (*OAuthToken, error) {
 }
 
 // tokenRequest performs the HTTP POST to a token endpoint and parses the response.
-func (s *Server) tokenRequest(tokenURL string, data url.Values) (*OAuthToken, error) {
+func (s *Server) tokenRequest(tokenURL string, data url.Values) (*tokens.OAuthToken, error) {
 	req, err := http.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,
@@ -304,7 +305,7 @@ func (s *Server) tokenRequest(tokenURL string, data url.Values) (*OAuthToken, er
 		scopes = strings.Split(tr.Scope, " ")
 	}
 
-	return &OAuthToken{
+	return &tokens.OAuthToken{
 		AccessToken:  tr.AccessToken,
 		RefreshToken: tr.RefreshToken,
 		TokenType:    tr.TokenType,

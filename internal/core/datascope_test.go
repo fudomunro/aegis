@@ -11,8 +11,10 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/types"
-	_ "modernc.org/sqlite"
 )
 
 // readAllGrants is the migrated "share everything read-only" grant map
@@ -22,123 +24,19 @@ func readAllGrants() types.DataGrants {
 	return types.DataGrants{types.PermissionDefaultKey: {Default: types.AccessRead}}
 }
 
-func writeDataScopes(t *testing.T, scopes []DataScope) string {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "data_scopes.json")
-	raw, err := json.Marshal(dataScopesFile{Version: dataScopesFileVersion, DataScopes: scopes})
-	if err != nil {
-		t.Fatalf("marshal scopes: %v", err)
-	}
-	if err := os.WriteFile(path, raw, 0o600); err != nil {
-		t.Fatalf("write scopes: %v", err)
-	}
-	return path
-}
-
-func TestNewDataScopeStore_MissingFile(t *testing.T) {
-	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "missing.json"))
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	if got := s.FindByAPIKey("nope"); got != nil {
-		t.Fatalf("expected nil scope, got %#v", got)
-	}
-}
-
-func TestNewDataScopeStore_LoadAndResolve(t *testing.T) {
-	path := writeDataScopes(t, []DataScope{
-		{ID: "shire", Name: "Shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", ReadOnly: true},
-		{ID: "gondor", Dataset: "gondor", APIKey: "YOUR_GONDOR_KEY"},
-		{ID: "off", Dataset: "x", APIKey: "YOUR_OFF_KEY", Disabled: true},
-	})
-	s, err := NewDataScopeStore(path)
-	if err != nil {
-		t.Fatalf("load: %v", err)
-	}
-	sc := s.FindByAPIKey("YOUR_SHIRE_KEY")
-	if sc == nil || sc.ID != "shire" || sc.Dataset != "shire" || !sc.ReadOnly {
-		t.Fatalf("shire scope = %#v", sc)
-	}
-	if sc.APIKey != "" {
-		t.Fatalf("plaintext key retained in memory: %q", sc.APIKey)
-	}
-	if s.FindByAPIKey("YOUR_OFF_KEY") != nil {
-		t.Fatal("disabled scope must not authenticate")
-	}
-	if s.FindByAPIKey("wrong") != nil {
-		t.Fatal("unknown key must not authenticate")
-	}
-	if s.Get("gondor") == nil || s.Get("missing") != nil {
-		t.Fatal("Get by id failed")
-	}
-	if len(s.All()) != 3 {
-		t.Fatalf("All() = %d scopes", len(s.All()))
-	}
-}
-
-func TestServiceVisibleToScope(t *testing.T) {
-	shared := &Service{ID: "spotify"}
-	partitioned := &Service{ID: "sample-library-shire", Dataset: "shire"}
-	owner := (*DataScope)(nil)
-	shire := &DataScope{ID: "shire", Dataset: "shire"}
-	gondor := &DataScope{ID: "gondor", Dataset: "gondor"}
-
-	if !serviceVisibleToScope(shared, owner) || !serviceVisibleToScope(shared, shire) {
-		t.Fatal("shared service must be visible to every scope")
-	}
-	if !serviceVisibleToScope(partitioned, owner) {
-		t.Fatal("owner scope sees every service")
-	}
-	if !serviceVisibleToScope(partitioned, shire) {
-		t.Fatal("matching dataset must be visible")
-	}
-	if serviceVisibleToScope(partitioned, gondor) {
-		t.Fatal("other dataset must be invisible")
-	}
-	if serviceVisibleToScope(nil, shire) {
-		t.Fatal("nil service is not visible")
-	}
-}
-
-func TestScopeCacheSuffix(t *testing.T) {
-	if scopeCacheSuffix(nil) != "" {
-		t.Fatal("default principal must not change cache keys")
-	}
-	// Every scoped principal is namespaced — grants change response content
-	// even on the owner dataset (issue #253).
-	plain := scopeCacheSuffix(&DataScope{ID: "x"})
-	if !strings.Contains(plain, "|sg:") {
-		t.Fatalf("scope without dataset = %q, want grants fingerprint", plain)
-	}
-	shire := scopeCacheSuffix(&DataScope{Dataset: "shire"})
-	if !strings.HasPrefix(shire, "|ds:shire|sg:") {
-		t.Fatalf("suffix = %q", shire)
-	}
-	read := scopeCacheSuffix(&DataScope{Dataset: "shire", Grants: readAllGrants()})
-	if read == shire {
-		t.Fatal("different grants must not share a cache suffix")
-	}
-	if again := scopeCacheSuffix(&DataScope{Dataset: "shire", Grants: readAllGrants()}); again != read {
-		t.Fatalf("identical grants must fingerprint identically: %q vs %q", again, read)
-	}
-	if got := scopeCacheSuffix(&DataScope{Dataset: "gondor", Grants: readAllGrants()}); got == read {
-		t.Fatal("different datasets must not share a cache suffix")
-	}
-}
-
 // scopeServer builds a server with two dataset-partitioned sample library
 // services, data-scope API keys, and a seeded mail archive.
-func scopeServer(t *testing.T, scopes []DataScope) *Server {
+func scopeServer(t *testing.T, list []scopes.Scope) *Server {
 	t.Helper()
 	cfg := &Config{Services: []Service{
 		{ID: "sample-library-shire", Name: "Sample Shire", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "shire"},
 		{ID: "sample-library-gondor", Name: "Sample Gondor", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "gondor"},
 	}}
-	loaded, err := NewDataScopeStore(writeDataScopes(t, scopes))
+	loaded, err := scopes.NewStore(writeDataScopes(t, list))
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
 	}
-	archive, err := OpenMailArchive(filepath.Join(t.TempDir(), "mail.db"))
+	archive, err := mail.Open(filepath.Join(t.TempDir(), "mail.db"))
 	if err != nil {
 		t.Fatalf("mail: %v", err)
 	}
@@ -162,7 +60,7 @@ func scopeServer(t *testing.T, scopes []DataScope) *Server {
 		connectors: make(map[string]connectors.ServiceConnector),
 		scopes:     loaded,
 		mail:       archive,
-		links:      &EntityLinkStore{},
+		links:      &links.Store{},
 		metrics:    NewAccessMetrics(32),
 	}
 	srv.connectors["sample-library-shire"] = NewSampleLibraryConnector("sample-library-shire", "shire", GenerateSampleLibraryFor("shire"))
@@ -174,7 +72,7 @@ func scopeServer(t *testing.T, scopes []DataScope) *Server {
 // per dataset plus a no-grants principal on shire (deny-by-default control).
 func twoScopeServer(t *testing.T) *Server {
 	t.Helper()
-	return scopeServer(t, []DataScope{
+	return scopeServer(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
 		{ID: "gondor", Dataset: "gondor", APIKey: "YOUR_GONDOR_KEY", Grants: readAllGrants()},
 		{ID: "empty", Dataset: "shire", APIKey: "YOUR_EMPTY_KEY"},
@@ -189,9 +87,9 @@ func scopeRequest(key, path string) *http.Request {
 
 func TestAuthMiddleware_DataScopeKey(t *testing.T) {
 	srv := twoScopeServer(t)
-	var got *DataScope
+	var got *scopes.Scope
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
-		got = DataScopeFrom(r)
+		got = scopes.From(r)
 		w.WriteHeader(http.StatusOK)
 	})
 	w := httptest.NewRecorder()
@@ -202,16 +100,16 @@ func TestAuthMiddleware_DataScopeKey(t *testing.T) {
 	if got == nil || got.ID != "shire" {
 		t.Fatalf("scope = %#v", got)
 	}
-	if DataScopeFrom(httptest.NewRequest(http.MethodGet, "/x", nil)) != nil {
+	if scopes.From(httptest.NewRequest(http.MethodGet, "/x", nil)) != nil {
 		t.Fatal("bare request must have no scope")
 	}
 }
 
 func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
-	path := writeDataScopes(t, []DataScope{
+	path := writeDataScopes(t, []scopes.Scope{
 		{ID: "demo", Dataset: "demo", APIKey: "YOUR_DEMO_KEY", ReadOnly: true},
 	})
-	scopes, err := NewDataScopeStore(path)
+	scopes, err := scopes.NewStore(path)
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
 	}
@@ -346,7 +244,7 @@ func callMailSearch(t *testing.T, srv *Server, key string) string {
 }
 
 func TestAdminMiddleware_RejectsScopeKeys(t *testing.T) {
-	scopes, err := NewDataScopeStore(writeDataScopes(t, []DataScope{
+	scopes, err := scopes.NewStore(writeDataScopes(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY"},
 	}))
 	if err != nil {
@@ -437,11 +335,11 @@ func TestPreRequest_FiltersForeignDatasetMatches(t *testing.T) {
 }
 
 func TestNewDataScopeStore_DuplicateAPIKey(t *testing.T) {
-	path := writeDataScopes(t, []DataScope{
+	path := writeDataScopes(t, []scopes.Scope{
 		{ID: "a", Dataset: "a", APIKey: "YOUR_SHARED_KEY"},
 		{ID: "b", Dataset: "b", APIKey: "YOUR_SHARED_KEY"},
 	})
-	if _, err := NewDataScopeStore(path); err == nil {
+	if _, err := scopes.NewStore(path); err == nil {
 		t.Fatal("duplicate api_key must fail load")
 	}
 }
@@ -485,12 +383,12 @@ CREATE TABLE mail_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 	}
 	db.Close()
 
-	archive, err := OpenMailArchive(path)
+	archive, err := mail.Open(path)
 	if err != nil {
 		t.Fatalf("migrate open: %v", err)
 	}
 	defer archive.Close()
-	if err := archive.Upsert(MailArchiveRecord{
+	if err := archive.Upsert(mail.Record{
 		Service: "google-gmail", ID: "m1", Subject: "hello", Dataset: "shire",
 	}); err != nil {
 		t.Fatalf("upsert after migrate: %v", err)
@@ -535,7 +433,7 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 // TestScopeGrants_TypeAllowList covers the deny-by-default rows of the
 // resolution table at the HTTP seam: listed types answer, unlisted types 403.
 func TestScopeGrants_TypeAllowList(t *testing.T) {
-	srv := scopeServer(t, []DataScope{
+	srv := scopeServer(t, []scopes.Scope{
 		{ID: "contacts-only", Dataset: "shire", APIKey: "YOUR_CONTACTS_KEY",
 			Grants: types.DataGrants{"contacts": {Default: types.AccessRead}}},
 	})
@@ -562,7 +460,7 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 // a stated type level: the overridden connector disappears from the aggregate
 // while the other still answers.
 func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
-	srv := scopeServer(t, []DataScope{
+	srv := scopeServer(t, []scopes.Scope{
 		{ID: "house", APIKey: "YOUR_HOUSE_KEY", Grants: types.DataGrants{
 			"contacts": {
 				Default:   types.AccessRead,
@@ -586,7 +484,7 @@ func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
 // TestScopeGrants_NeverExceedsOwnerDataGrants proves the two layers AND: a
 // scope grant cannot open a data type the owner tier closed.
 func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
-	srv := scopeServer(t, []DataScope{
+	srv := scopeServer(t, []scopes.Scope{
 		{ID: "house", Dataset: "shire", APIKey: "YOUR_HOUSE_KEY",
 			Grants: types.DataGrants{"contacts": {Default: types.AccessFull}}},
 	})
@@ -608,7 +506,7 @@ func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
 // different event levels must see differently redacted responses — and the
 // cache must not hand the full-read page to the freebusy-only principal.
 func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
-	srv := scopeServer(t, []DataScope{
+	srv := scopeServer(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
 		{ID: "shire-busy", Dataset: "shire", APIKey: "YOUR_BUSY_KEY",
 			Grants: types.DataGrants{"events": {Default: types.AccessFreeBusy}}},
@@ -655,7 +553,7 @@ func TestDataScopeStore_MigratesPlaintextToHashAtRest(t *testing.T) {
 	if err := os.WriteFile(path, []byte(legacy), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	s, err := NewDataScopeStore(path)
+	s, err := scopes.NewStore(path)
 	if err != nil {
 		t.Fatalf("load legacy: %v", err)
 	}
@@ -679,7 +577,7 @@ func TestDataScopeStore_MigratesPlaintextToHashAtRest(t *testing.T) {
 	}
 
 	// The migrated file (hash-only) must load and resolve without the plaintext.
-	s2, err := NewDataScopeStore(path)
+	s2, err := scopes.NewStore(path)
 	if err != nil {
 		t.Fatalf("reload migrated: %v", err)
 	}
@@ -690,11 +588,11 @@ func TestDataScopeStore_MigratesPlaintextToHashAtRest(t *testing.T) {
 
 func TestDataScopeStore_MintStoresHashOnly(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "data_scopes.json")
-	s, err := NewDataScopeStore(path)
+	s, err := scopes.NewStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	view, token, err := s.Create(DataScopeCreateRequest{
+	view, token, err := s.Create(scopes.CreateRequest{
 		ID:     "family",
 		Name:   "Family",
 		Grants: readAllGrants(),
@@ -725,11 +623,11 @@ func TestDataScopeStore_MintStoresHashOnly(t *testing.T) {
 }
 
 func TestDataScopeStore_RotateInvalidatesOldToken(t *testing.T) {
-	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	s, err := scopes.NewStore(filepath.Join(t.TempDir(), "data_scopes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, oldToken, err := s.Create(DataScopeCreateRequest{ID: "shire", Grants: readAllGrants()})
+	_, oldToken, err := s.Create(scopes.CreateRequest{ID: "shire", Grants: readAllGrants()})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -752,16 +650,16 @@ func TestDataScopeStore_RotateInvalidatesOldToken(t *testing.T) {
 }
 
 func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
-	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	s, err := scopes.NewStore(filepath.Join(t.TempDir(), "data_scopes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, token, err := s.Create(DataScopeCreateRequest{ID: "shire", Grants: readAllGrants()})
+	_, token, err := s.Create(scopes.CreateRequest{ID: "shire", Grants: readAllGrants()})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	view, err := s.Update("shire", DataScopeUpdateRequest{Disabled: boolPtr(true)})
+	view, err := s.Update("shire", scopes.UpdateRequest{Disabled: boolPtr(true)})
 	if err != nil {
 		t.Fatalf("disable: %v", err)
 	}
@@ -773,7 +671,7 @@ func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
 	}
 
 	grants := types.DataGrants{"contacts": {Default: types.AccessRead}}
-	view, err = s.Update("shire", DataScopeUpdateRequest{Disabled: boolPtr(false), Grants: &grants})
+	view, err = s.Update("shire", scopes.UpdateRequest{Disabled: boolPtr(false), Grants: &grants})
 	if err != nil {
 		t.Fatalf("update grants: %v", err)
 	}
@@ -786,17 +684,17 @@ func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
 }
 
 func TestDataScopeStore_CreateRejectsDuplicateAndBadID(t *testing.T) {
-	s, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	s, err := scopes.NewStore(filepath.Join(t.TempDir(), "data_scopes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.Create(DataScopeCreateRequest{ID: "bad id!"}); err == nil {
+	if _, _, err := s.Create(scopes.CreateRequest{ID: "bad id!"}); err == nil {
 		t.Fatal("invalid id must be rejected")
 	}
-	if _, _, err := s.Create(DataScopeCreateRequest{ID: "dup"}); err != nil {
+	if _, _, err := s.Create(scopes.CreateRequest{ID: "dup"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.Create(DataScopeCreateRequest{ID: "dup"}); err == nil {
+	if _, _, err := s.Create(scopes.CreateRequest{ID: "dup"}); err == nil {
 		t.Fatal("duplicate id must be rejected")
 	}
 	if _, _, err := s.Rotate("missing"); err == nil {
@@ -805,7 +703,7 @@ func TestDataScopeStore_CreateRejectsDuplicateAndBadID(t *testing.T) {
 }
 
 func TestAdminDataScopes_CRUD(t *testing.T) {
-	store, err := NewDataScopeStore(filepath.Join(t.TempDir(), "data_scopes.json"))
+	store, err := scopes.NewStore(filepath.Join(t.TempDir(), "data_scopes.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -834,8 +732,8 @@ func TestAdminDataScopes_CRUD(t *testing.T) {
 		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
 	}
 	var created struct {
-		Scope       DataScopeView `json:"scope"`
-		InviteToken string        `json:"invite_token"`
+		Scope       scopes.View `json:"scope"`
+		InviteToken string      `json:"invite_token"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode create: %v", err)

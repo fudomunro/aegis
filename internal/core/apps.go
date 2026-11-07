@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -136,7 +137,7 @@ func (s *AppStore) persistLocked() error {
 	}
 	data = append(data, '\n')
 	// 0600: app token hashes live here.
-	return atomicWriteFile(s.path, data, 0o600)
+	return shared.AtomicWriteFile(s.path, data, 0o600)
 }
 
 // generateAppToken returns a new high-entropy app token (plaintext) and its

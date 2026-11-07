@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -257,7 +258,7 @@ func TestHandleAuthCallback_TokenExchangeFails(t *testing.T) {
 
 func TestHandleAuthStatus_AndRevoke(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.tokens.Tokens["spotify"] = &OAuthToken{
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{
 		AccessToken:  "at",
 		RefreshToken: "rt",
 		Expiry:       time.Now().Add(time.Hour),
@@ -272,7 +273,7 @@ func TestHandleAuthStatus_AndRevoke(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var status map[string]TokenStatus
+	var status map[string]tokens.TokenStatus
 	if err := json.NewDecoder(w.Body).Decode(&status); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +312,7 @@ func TestRefreshToken_Success(t *testing.T) {
 	defer tokenSrv.Close()
 
 	srv := testServerWithBase(oauthConfig(tokenSrv.URL, "https://accounts.example.com/authorize"), "https://aegis.example.com")
-	srv.tokens.Tokens["spotify"] = &OAuthToken{
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{
 		AccessToken:  "old-at",
 		RefreshToken: "old-rt",
 		Expiry:       time.Now().Add(-time.Minute),
@@ -335,7 +336,7 @@ func TestRefreshToken_Success(t *testing.T) {
 
 func TestRefreshToken_NoRefreshToken(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.tokens.Tokens["spotify"] = &OAuthToken{AccessToken: "at"}
+	srv.tokens.Tokens["spotify"] = &tokens.OAuthToken{AccessToken: "at"}
 
 	if _, err := srv.RefreshToken("spotify"); err == nil {
 		t.Fatal("expected error when no refresh token")
@@ -344,7 +345,7 @@ func TestRefreshToken_NoRefreshToken(t *testing.T) {
 
 func TestRefreshToken_UnconfiguredService(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.tokens.Tokens["unknown"] = &OAuthToken{RefreshToken: "rt"}
+	srv.tokens.Tokens["unknown"] = &tokens.OAuthToken{RefreshToken: "rt"}
 
 	if _, err := srv.RefreshToken("unknown"); err == nil {
 		t.Fatal("expected error for unconfigured service")
@@ -468,7 +469,7 @@ func TestHandleAuthLogin_SharedGoogleConnection(t *testing.T) {
 func TestHandleAuthLogin_SharedConnectionSkipsPromptWhenRefreshExists(t *testing.T) {
 	cfg := googleSharedConfig()
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("google", &OAuthToken{
+	srv.tokens.Save("google", &tokens.OAuthToken{
 		AccessToken:  "at",
 		RefreshToken: "rt",
 		Expiry:       time.Now().Add(time.Hour),
@@ -537,7 +538,7 @@ func TestHandleAuthCallback_PreservesRefreshTokenAndScopes(t *testing.T) {
 	gconn.TokenURL = tokenSrv.URL
 	cfg.Connections["google"] = gconn
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("google", &OAuthToken{
+	srv.tokens.Save("google", &tokens.OAuthToken{
 		AccessToken:  "old",
 		RefreshToken: "keep-rt",
 		Expiry:       time.Now().Add(time.Hour),
@@ -567,7 +568,7 @@ func TestHandleAuthCallback_PreservesRefreshTokenAndScopes(t *testing.T) {
 func TestHandleAuthRevoke_SharedConnection(t *testing.T) {
 	cfg := googleSharedConfig()
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.tokens.Save("google", &OAuthToken{AccessToken: "at", Expiry: time.Now().Add(time.Hour)})
+	srv.tokens.Save("google", &tokens.OAuthToken{AccessToken: "at", Expiry: time.Now().Add(time.Hour)})
 
 	req := httptest.NewRequest(http.MethodDelete, "/v1/auth/google-photos", nil)
 	w := httptest.NewRecorder()
