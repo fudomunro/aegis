@@ -240,7 +240,7 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 	var q url.Values
 	ct := r.Header.Get("Content-Type")
 	if strings.Contains(ct, "application/json") {
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -344,7 +344,7 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusServiceUnavailable, "app registry disabled")
 		return
 	}
-	body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+	body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 	if !ok {
 		return
 	}

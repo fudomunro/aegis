@@ -193,7 +193,7 @@ func (s *Server) handleUDTBrowse(w http.ResponseWriter, r *http.Request) {
 			raw = "."
 		}
 	}
-	dir := expandUserPath(raw)
+	dir := shared.ExpandUserPath(raw)
 	if !filepath.IsAbs(dir) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "path must be absolute (or ~)")
 		return
@@ -287,7 +287,7 @@ func (s *Server) handleUDTSourceUpdate(w http.ResponseWriter, r *http.Request, k
 	var req udtSourceUpdateRequest
 	switch r.Method {
 	case http.MethodPut, http.MethodPost:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -308,7 +308,7 @@ func (s *Server) handleUDTExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 	var req udtExtraRequest
 	switch r.Method {
 	case http.MethodPost, http.MethodPut:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}

@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"golang.org/x/crypto/pbkdf2"
 )
 
@@ -588,7 +589,7 @@ func (ts *TokenStore) persist() error {
 	if err != nil {
 		return fmt.Errorf("marshaling token file: %w", err)
 	}
-	return atomicWriteFile(path, data, tokenFilePerms)
+	return shared.AtomicWriteFile(path, data, tokenFilePerms)
 }
 
 // encryptEntry seals plaintext under a fresh HKDF-derived entry key.

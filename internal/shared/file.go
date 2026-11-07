@@ -1,13 +1,13 @@
-package core
+package shared
 
 import (
 	"os"
 	"path/filepath"
 )
 
-// atomicWriteFile writes data to path via a same-directory temp file + rename,
+// AtomicWriteFile writes data to path via a same-directory temp file + rename,
 // so a crash cannot leave a truncated config behind.
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
+func AtomicWriteFile(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)
 	if dir != "" && dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil && !os.IsExist(err) {

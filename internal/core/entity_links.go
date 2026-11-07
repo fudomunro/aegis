@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -87,7 +88,7 @@ func (st *EntityLinkStore) saveLocked() error {
 	}
 	// Atomic: a crash mid-write must never leave a truncated link file,
 	// which would silently drop the user's confirmed identities.
-	return atomicWriteFile(st.path, append(data, '\n'), 0o644)
+	return shared.AtomicWriteFile(st.path, append(data, '\n'), 0o644)
 }
 
 // List returns a copy of all links.

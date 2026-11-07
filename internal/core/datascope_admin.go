@@ -34,7 +34,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		case http.MethodGet:
 			shared.WriteJSON(w, map[string]any{"data_scopes": s.scopes.List()})
 		case http.MethodPost:
-			body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+			body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 			if !ok {
 				return
 			}
@@ -104,7 +104,7 @@ func (s *Server) HandleAdminDataScopes(w http.ResponseWriter, r *http.Request) {
 		}
 		shared.WriteJSON(w, map[string]any{"scope": view})
 	case r.Method == http.MethodPatch || r.Method == http.MethodPut:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}

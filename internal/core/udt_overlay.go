@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -98,7 +99,7 @@ func saveUserTypesOverlay(path string, ov *UserTypesOverlay) error {
 	data = append(data, '\n')
 	// 0606-equivalent local config; paths are not secrets but keep 0600
 	// consistent with other admin overlays.
-	if err := atomicWriteFile(path, data, 0o600); err != nil {
+	if err := shared.AtomicWriteFile(path, data, 0o600); err != nil {
 		return err
 	}
 	return nil
@@ -117,19 +118,19 @@ func applyUserTypesOverlay(schema types.UserDefinedTypeSchema, ov UDTKindOverlay
 		if fs, ok := ov.FileSources[src.ID]; ok && len(fs.Paths) > 0 {
 			// Multi-file selection: first path is the primary Path; the rest
 			// are fetched as additional sources with the same mapping.
-			src.Path = expandUserPath(fs.Paths[0])
+			src.Path = shared.ExpandUserPath(fs.Paths[0])
 			for i, extra := range fs.Paths[1:] {
 				clone := *src
 				// Unique source id (basename alone collides across folders).
 				clone.ID = fmt.Sprintf("%s#%d", src.ID, i+2)
-				clone.Path = expandUserPath(extra)
+				clone.Path = shared.ExpandUserPath(extra)
 				clone.Name = src.Name + " (" + filepath.Base(clone.Path) + ")"
 				out.Sources = append(out.Sources, clone)
 			}
 		}
 	}
 	for _, ef := range ov.ExtraFiles {
-		path := expandUserPath(strings.TrimSpace(ef.Path))
+		path := shared.ExpandUserPath(strings.TrimSpace(ef.Path))
 		if path == "" || strings.TrimSpace(ef.ID) == "" {
 			continue
 		}
@@ -166,7 +167,7 @@ func nameMatchFieldMap(fields map[string]types.UserDefinedField) map[string]stri
 
 func resolveUDTFilePaths(paths []string) (out []string, err error) {
 	for _, p := range paths {
-		p = expandUserPath(strings.TrimSpace(p))
+		p = shared.ExpandUserPath(strings.TrimSpace(p))
 		if p == "" {
 			continue
 		}

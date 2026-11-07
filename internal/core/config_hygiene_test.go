@@ -34,7 +34,7 @@ func TestEntityLinkStore_SaveIsAtomic(t *testing.T) {
 			t.Fatalf("Add(%d): %v", i, err)
 		}
 		ids = append(ids, link.ID)
-		// A same-directory temp file is how atomicWriteFile works; a
+		// A same-directory temp file is how shared.AtomicWriteFile works; a
 		// successful save must leave none behind.
 		entries, err := os.ReadDir(dir)
 		if err != nil {

@@ -167,7 +167,7 @@ func (s *OwnershipStore) persist() error {
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(s.path, append(raw, '\n'), 0o600)
+	return shared.AtomicWriteFile(s.path, append(raw, '\n'), 0o600)
 }
 
 // ownershipStatuses derives the per-kind ownership view: user confirmation

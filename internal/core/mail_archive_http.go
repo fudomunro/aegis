@@ -265,7 +265,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 		if err := dec.Decode(&req); err != nil && err.Error() != "EOF" {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
-				writeBodyReadError(w, err)
+				shared.WriteBodyReadError(w, err)
 				return
 			}
 			// Empty body is fine; other decode errors are client faults.
@@ -358,7 +358,7 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 		if err := dec.Decode(&req); err != nil && r.ContentLength != 0 {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
-				writeBodyReadError(w, err)
+				shared.WriteBodyReadError(w, err)
 				return
 			}
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")

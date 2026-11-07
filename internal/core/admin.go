@@ -349,7 +349,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 			"data_grants": policies,
 		})
 	case http.MethodPut:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -440,7 +440,7 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 			"writable_data_types":    writable,
 		})
 	case http.MethodPut:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}
@@ -500,7 +500,7 @@ func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 		sortHookIssues(rep.Issues)
 		shared.WriteJSON(w, rep)
 	case http.MethodPost:
-		body, ok := readBodyLimited(w, r, maxAdminBodyBytes)
+		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
 		if !ok {
 			return
 		}

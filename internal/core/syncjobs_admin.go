@@ -131,7 +131,7 @@ func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause b
 		if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
-				writeBodyReadError(w, err)
+				shared.WriteBodyReadError(w, err)
 				return
 			}
 			if r.ContentLength != 0 {
@@ -221,7 +221,7 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 		if err := dec.Decode(&req); err != nil && !errors.Is(err, io.EOF) {
 			var maxErr *http.MaxBytesError
 			if errors.As(err, &maxErr) {
-				writeBodyReadError(w, err)
+				shared.WriteBodyReadError(w, err)
 				return
 			}
 			if r.ContentLength != 0 {

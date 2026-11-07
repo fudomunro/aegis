@@ -1,4 +1,4 @@
-package core
+package shared
 
 import (
 	"os"
@@ -9,10 +9,10 @@ import (
 func TestAtomicWriteFile_ReplacesContents(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atomic.json")
-	if err := atomicWriteFile(path, []byte(`{"a":1}`+"\n"), 0o644); err != nil {
+	if err := AtomicWriteFile(path, []byte(`{"a":1}`+"\n"), 0o644); err != nil {
 		t.Fatalf("first write: %v", err)
 	}
-	if err := atomicWriteFile(path, []byte(`{"a":2}`+"\n"), 0o644); err != nil {
+	if err := AtomicWriteFile(path, []byte(`{"a":2}`+"\n"), 0o644); err != nil {
 		t.Fatalf("second write: %v", err)
 	}
 	data, err := os.ReadFile(path)
@@ -37,7 +37,7 @@ func TestAtomicWriteFile_ReplacesContents(t *testing.T) {
 func TestAtomicWriteFile_CreatesParentDir(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "deep", "cfg.json")
-	if err := atomicWriteFile(path, []byte("ok\n"), 0o644); err != nil {
+	if err := AtomicWriteFile(path, []byte("ok\n"), 0o644); err != nil {
 		t.Fatalf("write: %v", err)
 	}
 	data, err := os.ReadFile(path)

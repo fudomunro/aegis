@@ -260,24 +260,6 @@ func TestEnsureDataDir_Empty(t *testing.T) {
 	}
 }
 
-func TestExpandUserPath(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip("no home dir")
-	}
-	if got := expandUserPath("~/x.json"); got != filepath.Join(home, "x.json") {
-		t.Fatalf("got %q", got)
-	}
-	if got := expandUserPath("~"); got != home {
-		t.Fatalf("got %q", got)
-	}
-	if got := expandUserPath("/abs/path"); got != "/abs/path" {
-		t.Fatalf("got %q", got)
-	}
-	if got := expandUserPath("  "); got != "" {
-		t.Fatalf("got %q", got)
-	}
-}
 
 func TestAdminSummary_IncludesDataDir(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")

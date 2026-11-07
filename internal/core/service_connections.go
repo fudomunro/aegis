@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/shared"
 	"log/slog"
 	"os"
 	"strings"
@@ -130,7 +131,7 @@ func saveServiceConnections(path string, ov *serviceConnectionsFile) error {
 	}
 	data = append(data, '\n')
 	// 0600 — file is non-secret after #184, but stays tight as local state.
-	if err := atomicWriteFile(path, data, 0o600); err != nil {
+	if err := shared.AtomicWriteFile(path, data, 0o600); err != nil {
 		return err
 	}
 	slog.Info("service connections overlay saved", "path", path, "services", len(out.Services))

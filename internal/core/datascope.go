@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -174,7 +175,7 @@ func (s *DataScopeStore) persistLocked() error {
 		return err
 	}
 	data = append(data, '\n')
-	return atomicWriteFile(s.path, data, 0o600)
+	return shared.AtomicWriteFile(s.path, data, 0o600)
 }
 
 // FindByAPIKey resolves a presented agent credential to its scope.

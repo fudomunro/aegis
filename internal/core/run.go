@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/shared"
 	"io"
 	"log/slog"
 	"net"
@@ -475,7 +476,7 @@ func Run() {
 	// skipped and logged; built-in kinds always stay available.
 	userTypesDir := filepath.Join(paths.Dir, "user-types")
 	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
-		userTypesDir = expandUserPath(v)
+		userTypesDir = shared.ExpandUserPath(v)
 	}
 	udtReg, udtLoaded := LoadUserDefinedTypes(userTypesDir, defaultUserTypesOverlayPath(paths.Config), slog.Default())
 	srv.udts = udtReg
