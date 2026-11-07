@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // --- mirror runner ---
@@ -104,12 +105,12 @@ func mirrorStubServer(t *testing.T, src mirrorSource, dst mirrorTarget) *Server 
 		{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: grants},
 		{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: grants},
 	}}, "https://aegis.example.com")
-	ledger, err := OpenCopyLedger(t.TempDir() + "/copy_ledger.db")
+	ledger, err := copies.Open(t.TempDir() + "/copy_ledger.db")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
-	srv.copies = ledger
+	srv.copyLedger = ledger
 	if src != nil {
 		srv.mirrorSourceFn = func(serviceID, kind string) (mirrorSource, error) { return src, nil }
 	}
@@ -164,7 +165,7 @@ func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
 	}
 
 	// The copy ledger row is stamped once, pointing at the single target.
-	rec, ok := srv.copies.Get(MirrorKindPlaylists, "youtube-music", dst.lastID)
+	rec, ok := srv.copyLedger.Get(MirrorKindPlaylists, "youtube-music", dst.lastID)
 	if !ok {
 		t.Fatalf("copy row missing for target %q", dst.lastID)
 	}
@@ -198,7 +199,7 @@ func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
 	if dst.copied != 3 {
 		t.Fatalf("copied = %d, want 3", dst.copied)
 	}
-	if _, ok := srv.copies.Get(MirrorKindTracks, "youtube-music", ""); !ok {
+	if _, ok := srv.copyLedger.Get(MirrorKindTracks, "youtube-music", ""); !ok {
 		t.Fatal("liked-tracks copy row must be stamped")
 	}
 }
@@ -300,7 +301,7 @@ func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
 	if job.State != SyncJobSucceeded {
 		t.Fatalf("job state = %s, want succeeded", job.State)
 	}
-	if _, ok := srv.copies.Get(MirrorKindPlaylists, "youtube-music", "s"); ok {
+	if _, ok := srv.copyLedger.Get(MirrorKindPlaylists, "youtube-music", "s"); ok {
 		t.Fatal("dry-run must not stamp a copy row")
 	}
 }

@@ -23,6 +23,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 func Run() {
@@ -302,14 +303,14 @@ func Run() {
 		slog.Info("demo mode: all data scopes forced read-only")
 	}
 
-	copies, err := OpenCopyLedger(paths.CopyLedger)
+	copyLedger, err := copies.Open(paths.CopyLedger)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", paths.CopyLedger, "error", err)
 		os.Exit(1)
 	}
-	if copies != nil {
-		defer copies.Close()
-		slog.Info("copy ledger ready", "path", copies.Path(), "enabled", copies.Enabled())
+	if copyLedger != nil {
+		defer copyLedger.Close()
+		slog.Info("copy ledger ready", "path", copyLedger.Path(), "enabled", copyLedger.Enabled())
 	}
 
 	// Sync job queue (issue #227). Defaults to the copy-ledger file so a
@@ -318,7 +319,7 @@ func Run() {
 	// explicit -sync-jobs opens its own file.
 	var syncShared *sql.DB
 	if paths.SyncJobs != "" && paths.SyncJobs == paths.CopyLedger {
-		syncShared = copies.DB()
+		syncShared = copyLedger.DB()
 	}
 	syncStore, err := OpenJobStore(syncShared, paths.SyncJobs)
 	if err != nil {
@@ -452,7 +453,7 @@ func Run() {
 		demoMode:      *demoMode,
 		grants:        NewGrantStore(),
 		csrfTokens:    shared.NewStateStore(),
-		copies:        copies,
+		copyLedger:    copyLedger,
 		syncJobs:      syncStore,
 		syncSchedules: scheduleStore,
 		mail:          mailArchive,
@@ -952,13 +953,13 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		return 1
 	}
 	defer a.Close()
-	copies, err := OpenCopyLedger(copyLedgerPath)
+	copyLedger, err := copies.Open(copyLedgerPath)
 	if err != nil {
 		slog.Error("failed to open copy ledger", "path", copyLedgerPath, "error", err)
 		return 1
 	}
-	if copies != nil {
-		defer copies.Close()
+	if copyLedger != nil {
+		defer copyLedger.Close()
 	}
 	if batch <= 0 {
 		batch = 20000
@@ -995,7 +996,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 			break
 		}
 	}
-	copies.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done)
+	copyLedger.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done)
 	slog.Info("takeout import finished",
 		"path", takeoutPath,
 		"scanned", scanned,

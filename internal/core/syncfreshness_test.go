@@ -16,6 +16,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // --- version comparison ---
@@ -24,25 +25,25 @@ func TestCompareCopyVersion(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		mode string
-		want CopyVersion
-		got  CopyVersion
+		want copies.Version
+		got  copies.Version
 		live bool
 		out  string
 	}{
-		{"gone is missing", CopySyncModeFull, CopyVersion{ItemCount: 3}, CopyVersion{}, false, CopyStatusMissing},
-		{"match is in_sync", CopySyncModeFull, CopyVersion{SnapshotID: "s1", ItemCount: 3}, CopyVersion{SnapshotID: "s1", ItemCount: 3}, true, CopyStatusInSync},
-		{"snapshot drift is stale", CopySyncModeFull, CopyVersion{SnapshotID: "s1"}, CopyVersion{SnapshotID: "s2"}, true, CopyStatusStale},
-		{"count drift is stale", CopySyncModeFull, CopyVersion{ItemCount: 3}, CopyVersion{ItemCount: 4}, true, CopyStatusStale},
-		{"etag drift is stale", CopySyncModeFull, CopyVersion{ETag: "e1"}, CopyVersion{ETag: "e2"}, true, CopyStatusStale},
-		{"hash drift is stale", CopySyncModeFull, CopyVersion{ContentHash: "h1"}, CopyVersion{ContentHash: "h2"}, true, CopyStatusStale},
+		{"gone is missing", copies.CopySyncModeFull, copies.Version{ItemCount: 3}, copies.Version{}, false, copies.CopyStatusMissing},
+		{"match is in_sync", copies.CopySyncModeFull, copies.Version{SnapshotID: "s1", ItemCount: 3}, copies.Version{SnapshotID: "s1", ItemCount: 3}, true, copies.CopyStatusInSync},
+		{"snapshot drift is stale", copies.CopySyncModeFull, copies.Version{SnapshotID: "s1"}, copies.Version{SnapshotID: "s2"}, true, copies.CopyStatusStale},
+		{"count drift is stale", copies.CopySyncModeFull, copies.Version{ItemCount: 3}, copies.Version{ItemCount: 4}, true, copies.CopyStatusStale},
+		{"etag drift is stale", copies.CopySyncModeFull, copies.Version{ETag: "e1"}, copies.Version{ETag: "e2"}, true, copies.CopyStatusStale},
+		{"hash drift is stale", copies.CopySyncModeFull, copies.Version{ContentHash: "h1"}, copies.Version{ContentHash: "h2"}, true, copies.CopyStatusStale},
 		// A token the provider does not report must not produce a false stale.
-		{"unreported snapshot ignored", CopySyncModeFull, CopyVersion{SnapshotID: "s1", ItemCount: 3}, CopyVersion{ItemCount: 3}, true, CopyStatusInSync},
-		{"unreported count ignored", CopySyncModeFull, CopyVersion{SnapshotID: "s1", ItemCount: 3}, CopyVersion{SnapshotID: "s1"}, true, CopyStatusInSync},
+		{"unreported snapshot ignored", copies.CopySyncModeFull, copies.Version{SnapshotID: "s1", ItemCount: 3}, copies.Version{ItemCount: 3}, true, copies.CopyStatusInSync},
+		{"unreported count ignored", copies.CopySyncModeFull, copies.Version{SnapshotID: "s1", ItemCount: 3}, copies.Version{SnapshotID: "s1"}, true, copies.CopyStatusInSync},
 		// A renamed playlist is not a drifted backup.
-		{"name is not staleness", CopySyncModeFull, CopyVersion{ItemCount: 3, Name: "old"}, CopyVersion{ItemCount: 3, Name: "new"}, true, CopyStatusInSync},
+		{"name is not staleness", copies.CopySyncModeFull, copies.Version{ItemCount: 3, Name: "old"}, copies.Version{ItemCount: 3, Name: "new"}, true, copies.CopyStatusInSync},
 		// Optimistic copies can only report presence.
-		{"optimistic drift is not stale", CopySyncModeOptimistic, CopyVersion{ItemCount: 3}, CopyVersion{ItemCount: 99}, true, CopyStatusInSync},
-		{"optimistic gone is missing", CopySyncModeOptimistic, CopyVersion{ItemCount: 3}, CopyVersion{}, false, CopyStatusMissing},
+		{"optimistic drift is not stale", copies.CopySyncModeOptimistic, copies.Version{ItemCount: 3}, copies.Version{ItemCount: 99}, true, copies.CopyStatusInSync},
+		{"optimistic gone is missing", copies.CopySyncModeOptimistic, copies.Version{ItemCount: 3}, copies.Version{}, false, copies.CopyStatusMissing},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got := compareCopyVersion(tc.mode, tc.want, tc.got, tc.live)
@@ -58,12 +59,12 @@ func TestCompareCopyVersion(t *testing.T) {
 
 type stubChecker struct {
 	services []string
-	fn       func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error)
+	fn       func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error)
 	calls    int
 }
 
 func (c *stubChecker) Services() []string { return c.services }
-func (c *stubChecker) Check(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+func (c *stubChecker) Check(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
 	c.calls++
 	return c.fn(ctx, rec)
 }
@@ -97,52 +98,52 @@ func TestCheckerRegistry(t *testing.T) {
 	}
 }
 
-func freshServerWithLedger(t *testing.T) (*Server, *CopyLedger) {
+func freshServerWithLedger(t *testing.T) (*Server, *copies.Ledger) {
 	t.Helper()
-	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
+	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
-		t.Fatalf("OpenCopyLedger: %v", err)
+		t.Fatalf("copies.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
-	srv := &Server{copies: ledger}
+	srv := &Server{copyLedger: ledger}
 	return srv, ledger
 }
 
 func TestFreshnessEngine_StampsStatuses(t *testing.T) {
 	srv, ledger := freshServerWithLedger(t)
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p1", Service: "spotify", ExternalID: "pl1",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull,
-		Version: CopyVersion{SnapshotID: "s1", ItemCount: 3},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
+		Version: copies.Version{SnapshotID: "s1", ItemCount: 3},
 	})
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p2", Service: "spotify", ExternalID: "pl2",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull,
-		Version: CopyVersion{SnapshotID: "s2", ItemCount: 5},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
+		Version: copies.Version{SnapshotID: "s2", ItemCount: 5},
 	})
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p3", Service: "spotify", ExternalID: "pl3",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull,
-		Version: CopyVersion{SnapshotID: "s3", ItemCount: 1},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
+		Version: copies.Version{SnapshotID: "s3", ItemCount: 1},
 	})
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p4", Service: "bluesky", ExternalID: "at://post",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull,
-		Version: CopyVersion{ContentHash: "h"},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
+		Version: copies.Version{ContentHash: "h"},
 	})
 
 	checker := &stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
 			switch rec.ExternalID {
 			case "pl1":
-				return CopyVersion{SnapshotID: "s1", ItemCount: 3}, true, true, nil // in sync
+				return copies.Version{SnapshotID: "s1", ItemCount: 3}, true, true, nil // in sync
 			case "pl2":
-				return CopyVersion{SnapshotID: "s2", ItemCount: 9}, true, true, nil // stale
+				return copies.Version{SnapshotID: "s2", ItemCount: 9}, true, true, nil // stale
 			case "pl3":
-				return CopyVersion{}, false, true, nil // missing
+				return copies.Version{}, false, true, nil // missing
 			}
-			return CopyVersion{}, false, false, nil
+			return copies.Version{}, false, false, nil
 		},
 	}
 	reg := NewCheckerRegistry()
@@ -176,16 +177,16 @@ func TestFreshnessEngine_StampsStatuses(t *testing.T) {
 			t.Fatalf("copy %s must carry last_checked_at", externalID)
 		}
 	}
-	assertStatus("pl1", CopyStatusInSync)
-	assertStatus("pl2", CopyStatusStale)
-	assertStatus("pl3", CopyStatusMissing)
+	assertStatus("pl1", copies.CopyStatusInSync)
+	assertStatus("pl2", copies.CopyStatusStale)
+	assertStatus("pl3", copies.CopyStatusMissing)
 
 	// A service with no checker is left exactly as it was — fail-open. A
 	// freshly placed copy is in_sync by construction (we just wrote it); the
 	// gap signal is the missing last_checked_at, which the rollup reports as
 	// "unchecked".
 	skipped, _ := ledger.Get("playlists", "bluesky", "at://post")
-	if skipped.Status != CopyStatusInSync || skipped.LastCheckedAt != "" {
+	if skipped.Status != copies.CopyStatusInSync || skipped.LastCheckedAt != "" {
 		t.Fatalf("unchecked copy = %s/%q, want in_sync/empty (must be left alone)",
 			skipped.Status, skipped.LastCheckedAt)
 	}
@@ -194,16 +195,16 @@ func TestFreshnessEngine_StampsStatuses(t *testing.T) {
 func TestFreshnessEngine_ChainsBatches(t *testing.T) {
 	srv, ledger := freshServerWithLedger(t)
 	for i := 0; i < 5; i++ {
-		_, _ = ledger.Upsert(CopyRecord{
+		_, _ = ledger.Upsert(copies.Record{
 			Kind: "playlists", EntityKey: fmt.Sprint("p", i), Service: "spotify",
-			ExternalID: fmt.Sprint("pl", i), Role: CopyRoleMirror, SyncMode: CopySyncModeFull,
-			Version: CopyVersion{ItemCount: 1},
+			ExternalID: fmt.Sprint("pl", i), Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
+			Version: copies.Version{ItemCount: 1},
 		})
 	}
 	checker := &stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
-			return CopyVersion{ItemCount: 1}, true, true, nil
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+			return copies.Version{ItemCount: 1}, true, true, nil
 		},
 	}
 	reg := NewCheckerRegistry()
@@ -241,14 +242,14 @@ func TestFreshnessEngine_ChainsBatches(t *testing.T) {
 
 func TestFreshnessEngine_AuthOrErrorLeavesRowAlone(t *testing.T) {
 	srv, ledger := freshServerWithLedger(t)
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p1", Service: "spotify", ExternalID: "pl1",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{ItemCount: 3},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 3},
 	})
 	checker := &stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
-			return CopyVersion{}, false, false, types.ErrUnauthorized
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+			return copies.Version{}, false, false, types.ErrUnauthorized
 		},
 	}
 	reg := NewCheckerRegistry()
@@ -263,13 +264,13 @@ func TestFreshnessEngine_AuthOrErrorLeavesRowAlone(t *testing.T) {
 		t.Fatalf("batch = %+v, want 1 skipped", batch)
 	}
 	rec, _ := ledger.Get("playlists", "spotify", "pl1")
-	if rec.Status != CopyStatusInSync || rec.LastCheckedAt != "" {
+	if rec.Status != copies.CopyStatusInSync || rec.LastCheckedAt != "" {
 		t.Fatalf("auth failure must leave the row alone, got %s/%q", rec.Status, rec.LastCheckedAt)
 	}
 }
 
 func TestFreshnessEngine_DisabledLedgerIsNoop(t *testing.T) {
-	engine := NewFreshnessEngine(&Server{copies: &CopyLedger{}}, NewCheckerRegistry())
+	engine := NewFreshnessEngine(&Server{copyLedger: &copies.Ledger{}}, NewCheckerRegistry())
 	batch, err := engine.RunBatch(context.Background(), "playlists", 0, 10)
 	if err != nil {
 		t.Fatalf("RunBatch on disabled ledger: %v", err)
@@ -284,17 +285,17 @@ func TestFreshnessEngine_DisabledLedgerIsNoop(t *testing.T) {
 func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 	srv, ledger := freshServerWithLedger(t)
 	for i := 0; i < 3; i++ {
-		_, _ = ledger.Upsert(CopyRecord{
+		_, _ = ledger.Upsert(copies.Record{
 			Kind: "playlists", EntityKey: fmt.Sprint("p", i), Service: "spotify",
-			ExternalID: fmt.Sprint("pl", i), Role: CopyRoleMirror, SyncMode: CopySyncModeFull,
-			Version: CopyVersion{ItemCount: 1},
+			ExternalID: fmt.Sprint("pl", i), Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull,
+			Version: copies.Version{ItemCount: 1},
 		})
 	}
 	reg := NewCheckerRegistry()
 	reg.Register(&stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
-			return CopyVersion{ItemCount: 1}, true, true, nil
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+			return copies.Version{ItemCount: 1}, true, true, nil
 		},
 	})
 	runner := &freshnessRunner{engine: NewFreshnessEngine(srv, reg), kind: "playlists"}
@@ -336,7 +337,7 @@ func TestFreshnessRunner_TerminalConditions(t *testing.T) {
 	} else if !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
 		t.Fatalf("err = %v, want terminal", err)
 	}
-	r := &freshnessRunner{engine: NewFreshnessEngine(&Server{copies: &CopyLedger{}}, NewCheckerRegistry()), kind: "playlists"}
+	r := &freshnessRunner{engine: NewFreshnessEngine(&Server{copyLedger: &copies.Ledger{}}, NewCheckerRegistry()), kind: "playlists"}
 	if _, err := r.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
 		t.Fatal("bad payload must fail terminal")
 	}
@@ -349,12 +350,12 @@ func TestFreshnessRunner_TerminalConditions(t *testing.T) {
 }
 
 func TestNewFreshnessRunners_CoverSupportedKinds(t *testing.T) {
-	runners := newFreshnessRunners(&Server{copies: &CopyLedger{}})
+	runners := newFreshnessRunners(&Server{copyLedger: &copies.Ledger{}})
 	if len(runners) != len(freshnessKinds) {
 		t.Fatalf("runners = %d, want %d", len(runners), len(freshnessKinds))
 	}
 	reg := NewRunnerRegistry()
-	registerFreshnessRunners(reg, &Server{copies: &CopyLedger{}})
+	registerFreshnessRunners(reg, &Server{copyLedger: &copies.Ledger{}})
 	for _, kind := range freshnessKinds {
 		if _, ok := reg.For(kind, SyncJobTypeFreshness); !ok {
 			t.Fatalf("kind %s has no freshness runner", kind)
@@ -380,7 +381,7 @@ func TestSnapshotChecker(t *testing.T) {
 		t.Fatalf("Services = %v", got)
 	}
 
-	cur, exists, ok, err := c.Check(context.Background(), CopyRecord{ExternalID: path})
+	cur, exists, ok, err := c.Check(context.Background(), copies.Record{ExternalID: path})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check(existing) = (%+v,%v,%v,%v)", cur, exists, ok, err)
 	}
@@ -388,19 +389,19 @@ func TestSnapshotChecker(t *testing.T) {
 		t.Fatalf("Check(existing) = %+v, want the recorded export", cur)
 	}
 
-	_, exists, ok, err = c.Check(context.Background(), CopyRecord{ExternalID: filepath.Join(dir, "gone.mbox")})
+	_, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: filepath.Join(dir, "gone.mbox")})
 	if err != nil || !ok || exists {
 		t.Fatalf("Check(missing) = (exists=%v ok=%v err=%v), want (false,true,nil)", exists, ok, err)
 	}
 
 	// No path recorded: cannot check, leave the row alone.
-	if _, _, ok, _ := c.Check(context.Background(), CopyRecord{ExternalID: ""}); ok {
+	if _, _, ok, _ := c.Check(context.Background(), copies.Record{ExternalID: ""}); ok {
 		t.Fatal("empty path must not report a successful check")
 	}
 
 	// A source that is not a SnapshotProber is not applicable.
 	noop := &snapshotChecker{srv: srv, service: "nope"}
-	if _, _, ok, _ := noop.Check(context.Background(), CopyRecord{ExternalID: path}); ok {
+	if _, _, ok, _ := noop.Check(context.Background(), copies.Record{ExternalID: path}); ok {
 		t.Fatal("non-prober source must not report a successful check")
 	}
 }
@@ -433,7 +434,7 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 
 	c := &musicMirrorChecker{srv: srv, service: "spotify"}
 
-	cur, exists, ok, err := c.Check(context.Background(), CopyRecord{ExternalID: "pl1"})
+	cur, exists, ok, err := c.Check(context.Background(), copies.Record{ExternalID: "pl1"})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check(playlist) = (%+v,%v,%v,%v)", cur, exists, ok, err)
 	}
@@ -445,7 +446,7 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 	}
 
 	// Liked-tracks mirrors carry no target id; the check compares counts.
-	cur, exists, ok, err = c.Check(context.Background(), CopyRecord{ExternalID: ""})
+	cur, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: ""})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check(liked) = (%+v,%v,%v,%v)", cur, exists, ok, err)
 	}
@@ -459,7 +460,7 @@ func TestMusicMirrorChecker_SpotifyShapes(t *testing.T) {
 	}))
 	t.Cleanup(up2.Close)
 	srv.config.updateService("spotify", func(svc *Service) { svc.Endpoint = up2.URL })
-	_, exists, ok, err = c.Check(context.Background(), CopyRecord{ExternalID: "pl1"})
+	_, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: "pl1"})
 	if err != nil || !ok || exists {
 		t.Fatalf("Check(404) = (exists=%v ok=%v err=%v), want (false,true,nil)", exists, ok, err)
 	}
@@ -489,7 +490,7 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 
 	c := &musicMirrorChecker{srv: srv, service: "youtube-music"}
-	cur, exists, ok, err := c.Check(context.Background(), CopyRecord{ExternalID: "PLx"})
+	cur, exists, ok, err := c.Check(context.Background(), copies.Record{ExternalID: "PLx"})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check = (%+v,%v,%v,%v)", cur, exists, ok, err)
 	}
@@ -497,7 +498,7 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 		t.Fatalf("cur = %+v, want 4/My list", cur)
 	}
 
-	cur, exists, ok, err = c.Check(context.Background(), CopyRecord{ExternalID: ""})
+	cur, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: ""})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check(liked) = (%+v,%v,%v,%v)", cur, exists, ok, err)
 	}
@@ -511,7 +512,7 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 	}))
 	t.Cleanup(up2.Close)
 	srv.config.updateService("youtube-music", func(svc *Service) { svc.Endpoint = up2.URL })
-	_, exists, ok, err = c.Check(context.Background(), CopyRecord{ExternalID: "PLx"})
+	_, exists, ok, err = c.Check(context.Background(), copies.Record{ExternalID: "PLx"})
 	if err != nil || !ok || exists {
 		t.Fatalf("Check(empty) = (exists=%v ok=%v err=%v), want (false,true,nil)", exists, ok, err)
 	}
@@ -689,23 +690,23 @@ func TestScheduleStore_DisabledIsNoop(t *testing.T) {
 // --- rollup ---
 
 func TestCopyLedger_FreshnessRollup(t *testing.T) {
-	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
+	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ledger.Close()
 
-	_, _ = ledger.Upsert(CopyRecord{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "1",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Status: CopyStatusInSync})
-	_, _ = ledger.Upsert(CopyRecord{Kind: "playlists", EntityKey: "b", Service: "spotify", ExternalID: "2",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Status: CopyStatusStale})
-	_, _ = ledger.Upsert(CopyRecord{Kind: "messages", EntityKey: "c", Service: connectors.TakeoutServiceID, ExternalID: "/tmp/x",
-		Role: CopyRoleImport, SyncMode: CopySyncModeOptimistic})
-	if err := ledger.MarkChecked("playlists", "a", "spotify", "1", CopyStatusInSync); err != nil {
+	_, _ = ledger.Upsert(copies.Record{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "1",
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Status: copies.CopyStatusInSync})
+	_, _ = ledger.Upsert(copies.Record{Kind: "playlists", EntityKey: "b", Service: "spotify", ExternalID: "2",
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Status: copies.CopyStatusStale})
+	_, _ = ledger.Upsert(copies.Record{Kind: "messages", EntityKey: "c", Service: connectors.TakeoutServiceID, ExternalID: "/tmp/x",
+		Role: copies.CopyRoleImport, SyncMode: copies.CopySyncModeOptimistic})
+	if err := ledger.MarkChecked("playlists", "a", "spotify", "1", copies.CopyStatusInSync); err != nil {
 		t.Fatalf("MarkChecked: %v", err)
 	}
 	// MarkChecked can also record an inconclusive result as `unknown`.
-	if err := ledger.MarkChecked("messages", "c", connectors.TakeoutServiceID, "/tmp/x", CopyStatusUnknown); err != nil {
+	if err := ledger.MarkChecked("messages", "c", connectors.TakeoutServiceID, "/tmp/x", copies.CopyStatusUnknown); err != nil {
 		t.Fatalf("MarkChecked(unknown): %v", err)
 	}
 
@@ -713,7 +714,7 @@ func TestCopyLedger_FreshnessRollup(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("rollup = %+v, want 2 kinds", got)
 	}
-	byKind := map[string]CopyFreshness{}
+	byKind := map[string]copies.Freshness{}
 	for _, f := range got {
 		byKind[f.Kind] = f
 	}
@@ -736,7 +737,7 @@ func TestCopyLedger_FreshnessRollup(t *testing.T) {
 		t.Fatalf("messages = %+v, want 0 unchecked (it has been checked)", msg)
 	}
 
-	if got := (&CopyLedger{}).FreshnessRollup(); got != nil {
+	if got := (&copies.Ledger{}).FreshnessRollup(); got != nil {
 		t.Fatalf("disabled rollup = %v, want nil", got)
 	}
 }
@@ -745,14 +746,14 @@ func TestCopyLedger_FreshnessRollup(t *testing.T) {
 
 func TestHandleAdminSync_ReportsFreshnessAndSchedules(t *testing.T) {
 	srv := syncAdminServer(t)
-	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
+	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer ledger.Close()
-	srv.copies = ledger
-	_, _ = srv.copies.Upsert(CopyRecord{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "1",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Status: CopyStatusStale})
+	srv.copyLedger = ledger
+	_, _ = srv.copyLedger.Upsert(copies.Record{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "1",
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Status: copies.CopyStatusStale})
 	srv.syncSchedules = testScheduleStore(t)
 	if _, err := srv.syncSchedules.Upsert(SyncSchedule{
 		Name: "Daily copy freshness", Kind: "playlists", JobType: SyncJobTypeFreshness,
@@ -905,15 +906,15 @@ func TestSyncWorker_HousekeepFeedsSchedules(t *testing.T) {
 
 func TestFreshness_EndToEndThroughQueue(t *testing.T) {
 	srv, ledger := freshServerWithLedger(t)
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p1", Service: "spotify", ExternalID: "pl1",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{SnapshotID: "s1", ItemCount: 3},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{SnapshotID: "s1", ItemCount: 3},
 	})
 	reg := NewCheckerRegistry()
 	reg.Register(&stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
-			return CopyVersion{SnapshotID: "s1", ItemCount: 3}, true, true, nil
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+			return copies.Version{SnapshotID: "s1", ItemCount: 3}, true, true, nil
 		},
 	})
 	store := testJobStore(t)
@@ -929,41 +930,24 @@ func TestFreshness_EndToEndThroughQueue(t *testing.T) {
 		t.Fatalf("job state = %s, want succeeded (progress %s)", job.State, job.Progress)
 	}
 	rec, _ := ledger.Get("playlists", "spotify", "pl1")
-	if rec.Status != CopyStatusInSync || rec.LastCheckedAt == "" {
+	if rec.Status != copies.CopyStatusInSync || rec.LastCheckedAt == "" {
 		t.Fatalf("copy = %s/%q, want in_sync and stamped", rec.Status, rec.LastCheckedAt)
 	}
 }
 
-func TestParseSyncRowID(t *testing.T) {
-	if got := parseSyncRowID("cpy_a"); got != 10 {
-		t.Fatalf("parseSyncRowID(cpy_a) = %d, want 10 (hex)", got)
-	}
-	if got := parseSyncRowID("cpy_2a"); got != 42 {
-		t.Fatalf("parseSyncRowID(cpy_2a) = %d, want 42", got)
-	}
-	if got := parseSyncRowID("cpy_"); got != 0 {
-		t.Fatalf("parseSyncRowID(cpy_) = %d, want 0", got)
-	}
-	if got := parseSyncRowID("nope"); got != 0 {
-		t.Fatalf("parseSyncRowID(nope) = %d, want 0", got)
-	}
-	if got := parseSyncRowID(""); got != 0 {
-		t.Fatalf("parseSyncRowID() = %d, want 0", got)
-	}
-}
 
 func TestFreshnessEngine_UnknownIDIsNotAFailure(t *testing.T) {
 	// A checker reporting ok=false (unsupported shape) must skip, not fail.
 	srv, ledger := freshServerWithLedger(t)
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "tracks", EntityKey: "liked:spotify", Service: "spotify", ExternalID: "",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{ItemCount: 3},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 3},
 	})
 	reg := NewCheckerRegistry()
 	reg.Register(&stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
-			return CopyVersion{}, false, false, nil
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+			return copies.Version{}, false, false, nil
 		},
 	})
 	engine := NewFreshnessEngine(srv, reg)
@@ -982,15 +966,15 @@ func TestFreshnessEngine_CheckerPanicPropagates(t *testing.T) {
 	// The engine does not recover panics — the worker's safeRun does. A
 	// checker returning an error is the documented path.
 	srv, ledger := freshServerWithLedger(t)
-	_, _ = ledger.Upsert(CopyRecord{
+	_, _ = ledger.Upsert(copies.Record{
 		Kind: "playlists", EntityKey: "p", Service: "spotify", ExternalID: "pl",
-		Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{ItemCount: 1},
+		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 1},
 	})
 	reg := NewCheckerRegistry()
 	reg.Register(&stubChecker{
 		services: []string{"spotify"},
-		fn: func(ctx context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
-			return CopyVersion{}, false, false, errCheckerBoom
+		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
+			return copies.Version{}, false, false, errCheckerBoom
 		},
 	})
 	engine := NewFreshnessEngine(srv, reg)
@@ -1032,24 +1016,24 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 	}}}, "https://aegis.example.com")
 	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
-	ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db"))
+	ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = ledger.Close() })
-	srv.copies = ledger
+	srv.copyLedger = ledger
 
-	for _, rec := range []CopyRecord{
+	for _, rec := range []copies.Record{
 		{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "pl-sync",
-			Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{SnapshotID: "snap-1", ItemCount: 12}},
+			Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{SnapshotID: "snap-1", ItemCount: 12}},
 		{Kind: "playlists", EntityKey: "b", Service: "spotify", ExternalID: "pl-stale",
-			Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{SnapshotID: "snap-1", ItemCount: 12}},
+			Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{SnapshotID: "snap-1", ItemCount: 12}},
 		{Kind: "playlists", EntityKey: "c", Service: "spotify", ExternalID: "pl-gone",
-			Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{SnapshotID: "snap-1", ItemCount: 12}},
+			Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{SnapshotID: "snap-1", ItemCount: 12}},
 		{Kind: "tracks", EntityKey: "liked:spotify", Service: "spotify", ExternalID: "",
-			Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{ItemCount: 3}},
+			Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 3}},
 		{Kind: "tracks", EntityKey: "liked:spotify2", Service: "spotify", ExternalID: "",
-			Role: CopyRoleMirror, SyncMode: CopySyncModeFull, Version: CopyVersion{ItemCount: 7}},
+			Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Version: copies.Version{ItemCount: 7}},
 	} {
 		if _, err := ledger.Upsert(rec); err != nil {
 			t.Fatalf("Upsert(%s): %v", rec.EntityKey, err)
@@ -1068,9 +1052,9 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 	}
 
 	wantStatus := map[string]string{
-		"playlists|pl-sync":  CopyStatusInSync,
-		"playlists|pl-stale": CopyStatusStale,
-		"playlists|pl-gone":  CopyStatusMissing,
+		"playlists|pl-sync":  copies.CopyStatusInSync,
+		"playlists|pl-stale": copies.CopyStatusStale,
+		"playlists|pl-gone":  copies.CopyStatusMissing,
 	}
 	for key, want := range wantStatus {
 		parts := strings.SplitN(key, "|", 2)
@@ -1091,7 +1075,7 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 		t.Fatal("liked-tracks copy must be findable")
 	}
 	rollup := ledger.FreshnessRollup()
-	byKind := map[string]CopyFreshness{}
+	byKind := map[string]copies.Freshness{}
 	for _, f := range rollup {
 		byKind[f.Kind] = f
 	}

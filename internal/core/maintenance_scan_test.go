@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // fakeIssueTracker records upserts for scanner tests.
@@ -140,7 +141,7 @@ func TestScanMaintenanceDir_FreshnessFromLatestBundle(t *testing.T) {
 	dir := t.TempDir()
 	tracker := &fakeIssueTracker{}
 	sig := scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC))
-	sig.Freshness = []CopyFreshness{
+	sig.Freshness = []copies.Freshness{
 		{Kind: "tracks", InSync: 8, Stale: 2, Missing: 1},
 		{Kind: "messages", InSync: 5},
 	}

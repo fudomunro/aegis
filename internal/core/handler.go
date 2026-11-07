@@ -20,6 +20,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -124,7 +125,7 @@ type Server struct {
 	// all the data of that kind the user cares about (issue #165).
 	ownership *ownership.Store
 	// copies is the durable copy ledger (issue #76). May be disabled.
-	copies *CopyLedger
+	copyLedger *copies.Ledger
 	// syncJobs is the durable sync job queue (issue #227). May be disabled.
 	// Co-located with copies by default so completion and copy stamps share
 	// one transaction.

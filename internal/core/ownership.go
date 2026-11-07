@@ -339,10 +339,10 @@ func ownershipRole(svc Service, kind string) string {
 // ids. The ledger is optional; a disabled ledger drops the field.
 func (s *Server) ownershipFreshnessByKind() map[string]*types.OwnershipFreshness {
 	out := map[string]*types.OwnershipFreshness{}
-	if s.copies == nil {
+	if s.copyLedger == nil {
 		return out
 	}
-	for _, f := range s.copies.FreshnessRollup() {
+	for _, f := range s.copyLedger.FreshnessRollup() {
 		f := f
 		out[f.Kind] = &types.OwnershipFreshness{
 			InSync:      f.InSync,

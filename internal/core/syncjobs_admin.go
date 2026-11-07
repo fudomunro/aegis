@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Admin sync surface (issue #227). Read model for the queue plus on-demand
@@ -29,7 +30,7 @@ type SyncStatus struct {
 	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
 	// Freshness is the copy ledger's per-kind status rollup (phase 2): the
 	// data an operator needs to see where their copies stand.
-	Freshness []CopyFreshness `json:"freshness,omitempty"`
+	Freshness []copies.Freshness `json:"freshness,omitempty"`
 	// Schedules lists the recurring job templates feeding the queue.
 	Schedules []SyncSchedule `json:"schedules,omitempty"`
 	// Paused lists active pause scopes ("global" and/or service ids).
@@ -85,8 +86,8 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 			status.ByJobType = b.ByJobType
 		}
 	}
-	if s.copies != nil {
-		status.Freshness = s.copies.FreshnessRollup()
+	if s.copyLedger != nil {
+		status.Freshness = s.copyLedger.FreshnessRollup()
 	}
 	if s.syncSchedules != nil {
 		status.Schedules = s.syncSchedules.List()

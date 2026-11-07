@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // davWriteMock is a CardDAV PUT sink for mirror tests (issue #146).
@@ -61,14 +62,14 @@ func (d *davWriteMock) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestRecordMirrorItemCopy_StoresETagWatermark(t *testing.T) {
-	ledger, err := OpenCopyLedger(t.TempDir() + "/copy_ledger.db")
+	ledger, err := copies.Open(t.TempDir() + "/copy_ledger.db")
 	if err != nil {
-		t.Fatalf("OpenCopyLedger: %v", err)
+		t.Fatalf("copies.Open: %v", err)
 	}
 	defer ledger.Close()
-	s := &Server{copies: ledger}
+	s := &Server{copyLedger: ledger}
 	s.recordMirrorItemCopy(MirrorKindContacts, "Ada Lovelace", "dav-contacts", "ada.vcf", "Ada Lovelace", `"etag-1"`)
-	recs := ledger.List(CopyFilter{Kind: MirrorKindContacts})
+	recs := ledger.List(copies.Filter{Kind: MirrorKindContacts})
 	if len(recs) != 1 {
 		t.Fatalf("got %d records", len(recs))
 	}

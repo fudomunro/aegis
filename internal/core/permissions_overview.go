@@ -7,6 +7,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
@@ -104,12 +105,12 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			Explicit: map[string]bool{"messages": true},
 		})
 	}
-	if s.copies != nil {
+	if s.copyLedger != nil {
 		// Copy ledger stamps provenance for mirror writes across types.
 		// No fixed type list — show only when a kind has copy activity.
 		levels := map[string]string{}
 		explicit := map[string]bool{}
-		for _, rec := range s.copies.List(CopyFilter{}) {
+		for _, rec := range s.copyLedger.List(copies.Filter{}) {
 			if rec.Kind == "" {
 				continue
 			}

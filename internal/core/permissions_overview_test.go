@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
@@ -57,16 +58,16 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	}
 	srv.apps = apps
 
-	mail, err := mail.Open(filepath.Join(dir, "mail-archive.db"))
+	mailArch, err := mail.Open(filepath.Join(dir, "mail-archive.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.mail = mail
-	copies, err := OpenCopyLedger(filepath.Join(dir, "copy_ledger.db"))
+	srv.mail = mailArch
+	copyLedger, err := copies.Open(filepath.Join(dir, "copy_ledger.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.copies = copies
+	srv.copyLedger = copyLedger
 
 	overview := srv.permissionsOverview()
 	if len(overview.DataTypes) == 0 || len(overview.Types) == 0 {

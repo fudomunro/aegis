@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 func TestOwnershipStatuses_ConnectedServiceIsUnderManagement(t *testing.T) {
@@ -121,16 +122,16 @@ func TestOwnershipStatuses_FreshnessPassthrough(t *testing.T) {
 	cfg := &Config{Services: []Service{}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.ownership = mustOwnershipStore(t, "")
-	srv.copies = mustCopyLedger(t)
-	if _, err := srv.copies.Upsert(CopyRecord{
+	srv.copyLedger = mustCopyLedger(t)
+	if _, err := srv.copyLedger.Upsert(copies.Record{
 		Kind:          "playlists",
 		EntityKey:     "playlists:spotify:p1",
 		SourceService: "spotify",
 		SourceID:      "p1",
 		Service:       "youtube-music",
 		ExternalID:    "y1",
-		Role:          CopyRoleMirror,
-		Version:       CopyVersion{ItemCount: 1},
+		Role:          copies.CopyRoleMirror,
+		Version:       copies.Version{ItemCount: 1},
 	}); err != nil {
 		t.Fatalf("upsert copy: %v", err)
 	}

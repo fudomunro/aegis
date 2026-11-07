@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -236,4 +237,15 @@ func sampleMailRecord(id, subject, body string) mail.Record {
 		BodyText: body,
 		SentAt:   "2024-06-01T09:00:00Z",
 	}
+}
+
+// mustCopyLedger opens a copy ledger in a temp dir for Server tests.
+func mustCopyLedger(t *testing.T) *copies.Ledger {
+	t.Helper()
+	l, err := copies.Open(filepath.Join(t.TempDir(), "copy-ledger.db"))
+	if err != nil {
+		t.Fatalf("copies.Open: %v", err)
+	}
+	t.Cleanup(func() { l.Close() })
+	return l
 }

@@ -13,6 +13,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 type fakePhotoBytesProvider struct {
@@ -100,9 +101,9 @@ func postPhotoShare(t *testing.T, srv *Server, body map[string]any) *httptest.Re
 
 func TestHandlePhotoShare_HappyPathClaim(t *testing.T) {
 	srv, src, dst := testPhotoShareServer(t, true, true)
-	if ledger, err := OpenCopyLedger(filepath.Join(t.TempDir(), "copy_ledger.db")); err == nil {
+	if ledger, err := copies.Open(filepath.Join(t.TempDir(), "copy_ledger.db")); err == nil {
 		t.Cleanup(func() { ledger.Close() })
-		srv.copies = ledger
+		srv.copyLedger = ledger
 	}
 	w := postPhotoShare(t, srv, map[string]any{
 		"source_service": "immich",
@@ -146,11 +147,11 @@ func TestHandlePhotoShare_HappyPathClaim(t *testing.T) {
 	}
 
 	// Copy ledger records the share as a durable provenance breadcrumb.
-	rec, ok := srv.copies.Get("photos", "bluesky", "3kxyz")
+	rec, ok := srv.copyLedger.Get("photos", "bluesky", "3kxyz")
 	if !ok {
 		t.Fatal("expected copy ledger row for bluesky post")
 	}
-	if rec.Provenance != CopyProvenanceShare {
+	if rec.Provenance != copies.CopyProvenanceShare {
 		t.Fatalf("provenance = %q", rec.Provenance)
 	}
 	if rec.Version.ContentHash != resp.Claim.SHA256 {

@@ -56,7 +56,7 @@ type DataPaths struct {
 	// Ownership is the per-kind data-ownership confirmation store
 	// (issue #165; ownership.json).
 	Ownership string
-	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
+	// copies.Ledger is the SQLite copy-ledger path (issue #76). Empty disables it.
 	CopyLedger string
 	// SyncJobs is the SQLite sync-job queue path (issue #227). Empty disables
 	// the sync worker. Defaults to the copy-ledger path so job completion and

@@ -110,7 +110,7 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 		"DataGrants":   filepath.Join(dir, "data_grants.json"),
 		"Tokens":       filepath.Join(dir, "tokens.json"),
 		"Links":        filepath.Join(dir, "entity_links.json"),
-		"CopyLedger":   filepath.Join(dir, "copy_ledger.db"),
+		"copies.Ledger":   filepath.Join(dir, "copy_ledger.db"),
 		"mail.Archive": filepath.Join(dir, "mail-archive.db"),
 		"LogFile":      filepath.Join(dir, "logs", "aegis.log"),
 		"LogsDir":      filepath.Join(dir, "logs"),
@@ -128,8 +128,8 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 	if paths.Links != checks["Links"] {
 		t.Fatalf("Links = %q, want %q", paths.Links, checks["Links"])
 	}
-	if paths.CopyLedger != checks["CopyLedger"] {
-		t.Fatalf("CopyLedger = %q, want %q", paths.CopyLedger, checks["CopyLedger"])
+	if paths.CopyLedger != checks["copies.Ledger"] {
+		t.Fatalf("copies.Ledger = %q, want %q", paths.CopyLedger, checks["copies.Ledger"])
 	}
 	if paths.MailArchive != checks["mail.Archive"] {
 		t.Fatalf("mail.Archive = %q, want %q", paths.MailArchive, checks["mail.Archive"])
@@ -174,7 +174,7 @@ func TestResolveStatePaths_ExplicitOverrides(t *testing.T) {
 		t.Fatalf("Links = %q", paths.Links)
 	}
 	if paths.CopyLedger != filepath.Join(ext, "copy.db") {
-		t.Fatalf("CopyLedger = %q", paths.CopyLedger)
+		t.Fatalf("copies.Ledger = %q", paths.CopyLedger)
 	}
 	if paths.MailArchive != filepath.Join(ext, "mail.db") {
 		t.Fatalf("mail.Archive = %q", paths.MailArchive)
@@ -211,7 +211,7 @@ func TestResolveStatePaths_CopyLedgerExplicitEmptyDisables(t *testing.T) {
 		t.Fatal(err)
 	}
 	if paths.CopyLedger != "" {
-		t.Fatalf("CopyLedger = %q, want empty (disabled)", paths.CopyLedger)
+		t.Fatalf("copies.Ledger = %q, want empty (disabled)", paths.CopyLedger)
 	}
 }
 

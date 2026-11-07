@@ -7,6 +7,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Contacts and events mirror (issue #146) is reconciliation over neutral
@@ -17,26 +18,26 @@ import (
 
 // recordMirrorItemCopy stores per-item etag/sync watermarks (issue #146).
 func (s *Server) recordMirrorItemCopy(kind, entityName, service, externalID, name, etag string) {
-	if s == nil || s.copies == nil {
+	if s == nil || s.copyLedger == nil {
 		return
 	}
 	entity := kind + ":" + strings.TrimSpace(entityName)
 	if strings.TrimSpace(externalID) == "" {
 		return
 	}
-	_, _ = s.copies.Upsert(CopyRecord{
+	_, _ = s.copyLedger.Upsert(copies.Record{
 		Kind:          kind,
 		EntityKey:     entity,
 		SourceService: service,
 		SourceID:      externalID,
 		Service:       service,
 		ExternalID:    externalID,
-		Role:          CopyRoleMirror,
-		SyncMode:      CopySyncModeFull,
-		Provenance:    CopyProvenanceMirror,
-		Status:        CopyStatusInSync,
+		Role:          copies.CopyRoleMirror,
+		SyncMode:      copies.CopySyncModeFull,
+		Provenance:    copies.CopyProvenanceMirror,
+		Status:        copies.CopyStatusInSync,
 		Watermark:     etag,
-		Version: CopyVersion{
+		Version: copies.Version{
 			ExternalID: externalID,
 			ETag:       etag,
 			Name:       name,
