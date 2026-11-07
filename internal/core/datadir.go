@@ -62,7 +62,7 @@ type DataPaths struct {
 	// the sync worker. Defaults to the copy-ledger path so job completion and
 	// copy stamps can commit in one transaction.
 	SyncJobs string
-	// MailArchive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
+	// mail.Archive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
 	MailArchive string
 	// search.Index is the SQLite library search-index path (issue #178).
 	// Empty disables q= on /v1/library/{kind}.

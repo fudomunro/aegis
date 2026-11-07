@@ -14,11 +14,12 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/ownership"
-	"github.com/fudomunro/aegis/internal/core/search"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -142,7 +143,7 @@ type Server struct {
 	mirrorSourceFn func(serviceID, kind string) (mirrorSource, error)
 	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
 	// mail is the optional local compressed mail archive (/v1/mail/*).
-	mail *MailArchive
+	mail *mail.Archive
 	// mailIngests are the archive ingest sources keyed by service id
 	// (issue #286). Wired beside connectors; see mail_ingest.go.
 	mailIngests map[string]connectors.MailIngest

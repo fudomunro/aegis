@@ -12,6 +12,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
@@ -139,7 +140,7 @@ func scopeServer(t *testing.T, scopes []DataScope) *Server {
 	if err != nil {
 		t.Fatalf("scopes: %v", err)
 	}
-	archive, err := OpenMailArchive(filepath.Join(t.TempDir(), "mail.db"))
+	archive, err := mail.Open(filepath.Join(t.TempDir(), "mail.db"))
 	if err != nil {
 		t.Fatalf("mail: %v", err)
 	}
@@ -486,12 +487,12 @@ CREATE TABLE mail_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 	}
 	db.Close()
 
-	archive, err := OpenMailArchive(path)
+	archive, err := mail.Open(path)
 	if err != nil {
 		t.Fatalf("migrate open: %v", err)
 	}
 	defer archive.Close()
-	if err := archive.Upsert(MailArchiveRecord{
+	if err := archive.Upsert(mail.Record{
 		Service: "google-gmail", ID: "m1", Subject: "hello", Dataset: "shire",
 	}); err != nil {
 		t.Fatalf("upsert after migrate: %v", err)

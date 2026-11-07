@@ -1,8 +1,6 @@
-package core
+package mail
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"bytes"
 	"compress/gzip"
 	"database/sql"
@@ -15,12 +13,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
-	"github.com/fudomunro/aegis/internal/core/search"
 )
 
-// MailArchive is Aegis's local queryable mail mirror.
+// Archive is Aegis's local queryable mail mirror.
 //
 // Design (issue: local compressed mailbox for agents):
 //   - Gmail (or another named provider) stays canonical for the home copy and
@@ -33,14 +33,14 @@ import (
 //
 // Optimized for Aegis/agent queries (search, filter, fetch by id) rather
 // than for offline mail clients.
-type MailArchive struct {
+type Archive struct {
 	db   *sql.DB
 	path string
 }
 
-// MailArchiveRecord is one archived message. Neutral Message fields are
+// Record is one archived message. Neutral Message fields are
 // denormalized for SQL filters; PayloadGzip holds the provider full payload.
-type MailArchiveRecord struct {
+type Record struct {
 	Service     string
 	ServiceName string
 	ID          string
@@ -67,7 +67,7 @@ type MailArchiveRecord struct {
 
 // Message converts the row into the neutral library shape (body included when
 // BodyText is non-empty).
-func (r MailArchiveRecord) Message() types.Message {
+func (r Record) Message() types.Message {
 	var from *types.Contact
 	if r.FromName != "" || r.FromEmail != "" {
 		c := types.NewContact(r.Service, r.ServiceName, "", r.FromName, []string{r.FromEmail}, nil)
@@ -116,9 +116,9 @@ func (r MailArchiveRecord) Message() types.Message {
 	}
 }
 
-// MailSearchQuery filters an archive search. Q is an FTS5 match expression
+// SearchQuery filters an archive search. Q is an FTS5 match expression
 // (or plain words — the store tokenizes safely). Empty Q lists by filters.
-type MailSearchQuery struct {
+type SearchQuery struct {
 	Q        string
 	From     string
 	To       string
@@ -135,10 +135,10 @@ type MailSearchQuery struct {
 	Dataset string
 }
 
-// MailSearchResponse is the agent-facing search/list result.
+// SearchResponse is the agent-facing search/list result.
 // Paging matches the library contract (issue #185): limit + opaque
 // cursor/next_cursor. offset remains accepted for admin UI callers.
-type MailSearchResponse struct {
+type SearchResponse struct {
 	Messages []types.Message `json:"messages"`
 	Total    int             `json:"total"`
 	Limit    int             `json:"limit"`
@@ -148,8 +148,8 @@ type MailSearchResponse struct {
 	Query      string `json:"query,omitempty"`
 }
 
-// MailArchiveStatus reports store health for agents and admin.
-type MailArchiveStatus struct {
+// Status reports store health for agents and admin.
+type Status struct {
 	Enabled       bool              `json:"enabled"`
 	Path          string            `json:"path,omitempty"`
 	MessageCount  int               `json:"message_count"`
@@ -162,9 +162,9 @@ type MailArchiveStatus struct {
 	TakeoutPath string `json:"takeout_path,omitempty"`
 }
 
-// OpenMailArchive opens (creating if needed) the SQLite mail archive at path.
+// Open opens (creating if needed) the SQLite mail archive at path.
 // An empty path returns (nil, nil) so callers can treat the archive as disabled.
-func OpenMailArchive(path string) (*MailArchive, error) {
+func Open(path string) (*Archive, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
 		return nil, nil
@@ -191,7 +191,7 @@ func OpenMailArchive(path string) (*MailArchive, error) {
 		db.Close()
 		return nil, err
 	}
-	a := &MailArchive{db: db, path: path}
+	a := &Archive{db: db, path: path}
 	if err := a.init(); err != nil {
 		db.Close()
 		return nil, err
@@ -200,7 +200,7 @@ func OpenMailArchive(path string) (*MailArchive, error) {
 }
 
 // Close releases the database handle.
-func (a *MailArchive) Close() error {
+func (a *Archive) Close() error {
 	if a == nil || a.db == nil {
 		return nil
 	}
@@ -208,14 +208,14 @@ func (a *MailArchive) Close() error {
 }
 
 // Path returns the on-disk location ("" when disabled).
-func (a *MailArchive) Path() string {
+func (a *Archive) Path() string {
 	if a == nil {
 		return ""
 	}
 	return a.path
 }
 
-func (a *MailArchive) init() error {
+func (a *Archive) init() error {
 	schema := `
 CREATE TABLE IF NOT EXISTS mail_messages (
   id INTEGER PRIMARY KEY,
@@ -274,7 +274,7 @@ CREATE TABLE IF NOT EXISTS mail_meta (
 }
 
 // Upsert stores or replaces one message and refreshes its FTS row.
-func (a *MailArchive) Upsert(rec MailArchiveRecord) error {
+func (a *Archive) Upsert(rec Record) error {
 	if a == nil || a.db == nil {
 		return fmt.Errorf("mail archive disabled")
 	}
@@ -362,9 +362,9 @@ ON CONFLICT(service, service_msg_id) DO UPDATE SET
 }
 
 // Get returns one archived message by service-local id.
-func (a *MailArchive) Get(service, id string) (MailArchiveRecord, error) {
+func (a *Archive) Get(service, id string) (Record, error) {
 	if a == nil || a.db == nil {
-		return MailArchiveRecord{}, fmt.Errorf("mail archive disabled")
+		return Record{}, fmt.Errorf("mail archive disabled")
 	}
 	row := a.db.QueryRow(`
 SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
@@ -373,7 +373,7 @@ SELECT service, service_msg_id, thread_id, message_id, mailbox, labels_json,
 FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
 	rec, err := scanMailRecord(row, true)
 	if err != nil {
-		return MailArchiveRecord{}, err
+		return Record{}, err
 	}
 	var payload []byte
 	if err := a.db.QueryRow(`SELECT payload_gzip FROM mail_messages WHERE service=? AND service_msg_id=?`,
@@ -392,9 +392,9 @@ const mailSearchMergeCap = 5000
 // types.MaxPageLimit). Source rows that share an identity (RFC Message-ID,
 // else subject+from+sent_at) are merged into one Message with multi-source
 // sources[] before pagination.
-func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
+func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	if a == nil || a.db == nil {
-		return MailSearchResponse{}, fmt.Errorf("mail archive disabled")
+		return SearchResponse{}, fmt.Errorf("mail archive disabled")
 	}
 	limit := q.Limit
 	if limit <= 0 {
@@ -470,20 +470,20 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 
 	rows, err := a.db.Query(querySQL, queryArgs...)
 	if err != nil {
-		return MailSearchResponse{}, err
+		return SearchResponse{}, err
 	}
 	msgs := make([]types.Message, 0, limit)
 	for rows.Next() {
 		rec, err := scanMailRows(rows, q.WithBody)
 		if err != nil {
 			rows.Close()
-			return MailSearchResponse{}, err
+			return SearchResponse{}, err
 		}
 		msgs = append(msgs, rec.Message())
 	}
 	if err := rows.Err(); err != nil {
 		rows.Close()
-		return MailSearchResponse{}, err
+		return SearchResponse{}, err
 	}
 	rows.Close()
 
@@ -494,13 +494,13 @@ func (a *MailArchive) Search(q MailSearchQuery) (MailSearchResponse, error) {
 	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
 	total := len(merged)
 	if offset >= total {
-		return MailSearchResponse{Messages: []types.Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
+		return SearchResponse{Messages: []types.Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
 	}
 	end := offset + limit
 	if end > total {
 		end = total
 	}
-	resp := MailSearchResponse{Messages: merged[offset:end], Total: total, Limit: limit, Offset: offset, Query: fts}
+	resp := SearchResponse{Messages: merged[offset:end], Total: total, Limit: limit, Offset: offset, Query: fts}
 	if end < total {
 		resp.NextCursor = types.EncodeCursor(end)
 	}
@@ -534,7 +534,7 @@ func sortMailMessages(msgs []types.Message, asc bool) {
 // with any message already selected, so multi-source identity survives
 // filter/FTS that only matched one copy (issue #139). dataset, when non-empty,
 // keeps siblings inside one data-scope partition (docs/data-scopes.md).
-func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message, dataset string) []types.Message {
+func (a *Archive) hydrateMessageSiblings(msgs []types.Message, dataset string) []types.Message {
 	if len(msgs) == 0 {
 		return msgs
 	}
@@ -599,7 +599,7 @@ func (a *MailArchive) hydrateMessageSiblings(msgs []types.Message, dataset strin
 // (issue #139). limit bounds the page; truncated reports that more archive
 // rows exist (full history remains /v1/mail/search). dataset restricts the
 // data-scope partition when non-empty (docs/data-scopes.md).
-func (a *MailArchive) ListMessagesForLibrary(limit int, dataset string) (msgs []types.Message, truncated bool, err error) {
+func (a *Archive) ListMessagesForLibrary(limit int, dataset string) (msgs []types.Message, truncated bool, err error) {
 	if a == nil || a.db == nil {
 		return nil, false, fmt.Errorf("mail archive disabled")
 	}
@@ -607,7 +607,7 @@ func (a *MailArchive) ListMessagesForLibrary(limit int, dataset string) (msgs []
 		limit = 200
 	}
 	// Load one extra merged identity to detect truncation after merge.
-	resp, err := a.Search(MailSearchQuery{Limit: limit, WithBody: true, Dataset: dataset})
+	resp, err := a.Search(SearchQuery{Limit: limit, WithBody: true, Dataset: dataset})
 	if err != nil {
 		return nil, false, err
 	}
@@ -618,8 +618,8 @@ func (a *MailArchive) ListMessagesForLibrary(limit int, dataset string) (msgs []
 }
 
 // Status summarizes the archive for /v1/mail/status.
-func (a *MailArchive) Status() (MailArchiveStatus, error) {
-	st := MailArchiveStatus{
+func (a *Archive) Status() (Status, error) {
+	st := Status{
 		Enabled:       a != nil && a.db != nil,
 		SyncPageToken: map[string]string{},
 		SyncDone:      map[string]bool{},
@@ -648,11 +648,11 @@ func (a *MailArchive) Status() (MailArchiveStatus, error) {
 	if err := rows.Err(); err != nil {
 		return st, err
 	}
-	st.LastSyncAt, _ = a.getMeta("sync:last_at")
-	st.LastSyncError, _ = a.getMeta("sync:last_error")
+	st.LastSyncAt, _ = a.GetMeta("sync:last_at")
+	st.LastSyncError, _ = a.GetMeta("sync:last_error")
 	// The export location is ingest-owned meta (issue #286); the status
 	// response field shape stays.
-	st.TakeoutPath, _ = a.getMeta(connectors.TakeoutPathMetaKey)
+	st.TakeoutPath, _ = a.GetMeta(connectors.TakeoutPathMetaKey)
 	metaRows, err := a.db.Query(`SELECT key, value FROM mail_meta WHERE key LIKE 'sync:%:page_token' OR key LIKE 'sync:%:done'`)
 	if err != nil {
 		return st, err
@@ -676,49 +676,49 @@ func (a *MailArchive) Status() (MailArchiveStatus, error) {
 }
 
 // LoadSyncCursor reads the durable ingest cursor for a service.
-func (a *MailArchive) LoadSyncCursor(service string) (types.MailIngestCursor, error) {
+func (a *Archive) LoadSyncCursor(service string) (types.MailIngestCursor, error) {
 	var cur types.MailIngestCursor
 	if a == nil || a.db == nil {
 		return cur, fmt.Errorf("mail archive disabled")
 	}
-	cur.PageToken, _ = a.getMeta("sync:" + service + ":page_token")
-	done, _ := a.getMeta("sync:" + service + ":done")
+	cur.PageToken, _ = a.GetMeta("sync:" + service + ":page_token")
+	done, _ := a.GetMeta("sync:" + service + ":done")
 	cur.Done = done == "1"
-	cur.LastSyncAt, _ = a.getMeta("sync:" + service + ":last_at")
-	cur.Error, _ = a.getMeta("sync:" + service + ":error")
+	cur.LastSyncAt, _ = a.GetMeta("sync:" + service + ":last_at")
+	cur.Error, _ = a.GetMeta("sync:" + service + ":error")
 	return cur, nil
 }
 
 // SaveSyncCursor persists ingest progress (fail-open callers still record errors).
-func (a *MailArchive) SaveSyncCursor(service string, cur types.MailIngestCursor) error {
+func (a *Archive) SaveSyncCursor(service string, cur types.MailIngestCursor) error {
 	if a == nil || a.db == nil {
 		return fmt.Errorf("mail archive disabled")
 	}
-	if err := a.setMeta("sync:"+service+":page_token", cur.PageToken); err != nil {
+	if err := a.SetMeta("sync:"+service+":page_token", cur.PageToken); err != nil {
 		return err
 	}
 	done := "0"
 	if cur.Done {
 		done = "1"
 	}
-	if err := a.setMeta("sync:"+service+":done", done); err != nil {
+	if err := a.SetMeta("sync:"+service+":done", done); err != nil {
 		return err
 	}
 	if cur.LastSyncAt != "" {
-		if err := a.setMeta("sync:"+service+":last_at", cur.LastSyncAt); err != nil {
+		if err := a.SetMeta("sync:"+service+":last_at", cur.LastSyncAt); err != nil {
 			return err
 		}
-		if ifErr := a.setMeta("sync:last_at", cur.LastSyncAt); ifErr != nil {
+		if ifErr := a.SetMeta("sync:last_at", cur.LastSyncAt); ifErr != nil {
 			return ifErr
 		}
 	}
-	if err := a.setMeta("sync:"+service+":error", cur.Error); err != nil {
+	if err := a.SetMeta("sync:"+service+":error", cur.Error); err != nil {
 		return err
 	}
-	return a.setMeta("sync:last_error", cur.Error)
+	return a.SetMeta("sync:last_error", cur.Error)
 }
 
-func (a *MailArchive) getMeta(key string) (string, error) {
+func (a *Archive) GetMeta(key string) (string, error) {
 	var v string
 	err := a.db.QueryRow(`SELECT value FROM mail_meta WHERE key=?`, key).Scan(&v)
 	if err == sql.ErrNoRows {
@@ -727,7 +727,7 @@ func (a *MailArchive) getMeta(key string) (string, error) {
 	return v, err
 }
 
-func (a *MailArchive) setMeta(key, value string) error {
+func (a *Archive) SetMeta(key, value string) error {
 	_, err := a.db.Exec(`
 INSERT INTO mail_meta(key, value) VALUES(?,?)
 ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
@@ -735,7 +735,7 @@ ON CONFLICT(key) DO UPDATE SET value=excluded.value`, key, value)
 }
 
 // Payload decompresses the stored provider payload JSON.
-func (r MailArchiveRecord) Payload() ([]byte, error) {
+func (r Record) Payload() ([]byte, error) {
 	if len(r.PayloadGzip) == 0 {
 		return nil, nil
 	}
@@ -763,7 +763,7 @@ func GzipPayload(raw []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-func mailParticipantsText(rec MailArchiveRecord) string {
+func mailParticipantsText(rec Record) string {
 	var b strings.Builder
 	writeContacts := func(cs []types.Contact) {
 		for _, c := range cs {
@@ -815,13 +815,9 @@ func normalizeMailTimeBound(raw string, lower bool) string {
 	return raw
 }
 
-type rowScanner interface {
-	Scan(dest ...any) error
-}
-
-func scanMailRecord(row rowScanner, withBody bool) (MailArchiveRecord, error) {
+func scanMailRecord(row shared.RowScanner, withBody bool) (Record, error) {
 	var (
-		rec        MailArchiveRecord
+		rec        Record
 		labelsJSON string
 		toJSON     string
 		ccJSON     string
@@ -834,7 +830,7 @@ func scanMailRecord(row rowScanner, withBody bool) (MailArchiveRecord, error) {
 		&rec.SentAt, &rec.ReceivedAt, &rec.Direction, &isRead, &body, &rec.Dataset,
 	}
 	if err := row.Scan(scanDest...); err != nil {
-		return MailArchiveRecord{}, err
+		return Record{}, err
 	}
 	rec.Read = isRead == 1
 	if withBody {
@@ -858,7 +854,7 @@ func scanMailRecord(row rowScanner, withBody bool) (MailArchiveRecord, error) {
 	return rec, nil
 }
 
-func scanMailRows(rows *sql.Rows, withBody bool) (MailArchiveRecord, error) {
+func scanMailRows(rows *sql.Rows, withBody bool) (Record, error) {
 	return scanMailRecord(rows, withBody)
 }
 
@@ -866,7 +862,7 @@ func scanMailRows(rows *sql.Rows, withBody bool) (MailArchiveRecord, error) {
 // Cross-service Message-ID matches are source attachment, not duplicates:
 // Gmail and Takeout may both hold the same RFC Message-ID as separate sources
 // (issue #139).
-func (a *MailArchive) hasSourceRecord(rec MailArchiveRecord) (bool, error) {
+func (a *Archive) hasSourceRecord(rec Record) (bool, error) {
 	if id := types.NormalizeMessageID(rec.MessageID); id != "" {
 		var n int
 		err := a.db.QueryRow(`SELECT COUNT(*) FROM mail_messages WHERE message_id=? AND service=?`,
@@ -881,7 +877,7 @@ func (a *MailArchive) hasSourceRecord(rec MailArchiveRecord) (bool, error) {
 
 // RecordFromMessage builds an archive row from a neutral Message plus optional
 // gzip provider payload. Missing fields stay empty rather than failing ingest.
-func RecordFromMessage(service, serviceName string, msg types.Message, payloadGzip []byte) MailArchiveRecord {
+func RecordFromMessage(service, serviceName string, msg types.Message, payloadGzip []byte) Record {
 	id := ""
 	if len(msg.Sources) > 0 {
 		id = msg.Sources[0].ID
@@ -892,7 +888,7 @@ func RecordFromMessage(service, serviceName string, msg types.Message, payloadGz
 			service = msg.Sources[0].Service
 		}
 	}
-	rec := MailArchiveRecord{
+	rec := Record{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,

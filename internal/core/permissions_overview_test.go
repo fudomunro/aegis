@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -56,7 +57,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	}
 	srv.apps = apps
 
-	mail, err := OpenMailArchive(filepath.Join(dir, "mail-archive.db"))
+	mail, err := mail.Open(filepath.Join(dir, "mail-archive.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

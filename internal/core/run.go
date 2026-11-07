@@ -10,6 +10,9 @@ import (
 	"fmt"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"io"
@@ -20,8 +23,6 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"github.com/fudomunro/aegis/internal/core/ownership"
-	"github.com/fudomunro/aegis/internal/core/search"
 )
 
 func Run() {
@@ -346,7 +347,7 @@ func Run() {
 		}
 	}
 
-	mailArchive, err := OpenMailArchive(paths.MailArchive)
+	mailArchive, err := mail.Open(paths.MailArchive)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", paths.MailArchive, "error", err)
 		os.Exit(1)
@@ -896,7 +897,7 @@ func runSeedDemoDatasetsCLI(dataDir, archivePath string) int {
 		slog.Error("failed to create demo dataset dir", "dir", outDir, "error", err)
 		return 1
 	}
-	archive, err := OpenMailArchive(archivePath)
+	archive, err := mail.Open(archivePath)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
 		return 1
@@ -941,7 +942,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		slog.Error("mail-archive path is required for -import-takeout")
 		return 1
 	}
-	a, err := OpenMailArchive(archivePath)
+	a, err := mail.Open(archivePath)
 	if err != nil {
 		slog.Error("failed to open mail archive", "path", archivePath, "error", err)
 		return 1
@@ -963,7 +964,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 		batch = 20000
 	}
 	ingest := connectors.NewTakeoutIngest()
-	sink := mailSink{a}
+	sink := mail.Sink{A: a}
 	var stored, skipped, scanned, failed int
 	done := false
 	for {

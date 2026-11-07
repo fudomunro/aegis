@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
@@ -84,8 +85,8 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.ownership = mustOwnershipStore(t, "")
 	srv.connectors[connectors.GoogleGmailServiceID] = connectors.NewGoogleGmailConnector(srv)
-	mail := openTestMailArchive(t)
-	srv.mail = mail
+	mailArch := openTestMailArchive(t)
+	srv.mail = mailArch
 
 	// No Takeout path and no rows: Takeout stays a route.
 	byKind := ownershipByKind(t, srv.ownershipStatuses())
@@ -93,7 +94,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 
 	// Gmail is not connected, so it is a route too — until the archive
 	// holds Gmail rows, which is evidence the data is under management.
-	if err := mail.Upsert(MailArchiveRecord{
+	if err := mailArch.Upsert(mail.Record{
 		Service: connectors.GoogleGmailServiceID, ServiceName: connectors.GoogleGmailServiceName,
 		ID: "g1", Subject: "hello",
 	}); err != nil {
@@ -103,7 +104,7 @@ func TestOwnershipStatuses_MailEvidence(t *testing.T) {
 	assertOwnershipSource(t, byKind["messages"].UnderManagement, connectors.GoogleGmailServiceID)
 
 	// Importing Takeout rows moves Takeout from route to source.
-	if err := mail.Upsert(MailArchiveRecord{
+	if err := mailArch.Upsert(mail.Record{
 		Service: connectors.TakeoutServiceID, ServiceName: connectors.TakeoutServiceName,
 		ID: "t1", Subject: "old",
 	}); err != nil {

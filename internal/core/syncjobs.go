@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -457,7 +458,7 @@ const syncJobColumns = `id, kind, job_type, service, idempotency_key, payload, s
   progress, last_error, last_error_class,
   created_at, updated_at, started_at, finished_at`
 
-func scanSyncJob(row rowScanner) (SyncJob, error) {
+func scanSyncJob(row shared.RowScanner) (SyncJob, error) {
 	var (
 		j                  SyncJob
 		id                 int64

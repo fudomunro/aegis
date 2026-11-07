@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -38,7 +39,7 @@ func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) requireMailArchive(w http.ResponseWriter) *MailArchive {
+func (s *Server) requireMailArchive(w http.ResponseWriter) *mail.Archive {
 	if s.mail == nil {
 		shared.WriteJSONError(w, http.StatusNotFound,
 			"mail archive disabled — start Aegis with a mail archive path (default: <data-dir>/mail-archive.db)")
@@ -126,7 +127,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	withBody := q.Get("include_body") == "1" || strings.EqualFold(q.Get("include_body"), "true")
-	search := MailSearchQuery{
+	search := mail.SearchQuery{
 		Q:        q.Get("q"),
 		From:     q.Get("from"),
 		To:       q.Get("to"),

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -24,7 +25,7 @@ import (
 // sort extremes so query tests can assert "oldest message" answers without
 // scanning the whole table.
 type SampleMailSet struct {
-	Records  []MailArchiveRecord
+	Records  []mail.Record
 	OldestID string
 	NewestID string
 }
@@ -71,7 +72,7 @@ func GenerateSampleMail(n int) SampleMailSet {
 	if n < 1 {
 		n = 1
 	}
-	recs := make([]MailArchiveRecord, 0, n+len(sampleEdgeCaseMail()))
+	recs := make([]mail.Record, 0, n+len(sampleEdgeCaseMail()))
 	subjects := []string{
 		"Quarterly report draft",
 		"Invoice due for widgets",
@@ -119,8 +120,8 @@ func GenerateSampleMail(n int) SampleMailSet {
 		}
 		id := fmt.Sprintf("msg-%04d", i+1)
 		payload := fmt.Sprintf(`{"id":%q,"subject":%q,"synthetic":true}`, id, subject)
-		gz, _ := GzipPayload([]byte(payload))
-		rec := MailArchiveRecord{
+		gz, _ := mail.GzipPayload([]byte(payload))
+		rec := mail.Record{
 			Service:     connectors.GoogleGmailServiceID,
 			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          id,
@@ -161,9 +162,9 @@ func GenerateSampleMail(n int) SampleMailSet {
 
 // sampleEdgeCaseMail covers the issue's edge-case table: missing sent_at,
 // missing entity id, huge body, unicode/RTL subjects, HTML-only, spam/trash.
-func sampleEdgeCaseMail() []MailArchiveRecord {
+func sampleEdgeCaseMail() []mail.Record {
 	huge := strings.Repeat("padding paragraph for the stress body. ", 800) // ~32KB
-	mk := func(rec MailArchiveRecord) MailArchiveRecord {
+	mk := func(rec mail.Record) mail.Record {
 		if rec.Service == "" {
 			rec.Service = connectors.GoogleGmailServiceID
 		}
@@ -171,13 +172,13 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			rec.ServiceName = connectors.GoogleGmailServiceName
 		}
 		if rec.PayloadGzip == nil {
-			gz, _ := GzipPayload([]byte(`{"synthetic":true,"edge":true}`))
+			gz, _ := mail.GzipPayload([]byte(`{"synthetic":true,"edge":true}`))
 			rec.PayloadGzip = gz
 		}
 		return rec
 	}
-	return []MailArchiveRecord{
-		mk(MailArchiveRecord{
+	return []mail.Record{
+		mk(mail.Record{
 			ID:        "edge-unicode-rtl",
 			ThreadID:  "thr-edge-1",
 			MessageID: "<edge-unicode-rtl@synthetic.example>",
@@ -195,7 +196,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Direction:  "inbound",
 			BodyText:   "Hello in several scripts: مرحبا שלום 你好",
 		}),
-		mk(MailArchiveRecord{
+		mk(mail.Record{
 			ID:        "edge-html-only",
 			ThreadID:  "thr-edge-2",
 			MessageID: "<edge-html-only@synthetic.example>",
@@ -215,7 +216,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			// short extracted text so FTS still has something to hit.
 			BodyText: "special offer widgets",
 		}),
-		mk(MailArchiveRecord{
+		mk(mail.Record{
 			ID:        "edge-huge-body",
 			ThreadID:  "thr-edge-3",
 			MessageID: "<edge-huge-body@synthetic.example>",
@@ -233,7 +234,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Direction:  "inbound",
 			BodyText:   huge,
 		}),
-		mk(MailArchiveRecord{
+		mk(mail.Record{
 			ID:        "edge-missing-sent",
 			ThreadID:  "thr-edge-4",
 			MessageID: "<edge-missing-sent@synthetic.example>",
@@ -249,7 +250,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Direction: "unknown",
 			BodyText:  "No send time recorded.",
 		}),
-		mk(MailArchiveRecord{
+		mk(mail.Record{
 			ID:        "edge-missing-entity",
 			ThreadID:  "thr-edge-5",
 			Mailbox:   "INBOX",
@@ -265,7 +266,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Direction: "inbound",
 			BodyText:  "Identity falls back to subject+from+time in library merge.",
 		}),
-		mk(MailArchiveRecord{
+		mk(mail.Record{
 			ID:        "edge-spam",
 			ThreadID:  "thr-edge-6",
 			MessageID: "<edge-spam@synthetic.example>",
@@ -282,7 +283,7 @@ func sampleEdgeCaseMail() []MailArchiveRecord {
 			Direction: "inbound",
 			BodyText:  "click here to claim your prize widgets",
 		}),
-		mk(MailArchiveRecord{
+		mk(mail.Record{
 			ID:        "edge-trash",
 			ThreadID:  "thr-edge-7",
 			MessageID: "<edge-trash@synthetic.example>",
@@ -320,7 +321,7 @@ func hasString(list []string, want string) bool {
 
 // lastSentID returns the record id with the lexicographically greatest non-empty
 // sent_at (stable "newest" pin for sort=desc tests). Ties break on id.
-func lastSentID(recs []MailArchiveRecord) string {
+func lastSentID(recs []mail.Record) string {
 	best := ""
 	bestSent := ""
 	for _, r := range recs {
@@ -1117,7 +1118,7 @@ func sampleDocuments() []types.Document {
 
 // SeedMailArchive upserts every fixture row into the archive. Rows are
 // synthetic; callers own the archive path (prefer the OS data dir, issue #74).
-func SeedMailArchive(a *MailArchive, recs []MailArchiveRecord) error {
+func SeedMailArchive(a *mail.Archive, recs []mail.Record) error {
 	if a == nil {
 		return fmt.Errorf("mail archive disabled")
 	}
@@ -1131,7 +1132,7 @@ func SeedMailArchive(a *MailArchive, recs []MailArchiveRecord) error {
 
 // WriteSampleMbox writes records as a Gmail-Takeout-shaped mbox so the real
 // importer (mail_takeout.go) can load the same synthetic set.
-func WriteSampleMbox(path string, recs []MailArchiveRecord) error {
+func WriteSampleMbox(path string, recs []mail.Record) error {
 	var b strings.Builder
 	b.WriteString("# Aegis synthetic sample mailbox. All messages are fictional.\n")
 	for _, rec := range recs {
@@ -1241,7 +1242,7 @@ func SeedSampleArchive(archivePath string, mailCount int) (SampleMailSet, error)
 	if archivePath == "" {
 		return SampleMailSet{}, fmt.Errorf("mail archive path is required to seed sample mail")
 	}
-	a, err := OpenMailArchive(archivePath)
+	a, err := mail.Open(archivePath)
 	if err != nil {
 		return SampleMailSet{}, err
 	}

@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -281,7 +282,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var st MailArchiveStatus
+	var st mail.Status
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("status json: %v", err)
 	}

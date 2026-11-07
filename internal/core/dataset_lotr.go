@@ -4,6 +4,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -54,9 +55,9 @@ func lotRContact(service, id, name string, emails, phones []string) types.Contac
 }
 
 func lotRMail(dataset string, rows []SampleMailRow) SampleMailSet {
-	recs := make([]MailArchiveRecord, 0, len(rows))
+	recs := make([]mail.Record, 0, len(rows))
 	for _, row := range rows {
-		rec := MailArchiveRecord{
+		rec := mail.Record{
 			Service:     connectors.GoogleGmailServiceID,
 			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          dataset + ":" + row.ID,

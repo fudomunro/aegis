@@ -16,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
@@ -213,4 +214,26 @@ func newTestSearchIndex(t *testing.T) *search.Index {
 	}
 	t.Cleanup(func() { idx.Close() })
 	return idx
+}
+
+// openTestMailArchive opens a mail archive in a temp dir for Server tests.
+func openTestMailArchive(t *testing.T) *mail.Archive {
+	t.Helper()
+	a, err := mail.Open(filepath.Join(t.TempDir(), "mail-archive.db"))
+	if err != nil {
+		t.Fatalf("mail.Open: %v", err)
+	}
+	t.Cleanup(func() { a.Close() })
+	return a
+}
+
+// sampleMailRecord builds a minimal mail.Record fixture for Server tests.
+func sampleMailRecord(id, subject, body string) mail.Record {
+	return mail.Record{
+		ID:       id,
+		Service:  "google-gmail",
+		Subject:  subject,
+		BodyText: body,
+		SentAt:   "2024-06-01T09:00:00Z",
+	}
 }

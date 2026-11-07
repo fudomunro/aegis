@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -17,7 +18,7 @@ import (
 // These tests pin the cases that live half-imported data used to hide —
 // especially "oldest message" needing sort=asc.
 
-func seedQueryFixture(t *testing.T) (*MailArchive, SampleMailSet) {
+func seedQueryFixture(t *testing.T) (*mail.Archive, SampleMailSet) {
 	t.Helper()
 	a := openTestMailArchive(t)
 	// 12 normal rows + edge cases: enough for pagination and date windows.
@@ -31,7 +32,7 @@ func seedQueryFixture(t *testing.T) (*MailArchive, SampleMailSet) {
 func TestMailQuery_OldestAndNewest(t *testing.T) {
 	a, set := seedQueryFixture(t)
 
-	oldest, err := a.Search(MailSearchQuery{Sort: "asc", Limit: 1})
+	oldest, err := a.Search(mail.SearchQuery{Sort: "asc", Limit: 1})
 	if err != nil {
 		t.Fatalf("asc: %v", err)
 	}
@@ -47,7 +48,7 @@ func TestMailQuery_OldestAndNewest(t *testing.T) {
 		t.Fatalf("oldest has empty sent_at: %+v", oldest.Messages[0])
 	}
 
-	newest, err := a.Search(MailSearchQuery{Sort: "desc", Limit: 1})
+	newest, err := a.Search(mail.SearchQuery{Sort: "desc", Limit: 1})
 	if err != nil {
 		t.Fatalf("desc: %v", err)
 	}
@@ -60,7 +61,7 @@ func TestMailQuery_OldestAndNewest(t *testing.T) {
 	}
 
 	// Explicit "what is the oldest email" shape used by agents.
-	first, err := a.Search(MailSearchQuery{Sort: "asc", Limit: 1, WithBody: true})
+	first, err := a.Search(mail.SearchQuery{Sort: "asc", Limit: 1, WithBody: true})
 	if err != nil {
 		t.Fatalf("oldest with body: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestMailQuery_DateWindow(t *testing.T) {
 	a, _ := seedQueryFixture(t)
 
 	// Rows land one week apart starting 2019-01-07; pick a mid-year window.
-	window, err := a.Search(MailSearchQuery{
+	window, err := a.Search(mail.SearchQuery{
 		After:  "2019-01-01",
 		Before: "2019-03-01",
 		Sort:   "asc",
@@ -94,7 +95,7 @@ func TestMailQuery_DateWindow(t *testing.T) {
 	}
 
 	// after/before exclusive-inclusive bounds from normalizeMailTimeBound.
-	only, err := a.Search(MailSearchQuery{After: "2019-01-07", Before: "2019-01-08", Sort: "asc"})
+	only, err := a.Search(mail.SearchQuery{After: "2019-01-07", Before: "2019-01-08", Sort: "asc"})
 	if err != nil {
 		t.Fatalf("day window: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestMailQuery_DateWindow(t *testing.T) {
 func TestMailQuery_FromToLabelFilters(t *testing.T) {
 	a, _ := seedQueryFixture(t)
 
-	fromAda, err := a.Search(MailSearchQuery{From: "ada@example.com", Sort: "asc"})
+	fromAda, err := a.Search(mail.SearchQuery{From: "ada@example.com", Sort: "asc"})
 	if err != nil {
 		t.Fatalf("from: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestMailQuery_FromToLabelFilters(t *testing.T) {
 		}
 	}
 
-	toMe, err := a.Search(MailSearchQuery{To: "me@example.com"})
+	toMe, err := a.Search(mail.SearchQuery{To: "me@example.com"})
 	if err != nil {
 		t.Fatalf("to: %v", err)
 	}
@@ -129,21 +130,21 @@ func TestMailQuery_FromToLabelFilters(t *testing.T) {
 		t.Fatal("expected me@example.com hits")
 	}
 
-	spam, err := a.Search(MailSearchQuery{Labels: []string{"SPAM"}})
+	spam, err := a.Search(mail.SearchQuery{Labels: []string{"SPAM"}})
 	if err != nil {
 		t.Fatalf("label spam: %v", err)
 	}
 	if spam.Total != 1 {
 		t.Fatalf("spam total = %d", spam.Total)
 	}
-	trash, err := a.Search(MailSearchQuery{Labels: []string{"TRASH"}})
+	trash, err := a.Search(mail.SearchQuery{Labels: []string{"TRASH"}})
 	if err != nil {
 		t.Fatalf("label trash: %v", err)
 	}
 	if trash.Total != 1 {
 		t.Fatalf("trash total = %d", trash.Total)
 	}
-	inbox, err := a.Search(MailSearchQuery{Labels: []string{"INBOX"}})
+	inbox, err := a.Search(mail.SearchQuery{Labels: []string{"INBOX"}})
 	if err != nil {
 		t.Fatalf("label inbox: %v", err)
 	}
@@ -155,7 +156,7 @@ func TestMailQuery_FromToLabelFilters(t *testing.T) {
 func TestMailQuery_FTS(t *testing.T) {
 	a, _ := seedQueryFixture(t)
 
-	multi, err := a.Search(MailSearchQuery{Q: "invoice widgets", Sort: "asc"})
+	multi, err := a.Search(mail.SearchQuery{Q: "invoice widgets", Sort: "asc"})
 	if err != nil {
 		t.Fatalf("multi-word fts: %v", err)
 	}
@@ -163,7 +164,7 @@ func TestMailQuery_FTS(t *testing.T) {
 		t.Fatal("expected invoice widgets hits")
 	}
 
-	unicode, err := a.Search(MailSearchQuery{Q: "שלום"})
+	unicode, err := a.Search(mail.SearchQuery{Q: "שלום"})
 	if err != nil {
 		t.Fatalf("unicode fts: %v", err)
 	}
@@ -180,13 +181,13 @@ func TestMailQuery_FTS(t *testing.T) {
 		`column:value*`,
 		`((((`,
 	} {
-		if _, err := a.Search(MailSearchQuery{Q: q}); err != nil {
+		if _, err := a.Search(mail.SearchQuery{Q: q}); err != nil {
 			t.Fatalf("hostile fts %q: %v", q, err)
 		}
 	}
 
 	// Combined FTS + structured filters.
-	combo, err := a.Search(MailSearchQuery{
+	combo, err := a.Search(mail.SearchQuery{
 		Q:      "report",
 		From:   "ada@example.com",
 		Labels: []string{"INBOX"},
@@ -205,7 +206,7 @@ func TestMailQuery_PaginationStableOrder(t *testing.T) {
 	var collected []string
 	seen := map[string]bool{}
 	for offset := 0; offset < 40; offset += 5 {
-		page, err := a.Search(MailSearchQuery{Sort: "desc", Limit: 5, Offset: offset})
+		page, err := a.Search(mail.SearchQuery{Sort: "desc", Limit: 5, Offset: offset})
 		if err != nil {
 			t.Fatalf("page offset=%d: %v", offset, err)
 		}
@@ -229,11 +230,11 @@ func TestMailQuery_PaginationStableOrder(t *testing.T) {
 	}
 
 	// Two overlapping pages must agree on order (stable sort keys).
-	p0, err := a.Search(MailSearchQuery{Sort: "desc", Limit: 4, Offset: 0})
+	p0, err := a.Search(mail.SearchQuery{Sort: "desc", Limit: 4, Offset: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
-	p1, err := a.Search(MailSearchQuery{Sort: "desc", Limit: 4, Offset: 1})
+	p1, err := a.Search(mail.SearchQuery{Sort: "desc", Limit: 4, Offset: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +252,7 @@ func TestMailQuery_PaginationStableOrder(t *testing.T) {
 		}
 	}
 
-	asc, err := a.Search(MailSearchQuery{Sort: "asc", Limit: 3, Offset: 0})
+	asc, err := a.Search(mail.SearchQuery{Sort: "asc", Limit: 3, Offset: 0})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,7 +291,7 @@ func TestMailQuery_FetchByIDAndRaw(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("search http code = %d body=%s", w.Code, w.Body.String())
 	}
-	var searchResp MailSearchResponse
+	var searchResp mail.SearchResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &searchResp); err != nil {
 		t.Fatalf("decode search: %v", err)
 	}
@@ -379,7 +380,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 	// Dateless mail rows sort last so they cannot win oldest/newest.
 	a, set := seedQueryFixture(t)
 	defer a.Close()
-	last, err := a.Search(MailSearchQuery{Sort: "asc", Limit: 50})
+	last, err := a.Search(mail.SearchQuery{Sort: "asc", Limit: 50})
 	if err != nil {
 		t.Fatal(err)
 	}

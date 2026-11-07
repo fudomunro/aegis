@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -40,7 +41,7 @@ Present in both Gmail sync and Takeout.
 	return path
 }
 
-func syncGmailShared(t *testing.T, srv *Server, a *MailArchive) {
+func syncGmailShared(t *testing.T, srv *Server, a *mail.Archive) {
 	t.Helper()
 	disableGmailArchivePace(t)
 	var mux = http.NewServeMux()
@@ -58,14 +59,14 @@ func syncGmailShared(t *testing.T, srv *Server, a *MailArchive) {
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 	conn := connectors.NewGoogleGmailConnector(srv)
-	if _, err := conn.IngestMail(context.Background(), mailSink{a}, types.MailIngestOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
+	if _, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
 		t.Fatalf("gmail sync: %v", err)
 	}
 }
 
-func importTakeout(t *testing.T, a *MailArchive, path string, reset bool) types.MailIngestResult {
+func importTakeout(t *testing.T, a *mail.Archive, path string, reset bool) types.MailIngestResult {
 	t.Helper()
-	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mailSink{a},
+	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mail.Sink{A: a},
 		types.MailIngestOptions{Query: path, MaxMessages: 50, ResetCursor: reset})
 	if err != nil {
 		t.Fatalf("takeout import: %v", err)
@@ -73,9 +74,9 @@ func importTakeout(t *testing.T, a *MailArchive, path string, reset bool) types.
 	return res
 }
 
-func searchMergedShared(t *testing.T, a *MailArchive) *types.Message {
+func searchMergedShared(t *testing.T, a *mail.Archive) *types.Message {
 	t.Helper()
-	hits, err := a.Search(MailSearchQuery{Q: "Shared dual-source", WithBody: true})
+	hits, err := a.Search(mail.SearchQuery{Q: "Shared dual-source", WithBody: true})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
