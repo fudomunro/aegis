@@ -71,7 +71,7 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 		// Leave step.Payload empty so a retry keeps the job's payload as-is,
 		// including reset_cursor — a failed first step must not silently
 		// resume from the saved cursor instead of starting over.
-		if isGmailQuotaError(err) {
+		if connectors.IsGmailQuotaError(err) {
 			step.RetryAfter = quotaSyncBackoff
 			return step, &SyncRetryAfter{Err: err, After: quotaSyncBackoff}
 		}
@@ -108,7 +108,7 @@ func parseMailIngestPayload(job SyncJob) (mailIngestPayload, error) {
 	}
 	if p.Service == "" {
 		if job.JobType == SyncJobTypeImport {
-			p.Service = takeoutServiceID
+			p.Service = connectors.TakeoutServiceID
 		} else {
 			p.Service = connectors.GoogleGmailServiceID
 		}
@@ -123,7 +123,7 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (MailSyn
 		return MailSyncResult{Service: p.Service, Error: "mail archive disabled"},
 			fmt.Errorf("%w: mail archive disabled", ErrSyncTerminal)
 	}
-	if p.Service == takeoutServiceID {
+	if p.Service == connectors.TakeoutServiceID {
 		return s.doTakeoutIngest(ctx, p)
 	}
 	syncer := s.mailArchiveSyncer(p.Service)
@@ -167,7 +167,7 @@ func (s *Server) doTakeoutIngest(_ context.Context, p mailIngestPayload) (MailSy
 		path = a.TakeoutPath()
 	}
 	if path == "" {
-		return MailSyncResult{Service: takeoutServiceID},
+		return MailSyncResult{Service: connectors.TakeoutServiceID},
 			fmt.Errorf("%w: takeout path not configured", ErrSyncTerminal)
 	}
 
@@ -188,7 +188,7 @@ func (s *Server) doTakeoutIngest(_ context.Context, p mailIngestPayload) (MailSy
 	// Shape as a mail sync result so the HTTP route and the admin UI share
 	// one renderer with the Gmail path.
 	result := MailSyncResult{
-		Service:   takeoutServiceID,
+		Service:   connectors.TakeoutServiceID,
 		Listed:    res.Scanned,
 		Stored:    res.Stored,
 		Skipped:   res.Skipped,

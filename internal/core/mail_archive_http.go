@@ -284,7 +284,7 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	}
 
 	// Takeout is a read-only sync location (mbox / zip / directory on disk).
-	if req.Service == takeoutServiceID {
+	if req.Service == connectors.TakeoutServiceID {
 		if req.ResetCursor {
 			if err := a.ResetTakeoutCursor(); err != nil {
 				shared.WriteJSONError(w, http.StatusInternalServerError, "failed to reset takeout cursor")
@@ -370,7 +370,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	// max_messages=0 with an explicit path is save-path-only (admin UI).
 	if req.MaxMessages == 0 && strings.TrimSpace(req.Path) != "" {
 		writeMailJSON(w, MailSyncResult{
-			Service: takeoutServiceID,
+			Service: connectors.TakeoutServiceID,
 			Query:   "takeout:" + path,
 			Done:    true,
 		})
@@ -380,7 +380,7 @@ func (s *Server) handleTakeoutSyncRequest(w http.ResponseWriter, r *http.Request
 	// One ingest implementation, shared with the sync queue runner
 	// (issue #227). doTakeoutIngest also stamps the optimistic snapshot.
 	result, _ := s.doMailIngest(r.Context(), mailIngestPayload{
-		Service:     takeoutServiceID,
+		Service:     connectors.TakeoutServiceID,
 		MaxMessages: req.MaxMessages,
 		Query:       path,
 	})
@@ -409,7 +409,7 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	req.Service = takeoutServiceID
+	req.Service = connectors.TakeoutServiceID
 	s.handleTakeoutSyncRequest(w, r, req, false)
 }
 

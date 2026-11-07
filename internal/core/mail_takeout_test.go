@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
 )
 
 const sampleMbox = `From MAILER-DAEMON Fri Jan  1 10:00:00 2024
@@ -102,7 +104,7 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 		}
 	}
 
-	byID, err := a.Get(takeoutServiceID, "msgid:takeout-1@example.com")
+	byID, err := a.Get(connectors.TakeoutServiceID, "msgid:takeout-1@example.com")
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -209,7 +211,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("json: %v", err)
 	}
-	if res.Service != takeoutServiceID || res.Stored != 3 {
+	if res.Service != connectors.TakeoutServiceID || res.Stored != 3 {
 		t.Fatalf("res = %+v", res)
 	}
 
@@ -225,7 +227,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("status json: %v", err)
 	}
-	if st.TakeoutPath == "" || st.ByService[takeoutServiceID] != 3 {
+	if st.TakeoutPath == "" || st.ByService[connectors.TakeoutServiceID] != 3 {
 		t.Fatalf("status = %+v", st)
 	}
 

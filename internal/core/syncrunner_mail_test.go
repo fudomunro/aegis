@@ -195,7 +195,7 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 	srv, store, w := mailRunnerServer(t, nil)
 
 	// No takeout path configured is terminal.
-	_, err := srv.doMailIngest(context.Background(), mailIngestPayload{Service: takeoutServiceID})
+	_, err := srv.doMailIngest(context.Background(), mailIngestPayload{Service: connectors.TakeoutServiceID})
 	if err == nil || !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
 		t.Fatalf("missing path err = %v, want terminal", err)
 	}
@@ -209,7 +209,7 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 	// that source, so the payload need not name it.
 	mustEnqueue(t, store, SyncEnqueue{
 		Kind: mailIngestKind, JobType: SyncJobTypeImport,
-		Service: takeoutServiceID,
+		Service: connectors.TakeoutServiceID,
 		Payload: map[string]any{
 			"query":        "takeout:" + mboxPath,
 			"max_messages": 10,
@@ -222,7 +222,7 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 	if job.State != SyncJobSucceeded {
 		t.Fatalf("takeout job state = %s, want succeeded (progress %s)", job.State, job.Progress)
 	}
-	if !strings.Contains(string(job.Progress), takeoutServiceID) {
+	if !strings.Contains(string(job.Progress), connectors.TakeoutServiceID) {
 		t.Fatalf("progress = %s, want the takeout service id", job.Progress)
 	}
 }
@@ -380,8 +380,8 @@ func TestParseMailIngestPayload_JobTypeDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p.Service != takeoutServiceID {
-		t.Fatalf("import_snapshot service = %q, want %q", p.Service, takeoutServiceID)
+	if p.Service != connectors.TakeoutServiceID {
+		t.Fatalf("import_snapshot service = %q, want %q", p.Service, connectors.TakeoutServiceID)
 	}
 	p, err = parseMailIngestPayload(SyncJob{JobType: SyncJobTypeIngest})
 	if err != nil {

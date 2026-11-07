@@ -40,9 +40,9 @@ func gmailPayloadJSON(id string) string {
 
 func disableGmailArchivePace(t *testing.T) {
 	t.Helper()
-	prev := gmailArchiveGetInterval
-	gmailArchiveGetInterval = 0
-	t.Cleanup(func() { gmailArchiveGetInterval = prev })
+	prev := connectors.GmailArchiveGetInterval
+	connectors.GmailArchiveGetInterval = 0
+	t.Cleanup(func() { connectors.GmailArchiveGetInterval = prev })
 }
 
 func TestGmailSyncMailArchive(t *testing.T) {
@@ -281,7 +281,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected quota error")
 	}
-	if !isGmailQuotaError(err) {
+	if !connectors.IsGmailQuotaError(err) {
 		t.Fatalf("err = %v", err)
 	}
 	if res.Stored != 1 || res.Failed != 0 || !res.Truncated {

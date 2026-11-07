@@ -63,8 +63,8 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 	}
 	for i := 0; i < 5; i++ {
 		rec := MailArchiveRecord{
-			Service:     takeoutServiceID,
-			ServiceName: takeoutServiceName,
+			Service:     connectors.TakeoutServiceID,
+			ServiceName: connectors.TakeoutServiceName,
 			ID:          "t" + string(rune('a'+i)),
 			Subject:     "Takeout " + string(rune('a'+i)),
 		}
@@ -78,7 +78,7 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 	}); err != nil {
 		t.Fatalf("save gmail cursor: %v", err)
 	}
-	if err := mail.SaveSyncCursor(takeoutServiceID, MailSyncCursor{
+	if err := mail.SaveSyncCursor(connectors.TakeoutServiceID, MailSyncCursor{
 		LastSyncAt: "2026-08-24T00:00:00Z",
 		Done:       true,
 	}); err != nil {
@@ -91,7 +91,7 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 	}
 	enrichLibraryServiceStatuses(srv, "messages", bySvc)
 
-	to, ok := bySvc[takeoutServiceID]
+	to, ok := bySvc[connectors.TakeoutServiceID]
 	if !ok {
 		t.Fatalf("missing takeout source: %+v", bySvc)
 	}
@@ -104,7 +104,7 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 	if to.LastSyncedAt != "2026-08-24T00:00:00Z" {
 		t.Fatalf("takeout last_synced_at = %q", to.LastSyncedAt)
 	}
-	if to.Name != takeoutServiceName {
+	if to.Name != connectors.TakeoutServiceName {
 		t.Fatalf("takeout name = %q", to.Name)
 	}
 	gm := bySvc[connectors.GoogleGmailServiceID]

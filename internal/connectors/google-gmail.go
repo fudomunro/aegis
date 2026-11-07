@@ -309,8 +309,40 @@ func isGmailInvalidIDError(err error) bool {
 
 const gmailQuotaMarker = "Quota exceeded"
 
-func isGmailQuotaError(err error) bool {
+// IsGmailQuotaError reports Google's per-user rate-quota failures. Core's
+// archive ingest and sync runner classify provider errors through this,
+// never through the quota body text (issue #286).
+func IsGmailQuotaError(err error) bool {
 	return err != nil && strings.Contains(err.Error(), gmailQuotaMarker)
+}
+
+// Archive-ingest knowledge for Gmail live sync into the local mail archive
+// (issue #286; docs/mail-ingest.md). Core paces and defaults through these.
+
+// GmailArchiveDefaultQuery pulls every mailbox the user can see, including
+// spam/trash, so "all of my email" is actually complete.
+const GmailArchiveDefaultQuery = "in:anywhere"
+
+// GmailArchiveGetInterval paces full-message gets. Gmail's "Units per minute
+// per user" budget is easy to exhaust when hydrating a whole page of IDs;
+// without pacing, mid-page 403s used to skip those messages forever.
+var GmailArchiveGetInterval = 1200 * time.Millisecond
+
+// PaceGmailArchiveGet sleeps between full-message hydrates so a large page
+// does not trip the per-user quota mid-page. A non-positive interval skips
+// the wait (tests use this) and reports only the context state.
+func PaceGmailArchiveGet(ctx context.Context) error {
+	if GmailArchiveGetInterval <= 0 {
+		return ctx.Err()
+	}
+	t := time.NewTimer(GmailArchiveGetInterval)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
 }
 
 // matchGmailAttachmentRoute reports whether remainingPath is the attachments
@@ -363,7 +395,7 @@ func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *h
 				"message not found on Gmail — check sources[].service and sources[].id")
 			return
 		}
-		if isGmailQuotaError(err) {
+		if IsGmailQuotaError(err) {
 			shared.WriteJSONError(w, http.StatusTooManyRequests,
 				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
 			return
@@ -419,7 +451,7 @@ func (c *GoogleGmailConnector) HandleGetAttachment(w http.ResponseWriter, r *htt
 		shared.WriteJSONError(w, http.StatusNotFound, "attachment not found on Gmail")
 		return
 	}
-	if resp.StatusCode == http.StatusTooManyRequests || isGmailQuotaError(fmt.Errorf("%s", data)) {
+	if resp.StatusCode == http.StatusTooManyRequests || IsGmailQuotaError(fmt.Errorf("%s", data)) {
 		shared.WriteJSONError(w, http.StatusTooManyRequests, "Gmail quota exceeded — retry shortly")
 		return
 	}
@@ -624,7 +656,7 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 				"message not found on Gmail — check sources[].service and sources[].id")
 			return
 		}
-		if isGmailQuotaError(err) {
+		if IsGmailQuotaError(err) {
 			shared.WriteJSONError(w, http.StatusTooManyRequests,
 				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
 			return

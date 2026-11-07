@@ -29,7 +29,7 @@ type gmailArchiveSyncer struct {
 type MailSyncOptions struct {
 	// MaxMessages is the hydrate/store cap for this call (default 200).
 	MaxMessages int
-	// Query is the provider list query. Empty uses mailSyncDefaultQuery.
+	// Query is the provider list query. Empty uses connectors.GmailArchiveDefaultQuery.
 	Query string
 	// ResetCursor discards the saved page token and starts over.
 	ResetCursor bool
@@ -56,24 +56,11 @@ type MailArchiveSyncer interface {
 	SyncMailArchive(ctx context.Context, archive *MailArchive, opts MailSyncOptions) (MailSyncResult, error)
 }
 
-// mailSyncDefaultQuery pulls every mailbox the user can see, including
-// spam/trash, so "all of my email" is actually complete.
-const mailSyncDefaultQuery = "in:anywhere"
-
 // mailSyncListPage is the provider ID page size during archive ingest.
 const mailSyncListPage = 100
 
-// gmailQuotaMarker identifies Google's per-user rate-quota body text.
-const gmailQuotaMarker = "Quota exceeded"
-
-// gmailArchiveGetInterval paces full-message gets. Gmail's "Units per minute
-// per user" budget is easy to exhaust when hydrating a whole page of IDs;
-// without pacing, mid-page 403s used to skip those messages forever.
-var gmailArchiveGetInterval = 1200 * time.Millisecond
-
-func isGmailQuotaError(err error) bool {
-	return err != nil && strings.Contains(err.Error(), gmailQuotaMarker)
-}
+// Gmail quota classification, pacing, and the default list query are
+// connector-owned (issue #286); core uses them through the exports.
 
 // SyncMailArchive implements MailArchiveSyncer. Each call lists up to
 // MaxMessages IDs (continuing the stored page token) and stores full payloads.
@@ -89,7 +76,7 @@ func (c *gmailArchiveSyncer) SyncMailArchive(ctx context.Context, archive *MailA
 	}
 	query := strings.TrimSpace(opts.Query)
 	if query == "" {
-		query = mailSyncDefaultQuery
+		query = connectors.GmailArchiveDefaultQuery
 	}
 	res.Query = query
 
@@ -159,7 +146,7 @@ func (c *gmailArchiveSyncer) SyncMailArchive(ctx context.Context, archive *MailA
 			}
 			res.Listed++
 			if err := c.storeGmailMessageArchive(ctx, archive, token, item.ID); err != nil {
-				if isGmailQuotaError(err) || ctx.Err() != nil {
+				if connectors.IsGmailQuotaError(err) || ctx.Err() != nil {
 					// Rate quota: stop now and leave the cursor on this page so
 					// the remaining IDs are retried after the window resets.
 					logger.Warn("mail archive sync paused", "id", item.ID, "error", err)
@@ -176,7 +163,7 @@ func (c *gmailArchiveSyncer) SyncMailArchive(ctx context.Context, archive *MailA
 			}
 			res.Stored++
 			res.LastStored = item.ID
-			if err := paceGmailArchiveGet(ctx); err != nil {
+			if err := connectors.PaceGmailArchiveGet(ctx); err != nil {
 				retry := cursor
 				retry.PageToken = pageFetchToken
 				retry.Done = false
@@ -211,22 +198,6 @@ func (c *gmailArchiveSyncer) finishMailSync(archive *MailArchive, res MailSyncRe
 	cursor.Error = res.Error
 	_ = archive.SaveSyncCursor(connectors.GoogleGmailServiceID, cursor)
 	return res, err
-}
-
-// paceGmailArchiveGet sleeps between full-message hydrates so a large page
-// cannot exhaust the Gmail per-minute unit quota (issue: archive sync).
-func paceGmailArchiveGet(ctx context.Context) error {
-	if gmailArchiveGetInterval <= 0 {
-		return ctx.Err()
-	}
-	t := time.NewTimer(gmailArchiveGetInterval)
-	defer t.Stop()
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-t.C:
-		return nil
-	}
 }
 
 func (c *gmailArchiveSyncer) storeGmailMessageArchive(ctx context.Context, archive *MailArchive, token, id string) error {

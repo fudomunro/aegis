@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -717,7 +718,7 @@ func (c *CopyLedger) RecordTakeoutSnapshot(path string, scanned, stored, skipped
 	_, _ = c.Upsert(CopyRecord{
 		Kind:       "messages",
 		EntityKey:  "snapshot:google-takeout:" + abs,
-		Service:    takeoutServiceID,
+		Service:    connectors.TakeoutServiceID,
 		ExternalID: abs,
 		Role:       CopyRoleImport,
 		SyncMode:   CopySyncModeOptimistic,

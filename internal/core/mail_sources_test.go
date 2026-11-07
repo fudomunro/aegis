@@ -103,7 +103,7 @@ func TestMailSources_TakeoutThenGmail_MergesOnMessageID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if st.ByService[takeoutServiceID] < 4 || st.ByService[connectors.GoogleGmailServiceID] != 1 {
+	if st.ByService[connectors.TakeoutServiceID] < 4 || st.ByService[connectors.GoogleGmailServiceID] != 1 {
 		t.Fatalf("by_service = %+v", st.ByService)
 	}
 
@@ -115,12 +115,12 @@ func TestMailSources_TakeoutThenGmail_MergesOnMessageID(t *testing.T) {
 	for _, src := range msg.Sources {
 		services = append(services, src.Service)
 	}
-	if !containsAll(services, connectors.GoogleGmailServiceID, takeoutServiceID) {
+	if !containsAll(services, connectors.GoogleGmailServiceID, connectors.TakeoutServiceID) {
 		t.Fatalf("sources services = %v", services)
 	}
 	// Takeout is a sync location, not the mailbox home.
 	for _, src := range msg.Sources {
-		if src.Service == takeoutServiceID && src.Canonical {
+		if src.Service == connectors.TakeoutServiceID && src.Canonical {
 			t.Fatalf("takeout marked canonical: %+v", src)
 		}
 		if src.Service == connectors.GoogleGmailServiceID && !src.Canonical {

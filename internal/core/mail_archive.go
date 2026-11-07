@@ -84,7 +84,7 @@ func (r MailArchiveRecord) Message() types.Message {
 		ID:          r.ID,
 		ThreadID:    r.ThreadID,
 		Mailbox:     r.Mailbox,
-		Canonical:   r.Service != takeoutServiceID,
+		Canonical:   r.Service != connectors.TakeoutServiceID,
 	}
 	if r.MessageID != "" {
 		src.Extra = map[string]any{"message_id": r.MessageID}
@@ -867,8 +867,8 @@ func mailServiceName(service string) string {
 	switch service {
 	case connectors.GoogleGmailServiceID:
 		return connectors.GoogleGmailServiceName
-	case takeoutServiceID:
-		return takeoutServiceName
+	case connectors.TakeoutServiceID:
+		return connectors.TakeoutServiceName
 	default:
 		return service
 	}

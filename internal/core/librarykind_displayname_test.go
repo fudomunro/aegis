@@ -24,7 +24,7 @@ func TestLibrarySourceDisplayName(t *testing.T) {
 		want string
 	}{
 		{"mail-archive", "Mail archive"},
-		{takeoutServiceID, takeoutServiceName},
+		{connectors.TakeoutServiceID, connectors.TakeoutServiceName},
 		// Canonical registry names win over configured names.
 		{"spotify", "Spotify"},
 		{"google-gmail", "Gmail"},

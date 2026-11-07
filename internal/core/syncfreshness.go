@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -260,7 +261,7 @@ func (c *musicMirrorChecker) Check(ctx context.Context, rec CopyRecord) (CopyVer
 type takeoutChecker struct{}
 
 // Services implements CopyChecker.
-func (takeoutChecker) Services() []string { return []string{takeoutServiceID} }
+func (takeoutChecker) Services() []string { return []string{connectors.TakeoutServiceID} }
 
 // Check implements CopyChecker.
 func (takeoutChecker) Check(_ context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {

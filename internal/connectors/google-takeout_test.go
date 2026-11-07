@@ -1,0 +1,126 @@
+package connectors
+
+import (
+	"errors"
+	"net/mail"
+	"strings"
+	"testing"
+)
+
+func takeoutMsg(t *testing.T, headers string) *mail.Message {
+	t.Helper()
+	msg, err := mail.ReadMessage(strings.NewReader(headers + "\r\n\r\nbody\r\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return msg
+}
+
+func TestTakeoutLabels(t *testing.T) {
+	msg := takeoutMsg(t, "X-GM-LABELS: INBOX, \"Starred\" UNREAD")
+	got := TakeoutLabels(msg, "/exports/All mail Including Spam and Trash.mbox")
+	want := []string{"INBOX", "STARRED", "UNREAD", "TAKEOUT"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("labels = %v, want %v", got, want)
+	}
+
+	// Without X-GM-LABELS the source base name stands in, TAKEOUT is appended.
+	plain := takeoutMsg(t, "Subject: hi")
+	got = TakeoutLabels(plain, "/exports/All mail Including Spam and Trash.mbox")
+	want = []string{"ALL_MAIL_INCLUDING_SPAM_AND_TRASH", "TAKEOUT"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("labels = %v, want %v", got, want)
+	}
+}
+
+func TestTakeoutMailboxFromLabels(t *testing.T) {
+	if got := TakeoutMailboxFromLabels([]string{"INBOX", "TAKEOUT"}); got != "INBOX" {
+		t.Fatalf("mailbox = %q, want INBOX", got)
+	}
+	if got := TakeoutMailboxFromLabels([]string{"sent"}); got != "SENT" {
+		t.Fatalf("mailbox = %q, want SENT", got)
+	}
+	if got := TakeoutMailboxFromLabels([]string{"TAKEOUT"}); got != "TAKEOUT" {
+		t.Fatalf("mailbox = %q, want TAKEOUT fallback", got)
+	}
+}
+
+func TestTakeoutDirection(t *testing.T) {
+	if got := TakeoutDirection([]string{"SENT"}); got != "outbound" {
+		t.Fatalf("direction = %q, want outbound", got)
+	}
+	if got := TakeoutDirection([]string{"INBOX"}); got != "inbound" {
+		t.Fatalf("direction = %q, want inbound", got)
+	}
+	if got := TakeoutDirection([]string{"TAKEOUT"}); got != "unknown" {
+		t.Fatalf("direction = %q, want unknown", got)
+	}
+}
+
+func TestTakeoutRead(t *testing.T) {
+	if TakeoutRead([]string{"INBOX", "UNREAD"}) {
+		t.Fatal("UNREAD must map to Read=false")
+	}
+	if !TakeoutRead([]string{"INBOX"}) {
+		t.Fatal("messages without UNREAD are read")
+	}
+}
+
+func TestTakeoutMessageID(t *testing.T) {
+	id := TakeoutMessageID("<abc@x>", []byte("raw"))
+	if id != "msgid:<abc@x>" {
+		t.Fatalf("id = %q, want msgid: form", id)
+	}
+	// No Message-ID → content-hash form, stable across calls.
+	a := TakeoutMessageID("", []byte("raw"))
+	b := TakeoutMessageID("", []byte("raw"))
+	if !strings.HasPrefix(a, "blob:") || a != b {
+		t.Fatalf("blob id = %q / %q", a, b)
+	}
+	if TakeoutMessageID("", []byte("other")) == a {
+		t.Fatal("different content must hash differently")
+	}
+}
+
+func FuzzTakeoutMessageID(f *testing.F) {
+	f.Add("", []byte("raw"))
+	f.Add("<abc@x>", []byte("raw"))
+	f.Add("  <>  ", []byte{})
+	f.Add("weird id", []byte("payload"))
+	f.Fuzz(func(t *testing.T, messageID string, raw []byte) {
+		id := TakeoutMessageID(messageID, raw)
+		if id == "" {
+			t.Fatal("empty takeout id")
+		}
+		if !strings.HasPrefix(id, "msgid:") && !strings.HasPrefix(id, "blob:") {
+			t.Fatalf("unexpected id prefix: %q", id)
+		}
+		// Same inputs → same id (stable hashing).
+		if again := TakeoutMessageID(messageID, raw); again != id {
+			t.Fatalf("unstable id: %q vs %q", id, again)
+		}
+	})
+}
+
+func TestIsGmailQuotaError(t *testing.T) {
+	if IsGmailQuotaError(nil) {
+		t.Fatal("nil is not a quota error")
+	}
+	quota := GmailListHTTPError("list", 403,
+		[]byte(`{"error":{"code":403,"message":"Quota exceeded for quota metric 'Total Query Cost'"}}`))
+	if !IsGmailQuotaError(quota) {
+		t.Fatalf("err = %v, want quota classification", quota)
+	}
+	if IsGmailQuotaError(errors.New("connection reset")) {
+		t.Fatal("unrelated errors must not classify as quota")
+	}
+}
+
+func TestPaceGmailArchiveGetSkipsWhenDisabled(t *testing.T) {
+	prev := GmailArchiveGetInterval
+	GmailArchiveGetInterval = 0
+	t.Cleanup(func() { GmailArchiveGetInterval = prev })
+	if err := PaceGmailArchiveGet(t.Context()); err != nil {
+		t.Fatalf("pace: %v", err)
+	}
+}
