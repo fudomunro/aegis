@@ -17,6 +17,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/ownership"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -119,7 +120,7 @@ type Server struct {
 	links *links.Store
 	// ownership holds per-kind user confirmation that Aegis already manages
 	// all the data of that kind the user cares about (issue #165).
-	ownership *OwnershipStore
+	ownership *ownership.Store
 	// copies is the durable copy ledger (issue #76). May be disabled.
 	copies *CopyLedger
 	// syncJobs is the durable sync job queue (issue #227). May be disabled.

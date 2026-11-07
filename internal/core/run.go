@@ -20,6 +20,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"github.com/fudomunro/aegis/internal/core/ownership"
 )
 
 func Run() {
@@ -270,7 +271,7 @@ func Run() {
 		os.Exit(1)
 	}
 
-	ownership, err := NewOwnershipStore(paths.Ownership)
+	ownership, err := ownership.NewStore(paths.Ownership)
 	if err != nil {
 		slog.Error("failed to load ownership state", "path", paths.Ownership, "error", err)
 		os.Exit(1)
