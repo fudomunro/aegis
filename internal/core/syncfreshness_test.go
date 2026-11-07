@@ -366,13 +366,15 @@ func TestNewFreshnessRunners_CoverSupportedKinds(t *testing.T) {
 
 // --- checkers ---
 
-func TestTakeoutChecker(t *testing.T) {
+func TestSnapshotChecker(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "export.mbox")
 	if err := os.WriteFile(path, []byte(""), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	c := takeoutChecker{}
+	srv := &Server{}
+	srv.wireMailIngests()
+	c := &snapshotChecker{srv: srv, service: connectors.TakeoutServiceID}
 	if got := c.Services(); len(got) != 1 || got[0] != connectors.TakeoutServiceID {
 		t.Fatalf("Services = %v", got)
 	}
@@ -380,6 +382,9 @@ func TestTakeoutChecker(t *testing.T) {
 	cur, exists, ok, err := c.Check(context.Background(), CopyRecord{ExternalID: path})
 	if err != nil || !ok || !exists {
 		t.Fatalf("Check(existing) = (%+v,%v,%v,%v)", cur, exists, ok, err)
+	}
+	if cur.Name != path || cur.ExternalID != path {
+		t.Fatalf("Check(existing) = %+v, want the recorded export", cur)
 	}
 
 	_, exists, ok, err = c.Check(context.Background(), CopyRecord{ExternalID: filepath.Join(dir, "gone.mbox")})
@@ -390,6 +395,12 @@ func TestTakeoutChecker(t *testing.T) {
 	// No path recorded: cannot check, leave the row alone.
 	if _, _, ok, _ := c.Check(context.Background(), CopyRecord{ExternalID: ""}); ok {
 		t.Fatal("empty path must not report a successful check")
+	}
+
+	// A source that is not a SnapshotProber is not applicable.
+	noop := &snapshotChecker{srv: srv, service: "nope"}
+	if _, _, ok, _ := noop.Check(context.Background(), CopyRecord{ExternalID: path}); ok {
+		t.Fatal("non-prober source must not report a successful check")
 	}
 }
 

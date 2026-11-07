@@ -953,11 +953,8 @@ func enrichLibraryServiceStatuses(s *Server, kindID string, bySvc map[string]typ
 }
 
 func librarySourceDisplayName(s *Server, id string) string {
-	switch id {
-	case "mail-archive":
+	if id == "mail-archive" {
 		return "Mail archive"
-	case connectors.TakeoutServiceID:
-		return connectors.TakeoutServiceName
 	}
 	if name, ok := connectors.ServiceName(id); ok {
 		return name
@@ -972,20 +969,18 @@ func librarySourceLastSyncedAt(s *Server, id string) string {
 	if s.mail == nil {
 		return ""
 	}
-	switch id {
-	case "mail-archive", connectors.TakeoutServiceID, connectors.GoogleGmailServiceID:
-		st, err := s.mail.Status()
-		if err != nil {
-			return ""
-		}
-		if id == connectors.TakeoutServiceID || id == connectors.GoogleGmailServiceID {
-			if cur, err := s.mail.LoadSyncCursor(id); err == nil && cur.LastSyncAt != "" {
-				return cur.LastSyncAt
-			}
-		}
-		return st.LastSyncAt
+	// Mail sources only: the archive itself and its ingest sources.
+	if id != "mail-archive" && s.mailIngestFor(id) == nil {
+		return ""
 	}
-	return ""
+	st, err := s.mail.Status()
+	if err != nil {
+		return ""
+	}
+	if cur, err := s.mail.LoadSyncCursor(id); err == nil && cur.LastSyncAt != "" {
+		return cur.LastSyncAt
+	}
+	return st.LastSyncAt
 }
 
 // expandMailArchiveSources adds per-source rows for Gmail-synced and Takeout
@@ -1001,7 +996,7 @@ func expandMailArchiveSources(s *Server, bySvc map[string]types.LibraryServiceSt
 			continue
 		}
 		id := svc
-		name := mailServiceName(svc)
+		name := librarySourceDisplayName(s, id)
 		last := ""
 		if cur, err := s.mail.LoadSyncCursor(svc); err == nil {
 			last = cur.LastSyncAt
@@ -1011,12 +1006,13 @@ func expandMailArchiveSources(s *Server, bySvc map[string]types.LibraryServiceSt
 		}
 		role := ""
 		canonical := false
-		// Takeout is a historical export nested under the live Gmail home when
-		// Gmail is present; otherwise it stands alone.
+		// Source grouping is declared (issue #286): nest under the declared
+		// parent when present, else under the collection's aggregate row,
+		// else stand alone.
 		parent := ""
-		if id == connectors.TakeoutServiceID {
-			if _, ok := bySvc[connectors.GoogleGmailServiceID]; ok {
-				parent = connectors.GoogleGmailServiceID
+		if p := connectors.MailSourceFor(id).Parent; p != "" {
+			if _, ok := bySvc[p]; ok {
+				parent = p
 			} else if _, ok := bySvc["mail-archive"]; ok {
 				parent = "mail-archive"
 			}

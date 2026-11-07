@@ -15,6 +15,7 @@ var serviceNames = map[string]string{
 	YouTubeMusicServiceID:   YouTubeMusicServiceName,
 	AmazonMusicServiceID:    AmazonMusicServiceName,
 	GoogleGmailServiceID:    GoogleGmailServiceName,
+	TakeoutServiceID:        TakeoutServiceName,
 	GoogleCalendarServiceID: GoogleCalendarServiceName,
 	GoogleContactsServiceID: GoogleContactsServiceName,
 	GooglePhotosServiceID:   GooglePhotosServiceName,

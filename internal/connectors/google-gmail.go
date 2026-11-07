@@ -45,6 +45,13 @@ const GoogleGmailServiceID = "google-gmail"
 
 const GoogleGmailServiceName = "Gmail"
 
+// GmailMailSource is the overview declaration: the live mailbox home
+// (issue #16) — canonical rows, no overview parent.
+var GmailMailSource = MailSource{
+	ServiceID: GoogleGmailServiceID,
+	Canonical: true,
+}
+
 // Default library window and caps. Gmail list endpoints return IDs only, so
 // the library hydrates metadata per message up to a modest cap to keep
 // "my inbox" answers useful without unbounded detail fetches.

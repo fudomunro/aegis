@@ -3,10 +3,8 @@ package core
 import (
 	"context"
 	"log/slog"
-	"os"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -253,36 +251,46 @@ func (c *musicMirrorChecker) Check(ctx context.Context, rec CopyRecord) (CopyVer
 	}, true, true, nil
 }
 
-// takeoutChecker validates an optimistic Google Takeout snapshot against the
-// export on disk. Purely local: the copy's contract is "this export was
-// ingested", so a check confirms the export is still where we recorded it.
-// A vanished export is `missing` — the ingest data is still in the archive,
-// but the recorded copy location is gone.
-type takeoutChecker struct{}
+// snapshotChecker validates an optimistic local-snapshot copy (issue #286,
+// the PlaylistMetaProvider pattern): the source itself decides what
+// "still there" means for its recorded export location. A vanished export
+// is `missing` — the ingested data is still in the archive, but the
+// recorded copy location is gone.
+type snapshotChecker struct {
+	srv     *Server
+	service string
+}
 
 // Services implements CopyChecker.
-func (takeoutChecker) Services() []string { return []string{connectors.TakeoutServiceID} }
+func (c *snapshotChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
-func (takeoutChecker) Check(_ context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+func (c *snapshotChecker) Check(_ context.Context, rec CopyRecord) (CopyVersion, bool, bool, error) {
+	p, ok := c.srv.mailIngestFor(c.service).(types.SnapshotProber)
+	if !ok {
+		return CopyVersion{}, false, false, nil
+	}
 	path := strings.TrimSpace(rec.ExternalID)
 	if path == "" {
 		return CopyVersion{}, false, false, nil
 	}
-	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
-			return CopyVersion{}, false, true, nil
-		}
+	exists, name, err := p.SnapshotProbe(path)
+	if err != nil {
 		return CopyVersion{}, false, false, err
 	}
-	return CopyVersion{ExternalID: path, Name: path}, true, true, nil
+	if !exists {
+		return CopyVersion{}, false, true, nil
+	}
+	return CopyVersion{ExternalID: path, Name: name}, true, true, nil
 }
 
 // newCheckerRegistry wires the checkers this build supports. Music services
 // register from the connector map: any connector exposing
-// types.PlaylistMetaProvider gets the shared mirror checker. Services with
-// no checker (Bluesky shares, DAV item etags) are deliberately absent: their
-// rows stay `unknown` until a checker lands, which is the honest answer.
+// types.PlaylistMetaProvider gets the shared mirror checker. Local-snapshot
+// ingest sources (issue #286) register from the ingest registry the same
+// way. Services with no checker (Bluesky shares, DAV item etags) are
+// deliberately absent: their rows stay `unknown` until a checker lands,
+// which is the honest answer.
 func newCheckerRegistry(srv *Server) *CheckerRegistry {
 	r := NewCheckerRegistry()
 	for id, conn := range srv.connectors {
@@ -290,6 +298,10 @@ func newCheckerRegistry(srv *Server) *CheckerRegistry {
 			r.Register(&musicMirrorChecker{srv: srv, service: id})
 		}
 	}
-	r.Register(takeoutChecker{})
+	for id, ing := range srv.mailIngests {
+		if _, ok := ing.(types.SnapshotProber); ok {
+			r.Register(&snapshotChecker{srv: srv, service: id})
+		}
+	}
 	return r
 }

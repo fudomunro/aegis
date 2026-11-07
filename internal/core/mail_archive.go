@@ -77,14 +77,15 @@ func (r MailArchiveRecord) Message() types.Message {
 			from = &c
 		}
 	}
-	// Takeout is a read-only sync location, never the mailbox home (issue #16/#139).
+	// Canonical-ness is declared beside the ingest (issue #16/#286): the
+	// live provider is the mailbox home, a read-only export never is.
 	src := types.MessageSource{
 		Service:     r.Service,
 		ServiceName: r.ServiceName,
 		ID:          r.ID,
 		ThreadID:    r.ThreadID,
 		Mailbox:     r.Mailbox,
-		Canonical:   r.Service != connectors.TakeoutServiceID,
+		Canonical:   connectors.MailSourceFor(r.Service).Canonical,
 	}
 	if r.MessageID != "" {
 		src.Extra = map[string]any{"message_id": r.MessageID}
@@ -849,23 +850,15 @@ func scanMailRecord(row rowScanner, withBody bool) (MailArchiveRecord, error) {
 	if ccJSON != "" {
 		_ = json.Unmarshal([]byte(ccJSON), &rec.CC)
 	}
-	rec.ServiceName = mailServiceName(rec.Service)
+	rec.ServiceName = rec.Service
+	if name, ok := connectors.ServiceName(rec.Service); ok {
+		rec.ServiceName = name
+	}
 	return rec, nil
 }
 
 func scanMailRows(rows *sql.Rows, withBody bool) (MailArchiveRecord, error) {
 	return scanMailRecord(rows, withBody)
-}
-
-func mailServiceName(service string) string {
-	switch service {
-	case connectors.GoogleGmailServiceID:
-		return connectors.GoogleGmailServiceName
-	case connectors.TakeoutServiceID:
-		return connectors.TakeoutServiceName
-	default:
-		return service
-	}
 }
 
 // hasSourceRecord reports whether *this* source already stores the message.
