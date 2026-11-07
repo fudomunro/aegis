@@ -266,6 +266,12 @@ func Run() {
 		os.Exit(1)
 	}
 
+	ownership, err := NewOwnershipStore(paths.Ownership)
+	if err != nil {
+		slog.Error("failed to load ownership state", "path", paths.Ownership, "error", err)
+		os.Exit(1)
+	}
+
 	apps, err := NewAppStore(paths.Apps)
 	if err != nil {
 		slog.Error("failed to load app registry", "path", paths.Apps, "error", err)
@@ -433,6 +439,7 @@ func Run() {
 		connectors:    make(map[string]connectors.ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
 		links:         links,
+		ownership:     ownership,
 		apps:          apps,
 		scopes:        scopes,
 		demoMode:      *demoMode,

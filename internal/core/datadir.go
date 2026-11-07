@@ -19,6 +19,7 @@ const (
 	defaultAppsName         = "apps.json"
 	defaultDataScopesName   = "data_scopes.json"
 	defaultLinksName        = "entity_links.json"
+	defaultOwnershipName    = "ownership.json"
 	defaultCopyLedgerName   = "copy_ledger.db"
 	defaultMailArchiveName  = "mail-archive.db"
 	defaultSearchIndexName  = "search-index.db"
@@ -51,6 +52,9 @@ type DataPaths struct {
 	DataScopes string
 	// Links is the entity-link store (playlists).
 	Links string
+	// Ownership is the per-kind data-ownership confirmation store
+	// (issue #165; ownership.json).
+	Ownership string
 	// CopyLedger is the SQLite copy-ledger path (issue #76). Empty disables it.
 	CopyLedger string
 	// SyncJobs is the SQLite sync-job queue path (issue #227). Empty disables
@@ -196,6 +200,7 @@ func ResolveStatePaths(ov StatePathOverrides) (DataPaths, error) {
 		Apps:               filepath.Join(dir, defaultAppsName),
 		DataScopes:         filepath.Join(dir, defaultDataScopesName),
 		Links:              resolveUnderDataDir(ov.Links, dir, defaultLinksName),
+		Ownership:          filepath.Join(dir, defaultOwnershipName),
 		LogsDir:            filepath.Join(dir, dataDirLogsSubdir),
 	}
 	// Copy ledger: omitted → default under data dir; explicitly empty → disabled.

@@ -114,6 +114,9 @@ type Server struct {
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
 	links *EntityLinkStore
+	// ownership holds per-kind user confirmation that Aegis already manages
+	// all the data of that kind the user cares about (issue #165).
+	ownership *OwnershipStore
 	// copies is the durable copy ledger (issue #76). May be disabled.
 	copies *CopyLedger
 	// syncJobs is the durable sync job queue (issue #227). May be disabled.

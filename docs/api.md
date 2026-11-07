@@ -756,6 +756,9 @@ GET /v1/admin/search/status — search index health: enabled, path, per-kind sea
 GET /v1/admin/permissions — type-centric data grants editor model: agent level + relevant apps/sync per data type
 GET /v1/admin/data-grants — agent data-grant map (primary,)
 PUT /v1/admin/data-grants — replace data grants {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+GET /v1/admin/ownership — per-kind data-ownership status (confirmed state, sources under management, unused routes, copy freshness)
+POST /v1/admin/ownership/{kind} — confirm the kind is complete {"note":"…"}; answers with the refreshed status
+DELETE /v1/admin/ownership/{kind} — reopen the kind (clear the confirmation; the note is kept)
 GET /v1/admin/services/{id}/grant-limits — service override map + effective_permissions + available/writable types
 PUT /v1/admin/services/{id}/grant-limits — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
 GET /v1/admin/setup/{id} — connector-declared setup spec + live status (fields, ladder, checklist, guides, probes)
