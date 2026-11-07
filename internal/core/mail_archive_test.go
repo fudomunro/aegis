@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
@@ -253,9 +254,9 @@ func mustTokens(t *testing.T) *tokens.TokenStore {
 	return ts
 }
 
-func mustLinks(t *testing.T) *EntityLinkStore {
+func mustLinks(t *testing.T) *links.Store {
 	t.Helper()
-	st, err := NewEntityLinkStore("")
+	st, err := links.NewStore("")
 	if err != nil {
 		t.Fatalf("links: %v", err)
 	}

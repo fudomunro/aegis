@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -412,7 +413,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Target:   kind.ID,
 			DataType: kind.ID,
 			Cache:    MetricCacheMiss,
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "app_scope",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -433,7 +434,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Target:   kind.ID,
 			DataType: kind.ID,
 			Cache:    MetricCacheMiss,
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "scope_grant",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -522,7 +523,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Surface:  MetricSurfaceService,
 			Target:   id,
 			DataType: kind.ID,
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
@@ -536,7 +537,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 				Surface:  MetricSurfaceLibrary,
 				Target:   kind.ID,
 				DataType: kind.ID,
-				Decision: DecisionDeny,
+				Decision: audit.DecisionDeny,
 				Reason:   "permission",
 				Method:   r.Method,
 				Status:   http.StatusForbidden,
@@ -720,7 +721,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 				Surface:  MetricSurfaceLibrary,
 				Target:   kind.ID,
 				DataType: kind.ID,
-				Decision: DecisionDeny,
+				Decision: audit.DecisionDeny,
 				Reason:   "permission",
 				Method:   r.Method,
 				Status:   http.StatusForbidden,

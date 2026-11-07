@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
@@ -162,7 +163,7 @@ func scopeServer(t *testing.T, scopes []DataScope) *Server {
 		connectors: make(map[string]connectors.ServiceConnector),
 		scopes:     loaded,
 		mail:       archive,
-		links:      &EntityLinkStore{},
+		links:      &links.Store{},
 		metrics:    NewAccessMetrics(32),
 	}
 	srv.connectors["sample-library-shire"] = NewSampleLibraryConnector("sample-library-shire", "shire", GenerateSampleLibraryFor("shire"))

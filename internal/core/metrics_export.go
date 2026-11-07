@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -124,7 +125,7 @@ func (p *PromMetrics) observeAccess(ev AccessEvent) {
 	}
 	decision := ev.Decision
 	if decision == "" {
-		decision = DecisionAllow
+		decision = audit.DecisionAllow
 	}
 	surface := ev.Surface
 	if surface == "" {
@@ -142,7 +143,7 @@ func (p *PromMetrics) observeAccess(ev AccessEvent) {
 	case MetricCacheMiss:
 		p.cache[MetricCacheMiss]++
 	}
-	if decision == DecisionDeny {
+	if decision == audit.DecisionDeny {
 		p.denials[surface+"|"+target]++
 	}
 	p.audit[decision]++
@@ -338,7 +339,7 @@ func (p *PromMetrics) promText() string {
 
 	writeMeta(&b, "aegis_audit_events_total", "counter",
 		"Audit sink writes by decision.")
-	for _, decision := range []string{DecisionAllow, DecisionDeny} {
+	for _, decision := range []string{audit.DecisionAllow, audit.DecisionDeny} {
 		fmt.Fprintf(&b, "aegis_audit_events_total{decision=%q} %d\n", decision, p.audit[decision])
 	}
 

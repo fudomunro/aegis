@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -140,13 +141,13 @@ func TestAuditRouteFamily(t *testing.T) {
 
 func TestDeny_RecordsAuthAuditAndProm(t *testing.T) {
 	dir := t.TempDir()
-	audit, err := OpenAuditLog(dir+"/audit.db", 30)
+	auditLog, err := audit.Open(dir+"/audit.db", 30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer audit.Close()
+	defer auditLog.Close()
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.audit = audit
+	srv.audit = auditLog
 	srv.prom = NewPromMetrics()
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
@@ -156,7 +157,7 @@ func TestDeny_RecordsAuthAuditAndProm(t *testing.T) {
 		t.Fatalf("status = %d, want 401", w.Code)
 	}
 
-	rows, err := audit.List(AuditFilter{Decision: DecisionDeny})
+	rows, err := auditLog.List(audit.Filter{Decision: audit.DecisionDeny})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -237,7 +238,7 @@ func TestPromText_CacheAndAccessSeries(t *testing.T) {
 	p := NewPromMetrics()
 	p.observeAccess(AccessEvent{Surface: "library", Target: "tracks", Cache: MetricCacheHit})
 	p.observeAccess(AccessEvent{Surface: "library", Target: "tracks", Cache: MetricCacheMiss})
-	p.observeAccess(AccessEvent{Surface: MetricSurfaceService, Target: "spotify", Decision: DecisionDeny, Reason: "permission"})
+	p.observeAccess(AccessEvent{Surface: MetricSurfaceService, Target: "spotify", Decision: audit.DecisionDeny, Reason: "permission"})
 	p.observeAccess(AccessEvent{}) // defaults
 
 	text := p.promText()

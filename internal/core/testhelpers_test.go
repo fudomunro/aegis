@@ -14,14 +14,15 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
 // AccessEventToAudit projects a redacted access event onto the durable
 // audit row (issue #105).
-func AccessEventToAudit(ev AccessEvent) AuditEvent {
-	return AuditEvent{
+func AccessEventToAudit(ev AccessEvent) audit.Event {
+	return audit.Event{
 		At:       ev.At,
 		Agent:    ev.Agent,
 		Surface:  ev.Surface,

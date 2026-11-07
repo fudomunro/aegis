@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -136,10 +137,10 @@ func FuzzPlaylistLinkKey(f *testing.F) {
 	f.Add("", "")
 	f.Add("youtube", "yt1")
 	f.Fuzz(func(t *testing.T, service, id string) {
-		st := &EntityLinkStore{Links: []EntityLink{{
+		st := &links.Store{Links: []links.Link{{
 			ID:      "L1",
 			Kind:    "playlist",
-			Sources: []EntityLinkSource{{Service: service, ID: id}},
+			Sources: []links.Source{{Service: service, ID: id}},
 		}}}
 		p := types.Playlist{Sources: []types.PlaylistSource{{Service: service, ID: id}}}
 		key := st.PlaylistLinkKey(p)
@@ -149,7 +150,7 @@ func FuzzPlaylistLinkKey(f *testing.F) {
 			}
 		}
 		// Nil store is inert.
-		var missing *EntityLinkStore
+		var missing *links.Store
 		if k := missing.PlaylistLinkKey(p); k != "" {
 			t.Fatalf("nil store returned %q", k)
 		}

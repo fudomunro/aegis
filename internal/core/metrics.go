@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"sort"
 	"sync"
@@ -36,7 +37,7 @@ type AccessEvent struct {
 	Target   string // service id or library kind id
 	DataType string
 	Cache    string // hit, miss, or empty
-	// Decision is DecisionAllow or DecisionDeny. Empty is treated as allow
+	// Decision is audit.DecisionAllow or audit.DecisionDeny. Empty is treated as allow
 	// for compatibility with older in-memory events.
 	Decision string
 	// Reason is a short redacted denial reason (permission, app_scope,
@@ -336,13 +337,13 @@ func (s *Server) recordAccess(ev AccessEvent) {
 		ev.At = time.Now()
 	}
 	if ev.Decision == "" {
-		ev.Decision = DecisionAllow
+		ev.Decision = audit.DecisionAllow
 	}
 	if s.metrics != nil {
 		s.metrics.Record(ev)
 	}
 	if s.audit != nil {
-		s.audit.Write(AuditEvent{
+		s.audit.Write(audit.Event{
 			At:       ev.At,
 			Agent:    ev.Agent,
 			Surface:  ev.Surface,

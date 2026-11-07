@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -298,7 +299,7 @@ func TestRateLimiter_EvictsInBatches(t *testing.T) {
 }
 
 func TestRateLimited_AuditCoalesced(t *testing.T) {
-	a, err := OpenAuditLog(filepath.Join(t.TempDir(), "audit.db"), 30)
+	a, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), 30)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -317,7 +318,7 @@ func TestRateLimited_AuditCoalesced(t *testing.T) {
 			t.Fatalf("status = %d", w.Code)
 		}
 	}
-	rows, err := a.List(AuditFilter{Limit: 20})
+	rows, err := a.List(audit.Filter{Limit: 20})
 	if err != nil {
 		t.Fatal(err)
 	}

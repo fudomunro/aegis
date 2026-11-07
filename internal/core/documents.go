@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -311,7 +312,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 			Surface:  MetricSurfaceLibrary,
 			Target:   kind.ID,
 			DataType: kind.ID,
-			Decision: DecisionDeny,
+			Decision: audit.DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,

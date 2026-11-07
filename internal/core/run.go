@@ -8,6 +8,8 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"io"
@@ -53,7 +55,7 @@ func Run() {
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
 	maintenanceRepo := flag.String("maintenance-repo", "", "GitHub repo (owner/name) where sync-maintenance tickets are opened as issues (reads AEGIS_MAINTENANCE_REPO if empty; empty disables ticketing)")
 	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
-	auditRetentionDays := flag.Int("audit-retention-days", defaultAuditRetentionDays, "how many days of audit events to retain before pruning")
+	auditRetentionDays := flag.Int("audit-retention-days", audit.DefaultRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
 	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit")
@@ -262,7 +264,7 @@ func Run() {
 		os.Exit(1)
 	}
 
-	links, err := NewEntityLinkStore(paths.Links)
+	linkStore, err := links.NewStore(paths.Links)
 	if err != nil {
 		slog.Error("failed to load entity link store", "path", paths.Links, "error", err)
 		os.Exit(1)
@@ -410,7 +412,7 @@ func Run() {
 		slog.Info("signal store disabled")
 	}
 
-	auditLog, err := OpenAuditLog(paths.AuditLog, *auditRetentionDays)
+	auditLog, err := audit.Open(paths.AuditLog, *auditRetentionDays)
 	if err != nil {
 		slog.Error("failed to open audit log", "path", paths.AuditLog, "error", err)
 		os.Exit(1)
@@ -440,7 +442,7 @@ func Run() {
 		rl:            newRateLimiter(),
 		connectors:    make(map[string]connectors.ServiceConnector),
 		metrics:       NewAccessMetrics(defaultMetricsCapacity),
-		links:         links,
+		links:         linkStore,
 		ownership:     ownership,
 		apps:          apps,
 		scopes:        scopes,

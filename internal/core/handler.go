@@ -12,6 +12,8 @@ import (
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
@@ -114,7 +116,7 @@ type Server struct {
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
-	links *EntityLinkStore
+	links *links.Store
 	// ownership holds per-kind user confirmation that Aegis already manages
 	// all the data of that kind the user cares about (issue #165).
 	ownership *OwnershipStore
@@ -156,7 +158,7 @@ type Server struct {
 	// hookHealth records Aperture pre-request outcomes for admin diagnostics.
 	hookHealth *HookHealth
 	// audit is the durable access audit log (issue #105). May be disabled.
-	audit *AuditLog
+	audit *audit.Log
 	// prom holds process-lifetime counters for GET /metrics (issue #105).
 	prom *PromMetrics
 	// maintenanceIssues is the GitHub-issue ticket surface for the sync
@@ -588,7 +590,7 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 		Agent:    agent,
 		Surface:  MetricSurfaceAuth,
 		Target:   auditRouteFamily(r),
-		Decision: DecisionDeny,
+		Decision: audit.DecisionDeny,
 		Reason:   "auth",
 		Method:   requestMethod(r),
 		Status:   status,

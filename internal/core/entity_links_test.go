@@ -9,62 +9,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/types"
 )
-
-func TestEntityLinkStore_AddListDelete(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "links.json")
-	st, err := NewEntityLinkStore(path)
-	if err != nil {
-		t.Fatalf("new store: %v", err)
-	}
-
-	link, err := st.Add("playlist", []EntityLinkSource{
-		{Service: "spotify", ID: "pl1"},
-		{Service: "youtube-music", ID: "PL1"},
-	}, "same mix")
-	if err != nil {
-		t.Fatalf("add: %v", err)
-	}
-	if link.ID == "" || len(link.Sources) != 2 {
-		t.Fatalf("link = %+v", link)
-	}
-
-	// Duplicate source rejected.
-	if _, err := st.Add("playlist", []EntityLinkSource{
-		{Service: "spotify", ID: "pl1"},
-		{Service: "amazon-music", ID: "x"},
-	}, ""); err == nil {
-		t.Fatal("expected duplicate source error")
-	}
-
-	// Reload from disk.
-	st2, err := NewEntityLinkStore(path)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	if len(st2.List()) != 1 {
-		t.Fatalf("reloaded links = %+v", st2.List())
-	}
-
-	key := st2.PlaylistLinkKey(types.Playlist{
-		Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "PL1"}},
-	})
-	if key != "link:"+link.ID {
-		t.Fatalf("link key = %q", key)
-	}
-	if st2.PlaylistLinkKey(types.Playlist{Sources: []types.PlaylistSource{{Service: "spotify", ID: "other"}}}) != "" {
-		t.Fatal("unlinked playlist should have empty key")
-	}
-
-	if !st2.Delete(link.ID) {
-		t.Fatal("delete failed")
-	}
-	if len(st2.List()) != 0 {
-		t.Fatalf("after delete = %+v", st2.List())
-	}
-}
 
 func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	// Different names but explicitly linked → one entity, match=link.
@@ -103,7 +50,7 @@ func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 func TestHandleEntityLinks_HTTP(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "links.json")
-	st, err := NewEntityLinkStore(path)
+	st, err := links.NewStore(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -118,7 +65,7 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
 	}
-	var created EntityLink
+	var created links.Link
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -33,9 +34,9 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		})
 	case path == "" && r.Method == http.MethodPost:
 		var body struct {
-			Kind    string             `json:"kind"`
-			Sources []EntityLinkSource `json:"sources"`
-			Note    string             `json:"note"`
+			Kind    string         `json:"kind"`
+			Sources []links.Source `json:"sources"`
+			Note    string         `json:"note"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")

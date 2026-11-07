@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -102,7 +103,7 @@ func TestHandleMergeReview_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
-	links, err := NewEntityLinkStore(filepath.Join(t.TempDir(), "links.json"))
+	links, err := links.NewStore(filepath.Join(t.TempDir(), "links.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,7 +246,7 @@ func TestHandleMergeReview_ProviderErrorsStillReturn200(t *testing.T) {
 
 func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	dir := t.TempDir()
-	st, err := NewEntityLinkStore(filepath.Join(dir, "links.json"))
+	st, err := links.NewStore(filepath.Join(dir, "links.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +311,7 @@ func TestHandleEntityLinks_MethodAndMissingPaths(t *testing.T) {
 	if w.Code != http.StatusCreated {
 		t.Fatalf("create status = %d body=%s", w.Code, w.Body.String())
 	}
-	var created EntityLink
+	var created links.Link
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatal(err)
 	}
