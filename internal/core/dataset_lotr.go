@@ -3,6 +3,7 @@ package core
 import (
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -56,8 +57,8 @@ func lotRMail(dataset string, rows []SampleMailRow) SampleMailSet {
 	recs := make([]MailArchiveRecord, 0, len(rows))
 	for _, row := range rows {
 		rec := MailArchiveRecord{
-			Service:     "google-gmail",
-			ServiceName: "Gmail",
+			Service:     connectors.GoogleGmailServiceID,
+			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          dataset + ":" + row.ID,
 			ThreadID:    row.ThreadID,
 			MessageID:   row.MessageID,
@@ -75,7 +76,7 @@ func lotRMail(dataset string, rows []SampleMailRow) SampleMailSet {
 			Dataset:     dataset,
 		}
 		if row.ToName != "" || row.ToEmail != "" {
-			rec.To = []types.Contact{types.NewContact("google-gmail", "Gmail", "", row.ToName, []string{row.ToEmail}, nil)}
+			rec.To = []types.Contact{types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", row.ToName, []string{row.ToEmail}, nil)}
 		}
 		recs = append(recs, rec)
 	}
@@ -284,8 +285,8 @@ func lotRLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentA
 		Read:      true,
 		EntityID:  id + "@middle-earth.example",
 		Sources: []types.MessageSource{{
-			Service:     "google-gmail",
-			ServiceName: "Gmail",
+			Service:     connectors.GoogleGmailServiceID,
+			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          id,
 			Canonical:   true,
 			Extra:       map[string]any{"message_id": id + "@middle-earth.example"},

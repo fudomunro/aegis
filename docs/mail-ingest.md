@@ -1,9 +1,11 @@
 # Mail ingest: the Gmail + Takeout seam
 
-Status: **design** — this note is the plan for issue #286; the slices below
-land as separate PRs. Nothing here has moved yet.
-Scope: the Google Takeout / mail-archive pipeline that still lives in
-`internal/core` (`mail_takeout.go`, `mail_archive_sync.go`,
+Status: **done** — all four phases have landed (#293 semantics to
+connectors, #294 the ingest seam, #295 declared source metadata, and this
+cleanup). The note is the contract for the seam; the worked examples are
+the Gmail and Takeout ingests in `internal/connectors`.
+Scope (as designed): the Google Takeout / mail-archive pipeline that lived
+in `internal/core` (`mail_takeout.go`, `mail_archive_sync.go`,
 `syncrunner_mail.go`, and the service-ID branches in `librarykind.go` /
 `syncfreshness.go` / `mail_archive_http.go`).
 
@@ -274,7 +276,7 @@ core holds no Takeout parser and no Gmail sync loop.
 **Done when:** `librarykind.go` and `syncfreshness.go` contain no
 mail/takeout service-ID branching; overviews behave as before.
 
-### Phase 4 — cleanup (`docs/issue-286-mail-ingest-cleanup`)
+### Phase 4 — cleanup (`docs/issue-286-mail-ingest-cleanup`) — **landed**
 
 1. Core holds no `google-takeout` / Gmail provider literals — a hygiene
    test (the `docs_hygiene_test.go` / onboarding-copy pattern) rejects

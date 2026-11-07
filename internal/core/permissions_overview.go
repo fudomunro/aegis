@@ -99,7 +99,7 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			ID:       syncMailID,
 			Kind:     types.AccessorSync,
 			Label:    "Mail archive sync",
-			Detail:   "Gmail sync and Takeout import into the local mail archive. Message bodies stay on the source; Aegis keeps a compressed search copy.",
+			Detail:   "Mail ingest into the local mail archive (live sync and export import). Message bodies stay on the source; Aegis keeps a compressed search copy.",
 			Levels:   map[string]string{"messages": types.AccessRead},
 			Explicit: map[string]bool{"messages": true},
 		})
