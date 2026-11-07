@@ -26,10 +26,15 @@ It does two jobs:
 
 Module: `github.com/fudomunro/aegis`  
 Layout: **`internal/types`** (data-type layer) + **`internal/core`**
-(runtime: auth, config, tokens, proxy, admin, state) +
-**`internal/connectors`** (named-service adapters on `Host`) +
-**`internal/shared`** (stdlib-only transport/JSON/math plumbing). Root
-`main.go` is thin (`core.Run()`). See `docs/restructure-core-types-connectors.md`.  
+(runtime hub: auth, config, proxy, admin) with concern sub-packages
+(`core/tokens`, `core/audit`, `core/links`, `core/copies`, `core/mail`,
+`core/ownership`, `core/scopes`, `core/search`) + **`internal/connectors`**
+(named-service adapters on `Host`) + **`internal/shared`** (stdlib-only
+transport/JSON/math/file/path plumbing). Root `main.go` is thin
+(`core.Run()`). Sub-packages follow the Tailscale `ipn/` pattern: durable
+stores and engines get their own package, `*Server` wiring and HTTP/admin
+handlers stay in the hub. See `docs/restructure-core-types-connectors.md`
+for the earlier core/types/connectors split.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
 ## Non-negotiable product rules
@@ -98,15 +103,15 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Data directory + state path layout | `internal/core/datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core/config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
 | Admin permissions overlay | `internal/core/permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
-| Data scopes (principal → dataset) | `internal/core/datascope.go`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
+| Data scopes (principal → dataset) | `internal/core/scopes/`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
 | External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
 | Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
-| Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math utils) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
-| Tokens / OAuth / CSRF | `internal/core/tokens.go`, `internal/core/oauth.go`, `internal/core/statestore.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
+| Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
+| Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared/statestore.go`, `internal/core/oauth.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
-| Merge / entity IDs | `internal/types/merge.go`, `internal/core/entity_links*.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
+| Merge / entity IDs | `internal/types/merge.go`, `internal/core/links/`, `internal/core/entity_links_handlers.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; local import stores `signal.go`, `quicken.go`, `timeline.go` + shared `localstore.go` | Register in `internal/core/run.go` `srv.connectors`; stores share the `ServiceConnector` surface with a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/core/places.go`, `internal/connectors/{timeline,owntracks}.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
@@ -310,9 +315,14 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Packages follow the #15 split.** `internal/types`, `internal/core`,
-  `internal/connectors`, and `internal/shared` have landed. Do not invent
-  other internal packages outside `docs/restructure-core-types-connectors.md`.
+- **Packages follow the #15 split plus #301 sub-packages.** `internal/types`,
+  `internal/core` (hub + concern sub-packages), `internal/connectors`, and
+  `internal/shared` have landed. Sub-packages under `core/` are for
+  self-contained stores/engines (`tokens`, `audit`, `links`, `copies`,
+  `mail`, `ownership`, `scopes`, `search`) — `*Server` wiring and HTTP/admin
+  handlers stay in the hub. `internal/shared` stays stdlib-only plumbing.
+  Do not invent other internal packages outside
+  `docs/restructure-core-types-connectors.md` and the #301 layout.
   `internal/shared` is stdlib-only transport/JSON/math plumbing — no domain
   models, no `Host`, no service IDs, no provider knowledge, no policy.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
@@ -381,6 +391,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Re-growing `writeJSON` / page-cap / URL-trim twins in `core` or `connectors` | One owner: `internal/shared` (issue #280) |
 | Service-ID switches or provider literals growing back into `core` mail paths | Declare grouping/canonical/freshness beside the ingest (`MailSource`, `types.SnapshotProber`); `mail_provider_hygiene_test.go` rejects provider literals (issue #286) |
 | Sequential multi-provider or multi-kind work when already parallelizable | Follow `internal/core/librarykind.go` fan-out; don’t serialize merge review without cause |
+| Local variables named after `core/` sub-packages (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
 
 ## Where to look first
 
