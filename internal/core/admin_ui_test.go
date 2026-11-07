@@ -209,3 +209,50 @@ func TestHandleSetup_Removed(t *testing.T) {
 		t.Fatal("admin HTML must not reference removed /v1/setup wizard")
 	}
 }
+
+// TestAdminHTML_OwnershipPanel pins the data-ownership surface (issue #165):
+// the mount points, the confirm/reopen controls, and that the panel renders
+// connector-declared labels from the API rather than restating them.
+func TestAdminHTML_OwnershipPanel(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	req := httptest.NewRequest("GET", "/v1/admin", nil)
+	w := httptest.NewRecorder()
+	srv.HandleAdmin(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	body := w.Body.String()
+
+	for _, want := range []string{
+		`id="ownership-kinds"`,
+		`id="ownership-summary"`,
+		`id="reload-ownership"`,
+		"loadOwnership",
+		"renderOwnership",
+		"ownershipHref",
+		"data-ownership-confirm",
+		"data-ownership-reopen",
+		"/v1/admin/ownership",
+		"Data ownership",
+		"I have all my ",
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("admin HTML missing ownership marker %q", want)
+		}
+	}
+	// Provider copy stays with the connectors: the panel must not restate
+	// the declared route labels (issue #254).
+	for _, label := range []string{
+		"Import Signal chats",
+		"Import Quicken exports",
+		"Import Timeline exports",
+		"Import a mail export",
+		"Set up Immich",
+		"Set up YNAB",
+		"Connect Spotify",
+	} {
+		if strings.Contains(body, label) {
+			t.Fatalf("admin HTML restates connector route label %q — render it from /v1/admin/ownership", label)
+		}
+	}
+}

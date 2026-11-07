@@ -631,6 +631,17 @@
       </div>
 
       <h2 class="section-heading" id="section-library-datasets">Library datasets</h2>
+      <div class="help-box">
+        <h3>Data ownership</h3>
+        <p>Aegis aims to hold all the data of each type you care about. A type you have not confirmed keeps a call to action to bring more of it under management — connect a service, run a setup flow, or import an export.</p>
+      </div>
+      <div class="toolbar">
+        <span class="meta" id="ownership-summary">Loading…</span>
+        <div class="grow"></div>
+        <button class="btn" id="reload-ownership" type="button">Refresh</button>
+      </div>
+      <div id="ownership-kinds" class="map-libraries"><div class="empty">Loading data ownership…</div></div>
+
       <div id="map-libraries" class="map-libraries"><div class="empty">Open Home to load topology details.</div></div>
 
       <div id="map-recent" class="map-recent" hidden></div>
@@ -1688,6 +1699,119 @@
         "</article>"
       );
     }).join("");
+  }
+
+  // Ownership action → where the user starts. Import panels are page
+  // sections; setup panels live on the service card; connect is the OAuth
+  // login. Targets come from the connector-declared action.
+  function ownershipHref(action) {
+    const target = escapeHtml(action.target || "");
+    if (action.kind === "import") {
+      const section = target === "google-takeout" ? "takeout" : target;
+      return "#section-" + section;
+    }
+    if (action.kind === "setup") {
+      return "#tab-services";
+    }
+    return "/v1/auth/" + target + "/login";
+  }
+
+  function renderOwnership(statuses) {
+    const root = $("ownership-kinds");
+    const summary = $("ownership-summary");
+    if (!root) return;
+    if (!statuses || !statuses.length) {
+      root.innerHTML = '<div class="empty">No data types registered.</div>';
+      if (summary) summary.textContent = "";
+      return;
+    }
+    const unconfirmed = statuses.filter((st) => !st.confirmed);
+    if (summary) {
+      summary.textContent = unconfirmed.length
+        ? unconfirmed.length + " of " + statuses.length + " types not yet confirmed complete"
+        : "All " + statuses.length + " types confirmed complete";
+    }
+    root.innerHTML = statuses.map((st) => {
+      const sources = (st.under_management || []).map((s) => s.name);
+      const sourceTxt = sources.length
+        ? sources.length + (sources.length === 1 ? " source" : " sources") + ": " + sources.join(", ")
+        : "No sources under management yet";
+      const freshness = st.freshness && st.freshness.total
+        ? '<div class="meta">Copies: ' + st.freshness.in_sync + " in sync · " + st.freshness.stale + " stale · " + st.freshness.missing + " missing</div>"
+        : "";
+      const note = st.note ? ' · <em>' + escapeHtml(st.note) + "</em>" : "";
+      if (st.confirmed) {
+        return (
+          '<article class="card">' +
+          '<div class="card-header"><h3>' + escapeHtml(st.label || st.kind) + '</h3> <span class="badge">complete</span></div>' +
+          '<div class="meta">' + escapeHtml(sourceTxt) + note + "</div>" +
+          freshness +
+          '<div class="toolbar"><div class="grow"></div>' +
+          '<button class="btn" data-ownership-reopen="' + escapeHtml(st.kind) + '" type="button">Reopen</button>' +
+          "</div></article>"
+        );
+      }
+      const routes = (st.unused_routes || []).map((r) => {
+        const href = ownershipHref(r.action);
+        return '<a class="btn" href="' + href + '">' + escapeHtml(r.action.label || r.name) + "</a>";
+      }).join(" ");
+      const routesTxt = (st.unused_routes || []).length
+        ? '<div class="toolbar">' + routes + "</div>"
+        : '<div class="meta">No unused routes declared for this type.</div>';
+      return (
+        '<article class="card">' +
+        '<div class="card-header"><h3>' + escapeHtml(st.label || st.kind) + '</h3> <span class="badge badge-blue">needs confirmation</span></div>' +
+        '<div class="meta">' + escapeHtml(sourceTxt) + "</div>" +
+        freshness +
+        routesTxt +
+        '<div class="toolbar"><div class="grow"></div>' +
+        '<button class="btn btn-primary" data-ownership-confirm="' + escapeHtml(st.kind) + '" type="button">I have all my ' + escapeHtml(st.label || st.kind) + "</button>" +
+        "</div></article>"
+      );
+    }).join("");
+    root.querySelectorAll("[data-ownership-confirm]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const kind = btn.getAttribute("data-ownership-confirm");
+        btn.disabled = true;
+        try {
+          await api("/v1/admin/ownership/" + encodeURIComponent(kind), { method: "POST", body: "{}" });
+          await loadOwnership();
+        } catch (err) {
+          showGlobalError(err.message || "Failed to confirm ownership");
+          btn.disabled = false;
+        }
+      });
+    });
+    root.querySelectorAll("[data-ownership-reopen]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const kind = btn.getAttribute("data-ownership-reopen");
+        btn.disabled = true;
+        try {
+          await api("/v1/admin/ownership/" + encodeURIComponent(kind), { method: "DELETE" });
+          await loadOwnership();
+        } catch (err) {
+          showGlobalError(err.message || "Failed to reopen ownership");
+          btn.disabled = false;
+        }
+      });
+    });
+  }
+
+  async function loadOwnership() {
+    const summary = $("ownership-summary");
+    if (summary) summary.textContent = "Loading data ownership…";
+    try {
+      const res = await api("/v1/admin/ownership");
+      renderOwnership(res.ownership || []);
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+        return;
+      }
+      const root = $("ownership-kinds");
+      if (root) root.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "Failed to load data ownership") + "</div>";
+      if (summary) summary.textContent = "";
+    }
   }
 
   function renderFlowStatsSummary(stats) {
@@ -3972,6 +4096,7 @@ function selectTab(name, opts) {
   });
   $("reload-summary").addEventListener("click", () => loadSummary());
   $("reload-flow").addEventListener("click", () => loadFlow());
+  $("reload-ownership").addEventListener("click", () => loadOwnership());
   document.querySelectorAll("[data-flow-window]").forEach((btn) => {
     btn.addEventListener("click", () => {
       flowWindow = btn.getAttribute("data-flow-window") || "1h";
@@ -4988,6 +5113,7 @@ function selectTab(name, opts) {
 
   loadSummary();
   loadTypePolicies();
+  loadOwnership();
   refreshSetupSurfaces();
 })();
 </script>

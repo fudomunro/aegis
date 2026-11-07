@@ -1,8 +1,8 @@
 # Data ownership: per-kind completeness feedback
 
-Status: **phases 1–2 landed** — ownership state, derivation, the admin API,
-and connector-declared route actions. Phase 3 (admin UI) and the optional
-agent-facing stretch are still open.
+Status: **phases 1–3 landed** — ownership state, derivation, the admin API,
+connector-declared route actions, and the admin UI panel. The optional
+agent-facing stretch is still open.
 Related issues: **#165** (this note), **#247** (connection maturity — the
 complementary mark), **#227** (sync job queue; the evidence source),
 **#254** (connector-declared metadata), **#286** (mail ingest seam),
@@ -113,8 +113,9 @@ not need a second fetch (the onboarding-runner pattern).
   derives the action from `Onboarder` or transport class. Tests pin the
   declarations against the seams they name (setup ↔ `Onboarder`, import ↔
   the local-store connectors, connect otherwise).
-- **Phase 3** — admin UI: ownership cards in Library datasets with the
-  call to action and the confirm/reopen control. Hygiene tests apply.
+- **Phase 3 (this PR)** — admin UI: ownership cards in Library datasets with
+  the call to action and the confirm/reopen control. Labels render from the
+  API (connector-declared copy is never restated in `admin.html`).
 - **Stretch** — surface unconfirmed kinds in agent instructions or
   `/v1/admin/summary`. Not required for #165's bar.
 

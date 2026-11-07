@@ -589,7 +589,9 @@ POST   /v1/admin/ownership/{kind}   # confirm {"note":"…"}
 DELETE /v1/admin/ownership/{kind}   # reopen (clear the confirmation)
 ```
 
-Unconfirmed ownership never blocks reads.
+Unconfirmed ownership never blocks reads. The admin UI (Advanced → Library
+datasets) shows one card per type with its sources, copy freshness, the
+declared call-to-action routes, and the confirm/reopen control.
 
 ### Schedules
 
