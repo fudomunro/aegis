@@ -196,6 +196,45 @@
     display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
   }
+  /* Data ownership controls in the library sources box: the toggle state
+     is the state, and it tints the box. */
+  .source-overview { transition: border-color 0.15s ease, background 0.15s ease; }
+  .source-overview.confirmed {
+    border-color: rgba(63,185,80,0.45);
+    background: rgba(63,185,80,0.05);
+  }
+  .ownership-toggle {
+    display: inline-flex; align-items: center; gap: 0.55rem; margin-left: auto;
+    background: none; border: none; cursor: pointer; padding: 0.2rem 0.15rem;
+    color: var(--dim); font-size: 0.86rem; line-height: 1.2;
+  }
+  .ownership-toggle:hover { color: var(--text); }
+  .ownership-toggle:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+  .ownership-switch {
+    width: 34px; height: 19px; border-radius: 999px; flex-shrink: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    position: relative; transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .ownership-switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--dim); transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .ownership-toggle[aria-checked="true"] { color: var(--green); }
+  .ownership-toggle[aria-checked="true"] .ownership-switch {
+    background: rgba(63,185,80,0.35); border-color: rgba(63,185,80,0.6);
+  }
+  .ownership-toggle[aria-checked="true"] .ownership-switch::after {
+    transform: translateX(15px); background: var(--green);
+  }
+  .ownership-routes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.15rem 0 0.15rem; }
+  .source-overview.confirmed .ownership-routes a {
+    background: none; border-color: transparent; color: var(--dim);
+    font-size: 0.82rem; padding: 0.15rem 0.35rem;
+  }
+  .source-overview.confirmed .ownership-routes a:hover { color: var(--accent); }
   .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
   .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
@@ -526,6 +565,8 @@
           <button type="button" class="kind-btn" data-library-kind="events" aria-pressed="false">Events</button>
           <button type="button" class="kind-btn" data-library-kind="messages" aria-pressed="false">Messages</button>
           <button type="button" class="kind-btn" data-library-kind="transactions" aria-pressed="false">Transactions</button>
+          <button type="button" class="kind-btn" data-library-kind="documents" aria-pressed="false">Documents</button>
+          <button type="button" class="kind-btn" data-library-kind="places" aria-pressed="false">Places</button>
         </div>
         <div class="grow">
           <input type="search" id="library-filter" placeholder="Filter playlists…" aria-label="Filter library">
@@ -1690,6 +1731,92 @@
     }).join("");
   }
 
+  // Ownership action → where the user starts. Import panels are page
+  // sections; setup panels live on the service card; connect is the OAuth
+  // login. Targets come from the connector-declared action.
+  function ownershipHref(action) {
+    const target = escapeHtml(action.target || "");
+    if (action.kind === "import") {
+      const section = target === "google-takeout" ? "takeout" : target;
+      return "#section-" + section;
+    }
+    if (action.kind === "setup") {
+      return "#tab-services";
+    }
+    return "/v1/auth/" + target + "/login";
+  }
+
+  // Ownership state for every kind, fetched once and rendered into the
+  // library sources box for the kind in view.
+  let ownershipByKind = {};
+
+  function renderOwnershipIntoSources(el, st) {
+    if (!st) return;
+    const on = !!st.confirmed;
+    el.classList.toggle("confirmed", on);
+    const routes = (st.unused_routes || []).map((r) => {
+      const href = ownershipHref(r.action);
+      return '<a class="btn" href="' + href + '">' + escapeHtml(r.action.label || r.name) + "</a>";
+    }).join("");
+    const routesTxt = routes
+      ? '<div class="ownership-routes">' + routes + "</div>"
+      : "";
+    const label = st.label || st.kind;
+    const title = el.querySelector(".source-overview-title");
+    if (title) {
+      title.insertAdjacentHTML("beforeend",
+        '<button type="button" role="switch" aria-checked="' + on + '" class="ownership-toggle"' +
+        ' data-ownership-toggle="' + escapeHtml(st.kind) + '"' +
+        ' aria-label="I have all my ' + escapeHtml(label) + '">' +
+        '<span class="ownership-switch" aria-hidden="true"></span>' +
+        "<span>I have all my " + escapeHtml(label) + "</span>" +
+        "</button>");
+    }
+    if (routesTxt) el.insertAdjacentHTML("beforeend", routesTxt);
+    const btn = el.querySelector("[data-ownership-toggle]");
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const kind = btn.getAttribute("data-ownership-toggle");
+      const wasOn = btn.getAttribute("aria-checked") === "true";
+      // Flip the box immediately; the request confirms or rolls it back.
+      btn.setAttribute("aria-checked", String(!wasOn));
+      el.classList.toggle("confirmed", !wasOn);
+      try {
+        const opts = wasOn
+          ? { method: "DELETE" }
+          : { method: "POST", body: "{}", headers: { "Content-Type": "application/json" } };
+        await api("/v1/admin/ownership/" + encodeURIComponent(kind), opts);
+        await loadOwnership();
+      } catch (err) {
+        btn.setAttribute("aria-checked", String(wasOn));
+        el.classList.toggle("confirmed", wasOn);
+        showGlobalError(err.message || "Failed to update ownership");
+      }
+    });
+  }
+
+  async function loadOwnership() {
+    try {
+      const res = await api("/v1/admin/ownership");
+      const list = res.ownership || [];
+      ownershipByKind = {};
+      list.forEach((st) => {
+        ownershipByKind[st.kind] = st;
+        ensureLibraryKindEntry(st);
+      });
+      // Re-render the sources box so the toggle reflects the fresh state.
+      const el = $("library-sources");
+      if (el && !el.hidden) {
+        const byService = (libraryDataByKind[libraryKind] || {}).by_service;
+        renderLibrarySourceOverview(byService);
+      }
+    } catch (err) {
+      if (err.status === 401) {
+        showAuthGate(true);
+      }
+    }
+  }
+
   function renderFlowStatsSummary(stats) {
     const el = $("map-stats-summary");
     if (!el) return;
@@ -2564,7 +2691,53 @@
       emptyAll: "No transactions found. Connect YNAB (Services → YNAB) or import Quicken files (Advanced → Quicken import), then reload.",
       emptyFilter: "No transactions match this filter.",
     },
+    documents: {
+      path: "/v1/admin/library/documents",
+      key: "documents",
+      label: "documents",
+      filterPlaceholder: "Filter documents…",
+      emptyAll: "No documents found. Connect Google Drive or Paperless, then reload.",
+      emptyFilter: "No documents match this filter.",
+    },
+    places: {
+      path: "/v1/admin/library/places",
+      key: "visits",
+      label: "places",
+      filterPlaceholder: "Filter places…",
+      emptyAll: "No places found. Import a Timeline export (Advanced → Timeline import) or connect OwnTracks, then reload.",
+      emptyFilter: "No places match this filter.",
+    },
   };
+
+  // ensureLibraryKindEntry registers a kind the switcher does not know —
+  // user-defined types arrive with the ownership status and serve through
+  // the generic item payload.
+  function ensureLibraryKindEntry(st) {
+    if (!st || !st.kind || LIBRARY_KINDS[st.kind]) return;
+    const label = st.label || st.kind;
+    LIBRARY_KINDS[st.kind] = {
+      path: "/v1/admin/library/" + encodeURIComponent(st.kind),
+      key: "items",
+      label: label,
+      filterPlaceholder: "Filter " + label + "…",
+      emptyAll: "No " + label + " found yet.",
+      emptyFilter: "Nothing matches this filter.",
+    };
+    const group = document.querySelector("[data-library-kind]");
+    if (!group || !group.parentElement || document.querySelector('[data-library-kind="' + st.kind.replace(/"/g, "") + '"]')) {
+      return;
+    }
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "kind-btn";
+    btn.setAttribute("data-library-kind", st.kind);
+    btn.setAttribute("aria-pressed", "false");
+    btn.textContent = label;
+    const d = FLOW_ICONS[st.kind];
+    if (d) btn.insertAdjacentHTML("afterbegin", iconHTML(d, 14, "type-icon"));
+    btn.addEventListener("click", () => setLibraryKind(st.kind));
+    group.parentElement.appendChild(btn);
+  }
 
   let libraryKind = "playlists";
   let libraryCopyFilter = "";
@@ -2737,13 +2910,14 @@
   function renderLibrarySourceOverview(byService) {
     const el = $("library-sources");
     if (!el) return;
+    const st = ownershipByKind[libraryKind];
     const entries = Object.keys(byService || {}).map((id) => {
       return { id: id, st: byService[id] };
     });
     // Hide the synthetic mail-archive rollup when real source rows exist.
     const real = entries.filter((e) => e.id !== "mail-archive");
     const shown = real.length ? real : entries;
-    if (!shown.length) {
+    if (!shown.length && !st) {
       el.hidden = true;
       el.innerHTML = "";
       return;
@@ -2769,6 +2943,7 @@
       '<div class="source-overview-title">' + kindIcon + "Sources · " + total.toLocaleString() + " items " +
       searchBadgeFor(libraryKind) + "</div>" +
       roots.map(rowHtml).join("");
+    renderOwnershipIntoSources(el, st);
   }
 
   function libraryStatusBadges(byService) {
@@ -3981,7 +4156,7 @@ function selectTab(name, opts) {
       loadFlow();
     });
   });
-  $("reload-library").addEventListener("click", () => loadAllLibraryKinds());
+  $("reload-library").addEventListener("click", () => { loadAllLibraryKinds(); loadOwnership(); });
   $("reload-cache").addEventListener("click", () => loadCache());
   $("reload-mail-archive").addEventListener("click", () => loadMailArchive());
   $("sync-mail-archive").addEventListener("click", () => runMailArchiveSync({ reset: false }));
@@ -4970,6 +5145,7 @@ function selectTab(name, opts) {
 
   loadSummary();
   loadTypePolicies();
+  loadOwnership();
   refreshSetupSurfaces();
 })();
 </script>

@@ -453,3 +453,50 @@ func TestOwnershipStartCoversIngestOnlySources(t *testing.T) {
 		t.Fatal("gmail MailSource must not override the maturity Start")
 	}
 }
+
+// TestHandleAdminOwnership_BrowserWritePath pins the tailnet-browser write
+// path: ambient identity, same-origin proof, and a JSON content type. The
+// API-key path skips the CSRF guard, so a handler test without this path
+// cannot see a content-type or origin rejection (issue #165).
+func TestHandleAdminOwnership_BrowserWritePath(t *testing.T) {
+	cfg := &Config{Services: []Service{}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.ownership = mustOwnershipStore(t, filepath.Join(t.TempDir(), "ownership.json"))
+	srv.authMode = AuthModeTailnet
+	srv.identity = fakeIdentity{login: "user@example.com"}
+
+	// The browser write: same-origin fetch with a JSON body.
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/ownership/messages",
+		strings.NewReader(`{"note":"all of it"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Origin", "https://aegis.example.com")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("same-origin JSON write: %d %s", w.Code, w.Body.String())
+	}
+
+	// The fetch default for a string body is text/plain — the write guard
+	// must reject it, which is what a missing Content-Type header causes.
+	req = httptest.NewRequest(http.MethodPost, "/v1/admin/ownership/messages",
+		strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("Origin", "https://aegis.example.com")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("text/plain write: %d, want 403 (fetch defaults a string body to text/plain)", w.Code)
+	}
+
+	// Bodyless DELETE is a safe content type and must stay accepted.
+	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/ownership/messages", nil)
+	req.Header.Set("Origin", "https://aegis.example.com")
+	req.Header.Set("Sec-Fetch-Site", "same-origin")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.HandleAdminOwnership)(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("same-origin DELETE: %d %s", w.Code, w.Body.String())
+	}
+}
