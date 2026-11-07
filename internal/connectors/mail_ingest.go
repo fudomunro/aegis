@@ -32,6 +32,11 @@ type MailSource struct {
 	// Canonical marks rows as the mailbox home (issue #16). Canonical is
 	// claimed, never assumed: undeclared sources are non-canonical.
 	Canonical bool
+	// Start is the call-to-action for an ingest-only source with no
+	// connection entry of its own (issue #165). Sources that are also
+	// connections declare Start on their maturity row instead; a Start
+	// here is only for sources the maturity catalog does not carry.
+	Start *types.OwnershipAction
 }
 
 // mailSources lists the declarations beside each ingest.

@@ -55,6 +55,10 @@ func signalMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   SignalServiceID,
 		Transport: types.TransportArchive,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionImport,
+			Label: "Import Signal chats",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "messages", Description: "Imported chat messages", Supported: true,
 				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to",
@@ -71,6 +75,10 @@ func quickenMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   QuickenServiceID,
 		Transport: types.TransportArchive,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionImport,
+			Label: "Import Quicken exports",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "transactions", Description: "Imported QIF/QFX line items", Supported: true,
 				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
@@ -85,6 +93,10 @@ func timelineMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   TimelineServiceID,
 		Transport: types.TransportArchive,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionImport,
+			Label: "Import Timeline exports",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "places", Description: "Imported Timeline visits and trips", Supported: true,
 				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
@@ -97,6 +109,10 @@ func spotifyMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   SpotifyServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Spotify",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "user", Description: "Current user profile", Supported: true},
 			{Name: "tracks", Description: "Saved and top tracks", Supported: true,
@@ -121,6 +137,10 @@ func youtubeMusicMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   YouTubeMusicServiceID,
 		Transport: types.TransportReverseEngineered,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect YouTube Music",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "user", Description: "Current user profile", Supported: true},
 			{Name: "tracks", Description: "Liked songs and videos", Supported: true,
@@ -142,6 +162,10 @@ func amazonMusicMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   AmazonMusicServiceID,
 		Transport: types.TransportReverseEngineered,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Amazon Music",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "user", Description: "Current user profile", Supported: true},
 			{Name: "tracks", Description: "Songs, including playlist items", Supported: true,
@@ -164,6 +188,10 @@ func googleGmailMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   GoogleGmailServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Gmail",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "messages", Description: "Mail messages and threads", Supported: true,
 				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to", "cc",
@@ -179,6 +207,10 @@ func googlePhotosMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   GooglePhotosServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Google Photos",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "photos", Description: "Picked library media items", Supported: true,
 				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename")},
@@ -192,6 +224,10 @@ func googleContactsMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   GoogleContactsServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Google Contacts",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "contacts", Description: "People API contacts", Supported: true,
 				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "organization")},
@@ -203,6 +239,10 @@ func googleCalendarMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   GoogleCalendarServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Google Calendar",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "events", Description: "Calendar entries", Supported: true,
 				Fields: types.FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
@@ -216,6 +256,10 @@ func googleDriveMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   GoogleDriveServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Google Drive",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "documents", Description: "Drive files and exports", Supported: true,
 				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "modified_at",
@@ -228,6 +272,10 @@ func immichMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   ImmichServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionSetup,
+			Label: "Set up Immich",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "photos", Description: "Library assets", Supported: true,
 				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename", "caption")},
@@ -241,6 +289,10 @@ func blueskyMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   BlueskyServiceID,
 		Transport: types.TransportProtocol,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Bluesky",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "messages", Description: "Notifications and chat messages", Supported: true,
 				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from",
@@ -260,6 +312,10 @@ func ynabMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   YNABServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionSetup,
+			Label: "Set up YNAB",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "transactions", Description: "Budget transactions", Supported: true,
 				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
@@ -275,6 +331,10 @@ func ownTracksMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   OwnTracksServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect OwnTracks",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "places", Description: "Recorder visits and trips", Supported: true,
 				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
@@ -287,6 +347,10 @@ func calDAVMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   CalDAVServiceID,
 		Transport: types.TransportProtocol,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect CalDAV",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "events", Description: "Calendar entries", Supported: true,
 				Fields: types.FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
@@ -301,6 +365,10 @@ func cardDAVMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   CardDAVServiceID,
 		Transport: types.TransportProtocol,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect CardDAV",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "contacts", Description: "Address book contacts", Supported: true,
 				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
@@ -312,6 +380,10 @@ func paperlessMaturity() types.ConnectionMaturity {
 	return types.ConnectionMaturity{
 		Service:   PaperlessServiceID,
 		Transport: types.TransportAPI,
+		Start: types.OwnershipAction{
+			Kind:  types.OwnershipActionConnect,
+			Label: "Connect Paperless",
+		},
 		DataTypes: []types.DataMaturity{
 			{Name: "documents", Description: "Archived documents", Supported: true,
 				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "modified_at",
