@@ -61,10 +61,16 @@ type TakeoutIngest struct{}
 
 // TakeoutMailSource is the overview declaration: a historical export
 // nested under the live Gmail home (issue #16/#162), never canonical.
+// Start is declared here because Takeout is ingest-only — it has no
+// connection entry in the maturity catalog (issue #165).
 var TakeoutMailSource = MailSource{
 	ServiceID: TakeoutServiceID,
 	Parent:    GoogleGmailServiceID,
 	Canonical: false,
+	Start: &types.OwnershipAction{
+		Kind:  types.OwnershipActionImport,
+		Label: "Import a mail export",
+	},
 }
 
 // NewTakeoutIngest returns the Takeout export ingest.

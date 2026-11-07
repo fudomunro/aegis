@@ -387,3 +387,69 @@ func hasRoute(routes []types.OwnershipRoute, serviceID string) bool {
 	}
 	return false
 }
+
+// TestOwnershipStartDeclarationsAreReal pins the connector-declared
+// call-to-action (issue #165 phase 2) against the seams it names: "setup"
+// connectors implement Onboarder, "import" sources expose an import panel,
+// everything else is "connect". Core reads these declarations and never
+// derives the action, so a wrong one is the only thing left to catch.
+func TestOwnershipStartDeclarationsAreReal(t *testing.T) {
+	conns := map[string]connectors.ServiceConnector{}
+	for _, c := range maturityTestConnectors() {
+		conns[c.id] = c.conn
+	}
+	for _, m := range ConnectionMaturityCatalog() {
+		conn := conns[m.Service]
+		if conn == nil {
+			t.Fatalf("catalog entry %q has no connector under test", m.Service)
+		}
+		start := m.Start
+		if start.Label == "" {
+			t.Errorf("connector %q: Start.Label is empty", m.Service)
+		}
+		_, isOnboarder := conn.(connectors.Onboarder)
+		isImportStore := false
+		switch conn.(type) {
+		case *connectors.SignalConnector, *connectors.QuickenConnector, *connectors.TimelineConnector:
+			// Local import stores: their admin import panel is the seam
+			// an "import" action names (issue #266).
+			isImportStore = true
+		}
+		switch {
+		case isOnboarder && isImportStore:
+			t.Errorf("connector %q is both Onboarder and an import store; Start.Kind cannot be honest", m.Service)
+		case isOnboarder:
+			if start.Kind != types.OwnershipActionSetup {
+				t.Errorf("connector %q implements Onboarder but Start.Kind = %q, want %q", m.Service, start.Kind, types.OwnershipActionSetup)
+			}
+		case isImportStore:
+			if start.Kind != types.OwnershipActionImport {
+				t.Errorf("connector %q is an import store but Start.Kind = %q, want %q", m.Service, start.Kind, types.OwnershipActionImport)
+			}
+		default:
+			if start.Kind != types.OwnershipActionConnect {
+				t.Errorf("connector %q has no setup or import seam but Start.Kind = %q, want %q", m.Service, start.Kind, types.OwnershipActionConnect)
+			}
+		}
+	}
+}
+
+// TestOwnershipStartCoversIngestOnlySources pins the ingest-only route
+// declarations: a MailSource outside the maturity catalog must declare its
+// own Start so core never has to invent one.
+func TestOwnershipStartCoversIngestOnlySources(t *testing.T) {
+	start := connectors.MailSourceFor(connectors.TakeoutServiceID).Start
+	if start == nil {
+		t.Fatal("takeout MailSource has no Start declaration")
+	}
+	if start.Kind != types.OwnershipActionImport {
+		t.Fatalf("takeout Start.Kind = %q, want %q", start.Kind, types.OwnershipActionImport)
+	}
+	if start.Label == "" {
+		t.Fatal("takeout Start.Label is empty")
+	}
+	// Gmail is a connection first; its Start lives on the maturity row.
+	if got := connectors.MailSourceFor(connectors.GoogleGmailServiceID).Start; got != nil {
+		t.Fatal("gmail MailSource must not override the maturity Start")
+	}
+}

@@ -35,17 +35,29 @@ type OwnershipSource struct {
 }
 
 // OwnershipAction names where the user starts to bring more data under
-// management. Derived in core from existing seams (Onboarder, transport
-// class, admin import panels) — phase 2 can move the declaration beside the
-// connectors.
+// management. Declared beside the connector or ingest source it describes
+// (issue #254) — core reads the declaration and never derives it from
+// interfaces or transport class.
 type OwnershipAction struct {
 	// Kind is "connect" (OAuth login), "setup" (onboarding flow), or
 	// "import" (local import panel).
 	Kind string `json:"kind"`
-	// Target is the setup id or admin panel anchor for the action. Empty
-	// for a bare connect.
+	// Target is the setup id or admin panel anchor. Empty means the
+	// source's service id.
 	Target string `json:"target,omitempty"`
+	// Label is the call-to-action phrase shown to the user
+	// ("Import Signal chats"). Provider copy lives beside the connector.
+	Label string `json:"label"`
 }
+
+// Action kinds an OwnershipAction may declare. Pinned against the real
+// seams: "setup" connectors implement Onboarder, "import" sources expose an
+// import panel, "connect" is the OAuth login.
+const (
+	OwnershipActionConnect = "connect"
+	OwnershipActionSetup   = "setup"
+	OwnershipActionImport  = "import"
+)
 
 // OwnershipRoute is a declared way to get more data of a kind that is not
 // yet in use. Routes come from the connection-maturity catalog and the

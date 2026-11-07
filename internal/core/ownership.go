@@ -247,7 +247,7 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 				}
 				sources[kind.ID] = append(sources[kind.ID], src)
 			} else {
-				routes[kind.ID] = append(routes[kind.ID], ownershipRoute(svc.ID, name, maturity[svc.ID], conn, kind.ID))
+				routes[kind.ID] = append(routes[kind.ID], ownershipRoute(svc.ID, name, maturity[svc.ID], kind.ID))
 			}
 		}
 	}
@@ -257,7 +257,6 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 		if seen[id] {
 			continue
 		}
-		conn := s.connectors[id]
 		name := ownershipCatalogName(id)
 		for _, dt := range m.DataTypes {
 			if !dt.Supported {
@@ -276,7 +275,7 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 					Detail:    u.detail,
 				})
 			} else {
-				routes[kind] = append(routes[kind], ownershipRoute(id, name, m, conn, kind))
+				routes[kind] = append(routes[kind], ownershipRoute(id, name, m, kind))
 			}
 		}
 	}
@@ -400,7 +399,9 @@ func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSourc
 		}
 	}
 
-	// Takeout is an ingest-only source: no config entry, no OAuth.
+	// Takeout is an ingest-only source: no config entry, no OAuth. Its
+	// call-to-action is declared on the MailSource beside the ingest
+	// (issue #165), not derived here.
 	takeoutRows := st.ByService[connectors.TakeoutServiceID]
 	takeoutUsed := takeoutRows > 0 || strings.TrimSpace(st.TakeoutPath) != ""
 	name := connectors.TakeoutServiceName
@@ -420,23 +421,36 @@ func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSourc
 		})
 		return
 	}
+	action := types.OwnershipAction{Kind: types.OwnershipActionImport, Target: connectors.TakeoutServiceID}
+	if start := connectors.MailSourceFor(connectors.TakeoutServiceID).Start; start != nil {
+		action = *start
+		if action.Target == "" {
+			action.Target = connectors.TakeoutServiceID
+		}
+	}
 	routes["messages"] = append(routes["messages"], types.OwnershipRoute{
 		ServiceID:   connectors.TakeoutServiceID,
 		Name:        name,
 		Transport:   types.TransportArchive,
 		Description: "Historical mail export (.mbox / .zip) imported into the local mail archive",
-		Action:      types.OwnershipAction{Kind: "import", Target: connectors.TakeoutServiceID},
+		Action:      action,
 	})
 }
 
-// ownershipRoute builds one unused-route entry. The action is derived from
-// existing seams: an Onboarder drives setup, an archive transport imports,
-// anything else connects.
-func ownershipRoute(serviceID, name string, m types.ConnectionMaturity, conn connectors.ServiceConnector, kind string) types.OwnershipRoute {
+// ownershipRoute builds one unused-route entry from the connector-declared
+// maturity row (issue #254): transport, per-type description, and the
+// declared call-to-action. Core never derives the action from interfaces.
+func ownershipRoute(serviceID, name string, m types.ConnectionMaturity, kind string) types.OwnershipRoute {
 	r := types.OwnershipRoute{
 		ServiceID: serviceID,
 		Name:      name,
 		Transport: m.Transport,
+		Action:    m.Start,
+	}
+	// A declared action may omit Target; the source's service id is the
+	// default anchor (setup id, import panel prefix).
+	if r.Action.Target == "" {
+		r.Action.Target = serviceID
 	}
 	for _, dt := range m.DataTypes {
 		if dt.Name == kind {
@@ -444,15 +458,6 @@ func ownershipRoute(serviceID, name string, m types.ConnectionMaturity, conn con
 			break
 		}
 	}
-	if _, ok := conn.(connectors.Onboarder); ok {
-		r.Action = types.OwnershipAction{Kind: "setup", Target: serviceID}
-		return r
-	}
-	if m.Transport == types.TransportArchive {
-		r.Action = types.OwnershipAction{Kind: "import", Target: serviceID}
-		return r
-	}
-	r.Action = types.OwnershipAction{Kind: "connect", Target: serviceID}
 	return r
 }
 

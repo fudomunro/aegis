@@ -74,6 +74,10 @@ type ConnectionMaturity struct {
 	Service   string         `json:"service"`
 	Transport Transport      `json:"transport"`
 	DataTypes []DataMaturity `json:"data_types"`
+	// Start is how a user brings this connection's data under management
+	// (issue #165). Declared beside the connector; core never derives it
+	// from interfaces or transport class.
+	Start OwnershipAction `json:"start"`
 }
 
 // MaturityGrade is the derived mark shown on the dashboard.
