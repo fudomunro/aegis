@@ -196,6 +196,44 @@
     display: inline-block; padding: 0.12rem 0.55rem; border-radius: 999px;
     font-size: 0.72rem; font-weight: 650; letter-spacing: 0.01em;
   }
+  /* Data ownership cards: the toggle state is the state. */
+  .ownership-card { transition: border-color 0.15s ease, background 0.15s ease; }
+  .ownership-card.confirmed {
+    border-color: rgba(63,185,80,0.45);
+    background: rgba(63,185,80,0.05);
+  }
+  .ownership-toggle {
+    display: inline-flex; align-items: center; gap: 0.55rem; margin-left: auto;
+    background: none; border: none; cursor: pointer; padding: 0.2rem 0.15rem;
+    color: var(--dim); font-size: 0.86rem; line-height: 1.2;
+  }
+  .ownership-toggle:hover { color: var(--text); }
+  .ownership-toggle:focus-visible {
+    outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px;
+  }
+  .ownership-switch {
+    width: 34px; height: 19px; border-radius: 999px; flex-shrink: 0;
+    background: var(--surface2); border: 1px solid var(--border);
+    position: relative; transition: background 0.15s ease, border-color 0.15s ease;
+  }
+  .ownership-switch::after {
+    content: ""; position: absolute; top: 2px; left: 2px;
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--dim); transition: transform 0.15s ease, background 0.15s ease;
+  }
+  .ownership-toggle[aria-checked="true"] { color: var(--green); }
+  .ownership-toggle[aria-checked="true"] .ownership-switch {
+    background: rgba(63,185,80,0.35); border-color: rgba(63,185,80,0.6);
+  }
+  .ownership-toggle[aria-checked="true"] .ownership-switch::after {
+    transform: translateX(15px); background: var(--green);
+  }
+  .ownership-routes { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.55rem 0 0.15rem; }
+  .ownership-card.confirmed .ownership-routes a {
+    background: none; border-color: transparent; color: var(--dim);
+    font-size: 0.82rem; padding: 0.15rem 0.35rem;
+  }
+  .ownership-card.confirmed .ownership-routes a:hover { color: var(--accent); }
   .badge-green { background: rgba(63,185,80,0.15); color: var(--green); }
   .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
   .badge-red { background: rgba(248,81,73,0.15); color: var(--red); }
@@ -1732,6 +1770,8 @@
         : "All " + statuses.length + " types confirmed complete";
     }
     root.innerHTML = statuses.map((st) => {
+      const on = !!st.confirmed;
+      const label = st.label || st.kind;
       const sources = (st.under_management || []).map((s) => s.name);
       const sourceTxt = sources.length
         ? sources.length + (sources.length === 1 ? " source" : " sources") + ": " + sources.join(", ")
@@ -1740,58 +1780,44 @@
         ? '<div class="meta">Copies: ' + st.freshness.in_sync + " in sync · " + st.freshness.stale + " stale · " + st.freshness.missing + " missing</div>"
         : "";
       const note = st.note ? ' · <em>' + escapeHtml(st.note) + "</em>" : "";
-      if (st.confirmed) {
-        return (
-          '<article class="card">' +
-          '<div class="card-header"><h3>' + escapeHtml(st.label || st.kind) + '</h3> <span class="badge">complete</span></div>' +
-          '<div class="meta">' + escapeHtml(sourceTxt) + note + "</div>" +
-          freshness +
-          '<div class="toolbar"><div class="grow"></div>' +
-          '<button class="btn" data-ownership-reopen="' + escapeHtml(st.kind) + '" type="button">Reopen</button>' +
-          "</div></article>"
-        );
-      }
       const routes = (st.unused_routes || []).map((r) => {
         const href = ownershipHref(r.action);
         return '<a class="btn" href="' + href + '">' + escapeHtml(r.action.label || r.name) + "</a>";
-      }).join(" ");
-      const routesTxt = (st.unused_routes || []).length
-        ? '<div class="toolbar">' + routes + "</div>"
+      }).join("");
+      const routesTxt = routes
+        ? '<div class="ownership-routes">' + routes + "</div>"
         : '<div class="meta">No unused routes declared for this type.</div>';
       return (
-        '<article class="card">' +
-        '<div class="card-header"><h3>' + escapeHtml(st.label || st.kind) + '</h3> <span class="badge badge-blue">needs confirmation</span></div>' +
-        '<div class="meta">' + escapeHtml(sourceTxt) + "</div>" +
+        '<article class="card ownership-card' + (on ? " confirmed" : "") + '">' +
+        '<div class="card-header"><h3>' + escapeHtml(label) + "</h3>" +
+        '<button type="button" role="switch" aria-checked="' + on + '" class="ownership-toggle"' +
+        ' data-ownership-toggle="' + escapeHtml(st.kind) + '"' +
+        ' aria-label="I have all my ' + escapeHtml(label) + '">' +
+        '<span class="ownership-switch" aria-hidden="true"></span>' +
+        "<span>I have all my " + escapeHtml(label) + "</span>" +
+        "</button></div>" +
+        '<div class="meta">' + escapeHtml(sourceTxt) + note + "</div>" +
         freshness +
         routesTxt +
-        '<div class="toolbar"><div class="grow"></div>' +
-        '<button class="btn btn-primary" data-ownership-confirm="' + escapeHtml(st.kind) + '" type="button">I have all my ' + escapeHtml(st.label || st.kind) + "</button>" +
-        "</div></article>"
+        "</article>"
       );
     }).join("");
-    root.querySelectorAll("[data-ownership-confirm]").forEach((btn) => {
+    root.querySelectorAll("[data-ownership-toggle]").forEach((btn) => {
       btn.addEventListener("click", async () => {
-        const kind = btn.getAttribute("data-ownership-confirm");
-        btn.disabled = true;
+        const kind = btn.getAttribute("data-ownership-toggle");
+        const wasOn = btn.getAttribute("aria-checked") === "true";
+        const card = btn.closest(".ownership-card");
+        // Flip the box immediately; the request confirms or rolls it back.
+        btn.setAttribute("aria-checked", String(!wasOn));
+        if (card) card.classList.toggle("confirmed", !wasOn);
         try {
-          await api("/v1/admin/ownership/" + encodeURIComponent(kind), { method: "POST", body: "{}" });
+          const opts = wasOn ? { method: "DELETE" } : { method: "POST", body: "{}" };
+          await api("/v1/admin/ownership/" + encodeURIComponent(kind), opts);
           await loadOwnership();
         } catch (err) {
-          showGlobalError(err.message || "Failed to confirm ownership");
-          btn.disabled = false;
-        }
-      });
-    });
-    root.querySelectorAll("[data-ownership-reopen]").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const kind = btn.getAttribute("data-ownership-reopen");
-        btn.disabled = true;
-        try {
-          await api("/v1/admin/ownership/" + encodeURIComponent(kind), { method: "DELETE" });
-          await loadOwnership();
-        } catch (err) {
-          showGlobalError(err.message || "Failed to reopen ownership");
-          btn.disabled = false;
+          btn.setAttribute("aria-checked", String(wasOn));
+          if (card) card.classList.toggle("confirmed", wasOn);
+          showGlobalError(err.message || "Failed to update ownership");
         }
       });
     });

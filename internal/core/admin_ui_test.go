@@ -217,8 +217,9 @@ func TestHandleSetup_Removed(t *testing.T) {
 }
 
 // TestAdminHTML_OwnershipPanel pins the data-ownership surface (issue #165):
-// the mount points, the confirm/reopen controls, and that the panel renders
-// connector-declared labels from the API rather than restating them.
+// the mount points, the toggle that carries the confirmation state, and that
+// the panel renders connector-declared labels from the API rather than
+// restating them.
 func TestAdminHTML_OwnershipPanel(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	req := httptest.NewRequest("GET", "/v1/admin", nil)
@@ -236,14 +237,27 @@ func TestAdminHTML_OwnershipPanel(t *testing.T) {
 		"loadOwnership",
 		"renderOwnership",
 		"ownershipHref",
-		"data-ownership-confirm",
-		"data-ownership-reopen",
+		"data-ownership-toggle",
+		`role="switch"`,
+		"aria-checked",
+		"ownership-card",
+		"confirmed",
 		"/v1/admin/ownership",
 		"Data ownership",
 		"I have all my ",
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("admin HTML missing ownership marker %q", want)
+		}
+	}
+	// The toggle carries the state, so status badges on the box are gone.
+	for _, gone := range []string{
+		"needs confirmation",
+		"data-ownership-confirm",
+		"data-ownership-reopen",
+	} {
+		if strings.Contains(body, gone) {
+			t.Fatalf("admin HTML still contains %q — the toggle is the state", gone)
 		}
 	}
 	// Provider copy stays with the connectors: the panel must not restate
