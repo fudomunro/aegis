@@ -19,6 +19,35 @@ type MailIngest interface {
 	IngestMail(ctx context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error)
 }
 
+// MailSource is how one ingest source groups beside the archive: its
+// overview parent and canonical-ness (issue #286; docs/mail-ingest.md).
+// Display names are not declared here — the serviceNames registry is the
+// one name owner (issue #254).
+type MailSource struct {
+	ServiceID string
+	// Parent nests this source under another in overviews when that source
+	// is present (google-takeout under google-gmail). When the declared
+	// parent is absent, core nests under the collection's aggregate row.
+	Parent string
+	// Canonical marks rows as the mailbox home (issue #16). Canonical is
+	// claimed, never assumed: undeclared sources are non-canonical.
+	Canonical bool
+}
+
+// mailSources lists the declarations beside each ingest.
+var mailSources = []MailSource{GmailMailSource, TakeoutMailSource}
+
+// MailSourceFor returns the declaration for an ingest source — the zero
+// value (no parent, non-canonical) when the source is undeclared.
+func MailSourceFor(service string) MailSource {
+	for _, s := range mailSources {
+		if s.ServiceID == service {
+			return s
+		}
+	}
+	return MailSource{}
+}
+
 // MailSink is the core-owned write surface of the mail archive (core
 // implements it over *MailArchive). Connectors never see the archive type
 // or its SQL.

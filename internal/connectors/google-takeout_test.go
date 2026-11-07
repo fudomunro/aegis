@@ -135,6 +135,21 @@ func TestParseTakeoutMessageMultipart(t *testing.T) {
 	}
 }
 
+func TestMailSourceDeclarations(t *testing.T) {
+	gm := MailSourceFor(GoogleGmailServiceID)
+	if !gm.Canonical || gm.Parent != "" {
+		t.Fatalf("gmail source = %+v, want canonical with no parent", gm)
+	}
+	to := MailSourceFor(TakeoutServiceID)
+	if to.Canonical || to.Parent != GoogleGmailServiceID {
+		t.Fatalf("takeout source = %+v, want non-canonical under %s", to, GoogleGmailServiceID)
+	}
+	// Canonical is claimed, never assumed (issue #16).
+	if got := MailSourceFor("unknown-service"); got.Canonical || got.Parent != "" {
+		t.Fatalf("unknown source = %+v, want the zero declaration", got)
+	}
+}
+
 func TestLooksLikeMboxName(t *testing.T) {
 	if !looksLikeMboxName("inbox.mbox") {
 		t.Fatal("inbox.mbox should look like mbox")

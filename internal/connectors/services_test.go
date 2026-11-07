@@ -11,6 +11,8 @@ func TestServiceName(t *testing.T) {
 		{YouTubeMusicServiceID, YouTubeMusicServiceName},
 		{AmazonMusicServiceID, AmazonMusicServiceName},
 		{GoogleGmailServiceID, GoogleGmailServiceName},
+		// Takeout is connector-owned (the Gmail+Takeout ingest pair; issue #286).
+		{TakeoutServiceID, TakeoutServiceName},
 		{GoogleCalendarServiceID, GoogleCalendarServiceName},
 		{GoogleContactsServiceID, GoogleContactsServiceName},
 		{GooglePhotosServiceID, GooglePhotosServiceName},
@@ -33,7 +35,7 @@ func TestServiceName(t *testing.T) {
 			t.Errorf("ServiceName(%q) = %q, %v; want %q, true", tc.id, name, ok, tc.name)
 		}
 	}
-	for _, id := range []string{"", "tidal", "google-takeout", "mail-archive"} {
+	for _, id := range []string{"", "tidal", "mail-archive"} {
 		if name, ok := ServiceName(id); ok {
 			t.Errorf("ServiceName(%q) = %q, true; want false for non-connector services", id, name)
 		}

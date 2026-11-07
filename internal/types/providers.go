@@ -287,6 +287,16 @@ type PlaylistMetaProvider interface {
 	SavedTrackCount(ctx context.Context) (n int, err error)
 }
 
+// SnapshotProber is implemented by ingest sources whose copy freshness is
+// "the recorded export location still exists" (issue #286, the
+// PlaylistMetaProvider pattern from #264). The generic core checker asks
+// the source to probe its own location semantics.
+type SnapshotProber interface {
+	// SnapshotProbe reports whether the export recorded at location is
+	// still present, and its display name for the copy version.
+	SnapshotProbe(location string) (exists bool, name string, err error)
+}
+
 // PlaceSkip is one item a placement operation could not place.
 type PlaceSkip struct {
 	Name   string `json:"name"`

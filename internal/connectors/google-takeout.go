@@ -59,10 +59,38 @@ const (
 // Host and no tokens — the export is already local.
 type TakeoutIngest struct{}
 
+// TakeoutMailSource is the overview declaration: a historical export
+// nested under the live Gmail home (issue #16/#162), never canonical.
+var TakeoutMailSource = MailSource{
+	ServiceID: TakeoutServiceID,
+	Parent:    GoogleGmailServiceID,
+	Canonical: false,
+}
+
 // NewTakeoutIngest returns the Takeout export ingest.
 func NewTakeoutIngest() *TakeoutIngest { return &TakeoutIngest{} }
 
-var _ MailIngest = (*TakeoutIngest)(nil)
+var (
+	_ MailIngest         = (*TakeoutIngest)(nil)
+	_ types.SnapshotProber = (*TakeoutIngest)(nil)
+)
+
+// SnapshotProbe implements types.SnapshotProber: the copy's contract is
+// "this export was ingested", so freshness is the export still being at
+// the recorded location (issue #76/#286).
+func (TakeoutIngest) SnapshotProbe(location string) (bool, string, error) {
+	path := strings.TrimSpace(location)
+	if path == "" {
+		return false, "", nil
+	}
+	if _, err := os.Stat(path); err != nil {
+		if os.IsNotExist(err) {
+			return false, "", nil
+		}
+		return false, "", err
+	}
+	return true, path, nil
+}
 
 // IngestMail walks one bounded batch of the export and stores what is new.
 // Options.Path is the admin save-path override (persisted); Options.Query
