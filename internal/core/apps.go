@@ -16,8 +16,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // appsFileVersion is the on-disk schema version for apps.json.
@@ -39,7 +39,7 @@ type App struct {
 	// Scopes restrict which library data types the app may read, using the
 	// same access levels as service permissions (none / freebusy / read /
 	// write / read-write). freebusy is events-only.
-	Scopes types.Permissions `json:"scopes"`
+	Scopes policy.Permissions `json:"scopes"`
 	// CreatedAt / UpdatedAt are informational.
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -102,7 +102,7 @@ func (s *AppStore) reload() error {
 		if app.ID == "" {
 			return fmt.Errorf("apps file: entry %d missing id", i)
 		}
-		if err := types.ValidatePermissions(app.Scopes); err != nil {
+		if err := policy.ValidatePermissions(app.Scopes); err != nil {
 			return fmt.Errorf("apps file app %q: %w", app.ID, err)
 		}
 		cp := app
@@ -165,17 +165,17 @@ func appTokenHint(token string) string {
 
 // AppCreateRequest is the admin body for registering a third-party app.
 type AppCreateRequest struct {
-	ID     string            `json:"id"`
-	Name   string            `json:"name"`
-	Scopes types.Permissions `json:"scopes"`
+	ID     string             `json:"id"`
+	Name   string             `json:"name"`
+	Scopes policy.Permissions `json:"scopes"`
 }
 
 // AppUpdateRequest patches name/scopes/disabled. Nil fields are left alone.
 // Scopes, when present, are normalized and default to none for unlisted types.
 type AppUpdateRequest struct {
-	Name     *string            `json:"name,omitempty"`
-	Scopes   *types.Permissions `json:"scopes,omitempty"`
-	Disabled *bool              `json:"disabled,omitempty"`
+	Name     *string             `json:"name,omitempty"`
+	Scopes   *policy.Permissions `json:"scopes,omitempty"`
+	Disabled *bool               `json:"disabled,omitempty"`
 }
 
 // AppView is the admin/API projection (never includes token material).
@@ -247,18 +247,18 @@ func (s *AppStore) Create(req AppCreateRequest) (AppView, string, error) {
 	}
 	scopes := req.Scopes
 	if scopes == nil {
-		scopes = types.Permissions{types.PermissionDefaultKey: types.AccessNone}
+		scopes = policy.Permissions{policy.PermissionDefaultKey: policy.AccessNone}
 	}
-	if err := types.ValidatePermissions(scopes); err != nil {
+	if err := policy.ValidatePermissions(scopes); err != nil {
 		return AppView{}, "", err
 	}
 	// Fail closed: unspecified types deny unless explicitly allowed.
-	normalized := types.Permissions{}
+	normalized := policy.Permissions{}
 	for k, v := range scopes {
-		normalized[k] = types.NormalizeAccess(v)
+		normalized[k] = policy.NormalizeAccess(v)
 	}
-	if _, ok := normalized[types.PermissionDefaultKey]; !ok {
-		normalized[types.PermissionDefaultKey] = types.AccessNone
+	if _, ok := normalized[policy.PermissionDefaultKey]; !ok {
+		normalized[policy.PermissionDefaultKey] = policy.AccessNone
 	}
 
 	token, hash, hint, err := generateAppToken()
@@ -312,15 +312,15 @@ func (s *AppStore) Update(id string, req AppUpdateRequest) (AppView, error) {
 		app.Name = name
 	}
 	if req.Scopes != nil {
-		normalized := types.Permissions{}
+		normalized := policy.Permissions{}
 		for k, v := range *req.Scopes {
-			normalized[k] = types.NormalizeAccess(v)
+			normalized[k] = policy.NormalizeAccess(v)
 		}
-		if err := types.ValidatePermissions(normalized); err != nil {
+		if err := policy.ValidatePermissions(normalized); err != nil {
 			return AppView{}, err
 		}
-		if _, ok := normalized[types.PermissionDefaultKey]; !ok {
-			normalized[types.PermissionDefaultKey] = types.AccessNone
+		if _, ok := normalized[policy.PermissionDefaultKey]; !ok {
+			normalized[policy.PermissionDefaultKey] = policy.AccessNone
 		}
 		app.Scopes = normalized
 	}
@@ -474,7 +474,7 @@ type appIdentityKey struct{}
 type AppIdentity struct {
 	ID     string
 	Name   string
-	Scopes types.Permissions
+	Scopes policy.Permissions
 }
 
 func withAppIdentity(r *http.Request, app *App) *http.Request {
@@ -499,7 +499,7 @@ func appLibraryCacheSuffix(app *AppIdentity, permType string) string {
 	if app == nil {
 		return ""
 	}
-	return "|app|" + types.NormalizeAccess(app.Scopes.For(permType))
+	return "|app|" + policy.NormalizeAccess(app.Scopes.For(permType))
 }
 
 // appAllowsLibrary reports whether the app may call the given library
@@ -508,5 +508,5 @@ func appAllowsLibrary(app *AppIdentity, permType, method string) bool {
 	if app == nil {
 		return true
 	}
-	return types.AllowsMethod(types.NormalizeAccess(app.Scopes.For(permType)), method)
+	return policy.AllowsMethod(policy.NormalizeAccess(app.Scopes.For(permType)), method)
 }

@@ -5,9 +5,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
@@ -27,7 +28,7 @@ const agentAccessorID = "agent"
 // only the other accessors (apps, sync pipelines) that apply to that type.
 // The admin map shows what each accessor has accessed; this view shows
 // what each is allowed to access.
-func (s *Server) permissionsOverview() types.PermissionsOverview {
+func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	preferred := make([]string, 0, 16)
 	for _, kind := range s.allLibraryKinds() {
 		key := kind.PermType
@@ -39,26 +40,26 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 
 	policies := s.config.DataGrants()
 	var extra []string
-	extra = append(extra, types.ExtraPolicyKeys(policies)...)
+	extra = append(extra, policy.ExtraPolicyKeys(policies)...)
 	for _, svc := range s.config.ServiceSnapshots() {
-		extra = append(extra, types.ExtraPermissionKeys(svc.GrantLimits)...)
+		extra = append(extra, policy.ExtraPermissionKeys(svc.GrantLimits)...)
 	}
 	if s.apps != nil {
 		for _, app := range s.apps.List() {
-			extra = append(extra, types.ExtraPermissionKeys(app.Scopes)...)
+			extra = append(extra, policy.ExtraPermissionKeys(app.Scopes)...)
 		}
 	}
 
-	dataTypes := types.OverviewDataTypes(preferred, extra)
-	accessors := make([]types.Accessor, 0, 8)
+	dataTypes := policy.OverviewDataTypes(preferred, extra)
+	accessors := make([]policy.Accessor, 0, 8)
 
 	// Agents: type-owned policy is primary (issue #148).
-	accessors = append(accessors, types.Accessor{
+	accessors = append(accessors, policy.Accessor{
 		ID:     agentAccessorID,
-		Kind:   types.AccessorAgent,
+		Kind:   policy.AccessorAgent,
 		Label:  "LLM agents",
 		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. Data grants are primary; per-service forms only tighten.",
-		Levels: types.AgentOverviewLevels(policies, dataTypes),
+		Levels: policy.AgentOverviewLevels(policies, dataTypes),
 		// Edited via the data-grant form in the data grants editor.
 		Editable: true,
 	})
@@ -73,14 +74,14 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			return apps[i].ID < apps[j].ID
 		})
 		for _, app := range apps {
-			scopes := make(types.Permissions, len(app.Scopes))
+			scopes := make(policy.Permissions, len(app.Scopes))
 			for k, v := range app.Scopes {
 				scopes[k] = v
 			}
-			levels, explicit := types.AppOverviewLevels(scopes, dataTypes)
-			accessors = append(accessors, types.Accessor{
+			levels, explicit := policy.AppOverviewLevels(scopes, dataTypes)
+			accessors = append(accessors, policy.Accessor{
 				ID:       "app:" + app.ID,
-				Kind:     types.AccessorApp,
+				Kind:     policy.AccessorApp,
 				Label:    app.Name,
 				Detail:   "Third-party application (" + app.ID + "). Scopes fail closed — unnamed types are off.",
 				Levels:   levels,
@@ -96,12 +97,12 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 	// pipeline may store — not agent visibility. Only named types are
 	// relevant under a data-type row.
 	if s.mail != nil {
-		accessors = append(accessors, types.Accessor{
+		accessors = append(accessors, policy.Accessor{
 			ID:       syncMailID,
-			Kind:     types.AccessorSync,
+			Kind:     policy.AccessorSync,
 			Label:    "Mail archive sync",
 			Detail:   "Mail ingest into the local mail archive (live sync and export import). Message bodies stay on the source; Aegis keeps a compressed search copy.",
-			Levels:   map[string]string{"messages": types.AccessRead},
+			Levels:   map[string]string{"messages": policy.AccessRead},
 			Explicit: map[string]bool{"messages": true},
 		})
 	}
@@ -114,12 +115,12 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 			if rec.Kind == "" {
 				continue
 			}
-			levels[rec.Kind] = types.AccessWrite
+			levels[rec.Kind] = policy.AccessWrite
 			explicit[rec.Kind] = true
 		}
-		accessors = append(accessors, types.Accessor{
+		accessors = append(accessors, policy.Accessor{
 			ID:       syncCopyID,
-			Kind:     types.AccessorSync,
+			Kind:     policy.AccessorSync,
 			Label:    "Copy ledger",
 			Detail:   "Mirror/copy jobs stamp provenance when Aegis writes copies to other services. Aegis does not store media.",
 			Levels:   levels,
@@ -127,34 +128,34 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		})
 	}
 	if s.timeline != nil {
-		accessors = append(accessors, types.Accessor{
+		accessors = append(accessors, policy.Accessor{
 			ID:       syncTimelineID,
-			Kind:     types.AccessorSync,
+			Kind:     policy.AccessorSync,
 			Label:    "Timeline import",
 			Detail:   "Google Timeline export ingest into the local places store.",
-			Levels:   map[string]string{"places": types.AccessRead},
+			Levels:   map[string]string{"places": policy.AccessRead},
 			Explicit: map[string]bool{"places": true},
 		})
 	}
 	if s.quicken != nil {
-		accessors = append(accessors, types.Accessor{
+		accessors = append(accessors, policy.Accessor{
 			ID:       syncQuickenID,
-			Kind:     types.AccessorSync,
+			Kind:     policy.AccessorSync,
 			Label:    "Quicken import",
 			Detail:   "QIF/QFX/OFX import into the local transaction store.",
-			Levels:   map[string]string{"transactions": types.AccessRead},
+			Levels:   map[string]string{"transactions": policy.AccessRead},
 			Explicit: map[string]bool{"transactions": true},
 		})
 	}
 	if s.signal != nil {
-		accessors = append(accessors, types.Accessor{
+		accessors = append(accessors, policy.Accessor{
 			ID:     syncSignalID,
-			Kind:   types.AccessorSync,
+			Kind:   policy.AccessorSync,
 			Label:  "Signal import",
 			Detail: "File-based Signal export ingest into the local contacts/messages store. Attachments are never stored.",
 			Levels: map[string]string{
-				"contacts": types.AccessRead,
-				"messages": types.AccessRead,
+				"contacts": policy.AccessRead,
+				"messages": policy.AccessRead,
 			},
 			Explicit: map[string]bool{"contacts": true, "messages": true},
 		})
@@ -178,16 +179,16 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		levels := make(map[string]string, len(provided))
 		explicit := make(map[string]bool, len(provided))
 		for _, dt := range provided {
-			levels[dt] = types.AccessRead
+			levels[dt] = policy.AccessRead
 			explicit[dt] = true
 		}
 		name := svc.Name
 		if name == "" {
 			name = svc.ID
 		}
-		accessors = append(accessors, types.Accessor{
+		accessors = append(accessors, policy.Accessor{
 			ID:       "service:" + svc.ID,
-			Kind:     types.AccessorService,
+			Kind:     policy.AccessorService,
 			Label:    name,
 			Detail:   "Service Aegis syncs with for this data type (read-only here).",
 			Levels:   levels,
@@ -200,7 +201,7 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 	// Fill non-agent missing levels with none so BuildTypeAccess can read
 	// a concrete level; relevance still uses Explicit / non-none checks.
 	for i := range accessors {
-		if accessors[i].Kind == types.AccessorAgent {
+		if accessors[i].Kind == policy.AccessorAgent {
 			continue
 		}
 		if accessors[i].Levels == nil {
@@ -208,14 +209,14 @@ func (s *Server) permissionsOverview() types.PermissionsOverview {
 		}
 		for _, dt := range dataTypes {
 			if _, ok := accessors[i].Levels[dt]; !ok {
-				accessors[i].Levels[dt] = types.AccessNone
+				accessors[i].Levels[dt] = policy.AccessNone
 			}
 		}
 	}
 
-	return types.PermissionsOverview{
+	return policy.PermissionsOverview{
 		DataTypes: dataTypes,
-		Types:     types.BuildTypeAccess(dataTypes, accessors),
+		Types:     policy.BuildTypeAccess(dataTypes, accessors),
 	}
 }
 
@@ -234,7 +235,7 @@ func serviceProvidedTypes(conn any) []string {
 	var out []string
 	add := func(name string) {
 		name = strings.TrimSpace(name)
-		if name == "" || name == types.PermissionDefaultKey || seen[name] {
+		if name == "" || name == policy.PermissionDefaultKey || seen[name] {
 			return
 		}
 		seen[name] = true

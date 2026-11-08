@@ -14,10 +14,11 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/search"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // kindRuntimeEntry is core-owned visibility wiring for one library kind.
@@ -310,8 +311,8 @@ func (s *Server) libraryIndexWriteable(r *http.Request, permType string) bool {
 		if !scopes.ServiceVisible(svc.Dataset, sc) {
 			continue
 		}
-		owner := types.NormalizeAccess(s.effectivePermissions(&svc).AccessForDataType(permType))
-		if types.NormalizeAccess(s.requestLevel(r, &svc, permType)) != owner {
+		owner := policy.NormalizeAccess(s.effectivePermissions(&svc).AccessForDataType(permType))
+		if policy.NormalizeAccess(s.requestLevel(r, &svc, permType)) != owner {
 			return false
 		}
 	}
@@ -340,7 +341,7 @@ func collectProviders[T any, P any](
 		if !ok {
 			continue
 		}
-		if !types.AllowsMethod(s.requestLevel(r, svc, permType), http.MethodGet) {
+		if !policy.AllowsMethod(s.requestLevel(r, svc, permType), http.MethodGet) {
 			denied = append(denied, id)
 			continue
 		}
@@ -428,7 +429,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	// Data-scope grants are deny-by-default (issue #253): an unlisted kind is
 	// none for the principal, mirroring the app-scope gate above.
 	if sc := scopes.From(r); sc != nil && !scopes.Allows(r, kind.PermType, r.Method) {
-		level := types.ScopeGrantsAccess(sc.Grants, kind.PermType, "")
+		level := policy.ScopeGrantsAccess(sc.Grants, kind.PermType, "")
 		logger.Info("library "+kind.ID+" denied by scope grant", "scope", sc.ID, "grant", level)
 		s.recordAccessFrom(r, AccessEvent{
 			Agent:    agent,

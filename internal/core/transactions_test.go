@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -133,13 +134,13 @@ func TestRedactTransactionRead_StripsAccount(t *testing.T) {
 }
 
 func TestValidatePermissions_SummaryOnlyOnTransactions(t *testing.T) {
-	if err := types.ValidatePermissions(types.Permissions{"transactions": types.AccessSummary}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"transactions": policy.AccessSummary}); err != nil {
 		t.Fatalf("summary on transactions: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{"tracks": types.AccessSummary}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessSummary}); err == nil {
 		t.Fatal("expected summary on tracks rejected")
 	}
-	if err := types.ValidatePermissions(types.Permissions{"default": types.AccessSummary}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"default": policy.AccessSummary}); err == nil {
 		t.Fatal("expected summary on default rejected")
 	}
 }
@@ -221,7 +222,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 
 	// Service-level summary redaction: no line items from that service, and
 	// app-level summary returns totals only.
-	cfg.Services[0].GrantLimits = types.Permissions{"transactions": types.AccessSummary}
+	cfg.Services[0].GrantLimits = policy.Permissions{"transactions": policy.AccessSummary}
 	req2 := httptest.NewRequest("GET", "/v1/library/transactions", nil)
 	w2 := httptest.NewRecorder()
 	srv.HandleLibraryTransactions(w2, req2)
@@ -442,12 +443,12 @@ func TestLibraryKindTransactions_Registered(t *testing.T) {
 }
 
 func TestSummaryDataTypes(t *testing.T) {
-	p := types.Permissions{"transactions": types.AccessSummary, "tracks": types.AccessRead}
+	p := policy.Permissions{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
 	got := p.SummaryDataTypes()
 	if len(got) != 1 || got[0] != "transactions" {
 		t.Fatalf("SummaryDataTypes = %v", got)
 	}
-	if (&types.Permissions{}).SummaryDataTypes() != nil {
+	if (&policy.Permissions{}).SummaryDataTypes() != nil {
 		t.Fatal("nil map should return nil")
 	}
 }
@@ -456,14 +457,14 @@ func TestRedactTransactionsForLevel(t *testing.T) {
 	items := []types.Transaction{
 		{Amount: "-1.00", Merchant: "A", Account: &types.TransactionAccount{Name: "X"}},
 	}
-	if got := redactTransactionsForLevel(items, types.AccessSummary); got != nil {
+	if got := redactTransactionsForLevel(items, policy.AccessSummary); got != nil {
 		t.Fatalf("summary should drop line items, got %v", got)
 	}
-	read := redactTransactionsForLevel(items, types.AccessRead)
+	read := redactTransactionsForLevel(items, policy.AccessRead)
 	if len(read) != 1 || read[0].Account != nil || read[0].Merchant != "A" {
 		t.Fatalf("read redaction = %+v", read)
 	}
-	full := redactTransactionsForLevel(items, types.AccessFull)
+	full := redactTransactionsForLevel(items, policy.AccessFull)
 	if full[0].Account == nil {
 		t.Fatal("full should keep account")
 	}
@@ -545,12 +546,12 @@ func TestYNABHandleProxy_Mock(t *testing.T) {
 }
 
 func TestStrictest_Summary(t *testing.T) {
-	p := types.Permissions{"transactions": types.AccessSummary}
-	if got := p.Strictest(); got != types.AccessNone {
+	p := policy.Permissions{"transactions": policy.AccessSummary}
+	if got := p.Strictest(); got != policy.AccessNone {
 		t.Fatalf("Strictest = %q, want none when summary is tightest", got)
 	}
-	p2 := types.Permissions{"transactions": types.AccessSummary, "tracks": types.AccessRead}
-	if got := p2.Strictest(); got != types.AccessRead {
+	p2 := policy.Permissions{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
+	if got := p2.Strictest(); got != policy.AccessRead {
 		t.Fatalf("Strictest = %q", got)
 	}
 }

@@ -1,4 +1,4 @@
-package types
+package policy
 
 // Scope grants are an external principal's complete allow list
 // (docs/external-access.md). Unlike DataGrants.Access — which keeps

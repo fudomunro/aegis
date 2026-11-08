@@ -1,4 +1,4 @@
-package types
+package policy
 
 import "sort"
 
@@ -240,10 +240,10 @@ func AgentOverviewLevels(policies DataGrants, dataTypes []string) map[string]str
 // types are none, matching Create's default=none rule. Opt-in types
 // (places) stay none unless the scope map names them. Explicit keys are
 // reported so the editor can treat a deliberate "none" as relevant.
-func AppOverviewLevels(scopes Permissions, dataTypes []string) (levels map[string]string, explicit map[string]bool) {
+func AppOverviewLevels(appScopes Permissions, dataTypes []string) (levels map[string]string, explicit map[string]bool) {
 	levels = make(map[string]string, len(dataTypes))
-	explicit = make(map[string]bool, len(scopes))
-	for k := range scopes {
+	explicit = make(map[string]bool, len(appScopes))
+	for k := range appScopes {
 		if k == "" || k == PermissionDefaultKey {
 			continue
 		}
@@ -251,11 +251,11 @@ func AppOverviewLevels(scopes Permissions, dataTypes []string) (levels map[strin
 	}
 	for _, dataType := range dataTypes {
 		level := AccessNone
-		if scopes != nil {
-			if v, ok := scopes[dataType]; ok {
+		if appScopes != nil {
+			if v, ok := appScopes[dataType]; ok {
 				level = NormalizeAccess(v)
 			} else if !isOptInDefaultNone(dataType) {
-				if v, ok := scopes[PermissionDefaultKey]; ok {
+				if v, ok := appScopes[PermissionDefaultKey]; ok {
 					level = NormalizeAccess(v)
 				}
 			}

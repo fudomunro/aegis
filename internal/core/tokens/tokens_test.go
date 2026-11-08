@@ -18,7 +18,6 @@ func newTestTokenStore(path, passphrase string) (*TokenStore, error) {
 	return NewStoreWithIterations(path, passphrase, 1_000)
 }
 
-
 func TestTokenStore_SaveAndGet(t *testing.T) {
 	dir := t.TempDir()
 	ts, err := NewStoreWithIterations(filepath.Join(dir, "tokens.json"), "test-passphrase", 1_000)

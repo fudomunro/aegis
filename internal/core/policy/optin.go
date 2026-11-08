@@ -1,4 +1,4 @@
-package types
+package policy
 
 // MarkOptInDataType records a data-type key that stays hidden until the
 // permissions map / data grant names it explicitly (places pattern, #142).

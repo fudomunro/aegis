@@ -2,11 +2,12 @@ package core
 
 import (
 	"context"
-	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 

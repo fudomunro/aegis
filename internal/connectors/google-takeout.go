@@ -77,7 +77,7 @@ var TakeoutMailSource = MailSource{
 func NewTakeoutIngest() *TakeoutIngest { return &TakeoutIngest{} }
 
 var (
-	_ MailIngest         = (*TakeoutIngest)(nil)
+	_ MailIngest           = (*TakeoutIngest)(nil)
 	_ types.SnapshotProber = (*TakeoutIngest)(nil)
 )
 

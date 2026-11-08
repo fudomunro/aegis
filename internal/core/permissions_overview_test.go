@@ -8,9 +8,10 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/mail"
-	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
@@ -23,9 +24,9 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cfg.SeedDataGrant("tracks", types.DataGrant{Default: types.AccessRead})
-	cfg.SeedDataGrant("events", types.DataGrant{Default: types.AccessFreeBusy})
-	cfg.SeedDataGrant("places", types.DataGrant{Default: types.AccessCity})
+	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: policy.AccessRead})
+	cfg.SeedDataGrant("events", policy.DataGrant{Default: policy.AccessFreeBusy})
+	cfg.SeedDataGrant("places", policy.DataGrant{Default: policy.AccessCity})
 
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
@@ -37,10 +38,10 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if _, _, err := apps.Create(AppCreateRequest{
 		ID:   "eco-demo",
 		Name: "Event Coordinator",
-		Scopes: types.Permissions{
-			"events": types.AccessFreeBusy,
+		Scopes: policy.Permissions{
+			"events": policy.AccessFreeBusy,
 			// Explicit none still counts as relevant for the editor.
-			"tracks": types.AccessNone,
+			"tracks": policy.AccessNone,
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -48,7 +49,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if _, _, err := apps.Create(AppCreateRequest{
 		ID:     "disabled-app",
 		Name:   "Disabled App",
-		Scopes: types.Permissions{"photos": types.AccessRead},
+		Scopes: policy.Permissions{"photos": policy.AccessRead},
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -74,7 +75,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		t.Fatalf("overview = %+v", overview)
 	}
 
-	byID := map[string]types.TypeAccess{}
+	byID := map[string]policy.TypeAccess{}
 	for _, row := range overview.Types {
 		byID[row.ID] = row
 	}
@@ -83,7 +84,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing tracks row: %+v", overview.Types)
 	}
-	if tracks.AgentLevel != types.AccessRead {
+	if tracks.AgentLevel != policy.AccessRead {
 		t.Fatalf("tracks agent = %q, want read", tracks.AgentLevel)
 	}
 	// Eco named tracks (even as none) — relevant. Mail sync is not.
@@ -93,16 +94,16 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		switch acc.ID {
 		case "app:eco-demo":
 			sawEco = true
-			if acc.Level != types.AccessNone {
+			if acc.Level != policy.AccessNone {
 				t.Fatalf("eco tracks = %q, want none", acc.Level)
 			}
 		case "service:spotify":
 			sawSpotify = true
-			if acc.Kind != types.AccessorService {
+			if acc.Kind != policy.AccessorService {
 				t.Fatalf("spotify kind = %q", acc.Kind)
 			}
 		default:
-			if acc.Kind == types.AccessorSync {
+			if acc.Kind == policy.AccessorSync {
 				sawSync = true
 			}
 		}
@@ -121,13 +122,13 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatal("missing events row")
 	}
-	if events.AgentLevel != types.AccessFreeBusy {
+	if events.AgentLevel != policy.AccessFreeBusy {
 		t.Fatalf("events agent = %q", events.AgentLevel)
 	}
 	if len(events.Accessors) != 1 || events.Accessors[0].ID != "app:eco-demo" {
 		t.Fatalf("events accessors = %+v", events.Accessors)
 	}
-	if events.Accessors[0].Level != types.AccessFreeBusy {
+	if events.Accessors[0].Level != policy.AccessFreeBusy {
 		t.Fatalf("eco events = %q", events.Accessors[0].Level)
 	}
 
@@ -139,7 +140,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	for _, acc := range messages.Accessors {
 		if acc.ID == syncMailID {
 			foundMail = true
-			if acc.Kind != types.AccessorSync || acc.Level != types.AccessRead {
+			if acc.Kind != policy.AccessorSync || acc.Level != policy.AccessRead {
 				t.Fatalf("mail row = %+v", acc)
 			}
 		}
@@ -155,7 +156,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatal("missing places row")
 	}
-	if places.AgentLevel != types.AccessCity {
+	if places.AgentLevel != policy.AccessCity {
 		t.Fatalf("places agent = %q", places.AgentLevel)
 	}
 	// Disabled app named photos only — not places. Timeline not mounted.
@@ -203,7 +204,7 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	var overview types.PermissionsOverview
+	var overview policy.PermissionsOverview
 	if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -213,13 +214,13 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	sawAgentLevel := false
 	for _, row := range overview.Types {
 		if row.ID == "places" {
-			if row.AgentLevel != types.AccessNone {
+			if row.AgentLevel != policy.AccessNone {
 				t.Fatalf("agent places = %q, want none", row.AgentLevel)
 			}
 		}
 		if row.ID == "tracks" {
-			if row.AgentLevel != types.DefaultAccessType {
-				t.Fatalf("agent tracks = %q, want %q", row.AgentLevel, types.DefaultAccessType)
+			if row.AgentLevel != policy.DefaultAccessType {
+				t.Fatalf("agent tracks = %q, want %q", row.AgentLevel, policy.DefaultAccessType)
 			}
 			sawAgentLevel = true
 		}
@@ -263,7 +264,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 	}
 
 	overview := srv.permissionsOverview()
-	var playlists *types.TypeAccess
+	var playlists *policy.TypeAccess
 	for i := range overview.Types {
 		if overview.Types[i].ID == "playlists" {
 			playlists = &overview.Types[i]
@@ -274,9 +275,9 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 		t.Fatal("missing playlists row")
 	}
 
-	services := map[string]types.TypeAccessor{}
+	services := map[string]policy.TypeAccessor{}
 	for _, acc := range playlists.Accessors {
-		if acc.Kind == types.AccessorService {
+		if acc.Kind == policy.AccessorService {
 			services[acc.ID] = acc
 		}
 	}
@@ -284,7 +285,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 	if !ok {
 		t.Fatalf("playlists services = %+v, want spotify", playlists.Accessors)
 	}
-	if spotify.Label != "Spotify" || spotify.Level != types.AccessRead {
+	if spotify.Label != "Spotify" || spotify.Level != policy.AccessRead {
 		t.Fatalf("spotify = %+v", spotify)
 	}
 	yt, ok := services["service:youtube-music"]

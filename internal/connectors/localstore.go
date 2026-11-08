@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	_ "modernc.org/sqlite"
 )
 
@@ -171,7 +171,7 @@ type LocalStoreService struct {
 	Name        string
 	Action      string
 	Description string
-	GrantLimits types.Permissions
+	GrantLimits policy.Permissions
 }
 
 // ImportStats counts one import run. Store-specific result DTOs wrap these.

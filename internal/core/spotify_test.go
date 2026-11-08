@@ -4,12 +4,13 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 
 	"encoding/json"
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func TestSpotifyConnector_HandleProxy_NoToken(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -366,7 +367,7 @@ func TestMailSyncRoute_KeepsNotImplementedContract(t *testing.T) {
 	srv.connectors["dummy"] = &stubNoSyncConnector{}
 	srv.config.Services = append(srv.config.Services, Service{
 		ID: "dummy", Name: "Dummy", Action: "inject",
-		GrantLimits: types.Permissions{"messages": "read"},
+		GrantLimits: policy.Permissions{"messages": "read"},
 	})
 	w := doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"dummy"}`)
 	if w.Code != http.StatusNotImplemented {

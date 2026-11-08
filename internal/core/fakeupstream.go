@@ -1,10 +1,11 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"log/slog"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 // Fake-upstream host support (issue #86): the dev-only mount that serves

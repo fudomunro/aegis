@@ -23,16 +23,16 @@ var privateIdentifierDenylist = []string{
 }
 
 var publicHygieneSkipDirs = map[string]bool{
-	".git":        true,
-	".mimocode":   true,
-	".idea":       true,
-	".vscode":     true,
+	".git":         true,
+	".mimocode":    true,
+	".idea":        true,
+	".vscode":      true,
 	"node_modules": true,
 }
 
 var publicHygieneSkipFiles = map[string]bool{
-	"aegis":            true, // local binary
-	"coverage.out":     true,
+	"aegis":        true, // local binary
+	"coverage.out": true,
 	"aegis-backup-before-authorship-rewrite.bundle": true,
 }
 

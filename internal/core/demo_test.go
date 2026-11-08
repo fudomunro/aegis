@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
 	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 

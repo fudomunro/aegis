@@ -1,10 +1,17 @@
-package types
+// Package policy holds Aegis's internal access policy: the access-level
+// vocabulary, legacy service Permissions maps, type-owned DataGrants,
+// effective/scope grant resolution, and the permissions-editor view models.
+// This is Aegis authorization state and rules — not the data-type layer
+// (neutral models, merge, and library kinds stay in internal/types).
+package policy
 
 import (
 	"fmt"
 	"net/http"
 	"sort"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Access levels for agent access to a data type.
@@ -51,7 +58,7 @@ func isOptInDefaultNone(dataType string) bool {
 	if optInDefaultNone[dataType] {
 		return true
 	}
-	return KindDefaultsNone(dataType)
+	return types.KindDefaultsNone(dataType)
 }
 
 // DefaultAccessType is used when a service has no permissions block, or when
@@ -272,7 +279,7 @@ func (p Permissions) PlacesAccessLevels() map[string]string {
 		if NormalizeAccess(v) == AccessNone {
 			continue
 		}
-		if KindAllowsLevel(k, AccessCity) || KindAllowsLevel(k, AccessPrecise) {
+		if types.KindAllowsLevel(k, AccessCity) || types.KindAllowsLevel(k, AccessPrecise) {
 			out[k] = NormalizeAccess(v)
 		}
 	}
@@ -620,31 +627,31 @@ func ValidatePermissions(p Permissions) error {
 		default:
 			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, metadata, read, write, or read-write)", k, v)
 		}
-		if NormalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !KindAllowsLevel(k, AccessFreeBusy) {
+		if NormalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessFreeBusy) {
 			return fmt.Errorf("permissions[%s]: freebusy is only supported for %s", k, joinKindsAllowing(AccessFreeBusy))
 		}
 		if NormalizeAccess(v) == AccessFreeBusy && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: freebusy is only supported for events")
 		}
-		if NormalizeAccess(v) == AccessSummary && k != PermissionDefaultKey && !KindAllowsLevel(k, AccessSummary) {
+		if NormalizeAccess(v) == AccessSummary && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessSummary) {
 			return fmt.Errorf("permissions[%s]: summary is only supported for %s", k, joinKindsAllowing(AccessSummary))
 		}
 		if NormalizeAccess(v) == AccessSummary && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: summary is only supported for transactions")
 		}
-		if NormalizeAccess(v) == AccessCity && k != PermissionDefaultKey && !KindAllowsLevel(k, AccessCity) {
+		if NormalizeAccess(v) == AccessCity && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessCity) {
 			return fmt.Errorf("permissions[%s]: city is only supported for %s", k, joinKindsAllowing(AccessCity))
 		}
 		if NormalizeAccess(v) == AccessCity && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: city is only supported for places")
 		}
-		if NormalizeAccess(v) == AccessPrecise && k != PermissionDefaultKey && !KindAllowsLevel(k, AccessPrecise) {
+		if NormalizeAccess(v) == AccessPrecise && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessPrecise) {
 			return fmt.Errorf("permissions[%s]: precise is only supported for %s", k, joinKindsAllowing(AccessPrecise))
 		}
 		if NormalizeAccess(v) == AccessPrecise && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: precise is only supported for places")
 		}
-		if NormalizeAccess(v) == AccessMetadata && k != PermissionDefaultKey && !KindAllowsLevel(k, AccessMetadata) {
+		if NormalizeAccess(v) == AccessMetadata && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessMetadata) {
 			return fmt.Errorf("permissions[%s]: metadata is only supported for %s", k, joinKindsAllowing(AccessMetadata))
 		}
 		if NormalizeAccess(v) == AccessMetadata && k == PermissionDefaultKey {
@@ -657,7 +664,7 @@ func ValidatePermissions(p Permissions) error {
 // joinKindsAllowing lists built-in kinds that honor an optional level for
 // validation error messages.
 func joinKindsAllowing(level string) string {
-	ids := KindsAllowingLevel(level)
+	ids := types.KindsAllowingLevel(level)
 	if len(ids) == 0 {
 		return "no built-in type"
 	}

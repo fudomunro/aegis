@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestDataGrantsOverlay_Primary(t *testing.T) {
@@ -44,29 +44,29 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	}
 
 	// Data grant is primary: tracks default full, spotify tightens to none.
-	if err := cfg.SetDataGrants(types.DataGrants{
+	if err := cfg.SetDataGrants(policy.DataGrants{
 		"tracks": {
-			Default:   types.AccessFull,
-			Providers: map[string]string{"spotify": types.AccessNone},
+			Default:   policy.AccessFull,
+			Providers: map[string]string{"spotify": policy.AccessNone},
 		},
 		"places": {
-			Default:   types.AccessNone,
-			Providers: map[string]string{"immich": types.AccessCity},
+			Default:   policy.AccessNone,
+			Providers: map[string]string{"immich": policy.AccessCity},
 		},
 	}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
 		t.Fatalf("spotify tracks = %q, want none", got)
 	}
-	if got := cfg.EffectiveAccess("immich", "tracks"); got != types.AccessFull {
+	if got := cfg.EffectiveAccess("immich", "tracks"); got != policy.AccessFull {
 		t.Fatalf("immich tracks = %q, want full", got)
 	}
-	if got := cfg.EffectiveAccess("immich", "places"); got != types.AccessCity {
+	if got := cfg.EffectiveAccess("immich", "places"); got != policy.AccessCity {
 		t.Fatalf("immich places = %q, want city", got)
 	}
-	if got := cfg.EffectiveAccess("spotify", "places"); got != types.AccessNone {
+	if got := cfg.EffectiveAccess("spotify", "places"); got != policy.AccessNone {
 		t.Fatalf("spotify places = %q, want none", got)
 	}
 
@@ -82,7 +82,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	if file.Version != dataGrantsFileVersion {
 		t.Fatalf("version = %d", file.Version)
 	}
-	if file.DataGrants["tracks"].Default != types.AccessFull {
+	if file.DataGrants["tracks"].Default != policy.AccessFull {
 		t.Fatalf("data_grants.tracks = %+v", file.DataGrants["tracks"])
 	}
 
@@ -94,7 +94,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore reload: %v", err)
 	}
-	if got := fresh.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+	if got := fresh.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
 		t.Fatalf("reloaded spotify tracks = %q", got)
 	}
 }
@@ -115,25 +115,25 @@ func TestDataGrantsOverlay_ServiceLimitsOnlyTighten(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if err := cfg.SetDataGrants(types.DataGrants{
-		"tracks": {Default: types.AccessRead},
+	if err := cfg.SetDataGrants(policy.DataGrants{
+		"tracks": {Default: policy.AccessRead},
 	}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 
 	// Service map cannot grant above the type default.
-	if err := cfg.SetServicePermissions("spotify", types.Permissions{"tracks": types.AccessFull}); err != nil {
+	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": policy.AccessFull}); err != nil {
 		t.Fatalf("SetServicePermissions: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessRead {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessRead {
 		t.Fatalf("legacy cannot loosen: %q", got)
 	}
 
 	// Service map can tighten.
-	if err := cfg.SetServicePermissions("spotify", types.Permissions{"tracks": types.AccessNone}); err != nil {
+	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": policy.AccessNone}); err != nil {
 		t.Fatalf("SetServicePermissions: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
 		t.Fatalf("legacy tightens: %q", got)
 	}
 }
@@ -155,10 +155,10 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
 		t.Fatalf("bootstrap provider tighten = %q", got)
 	}
-	if got := cfg.EffectiveAccess("google-timeline", "places"); got != types.AccessCity {
+	if got := cfg.EffectiveAccess("google-timeline", "places"); got != policy.AccessCity {
 		t.Fatalf("bootstrap places opt-in = %q", got)
 	}
 
@@ -168,7 +168,7 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessFull {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessFull {
 		t.Fatalf("overlay types win = %q", got)
 	}
 }
@@ -203,15 +203,15 @@ func TestHandleAdminDataGrants(t *testing.T) {
 		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
 	var resp struct {
-		DataGrants map[string]types.DataGrant `json:"data_grants"`
+		DataGrants map[string]policy.DataGrant `json:"data_grants"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if resp.DataGrants["tracks"].Default != types.AccessRead {
+	if resp.DataGrants["tracks"].Default != policy.AccessRead {
 		t.Fatalf("data_grants.tracks = %+v", resp.DataGrants["tracks"])
 	}
-	if got := srv.config.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+	if got := srv.config.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
 		t.Fatalf("effective = %q", got)
 	}
 }
@@ -234,10 +234,10 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessNone {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
 		t.Fatalf("bootstrap data_grants provider tighten = %q", got)
 	}
-	if got := cfg.EffectiveAccess("google-timeline", "places"); got != types.AccessCity {
+	if got := cfg.EffectiveAccess("google-timeline", "places"); got != policy.AccessCity {
 		t.Fatalf("bootstrap grant_limits places = %q", got)
 	}
 
@@ -247,12 +247,12 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(ovPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != types.AccessFull {
+	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessFull {
 		t.Fatalf("overlay data_grants win = %q", got)
 	}
 
 	// Saves write v3 keys only.
-	if err := cfg.SetDataGrants(types.DataGrants{"tracks": {Default: types.AccessRead}}); err != nil {
+	if err := cfg.SetDataGrants(policy.DataGrants{"tracks": {Default: policy.AccessRead}}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 	raw, err := os.ReadFile(ovPath)
@@ -263,7 +263,7 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err := json.Unmarshal(raw, &file); err != nil {
 		t.Fatal(err)
 	}
-	if file.DataGrants["tracks"].Default != types.AccessRead {
+	if file.DataGrants["tracks"].Default != policy.AccessRead {
 		t.Fatalf("saved data_grants = %+v", file.DataGrants)
 	}
 	if file.Version != dataGrantsFileVersion {

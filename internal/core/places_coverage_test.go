@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"bytes"
 	"context"
@@ -19,12 +20,12 @@ func TestTighterPlacesLevel(t *testing.T) {
 	cases := []struct {
 		a, b, want string
 	}{
-		{types.AccessCity, types.AccessPrecise, types.AccessCity},
-		{types.AccessPrecise, types.AccessCity, types.AccessCity},
-		{types.AccessRead, types.AccessCity, types.AccessCity},
-		{types.AccessPrecise, types.AccessRead, types.AccessRead},
-		{types.AccessNone, types.AccessRead, types.AccessNone},
-		{"", types.AccessRead, types.AccessNone},
+		{policy.AccessCity, policy.AccessPrecise, policy.AccessCity},
+		{policy.AccessPrecise, policy.AccessCity, policy.AccessCity},
+		{policy.AccessRead, policy.AccessCity, policy.AccessCity},
+		{policy.AccessPrecise, policy.AccessRead, policy.AccessRead},
+		{policy.AccessNone, policy.AccessRead, policy.AccessNone},
+		{"", policy.AccessRead, policy.AccessNone},
 	}
 	for _, c := range cases {
 		if got := tighterPlacesLevel(c.a, c.b); got != c.want {
@@ -34,15 +35,15 @@ func TestTighterPlacesLevel(t *testing.T) {
 }
 
 func TestPlacesAccessLevels(t *testing.T) {
-	p := types.Permissions{"places": types.AccessCity, "tracks": types.AccessRead, "events": types.AccessNone}
+	p := policy.Permissions{"places": policy.AccessCity, "tracks": policy.AccessRead, "events": policy.AccessNone}
 	got := p.PlacesAccessLevels()
-	if got == nil || got["places"] != types.AccessCity {
+	if got == nil || got["places"] != policy.AccessCity {
 		t.Fatalf("got = %v", got)
 	}
 	if _, ok := got["tracks"]; ok {
 		t.Fatal("tracks must not appear")
 	}
-	if (types.Permissions{}).PlacesAccessLevels() != nil {
+	if (policy.Permissions{}).PlacesAccessLevels() != nil {
 		t.Fatal("empty map should be nil")
 	}
 }

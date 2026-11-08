@@ -8,13 +8,6 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
-	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/links"
-	"github.com/fudomunro/aegis/internal/core/mail"
-	"github.com/fudomunro/aegis/internal/core/ownership"
-	"github.com/fudomunro/aegis/internal/core/search"
-	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/shared"
 	"io"
 	"log/slog"
 	"net"
@@ -23,8 +16,16 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func Run() {

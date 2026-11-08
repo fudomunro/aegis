@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -306,7 +307,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: types.Permissions{"playlists": types.AccessNone},
+				GrantLimits: policy.Permissions{"playlists": policy.AccessNone},
 			},
 		},
 	}
@@ -336,7 +337,7 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 			{ID: "spotify", Name: "Spotify", Action: "inject"},
 			{
 				ID: "youtube-music", Name: "YouTube Music", Action: "inject",
-				GrantLimits: types.Permissions{"playlists": types.AccessNone},
+				GrantLimits: policy.Permissions{"playlists": policy.AccessNone},
 			},
 		},
 	}
@@ -509,7 +510,7 @@ func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: types.Permissions{"tracks": types.AccessNone},
+				GrantLimits: policy.Permissions{"tracks": policy.AccessNone},
 			},
 		},
 	}
@@ -858,7 +859,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: types.Permissions{"albums": types.AccessNone}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: policy.Permissions{"albums": policy.AccessNone}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

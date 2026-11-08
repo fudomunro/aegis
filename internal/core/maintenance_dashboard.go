@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Sync-maintenance dashboard (issue #239): an entirely build-time generated

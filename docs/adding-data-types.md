@@ -96,13 +96,14 @@ still flat, write new code so the move is a `git mv` + package rename:
 
 | Target package | Contents | Status |
 |----------------|----------|--------|
-| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, `DataGrant` / access levels, capability shapes, path rules | **landed** |
+| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, capability shapes, path rules | **landed** |
+| `internal/core/policy` | Access levels, `DataGrant` / `Permissions` maps, effective + scope grant resolution, permissions-editor models | **landed** |
 | `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores | **landed** |
 | `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) | **landed** |
 
 Connectors take `Host` (`host.go`). Classification lives in
-`internal/types/pathclass.go`. Type-level policy shape
-(`internal/types/policy.go`) is the #148 home — service `permissions` remain
+`internal/types/pathclass.go`. Policy shape
+(`internal/core/policy`) is the #148 home — service `permissions` remain
 a migration override, not the primary model.
 
 You do **not** need every optional hook on day one. Ship the spine first

@@ -106,14 +106,14 @@ func TestResolveStatePaths_DefaultsUnderDataDir(t *testing.T) {
 		t.Fatalf("Dir = %q, want %q", paths.Dir, dir)
 	}
 	checks := map[string]string{
-		"Config":       filepath.Join(dir, "aegis.json"),
-		"DataGrants":   filepath.Join(dir, "data_grants.json"),
-		"Tokens":       filepath.Join(dir, "tokens.json"),
-		"Links":        filepath.Join(dir, "entity_links.json"),
-		"copies.Ledger":   filepath.Join(dir, "copy_ledger.db"),
-		"mail.Archive": filepath.Join(dir, "mail-archive.db"),
-		"LogFile":      filepath.Join(dir, "logs", "aegis.log"),
-		"LogsDir":      filepath.Join(dir, "logs"),
+		"Config":        filepath.Join(dir, "aegis.json"),
+		"DataGrants":    filepath.Join(dir, "data_grants.json"),
+		"Tokens":        filepath.Join(dir, "tokens.json"),
+		"Links":         filepath.Join(dir, "entity_links.json"),
+		"copies.Ledger": filepath.Join(dir, "copy_ledger.db"),
+		"mail.Archive":  filepath.Join(dir, "mail-archive.db"),
+		"LogFile":       filepath.Join(dir, "logs", "aegis.log"),
+		"LogsDir":       filepath.Join(dir, "logs"),
 	}
 	// Reflect without getters: compare via struct fields explicitly.
 	if paths.Config != checks["Config"] {

@@ -21,9 +21,9 @@ import (
 
 // Immich VIP service name and default service-host tag.
 const (
-	ImmichVIPServiceName  = "svc:immich"
-	immichDefaultHostTag  = "tag:immich-host"
-	immichGuideIDTailnet  = "tailnet"
+	ImmichVIPServiceName = "svc:immich"
+	immichDefaultHostTag = "tag:immich-host"
+	immichGuideIDTailnet = "tailnet"
 )
 
 // immichTailnetGuide is the copyable VIP walkthrough. Its steps, details and
@@ -44,16 +44,16 @@ func immichTailnetGuide(baseURL, configuredEndpoint string) types.OnboardingGuid
 	tailnetPath := "your-tailnet" // or "-" for the default tailnet in newer API versions
 
 	g := types.OnboardingGuide{
-		ID:  immichGuideIDTailnet,
-		Title: "Friendly tailnet URL (VIP Service)",
-		Short: "Tailnet URL",
+		ID:          immichGuideIDTailnet,
+		Title:       "Friendly tailnet URL (VIP Service)",
+		Short:       "Tailnet URL",
 		Walkthrough: true,
 		Body: "Give Immich a stable `https://…ts.net` name with a Tailscale **VIP Service** — no `:2283`, real certs, host-move safe. " +
 			"Tailnet-only Serve; never Funnel. A Tailscale VIP Service gives Immich a stable https://…ts.net name " +
 			"(no :2283, real certs) that survives host moves. Serve stays tailnet-only — never Funnel.",
-		Label:      "VIP Service walkthrough (copyable)",
-		LiveLabel:  "Live step status",
-		Button:     "Copy all commands",
+		Label:     "VIP Service walkthrough (copyable)",
+		LiveLabel: "Live step status",
+		Button:    "Copy all commands",
 		Requirements: []string{
 			"Immich host runs Tailscale and can bind Serve (same machine as Immich, or a reverse proxy to it).",
 			"Service hosts must be tagged nodes (tag:immich-host or similar) — user-owned nodes cannot host svc:*.",

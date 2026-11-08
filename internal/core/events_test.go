@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"context"
 	"encoding/json"
@@ -125,7 +126,7 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessNone},
+		GrantLimits: policy.Permissions{"events": policy.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

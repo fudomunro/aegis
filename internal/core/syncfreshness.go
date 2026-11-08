@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Copy freshness checks (issue #227 phase 2, closing the observational

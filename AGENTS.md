@@ -28,7 +28,7 @@ Module: `github.com/fudomunro/aegis`
 Layout: **`internal/types`** (data-type layer) + **`internal/core`**
 (runtime hub: auth, config, proxy, admin) with concern sub-packages
 (`core/tokens`, `core/audit`, `core/links`, `core/copies`, `core/mail`,
-`core/ownership`, `core/scopes`, `core/search`) + **`internal/connectors`**
+`core/ownership`, `core/scopes`, `core/search`, `core/policy`) + **`internal/connectors`**
 (named-service adapters on `Host`) + **`internal/shared`** (stdlib-only
 transport/JSON/math/file/path plumbing). Root `main.go` is thin
 (`core.Run()`). Sub-packages follow the Tailscale `ipn/` pattern: durable
@@ -148,8 +148,10 @@ type ServiceConnector interface {
   upstream base URLs (breaks mock tests and custom endpoints).
 - Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `shared.HTTPClient`
   over new `http.DefaultClient` call sites.
-- **Connectors depend on `Host`** (`host.go`) — not `*Server`. That seam is
-  how named services leave package main under #15. Extend `Host` only for
+- **Connectors depend on `Host`** (`host.go`) — not `*Server`, and never the
+  core hub. Model packages `internal/types` and `internal/core/policy` are
+  allowed (neutral models, access-level vocabulary, `GrantLimits`). That seam
+  is how named services leave package main under #15. Extend `Host` only for
   cross-connector runtime needs; provider-specific stores are constructor
   args (see `NewQuickenConnector`).
 - Proxy path → data-type classification is the ordered table in
@@ -319,8 +321,9 @@ over the hostile-input parsers, and `go build -o aegis .`.
   `internal/core` (hub + concern sub-packages), `internal/connectors`, and
   `internal/shared` have landed. Sub-packages under `core/` are for
   self-contained stores/engines (`tokens`, `audit`, `links`, `copies`,
-  `mail`, `ownership`, `scopes`, `search`) — `*Server` wiring and HTTP/admin
-  handlers stay in the hub. `internal/shared` stays stdlib-only plumbing.
+  `mail`, `ownership`, `scopes`, `search`, `policy`) — `*Server` wiring and
+  HTTP/admin handlers stay in the hub. `internal/shared` stays stdlib-only
+  plumbing.
   Do not invent other internal packages outside
   `docs/restructure-core-types-connectors.md` and the #301 layout.
   `internal/shared` is stdlib-only transport/JSON/math plumbing — no domain
@@ -332,12 +335,15 @@ over the hostile-input parsers, and `go build -o aegis .`.
 - **Neutral models at the library boundary.** Provider quirks stay inside
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
 - **Permissions are data, not comments.** **Data grants** (what the user allows
-  an LLM agent or app to use) are owned by type-level `DataGrant`
-  (`internal/types`) plus optional provider/attribute filters and must stay
+  an LLM agent or app to use) are owned by `DataGrant` in
+  `internal/core/policy` (keyed by data type) plus optional provider/attribute
+  filters and must stay
   enforced on the content/ingest proxy, library, capabilities output, and
   pre-request injection. Service `permissions` maps are migration overrides
   that can only tighten the type default (issue #148). Prefer **data grant** in
-  product English (`docs/glossary.md`).
+  product English (`docs/glossary.md`). Aegis authorization policy (grants,
+  permission maps, access levels) is `internal/core/policy` — never
+  `internal/types`, which is the data-type layer only.
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `shared.HTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
@@ -405,7 +411,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | OAuth / connections / refresh | `internal/core/oauth.go`, `internal/core/connections.go`, `internal/core/tokens.go` |
 | Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
 | Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors/mail_ingest.go`, `internal/core/mail_ingest.go` |
-| Data grants / agent visibility | `internal/types/policy.go` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
+| Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
 | Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/types/ownership.go`, `internal/core/ownership.go` | Per-kind user confirmation + derived evidence; distinct from connection maturity |
 | Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |

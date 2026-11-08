@@ -6,9 +6,10 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // writableDataSet reports data types the admin form may offer as Editable:
@@ -38,7 +39,7 @@ func (s *Server) writableDataTypesFor(serviceID string, caps types.ServiceCapabi
 // read-only types become read, so later agent-write support does not
 // auto-open — the operator must enable it explicitly. Unknown keys and
 // "default" are preserved.
-func clampPermissionsWithWritable(p types.Permissions, caps types.ServiceCapabilities, writable map[string]bool) types.Permissions {
+func clampPermissionsWithWritable(p policy.Permissions, caps types.ServiceCapabilities, writable map[string]bool) policy.Permissions {
 	if p == nil {
 		return nil
 	}
@@ -46,12 +47,12 @@ func clampPermissionsWithWritable(p types.Permissions, caps types.ServiceCapabil
 	for _, dt := range caps.DataTypes {
 		known[dt.Name] = true
 	}
-	out := make(types.Permissions, len(p))
+	out := make(policy.Permissions, len(p))
 	for k, v := range p {
-		level := types.NormalizeAccess(v)
-		if k != types.PermissionDefaultKey && known[k] && !writable[k] &&
-			(level == types.AccessWrite || level == types.AccessFull) {
-			level = types.AccessRead
+		level := policy.NormalizeAccess(v)
+		if k != policy.PermissionDefaultKey && known[k] && !writable[k] &&
+			(level == policy.AccessWrite || level == policy.AccessFull) {
+			level = policy.AccessRead
 		}
 		out[k] = level
 	}
@@ -80,7 +81,7 @@ func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool 
 // effectivePermissions resolves agent access for a service from data grants
 // plus legacy service permissions (tighten-only). Data grant is primary
 // (issue #148); the service map remains a migration override.
-func (s *Server) effectivePermissions(svc *Service) types.Permissions {
+func (s *Server) effectivePermissions(svc *Service) policy.Permissions {
 	if svc == nil || s == nil || s.config == nil {
 		return nil
 	}
@@ -103,19 +104,19 @@ func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) st
 	if svc != nil {
 		provider = svc.ID
 	}
-	return types.ScopeTighten(sc.Grants, level, dataType, provider)
+	return policy.ScopeTighten(sc.Grants, level, dataType, provider)
 }
 
 // requestPermissions is requestLevel's map view: owner-tier effective
 // permissions AND scope grants, key by key. Used where a permission map
 // feeds notices and all-denied checks.
-func (s *Server) requestPermissions(r *http.Request, svc *Service) types.Permissions {
+func (s *Server) requestPermissions(r *http.Request, svc *Service) policy.Permissions {
 	owner := s.effectivePermissions(svc)
 	sc := scopes.From(r)
 	if sc == nil {
 		return owner
 	}
-	return types.ScopeTightenPermissions(sc.Grants, owner)
+	return policy.ScopeTightenPermissions(sc.Grants, owner)
 }
 
 // AllowDataPermission enforces the service's permission for a proxy request.
@@ -141,7 +142,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		))
 		return false
 	}
-	if types.AllowsMethod(level, r.Method) {
+	if policy.AllowsMethod(level, r.Method) {
 		return true
 	}
 	label := dataType
@@ -158,7 +159,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 // permissionNotice returns a short system-instruction suffix listing denied
 // data types so agents do not waste turns on blocked endpoints. Also warns
 // when a type is free/busy only (issue #128).
-func permissionNotice(p types.Permissions) string {
+func permissionNotice(p policy.Permissions) string {
 	var parts []string
 	if denied := p.DeniedDataTypes(); len(denied) > 0 {
 		parts = append(parts, "the following data types are not available and must not be requested: "+
@@ -176,19 +177,19 @@ func permissionNotice(p types.Permissions) string {
 
 // allDataDenied reports whether every listed data type (and the default)
 // is "none", so there is nothing useful to inject for the service.
-func allDataDenied(p types.Permissions) bool {
+func allDataDenied(p policy.Permissions) bool {
 	if p == nil {
 		return false
 	}
-	if p.For("") != types.AccessNone {
+	if p.For("") != policy.AccessNone {
 		// Unlisted types are not fully denied.
 		return false
 	}
 	for k, v := range p {
-		if k == types.PermissionDefaultKey {
+		if k == policy.PermissionDefaultKey {
 			continue
 		}
-		if types.NormalizeAccess(v) != types.AccessNone {
+		if policy.NormalizeAccess(v) != policy.AccessNone {
 			return false
 		}
 	}

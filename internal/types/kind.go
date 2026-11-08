@@ -44,7 +44,8 @@ type LibraryKind struct {
 
 	// AllowedLevels lists optional access levels this type honors between
 	// none and full (freebusy, summary, city, precise, metadata). Empty
-	// means only none/read/write/read-write apply (issue #183).
+	// means only none/read/write/read-write apply (issue #183). Tokens are
+	// the policy level names defined in internal/core/policy.
 	AllowedLevels []string
 
 	// DefaultNone keeps the type hidden unless a permissions map / data

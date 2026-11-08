@@ -1,14 +1,13 @@
 package mail
 
 import (
-	"strings"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/types"
 )
-
 
 func openTestArchive(t *testing.T) *Archive {
 	t.Helper()
@@ -19,7 +18,6 @@ func openTestArchive(t *testing.T) *Archive {
 	t.Cleanup(func() { a.Close() })
 	return a
 }
-
 
 func sampleMailRecord(id, subject, body string) Record {
 	return Record{
@@ -43,14 +41,12 @@ func sampleMailRecord(id, subject, body string) Record {
 	}
 }
 
-
 func minInt(a, b int) int {
 	if a < b {
 		return a
 	}
 	return b
 }
-
 
 func TestArchiveDisabled(t *testing.T) {
 	a, err := Open("")
@@ -67,7 +63,6 @@ func TestArchiveDisabled(t *testing.T) {
 		t.Fatal("expected disabled search error")
 	}
 }
-
 
 func TestArchiveUpsertGetSearch(t *testing.T) {
 	a := openTestArchive(t)
@@ -177,7 +172,6 @@ func TestArchiveUpsertGetSearch(t *testing.T) {
 	}
 }
 
-
 func TestArchiveSyncCursor(t *testing.T) {
 	a := openTestArchive(t)
 	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
@@ -201,7 +195,6 @@ func TestArchiveSyncCursor(t *testing.T) {
 		t.Fatal("expected done cursor")
 	}
 }
-
 
 func TestRecordFromMessage(t *testing.T) {
 	msg := newMessage(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "id9", types.MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")

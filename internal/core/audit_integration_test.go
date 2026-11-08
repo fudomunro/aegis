@@ -2,20 +2,20 @@ package core
 
 import (
 	"context"
-	"os"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/types"
 )
-
 
 func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 	dir := t.TempDir()
@@ -73,7 +73,6 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 	srv.recordAccess(AccessEvent{Surface: "library", Target: "tracks"})
 }
 
-
 func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	dir := t.TempDir()
 	a, err := audit.Open(filepath.Join(dir, "audit.db"), 30)
@@ -86,7 +85,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: types.Permissions{"playlists": types.AccessNone},
+				GrantLimits: policy.Permissions{"playlists": policy.AccessNone},
 			},
 		},
 	}
@@ -129,7 +128,6 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 		t.Fatalf("missing deny rows service=%v library=%v rows=%+v", sawService, sawLibrary, rows)
 	}
 }
-
 
 func TestResolveStatePaths_AuditLog(t *testing.T) {
 	dir := t.TempDir()
@@ -175,7 +173,6 @@ func (f *fakeLikedTracks) ListUserLikedTracks(context.Context) ([]types.Track, b
 	return f.tracks, false, nil
 }
 
-
 func TestAgentForRequest_ScopePrincipal(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
 	if got := agentForRequest(req); got != "api-key" {
@@ -186,7 +183,6 @@ func TestAgentForRequest_ScopePrincipal(t *testing.T) {
 		t.Fatalf("scope principal = %q", got)
 	}
 }
-
 
 func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 	a, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), 30)
@@ -221,7 +217,6 @@ func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 		t.Fatalf("agent = %q", rows[0].Agent)
 	}
 }
-
 
 func TestDenyAuditRows_CarryClientIP(t *testing.T) {
 	a, err := audit.Open(filepath.Join(t.TempDir(), "audit.db"), 30)
@@ -268,4 +263,3 @@ func TestDenyAuditRows_CarryClientIP(t *testing.T) {
 		}
 	}
 }
-

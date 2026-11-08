@@ -36,7 +36,7 @@ func TestTailscaleAdminKey_PersistPresenceOnly(t *testing.T) {
 
 	body, _ := json.Marshal(map[string]any{
 		"values": map[string]string{
-			"ts_api_key": "tskey-api-secret",
+			"ts_api_key":  "tskey-api-secret",
 			"host_device": "n1",
 		},
 	})

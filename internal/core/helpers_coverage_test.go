@@ -1,12 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func TestUnionScopes(t *testing.T) {

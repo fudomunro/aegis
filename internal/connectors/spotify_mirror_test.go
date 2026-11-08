@@ -171,7 +171,7 @@ func TestSpotify_ListUserLikedTracksPage_Pages(t *testing.T) {
 							"artists": []any{map[string]any{"name": "Artist One"}},
 						}},
 					},
-					"next": "https://api.spotify.com/v1/me/tracks?offset=1&limit=50",
+					"next":  "https://api.spotify.com/v1/me/tracks?offset=1&limit=50",
 					"total": 2,
 				})
 				return
@@ -183,7 +183,7 @@ func TestSpotify_ListUserLikedTracksPage_Pages(t *testing.T) {
 						"artists": []any{map[string]any{"name": "Artist Two"}},
 					}},
 				},
-				"next": nil,
+				"next":  nil,
 				"total": 2,
 			})
 			return

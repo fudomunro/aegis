@@ -28,11 +28,11 @@ func TestCompileTrustedProxies(t *testing.T) {
 
 func TestCompileClientIPHeader(t *testing.T) {
 	for in, want := range map[string]string{
-		"":                   ClientIPHeaderXFF,
-		"x-forwarded-for":    ClientIPHeaderXFF,
-		"X-Forwarded-For":    ClientIPHeaderXFF,
-		"x-real-ip":          ClientIPHeaderXRealIP,
-		" X-Real-IP ":        ClientIPHeaderXRealIP,
+		"":                ClientIPHeaderXFF,
+		"x-forwarded-for": ClientIPHeaderXFF,
+		"X-Forwarded-For": ClientIPHeaderXFF,
+		"x-real-ip":       ClientIPHeaderXRealIP,
+		" X-Real-IP ":     ClientIPHeaderXRealIP,
 	} {
 		got, err := compileClientIPHeader(in)
 		if err != nil || got != want {

@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func testJobStore(t *testing.T) *JobStore {

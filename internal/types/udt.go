@@ -296,17 +296,6 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 	if s.FailMsg == "" {
 		s.FailMsg = "failed to fetch " + s.ID
 	}
-	if s.DefaultAccess == "" {
-		s.DefaultAccess = AccessNone
-	} else {
-		s.DefaultAccess = NormalizeAccess(s.DefaultAccess)
-	}
-	// Packs cannot enable themselves. Surface the requested level for admin
-	// display only; enforcement always starts at none until a data grant
-	// names this key (issue #15 review).
-	if s.DefaultAccess == "" {
-		s.DefaultAccess = AccessNone
-	}
 	if len(s.Fields) == 0 {
 		return fmt.Errorf("schema %q: fields must not be empty", s.ID)
 	}

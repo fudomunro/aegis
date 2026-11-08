@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Maintenance signals (issue #86): the phase-1 observation bundle the sync
@@ -36,12 +36,12 @@ const (
 
 // MaintenanceSignals is one captured observation of instance health.
 type MaintenanceSignals struct {
-	CapturedAt time.Time        `json:"captured_at"`
-	Hostname   string           `json:"hostname,omitempty"`
-	Version    string           `json:"version"`
-	Commit     string           `json:"commit"`
-	Sync       *MaintenanceSync `json:"sync,omitempty"`
-	Freshness  []copies.Freshness  `json:"freshness,omitempty"`
+	CapturedAt time.Time          `json:"captured_at"`
+	Hostname   string             `json:"hostname,omitempty"`
+	Version    string             `json:"version"`
+	Commit     string             `json:"commit"`
+	Sync       *MaintenanceSync   `json:"sync,omitempty"`
+	Freshness  []copies.Freshness `json:"freshness,omitempty"`
 }
 
 // MaintenanceSync is the sync-queue slice of a signal bundle.

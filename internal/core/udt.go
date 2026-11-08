@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -137,6 +138,13 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDe
 			}
 			continue
 		}
+		// DefaultAccess is admin-display metadata only (packs cannot grant
+		// agent access); canonicalize the level token here at the policy
+		// boundary (issue #15 review).
+		schema.DefaultAccess = policy.NormalizeAccess(schema.DefaultAccess)
+		if schema.DefaultAccess == "" {
+			schema.DefaultAccess = policy.AccessNone
+		}
 		if _, exists := reg.byID[schema.ID]; exists {
 			if logger != nil {
 				logger.Warn("user-defined types: duplicate id", "path", path, "id", schema.ID)
@@ -156,7 +164,7 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDe
 		reg.schemaDir[schema.ID] = schemaDir
 		reg.byPath[schema.Path] = schema.ID
 		// UDTs are opt-in until data grant / permissions name them (places).
-		types.MarkOptInDataType(schema.PermType)
+		policy.MarkOptInDataType(schema.PermType)
 		loaded = append(loaded, schema)
 		if logger != nil {
 			logger.Info("user-defined type loaded",

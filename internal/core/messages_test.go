@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"context"
 	"encoding/json"
@@ -124,7 +125,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 		ID:          "google-gmail",
 		Name:        "Gmail",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"messages": types.AccessNone},
+		GrantLimits: policy.Permissions{"messages": policy.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

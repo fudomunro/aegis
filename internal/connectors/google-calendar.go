@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -256,7 +257,7 @@ func (c *GoogleCalendarConnector) EventsFreeBusyOnly() bool {
 	if svc == nil {
 		return false
 	}
-	return types.IsFreeBusyAccess(svc.GrantLimits.For("events"))
+	return policy.IsFreeBusyAccess(svc.GrantLimits.For("events"))
 }
 
 func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {

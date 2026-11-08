@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func writeDataScopes(t *testing.T, scopes []Scope) string {
@@ -112,6 +112,6 @@ func TestCacheSuffix(t *testing.T) {
 	}
 }
 
-func readAllGrants() types.DataGrants {
-	return types.DataGrants{types.PermissionDefaultKey: {Default: types.AccessRead}}
+func readAllGrants() policy.DataGrants {
+	return policy.DataGrants{policy.PermissionDefaultKey: {Default: policy.AccessRead}}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
@@ -321,13 +322,13 @@ func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 // adminServiceLimitsRequest is the body for PUT service grant_limits.
 type adminServiceLimitsRequest struct {
 	// GrantLimits is the new map. Empty/null clears the block (unrestricted).
-	GrantLimits types.Permissions `json:"grant_limits"`
+	GrantLimits policy.Permissions `json:"grant_limits"`
 }
 
 // adminDataGrantsRequest is the body for PUT data grants.
 type adminDataGrantsRequest struct {
 	// DataGrants maps data-type keys to DataGrant (issue #174).
-	DataGrants map[string]types.DataGrant `json:"data_grants"`
+	DataGrants map[string]policy.DataGrant `json:"data_grants"`
 }
 
 // HandleAdminDataGrants reads or writes the agent data-grant map.
@@ -342,7 +343,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 	case http.MethodGet:
 		policies := s.config.DataGrants()
 		if policies == nil {
-			policies = types.DataGrants{}
+			policies = policy.DataGrants{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{
@@ -363,7 +364,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 		}
 		policies := req.DataGrants
 		if policies == nil {
-			policies = types.DataGrants{}
+			policies = policy.DataGrants{}
 		}
 		if err := s.config.SetDataGrants(policies); err != nil {
 			withPeerLog(slog.With("handler", "admin_data_grants"), r).
@@ -376,7 +377,7 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 			Info("data grants updated", "types", len(policies))
 		saved := s.config.DataGrants()
 		if saved == nil {
-			saved = types.DataGrants{}
+			saved = policy.DataGrants{}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{

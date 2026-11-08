@@ -7,10 +7,10 @@ import (
 func sampleReadingListSchema(t *testing.T) UserDefinedTypeSchema {
 	t.Helper()
 	s := UserDefinedTypeSchema{
-		Version: "1",
-		ID:      "reading-list",
-		Label:   "reading list",
-		Usage:   "books or articles they want to read",
+		Version:         "1",
+		ID:              "reading-list",
+		Label:           "reading list",
+		Usage:           "books or articles they want to read",
 		ExampleQuestion: "what's on my reading list?",
 		Keywords:        []string{"reading list", "want to read"},
 		Fields: map[string]UserDefinedField{
@@ -59,8 +59,8 @@ func TestUserDefinedTypeSchema_NormalizeDefaults(t *testing.T) {
 	if s.Path != "/v1/library/garden-plants" {
 		t.Errorf("Path = %q", s.Path)
 	}
-	if s.DefaultAccess != AccessNone {
-		t.Errorf("DefaultAccess = %q, want none (UDTs are opt-in)", s.DefaultAccess)
+	if s.DefaultAccess != "" {
+		t.Errorf("DefaultAccess = %q, want passthrough (pack load canonicalizes for display)", s.DefaultAccess)
 	}
 	if len(s.Identity.Fields) != 1 || s.Identity.Fields[0] != "name" {
 		t.Errorf("Identity.Fields = %v, want [name]", s.Identity.Fields)

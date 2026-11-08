@@ -93,12 +93,12 @@ func TestRunProxy_CustomTokenResolverAndCopy(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/api/v0/locations", nil)
 	w := httptest.NewRecorder()
 	RunProxy(host, w, req, "/api/v0/locations", ProxyOpts{
-		serviceID:      OwnTracksServiceID,
-		displayName:    OwnTracksServiceName,
-		missingToken:   "set headers on the owntracks service",
-		rejectToken:    "rejected — set an API key",
+		serviceID:       OwnTracksServiceID,
+		displayName:     OwnTracksServiceName,
+		missingToken:    "set headers on the owntracks service",
+		rejectToken:     "rejected — set an API key",
 		rejectForbidden: true,
-		token:          NewOwnTracksConnector(host).OwnTracksToken,
+		token:           NewOwnTracksConnector(host).OwnTracksToken,
 	})
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())

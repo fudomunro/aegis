@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Demo mode (issue #217) is a deployment profile for a public synthetic
@@ -61,7 +61,6 @@ func validateDemoConfig(cfg *Config, scopes *scopes.Store) error {
 	}
 	return nil
 }
-
 
 // demoLockdown refuses mutating admin/OAuth routes in demo mode. GET/HEAD
 // stay available for health and read-only admin views.

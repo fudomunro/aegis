@@ -82,7 +82,8 @@ can move to per-user connector state without changing the principal model.
 
 ## Grants
 
-`DataScope.grants` uses the existing type-level `types.DataGrants` and is
+`DataScope.grants` uses the type-keyed `policy.DataGrants`
+(`internal/core/policy`) and is
 validated on load. **Enforced** since the scope-grants resolver landed: the
 semantics are decided in [`external-access.md`](external-access.md) and every
 row of the resolution table is a test case.
@@ -105,7 +106,7 @@ regardless of levels.
 | `{"default": {"default": "read"}, "music": {}}` | `none` for `music` — the `default` key covers unlisted types only |
 
 This runs in a **dedicated scope-grants resolver**, never in
-`types.DataGrants.Access` (owner-tier "unset = unrestricted" semantics must
+`policy.DataGrants.Access` (owner-tier "unset = unrestricted" semantics must
 not move). Each resolution row is a test case.
 
 **Owner-tier split.** The shared agent key and tailnet agents keep today's

@@ -14,9 +14,9 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // --- version comparison ---
@@ -934,7 +934,6 @@ func TestFreshness_EndToEndThroughQueue(t *testing.T) {
 		t.Fatalf("copy = %s/%q, want in_sync and stamped", rec.Status, rec.LastCheckedAt)
 	}
 }
-
 
 func TestFreshnessEngine_UnknownIDIsNotAFailure(t *testing.T) {
 	// A checker reporting ok=false (unsupported shape) must skip, not fail.

@@ -2,12 +2,13 @@ package core
 
 import (
 	"fmt"
-	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/audit"
 )
 
 func TestRateLimitConfig_Effective(t *testing.T) {
