@@ -20,6 +20,15 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Search index format leaves the data-type layer.** `SearchDocument` and
+  `BuildSearchDocument` (the item→document flattening) move from
+  `internal/types` to `internal/core/search`: the index record is
+  Aegis-internal metadata, not a managed data type. `SearchSpec` stays in
+  `internal/types` — kinds and schema packs declare it (like `AllowedLevels`)
+  and the engine is the machinery behind that declaration. The engine no
+  longer references the agent page cap: the library search handler clamps
+  `limit` to `MaxPageLimit` at the API boundary (effective limits
+  unchanged).
 - **OwnershipEntry moves to its store package.** The user-confirmation
   record (`Confirmed` / `ConfirmedAt` / `Note`) leaves `internal/types` for
   `internal/core/ownership`, which stores it — matching `scopes.Scope`. The

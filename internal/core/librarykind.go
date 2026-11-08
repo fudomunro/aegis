@@ -786,7 +786,8 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 		}
 	}
 
-	res, err := s.search.Search(search.Query{Kind: kind.ID, Dataset: dataset, Q: q, Limit: searchHitCap})
+	// Clamp at the API boundary: the engine trusts its caller's limit.
+	res, err := s.search.Search(search.Query{Kind: kind.ID, Dataset: dataset, Q: q, Limit: min(searchHitCap, types.MaxPageLimit)})
 	if err != nil {
 		logger.Error("search index query failed", "error", err)
 		shared.WriteJSONError(w, http.StatusInternalServerError, "search index unavailable")
@@ -863,9 +864,9 @@ func indexLibraryDocuments[T any](s *Server, spec libraryKindSpec[T], dataset st
 	if !s.search.Enabled() || spec.kind.Search == nil {
 		return nil
 	}
-	docs := make([]types.SearchDocument, 0, len(fetched.Items))
+	docs := make([]search.SearchDocument, 0, len(fetched.Items))
 	for _, item := range fetched.Items {
-		doc, err := types.BuildSearchDocument(spec.sortKey(item), item, *spec.kind.Search)
+		doc, err := search.BuildSearchDocument(spec.sortKey(item), item, *spec.kind.Search)
 		if err != nil {
 			return err
 		}

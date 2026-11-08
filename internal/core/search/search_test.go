@@ -3,8 +3,6 @@ package search
 import (
 	"path/filepath"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func newTestIndex(t *testing.T) *Index {
@@ -17,8 +15,8 @@ func newTestIndex(t *testing.T) *Index {
 	return x
 }
 
-func searchDoc(id, title, body string, services ...string) types.SearchDocument {
-	return types.SearchDocument{
+func searchDoc(id, title, body string, services ...string) SearchDocument {
+	return SearchDocument{
 		ItemID:   id,
 		Title:    title,
 		Body:     body,
@@ -29,7 +27,7 @@ func searchDoc(id, title, body string, services ...string) types.SearchDocument 
 
 func TestSearchIndex_UpsertAndSearch(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("tracks", "", []types.SearchDocument{
+	if err := x.Upsert("tracks", "", []SearchDocument{
 		searchDoc("t1", "Purple Rain", "Purple Rain Prince", "spotify"),
 		searchDoc("t2", "Raining Blood", "Raining Blood Slayer", "spotify"),
 	}); err != nil {
@@ -55,7 +53,7 @@ func TestSearchIndex_UpsertAndSearch(t *testing.T) {
 	}
 
 	// Re-upsert refreshes the FTS row rather than duplicating it.
-	if err := x.Upsert("tracks", "", []types.SearchDocument{
+	if err := x.Upsert("tracks", "", []SearchDocument{
 		searchDoc("t1", "Purple Rain", "Purple Rain The Artist Formerly Known As Prince", "spotify"),
 	}); err != nil {
 		t.Fatalf("re-upsert: %v", err)
@@ -71,12 +69,12 @@ func TestSearchIndex_UpsertAndSearch(t *testing.T) {
 
 func TestSearchIndex_DatasetPartitions(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("tracks", "shire", []types.SearchDocument{
+	if err := x.Upsert("tracks", "shire", []SearchDocument{
 		searchDoc("t1", "Hobbiton", "Shared token shire"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := x.Upsert("tracks", "gondor", []types.SearchDocument{
+	if err := x.Upsert("tracks", "gondor", []SearchDocument{
 		searchDoc("t2", "Minas Tirith", "Shared token gondor"),
 	}); err != nil {
 		t.Fatal(err)
@@ -114,7 +112,7 @@ func TestSearchIndex_CountAndEmptyQuery(t *testing.T) {
 	if n != 0 {
 		t.Fatalf("count = %d, want 0", n)
 	}
-	if err := x.Upsert("tracks", "", []types.SearchDocument{searchDoc("t1", "One", "One")}); err != nil {
+	if err := x.Upsert("tracks", "", []SearchDocument{searchDoc("t1", "One", "One")}); err != nil {
 		t.Fatal(err)
 	}
 	n, err = x.Count("tracks", "")
@@ -132,7 +130,7 @@ func TestSearchIndex_CountAndEmptyQuery(t *testing.T) {
 
 func TestSearchIndex_HostileFTSInput(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("tracks", "", []types.SearchDocument{
+	if err := x.Upsert("tracks", "", []SearchDocument{
 		searchDoc("t1", "NEAR(a b)", "OR AND NOT * ^ : ( ) { } \"quoted\""),
 	}); err != nil {
 		t.Fatal(err)
@@ -149,7 +147,7 @@ func TestSearchIndex_HostileFTSInput(t *testing.T) {
 
 func TestSearchIndex_PaginationCap(t *testing.T) {
 	x := newTestIndex(t)
-	docs := make([]types.SearchDocument, 0, 5)
+	docs := make([]SearchDocument, 0, 5)
 	for i := range 5 {
 		docs = append(docs, searchDoc("t"+string(rune('a'+i)), "Shared title", "Shared title"))
 	}
@@ -208,13 +206,13 @@ func TestSearchIndex_CountsByKind(t *testing.T) {
 	if _, err := x.CountsByKind(); err != nil {
 		t.Fatalf("empty counts: %v", err)
 	}
-	if err := x.Upsert("tracks", "", []types.SearchDocument{
+	if err := x.Upsert("tracks", "", []SearchDocument{
 		searchDoc("t1", "One", "One"),
 		searchDoc("t2", "Two", "Two"),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if err := x.Upsert("contacts", "shire", []types.SearchDocument{
+	if err := x.Upsert("contacts", "shire", []SearchDocument{
 		searchDoc("c1", "Ada", "Ada"),
 	}); err != nil {
 		t.Fatal(err)
@@ -237,14 +235,14 @@ func TestSearchIndex_CountsByKind(t *testing.T) {
 
 func TestSearchIndex_SyncDropsRefutedRows(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []types.SearchDocument{
+	if err := x.Upsert("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 		searchDoc("t2", "Grace", "Grace Hopper", "google"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// A complete fetch that no longer returns t2 refutes it.
-	if err := x.Sync("contacts", "", []types.SearchDocument{
+	if err := x.Sync("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 	}, []string{"google"}); err != nil {
 		t.Fatal(err)
@@ -263,14 +261,14 @@ func TestSearchIndex_SyncDropsRefutedRows(t *testing.T) {
 
 func TestSearchIndex_SyncKeepsRowsFromIncompleteServices(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []types.SearchDocument{
+	if err := x.Upsert("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 		searchDoc("t2", "Secret", "Secret Person", "outlook"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// Only google completed; outlook's row must survive the fetch.
-	if err := x.Sync("contacts", "", []types.SearchDocument{
+	if err := x.Sync("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 	}, []string{"google"}); err != nil {
 		t.Fatal(err)
@@ -282,7 +280,7 @@ func TestSearchIndex_SyncKeepsRowsFromIncompleteServices(t *testing.T) {
 
 func TestSearchIndex_SyncWithoutCompletionDeletesNothing(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []types.SearchDocument{
+	if err := x.Upsert("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google"),
 	}); err != nil {
 		t.Fatal(err)
@@ -297,14 +295,14 @@ func TestSearchIndex_SyncWithoutCompletionDeletesNothing(t *testing.T) {
 
 func TestSearchIndex_SyncPreservesUnknownMembership(t *testing.T) {
 	x := newTestIndex(t)
-	if err := x.Upsert("contacts", "", []types.SearchDocument{
+	if err := x.Upsert("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace", "google", "outlook"),
 	}); err != nil {
 		t.Fatal(err)
 	}
 	// google still returns the item but outlook is degraded: the vouch from
 	// outlook must stay so a later google-only fetch cannot refute the row.
-	if err := x.Sync("contacts", "", []types.SearchDocument{
+	if err := x.Sync("contacts", "", []SearchDocument{
 		searchDoc("t1", "Ada", "Ada Lovelace updated", "google"),
 	}, []string{"google"}); err != nil {
 		t.Fatal(err)
