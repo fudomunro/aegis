@@ -48,7 +48,7 @@ LLM agent ──► Aperture ──► Aegis pre-request hook ──► LLM prov
 | User library data | Playlists, contacts, events, messages, transactions, places, documents | Provider-side; Aegis returns metadata + content transport |
 | Data grants / app scopes | Policy that constrains agents and third-party apps | `data_grants.json`, `apps.json` |
 | App tokens | Scoped third-party credentials | SHA-256 hashes in `apps.json` |
-| Audit log | Who accessed which data type, allow/deny | `audit_log.db` (retention capped) |
+| Audit log | Who accessed which kind, allow/deny | `audit_log.db` (retention capped) |
 | Agent API key / admin API key | Shared secrets when not pure-tailnet | Operator-supplied flags/env |
 
 **Non-assets (by design):** media bytes (stay on the source service), LLM
@@ -63,14 +63,14 @@ of full message bodies outside the optional local mail archive.
 |-------|-------|------------|-----------|
 | Tailnet owner / admin principal | Highest on the service | Admin API key or user login (`-admin-logins`), on the admin listener | Policy writes, OAuth, app minting, `/v1/admin/*`, `/metrics` |
 | LLM agent (runtime) | Constrained by data grants | Agent API key, tagged device, allowed tailnet login | Library reads, hook, content transport, mail search |
-| External principal (invite token) | Constrained by scope grants, **deny-by-default** | Invite token (data-scope key) | Granted data types of the owner's data, in its dataset; never admin |
+| External principal (invite token) | Constrained by scope grants, **deny-by-default** | Invite token (data-scope key) | Granted kinds of the owner's data, in its dataset; never admin |
 | Third-party app | Least privilege | App token `aeg_app_…` | Library **read** only, AND of app scopes × data grants |
 | Human operator (SSH/host) | Host root | OS account | Full data directory — out of Aegis’s auth |
 | Public internet (API listener) | Untrusted | — | Reaches the API listener only, and only with a valid token; admin listener has **no** public path |
 | Public internet (admin listener) | Untrusted | — | Must have **no** path |
 
 Authentication answers *who may call*. Data grants answer *what an authorized
-caller may do with each data type*. Admin is never the agent key.
+caller may do with each kind*. Admin is never the agent key.
 
 ---
 
@@ -119,7 +119,7 @@ caller may do with each data type*. Admin is never the agent key.
 | Agent rewrites policy that constrains it | Admin tier separate; agent credential gets **403** on `/v1/admin/*` writes |
 | Tagged device treated as admin | Tagged identities are **not** admin unless listed in `-admin-logins` |
 | Forged `Tailscale-User-Login` header on a public socket | Ambient identity resolution is **disabled on externally reachable listeners**; tokens only (see `external-access.md` "The landmine") |
-| External principal reads data outside its grants | Scope grants are **deny-by-default**: unlisted data type = `none`; AND with agent data grants; never admin |
+| External principal reads data outside its grants | Scope grants are **deny-by-default**: unlisted kind = `none`; AND with agent data grants; never admin |
 | Admin surface reachable from outside | Split listeners: admin listener tailnet/loopback only; admin paths **404** on the published API listener |
 | Public exposure beyond intent | Publish the **API listener only**, behind TLS, invite tokens; tag `tag:aegis`; never an unsplit listener — unless the edge enforces the split (named demo exception: nginx drops admin/metrics/SPA) |
 | Unapproved device joins with stolen auth key | Tailscale device approval |
@@ -138,8 +138,8 @@ caller may do with each data type*. Admin is never the agent key.
 
 | Threat | Mitigation |
 |--------|------------|
-| Agent reads data types the user meant to hide | Type-owned **data grants** + tighten-only **service grant limits**; 403 on deny |
-| Redacted views leak raw content | Type-scoped levels: `freebusy`, `summary`, `city`/`precise`, `metadata` |
+| Agent reads kinds the user meant to hide | Kind-owned **data grants** + tighten-only **service grant limits**; 403 on deny |
+| Redacted views leak raw content | Kind-scoped levels: `freebusy`, `summary`, `city`/`precise`, `metadata` |
 | Places exposed by default | Places default **none**; opt-in |
 | Third-party app exceeds intent | App scopes AND data grants; library read only |
 | Capability listing becomes an attack map | Capabilities are admin/connector metadata, not agent discovery (#119) |
@@ -214,7 +214,7 @@ caller may do with each data type*. Admin is never the agent key.
 | Principal → dataset isolation | [`data-scopes.md`](data-scopes.md) |
 | Audit log | SECURITY.md “Best practices” §12 |
 | Deployment checklist | SECURITY.md “Deployment checklist” |
-| Product rules (fail-open, no media store, type-centric) | [`../AGENTS.md`](../AGENTS.md) |
+| Product rules (fail-open, no media store, kind-centric) | [`../AGENTS.md`](../AGENTS.md) |
 
 ---
 

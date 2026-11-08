@@ -1,6 +1,6 @@
 # Aegis
 
-A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music, Google Photos/Contacts/Calendar/Gmail/Drive, Immich, Paperless-ngx, YNAB, Quicken, OwnTracks, Signal, Timeline, Bluesky, CalDAV/CardDAV), serves the user's data from a type-centric library, and enforces **data grants** with OAuth-based authentication.
+A personal data service for [Tailscale Aperture](https://tailscale.com/docs/aperture) that intercepts LLM requests referencing named services (Spotify, YouTube Music, Amazon Music, Google Photos/Contacts/Calendar/Gmail/Drive, Immich, Paperless-ngx, YNAB, Quicken, OwnTracks, Signal, Timeline, Bluesky, CalDAV/CardDAV), serves the user's data from a kind-centric library, and enforces **data grants** with OAuth-based authentication.
 
 > Looking for the pitch rather than the manual? The marketing site is at <https://fudomunro.github.io/aegis/> ([`site/`](site/)).
 
@@ -71,7 +71,7 @@ You should see neutral playlist objects with `sources[]` provenance. Vocabulary 
 | [docs/caldav-carddav.md](docs/caldav-carddav.md) | Nextcloud/iCloud/Fastmail DAV setup |
 | [docs/configuring-aperture.md](docs/configuring-aperture.md) | Aperture operator guide |
 | [docs/user-defined-types.md](docs/user-defined-types.md) | Schema packs / user-defined types |
-| [docs/adding-data-types.md](docs/adding-data-types.md) | Checklist for new library data types |
+| [docs/adding-kinds.md](docs/adding-kinds.md) | Checklist for new library kinds |
 | [docs/development.md](docs/development.md) | Tests, project structure, sample data |
 | [CHANGELOG.md](CHANGELOG.md) | History and design decisions |
 

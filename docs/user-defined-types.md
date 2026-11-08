@@ -13,7 +13,7 @@ should live.
 ## 1. What #15 is asking for
 
 A user defines a **source and schema** for personal data; Aegis exposes it on
-the same type-centric surface as built-ins:
+the same kind-centric surface as built-ins:
 
 - `GET /v1/library/{kind}`
 - neutral list (`name`, `fields`, `sources[]`)

@@ -45,7 +45,7 @@ the shared word “agent”.
 | Trust model | `SECURITY.md` | Security auditor, Human ops | Tailnet boundary, auth modes, redaction. |
 | Threat model | `docs/threat-model.md` | Security auditor | Assets, actors, threats/mitigations, residual risks. |
 | Coding-agent handbook | `AGENTS.md` | Coding agent, Maintainer | Non-negotiable product rules. |
-| Extension guide | `docs/adding-data-types.md` | Developer integrator, Coding agent | New library types checklist. |
+| Extension guide | `docs/adding-kinds.md` | Developer integrator, Coding agent | New library kinds checklist. |
 | Aperture ops guide | `docs/configuring-aperture.md` | Human ops | Hooks, grants, Guardian migration. |
 | Immich runbook | `docs/immich-live-testing.md` | Human ops, QA | Live checklist; product contract callouts. |
 | CalDAV/CardDAV guide | `docs/caldav-carddav.md` | Human ops, End user | Nextcloud / iCloud app-specific passwords; mirror + freebusy. |
@@ -125,7 +125,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 **Gaps:** Guardian→Aegis migration only in hook-health + Aperture doc.
 
 ### D. Developer integrator
-**Surfaces:** README API Reference, `docs/adding-data-types.md`, walkthrough `experiments/index.html`, app token docs, `third_party_demo.html`, example schema packs.
+**Surfaces:** README API Reference, `docs/adding-kinds.md`, walkthrough `experiments/index.html`, app token docs, `third_party_demo.html`, example schema packs.
 
 **Strengths:** prose is complete enough to integrate.
 
@@ -163,7 +163,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | Library/content error strings | Agent + ops + auditor | Generally good; product-rule prose in 403/404 can confuse |
 | README | Setup + API contract + ops + security | Different readers must hunt |
 | admin.html | Homelab wizard + security claims + ops diagnostics + issue numbers | Cognitive load; Immich install is almost a product |
-| Capabilities/Operations | Admin metadata vs provider-shaped docs vs library-first agent story | Drift vs type-centric rule |
+| Capabilities/Operations | Admin metadata vs provider-shaped docs vs library-first agent story | Drift vs kind-centric rule |
 | Hook-health `fix` text | Ops English + Aperture snippets | Excellent; not linked from agent docs |
 | slog | Ops + privacy-conscious auditors | Good field discipline |
 
@@ -176,7 +176,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | Runtime LLM agent | Injection suite, library errors, neutral schema | No dedicated agent API doc |
 | End user (admin) | admin.html, README setup, example config | Non-admin users; wizard/ops blend |
 | Human ops | hook-health, logs, metrics, runbooks, flags | Import ops live under Advanced / operator CLI |
-| Developer integrator | README API, walkthrough, adding-data-types | No OpenAPI; thin app-dev docs |
+| Developer integrator | README API, walkthrough, adding-kinds | No OpenAPI; thin app-dev docs |
 | Security auditor | SECURITY.md, threat model, audit, redaction, admin Map | Fail-open rationale scattered |
 | Coding agent | AGENTS.md + docs + CI | Name collision with runtime “agents” |
 | Third-party app user | consent HTML + freebusy demos | Lifecycle / revoke UX |

@@ -555,7 +555,7 @@ func TestWriteMaintenanceDashboard_Maturity(t *testing.T) {
 		t.Fatalf("read service page: %v", err)
 	}
 	for _, want := range []string{
-		"Connection maturity", "Data types", "audiobooks", "not supported", "supported",
+		"Connection maturity", "Kinds", "audiobooks", "not supported", "supported",
 	} {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("spotify.html missing %q", want)

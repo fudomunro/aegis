@@ -621,7 +621,7 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 		"openAdvanced",
 		"<summary>Advanced</summary>",
 		`id="agent-data-access-help"`,
-		"Data grants by type",
+		"Data grants by kind",
 		`id="data-grant-panel"`,
 		"typeOtherAccessorsHTML",
 		"type-access-row",

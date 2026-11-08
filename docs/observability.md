@@ -111,7 +111,7 @@ SQLite at `<data-dir>/audit_log.db`.
 Each row is redacted like the in-memory access ring: agent login,
 `app:<id>`, or `scope:<id>` (external principals holding invite tokens),
 surface (`library` / `service` / `auth` / …), target (service id or library
-kind), data type, decision, a short reason (`permission`, `app_scope`,
+kind), the resolved kind for policy, decision, a short reason (`permission`, `app_scope`,
 `service_blocked`, `auth`, `rate_limited`), and the resolved `client_ip`
 (trusted-proxy aware — see [`configuration.md`](configuration.md)). **No
 tokens, request bodies, query strings, or full paths.** Note that

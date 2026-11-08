@@ -519,8 +519,8 @@
       <div id="services-help" class="help-box" hidden></div>
 
       <div id="agent-data-access-help" class="help-box">
-        <h3>Data grants by type</h3>
-        <p>Each data type’s <strong>data grant</strong> sets the agent access level; <strong>service limits</strong> on a service card can only tighten it. Saves to <code>data_grants.json</code>. <a href="https://github.com/fudomunro/aegis/blob/main/README.md#data-grants" target="_blank" rel="noopener noreferrer">Learn more</a></p>
+        <h3>Data grants by kind</h3>
+        <p>Each kind’s <strong>data grant</strong> sets the agent access level; <strong>service limits</strong> on a service card can only tighten it. Saves to <code>data_grants.json</code>. <a href="https://github.com/fudomunro/aegis/blob/main/README.md#data-grants" target="_blank" rel="noopener noreferrer">Learn more</a></p>
       </div>
 
       <div class="help-box" id="data-grant-panel">
@@ -531,9 +531,9 @@
           <button class="btn btn-primary" id="data-grant-save" type="button">Save data grants</button>
         </div>
         <p class="meta" style="margin:0.55rem 0 0.35rem">
-          Type-owned agent access. <strong>Service limits</strong> on a service card can only tighten these defaults.
+          Kind-owned agent access. <strong>Service limits</strong> on a service card can only tighten these defaults.
           <code>places</code> stays off until you name it (city / read / precise).
-          Other accessors under a type are read-only — edit app scopes with <code>/v1/admin/apps</code>.
+          Other accessors under a kind are read-only — edit app scopes with <code>/v1/admin/apps</code>.
         </p>
         <div id="data-grant-list" class="perm-list"></div>
         <div class="perm-status" id="data-grant-status"></div>
@@ -555,7 +555,7 @@
 
     <section id="panel-library" class="panel" role="tabpanel" aria-labelledby="tab-library" hidden>
       <div class="toolbar">
-        <div class="kind-switch" role="group" aria-label="Library data type">
+        <div class="kind-switch" role="group" aria-label="Library kind">
           <button type="button" class="kind-btn" data-library-kind="playlists" aria-pressed="true">Playlists</button>
           <button type="button" class="kind-btn" data-library-kind="tracks" aria-pressed="false">Liked tracks</button>
           <button type="button" class="kind-btn" data-library-kind="albums" aria-pressed="false">Albums</button>
@@ -1183,7 +1183,7 @@
   }
 
   // Nested layout: Aperture wraps Aegis; Aegis holds Token vault
-  // (connection tokens) and Data cache (synced library data types).
+  // (connection tokens) and Data cache (synced library kinds).
   // Individual agents stack on the left when the window has access data (issue #114).
   // Shared between layoutFlowMap and renderFlowMap (store-shelf title row).
   const flowTitleH = 22;
@@ -1197,7 +1197,7 @@
     nodes.forEach((n) => { byId[n.id] = n; });
 
     const pad = 12;
-    // Data types are a vertical list — one type per row, full container width.
+    // Kinds are a vertical list — one type per row, full container width.
     const typeRowH = 24;
     const typeGap = 6;
     const typeCount = Math.max(dataTypes.length, 1);
@@ -1459,7 +1459,7 @@
       if (fromN && toN && fromN.parent === e.to) return;
       // Aperture cluster is one unlabeled bi-arrow above; skip individual edges.
       if (isGatewayClusterEdge(e)) return;
-      // Library fan-in is drawn from each data-type row to its providers.
+      // Library fan-in is drawn from each kind row to its providers.
       if (e.style === "library") return;
       // Agent → data arrows are drawn above container fills (issue #114).
       if (isAgentAccessEdge(e)) return;
@@ -1560,7 +1560,7 @@
     }
 
     // Auth / proxy-read arrows: originate at each Token vault entry and draw
-    // above Aperture/Aegis fills (same treatment as data-type reads).
+    // above Aperture/Aegis fills (same treatment as kind reads).
     const leafSvcNodes = (topo.nodes || []).filter((n) => n.kind === "service");
     tokenItems.forEach((token) => {
       leafSvcNodes.forEach((n) => {
@@ -1588,8 +1588,8 @@
       });
     });
 
-    // Data-type access arrows: drawn above Aperture/Aegis fills so the
-    // origin at each type row stays visible (SVG paint order = z-index).
+    // Kind access arrows: drawn above Aperture/Aegis fills so the
+    // origin at each kind row stays visible (SVG paint order = z-index).
     (layout.typeItems || []).forEach((item) => {
       (item.providers || []).forEach((svcId) => {
         const to = pos["svc:" + svcId];
@@ -1612,7 +1612,7 @@
     });
 
     // Agent → library data access arrows (issue #114). Drawn above container
-    // fills so each individual agent node connects to the data types it used.
+    // fills so each individual agent node connects to the kinds it used.
     // Agent → service arrows are omitted so the map stays type-focused.
     (topo.edges || []).forEach((e) => {
       if (!isAgentAccessEdge(e)) return;
@@ -1831,7 +1831,7 @@
       "Access window " + (stats.window || "1h") +
       " · " + agents + (agents === 1 ? " agent" : " agents") +
       sampleTxt +
-      " · arrows show which data types each agent touched" +
+      " · arrows show which kinds each agent touched" +
       " · admin-only, no request bodies";
   }
 
@@ -1888,7 +1888,7 @@
     return '<span class="badge badge-gray">' + escapeHtml(action || "—") + "</span>";
   }
 
-  // Core data types — same synced library kinds the Map shows (flow.go).
+  // Core kinds — same synced library kinds the Map shows (flow.go).
   // Proxy-only surfaces (player, search, …) stay off this form; Save preserves
   // any explicit keys from aegis.json that are not rendered.
   const LIBRARY_DATA_TYPES = ["playlists", "tracks", "albums", "artists", "contacts", "photos", "events", "messages", "transactions", "places"];
@@ -2032,10 +2032,10 @@
     return '<div class="perm-editor perm-live" id="perm-editor-' + escapeHtml(id) + '" data-service="' + escapeHtml(id) +
       '" data-original-perms=\'' + original.replace(/'/g, "&#39;") + '\'>' +
       "<h4>Service limits</h4>" +
-      '<p class="meta" style="margin:0 0 0.45rem">Tighten-only overrides of the data grant — never more than the type default.</p>' +
+      '<p class="meta" style="margin:0 0 0.45rem">Tighten-only overrides of the data grant — never more than the kind default.</p>' +
       (show.length
         ? '<div class="perm-list">' + rows + "</div>"
-        : '<p class="meta">No core data types for this service.</p>') +
+        : '<p class="meta">No core kinds for this service.</p>') +
       '<div class="perm-status" id="perm-status-' + escapeHtml(id) + '"></div>' +
       "</div>";
   }
@@ -2112,8 +2112,8 @@
     }
   }
 
-  // Type-owned policy editor (issue #148) merged with the accessor matrix
-  // (issue #160): one block per data type. Agent level is editable; other
+  // Kind-owned policy editor (issue #148) merged with the accessor matrix
+  // (issue #160): one block per kind. Agent level is editable; other
   // accessors (apps, sync) are listed read-only and only when relevant.
   function accessorLevelBadge(level) {
     const v = normalizeAccess(level);
@@ -2381,7 +2381,7 @@
   }
 
   // Data-flow lines: how agents reach this service, what it feeds into the
-  // library, and which agent data types are currently allowed.
+  // library, and which agent kinds are currently allowed.
   function serviceFlowRows(svc) {
     const action = String(svc.action || "").toLowerCase();
     const token = svc.token;

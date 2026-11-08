@@ -22,6 +22,8 @@ var agentStringForbidden = []string{
 	"foreign canonical",
 	"ingest transport",
 	"type pack",
+	// Issue #305: "data type" is retired in favor of "library kind".
+	"data type",
 	// "schema pack" is the allowed on-disk artifact name; prefer "user-defined type" in prose.
 }
 

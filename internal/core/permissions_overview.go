@@ -190,7 +190,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			ID:       "service:" + svc.ID,
 			Kind:     policy.AccessorService,
 			Label:    name,
-			Detail:   "Service Aegis syncs with for this data type (read-only here).",
+			Detail:   "Service Aegis syncs with for this kind (read-only here).",
 			Levels:   levels,
 			Explicit: explicit,
 			// Service grant_limits are edited on the service card.

@@ -25,17 +25,17 @@ the most weight in product language.
 | **Fail-open** | product rule |
 | **Aegis owns OAuth** | product rule |
 | **Aegis does not store media** / bytes stay on source | product rule |
-| **Type-centric surface; named-service connectors** | product rule |
+| **Kind-centric surface; named-service connectors** | product rule |
 | **Connections, not per-surface OAuth** | product rule |
 | **Admin listener never published** (Funnel on the API listener only) | product rule |
 | Coverage floor (80%) | process |
 | Content/ingest only (`/v1/services`) | product rule |
 
-### Data types and library
+### Kinds and library
 
 | Concept | Surface weight |
 |---------|----------------|
-| **Library kind** / data type | product + code |
+| **Library kind** (short: kind) | product + code |
 | **Neutral model** (`Playlist`, `Track`, `Contact`, `Photo`, …) | product + code |
 | **Unified library** (`/v1/library/{kind}`) | product |
 | `sources[]` / multi-source merge | product + code |
@@ -52,7 +52,7 @@ the most weight in product language.
 
 | Concept | Surface weight |
 |---------|----------------|
-| **Data grant** (user allows agent/app to use a data type at an access level) | product |
+| **Data grant** (user allows agent/app to use a library kind at an access level) | product |
 | **DataGrant** (where agent data grants live) | product + code |
 | Service grant limits (tighten-only) | product + code |
 | **EffectiveAccess** | code |
@@ -71,7 +71,7 @@ the most weight in product language.
 | **ServiceConnector** (`Capabilities` + `SystemInstructions` + `HandleProxy`) | code + product |
 | **Named service** (Spotify, Gmail, Immich, …) | product |
 | **Connection** (OAuth provider credential) | product + code |
-| **Connection maturity** (coverage: data types served, fields, transport) | product |
+| **Connection maturity** (coverage: kinds served, fields, transport) | product |
 | Service definition (`services[]`, action inject/block) | product + code |
 | **Host** (connector seam) | code |
 | Token store / OAuth token / refresh | code + product |
@@ -130,7 +130,7 @@ edits the repo. Same word, two audiences (see audience map §F).
 
 `DataGrant`, `Permissions`, `EffectiveAccess`, `Accessor`, `TypeAccess`,
 `PermissionsOverview`, access-level tokens, service `permissions` maps,
-`data_grants` config, and admin “Data grants by type”.
+`data_grants` config, and admin “Data grants by kind”.
 
 **Overlap:** five Go types and two config keys all answer “who can see what”.
 Data grant is primary; service maps only tighten; Accessor is a third principal
@@ -138,7 +138,7 @@ axis. The words “permission”, “access”, and “policy” are used interc
 in English.
 
 **Resolution (glossary):** the product idea is a **data grant** (user allows an
-LLM agent or app to use a data type at an access level). Data grant stores
+LLM agent or app to use a library kind at an access level). Data grant stores
 agent data grants; app scopes are **app data grants**.
 
 ### 2.4 Canonical vocabulary
@@ -155,8 +155,17 @@ response field, prose synonym, and method name.
 `LibraryKind`, `data type`, `kind` (URL segment), `perm_type` (permissions
 keys), `data_grants`, UDT “type”, `LibraryKind.ID`.
 
-**Overlap:** the same registry entry is called four different names in product
-prose depending on surface (URL, permissions, admin UI, AGENTS).
+**Overlap:** the same registry entry was called four different names in product
+prose depending on surface (URL, permissions, admin UI, AGENTS), and “data
+type” also collided with the field-shape sense of `type` (`"type": "string"`
+in `capabilities.go` and `udt.go`).
+
+**Resolution (glossary, issue #305):** two axes, each named once. The registry
+axis is **library kind** (short: **kind**) — already the URL segment and
+`LibraryKind`. The field-shape axis is **type** / **field type**. “Data type”
+is retired from product prose. `perm_type` and `data_types` stay as
+config/response keys that name a kind. **Data grant** keeps its name — it
+names what is granted, not the axis it is keyed by; do not write “kind grant”.
 
 ### 2.6 Capabilities dialect vs SystemInstructions dialect
 
@@ -202,17 +211,17 @@ After the overlap call-outs above, the stable concepts.
 | **Fail-open** | Fetch/parse/match failures pass through; hook returns `allow` on errors. Never invent fail-closed. | `AGENTS.md`, `handler.go`, `internal/types/kind.go` |
 | **Aegis owns OAuth** | Agents never see tokens or authorize services. Tokens encrypted on disk; proxy auto-refreshes. | `tokens.go`, `oauth.go`, `SECURITY.md` |
 | **Aegis does not store media** | Canonical bytes stay on the source service. Library is metadata; content transport is ephemeral. | `SECURITY.md`, `immich.go`, `google-photos.go` |
-| **Type-centric surface** | Product API is organized around data types (`/v1/library/{kind}`), not provider-shaped endpoints. | `AGENTS.md`, `librarykind.go`, `internal/types` |
+| **Kind-centric surface** | Product API is organized around library kinds (`/v1/library/{kind}`), not provider-shaped endpoints. | `AGENTS.md`, `librarykind.go`, `internal/types` |
 | **Named-service connectors** | Spotify, Gmail, Immich, … are first-class adapters and match targets, not generic scrapers. | `internal/connectors/`, `run.go` |
 | **Connections (not per-surface OAuth)** | Surfaces reference top-level `connections` entries. | `connections.go`, `aegis.example.json` |
 | **Content/ingest only** | `/v1/services/{id}/…` is photo bytes, full message bodies, playlist items, local import — not a provider API mirror. | `internal/types/agentpaths.go`, `proxy.go` |
 | **External access (invite-only)** | Two listeners: the API listener may be published (credential perimeter — invite tokens, deny-by-default grants); the admin listener stays in-tailnet. No signup/OIDC/federation. | `SECURITY.md`, `docs/external-access.md` |
 
-### Data types and library
+### Kinds and library
 
 | Concept | Definition | Key files |
 |---------|------------|-----------|
-| **LibraryKind** | Type-layer metadata for one unified dataset (id, path, label, usage, instructions, empty/deny/fail messages). | `internal/types/kind.go`, `internal/core/librarykind.go:113` |
+| **LibraryKind** | Kind-registry metadata for one unified dataset (id, path, label, usage, instructions, empty/deny/fail messages). | `internal/types/kind.go`, `internal/core/librarykind.go:113` |
 | **Neutral model** | Provider-agnostic structs (`Playlist`, `Track`, `Contact`, `Photo`, `CalendarEvent`, `Message`, `Transaction`, `PlaceVisit`) plus per-item `*Source`. | `internal/types/models.go` |
 | **Unified library** | Aggregate endpoints under `/v1/library/{kind}` that fan in every connected provider and merge. | `library.go`, `librarykind.go` |
 | **sources[]** | Per-item provenance list: service, service_name, id, url, `canonical`, `copy`. | `models.go` (each `*Source`) |
@@ -231,12 +240,12 @@ After the overlap call-outs above, the stable concepts.
 
 | Concept | Definition | Key files |
 |---------|------------|-----------|
-| **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
-| **DataGrant** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/core/policy/policy.go` |
+| **Data grant** | What the user does to allow an LLM agent or app to use a library kind at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
+| **DataGrant** | Kind-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/core/policy/policy.go` |
 | **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `internal/core/policy/policy.go`, `permissions_overlay.go` |
 | **EffectiveAccess** | Resolved level for (type, provider) combining data grant + service tighten. | `internal/core/policy/policy.go`, `config.go` |
 | **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `internal/core/policy/policy.go` |
-| **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from data grant. | `internal/core/policy/accessors.go` |
+| **Accessor** | Principal-level allowed access per library kind (issue #160) — distinct from data grant. | `internal/core/policy/accessors.go` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |
 | **Admin principal** | Who may change policy: admin API key (`-admin-api-key`) or allowed tailnet login (`-admin-logins`). Agent credentials are never admin. | `SECURITY.md`, `handler.go`, `identity.go` |
@@ -252,14 +261,14 @@ After the overlap call-outs above, the stable concepts.
 | **Host** | Connector seam: services the runtime offers connectors (tokens, config, HTTP). Not `*Server`. | `host.go:27`, `docs/restructure-core-types-connectors.md` |
 | **Named service** | Config row in `services[]` with id, name, action (`inject`/`block`), endpoint, aliases, `canonical_for`. | `config.go`, `aegis.example.json` |
 | **Connection** | OAuth credential entry referenced by services (`connection` + `oauth_scopes`). | `connections.go` |
-| **Connection maturity** | Coverage of one connection: data types the service offers vs those Aegis serves, content-field coverage, and transport tier. A code-declared mark on the sync dashboard — not an operational score. | `internal/types/maturity.go`, `internal/core/maturity.go`, `docs/sync-maintenance.md` |
+| **Connection maturity** | Coverage of one connection: kinds the service offers vs those Aegis serves, content-field coverage, and transport tier. A code-declared mark on the sync dashboard — not an operational score. | `internal/types/maturity.go`, `internal/core/maturity.go`, `docs/sync-maintenance.md` |
 | **TokenStore** | Encrypted-at-rest OAuth tokens (AES-256-GCM + PBKDF2), refresh singleflight. | `tokens.go:23` |
 | **Encrypted static credentials** | Non-OAuth secrets (e.g. Immich/YNAB API keys) stored under the same `-token-pass` master key; admin API exposes presence only. | `service_connections.go`, `tokens.go`, `SECURITY.md` |
 | **CalDAV / CardDAV** | Named-service adapters for calendars/contacts (Nextcloud, iCloud app-specific passwords). Mirrored events feed freebusy. | `internal/connectors/{caldav,carddav,dav,ical,vcard}.go`, `docs/caldav-carddav.md` |
 | **SystemInstructions** | English block injected into the LLM request telling the agent how to use Aegis. | each connector `SystemInstructions`, `librarykind.go` |
 | **Capabilities / Operation** | Structured metadata of what a connector can do (admin/connector, not agent discovery). | `internal/types/capabilities.go` |
 | **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/types/agentpaths.go:13` |
-| **Path classification** | Ordered table mapping proxy paths → data types for permission checks. | `internal/types/pathclass.go` |
+| **Path classification** | Ordered table mapping proxy paths → library kinds for permission checks. | `internal/types/pathclass.go` |
 | **LibraryKind registry** | The list of built-in kinds + UDT-published kinds. | `librarykind.go:113` |
 
 ### Hook and ops

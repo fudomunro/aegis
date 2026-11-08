@@ -52,9 +52,9 @@ nothing — the socket is hostile. **The credential is the perimeter:**
   would hand them the store. Identity resolution (Serve headers, WhoIs) runs
   only on listeners that are not externally reachable.
 - **External principals are deny-by-default.** An invite token sees exactly
-  the data types its data scope grants (see
+  the kinds its data scope grants (see
   [`docs/data-scopes.md`](docs/data-scopes.md) and "What authorized means"
-  below) — sharing is opt-in per data type.
+  below) — sharing is opt-in per kind.
 - **Admin stays in-tailnet.** The admin listener is never published; policy
   is changed from inside the tailnet only (issue #149 decision).
 - TLS termination, rate limiting, and abuse damping are the deployment's
@@ -108,7 +108,7 @@ traffic on the API listener, policy on the admin listener (in-tailnet).
 | Principal | Credentials | May call |
 |-----------|-------------|----------|
 | **Agent** | Agent API key (`-api-key`), tagged devices, third-party app tokens, allowed tailnet logins, invite tokens | Library reads, pre-request hook, content transport (`/v1/services/*`), mail search/status, `GET /v1/auth/status` |
-| **External** | Invite token (data-scope key) | Same agent surface, narrowed to the scope's **granted** data types and dataset; never admin |
+| **External** | Invite token (data-scope key) | Same agent surface, narrowed to the scope's **granted** kinds and dataset; never admin |
 | **Admin** | Admin API key (`-admin-api-key`) or a tailnet **user** login that passes admin rules, on the admin listener | Everything agents can, plus `/v1/admin/*`, data-grant writes, app minting (`POST /v1/apps/authorize`), mirror / photo-share / entity-link writes, mail sync, OAuth revoke, `/metrics` |
 
 **Default on a solo tailnet:** admin = allowed user logins (your browser
@@ -272,7 +272,7 @@ from other LAN interfaces.
     a tailnet admin identity — it lives on the admin listener and is never
     published.
 12. **Audit log is local state.** `<data-dir>/audit_log.db` records who
-    accessed which data type and whether the call was allowed or denied
+    accessed which kind and whether the call was allowed or denied
     (redacted — no tokens or bodies). Treat the file like `tokens.json`:
     mode 0700 directory, not world-readable, included in the same backup
     you use for other Aegis state. Default retention is 30 days
@@ -300,10 +300,10 @@ login/invite and select the store from the request principal. Until then,
 keep the allowlist tight on shared tailnets and grant external principals
 only what they need.
 
-### Data grants (data-type permissions)
+### Data grants (permissions per kind)
 
 Authentication answers “who may call Aegis.” A **data grant** answers “what may
-an authorized LLM agent or app do with each data type” — for example deny
+an authorized LLM agent or app do with each kind” — for example deny
 `player` or limit `playlists` to `read`. This is the app-capability layer
 alongside Tailscale **grants** (who can reach Aegis); see
 [`docs/glossary.md`](docs/glossary.md).
@@ -313,15 +313,15 @@ service `grant_limits` only tighten. Denials are enforced on the
 content/ingest proxy and library endpoints with 403. Agent discovery is via
 pre-request instructions and connector `SystemInstructions` (issue #119) — not
 a capabilities listing API. Omitting a data grant (or `permissions`) preserves
-unrestricted access for authorized callers unless a type defaults closed
+unrestricted access for authorized callers unless a kind defaults closed
 (places default to `none`).
 
 **External principals (invite tokens) are deny-by-default** — the owner-tier
 “omit = unrestricted” rule does not apply to them. Their data scope's
-`grants` map is the complete allow list: an unlisted data type resolves to
-`none` (a reserved `default` entry can set the level for unlisted types;
-opt-in types still require an explicit name). Sharing is opt-in per data
-type. Scope grants also never exceed what agent data grants allow (AND of
+`grants` map is the complete allow list: an unlisted kind resolves to
+`none` (a reserved `default` entry can set the level for unlisted kinds;
+opt-in kinds still require an explicit name). Sharing is opt-in per kind.
+Scope grants also never exceed what agent data grants allow (AND of
 both layers). This is the deliberate split from owner-tier semantics — see
 `docs/external-access.md` “Deny-by-default”.
 

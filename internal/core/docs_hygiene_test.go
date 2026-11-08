@@ -28,6 +28,8 @@ var docsForbidden = []string{
 	"foreign canonical",
 	"ingest transport",
 	"type pack",
+	// Issue #305: "data type" is retired in favor of "library kind".
+	"data type",
 }
 
 // issueRefRe matches prose issue citations and the tracker-URL form

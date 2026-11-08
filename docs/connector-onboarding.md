@@ -245,7 +245,7 @@ unused method:
 
 ```go
 // Phase 1 (YNAB readiness bit)
-LibraryReadable(kind string) bool    // provider registered AND type policy allows reads
+LibraryReadable(kind string) bool    // provider registered AND kind policy allows reads
 
 // Phase 2 (Immich canonical claim + conflict copy)
 ServiceInfo.CanonicalFor []string    // am I the canonical owner of these kinds?

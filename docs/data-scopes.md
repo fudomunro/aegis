@@ -89,9 +89,9 @@ semantics are decided in [`external-access.md`](external-access.md) and every
 row of the resolution table is a test case.
 
 **Deny-by-default for invite tokens.** For an external principal the scope's
-`grants` map is the **complete allow list**: an unlisted data type resolves
-to `none`. A reserved `default` entry sets the level for **unlisted** types
-(so "share everything read-only" stays expressible); opt-in types (places)
+`grants` map is the **complete allow list**: an unlisted kind resolves
+to `none`. A reserved `default` entry sets the level for **unlisted** kinds
+(so "share everything read-only" stays expressible); opt-in kinds (places)
 still require an explicit name. `read_only: true` still caps methods
 regardless of levels.
 
@@ -101,9 +101,9 @@ regardless of levels.
 |-------|-------------|
 | Type absent, no `default` key | `none` |
 | Type absent, `default` key present | the `default` key's level |
-| `{"music": {}}` (listed, empty) | `none` — a listed type must state its own level |
-| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides only tighten; they never open a closed type. Set the type's `default` field to grant, provider entries to narrow |
-| `{"default": {"default": "read"}, "music": {}}` | `none` for `music` — the `default` key covers unlisted types only |
+| `{"music": {}}` (listed, empty) | `none` — a listed kind must state its own level |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides only tighten; they never open a closed kind. Set the kind's `default` field to grant, provider entries to narrow |
+| `{"default": {"default": "read"}, "music": {}}` | `none` for `music` — the `default` key covers unlisted kinds only |
 
 This runs in a **dedicated scope-grants resolver**, never in
 `policy.DataGrants.Access` (owner-tier "unset = unrestricted" semantics must
@@ -112,7 +112,7 @@ not move). Each resolution row is a test case.
 **Owner-tier split.** The shared agent key and tailnet agents keep today's
 "omit = unrestricted" agent-data-grant semantics (places opt-in `none`).
 Scope grants for invite tokens deliberately diverge: sharing is opt-in per
-data type. Scope grants also never exceed what agent data grants allow (AND
+kind. Scope grants also never exceed what agent data grants allow (AND
 of both layers, same as app tokens).
 
 **Migration.** Scopes that relied on "empty grants = full read" must set

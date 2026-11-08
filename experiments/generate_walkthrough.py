@@ -47,7 +47,7 @@ FILE_ROLES = {
     "internal/core/policy/policy.go": "Access levels, Permissions map, DataGrant (#148)",
     "internal/core/policy/scopegrants.go": "External-principal scope-grant resolution",
     "internal/core/policy/accessors.go": "Permissions-editor accessor view models (#160)",
-    "internal/types/pathclass.go": "Proxy path → data-type classification table",
+    "internal/types/pathclass.go": "Proxy path → kind classification table",
     "internal/types/capabilities.go": "ServiceCapabilities / Operation shapes + filtering",
     "internal/types/providers.go": "Provider interfaces + ErrUnauthorized + service-name helpers",
     "internal/types/udt.go": "User-defined type schema, neutral item, merge (#15)",

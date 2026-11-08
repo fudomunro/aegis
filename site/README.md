@@ -53,7 +53,7 @@ python3 -m http.server -d site 8000   # then open http://localhost:8000
 
 Prefer the glossary terms from [`docs/glossary.md`](../docs/glossary.md):
 **data grant**, **access level**, **app data grant**, **service limits**,
-**data type**, **user-defined type**. Do not put older “permissions” product
+**library kind**, **user-defined type**. Do not put older “permissions” product
 English back into visible copy. Issue numbers are fine on this page only where
 they point at open design work (for example #15 for user-defined types).
 

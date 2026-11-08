@@ -8,7 +8,7 @@ Supported servers: **Nextcloud**, **iCloud** (app-specific password),
 **Fastmail**, **Radicale**, **Baïkal**, and anything else that speaks RFC 4791
 / RFC 6352.
 
-| Service ID | Data type | Provider interface | Notes |
+| Service ID | Kind | Provider interface | Notes |
 |------------|-----------|--------------------|-------|
 | `dav-contacts` | `contacts` | `ContactProvider` | vCard 3/4 → neutral `Contact` |
 | `dav-calendar` | `events` | `CalendarEventProvider` | iCalendar `VEVENT` → neutral `CalendarEvent`, RRULE expanded in the window |

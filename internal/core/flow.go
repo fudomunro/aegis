@@ -247,7 +247,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 			ID:     "cache",
 			Kind:   FlowKindStore,
 			Label:  "Data cache",
-			Detail: "In-memory cache of synced library data types and proxied GETs",
+			Detail: "In-memory cache of synced library kinds and proxied GETs",
 			Parent: "aegis",
 		},
 	}

@@ -1,11 +1,11 @@
-# Plan: Restructure into core / data types / connectors
+# Plan: Restructure into core / kinds / connectors
 
 > Historical plan (issue #15). Some names in this document predate the
 > data-grant rename (#174): `TypePolicy` is now `DataGrant`,
 > `permissions.json` is `data_grants.json`. Prefer `docs/glossary.md`.
 > Also superseded: policy (access levels, `Permissions`, `DataGrant`, grant
 > resolution) later moved from `internal/types` to `internal/core/policy` —
-> data grants are Aegis-internal policy, not data types. The package tables
+> data grants are Aegis-internal policy, not kinds. The package tables
 > below predate that move.
 
 Status: **landed** — the `internal/types` / `internal/core` /
@@ -14,8 +14,8 @@ for the work called for in #15, with #148 as the first product feature that
 landed on the type layer.
 
 Related issues: **#15** (user-defined types; designated split point),
-**#148** (permissions live with data types).  
-Related product rules: type-centric surface; named-service connectors;
+**#148** (permissions live with kinds).  
+Related product rules: kind-centric surface; named-service connectors;
 fail-open; Aegis owns OAuth; coverage floor 80%.
 
 ---
@@ -25,13 +25,13 @@ fail-open; Aegis owns OAuth; coverage floor 80%.
 ### Issue #15 — user-defined types (“bring your own types”)
 
 **What it asks for.** Let a user define a source and a schema for personal
-data, then have Aegis expose that data to agents under the same type-centric
+data, then have Aegis expose that data to agents under the same kind-centric
 surface as built-in kinds (`/v1/library/{kind}`, neutral list, permissions,
 pre-request injection). Work spreadsheets / DBs were named as the likely
 utility; canonical ownership is still open.
 
 **What the issue already decided.** The scope note treats #15 as the **split
-point** for layout: break flat `package main` into core / data-type handling /
+point** for layout: break flat `package main` into core / kind handling /
 connectors, and stop advertising “single package `main`” in AGENTS.md.
 
 **Why the split is forced by #15.** User-defined kinds cannot be compiled-in
@@ -42,7 +42,7 @@ Go structs and switch statements. They need:
 | Type description | `LibraryKind` + hard-coded model | Schema-as-data (fields, identity, merge, redaction) |
 | Registry | `var libraryKinds = []LibraryKind{…}` in Go | Runtime registration + built-ins |
 | Handlers | `HandleLibraryWidgets` per kind | Generic aggregate over a schema |
-| Permissions | map keys hard-coded in `DataTypeForPath` | Type-owned policy + path patterns |
+| Permissions | map keys hard-coded in `DataTypeForPath` | Kind-owned policy + path patterns |
 | Provider | `WidgetProvider` Go interface | Pluggable fetch (HTTP mapping, SQL, local file) |
 
 Without a real type layer, user-defined types become a parallel code path —
@@ -57,10 +57,10 @@ exactly what AGENTS.md forbids.
 
 These belong in a design spike **after** the type layer exists.
 
-### Issue #148 — permissions with data types, not service providers
+### Issue #148 — permissions with kinds, not service providers
 
 **What it asks for.** Policy ownership moves from
-`services[].permissions` (service-scoped, already keyed by data-type name) to
+`services[].permissions` (service-scoped, already keyed by kind name) to
 **type-level** policy with optional provider / attribute filters. Service-level
 filtering becomes the minority case.
 
@@ -97,7 +97,7 @@ Service.Permissions: optional legacy override during migration only
 Resolution order at enforcement time:
 
 ```text
-type default → provider override (if any) → attribute / redaction filters
+kind default → provider override (if any) → attribute / redaction filters
 ```
 
 **Depends on:** type layer owning policy *shape* (can be introduced as types
@@ -130,7 +130,7 @@ the restructure PRs. Restructure is boundaries only.
   `config`, `cache` (~50 call sites).
 - Type knowledge is split across `models.go`, `librarykind.go`, `match.go`,
   `permissions.go` (`DataTypeForPath`), `canonical.go`, `copy_ledger_stamp.go`.
-- Extension checklist is already excellent (`docs/adding-data-types.md`) — it
+- Extension checklist is already excellent (`docs/adding-kinds.md`) — it
   describes *logical* layers that do not yet exist as packages.
 
 ### Coupling that blocks a naive move
@@ -156,7 +156,7 @@ Keep `package main` at repo root so `go build -o aegis .` and CI stay stable.
 github.com/fudomunro/aegis/
   main.go, admin UI embed, flags, route wiring     (package main)
   internal/shared/      stdlib-only transport/JSON/math plumbing (issue #280)
-  internal/types/       pure data-type layer
+  internal/types/       neutral models + kind registry
   internal/core/        runtime: auth, config, tokens, proxy, cache, admin,
                         permission engine, library aggregate pipeline
   internal/connectors/  named-service adapters
@@ -255,7 +255,7 @@ Worktrees: `../aegis-<slug>`, branches `refactor/…` then
 - [ ] Comment on #15 / #148 linking this plan (or attach as docs PR).
 - [ ] AGENTS.md: note that “single package `main`” is **ending**; layout change
       is in progress under #15. Do not remove the rule until Phase 2–3 land.
-- [ ] `docs/adding-data-types.md`: add a short “package map (target)” section
+- [ ] `docs/adding-kinds.md`: add a short “package map (target)” section
       pointing at `internal/types` / `core` / `connectors` as the destination
       of the existing logical layers.
 
@@ -335,8 +335,8 @@ connector types except via `ServiceConnector` interface (already in the seam).
   tokens, admin API, overlays, metrics, state stores, sampledata, mail).
 - Root `main.go` becomes flags + wiring + `//go:embed` for `web/`.
 - Update **AGENTS.md** (layout, extension points, pitfalls, architecture map),
-  **README.md** project structure, **docs/adding-data-types.md** checklist paths.
-- Keep `docs/adding-data-types.md` as the migration guide; rewrite file paths
+  **README.md** project structure, **docs/adding-kinds.md** checklist paths.
+- Keep `docs/adding-kinds.md` as the migration guide; rewrite file paths
   to packages, not root `*.go`.
 
 **Done when:** AGENTS.md no longer claims single-package root layout;
@@ -346,10 +346,10 @@ connector types except via `ServiceConnector` interface (already in the seam).
 
 1. Persist type policy as primary (`permissions.json` schema version bump):
    `typeID → TypePolicy`.
-2. Enforcement order: type default → provider override → redaction/attributes.
+2. Enforcement order: kind default → provider override → redaction/attributes.
 3. `collectProviders` / `libraryReadableFor` read type policy first; provider
    override can only **further restrict** (clamp, same as admin today).
-4. Admin API + UI: edit by data type (primary) and optional per-service
+4. Admin API + UI: edit by kind (primary) and optional per-service
    override (secondary).
 5. Pre-request injection uses type policy (visibility of kinds).
 6. AGENTS.md updates required by the issue comment:
@@ -380,7 +380,7 @@ Only after Phases 2–5. Suggested spike then feature:
    enabled (reuse places opt-in pattern).
 5. **Admin:** define/edit/list UDTs; no media storage; fail-open fetch.
 6. **Sample data:** deterministic fixtures for one UDT end-to-end.
-7. Checklist in `docs/adding-data-types.md` gains a “user-defined kind”
+7. Checklist in `docs/adding-kinds.md` gains a “user-defined kind”
    section with the schema file example.
 
 **Explicitly out of scope for v1 UDT:** auto-detected scrapers, photo
@@ -436,7 +436,7 @@ ownership proofs (#20), multi-user (#149), replacing named connectors.
       `connectors` (issue #280).
 - [ ] Connectors depend on `Host` + `types`, not `*Server`.
 - [ ] `LibraryKind` data and type policy live in `types`; enforcement in `core`.
-- [ ] AGENTS.md + README + adding-data-types.md describe the new layout.
+- [ ] AGENTS.md + README + adding-kinds.md describe the new layout.
 - [ ] `go vet ./...`, `go test ./... -count=1 -race`, coverage ≥ 80%,
       staticcheck clean, `go build -o aegis .`.
 - [ ] No secrets in the diff; fail-open and OAuth ownership unchanged.

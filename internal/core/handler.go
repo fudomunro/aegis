@@ -828,7 +828,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		}
 		// Skip services that deny every data type — nothing useful to inject.
 		if allDataDenied(s.requestPermissions(r, &svc)) {
-			logger.Info("skipping inject: all data types denied by permission", "service", svc.ID)
+			logger.Info("skipping inject: all kinds denied by permission", "service", svc.ID)
 			continue
 		}
 		// Use connector-specific instructions if available.

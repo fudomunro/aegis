@@ -25,7 +25,7 @@ It does two jobs:
    caches, enforces data grants, and returns neutral models.
 
 Module: `github.com/fudomunro/aegis`  
-Layout: **`internal/types`** (data-type layer) + **`internal/core`**
+Layout: **`internal/types`** (neutral models + kind registry) + **`internal/core`**
 (runtime hub: auth, config, proxy, admin) with concern sub-packages
 (`core/tokens`, `core/audit`, `core/links`, `core/copies`, `core/mail`,
 `core/ownership`, `core/scopes`, `core/search`, `core/policy`) + **`internal/connectors`**
@@ -43,8 +43,8 @@ Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modern
 These come from explicit user decisions across sessions. Do not “improve”
 them away.
 
-- **Type-centric surface; named-service connectors.** The product API is
-  organized around data types (`/v1/library/{kind}`, neutral models,
+- **Kind-centric surface; named-service connectors.** The product API is
+  organized around kinds (`/v1/library/{kind}`, neutral models,
   `LibraryKind`) — including user-defined types (#15) — not provider-shaped
   endpoints. Named services (Spotify, YouTube Music, Amazon Music,
   Google Photos/Contacts, Immich, …) remain the first-class **connectors** and
@@ -111,7 +111,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
 | Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared/statestore.go`, `internal/core/oauth.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
-| Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
+| Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Models and kind metadata in `internal/types`; aggregate pipeline lives in `internal/core` |
 | Merge / entity IDs | `internal/types/merge.go`, `internal/core/links/`, `internal/core/entity_links_handlers.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
 | Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; local import stores `signal.go`, `quicken.go`, `timeline.go` + shared `localstore.go` | Register in `internal/core/run.go` `srv.connectors`; stores share the `ServiceConnector` surface with a local-transport constructor (design: `docs/local-import-stores.md`) |
 | Location history (places) | `internal/core/places.go`, `internal/connectors/{timeline,owntracks}.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
@@ -122,7 +122,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 
 ### Extension points agents must use
 
-**New library data types** follow `docs/adding-data-types.md`: neutral model +
+**New library kinds** follow `docs/adding-kinds.md`: neutral model +
 provider interface + `LibraryKind` registry entry + thin
 `handleLibraryAggregate` handler. Do not clone an aggregate pipeline.
 
@@ -155,7 +155,7 @@ type ServiceConnector interface {
   is how named services leave package main under #15. Extend `Host` only for
   cross-connector runtime needs; provider-specific stores are constructor
   args (see `NewQuickenConnector`).
-- Proxy path → data-type classification is the ordered table in
+- Proxy path → kind classification is the ordered table in
   `internal/types/pathclass.go`. Do not reintroduce a `switch` or a second
   classifier. Agent-facing `/v1/services` paths must pass
   `types.IsAgentContentPath` (issue #119).
@@ -333,7 +333,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
   `DefaultNone` flags, `RegisterKindRule` / `KindAllowsLevel` / …) is shared
   plumbing on purpose: domain owners register rules (built-in kinds at init,
   user-defined packs at load) and `core/policy` resolves them, so policy and
-  the type layer never import each other for kind queries.
+  `internal/types` never import each other for kind queries.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -342,14 +342,14 @@ over the hostile-input parsers, and `go build -o aegis .`.
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
 - **Permissions are data, not comments.** **Data grants** (what the user allows
   an LLM agent or app to use) are owned by `DataGrant` in
-  `internal/core/policy` (keyed by data type) plus optional provider/attribute
+  `internal/core/policy` (keyed by kind) plus optional provider/attribute
   filters and must stay
   enforced on the content/ingest proxy, library, capabilities output, and
   pre-request injection. Service `permissions` maps are migration overrides
-  that can only tighten the type default (issue #148). Prefer **data grant** in
+  that can only tighten the kind default (issue #148). Prefer **data grant** in
   product English (`docs/glossary.md`). Aegis authorization policy (grants,
   permission maps, access levels) is `internal/core/policy` — never
-  `internal/types`, which is the data-type layer only.
+  `internal/types`, which holds models and kind metadata only.
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `shared.HTTPClient` and
   `http.NewRequestWithContext`. No lock-held I/O on the token store hot path;
@@ -409,7 +409,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 | Task | Start here |
 |------|------------|
-| New library data type / kind | `docs/adding-data-types.md` (checklist), then `internal/types/librarykinds.go` |
+| New library kind | `docs/adding-kinds.md` (checklist), then `internal/types/librarykinds.go` |
 | Hook behavior / system instructions | `internal/core/handler.go`, connector `SystemInstructions` |
 | Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
 | Config schema / service matching | `internal/core/config.go`, `aegis.example.json`, README “Configuration” |
