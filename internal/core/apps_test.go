@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func testAppStore(t *testing.T) *AppStore {
@@ -20,7 +20,7 @@ func testAppStore(t *testing.T) *AppStore {
 	return store
 }
 
-func createTestApp(t *testing.T, store *AppStore, id string, scopes types.Permissions) (view AppView, token string) {
+func createTestApp(t *testing.T, store *AppStore, id string, scopes policy.Permissions) (view AppView, token string) {
 	t.Helper()
 	view, token, err := store.Create(AppCreateRequest{ID: id, Name: id, Scopes: scopes})
 	if err != nil {
@@ -34,7 +34,7 @@ func TestAppStore_CreateReturnsTokenOnce(t *testing.T) {
 	view, token, err := store.Create(AppCreateRequest{
 		ID:     "eco",
 		Name:   "Event Coordinator",
-		Scopes: types.Permissions{"events": types.AccessFreeBusy},
+		Scopes: policy.Permissions{"events": policy.AccessFreeBusy},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -57,18 +57,18 @@ func TestAppStore_CreateReturnsTokenOnce(t *testing.T) {
 		t.Fatalf("list hint mismatch")
 	}
 	got, ok := store.Get("eco")
-	if !ok || got.Scopes["events"] != types.AccessFreeBusy {
+	if !ok || got.Scopes["events"] != policy.AccessFreeBusy {
 		t.Fatalf("get = %+v ok=%v", got, ok)
 	}
 	// Scopes default to deny-all when not listed.
-	if got.Scopes[types.PermissionDefaultKey] != types.AccessNone {
-		t.Fatalf("default scope = %q, want none", got.Scopes[types.PermissionDefaultKey])
+	if got.Scopes[policy.PermissionDefaultKey] != policy.AccessNone {
+		t.Fatalf("default scope = %q, want none", got.Scopes[policy.PermissionDefaultKey])
 	}
 }
 
 func TestAppStore_FindByTokenAndRotate(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessRead})
+	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessRead})
 	if store.FindByToken(token) == nil {
 		t.Fatal("expected token to resolve")
 	}
@@ -90,7 +90,7 @@ func TestAppStore_FindByTokenAndRotate(t *testing.T) {
 
 func TestAppStore_DeleteAndDisable(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessRead})
+	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessRead})
 	disabled := true
 	if _, err := store.Update("eco", AppUpdateRequest{Disabled: &disabled}); err != nil {
 		t.Fatalf("Update disabled: %v", err)
@@ -108,28 +108,28 @@ func TestAppStore_DeleteAndDisable(t *testing.T) {
 
 func TestAppStore_CreateRejectsBadIDAndScopes(t *testing.T) {
 	store := testAppStore(t)
-	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: types.Permissions{"events": types.AccessRead}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: policy.Permissions{"events": policy.AccessRead}}); err == nil {
 		t.Fatal("expected bad id rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: types.Permissions{"tracks": types.AccessFreeBusy}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.Permissions{"tracks": policy.AccessFreeBusy}}); err == nil {
 		t.Fatal("expected freebusy on tracks rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: types.Permissions{"events": "write-only-oops"}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.Permissions{"events": "write-only-oops"}}); err == nil {
 		t.Fatal("expected unknown level rejected")
 	}
 }
 
 func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", types.Permissions{
-		"events":   types.AccessRead,
-		"contacts": types.AccessNone,
+	_, token := createTestApp(t, store, "eco", policy.Permissions{
+		"events":   policy.AccessRead,
+		"contacts": policy.AccessNone,
 	})
 	svc := &Service{
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -177,12 +177,12 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 
 func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessFreeBusy})
+	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessFreeBusy})
 	svc := &Service{
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -216,13 +216,13 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 
 func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 	store := testAppStore(t)
-	_, fbToken := createTestApp(t, store, "eco-fb", types.Permissions{"events": types.AccessFreeBusy})
-	_, roToken := createTestApp(t, store, "eco-ro", types.Permissions{"events": types.AccessRead})
+	_, fbToken := createTestApp(t, store, "eco-fb", policy.Permissions{"events": policy.AccessFreeBusy})
+	_, roToken := createTestApp(t, store, "eco-ro", policy.Permissions{"events": policy.AccessRead})
 	svc := &Service{
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -352,7 +352,7 @@ func TestAppPathAllowed(t *testing.T) {
 
 func TestAgentForRequest_AppIdentity(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
-	req = withAppIdentity(req, &App{ID: "eco", Name: "E Co", Scopes: types.Permissions{"events": types.AccessRead}})
+	req = withAppIdentity(req, &App{ID: "eco", Name: "E Co", Scopes: policy.Permissions{"events": policy.AccessRead}})
 	if got := agentForRequest(req); got != "app:eco" {
 		t.Fatalf("agent = %q", got)
 	}

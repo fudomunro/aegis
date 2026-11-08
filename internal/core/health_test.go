@@ -1,12 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/core/audit"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/audit"
 )
 
 func TestHandleHealthz(t *testing.T) {

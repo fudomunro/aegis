@@ -4,9 +4,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"github.com/fudomunro/aegis/internal/shared"
 	"strings"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Sync schedules (issue #227 phase 2): recurring job templates that keep the

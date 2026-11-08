@@ -1,12 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func googleSharedConfig() *Config {

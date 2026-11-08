@@ -2,11 +2,12 @@ package core
 
 import (
 	"fmt"
-	"github.com/fudomunro/aegis/internal/shared"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Default file names under the data directory (issue #74).

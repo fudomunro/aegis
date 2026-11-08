@@ -86,11 +86,11 @@ type OwnershipFreshness struct {
 // is evidence computed from configured services, local stores, the mail
 // archive, and the copy ledger.
 type OwnershipStatus struct {
-	Kind        string             `json:"kind"`
-	Label       string             `json:"label"`
-	Confirmed   bool               `json:"confirmed"`
-	ConfirmedAt string             `json:"confirmed_at,omitempty"`
-	Note        string             `json:"note,omitempty"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	Confirmed   bool   `json:"confirmed"`
+	ConfirmedAt string `json:"confirmed_at,omitempty"`
+	Note        string `json:"note,omitempty"`
 	// UnderManagement lists sources currently feeding this kind.
 	UnderManagement []OwnershipSource `json:"under_management"`
 	// UnusedRoutes lists declared ways to get more data of this kind that

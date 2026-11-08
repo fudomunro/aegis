@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestAuthMiddleware_ValidBearer(t *testing.T) {
@@ -853,7 +853,7 @@ func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: types.Permissions{"default": types.AccessRead, "player": types.AccessNone, "recommendations": types.AccessNone},
+				GrantLimits: policy.Permissions{"default": policy.AccessRead, "player": policy.AccessNone, "recommendations": policy.AccessNone},
 			},
 		},
 	}

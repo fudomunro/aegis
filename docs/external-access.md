@@ -141,7 +141,7 @@ For an invite token, the scope's `grants` map is the **complete allow list**:
 | `{"default": {"default": "read"}, "music": {...}}` with `music.default` empty | `none` for `music` — the `default` key covers **unlisted** types only; listing a type is an explicit act |
 
 This resolution runs in a **dedicated scope-grants resolver**, not in
-`types.DataGrants.Access`. `DataGrants.Access` keeps owner-tier semantics
+`policy.DataGrants.Access`. `DataGrants.Access` keeps owner-tier semantics
 ("unset default preserves pre-permission behavior"); the two must not be
 merged, or a scope fix silently changes owner behavior and vice versa. The
 scope resolver is its own function with its own tests (every row of the
@@ -349,7 +349,7 @@ Items 3–5 remain follow-on work.
    empty/override cases in the resolution table above, migration for packs
    assuming empty = full read, and the isolation-contract tests extended
    with a third principal that holds *no* grants plus a case per resolution
-   row. (Landed: `types.ScopeGrantsAccess` / `ScopeTighten`, enforced at the
+   row. (Landed: `policy.ScopeGrantsAccess` / `ScopeTighten`, enforced at the
    library, content-transport, mail, pre-request, and cache-key seams.)
 4. **Invite lifecycle** — admin mint / rotate / disable for scope keys
    (reusing `api_key_hint`). **Hash at rest**: mint writes only the SHA-256

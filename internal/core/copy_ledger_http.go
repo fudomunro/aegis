@@ -4,17 +4,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // CopyListResponse is GET /v1/library/copies.
 type CopyListResponse struct {
-	Copies    []copies.Record   `json:"copies"`
-	Total     int            `json:"total"`
-	ByStatus  map[string]int `json:"by_status,omitempty"`
-	SyncModes map[string]int `json:"sync_modes,omitempty"`
-	ByService map[string]int `json:"by_service,omitempty"`
+	Copies    []copies.Record `json:"copies"`
+	Total     int             `json:"total"`
+	ByStatus  map[string]int  `json:"by_status,omitempty"`
+	SyncModes map[string]int  `json:"sync_modes,omitempty"`
+	ByService map[string]int  `json:"by_service,omitempty"`
 }
 
 // HandleLibraryCopies lists durable copy-ledger rows (issue #76).

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -96,13 +97,13 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		add("writePolicyNotice", notice)
 	}
 
-	add("permissionNotice/denied", permissionNotice(types.Permissions{
-		types.PermissionDefaultKey: types.AccessNone,
-		"photos":                   types.AccessNone,
+	add("permissionNotice/denied", permissionNotice(policy.Permissions{
+		policy.PermissionDefaultKey: policy.AccessNone,
+		"photos":                    policy.AccessNone,
 	}))
-	add("permissionNotice/freebusy", permissionNotice(types.Permissions{
-		types.PermissionDefaultKey: types.AccessRead,
-		"events":                   types.AccessFreeBusy,
+	add("permissionNotice/freebusy", permissionNotice(policy.Permissions{
+		policy.PermissionDefaultKey: policy.AccessRead,
+		"events":                    policy.AccessFreeBusy,
 	}))
 
 	out = append(out, connectorAgentSamples(t, srv)...)

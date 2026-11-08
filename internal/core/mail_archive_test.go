@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
@@ -21,7 +22,7 @@ func mailTestServer(t *testing.T, archive *mail.Archive) *Server {
 		ID:          connectors.GoogleGmailServiceID,
 		Name:        connectors.GoogleGmailServiceName,
 		Action:      "inject",
-		GrantLimits: types.Permissions{"messages": "read"},
+		GrantLimits: policy.Permissions{"messages": "read"},
 	}}}
 	srv := &Server{
 		apiKey:      "test-key",
@@ -168,7 +169,7 @@ func TestMailHTTPDisabledAndDenied(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	srv = mailTestServer(t, a)
-	srv.config.Services[0].GrantLimits = types.Permissions{"messages": "none"}
+	srv.config.Services[0].GrantLimits = policy.Permissions{"messages": "none"}
 	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/status", "")
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("denied code = %d", w.Code)
@@ -188,7 +189,7 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 		ID:          "dummy",
 		Name:        "Dummy",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"messages": "read"},
+		GrantLimits: policy.Permissions{"messages": "read"},
 	})
 	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"dummy","reset_cursor":true}`)
 	if w.Code != http.StatusNotImplemented {

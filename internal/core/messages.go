@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // messageServiceName returns the first source service name for stable pre-sort.

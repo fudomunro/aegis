@@ -44,12 +44,14 @@ FILE_ROLES = {
     "internal/types/models.go": "Neutral Playlist / Track / Artist / Album / Contact / Photo",
     "internal/types/merge.go": "Cross-service identity keys and merge algorithms",
     "internal/types/kind.go": "LibraryKind data (instructions, keywords, cache key)",
-    "internal/types/policy.go": "Access levels, Permissions map, TypePolicy (#148)",
+    "internal/core/policy/policy.go": "Access levels, Permissions map, DataGrant (#148)",
+    "internal/core/policy/scopegrants.go": "External-principal scope-grant resolution",
+    "internal/core/policy/accessors.go": "Permissions-editor accessor view models (#160)",
     "internal/types/pathclass.go": "Proxy path → data-type classification table",
     "internal/types/capabilities.go": "ServiceCapabilities / Operation shapes + filtering",
     "internal/types/providers.go": "Provider interfaces + ErrUnauthorized + service-name helpers",
     "internal/types/udt.go": "User-defined type schema, neutral item, merge (#15)",
-    "internal/types/optin.go": "Opt-in data-type marks for UDTs / places (#15, #142)",
+    "internal/core/policy/optin.go": "Opt-in data-type marks for UDTs / places (#15, #142)",
     "internal/core/udt.go": "UDT pack loader, field map, file_json/http_json fetch (#15)",
     "internal/core/udt_handlers.go": "UDT library aggregate handler + type-policy gate (#15)",
     "internal/core/udt_overlay.go": "user_types.json overlay: admin local-file selection (#15)",
@@ -95,12 +97,12 @@ READING_ORDER = [
     "internal/types/models.go",
     "internal/types/merge.go",
     "internal/types/kind.go",
-    "internal/types/policy.go",
+    "internal/core/policy/policy.go",
     "internal/types/pathclass.go",
     "internal/types/capabilities.go",
     "internal/types/providers.go",
     "internal/types/udt.go",
-    "internal/types/optin.go",
+    "internal/core/policy/optin.go",
     "permissions.go",
     "proxy.go",
     "connector_proxy.go",
@@ -204,9 +206,9 @@ def extract_connectors() -> list[str]:
 
 
 def extract_library_kinds() -> list[str]:
-    text = (REPO / "internal/core/librarykind.go").read_text(encoding="utf-8")
-    # Only the registry block IDs (first assignments after libraryKinds =).
-    block = text.split("var libraryKinds", 1)[-1].split("func ", 1)[0]
+    text = (REPO / "internal/types/librarykinds.go").read_text(encoding="utf-8")
+    # Only the registry block IDs (first assignments after BuiltinLibraryKinds =).
+    block = text.split("var BuiltinLibraryKinds", 1)[-1].split("func ", 1)[0]
     return re.findall(r'ID:\s*"([^"]+)"', block)
 
 
@@ -216,11 +218,11 @@ def file_map_rows() -> str:
         name = path.relative_to(REPO).as_posix()
         entries.append((name, loc_of(path), FILE_ROLES.get(name, FILE_ROLES.get(path.name, "Supporting code"))))
 
-    admin_html = REPO / "web" / "admin.html"
+    admin_html = REPO / "internal" / "core" / "web" / "admin.html"
     if admin_html.exists():
         entries.append(
             (
-                "web/admin.html",
+                "internal/core/web/admin.html",
                 loc_of(admin_html),
                 FILE_ROLES["web/admin.html"],
             )

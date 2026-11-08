@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -88,7 +89,7 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 		ID:          "google-photos",
 		Name:        "Google Photos",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"photos": types.AccessNone},
+		GrantLimits: policy.Permissions{"photos": policy.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{

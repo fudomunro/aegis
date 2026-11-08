@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 //go:embed web/app_authorize.html
@@ -35,7 +35,7 @@ type GrantCode struct {
 	Code       string
 	AppID      string
 	AppName    string
-	Scopes     types.Permissions
+	Scopes     policy.Permissions
 	RedirectTo string
 	State      string
 	Expires    time.Time
@@ -137,7 +137,7 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 			continue
 		}
 		// Accept "events:freebusy" or bare "events" → read.
-		typ, level := f, types.AccessRead
+		typ, level := f, policy.AccessRead
 		if i := strings.IndexByte(f, ':'); i >= 0 {
 			typ = strings.TrimSpace(f[:i])
 			level = strings.TrimSpace(f[i+1:])
@@ -150,20 +150,20 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 	if len(out) == 0 {
 		return nil, fmt.Errorf("scopes is required (e.g. events:freebusy)")
 	}
-	perms := types.Permissions{}
+	perms := policy.Permissions{}
 	for _, e := range out {
 		perms[e.Type] = e.Level
 	}
-	if err := types.ValidatePermissions(perms); err != nil {
+	if err := policy.ValidatePermissions(perms); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func scopesFromEntries(entries []PermissionEntry) types.Permissions {
-	p := types.Permissions{types.PermissionDefaultKey: types.AccessNone}
+func scopesFromEntries(entries []PermissionEntry) policy.Permissions {
+	p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessNone}
 	for _, e := range entries {
-		p[e.Type] = types.NormalizeAccess(e.Level)
+		p[e.Type] = policy.NormalizeAccess(e.Level)
 	}
 	return p
 }

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
 	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 

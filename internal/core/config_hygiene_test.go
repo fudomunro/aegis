@@ -9,8 +9,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // hygieneConfig writes a bootstrap config and loads it, for the race tests
@@ -67,7 +67,7 @@ func rewriteConfig(t *testing.T, path string, i int) {
 // a data race. Run under -race: this is the regression test.
 func TestEffectiveAccessors_SafeUnderReload(t *testing.T) {
 	cfg, path := hygieneConfig(t)
-	cfg.SeedDataGrant("tracks", types.DataGrant{Default: "read"})
+	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: "read"})
 
 	var wg sync.WaitGroup
 	stop := make(chan struct{})
@@ -102,7 +102,7 @@ func TestEffectiveAccessors_SafeUnderReload(t *testing.T) {
 				default:
 				}
 				cfg.SeedDataGrant(fmt.Sprintf("seeded-%d-%d", base, j),
-					types.DataGrant{Default: "read"})
+					policy.DataGrant{Default: "read"})
 			}
 		}(i)
 	}

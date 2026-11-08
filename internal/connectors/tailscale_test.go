@@ -183,7 +183,7 @@ func TestTailscaleClient_AuthAndDeclareTag(t *testing.T) {
 	if err := cl.DeclareTag(t.Context(), "tag:immich-host"); err != nil {
 		t.Fatal(err)
 	}
-	if got := TagOwnersOf(map[string]any{} , "tag:immich-host"); got != nil {
+	if got := TagOwnersOf(map[string]any{}, "tag:immich-host"); got != nil {
 		t.Fatalf("empty policy = %v", got)
 	}
 	pol, _, err := cl.LoadPolicy(t.Context())

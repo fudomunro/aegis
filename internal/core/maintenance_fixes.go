@@ -32,12 +32,12 @@ import (
 // maintenance record. Raw bodies are parsed and dropped at scrape time so
 // triage prose never reaches the rendered pages.
 type MaintenanceIssueRecord struct {
-	Number      int      `json:"number"`
-	URL         string   `json:"url"`
-	Title       string   `json:"title"`
-	State       string   `json:"state"`        // open | closed (lowercased)
-	StateReason string   `json:"state_reason"` // completed | not_planned | "" (lowercased)
-	Labels      []string `json:"labels,omitempty"`
+	Number      int       `json:"number"`
+	URL         string    `json:"url"`
+	Title       string    `json:"title"`
+	State       string    `json:"state"`        // open | closed (lowercased)
+	StateReason string    `json:"state_reason"` // completed | not_planned | "" (lowercased)
+	Labels      []string  `json:"labels,omitempty"`
 	CreatedAt   time.Time `json:"created_at"`
 	ClosedAt    time.Time `json:"closed_at,omitempty"`
 	// IsTicket marks sync-maintenance loop tickets.

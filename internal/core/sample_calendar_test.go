@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"encoding/json"
 	"net/http"
@@ -34,7 +35,7 @@ func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 		Name:        connectors.SampleCalendarServiceName,
 		Action:      "inject",
 		Endpoint:    connectors.SampleCalendarEndpoint,
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()

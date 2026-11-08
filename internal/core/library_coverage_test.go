@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -261,7 +262,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{{
 			ID: "spotify", Name: "Spotify", Action: "inject",
-			GrantLimits: types.Permissions{"artists": types.AccessNone},
+			GrantLimits: policy.Permissions{"artists": policy.AccessNone},
 		}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -294,9 +295,9 @@ func TestLibraryReadableHelpers(t *testing.T) {
 		Services: []Service{
 			{ID: "a", Name: "A", Action: "inject"},
 			{ID: "b", Name: "B", Action: "block"},
-			{ID: "c", Name: "C", Action: "inject", GrantLimits: types.Permissions{
-				"tracks": types.AccessNone, "albums": types.AccessNone, "artists": types.AccessNone,
-				"playlists": types.AccessNone, "contacts": types.AccessNone, "photos": types.AccessNone,
+			{ID: "c", Name: "C", Action: "inject", GrantLimits: policy.Permissions{
+				"tracks": policy.AccessNone, "albums": policy.AccessNone, "artists": policy.AccessNone,
+				"playlists": policy.AccessNone, "contacts": policy.AccessNone, "photos": policy.AccessNone,
 			}},
 		},
 	}, "https://aegis.example.com")
@@ -313,7 +314,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 	srv2 := testServerWithBase(&Config{
 		Services: []Service{
 			{ID: "b", Name: "B", Action: "block"},
-			{ID: "c", Name: "C", Action: "inject", GrantLimits: types.Permissions{"default": types.AccessNone}},
+			{ID: "c", Name: "C", Action: "inject", GrantLimits: policy.Permissions{"default": policy.AccessNone}},
 		},
 	}, "https://aegis.example.com")
 	if kindReadable("tracks", srv2) || kindReadable("albums", srv2) || kindReadable("artists", srv2) ||
@@ -767,7 +768,7 @@ func TestMentionsAlbumsAndArtists_Keywords(t *testing.T) {
 func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 	svc := &Service{
 		ID: "spotify", Name: "Spotify",
-		GrantLimits: types.Permissions{"default": types.AccessRead, "artists": types.AccessNone},
+		GrantLimits: policy.Permissions{"default": policy.AccessRead, "artists": policy.AccessNone},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 

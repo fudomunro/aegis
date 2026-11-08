@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // HandleServiceProxy is the /v1/services/{id}/{path} transport. After issue

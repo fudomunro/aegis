@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -51,40 +52,40 @@ func TestFreeBusyListFromEvents_OmitsCancelled(t *testing.T) {
 }
 
 func TestValidatePermissions_FreeBusyEventsOnly(t *testing.T) {
-	if err := types.ValidatePermissions(types.Permissions{"events": types.AccessFreeBusy}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"events": policy.AccessFreeBusy}); err != nil {
 		t.Fatalf("events freebusy: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{"events": "free-busy"}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"events": "free-busy"}); err != nil {
 		t.Fatalf("alias free-busy: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{"tracks": types.AccessFreeBusy}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessFreeBusy}); err == nil {
 		t.Fatal("expected freebusy rejected on tracks")
 	}
-	if err := types.ValidatePermissions(types.Permissions{types.PermissionDefaultKey: types.AccessFreeBusy}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{policy.PermissionDefaultKey: policy.AccessFreeBusy}); err == nil {
 		t.Fatal("expected freebusy rejected on default")
 	}
 }
 
 func TestPermissions_FreeBusyAllowsReadNotWrite(t *testing.T) {
-	p := types.Permissions{"events": types.AccessFreeBusy}
+	p := policy.Permissions{"events": policy.AccessFreeBusy}
 	if !p.AllowsRead("events") {
 		t.Fatal("expected GET allowed")
 	}
 	if p.AllowsWrite("events") {
 		t.Fatal("expected write denied")
 	}
-	if types.IsFreeBusyAccess(p.For("events")) != true {
+	if policy.IsFreeBusyAccess(p.For("events")) != true {
 		t.Fatal("expected freebusy level")
 	}
 }
 
 func TestStrictest_FreeBusyAloneDeniesUnknownPaths(t *testing.T) {
-	p := types.Permissions{"events": types.AccessFreeBusy}
-	if got := p.Strictest(); got != types.AccessNone {
+	p := policy.Permissions{"events": policy.AccessFreeBusy}
+	if got := p.Strictest(); got != policy.AccessNone {
 		t.Fatalf("Strictest = %q, want none (cannot redact unknown paths)", got)
 	}
-	mixed := types.Permissions{"events": types.AccessFreeBusy, "tracks": types.AccessRead}
-	if got := mixed.Strictest(); got != types.AccessRead {
+	mixed := policy.Permissions{"events": policy.AccessFreeBusy, "tracks": policy.AccessRead}
+	if got := mixed.Strictest(); got != policy.AccessRead {
 		t.Fatalf("Strictest mixed = %q, want read", got)
 	}
 }
@@ -94,7 +95,7 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: policy.Permissions{"events": policy.AccessFreeBusy},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -127,7 +128,7 @@ func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: policy.Permissions{"events": policy.AccessFreeBusy},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -164,7 +165,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -182,7 +183,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 }
 
 func TestPermissionNotice_FreeBusy(t *testing.T) {
-	p := types.Permissions{"events": types.AccessFreeBusy, "player": types.AccessNone}
+	p := policy.Permissions{"events": policy.AccessFreeBusy, "player": policy.AccessNone}
 	notice := permissionNotice(p)
 	for _, want := range []string{"player", "free/busy only", "/v1/library/freebusy"} {
 		if !strings.Contains(notice, want) {
@@ -204,7 +205,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: []types.CalendarEvent{
@@ -232,7 +233,7 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessFreeBusy},
+		GrantLimits: policy.Permissions{"events": policy.AccessFreeBusy},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}

@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestSignalLibraryKindRegistered(t *testing.T) {
@@ -75,7 +75,7 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
 	overview := srv.permissionsOverview()
-	byID := map[string]types.TypeAccess{}
+	byID := map[string]policy.TypeAccess{}
 	for _, row := range overview.Types {
 		byID[row.ID] = row
 	}
@@ -91,7 +91,7 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 				continue
 			}
 			found = true
-			if acc.Kind != types.AccessorSync || acc.Level != types.AccessRead {
+			if acc.Kind != policy.AccessorSync || acc.Level != policy.AccessRead {
 				t.Fatalf("%s signal row = %+v", kind, acc)
 			}
 		}

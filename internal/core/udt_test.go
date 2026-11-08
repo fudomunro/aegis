@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -62,6 +63,28 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	}
 	if !sawEntity || !sawName {
 		t.Errorf("match labels: entity=%v name=%v in %+v", sawEntity, sawName, merged)
+	}
+}
+
+func TestLoadUserDefinedTypes_DefaultAccessCanonicalized(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, schema string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(schema), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("synonym.json", `{"id": "syn-1", "label": "syn one", "default_access": "rw", "fields": {"name": {"type": "string"}}}`)
+	write("omitted.json", `{"id": "syn-2", "label": "syn two", "fields": {"name": {"type": "string"}}}`)
+	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
+	if len(loaded) != 2 {
+		t.Fatalf("loaded %d schemas, want 2", len(loaded))
+	}
+	if s, _ := reg.Get("syn-1"); s.DefaultAccess != "read-write" {
+		t.Errorf("synonym DefaultAccess = %q, want read-write", s.DefaultAccess)
+	}
+	if s, _ := reg.Get("syn-2"); s.DefaultAccess != "none" {
+		t.Errorf("omitted DefaultAccess = %q, want none", s.DefaultAccess)
 	}
 }
 
@@ -234,7 +257,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	srv.udts = reg
 	srv.registerUserDefinedKinds()
 	// Packs cannot self-enable; an admin data grant must name the kind.
-	srv.config.SeedDataGrant("reading-list", types.DataGrant{Default: types.AccessRead})
+	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
 
 	schema, _ := reg.Get("reading-list")
 	handler := srv.HandleLibraryUserDefined(schema)

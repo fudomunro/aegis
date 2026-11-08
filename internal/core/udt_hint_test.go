@@ -14,12 +14,12 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	schema := types.UserDefinedTypeSchema{
-		ID:            "reading-list",
-		Label:         "reading list",
-		Path:          "/v1/library/reading-list",
-		Usage:         "books the user is reading",
-		Summary:       "entries with title and author",
-		SyncRule:      "match on title+author",
+		ID:              "reading-list",
+		Label:           "reading list",
+		Path:            "/v1/library/reading-list",
+		Usage:           "books the user is reading",
+		Summary:         "entries with title and author",
+		SyncRule:        "match on title+author",
 		ExampleQuestion: "what books am I reading?",
 		Fields: map[string]types.UserDefinedField{
 			"title":  {Type: "string", Required: true, Description: "book title"},

@@ -7,8 +7,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // HandleAdminDataScopes manages invite tokens — the data-scope credentials

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -44,9 +45,9 @@ func flowTestServer() *Server {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				GrantLimits: types.Permissions{
-					types.PermissionDefaultKey: types.AccessRead,
-					"player":                   types.AccessNone,
+				GrantLimits: policy.Permissions{
+					policy.PermissionDefaultKey: policy.AccessRead,
+					"player":                    policy.AccessNone,
 				},
 			},
 			{

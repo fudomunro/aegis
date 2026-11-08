@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -20,8 +21,8 @@ import (
 // readAllGrants is the migrated "share everything read-only" grant map
 // (docs/external-access.md): packs that relied on "empty grants = full read"
 // state it explicitly now that scope resolution is deny-by-default.
-func readAllGrants() types.DataGrants {
-	return types.DataGrants{types.PermissionDefaultKey: {Default: types.AccessRead}}
+func readAllGrants() policy.DataGrants {
+	return policy.DataGrants{policy.PermissionDefaultKey: {Default: policy.AccessRead}}
 }
 
 // scopeServer builds a server with two dataset-partitioned sample library
@@ -435,7 +436,7 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 func TestScopeGrants_TypeAllowList(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "contacts-only", Dataset: "shire", APIKey: "YOUR_CONTACTS_KEY",
-			Grants: types.DataGrants{"contacts": {Default: types.AccessRead}}},
+			Grants: policy.DataGrants{"contacts": {Default: policy.AccessRead}}},
 	})
 
 	body := callLibrary(t, srv, "YOUR_CONTACTS_KEY", "/v1/library/contacts")
@@ -461,10 +462,10 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 // while the other still answers.
 func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
-		{ID: "house", APIKey: "YOUR_HOUSE_KEY", Grants: types.DataGrants{
+		{ID: "house", APIKey: "YOUR_HOUSE_KEY", Grants: policy.DataGrants{
 			"contacts": {
-				Default:   types.AccessRead,
-				Providers: map[string]string{"sample-library-gondor": types.AccessNone},
+				Default:   policy.AccessRead,
+				Providers: map[string]string{"sample-library-gondor": policy.AccessNone},
 			},
 		}},
 	})
@@ -486,10 +487,10 @@ func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
 func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "house", Dataset: "shire", APIKey: "YOUR_HOUSE_KEY",
-			Grants: types.DataGrants{"contacts": {Default: types.AccessFull}}},
+			Grants: policy.DataGrants{"contacts": {Default: policy.AccessFull}}},
 	})
 	for i := range srv.config.Services {
-		srv.config.Services[i].GrantLimits = types.Permissions{"contacts": types.AccessNone}
+		srv.config.Services[i].GrantLimits = policy.Permissions{"contacts": policy.AccessNone}
 	}
 
 	w := httptest.NewRecorder()
@@ -509,7 +510,7 @@ func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
 		{ID: "shire-busy", Dataset: "shire", APIKey: "YOUR_BUSY_KEY",
-			Grants: types.DataGrants{"events": {Default: types.AccessFreeBusy}}},
+			Grants: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}}},
 	})
 
 	call := func(key string) []types.CalendarEvent {
@@ -670,7 +671,7 @@ func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
 		t.Fatal("disabled scope must not authenticate")
 	}
 
-	grants := types.DataGrants{"contacts": {Default: types.AccessRead}}
+	grants := policy.DataGrants{"contacts": {Default: policy.AccessRead}}
 	view, err = s.Update("shire", scopes.UpdateRequest{Disabled: boolPtr(false), Grants: &grants})
 	if err != nil {
 		t.Fatalf("update grants: %v", err)
@@ -678,7 +679,7 @@ func TestDataScopeStore_UpdateDisableAndGrants(t *testing.T) {
 	if s.FindByAPIKey(token) == nil {
 		t.Fatal("re-enabled scope must authenticate")
 	}
-	if got := view.Grants["contacts"].Default; got != types.AccessRead {
+	if got := view.Grants["contacts"].Default; got != policy.AccessRead {
 		t.Fatalf("grants = %v, want contacts read", view.Grants)
 	}
 }

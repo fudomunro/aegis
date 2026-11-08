@@ -7,6 +7,16 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Access policy moves to `internal/core/policy` (package cleanup).** Data
+  grants, permission maps, the access-level vocabulary, grant resolution
+  (`EffectiveAccess` / scope-grant resolvers), and the permissions-editor
+  view models left `internal/types`: they are Aegis-internal authorization
+  policy, not data types. `internal/types` now holds only the data-type
+  layer (neutral models, merge, kind registry). `internal/core/scopes`
+  depends on `internal/core/policy` instead of the type layer, and
+  connectors may import `internal/core/policy` alongside `internal/types`
+  (their `GrantLimits` vocabulary). No behavior change — including UDT
+  `default_access` canonicalization, which moved to pack load.
 - **Library cache: aggregates not pages, coalesced fetches, targeted
   invalidation (issue #273).** The in-memory cache used to store one encoded
   response per page, so paging through N pages re-ran the full provider

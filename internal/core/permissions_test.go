@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"net/http"
 	"net/http/httptest"
@@ -13,28 +14,28 @@ import (
 )
 
 func TestPermissions_ForAndAllows(t *testing.T) {
-	var nilPerms types.Permissions
-	if nilPerms.For("tracks") != types.AccessFull {
-		t.Fatalf("nil permissions For(tracks) = %q, want %q", nilPerms.For("tracks"), types.AccessFull)
+	var nilPerms policy.Permissions
+	if nilPerms.For("tracks") != policy.AccessFull {
+		t.Fatalf("nil permissions For(tracks) = %q, want %q", nilPerms.For("tracks"), policy.AccessFull)
 	}
 	if !nilPerms.Allows("tracks", http.MethodGet) || !nilPerms.Allows("tracks", http.MethodPost) {
 		t.Fatal("nil permissions should allow all methods")
 	}
 
-	p := types.Permissions{
-		types.PermissionDefaultKey: types.AccessRead,
-		"playlists":                types.AccessFull,
-		"player":                   types.AccessNone,
-		"contacts":                 types.AccessWrite,
+	p := policy.Permissions{
+		policy.PermissionDefaultKey: policy.AccessRead,
+		"playlists":                 policy.AccessFull,
+		"player":                    policy.AccessNone,
+		"contacts":                  policy.AccessWrite,
 	}
 
-	if p.For("tracks") != types.AccessRead {
+	if p.For("tracks") != policy.AccessRead {
 		t.Fatalf("default For(tracks) = %q, want read", p.For("tracks"))
 	}
-	if p.For("playlists") != types.AccessFull {
+	if p.For("playlists") != policy.AccessFull {
 		t.Fatalf("For(playlists) = %q, want read-write", p.For("playlists"))
 	}
-	if p.For("player") != types.AccessNone {
+	if p.For("player") != policy.AccessNone {
 		t.Fatalf("For(player) = %q, want none", p.For("player"))
 	}
 
@@ -65,24 +66,24 @@ func TestPermissions_ForAndAllows(t *testing.T) {
 }
 
 func TestPermissions_NormalizeAliases(t *testing.T) {
-	p := types.Permissions{"a": "READ", "b": "deny", "c": "read_write"}
-	if p.For("a") != types.AccessRead {
+	p := policy.Permissions{"a": "READ", "b": "deny", "c": "read_write"}
+	if p.For("a") != policy.AccessRead {
 		t.Fatalf("a = %q", p.For("a"))
 	}
-	if p.For("b") != types.AccessNone {
+	if p.For("b") != policy.AccessNone {
 		t.Fatalf("b = %q", p.For("b"))
 	}
-	if p.For("c") != types.AccessFull {
+	if p.For("c") != policy.AccessFull {
 		t.Fatalf("c = %q", p.For("c"))
 	}
 }
 
 func TestPermissions_DeniedDataTypes(t *testing.T) {
-	p := types.Permissions{
-		types.PermissionDefaultKey: types.AccessNone,
-		"player":                   "none",
-		"albums":                   types.AccessRead,
-		"tracks":                   "deny",
+	p := policy.Permissions{
+		policy.PermissionDefaultKey: policy.AccessNone,
+		"player":                    "none",
+		"albums":                    policy.AccessRead,
+		"tracks":                    "deny",
 	}
 	denied := p.DeniedDataTypes()
 	if len(denied) != 2 || denied[0] != "player" || denied[1] != "tracks" {
@@ -91,16 +92,16 @@ func TestPermissions_DeniedDataTypes(t *testing.T) {
 }
 
 func TestValidatePermissions(t *testing.T) {
-	if err := types.ValidatePermissions(nil); err != nil {
+	if err := policy.ValidatePermissions(nil); err != nil {
 		t.Fatalf("nil should be valid: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{types.PermissionDefaultKey: types.AccessRead, "tracks": "nope"}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "tracks": "nope"}); err == nil {
 		t.Fatal("expected error for unknown level")
 	}
-	if err := types.ValidatePermissions(types.Permissions{"": types.AccessRead}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"": policy.AccessRead}); err == nil {
 		t.Fatal("expected error for empty key")
 	}
-	if err := types.ValidatePermissions(types.Permissions{"tracks": types.AccessFull}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessFull}); err != nil {
 		t.Fatalf("valid map rejected: %v", err)
 	}
 }
@@ -146,18 +147,18 @@ func TestCanonicalProxyPath(t *testing.T) {
 
 func TestPermissions_Strictest(t *testing.T) {
 	cases := []struct {
-		p    types.Permissions
+		p    policy.Permissions
 		want string
 	}{
-		{nil, types.DefaultAccessType},
-		{types.Permissions{}, types.DefaultAccessType},
-		{types.Permissions{"player": types.AccessNone}, types.AccessNone},
-		{types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone}, types.AccessNone},
-		{types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessRead}, types.AccessRead},
-		{types.Permissions{"tracks": types.AccessRead, "playlists": types.AccessFull}, types.AccessRead},
-		{types.Permissions{"tracks": types.AccessWrite, "playlists": types.AccessFull}, types.AccessWrite},
-		{types.Permissions{"tracks": types.AccessRead, "playlists": types.AccessWrite}, types.AccessNone},
-		{types.Permissions{"tracks": types.AccessFull, "playlists": types.AccessFull}, types.AccessFull},
+		{nil, policy.DefaultAccessType},
+		{policy.Permissions{}, policy.DefaultAccessType},
+		{policy.Permissions{"player": policy.AccessNone}, policy.AccessNone},
+		{policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone}, policy.AccessNone},
+		{policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessRead}, policy.AccessRead},
+		{policy.Permissions{"tracks": policy.AccessRead, "playlists": policy.AccessFull}, policy.AccessRead},
+		{policy.Permissions{"tracks": policy.AccessWrite, "playlists": policy.AccessFull}, policy.AccessWrite},
+		{policy.Permissions{"tracks": policy.AccessRead, "playlists": policy.AccessWrite}, policy.AccessNone},
+		{policy.Permissions{"tracks": policy.AccessFull, "playlists": policy.AccessFull}, policy.AccessFull},
 	}
 	for _, tc := range cases {
 		if got := tc.p.Strictest(); got != tc.want {
@@ -167,15 +168,15 @@ func TestPermissions_Strictest(t *testing.T) {
 }
 
 func TestAccessForDataType(t *testing.T) {
-	p := types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone, "playlists": types.AccessFull}
-	if got := p.AccessForDataType("player"); got != types.AccessNone {
+	p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone, "playlists": policy.AccessFull}
+	if got := p.AccessForDataType("player"); got != policy.AccessNone {
 		t.Fatalf("player = %q", got)
 	}
-	if got := p.AccessForDataType("playlists"); got != types.AccessFull {
+	if got := p.AccessForDataType("playlists"); got != policy.AccessFull {
 		t.Fatalf("playlists = %q", got)
 	}
 	// Unclassified must not inherit default=read while player is none.
-	if got := p.AccessForDataType(""); got != types.AccessNone {
+	if got := p.AccessForDataType(""); got != policy.AccessNone {
 		t.Fatalf("unclassified = %q, want none", got)
 	}
 }
@@ -185,7 +186,7 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: types.Permissions{"default": types.AccessRead, "playlists": types.AccessFull},
+				GrantLimits: policy.Permissions{"default": policy.AccessRead, "playlists": policy.AccessFull},
 			},
 		},
 	}
@@ -215,10 +216,10 @@ func TestAllDataDenied(t *testing.T) {
 	if allDataDenied(nil) {
 		t.Fatal("nil should not be all-denied")
 	}
-	if allDataDenied(types.Permissions{"default": types.AccessRead, "player": types.AccessNone}) {
+	if allDataDenied(policy.Permissions{"default": policy.AccessRead, "player": policy.AccessNone}) {
 		t.Fatal("default read should not be all-denied")
 	}
-	if !allDataDenied(types.Permissions{"default": types.AccessNone, "player": types.AccessNone, "tracks": "deny"}) {
+	if !allDataDenied(policy.Permissions{"default": policy.AccessNone, "player": policy.AccessNone, "tracks": "deny"}) {
 		t.Fatal("all none should be all-denied")
 	}
 }
@@ -257,10 +258,10 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 		t.Fatalf("valid permissions failed: %v", err)
 	}
 	svc := cfg.GetService("spotify")
-	if svc.GrantLimits.For("playlists") != types.AccessFull {
+	if svc.GrantLimits.For("playlists") != policy.AccessFull {
 		t.Fatalf("playlists = %q", svc.GrantLimits.For("playlists"))
 	}
-	if svc.GrantLimits.For("tracks") != types.AccessRead {
+	if svc.GrantLimits.For("tracks") != policy.AccessRead {
 		t.Fatalf("tracks default = %q", svc.GrantLimits.For("tracks"))
 	}
 }
@@ -285,25 +286,25 @@ func TestClampPermissionsWithWritable(t *testing.T) {
 		t.Fatalf("writable from caps = %v, want [contacts]", writable)
 	}
 	wset := map[string]bool{"contacts": true}
-	p := types.Permissions{
-		types.PermissionDefaultKey: types.AccessFull,
-		"tracks":                   types.AccessFull,
-		"photos":                   types.AccessFull,
-		"playlists":                types.AccessFull,
-		"contacts":                 types.AccessFull,
-		"player":                   types.AccessWrite,
-		"custom":                   types.AccessFull,
+	p := policy.Permissions{
+		policy.PermissionDefaultKey: policy.AccessFull,
+		"tracks":                    policy.AccessFull,
+		"photos":                    policy.AccessFull,
+		"playlists":                 policy.AccessFull,
+		"contacts":                  policy.AccessFull,
+		"player":                    policy.AccessWrite,
+		"custom":                    policy.AccessFull,
 	}
 	got := clampPermissionsWithWritable(p, caps, wset)
-	if got["tracks"] != types.AccessRead || got["playlists"] != types.AccessRead || got["photos"] != types.AccessRead || got["player"] != types.AccessRead {
+	if got["tracks"] != policy.AccessRead || got["playlists"] != policy.AccessRead || got["photos"] != policy.AccessRead || got["player"] != policy.AccessRead {
 		t.Fatalf("non-agent-writable types should clamp to read: tracks=%q playlists=%q photos=%q player=%q",
 			got["tracks"], got["playlists"], got["photos"], got["player"])
 	}
-	if got["contacts"] != types.AccessFull {
+	if got["contacts"] != policy.AccessFull {
 		t.Fatalf("contacts = %q, want read-write (true data write op)", got["contacts"])
 	}
-	if got["custom"] != types.AccessFull || got[types.PermissionDefaultKey] != types.AccessFull {
-		t.Fatalf("unknown/default should be preserved: custom=%q default=%q", got["custom"], got[types.PermissionDefaultKey])
+	if got["custom"] != policy.AccessFull || got[policy.PermissionDefaultKey] != policy.AccessFull {
+		t.Fatalf("unknown/default should be preserved: custom=%q default=%q", got["custom"], got[policy.PermissionDefaultKey])
 	}
 }
 
@@ -313,7 +314,7 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 		Name: "Spotify",
 		// Legacy write grant — must not unlock proxy writes the connector
 		// does not implement (mirror write is a separate path).
-		GrantLimits: types.Permissions{"tracks": types.AccessFull, "playlists": types.AccessFull},
+		GrantLimits: policy.Permissions{"tracks": policy.AccessFull, "playlists": policy.AccessFull},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)

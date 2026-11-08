@@ -14,8 +14,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Data scopes bind an authenticated principal to a dataset partition and
@@ -52,7 +52,7 @@ type Scope struct {
 	// Grants are this principal's deny-by-default allow list (issue #253).
 	// Scope grants only tighten owner-tier policy (AND of both layers) and an
 	// unlisted type resolves to none. See docs/external-access.md.
-	Grants types.DataGrants `json:"grants,omitempty"`
+	Grants policy.DataGrants `json:"grants,omitempty"`
 	// Disabled blocks authentication without deleting the record.
 	Disabled bool `json:"disabled,omitempty"`
 }
@@ -115,7 +115,7 @@ func (s *Store) reload() error {
 		if sc.ID == "" {
 			return fmt.Errorf("data_scopes: entry %d missing id", i)
 		}
-		if err := types.ValidateDataGrants(sc.Grants); err != nil {
+		if err := policy.ValidateDataGrants(sc.Grants); err != nil {
 			return fmt.Errorf("data_scopes: scope %q grants: %w", sc.ID, err)
 		}
 		if sc.APIKey != "" {
@@ -226,31 +226,31 @@ func (s *Store) All() []Scope {
 // View is the secret-free admin projection of a scope. Key material
 // never leaves the store; api_key_hint identifies a credential in UIs.
 type View struct {
-	ID         string           `json:"id"`
-	Name       string           `json:"name,omitempty"`
-	Dataset    string           `json:"dataset,omitempty"`
-	APIKeyHint string           `json:"api_key_hint,omitempty"`
-	Grants     types.DataGrants `json:"grants,omitempty"`
-	ReadOnly   bool             `json:"read_only,omitempty"`
-	Disabled   bool             `json:"disabled,omitempty"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name,omitempty"`
+	Dataset    string            `json:"dataset,omitempty"`
+	APIKeyHint string            `json:"api_key_hint,omitempty"`
+	Grants     policy.DataGrants `json:"grants,omitempty"`
+	ReadOnly   bool              `json:"read_only,omitempty"`
+	Disabled   bool              `json:"disabled,omitempty"`
 }
 
 // CreateRequest mints a scope with a generated invite token.
 type CreateRequest struct {
-	ID       string           `json:"id"`
-	Name     string           `json:"name,omitempty"`
-	Dataset  string           `json:"dataset,omitempty"`
-	Grants   types.DataGrants `json:"grants,omitempty"`
-	ReadOnly bool             `json:"read_only,omitempty"`
+	ID       string            `json:"id"`
+	Name     string            `json:"name,omitempty"`
+	Dataset  string            `json:"dataset,omitempty"`
+	Grants   policy.DataGrants `json:"grants,omitempty"`
+	ReadOnly bool              `json:"read_only,omitempty"`
 }
 
 // UpdateRequest patches scope fields. The key is rotated, not
 // patched (issue #253).
 type UpdateRequest struct {
-	Name     *string           `json:"name,omitempty"`
-	Grants   *types.DataGrants `json:"grants,omitempty"`
-	ReadOnly *bool             `json:"read_only,omitempty"`
-	Disabled *bool             `json:"disabled,omitempty"`
+	Name     *string            `json:"name,omitempty"`
+	Grants   *policy.DataGrants `json:"grants,omitempty"`
+	ReadOnly *bool              `json:"read_only,omitempty"`
+	Disabled *bool              `json:"disabled,omitempty"`
 }
 
 func view(sc *Scope) View {
@@ -309,7 +309,7 @@ func (s *Store) Create(req CreateRequest) (View, string, error) {
 		return View{}, "", err
 	}
 	if req.Grants != nil {
-		if err := types.ValidateDataGrants(req.Grants); err != nil {
+		if err := policy.ValidateDataGrants(req.Grants); err != nil {
 			return View{}, "", err
 		}
 	}
@@ -360,7 +360,7 @@ func (s *Store) Update(id string, req UpdateRequest) (View, error) {
 		sc.Name = strings.TrimSpace(*req.Name)
 	}
 	if req.Grants != nil {
-		if err := types.ValidateDataGrants(*req.Grants); err != nil {
+		if err := policy.ValidateDataGrants(*req.Grants); err != nil {
 			return View{}, err
 		}
 		sc.Grants = *req.Grants
@@ -511,7 +511,7 @@ func Allows(r *http.Request, dataType, method string) bool {
 	if sc == nil {
 		return true
 	}
-	return types.AllowsMethod(types.ScopeGrantsAccess(sc.Grants, dataType, ""), method)
+	return policy.AllowsMethod(policy.ScopeGrantsAccess(sc.Grants, dataType, ""), method)
 }
 
 // CacheSuffix namespaces library cache entries per principal so one
@@ -531,7 +531,7 @@ func CacheSuffix(sc *Scope) string {
 
 // grantsFingerprint is a stable short digest of a grant map (json.Marshal
 // sorts map keys). Empty grants share the reserved "none" fingerprint.
-func grantsFingerprint(g types.DataGrants) string {
+func grantsFingerprint(g policy.DataGrants) string {
 	if len(g) == 0 {
 		return "none"
 	}

@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"context"
 	"encoding/json"
@@ -125,7 +126,7 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "google", Name: "Google", Action: "inject",
-				GrantLimits: types.Permissions{"contacts": types.AccessNone},
+				GrantLimits: policy.Permissions{"contacts": policy.AccessNone},
 			},
 		},
 	}

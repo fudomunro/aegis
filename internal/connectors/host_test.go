@@ -4,8 +4,8 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // testHost is a Host fake for connector unit tests.
@@ -36,7 +36,7 @@ func newTestHost(baseURL string) *testHost {
 }
 
 func (h *testHost) setService(id, endpoint string) {
-	h.services[id] = &ServiceInfo{ID: id, Endpoint: endpoint, GrantLimits: types.Permissions{}}
+	h.services[id] = &ServiceInfo{ID: id, Endpoint: endpoint, GrantLimits: policy.Permissions{}}
 	h.endpoints[id] = endpoint
 }
 

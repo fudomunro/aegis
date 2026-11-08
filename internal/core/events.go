@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -15,7 +16,6 @@ func calendarEventServiceName(e types.CalendarEvent) string {
 	}
 	return ""
 }
-
 
 // calendarEventIsBusy reports whether the event should block time on a
 // free/busy share. Cancelled events do not occupy the calendar.
@@ -75,7 +75,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 			targets, denied := eventsProviderTargets(s, r, kind.PermType)
 			appFreeBusy := false
 			if app := AppIdentityFrom(r); app != nil {
-				appFreeBusy = types.IsFreeBusyAccess(app.Scopes.For(kind.PermType))
+				appFreeBusy = policy.IsFreeBusyAccess(app.Scopes.For(kind.PermType))
 			}
 			for i := range targets {
 				id := targets[i].id
@@ -84,7 +84,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 				if svc := s.config.GetService(id); svc != nil {
 					level = s.requestLevel(r, svc, kind.PermType)
 				}
-				if !appFreeBusy && !types.IsFreeBusyAccess(level) {
+				if !appFreeBusy && !policy.IsFreeBusyAccess(level) {
 					continue
 				}
 				targets[i].list = func(ctx context.Context) ([]types.CalendarEvent, bool, error) {
@@ -115,7 +115,7 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 func (s *Server) searchRedactEvents(items []types.CalendarEvent, r *http.Request) []types.CalendarEvent {
 	appFreeBusy := false
 	if app := AppIdentityFrom(r); app != nil {
-		appFreeBusy = types.IsFreeBusyAccess(app.Scopes.For("events"))
+		appFreeBusy = policy.IsFreeBusyAccess(app.Scopes.For("events"))
 	}
 	out := make([]types.CalendarEvent, 0, len(items))
 	for _, e := range items {
@@ -125,7 +125,7 @@ func (s *Server) searchRedactEvents(items []types.CalendarEvent, r *http.Request
 			if svc == nil {
 				continue
 			}
-			if types.IsFreeBusyAccess(s.requestLevel(r, svc, "events")) {
+			if policy.IsFreeBusyAccess(s.requestLevel(r, svc, "events")) {
 				redact = true
 			}
 		}

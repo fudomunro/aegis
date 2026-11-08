@@ -3,11 +3,12 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/shared"
 	"log/slog"
 	"os"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // serviceConnectionsFileVersion is the on-disk schema for service_connections.json.

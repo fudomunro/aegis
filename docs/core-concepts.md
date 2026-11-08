@@ -224,7 +224,7 @@ After the overlap call-outs above, the stable concepts.
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `librarykind.go` |
 | **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
 | **User-defined type (UDT)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined type”; the file/directory is a schema pack. | `internal/types/udt.go`, `docs/user-defined-types.md` |
-| **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/types/policy.go:11`, `places.go`, `events.go` |
+| **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/core/policy/policy.go`, `places.go`, `events.go` |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/types/providers.go` |
 
 ### Access and identity
@@ -232,11 +232,11 @@ After the overlap call-outs above, the stable concepts.
 | Concept | Definition | Key files |
 |---------|------------|-----------|
 | **Data grant** | What the user does to allow an LLM agent or app to use a data type at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
-| **DataGrant** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/types/policy.go` |
-| **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `policy.go`, `permissions_overlay.go` |
-| **EffectiveAccess** | Resolved level for (type, provider) combining data grant + service tighten. | `policy.go:484`, `config.go:437` |
-| **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `policy.go:11-36` |
-| **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from data grant. | `internal/types/accessors.go:31` |
+| **DataGrant** | Type-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/core/policy/policy.go` |
+| **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `internal/core/policy/policy.go`, `permissions_overlay.go` |
+| **EffectiveAccess** | Resolved level for (type, provider) combining data grant + service tighten. | `internal/core/policy/policy.go`, `config.go` |
+| **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `internal/core/policy/policy.go` |
+| **Accessor** | Principal-level allowed access per data type (issue #160) — distinct from data grant. | `internal/core/policy/accessors.go` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |
 | **Admin principal** | Who may change policy: admin API key (`-admin-api-key`) or allowed tailnet login (`-admin-logins`). Agent credentials are never admin. | `SECURITY.md`, `handler.go`, `identity.go` |

@@ -9,9 +9,10 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func searchTestServer(t *testing.T, contacts ...types.Contact) *Server {
@@ -199,7 +200,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 	cfg := &Config{Services: []Service{
 		{ID: "google", Name: "Google", Action: "inject"},
 		{ID: "outlook", Name: "Outlook", Action: "inject",
-			GrantLimits: types.Permissions{"contacts": types.AccessNone}},
+			GrantLimits: policy.Permissions{"contacts": policy.AccessNone}},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
@@ -252,7 +253,7 @@ func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
 		ID:          "paperless",
 		Name:        "Paperless-ngx",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"documents": types.AccessMetadata},
+		GrantLimits: policy.Permissions{"documents": policy.AccessMetadata},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
@@ -403,7 +404,7 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 		ID:          "google-calendar",
 		Name:        "Google Calendar",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"events": types.AccessRead},
+		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
@@ -412,7 +413,7 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 	}
 	store := testAppStore(t)
 	srv.apps = store
-	_, appToken := createTestApp(t, store, "eco", types.Permissions{"events": types.AccessFreeBusy})
+	_, appToken := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessFreeBusy})
 
 	// A first query materializes the index at owner tier.
 	before := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
@@ -455,7 +456,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 		ID:          "paperless",
 		Name:        "Paperless-ngx",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"documents": types.AccessRead},
+		GrantLimits: policy.Permissions{"documents": policy.AccessRead},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
@@ -466,7 +467,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	}
 	store := testAppStore(t)
 	srv.apps = store
-	_, appToken := createTestApp(t, store, "reader", types.Permissions{"documents": types.AccessMetadata})
+	_, appToken := createTestApp(t, store, "reader", policy.Permissions{"documents": policy.AccessMetadata})
 
 	before := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
 	if len(before) != 1 || before[0].Excerpt != "sensitive excerpt" {

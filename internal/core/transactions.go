@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -31,11 +32,11 @@ func RedactTransactionRead(t types.Transaction) types.Transaction {
 }
 
 func redactTransactionsForLevel(items []types.Transaction, level string) []types.Transaction {
-	switch types.NormalizeAccess(level) {
-	case types.AccessSummary:
+	switch policy.NormalizeAccess(level) {
+	case policy.AccessSummary:
 		// No line items at all.
 		return nil
-	case types.AccessRead:
+	case policy.AccessRead:
 		out := make([]types.Transaction, len(items))
 		for i, t := range items {
 			out[i] = RedactTransactionRead(t)
@@ -165,8 +166,8 @@ func transactionsProviderTargets(s *Server, r *http.Request, permType string, ap
 		func(p types.TransactionProvider) func(context.Context) ([]types.Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
-	appSummary := types.IsSummaryAccess(appLevel)
-	appRead := appLevel != "" && types.NormalizeAccess(appLevel) == types.AccessRead
+	appSummary := policy.IsSummaryAccess(appLevel)
+	appRead := appLevel != "" && policy.NormalizeAccess(appLevel) == policy.AccessRead
 	for i := range targets {
 		id := targets[i].id
 		inner := targets[i].list
@@ -176,11 +177,11 @@ func transactionsProviderTargets(s *Server, r *http.Request, permType string, ap
 		}
 		effective := level
 		if appSummary {
-			effective = types.AccessSummary
+			effective = policy.AccessSummary
 		} else if appRead {
-			effective = types.AccessRead
+			effective = policy.AccessRead
 		}
-		if effective == level && !types.IsSummaryAccess(level) && types.NormalizeAccess(level) != types.AccessRead {
+		if effective == level && !policy.IsSummaryAccess(level) && policy.NormalizeAccess(level) != policy.AccessRead {
 			continue
 		}
 		targets[i].list = func(ctx context.Context) ([]types.Transaction, bool, error) {
@@ -207,7 +208,7 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
 	}
-	summaryOnly := types.IsSummaryAccess(appLevel)
+	summaryOnly := policy.IsSummaryAccess(appLevel)
 	// If the agent surface is unrestricted but every service is summary-only
 	// after redaction, encode() still has line items only when services
 	// returned them. Force summary-only encode when the app is summary.
@@ -272,10 +273,10 @@ func (s *Server) searchRedactTransactions(items []types.Transaction, r *http.Req
 			continue
 		}
 		switch {
-		case types.IsSummaryAccess(appLevel):
-			t = redactTransactionsForLevel([]types.Transaction{t}, types.AccessSummary)[0]
-		case appLevel != "" && types.NormalizeAccess(appLevel) == types.AccessRead:
-			t = redactTransactionsForLevel([]types.Transaction{t}, types.AccessRead)[0]
+		case policy.IsSummaryAccess(appLevel):
+			t = redactTransactionsForLevel([]types.Transaction{t}, policy.AccessSummary)[0]
+		case appLevel != "" && policy.NormalizeAccess(appLevel) == policy.AccessRead:
+			t = redactTransactionsForLevel([]types.Transaction{t}, policy.AccessRead)[0]
 		}
 		out = append(out, t)
 	}

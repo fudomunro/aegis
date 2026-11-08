@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -197,8 +198,8 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	}
 
 	// Library aggregate uses the selected file (empty items list still 200)
-	types.MarkOptInDataType("reading-list")
-	srv.config.SeedDataGrant("reading-list", types.DataGrant{Default: types.AccessRead})
+	policy.MarkOptInDataType("reading-list")
+	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
 	handler := srv.HandleLibraryUserDefined(schema)
 	req = httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -54,16 +55,16 @@ func RedactPlaceVisitRead(v types.PlaceVisit) types.PlaceVisit {
 }
 
 func redactPlaceVisitsForLevel(items []types.PlaceVisit, level string) []types.PlaceVisit {
-	switch types.PlacesLevelForResponse(level) {
-	case types.AccessNone:
+	switch policy.PlacesLevelForResponse(level) {
+	case policy.AccessNone:
 		return nil
-	case types.AccessCity:
+	case policy.AccessCity:
 		out := make([]types.PlaceVisit, len(items))
 		for i, v := range items {
 			out[i] = RedactPlaceVisitCity(v)
 		}
 		return out
-	case types.AccessRead:
+	case policy.AccessRead:
 		out := make([]types.PlaceVisit, len(items))
 		for i, v := range items {
 			out[i] = RedactPlaceVisitRead(v)
@@ -83,7 +84,7 @@ func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel
 		func(p types.PlaceVisitProvider) func(context.Context) ([]types.PlaceVisit, bool, error) {
 			return p.ListUserPlaceVisits
 		})
-	appPlaces := types.PlacesLevelForResponse(appLevel)
+	appPlaces := policy.PlacesLevelForResponse(appLevel)
 	for i := range targets {
 		id := targets[i].id
 		inner := targets[i].list
@@ -91,12 +92,12 @@ func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel
 		if svc := s.config.GetService(id); svc != nil {
 			level = s.requestLevel(r, svc, permType)
 		}
-		effective := types.PlacesLevelForResponse(level)
-		if appPlaces != "" && appPlaces != types.AccessNone {
+		effective := policy.PlacesLevelForResponse(level)
+		if appPlaces != "" && appPlaces != policy.AccessNone {
 			// App scope is an additional clamp: take the tighter of the two.
 			effective = tighterPlacesLevel(appPlaces, effective)
 		}
-		if effective == types.PlacesLevelForResponse(level) && effective != types.AccessCity && effective != types.AccessRead {
+		if effective == policy.PlacesLevelForResponse(level) && effective != policy.AccessCity && effective != policy.AccessRead {
 			continue
 		}
 		targets[i].list = func(ctx context.Context) ([]types.PlaceVisit, bool, error) {
@@ -110,13 +111,13 @@ func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel
 // tighterPlacesLevel returns the more restrictive of two places levels.
 func tighterPlacesLevel(a, b string) string {
 	rank := map[string]int{
-		types.AccessNone:    0,
-		types.AccessCity:    1,
-		types.AccessRead:    2,
-		types.AccessPrecise: 3,
+		policy.AccessNone:    0,
+		policy.AccessCity:    1,
+		policy.AccessRead:    2,
+		policy.AccessPrecise: 3,
 	}
-	ra, okA := rank[types.PlacesLevelForResponse(a)]
-	rb, okB := rank[types.PlacesLevelForResponse(b)]
+	ra, okA := rank[policy.PlacesLevelForResponse(a)]
+	rb, okB := rank[policy.PlacesLevelForResponse(b)]
 	if !okA {
 		ra = 0
 	}
@@ -124,9 +125,9 @@ func tighterPlacesLevel(a, b string) string {
 		rb = 0
 	}
 	if ra <= rb {
-		return types.PlacesLevelForResponse(a)
+		return policy.PlacesLevelForResponse(a)
 	}
-	return types.PlacesLevelForResponse(b)
+	return policy.PlacesLevelForResponse(b)
 }
 
 // HandleLibraryPlaceVisits returns the user's visits and trips from every
@@ -171,7 +172,7 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 func (s *Server) searchRedactPlaceVisits(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
 	appPlaces := ""
 	if app := AppIdentityFrom(r); app != nil {
-		appPlaces = types.PlacesLevelForResponse(app.Scopes.For("places"))
+		appPlaces = policy.PlacesLevelForResponse(app.Scopes.For("places"))
 	}
 	out := make([]types.PlaceVisit, 0, len(items))
 	for _, v := range items {
@@ -181,8 +182,8 @@ func (s *Server) searchRedactPlaceVisits(items []types.PlaceVisit, r *http.Reque
 			if svc == nil {
 				continue
 			}
-			level := types.PlacesLevelForResponse(s.requestLevel(r, svc, "places"))
-			if appPlaces != "" && appPlaces != types.AccessNone {
+			level := policy.PlacesLevelForResponse(s.requestLevel(r, svc, "places"))
+			if appPlaces != "" && appPlaces != policy.AccessNone {
 				level = tighterPlacesLevel(appPlaces, level)
 			}
 			red := redactPlaceVisitsForLevel([]types.PlaceVisit{v}, level)
@@ -195,7 +196,7 @@ func (s *Server) searchRedactPlaceVisits(items []types.PlaceVisit, r *http.Reque
 		if skip {
 			continue
 		}
-		if appPlaces != "" && appPlaces != types.AccessNone {
+		if appPlaces != "" && appPlaces != policy.AccessNone {
 			red := redactPlaceVisitsForLevel([]types.PlaceVisit{v}, appPlaces)
 			if len(red) == 0 {
 				continue

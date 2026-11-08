@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // Contacts and events mirror (issue #146) is reconciliation over neutral

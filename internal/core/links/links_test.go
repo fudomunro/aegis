@@ -1,13 +1,14 @@
 package links
 
 import (
-	"strings"
-	"fmt"
-	"github.com/fudomunro/aegis/internal/types"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestStore_AddListDelete(t *testing.T) {

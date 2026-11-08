@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/copies"
 )
 
 // davWriteMock is a CardDAV PUT sink for mirror tests (issue #146).
@@ -120,10 +121,10 @@ func TestHandleEntityMirror_ContactsDryRun(t *testing.T) {
 		{ID: connectors.CardDAVServiceID, Name: "DAV Contacts", Action: "inject",
 			Endpoint:    ts.URL + "/remote.php/dav/addressbooks/alice/default/",
 			Headers:     map[string]string{"X-DAV-Username": "u", "X-DAV-Password": "p"},
-			GrantLimits: types.Permissions{"contacts": types.AccessRead}},
+			GrantLimits: policy.Permissions{"contacts": policy.AccessRead}},
 		{ID: "google", Name: "Google Contacts", Action: "inject",
 			Endpoint:    people.URL,
-			GrantLimits: types.Permissions{"contacts": types.AccessWrite}},
+			GrantLimits: policy.Permissions{"contacts": policy.AccessWrite}},
 	}}, "https://aegis.example.com")
 	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
 	srv.connectors["google"] = connectors.NewGoogleContactsConnector(srv)

@@ -25,12 +25,12 @@ func dispatchAuth(srv *Server, w http.ResponseWriter, r *http.Request) {
 // routeTestCase is one admin/auth path exercised through the pattern
 // registrations (issue #274).
 type routeTestCase struct {
-	name        string
-	method      string
-	path        string
-	auth        bool // true = must 401 without credentials (AdminMiddleware / AuthMiddleware)
-	public      bool // true = no auth wrapper (OAuth login/callback)
-	dispatch    func(*Server, http.ResponseWriter, *http.Request)
+	name     string
+	method   string
+	path     string
+	auth     bool // true = must 401 without credentials (AdminMiddleware / AuthMiddleware)
+	public   bool // true = no auth wrapper (OAuth login/callback)
+	dispatch func(*Server, http.ResponseWriter, *http.Request)
 }
 
 func adminAuthPathTests() []routeTestCase {

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -153,7 +154,7 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 	defer upstream.Close()
 
 	host := newTestHostWithService(GoogleCalendarServiceID, upstream.URL, "https://aegis.example.com")
-	host.services[GoogleCalendarServiceID].GrantLimits = types.Permissions{"events": types.AccessFreeBusy}
+	host.services[GoogleCalendarServiceID].GrantLimits = policy.Permissions{"events": policy.AccessFreeBusy}
 	host.setToken(GoogleCalendarServiceID, "test-token")
 	conn := NewGoogleCalendarConnector(host)
 	if !conn.EventsFreeBusyOnly() {

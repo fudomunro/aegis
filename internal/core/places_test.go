@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"context"
 	"encoding/json"
@@ -101,34 +102,34 @@ func TestRedactPlaceVisitRead_OmitsCoordinates(t *testing.T) {
 
 func TestPlacesLevelForResponse(t *testing.T) {
 	cases := map[string]string{
-		types.AccessNone:    types.AccessNone,
-		types.AccessCity:    types.AccessCity,
-		types.AccessRead:    types.AccessRead,
-		types.AccessPrecise: types.AccessPrecise,
-		types.AccessWrite:   types.AccessPrecise,
-		types.AccessFull:    types.AccessPrecise,
+		policy.AccessNone:    policy.AccessNone,
+		policy.AccessCity:    policy.AccessCity,
+		policy.AccessRead:    policy.AccessRead,
+		policy.AccessPrecise: policy.AccessPrecise,
+		policy.AccessWrite:   policy.AccessPrecise,
+		policy.AccessFull:    policy.AccessPrecise,
 	}
 	for in, want := range cases {
-		if got := types.PlacesLevelForResponse(in); got != want {
-			t.Fatalf("types.PlacesLevelForResponse(%q) = %q, want %q", in, got, want)
+		if got := policy.PlacesLevelForResponse(in); got != want {
+			t.Fatalf("policy.PlacesLevelForResponse(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
 
 func TestPermissions_PlacesDefaultNone(t *testing.T) {
-	var nilPerm types.Permissions
-	if got := nilPerm.For("places"); got != types.AccessNone {
+	var nilPerm policy.Permissions
+	if got := nilPerm.For("places"); got != policy.AccessNone {
 		t.Fatalf("nil map places = %q, want none", got)
 	}
-	p := types.Permissions{"default": types.AccessFull, "tracks": types.AccessRead}
-	if got := p.For("places"); got != types.AccessNone {
+	p := policy.Permissions{"default": policy.AccessFull, "tracks": policy.AccessRead}
+	if got := p.For("places"); got != policy.AccessNone {
 		t.Fatalf("default key must not enable places: %q", got)
 	}
 	if p.AllowsRead("places") {
 		t.Fatal("places must not be readable by default")
 	}
-	enabled := types.Permissions{"places": types.AccessCity}
-	if got := enabled.For("places"); got != types.AccessCity {
+	enabled := policy.Permissions{"places": policy.AccessCity}
+	if got := enabled.For("places"); got != policy.AccessCity {
 		t.Fatalf("explicit places = %q, want city", got)
 	}
 	if !enabled.AllowsRead("places") {
@@ -137,19 +138,19 @@ func TestPermissions_PlacesDefaultNone(t *testing.T) {
 }
 
 func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
-	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessCity}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessCity}); err != nil {
 		t.Fatalf("places city: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessPrecise}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessPrecise}); err != nil {
 		t.Fatalf("places precise: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{"events": types.AccessCity}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"events": policy.AccessCity}); err == nil {
 		t.Fatal("city on events should be rejected")
 	}
-	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessFreeBusy}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessFreeBusy}); err == nil {
 		t.Fatal("freebusy on places should be rejected")
 	}
-	if err := types.ValidatePermissions(types.Permissions{"places": types.AccessSummary}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessSummary}); err == nil {
 		t.Fatal("summary on places should be rejected")
 	}
 }
@@ -190,14 +191,14 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: types.Permissions{"places": types.AccessPrecise}},
+				GrantLimits: policy.Permissions{"places": policy.AccessPrecise}},
 			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject",
-				GrantLimits: types.Permissions{"places": types.AccessRead}},
+				GrantLimits: policy.Permissions{"places": policy.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		connectors.TimelineServiceID:             &fakePlaceProvider{visits: samplePlaces()},
+		connectors.TimelineServiceID:  &fakePlaceProvider{visits: samplePlaces()},
 		connectors.OwnTracksServiceID: &fakePlaceProvider{visits: samplePlaces()},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
@@ -240,7 +241,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: types.Permissions{"places": types.AccessCity}},
+				GrantLimits: policy.Permissions{"places": policy.AccessCity}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -275,7 +276,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: types.Permissions{"places": types.AccessRead}},
+				GrantLimits: policy.Permissions{"places": policy.AccessRead}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -310,7 +311,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: types.Permissions{"places": types.AccessPrecise}},
+				GrantLimits: policy.Permissions{"places": policy.AccessPrecise}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

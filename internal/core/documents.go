@@ -8,9 +8,10 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
 // documentServiceName returns the first source service name for stable pre-sort.
@@ -131,14 +132,14 @@ func RedactDocumentMetadata(d types.Document) types.Document {
 }
 
 func redactDocumentsForLevel(items []types.Document, level string) []types.Document {
-	switch types.DocumentsLevelForResponse(level) {
-	case types.AccessMetadata:
+	switch policy.DocumentsLevelForResponse(level) {
+	case policy.AccessMetadata:
 		out := make([]types.Document, len(items))
 		for i, d := range items {
 			out[i] = RedactDocumentMetadata(d)
 		}
 		return out
-	case types.AccessNone:
+	case policy.AccessNone:
 		return nil
 	default:
 		return items
@@ -153,7 +154,7 @@ func documentsProviderTargets(s *Server, r *http.Request, permType string, appLe
 		func(p types.DocumentProvider) func(context.Context) ([]types.Document, bool, error) {
 			return p.ListUserDocuments
 		})
-	appMeta := types.IsMetadataAccess(appLevel)
+	appMeta := policy.IsMetadataAccess(appLevel)
 	for i := range targets {
 		id := targets[i].id
 		inner := targets[i].list
@@ -163,9 +164,9 @@ func documentsProviderTargets(s *Server, r *http.Request, permType string, appLe
 		}
 		effective := level
 		if appMeta {
-			effective = types.AccessMetadata
+			effective = policy.AccessMetadata
 		}
-		if effective == level && !types.IsMetadataAccess(level) {
+		if effective == level && !policy.IsMetadataAccess(level) {
 			continue
 		}
 		targets[i].list = func(ctx context.Context) ([]types.Document, bool, error) {
@@ -194,7 +195,7 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 	}
 	// Encode-time redaction is a second belt: even if a service returned an
 	// excerpt, metadata-only surfaces must not ship it.
-	metaOnly := types.IsMetadataAccess(appLevel)
+	metaOnly := policy.IsMetadataAccess(appLevel)
 	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Document]{
 		kind: kind,
 		targets: func(s *Server, r *http.Request) ([]namedLister[types.Document], []string) {
@@ -206,7 +207,7 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 		encode: func(items []types.Document, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterDocuments(items, filters)
 			if metaOnly {
-				filtered = redactDocumentsForLevel(filtered, types.AccessMetadata)
+				filtered = redactDocumentsForLevel(filtered, policy.AccessMetadata)
 			}
 			pageItems, pr := types.SlicePage(filtered, page)
 			return types.DocumentList{
@@ -242,7 +243,7 @@ func (s *Server) searchRedactDocuments(items []types.Document, r *http.Request) 
 				continue
 			}
 			level := s.requestLevel(r, svc, "documents")
-			red := redactDocumentsForLevel([]types.Document{d}, types.DocumentsLevelForResponse(level))
+			red := redactDocumentsForLevel([]types.Document{d}, policy.DocumentsLevelForResponse(level))
 			if len(red) == 0 {
 				skip = true
 				break
@@ -252,7 +253,7 @@ func (s *Server) searchRedactDocuments(items []types.Document, r *http.Request) 
 		if skip {
 			continue
 		}
-		if types.IsMetadataAccess(appLevel) {
+		if policy.IsMetadataAccess(appLevel) {
 			d = RedactDocumentMetadata(d)
 		}
 		out = append(out, d)
@@ -294,7 +295,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	level := types.DefaultAccessType
+	level := policy.DefaultAccessType
 	svc := s.config.GetService(serviceID)
 	if svc != nil {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
@@ -307,7 +308,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 		level = app.Scopes.For(kind.PermType)
 	}
 	// Metadata is list-only: full text requires read (or unrestricted write/full).
-	if !types.AllowsMethod(level, http.MethodGet) || types.IsMetadataAccess(level) || types.DocumentsLevelForResponse(level) == types.AccessNone {
+	if !policy.AllowsMethod(level, http.MethodGet) || policy.IsMetadataAccess(level) || policy.DocumentsLevelForResponse(level) == policy.AccessNone {
 		s.recordAccessFrom(r, AccessEvent{
 			Agent:    agent,
 			Surface:  MetricSurfaceLibrary,

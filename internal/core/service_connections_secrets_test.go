@@ -2,11 +2,12 @@ package core
 
 import (
 	"encoding/json"
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func TestTokenStore_SecretsRoundTrip(t *testing.T) {

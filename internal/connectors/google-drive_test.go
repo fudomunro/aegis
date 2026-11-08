@@ -31,7 +31,7 @@ func TestGoogleDriveListUserDocuments_MapsGoogleDocs(t *testing.T) {
 				"description":  "Lease for 12 Example Street",
 				"webViewLink":  "https://docs.google.com/document/d/file-1/edit",
 				"owners": []map[string]any{{
-					"displayName": "Ada Lovelace",
+					"displayName":  "Ada Lovelace",
 					"emailAddress": "ada@example.com",
 				}},
 			}},
@@ -156,11 +156,11 @@ func TestGoogleDriveNoToken(t *testing.T) {
 
 func TestGoogleDriveNormalizeProxyPath(t *testing.T) {
 	cases := map[string]string{
-		"/files/abc/export":            "/files/abc/export",
-		"/drive/v3/files/abc/export":   "/files/abc/export",
-		"/drive/v2/files/abc":          "/files/abc",
-		"/drive/v3":                    "/",
-		"/other":                       "/other",
+		"/files/abc/export":          "/files/abc/export",
+		"/drive/v3/files/abc/export": "/files/abc/export",
+		"/drive/v2/files/abc":        "/files/abc",
+		"/drive/v3":                  "/",
+		"/other":                     "/other",
 	}
 	for in, want := range cases {
 		if got := normalizeDriveProxyPath(in); got != want {

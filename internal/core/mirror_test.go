@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*Server, *httptest.Server) {
@@ -23,9 +23,9 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 	ts := httptest.NewServer(upstream)
 	t.Cleanup(ts.Close)
 
-	perms := types.Permissions{"default": types.AccessRead}
+	perms := policy.Permissions{"default": policy.AccessRead}
 	if targetWrite {
-		perms = types.Permissions{"default": types.AccessRead, "playlists": types.AccessFull, "tracks": types.AccessFull}
+		perms = policy.Permissions{"default": policy.AccessRead, "playlists": policy.AccessFull, "tracks": policy.AccessFull}
 	}
 	cfg := &Config{
 		Services: []Service{

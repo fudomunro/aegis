@@ -3,7 +3,6 @@ package core
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -11,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 func oauthConfig(tokenURL, authURL string) *Config {

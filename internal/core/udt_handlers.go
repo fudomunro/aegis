@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"sort"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -73,13 +74,13 @@ func (s *Server) userDefinedReadable(permType string) bool {
 	if s == nil || s.config == nil {
 		return false
 	}
-	return types.AllowsMethod(s.config.EffectiveAccess("", permType), http.MethodGet)
+	return policy.AllowsMethod(s.config.EffectiveAccess("", permType), http.MethodGet)
 }
 
 // registerUserDefinedKinds prepares loaded UDT kinds for serving.
 //
 // Visibility is never taken from the pack: every UDT stays opt-in
-// (types.MarkOptInDataType at load) until an admin data grant names the
+// (policy.MarkOptInDataType at load) until an admin data grant names the
 // kind (issue #15 review — packs must not self-enable, including
 // default_access). Schema default_access is informational only.
 func (s *Server) registerUserDefinedKinds() {

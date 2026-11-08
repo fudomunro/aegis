@@ -1,11 +1,12 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/core/tokens"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
 // These cover core's connection write seams and the starter-env doc pin.

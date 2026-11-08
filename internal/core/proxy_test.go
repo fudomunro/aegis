@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
@@ -148,7 +149,7 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: types.Permissions{"playlists": types.AccessNone, "default": types.AccessRead},
+				GrantLimits: policy.Permissions{"playlists": policy.AccessNone, "default": policy.AccessRead},
 			},
 		},
 	}
@@ -173,7 +174,7 @@ func TestHandleServiceProxy_ContentPathAllowedByPermission(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "gmail", Name: "Gmail", Action: "inject",
-				GrantLimits: types.Permissions{"messages": types.AccessRead},
+				GrantLimits: policy.Permissions{"messages": policy.AccessRead},
 			},
 		},
 	}

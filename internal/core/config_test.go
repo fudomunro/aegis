@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestLoadConfig(t *testing.T) {
@@ -221,7 +221,7 @@ func TestDuration_MarshalJSON(t *testing.T) {
 func TestGetService_ReturnsSnapshot(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", GrantLimits: types.Permissions{"player": types.AccessNone}},
+			{ID: "spotify", Name: "Spotify", GrantLimits: policy.Permissions{"player": policy.AccessNone}},
 		},
 	}
 
@@ -231,13 +231,13 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 	}
 	// Mutating the snapshot must not touch the live store.
 	svc.Endpoint = "https://mutated.example"
-	svc.GrantLimits["player"] = types.AccessFull
+	svc.GrantLimits["player"] = policy.AccessFull
 
 	live := cfg.GetService("spotify")
 	if live.Endpoint != "" {
 		t.Fatalf("Endpoint leaked to store: %q", live.Endpoint)
 	}
-	if live.GrantLimits.For("player") != types.AccessNone {
+	if live.GrantLimits.For("player") != policy.AccessNone {
 		t.Fatalf("Permissions mutated via snapshot: %q", live.GrantLimits.For("player"))
 	}
 
@@ -257,8 +257,8 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone}},
-			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: types.Permissions{types.PermissionDefaultKey: types.AccessRead}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone}},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead}},
 		},
 	}
 	permsPath := filepath.Join(t.TempDir(), "data_grants.json")
@@ -274,9 +274,9 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			p := types.Permissions{types.PermissionDefaultKey: types.AccessRead, "player": types.AccessNone, "tracks": types.AccessNone}
+			p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone, "tracks": policy.AccessNone}
 			if i%2 == 0 {
-				p = types.Permissions{"player": types.AccessNone, "default": types.AccessRead, "playlists": types.AccessRead}
+				p = policy.Permissions{"player": policy.AccessNone, "default": policy.AccessRead, "playlists": policy.AccessRead}
 			}
 			if err := cfg.SetServicePermissions("spotify", p); err != nil {
 				t.Errorf("SetServicePermissions: %v", err)

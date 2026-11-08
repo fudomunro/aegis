@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -91,13 +92,13 @@ func TestRedactDocumentMetadata_StripsExcerpt(t *testing.T) {
 	if got.Title != "Lease" || len(got.Tags) != 1 {
 		t.Fatalf("metadata fields should survive: %+v", got)
 	}
-	if got := redactDocumentsForLevel([]types.Document{d}, types.AccessMetadata); got[0].Excerpt != "" {
+	if got := redactDocumentsForLevel([]types.Document{d}, policy.AccessMetadata); got[0].Excerpt != "" {
 		t.Fatal("metadata level should strip excerpt")
 	}
-	if got := redactDocumentsForLevel([]types.Document{d}, types.AccessRead); got[0].Excerpt != "secret text" {
+	if got := redactDocumentsForLevel([]types.Document{d}, policy.AccessRead); got[0].Excerpt != "secret text" {
 		t.Fatal("read level should keep excerpt")
 	}
-	if got := redactDocumentsForLevel([]types.Document{d}, types.AccessNone); got != nil {
+	if got := redactDocumentsForLevel([]types.Document{d}, policy.AccessNone); got != nil {
 		t.Fatal("none should return no items")
 	}
 }
@@ -146,7 +147,7 @@ func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
 		ID:          "paperless",
 		Name:        "Paperless-ngx",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"documents": types.AccessMetadata},
+		GrantLimits: policy.Permissions{"documents": policy.AccessMetadata},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
@@ -182,7 +183,7 @@ func TestHandleLibraryDocuments_DeniedByPermission(t *testing.T) {
 		ID:          "paperless",
 		Name:        "Paperless-ngx",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"documents": types.AccessNone},
+		GrantLimits: policy.Permissions{"documents": policy.AccessNone},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
@@ -261,7 +262,7 @@ func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
 		ID:          "paperless",
 		Name:        "Paperless-ngx",
 		Action:      "inject",
-		GrantLimits: types.Permissions{"documents": types.AccessMetadata},
+		GrantLimits: policy.Permissions{"documents": policy.AccessMetadata},
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
@@ -278,7 +279,7 @@ func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
 		t.Fatalf("metadata access must not read text: status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	cfg.Services[0].GrantLimits = types.Permissions{"documents": types.AccessRead}
+	cfg.Services[0].GrantLimits = policy.Permissions{"documents": policy.AccessRead}
 	srv2 := testServerWithBase(cfg, "https://aegis.example.com")
 	srv2.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{text: "full lease text"},
@@ -341,19 +342,19 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 }
 
 func TestValidatePermissions_MetadataDocumentsOnly(t *testing.T) {
-	if err := types.ValidatePermissions(types.Permissions{"documents": types.AccessMetadata}); err != nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"documents": policy.AccessMetadata}); err != nil {
 		t.Fatalf("documents metadata should validate: %v", err)
 	}
-	if err := types.ValidatePermissions(types.Permissions{"tracks": types.AccessMetadata}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessMetadata}); err == nil {
 		t.Fatal("metadata must be rejected on tracks")
 	}
-	if err := types.ValidatePermissions(types.Permissions{"default": types.AccessMetadata}); err == nil {
+	if err := policy.ValidatePermissions(policy.Permissions{"default": policy.AccessMetadata}); err == nil {
 		t.Fatal("metadata must be rejected on default")
 	}
-	if !types.IsMetadataAccess(types.AccessMetadata) || types.IsMetadataAccess(types.AccessRead) {
+	if !policy.IsMetadataAccess(policy.AccessMetadata) || policy.IsMetadataAccess(policy.AccessRead) {
 		t.Fatal("IsMetadataAccess")
 	}
-	if types.DocumentsLevelForResponse(types.AccessFull) != types.AccessRead {
+	if policy.DocumentsLevelForResponse(policy.AccessFull) != policy.AccessRead {
 		t.Fatal("full should respond at read (excerpt ok)")
 	}
 }

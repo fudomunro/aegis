@@ -3,6 +3,10 @@
 > Historical plan (issue #15). Some names in this document predate the
 > data-grant rename (#174): `TypePolicy` is now `DataGrant`,
 > `permissions.json` is `data_grants.json`. Prefer `docs/glossary.md`.
+> Also superseded: policy (access levels, `Permissions`, `DataGrant`, grant
+> resolution) later moved from `internal/types` to `internal/core/policy` —
+> data grants are Aegis-internal policy, not data types. The package tables
+> below predate that move.
 
 Status: **landed** — the `internal/types` / `internal/core` /
 `internal/connectors` split is in the tree; this note is the design record

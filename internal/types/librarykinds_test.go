@@ -95,10 +95,10 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 		levels []string
 		none   bool
 	}{
-		{"events", []string{AccessFreeBusy}, false},
-		{"transactions", []string{AccessSummary}, false},
-		{"places", []string{AccessCity, AccessPrecise}, true},
-		{"documents", []string{AccessMetadata}, false},
+		{"events", []string{"freebusy"}, false},
+		{"transactions", []string{"summary"}, false},
+		{"places", []string{"city", "precise"}, true},
+		{"documents", []string{"metadata"}, false},
 		{"tracks", nil, false},
 	}
 	for _, tc := range cases {
@@ -115,10 +115,10 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 	}
 
 	// Derived allowlists match AllowedLevels.
-	if !KindAllowsLevel("events", AccessFreeBusy) {
+	if !KindAllowsLevel("events", "freebusy") {
 		t.Error("events should allow freebusy")
 	}
-	if KindAllowsLevel("tracks", AccessSummary) {
+	if KindAllowsLevel("tracks", "summary") {
 		t.Error("tracks must not allow summary")
 	}
 	if !KindDefaultsNone("places") {
@@ -127,22 +127,8 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 	if KindDefaultsNone("documents") {
 		t.Error("documents should not default to none")
 	}
-	if got := KindsAllowingLevel(AccessMetadata); strings.Join(got, ",") != "documents" {
+	if got := KindsAllowingLevel("metadata"); strings.Join(got, ",") != "documents" {
 		t.Errorf("KindsAllowingLevel(metadata) = %v, want [documents]", got)
-	}
-
-	// ValidatePermissions rejects levels on kinds that cannot honor them.
-	err := ValidatePermissions(Permissions{"tracks": AccessSummary})
-	if err == nil {
-		t.Error("summary on tracks should fail validation")
-	}
-	err = ValidatePermissions(Permissions{"documents": AccessMetadata})
-	if err != nil {
-		t.Errorf("metadata on documents should pass: %v", err)
-	}
-	err = ValidatePermissions(Permissions{"places": AccessCity})
-	if err != nil {
-		t.Errorf("city on places should pass: %v", err)
 	}
 }
 

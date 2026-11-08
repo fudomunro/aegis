@@ -1,5 +1,6 @@
 // Package connectors hosts named-service adapters (issue #15). Connectors
-// depend on Host + internal/types only — never on package main / *Server.
+// depend on Host + internal/types + internal/core/policy only — never on
+// package main / *Server.
 package connectors
 
 import (
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -19,7 +21,7 @@ type ServiceInfo struct {
 	Endpoint    string
 	Headers     map[string]string
 	CacheTTL    time.Duration
-	GrantLimits types.Permissions
+	GrantLimits policy.Permissions
 	// CanonicalFor names the library kinds this service is the home copy
 	// for. Aegis stores metadata only; canonical content stays on the
 	// source service.

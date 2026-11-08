@@ -159,7 +159,7 @@ do not invent a second proxy path.
 
 ## 4. Permissions
 
-- Every UDT id is marked **opt-in** (`types.MarkOptInDataType`) so a new pack
+- Every UDT id is marked **opt-in** (`policy.MarkOptInDataType`) so a new pack
   is never agent-visible by accident.
 - **Packs cannot self-enable.** `default_access` is informational only; type
   policy must name the kind (admin UI / `PUT /v1/admin/data-grants`).

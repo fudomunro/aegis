@@ -6,8 +6,8 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // dataGrantsFileVersion is the on-disk schema version for data_grants.json.
@@ -32,10 +32,10 @@ type dataGrantsOverlayFile struct {
 	// DataGrants is the primary agent data-grant map (typeID → DataGrant).
 	// A present map (including empty) replaces aegis.json data_grants;
 	// null/absent leaves bootstrap grants in place.
-	DataGrants map[string]types.DataGrant `json:"data_grants"`
+	DataGrants map[string]policy.DataGrant `json:"data_grants"`
 	// ServiceLimits maps service id → tighten-only grant limits.
 	// Present+null means cleared.
-	ServiceLimits map[string]*types.Permissions `json:"service_limits"`
+	ServiceLimits map[string]*policy.Permissions `json:"service_limits"`
 }
 
 // loadDataGrantsOverlay reads the overlay file. A missing file yields a
@@ -54,10 +54,10 @@ func loadDataGrantsOverlay(path string) (*dataGrantsOverlayFile, error) {
 		return nil, fmt.Errorf("parsing data grants overlay: %w", err)
 	}
 	if ov.ServiceLimits == nil {
-		ov.ServiceLimits = map[string]*types.Permissions{}
+		ov.ServiceLimits = map[string]*policy.Permissions{}
 	}
 	if ov.DataGrants != nil {
-		if err := types.ValidateDataGrants(ov.DataGrants); err != nil {
+		if err := policy.ValidateDataGrants(ov.DataGrants); err != nil {
 			return nil, fmt.Errorf("data grants overlay: %w", err)
 		}
 	}
@@ -65,7 +65,7 @@ func loadDataGrantsOverlay(path string) (*dataGrantsOverlayFile, error) {
 		if p == nil {
 			continue
 		}
-		if err := types.ValidatePermissions(*p); err != nil {
+		if err := policy.ValidatePermissions(*p); err != nil {
 			return nil, fmt.Errorf("data grants overlay service %q: %w", id, err)
 		}
 	}
@@ -84,7 +84,7 @@ func saveDataGrantsOverlay(path string, ov *dataGrantsOverlayFile) error {
 		ServiceLimits: ov.ServiceLimits,
 	}
 	if out.ServiceLimits == nil {
-		out.ServiceLimits = map[string]*types.Permissions{}
+		out.ServiceLimits = map[string]*policy.Permissions{}
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -137,7 +137,7 @@ func (c *Config) applyDataGrantsOverlayLocked() error {
 			c.Services[i].GrantLimits = nil
 			continue
 		}
-		c.Services[i].GrantLimits = types.Permissions(p.Clone())
+		c.Services[i].GrantLimits = policy.Permissions(p.Clone())
 	}
 	return nil
 }
@@ -147,14 +147,14 @@ func (c *Config) applyDataGrantsOverlayLocked() error {
 // clear (JSON null) so bootstrap permissions do not resurface on reload.
 // Service maps are migration overrides — they only tighten data grant.
 // Caller must hold c.mu.
-func (c *Config) setServiceLimitsEntryLocked(id string, p types.Permissions) error {
+func (c *Config) setServiceLimitsEntryLocked(id string, p policy.Permissions) error {
 	if c.serviceLimits == nil {
-		c.serviceLimits = map[string]*types.Permissions{}
+		c.serviceLimits = map[string]*policy.Permissions{}
 	}
 	if len(p) == 0 {
 		c.serviceLimits[id] = nil
 	} else {
-		cloned := types.Permissions(p.Clone())
+		cloned := policy.Permissions(p.Clone())
 		c.serviceLimits[id] = &cloned
 	}
 	return saveDataGrantsOverlay(c.dataGrantsPath, &dataGrantsOverlayFile{
@@ -168,14 +168,14 @@ func (c *Config) setServiceLimitsEntryLocked(id string, p types.Permissions) err
 // overlay. An empty map is stored as an explicit empty `data_grants` object
 // so it clears bootstrap grants on reload (rather than falling back to them).
 // Caller must hold c.mu.
-func (c *Config) setDataGrantsLocked(policies types.DataGrants) error {
-	if err := types.ValidateDataGrants(policies); err != nil {
+func (c *Config) setDataGrantsLocked(policies policy.DataGrants) error {
+	if err := policy.ValidateDataGrants(policies); err != nil {
 		return err
 	}
 	if policies == nil {
-		c.typePolicies = map[string]types.DataGrant{}
+		c.typePolicies = map[string]policy.DataGrant{}
 	} else {
-		c.typePolicies = make(types.DataGrants, len(policies))
+		c.typePolicies = make(policy.DataGrants, len(policies))
 		for k, v := range policies {
 			c.typePolicies[k] = cloneDataGrant(v)
 		}
@@ -187,8 +187,8 @@ func (c *Config) setDataGrantsLocked(policies types.DataGrants) error {
 	})
 }
 
-func cloneDataGrant(p types.DataGrant) types.DataGrant {
-	out := types.DataGrant{Default: types.NormalizeAccess(p.Default)}
+func cloneDataGrant(p policy.DataGrant) policy.DataGrant {
+	out := policy.DataGrant{Default: policy.NormalizeAccess(p.Default)}
 	if p.Default == "" {
 		out.Default = ""
 	}
@@ -197,7 +197,7 @@ func cloneDataGrant(p types.DataGrant) types.DataGrant {
 	}
 	out.Providers = make(map[string]string, len(p.Providers))
 	for k, v := range p.Providers {
-		out.Providers[k] = types.NormalizeAccess(v)
+		out.Providers[k] = policy.NormalizeAccess(v)
 	}
 	return out
 }

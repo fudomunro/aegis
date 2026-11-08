@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // --- mirror runner ---
@@ -100,7 +101,7 @@ func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor s
 // services carry read-write grants, so the real permission checks pass.
 func mirrorStubServer(t *testing.T, src mirrorSource, dst mirrorTarget) *Server {
 	t.Helper()
-	grants := types.Permissions{"playlists": types.AccessFull, "tracks": types.AccessFull}
+	grants := policy.Permissions{"playlists": policy.AccessFull, "tracks": policy.AccessFull}
 	srv := testServerWithBase(&Config{Services: []Service{
 		{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: grants},
 		{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: grants},
