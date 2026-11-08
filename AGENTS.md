@@ -242,6 +242,13 @@ Observed pattern across sessions (and the reason this file exists):
 1. **Issue-driven, phased.** Features land as numbered phases under a GitHub
    issue (`#4` entity resolution, `#16` canonical sources, `#53` cleanup).
    PR titles/bodies reference the issue or “Area N of #X”.
+   Before the first PR, the issue answers three questions (template:
+   `.github/ISSUE_TEMPLATE/design-decision.md`): **what is this a property
+   of** (service / library kind / data grant / reconciliation policy /
+   Aegis-internal metadata), **what is the canonical name** (add it to
+   `docs/glossary.md` in the same PR), and **what is explicitly out of
+   scope**. Settling ownership and vocabulary up front is cheaper than the
+   rework when a concept is renamed or re-homed later.
 2. **One concern per branch/PR.** Branch prefixes:
    - `feat/…` product capability
    - `fix/…` behavior bug
@@ -251,7 +258,11 @@ Observed pattern across sessions (and the reason this file exists):
    - `docs/…` documentation
 3. **Git worktree per branch.** Main worktree stays on `main`; feature work
    runs in sibling dirs like `../aegis-<slug>`.
-   Do not mutate `main` in place for feature work.
+   Do not mutate `main` in place for feature work. Before the first
+   mutating command, assert the worktree and branch
+   (`git rev-parse --show-toplevel && git branch --show-current`) and pass
+   the worktree as `workdir` on every call — edits that land on `main` by
+   mistake have needed reverting repeatedly.
 4. **PR before merge.** Merge commits are the normal landing path
    (`Merge pull request #N from …`). Body starts with `## Summary` and lists
    concrete file/behavior bullets.
@@ -334,6 +345,12 @@ over the hostile-input parsers, and `go build -o aegis .`.
   plumbing on purpose: domain owners register rules (built-in kinds at init,
   user-defined packs at load) and `core/policy` resolves them, so policy and
   `internal/types` never import each other for kind queries.
+  **Placement before writing:** managed data models and kind metadata →
+  `internal/types`; Aegis-internal stores/engines/policy → a `core/`
+  sub-package; stdlib-only plumbing → `internal/shared`. Do not park new
+  machinery in `internal/types` by default — it was audited back out three
+  times (policy, search docs, kind rules). `churn_guardrails_test.go`
+  enforces the import boundaries.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -404,6 +421,10 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Service-ID switches or provider literals growing back into `core` mail paths | Declare grouping/canonical/freshness beside the ingest (`MailSource`, `types.SnapshotProber`); `mail_provider_hygiene_test.go` rejects provider literals (issue #286) |
 | Sequential multi-provider or multi-kind work when already parallelizable | Follow `internal/core/librarykind.go` fan-out; don’t serialize merge review without cause |
 | Local variables named after `core/` sub-packages (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
+| Concept named before its glossary entry | `docs/glossary.md` entry in the introducing PR; retire synonyms in the same change |
+| New code parked in `internal/types` "for now" | `core/` sub-package or `shared` — policy, search docs, and kind rules were all audited back out of `types` |
+| Moving code again within weeks of its first move | Freeze the target layout for the duration of a move campaign; record layout questions in the design doc instead of another relocation |
+| Mutating a worktree without checking which one | Preflight `git rev-parse --show-toplevel` and pass `workdir` on every call |
 
 ## Where to look first
 
