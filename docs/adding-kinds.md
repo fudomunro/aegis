@@ -23,11 +23,11 @@ These three names often mean the same underlying concept. Keep them aligned.
 
 | Name | Where | Example |
 |------|-------|---------|
-| **Library kind ID** | `LibraryKind.ID`, cache keys, logs, metrics `DataType` | `tracks` |
-| **Permission / kind key** | `LibraryKind.PermType`, `Permissions` map, `DataTypeCapability.Name`, `DataTypeForPath` | `tracks` |
+| **Library kind ID** | `LibraryKind.ID`, cache keys, logs, metrics `Kind` | `tracks` |
+| **Permission / kind key** | `LibraryKind.PermType`, `Permissions` map, `KindCapability.Name`, `KindForPath` | `tracks` |
 | **Agent path** | `LibraryKind.Path` | `/v1/library/tracks` |
 
-A connector's **kind capability** (`DataTypeCapability`) advertises what
+A connector's **kind capability** (`KindCapability`) advertises what
 that *service* can do for the same key. A library kind is the **unified**
 cross-service view of that key.
 
@@ -78,7 +78,7 @@ internal/types/merge_<kind>.go  Per-kind identity keys + Merge* (one file per ki
 internal/types/providers.go  Provider interface (WidgetProvider) + ErrUnauthorized
 internal/types/kind.go       LibraryKind data helpers (already generic)
 internal/types/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
-internal/types/pathclass.go  dataTypePathRules for the provider's proxy paths
+internal/types/pathclass.go  kindPathRules for the provider's proxy paths
 <kind>.go                    Thin handler + filters/redaction glue
 librarykind.go               kindRuntime predicates + libraryRouteHandlers
 <provider>.go                Connector: Capabilities + ListUser… + optional proxy
@@ -207,7 +207,7 @@ Append a **data** entry to `types.BuiltinLibraryKinds` and a matching
 The registry is the **single source** for per-kind policy (issue #183).
 Derived lists — reserved UDT ids, app-token paths, `canonical_for` keys,
 access-level allowlists — are computed from it. Do **not** copy the kind
-list into `ReservedDataTypeKeys`, `canonicalKindIDs`, `appAllowedPrefixes`,
+list into `ReservedKindKeys`, `canonicalKindIDs`, `appAllowedPrefixes`,
 or `serviceProvidedTypes`.
 
 ```go
@@ -388,17 +388,17 @@ auto-mirroring.
 
 A kind is invisible until permissions and path classification know it.
 
-**Permission key** (`PermType` / `DataTypeCapability.Name`) must match what
-`DataTypeForPath` returns for that provider's proxy paths.
+**Permission key** (`PermType` / `KindCapability.Name`) must match what
+`KindForPath` returns for that provider's proxy paths.
 
-1. **`internal/types/pathclass.go` → `dataTypePathRules`**  
+1. **`internal/types/pathclass.go` → `kindPathRules`**  
    Map provider paths (`/me/widgets`, `/widgets/...`, …) to `"widgets"` via
-   `DataTypeForPath`.  
+   `KindForPath`.  
    Unknown paths fall through to `default` — that is fail-open for access, not
    a substitute for classification.
 
 2. **Connector `Capabilities()`**  
-   Advertise `DataTypeCapability{Name: "widgets", ...}` with real
+   Advertise `KindCapability{Name: "widgets", ...}` with real
    `Operations[]`:
    - `Operations` is `[]Operation` (method, path, parameters, response spec),
      not `[]string`.
@@ -495,12 +495,12 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 - [ ] `WidgetProvider` in `internal/types/providers.go` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
 - [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone` / `OptimisticCopies` / `ExtraInstructions` / `Search`) **and** a `kindRuntime` row (`newKindRuntime[P]`)
 - [ ] Route in `libraryRouteHandlers()`
-- [ ] `DataTypeForPath` rules use the same permission key (reserved automatically via the registry)
+- [ ] `KindForPath` rules use the same permission key (reserved automatically via the registry)
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
 - [ ] `redactSearch` on the `libraryKindSpec` when the kind has `AllowedLevels` (search hits hydrate from the index and skip fetch-time redaction)
 - [ ] Identity key + `MergeWidgets` in `internal/types/merge_widgets.go` (durable ID first; record `Match`) — merge logic does not live in core
 - [ ] Connector implements `WidgetProvider` + `Capabilities()` kind
-- [ ] `DataTypeForPath` cases for the provider's paths
+- [ ] `KindForPath` cases for the provider's paths
 - [ ] Tests: merge cases, aggregate happy path + unauthorized/error/truncated, permission deny
 
 **Locations (when applicable)**

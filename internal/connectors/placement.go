@@ -18,7 +18,7 @@ import (
 
 // Placement helpers shared by the write-side provider operations
 // (PlaylistItemWriteProvider, LikedTrackWriteProvider) and the paged list
-// reads reconciliation uses. Mirroring is reconciliation over data types
+// reads reconciliation uses. Mirroring is reconciliation over kinds
 // (issue #254): core plans, connectors operate.
 
 // apiJSON performs a raw JSON call to a service's configured endpoint using

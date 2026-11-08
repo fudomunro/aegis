@@ -218,7 +218,7 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 
 	hasLibraryType := false
 	hasReadablePlaylists := false
-	for _, dt := range topo.DataTypes {
+	for _, dt := range topo.Kinds {
 		if dt.Kind == "library" {
 			hasLibraryType = true
 		}
@@ -227,19 +227,19 @@ func TestHandleAdminFlow_Topology(t *testing.T) {
 		}
 	}
 	if !hasLibraryType {
-		t.Fatal("expected library data types in topology")
+		t.Fatal("expected library kinds in topology")
 	}
 	if !hasReadablePlaylists {
-		t.Fatal("expected readable playlists data type with providers")
+		t.Fatal("expected readable playlists kind with providers")
 	}
-	for _, dt := range topo.DataTypes {
+	for _, dt := range topo.Kinds {
 		if dt.Kind != "library" {
-			t.Fatalf("map data type %q kind = %q, want library only (proxy chips removed)", dt.ID, dt.Kind)
+			t.Fatalf("map kind %q kind = %q, want library only (proxy chips removed)", dt.ID, dt.Kind)
 		}
 	}
-	if len(topo.DataTypes) != len(topo.Libraries) {
-		t.Fatalf("data types = %d, libraries = %d; map chips should match synced library kinds",
-			len(topo.DataTypes), len(topo.Libraries))
+	if len(topo.Kinds) != len(topo.Libraries) {
+		t.Fatalf("kinds = %d, libraries = %d; map chips should match synced library kinds",
+			len(topo.Kinds), len(topo.Libraries))
 	}
 
 	hasPhotoNote := false
@@ -327,24 +327,24 @@ func TestAdminFlow_RouteRequiresAuth(t *testing.T) {
 func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 	srv := flowTestServer()
 	srv.recordAccess(AccessEvent{
-		Agent:    "alice@example.com",
-		Surface:  MetricSurfaceService,
-		Target:   "spotify",
-		DataType: "tracks",
-		Cache:    MetricCacheMiss,
+		Agent:   "alice@example.com",
+		Surface: MetricSurfaceService,
+		Target:  "spotify",
+		Kind:    "tracks",
+		Cache:   MetricCacheMiss,
 	})
 	srv.recordAccess(AccessEvent{
-		Agent:    "alice@example.com",
-		Surface:  MetricSurfaceLibrary,
-		Target:   "playlists",
-		DataType: "playlists",
-		Cache:    MetricCacheHit,
+		Agent:   "alice@example.com",
+		Surface: MetricSurfaceLibrary,
+		Target:  "playlists",
+		Kind:    "playlists",
+		Cache:   MetricCacheHit,
 	})
 	srv.recordAccess(AccessEvent{
-		Agent:    "bob@example.com",
-		Surface:  MetricSurfaceService,
-		Target:   "spotify",
-		DataType: "playlists",
+		Agent:   "bob@example.com",
+		Surface: MetricSurfaceService,
+		Target:  "spotify",
+		Kind:    "playlists",
 	})
 
 	req := httptest.NewRequest("GET", "/v1/admin/flow?window=1h", nil)
@@ -438,7 +438,7 @@ func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 		}
 	}
 	if foundAgentServiceEdge {
-		t.Fatal("did not expect agent → service edge; map should focus on data types")
+		t.Fatal("did not expect agent → service edge; map should focus on kinds")
 	}
 	if !foundAgentLibraryEdge {
 		t.Fatal("expected agent → library data edge")
@@ -550,7 +550,7 @@ func TestAdminFlow_HTMLIncludesMap(t *testing.T) {
 		t.Fatal("expected bidirectional gateway markers")
 	}
 	if !strings.Contains(body, "typeItems") {
-		t.Fatal("expected data-type row access arrows")
+		t.Fatal("expected kind row access arrows")
 	}
 	if !strings.Contains(body, "connection_id") {
 		t.Fatal("expected service connection_id for token-origin auth arrows")

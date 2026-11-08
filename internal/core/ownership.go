@@ -102,7 +102,7 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 			continue
 		}
 		name := ownershipCatalogName(id)
-		for _, dt := range m.DataTypes {
+		for _, dt := range m.Kinds {
 			if !dt.Supported {
 				continue
 			}
@@ -296,7 +296,7 @@ func ownershipRoute(serviceID, name string, m types.ConnectionMaturity, kind str
 	if r.Action.Target == "" {
 		r.Action.Target = serviceID
 	}
-	for _, dt := range m.DataTypes {
+	for _, dt := range m.Kinds {
 		if dt.Name == kind {
 			r.Description = dt.Description
 			break

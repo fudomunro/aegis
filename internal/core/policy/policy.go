@@ -1,7 +1,7 @@
 // Package policy holds Aegis's internal access policy: the access-level
 // vocabulary, legacy service Permissions maps, type-owned DataGrants,
 // effective/scope grant resolution, and the permissions-editor view models.
-// This is Aegis authorization state and rules — not the data-type layer
+// This is Aegis authorization state and rules — not the `internal/types` layer
 // (neutral models, merge, and library kinds stay in internal/types).
 package policy
 
@@ -14,9 +14,9 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// Access levels for agent access to a data type.
+// Access levels for agent access to a kind.
 const (
-	// AccessNone denies all operations on the data type.
+	// AccessNone denies all operations on the kind.
 	AccessNone = "none"
 	// AccessFreeBusy allows safe methods on events, but responses are
 	// reduced to availability only (start/end/all_day/status) — no titles,
@@ -48,27 +48,27 @@ const (
 )
 
 // DefaultAccessType is used when a service has no permissions block, or when
-// a data type is not listed and no "default" key is set.
+// a kind is not listed and no "default" key is set.
 const DefaultAccessType = AccessFull
 
 // PermissionDefaultKey is the reserved permissions map key that sets the level
-// for data types not listed explicitly.
+// for kinds not listed explicitly.
 const PermissionDefaultKey = "default"
 
-// Permissions maps data-type names to access levels. The reserved key
+// Permissions maps kind names to access levels. The reserved key
 // "default" applies to types not listed. A nil map means unrestricted access.
 type Permissions map[string]string
 
-// For returns the access level for a data type.
-// Unknown/empty data types fall through to "default" (or DefaultAccessType),
+// For returns the access level for a kind.
+// Unknown/empty kinds fall through to "default" (or DefaultAccessType),
 // except opt-in types (places) which stay "none" unless named explicitly —
 // the "default" key never enables them (issue #142).
 // Proxy callers with an unclassified path must use Strictest instead so
 // unknown surface cannot outrank a tighter type (issue #94).
-func (p Permissions) For(dataType string) string {
-	if shared.KindDefaultsNone(dataType) {
+func (p Permissions) For(kind string) string {
+	if shared.KindDefaultsNone(kind) {
 		if p != nil {
-			if level, ok := p[dataType]; ok {
+			if level, ok := p[kind]; ok {
 				return NormalizeAccess(level)
 			}
 		}
@@ -77,7 +77,7 @@ func (p Permissions) For(dataType string) string {
 	if p == nil {
 		return DefaultAccessType
 	}
-	level, ok := p[dataType]
+	level, ok := p[kind]
 	if ok {
 		return NormalizeAccess(level)
 	}
@@ -88,7 +88,7 @@ func (p Permissions) For(dataType string) string {
 }
 
 // Strictest returns the most restrictive access level configured on the map.
-// Used when a proxy path does not map to a known data type: unknown endpoints
+// Used when a proxy path does not map to a known kind: unknown endpoints
 // must not inherit "default" if any type is tighter (issue #94). A nil or empty
 // map is unrestricted. If reads and writes both appear, no single level is
 // tighter than every known type for an unknown method class — deny.
@@ -167,33 +167,33 @@ func (p Permissions) Strictest() string {
 	return DefaultAccessType
 }
 
-// AccessForDataType resolves the effective level for a classified path.
+// AccessForKind resolves the effective level for a classified path.
 // Unclassified paths use Strictest, never the default key (issue #94).
-func (p Permissions) AccessForDataType(dataType string) string {
-	if dataType == "" {
+func (p Permissions) AccessForKind(kind string) string {
+	if kind == "" {
 		return p.Strictest()
 	}
-	return p.For(dataType)
+	return p.For(kind)
 }
 
-// Allows reports whether the given HTTP method is permitted for the data type.
-func (p Permissions) Allows(dataType, method string) bool {
-	return AllowsMethod(p.For(dataType), method)
+// Allows reports whether the given HTTP method is permitted for the kind.
+func (p Permissions) Allows(kind, method string) bool {
+	return AllowsMethod(p.For(kind), method)
 }
 
-// AllowsRead reports whether read (GET/HEAD) is permitted for the data type.
-func (p Permissions) AllowsRead(dataType string) bool {
-	return AllowsMethod(p.For(dataType), http.MethodGet)
+// AllowsRead reports whether read (GET/HEAD) is permitted for the kind.
+func (p Permissions) AllowsRead(kind string) bool {
+	return AllowsMethod(p.For(kind), http.MethodGet)
 }
 
-// AllowsWrite reports whether any mutating method is permitted for the data type.
-func (p Permissions) AllowsWrite(dataType string) bool {
-	return AllowsMethod(p.For(dataType), http.MethodPost)
+// AllowsWrite reports whether any mutating method is permitted for the kind.
+func (p Permissions) AllowsWrite(kind string) bool {
+	return AllowsMethod(p.For(kind), http.MethodPost)
 }
 
-// DeniedDataTypes returns sorted data-type names explicitly set to "none".
+// DeniedKinds returns sorted kind names explicitly set to "none".
 // The reserved "default" key is omitted.
-func (p Permissions) DeniedDataTypes() []string {
+func (p Permissions) DeniedKinds() []string {
 	if p == nil {
 		return nil
 	}
@@ -210,10 +210,10 @@ func (p Permissions) DeniedDataTypes() []string {
 	return denied
 }
 
-// FreeBusyDataTypes returns sorted data-type names limited to free/busy
+// FreeBusyKinds returns sorted kind names limited to free/busy
 // (issue #128). Used in pre-request injection so agents know they only get
 // availability, not event content.
-func (p Permissions) FreeBusyDataTypes() []string {
+func (p Permissions) FreeBusyKinds() []string {
 	if p == nil {
 		return nil
 	}
@@ -230,10 +230,10 @@ func (p Permissions) FreeBusyDataTypes() []string {
 	return limited
 }
 
-// SummaryDataTypes returns sorted data-type names limited to totals-only
+// SummaryKinds returns sorted kind names limited to totals-only
 // summary (issue #141). Used in pre-request injection so agents know they
 // only get category/month totals, not line items.
-func (p Permissions) SummaryDataTypes() []string {
+func (p Permissions) SummaryKinds() []string {
 	if p == nil {
 		return nil
 	}
@@ -333,7 +333,7 @@ func AllowsMethod(level, method string) bool {
 	}
 }
 
-// DataGrant is an agent data grant owned by a data type (issue #148).
+// DataGrant is an agent data grant owned by a kind (issue #148).
 // Service-level Permissions remain a minority override during migration;
 // the type default is the primary model. Enforcement applies on the
 // content/ingest proxy, library, and pre-request injection. Capabilities
@@ -354,7 +354,7 @@ type DataGrant struct {
 // For returns the effective access level for a provider (or the type default
 // when provider is empty / has no override). Provider overrides can only
 // tighten the type default. Opt-in types (places) stay none when Default is
-// empty — call DataGrants.Access when the data-type key is known so opt-in
+// empty — call DataGrants.Access when the kind key is known so opt-in
 // rules apply.
 func (tp DataGrant) For(provider string) string {
 	level := NormalizeAccess(tp.Default)
@@ -375,24 +375,24 @@ func (tp DataGrant) For(provider string) string {
 	return stricterAccess(level, ovLevel)
 }
 
-// DataGrants maps data-type / permission keys to their agent policy.
+// DataGrants maps kind / permission keys to their agent policy.
 type DataGrants map[string]DataGrant
 
-// For returns the policy for a data type key (zero value when unset).
-func (tp DataGrants) For(dataType string) DataGrant {
+// For returns the policy for a kind key (zero value when unset).
+func (tp DataGrants) For(kind string) DataGrant {
 	if tp == nil {
 		return DataGrant{}
 	}
-	return tp[dataType]
+	return tp[kind]
 }
 
-// Access returns the effective agent access for a data type from a provider.
+// Access returns the effective agent access for a kind from a provider.
 // Type default applies first; the provider override can only tighten it
 // (issue #148). Opt-in types stay none unless named explicitly — either the
 // type default or that provider's override (the Permissions "default" key
 // never enables them).
-func (tp DataGrants) Access(dataType, provider string) string {
-	policy := tp.For(dataType)
+func (tp DataGrants) Access(kind, provider string) string {
+	policy := tp.For(kind)
 	typeLevel := NormalizeAccess(policy.Default)
 	if typeLevel == "" {
 		typeLevel = AccessNone
@@ -403,7 +403,7 @@ func (tp DataGrants) Access(dataType, provider string) string {
 			explicitProvider = NormalizeAccess(v)
 		}
 	}
-	if shared.KindDefaultsNone(dataType) {
+	if shared.KindDefaultsNone(kind) {
 		if explicitProvider == "" {
 			if typeLevel == AccessNone {
 				return AccessNone
@@ -433,8 +433,8 @@ func (tp DataGrants) Access(dataType, provider string) string {
 // can keep their map shape while ownership stays type-level.
 func (tp DataGrants) PermissionsFor(provider string) Permissions {
 	out := Permissions{}
-	for dataType := range tp {
-		out[dataType] = tp.Access(dataType, provider)
+	for kind := range tp {
+		out[kind] = tp.Access(kind, provider)
 	}
 	if len(out) == 0 {
 		return nil
@@ -445,39 +445,39 @@ func (tp DataGrants) PermissionsFor(provider string) Permissions {
 // ValidateDataGrants checks every data grant entry (default + provider
 // overrides) against the access vocabulary and type-scoped redaction rules.
 func ValidateDataGrants(policies DataGrants) error {
-	for dataType, policy := range policies {
-		if dataType == "" {
+	for kind, policy := range policies {
+		if kind == "" {
 			return fmt.Errorf("data grants: empty kind key")
 		}
 		// Empty default is allowed (DefaultAccessType / opt-in none).
 		if policy.Default != "" {
-			if err := ValidatePermissions(Permissions{dataType: policy.Default}); err != nil {
-				return fmt.Errorf("data grant %q: %w", dataType, err)
+			if err := ValidatePermissions(Permissions{kind: policy.Default}); err != nil {
+				return fmt.Errorf("data grant %q: %w", kind, err)
 			}
 		}
 		for provider, level := range policy.Providers {
 			if provider == "" {
-				return fmt.Errorf("data grant %q: empty provider key", dataType)
+				return fmt.Errorf("data grant %q: empty provider key", kind)
 			}
-			if err := ValidatePermissions(Permissions{dataType: level}); err != nil {
-				return fmt.Errorf("data grant %q provider %q: %w", dataType, provider, err)
+			if err := ValidatePermissions(Permissions{kind: level}); err != nil {
+				return fmt.Errorf("data grant %q provider %q: %w", kind, provider, err)
 			}
 		}
 	}
 	return nil
 }
 
-// legacyOverride returns the legacy service-map opinion for a data type.
+// legacyOverride returns the legacy service-map opinion for a kind.
 // The second result is false when the map has no opinion (so data grant is
 // not tightened). Opt-in types only take an explicit key, never "default".
-func legacyOverride(p Permissions, dataType string) (string, bool) {
+func legacyOverride(p Permissions, kind string) (string, bool) {
 	if len(p) == 0 {
 		return "", false
 	}
-	if v, ok := p[dataType]; ok {
+	if v, ok := p[kind]; ok {
 		return NormalizeAccess(v), true
 	}
-	if shared.KindDefaultsNone(dataType) {
+	if shared.KindDefaultsNone(kind) {
 		return "", false
 	}
 	if v, ok := p[PermissionDefaultKey]; ok {
@@ -486,7 +486,7 @@ func legacyOverride(p Permissions, dataType string) (string, bool) {
 	return "", false
 }
 
-// EffectiveAccess resolves agent access for a data type from a provider
+// EffectiveAccess resolves agent access for a kind from a provider
 // (issue #148):
 //
 //  1. data grant is primary when present (default + provider tighten-only)
@@ -494,20 +494,20 @@ func legacyOverride(p Permissions, dataType string) (string, bool) {
 //  3. when no data grant exists for the type, service grant_limits
 //     remain the authority (compat window; they can still opt in places)
 //
-// Unclassified paths must pass dataType == "" and use the Strictest view so
+// Unclassified paths must pass kind == "" and use the Strictest view so
 // unknown surface cannot inherit a wide default (issue #94).
-func EffectiveAccess(policies DataGrants, legacy Permissions, dataType, provider string) string {
-	if dataType == "" {
+func EffectiveAccess(policies DataGrants, legacy Permissions, kind, provider string) string {
+	if kind == "" {
 		level := policies.PermissionsFor(provider).Strictest()
 		if legacy != nil {
 			level = stricterAccess(level, legacy.Strictest())
 		}
 		return level
 	}
-	_, hasDataGrant := policies[dataType]
+	_, hasDataGrant := policies[kind]
 	if hasDataGrant {
-		level := policies.Access(dataType, provider)
-		if ov, ok := legacyOverride(legacy, dataType); ok {
+		level := policies.Access(kind, provider)
+		if ov, ok := legacyOverride(legacy, kind); ok {
 			level = stricterAccess(level, ov)
 		}
 		return level
@@ -515,9 +515,9 @@ func EffectiveAccess(policies DataGrants, legacy Permissions, dataType, provider
 	// No type-owned policy for this key: service grant_limits still decide
 	// during the migration window (they can name opt-in types explicitly).
 	if legacy != nil {
-		return legacy.For(dataType)
+		return legacy.For(kind)
 	}
-	if shared.KindDefaultsNone(dataType) {
+	if shared.KindDefaultsNone(kind) {
 		return AccessNone
 	}
 	return DefaultAccessType
@@ -531,8 +531,8 @@ func EffectivePermissions(policies DataGrants, legacy Permissions, provider stri
 	// Collect every type the policies name plus every type the legacy map
 	// names (except "default"), so service-only keys still resolve.
 	keys := map[string]bool{}
-	for dataType := range policies {
-		keys[dataType] = true
+	for kind := range policies {
+		keys[kind] = true
 	}
 	for k := range legacy {
 		if k == PermissionDefaultKey {
@@ -547,8 +547,8 @@ func EffectivePermissions(policies DataGrants, legacy Permissions, provider stri
 		return legacy.Clone()
 	}
 	out := Permissions{}
-	for dataType := range keys {
-		out[dataType] = EffectiveAccess(policies, legacy, dataType, provider)
+	for kind := range keys {
+		out[kind] = EffectiveAccess(policies, legacy, kind, provider)
 	}
 	// Preserve a legacy "default" key only as a documentation of unlisted
 	// types; enforcement for unlisted types uses EffectiveAccess/Strictest.

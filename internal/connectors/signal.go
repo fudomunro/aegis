@@ -1093,7 +1093,7 @@ func NewSignalConnector(store *SignalStore) *SignalConnector {
 
 func (c *SignalConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "contacts",
 				Description: "Imported Signal contacts (names and phones from a local export)",

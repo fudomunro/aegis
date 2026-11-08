@@ -31,7 +31,7 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 		Agent:    "alice@example.com",
 		Surface:  MetricSurfaceLibrary,
 		Target:   "playlists",
-		DataType: "playlists",
+		Kind:     "playlists",
 		Cache:    MetricCacheHit,
 		Decision: audit.DecisionAllow,
 		Method:   http.MethodGet,
@@ -40,7 +40,7 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 		Agent:    "alice@example.com",
 		Surface:  MetricSurfaceService,
 		Target:   "spotify",
-		DataType: "player",
+		Kind:     "player",
 		Decision: audit.DecisionDeny,
 		Reason:   "permission",
 		Method:   http.MethodPost,
@@ -117,7 +117,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 		if row.Agent != "api-key" {
 			t.Fatalf("agent = %q, want api-key", row.Agent)
 		}
-		if row.Surface == MetricSurfaceService && row.Target == "spotify" && row.DataType == "playlists" {
+		if row.Surface == MetricSurfaceService && row.Target == "spotify" && row.Kind == "playlists" {
 			sawService = true
 		}
 		if row.Surface == MetricSurfaceLibrary && row.Target == "playlists" {

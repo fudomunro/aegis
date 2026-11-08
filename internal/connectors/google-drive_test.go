@@ -194,7 +194,7 @@ func TestGoogleDriveHandleProxy_AcceptsDriveV3ExportPath(t *testing.T) {
 func TestGoogleDriveCapabilitiesAndInstructions(t *testing.T) {
 	c := NewGoogleDriveConnector(newTestHost("https://aegis.example.com"))
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "documents" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "documents" {
 		t.Fatalf("caps = %+v", caps)
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")

@@ -140,10 +140,10 @@ func TestPaperlessUnauthorized(t *testing.T) {
 func TestPaperlessCapabilitiesAndInstructions(t *testing.T) {
 	c := NewPaperlessConnector(newTestHost("https://aegis.example.com"))
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "documents" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "documents" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if len(caps.DataTypes[0].Operations) == 0 {
+	if len(caps.Kinds[0].Operations) == 0 {
 		t.Fatal("expected operations")
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")

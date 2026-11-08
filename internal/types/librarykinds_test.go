@@ -34,11 +34,11 @@ func TestBuiltinLibraryKinds_Reserved(t *testing.T) {
 		if !IsReservedUserDefinedID(k.ID) {
 			t.Errorf("kind %q is not reserved; a UDT pack could shadow it", k.ID)
 		}
-		if !IsReservedDataTypeKey(k.ID) {
-			t.Errorf("kind %q missing from reserved data-type keys", k.ID)
+		if !IsReservedKindKey(k.ID) {
+			t.Errorf("kind %q missing from reserved kind keys", k.ID)
 		}
-		if !ReservedDataTypeKeys()[k.ID] {
-			t.Errorf("kind %q missing from ReservedDataTypeKeys()", k.ID)
+		if !ReservedKindKeys()[k.ID] {
+			t.Errorf("kind %q missing from ReservedKindKeys()", k.ID)
 		}
 	}
 	// Regression for the documents hole (issue #183).
@@ -53,8 +53,8 @@ func TestBuiltinLibraryKinds_Reserved(t *testing.T) {
 	}
 	// Proxy-only permission keys that are not library kinds stay reserved.
 	for _, id := range []string{"library", "player", "search", "channels", "recommendations", "user"} {
-		if !IsReservedDataTypeKey(id) {
-			t.Errorf("proxy data-type key %q must be reserved", id)
+		if !IsReservedKindKey(id) {
+			t.Errorf("proxy kind key %q must be reserved", id)
 		}
 	}
 	if IsReservedUserDefinedID("reading-list") {
@@ -165,15 +165,15 @@ func TestBuiltinLibraryKinds_DerivedLists(t *testing.T) {
 	}
 }
 
-// TestDataTypePathRules_UseReservedKeys keeps the proxy classifier aligned
-// with reserved data-type keys (issue #183).
-func TestDataTypePathRules_UseReservedKeys(t *testing.T) {
-	for _, rule := range dataTypePathRules {
-		if rule.DataType == "" {
-			t.Fatalf("path rule %+v has empty DataType", rule)
+// TestKindPathRules_UseReservedKeys keeps the proxy classifier aligned
+// with reserved kind keys (issue #183).
+func TestKindPathRules_UseReservedKeys(t *testing.T) {
+	for _, rule := range kindPathRules {
+		if rule.Kind == "" {
+			t.Fatalf("path rule %+v has empty Kind", rule)
 		}
-		if !IsReservedDataTypeKey(rule.DataType) {
-			t.Errorf("path rule DataType %q is not a reserved data-type key", rule.DataType)
+		if !IsReservedKindKey(rule.Kind) {
+			t.Errorf("path rule Kind %q is not a reserved kind key", rule.Kind)
 		}
 	}
 }

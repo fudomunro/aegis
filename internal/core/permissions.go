@@ -12,19 +12,19 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-// writableDataSet reports data types the admin form may offer as Editable:
+// writableDataSet reports kinds the admin form may offer as Editable:
 // agent-meaningful proxy write ops only. Mirror adapters and picker/search
-// POSTs do not count — those are not "agents can edit this data type".
+// POSTs do not count — those are not "agents can edit this kind".
 func (s *Server) writableDataSet(serviceID string, caps types.ServiceCapabilities) map[string]bool {
 	set := map[string]bool{}
-	for _, name := range types.WritableDataTypesFromCapabilities(caps) {
+	for _, name := range types.WritableKindsFromCapabilities(caps) {
 		set[name] = true
 	}
 	return set
 }
 
-// writableDataTypesFor returns the sorted list for admin payloads.
-func (s *Server) writableDataTypesFor(serviceID string, caps types.ServiceCapabilities) []string {
+// writableKindsFor returns the sorted list for admin payloads.
+func (s *Server) writableKindsFor(serviceID string, caps types.ServiceCapabilities) []string {
 	set := s.writableDataSet(serviceID, caps)
 	out := make([]string, 0, len(set))
 	for k := range set {
@@ -44,7 +44,7 @@ func clampPermissionsWithWritable(p policy.Permissions, caps types.ServiceCapabi
 		return nil
 	}
 	known := map[string]bool{}
-	for _, dt := range caps.DataTypes {
+	for _, dt := range caps.Kinds {
 		known[dt.Name] = true
 	}
 	out := make(policy.Permissions, len(p))
@@ -63,8 +63,8 @@ func clampPermissionsWithWritable(p policy.Permissions, caps types.ServiceCapabi
 // because the connector does not implement any mutating op for that data
 // type. Picker/search POSTs still count here so a configured write level can
 // reach them; the admin form simply does not offer Editable for those.
-func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool {
-	if !types.IsMutatingMethod(method) || dataType == "" || serviceID == "" {
+func (s *Server) connectorWriteBlocked(serviceID, kind, method string) bool {
+	if !types.IsMutatingMethod(method) || kind == "" || serviceID == "" {
 		return false
 	}
 	conn, ok := s.connectors[serviceID]
@@ -72,10 +72,10 @@ func (s *Server) connectorWriteBlocked(serviceID, dataType, method string) bool 
 		return false
 	}
 	caps := conn.Capabilities()
-	if !types.DataTypeKnown(caps, dataType) {
+	if !types.KindKnown(caps, kind) {
 		return false
 	}
-	return !types.DataTypeHasWriteOp(caps, dataType)
+	return !types.KindHasWriteOp(caps, kind)
 }
 
 // effectivePermissions resolves agent access for a service from data grants
@@ -88,14 +88,14 @@ func (s *Server) effectivePermissions(svc *Service) policy.Permissions {
 	return s.config.EffectivePermissions(svc.ID)
 }
 
-// requestLevel returns the effective access level for a data type on a
+// requestLevel returns the effective access level for a kind on a
 // service for this request: owner-tier effective permissions tightened by
 // the principal's scope grants (issue #253). Scope grants never open what
 // owner policy closed — the level is the stricter of both layers. Internal
 // owner-tier fetches (search-index writes) skip the tightening so the index
 // stores the partition's fullest rows (issue #272).
-func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) string {
-	level := s.effectivePermissions(svc).AccessForDataType(dataType)
+func (s *Server) requestLevel(r *http.Request, svc *Service, kind string) string {
+	level := s.effectivePermissions(svc).AccessForKind(kind)
 	sc := scopes.From(r)
 	if sc == nil || ownerView(r) {
 		return level
@@ -104,7 +104,7 @@ func (s *Server) requestLevel(r *http.Request, svc *Service, dataType string) st
 	if svc != nil {
 		provider = svc.ID
 	}
-	return policy.ScopeTighten(sc.Grants, level, dataType, provider)
+	return policy.ScopeTighten(sc.Grants, level, kind, provider)
 }
 
 // requestPermissions is requestLevel's map view: owner-tier effective
@@ -129,10 +129,10 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 	if svc == nil {
 		return false
 	}
-	dataType := types.DataTypeForPath(remainingPath)
-	level := s.requestLevel(r, svc, dataType)
-	if s.connectorWriteBlocked(svc.ID, dataType, r.Method) {
-		label := dataType
+	kind := types.KindForPath(remainingPath)
+	level := s.requestLevel(r, svc, kind)
+	if s.connectorWriteBlocked(svc.ID, kind, r.Method) {
+		label := kind
 		if label == "" {
 			label = "this data"
 		}
@@ -145,7 +145,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 	if policy.AllowsMethod(level, r.Method) {
 		return true
 	}
-	label := dataType
+	label := kind
 	if label == "" {
 		label = "this data"
 	}
@@ -157,15 +157,15 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 }
 
 // permissionNotice returns a short system-instruction suffix listing denied
-// data types so agents do not waste turns on blocked endpoints. Also warns
+// kinds so agents do not waste turns on blocked endpoints. Also warns
 // when a type is free/busy only (issue #128).
 func permissionNotice(p policy.Permissions) string {
 	var parts []string
-	if denied := p.DeniedDataTypes(); len(denied) > 0 {
+	if denied := p.DeniedKinds(); len(denied) > 0 {
 		parts = append(parts, "the following kinds are not available and must not be requested: "+
 			strings.Join(denied, ", "))
 	}
-	if limited := p.FreeBusyDataTypes(); len(limited) > 0 {
+	if limited := p.FreeBusyKinds(); len(limited) > 0 {
 		parts = append(parts, strings.Join(limited, ", ")+
 			" is free/busy only — responses include start_at, end_at, all_day, and status; never request titles, attendees, locations, or descriptions. Prefer GET /v1/library/freebusy for scheduling.")
 	}
@@ -175,7 +175,7 @@ func permissionNotice(p policy.Permissions) string {
 	return "Data grants: " + strings.Join(parts, ". ") + "."
 }
 
-// allDataDenied reports whether every listed data type (and the default)
+// allDataDenied reports whether every listed kind (and the default)
 // is "none", so there is nothing useful to inject for the service.
 func allDataDenied(p policy.Permissions) bool {
 	if p == nil {

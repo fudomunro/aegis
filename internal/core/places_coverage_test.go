@@ -177,7 +177,7 @@ func TestOwnTracksConnector_HandleProxy(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	conn := connectors.NewOwnTracksConnector(srv)
-	if caps := conn.Capabilities(); len(caps.DataTypes) == 0 {
+	if caps := conn.Capabilities(); len(caps.Kinds) == 0 {
 		t.Fatal("capabilities empty")
 	}
 	if s := conn.SystemInstructions("https://aegis.example.com"); s == "" {
@@ -253,7 +253,7 @@ func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
 	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
-	if caps := conn.Capabilities(); len(caps.DataTypes) == 0 {
+	if caps := conn.Capabilities(); len(caps.Kinds) == 0 {
 		t.Fatal("caps")
 	}
 	if s := conn.SystemInstructions("https://x"); s == "" {

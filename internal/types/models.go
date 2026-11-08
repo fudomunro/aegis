@@ -412,8 +412,8 @@ const (
 // social posts/replies the user authored or received as conversation.
 //
 // Messages are not app or service notifications (likes, shipping updates,
-// marketing blasts, system alerts). Those are out of scope for this type;
-// when a Notifications data type lands, operators can reclassify
+// marketing blasts, system alerts). Those are out of scope for this kind;
+// when a Notifications kind lands, operators can reclassify
 // notification-shaped mail/social activity there instead.
 //
 // Service identity lives in Sources. Aegis does not store message bodies as

@@ -42,7 +42,7 @@ Go structs and switch statements. They need:
 | Type description | `LibraryKind` + hard-coded model | Schema-as-data (fields, identity, merge, redaction) |
 | Registry | `var libraryKinds = []LibraryKind{…}` in Go | Runtime registration + built-ins |
 | Handlers | `HandleLibraryWidgets` per kind | Generic aggregate over a schema |
-| Permissions | map keys hard-coded in `DataTypeForPath` | Kind-owned policy + path patterns |
+| Permissions | map keys hard-coded in `KindForPath` | Kind-owned policy + path patterns |
 | Provider | `WidgetProvider` Go interface | Pluggable fetch (HTTP mapping, SQL, local file) |
 
 Without a real type layer, user-defined types become a parallel code path —
@@ -129,7 +129,7 @@ the restructure PRs. Restructure is boundaries only.
 - Connectors hold `*Server` and call `getValidToken`, `upstreamBaseFor`,
   `config`, `cache` (~50 call sites).
 - Type knowledge is split across `models.go`, `librarykind.go`, `match.go`,
-  `permissions.go` (`DataTypeForPath`), `canonical.go`, `copy_ledger_stamp.go`.
+  `permissions.go` (`KindForPath`), `canonical.go`, `copy_ledger_stamp.go`.
 - Extension checklist is already excellent (`docs/adding-kinds.md`) — it
   describes *logical* layers that do not yet exist as packages.
 
@@ -143,7 +143,7 @@ connectors ──► *Server ──► types (models, LibraryKind)
 
 `LibraryKind.HasProviders` / `Readable` take `*Server`.  
 `libraryKindSpec` methods are bound to `*Server`.  
-`DataTypeForPath` is a hard-coded switch in `permissions.go`.
+`KindForPath` is a hard-coded switch in `permissions.go`.
 
 ---
 
@@ -167,7 +167,7 @@ github.com/fudomunro/aegis/
 | Layer | Owns | Must not own |
 |-------|------|--------------|
 | **shared** | `HTTPClient`, `LibraryPageCap`, `WriteJSON` / `WriteJSONError`, `TrimRightSlash`, generic map/JSON coercion (`ExtractNested`, `ExtractNames`, `ExtraOrNil`, `AsInt`), math helpers (`HaversineMeters`, `Iso8601DurationMs`) | Domain models, `Host`, service IDs, provider knowledge, policy — and it imports none of the other Aegis packages (stdlib only) |
-| **types** | Neutral models, identity/merge, `LibraryKind` *data*, type schema (including future UDT), `TypePolicy` / access levels, redaction *rules*, `DataTypeCapability` / `Operation` shapes, error sentinels (`ErrUnauthorized`) | HTTP, tokens, config file I/O, `*Server`, provider HTTP |
+| **types** | Neutral models, identity/merge, `LibraryKind` *data*, type schema (including future UDT), `TypePolicy` / access levels, redaction *rules*, `KindCapability` / `Operation` shapes, error sentinels (`ErrUnauthorized`) | HTTP, tokens, config file I/O, `*Server`, provider HTTP |
 | **core** | `Server` / host, auth, config + overlays, OAuth + tokens, proxy + cache + httpclient, permission *enforcement*, `handleLibraryAggregate`, admin/flow/metrics, state stores (copy ledger, entity links, mail, …) | Provider-specific JSON, per-kind merge logic, service brand knowledge |
 | **connectors** | `ServiceConnector` impls, `Capabilities()`, `SystemInstructions`, `HandleProxy`, `ListUser*` providers, setup flows (Immich, YNAB), sample calendar, `DoUpstreamRequest` | Permission policy, neutral merge, admin HTML, token storage |
 
@@ -276,7 +276,7 @@ exist. Still one package — pure mechanical + interface work.
 4. Split `LibraryKind` into **data** (ID, Path, PermType, messages, keywords)
    and **runtime predicates** (`HasProviders`, `Readable`) owned by core
    registration — or keep predicates as `func(Host) bool`.
-5. Replace `DataTypeForPath` giant switch with **kind-declared path patterns**
+5. Replace `KindForPath` giant switch with **kind-declared path patterns**
    (still evaluated in permissions/proxy): each kind/connector registers
    prefixes. Behavior must match current cases 1:1 (table-driven tests).
 
@@ -296,7 +296,7 @@ Move (and rename package):
 | `match.go`, identity/merge helpers | `internal/types/merge_*.go` |
 | `librarykind.go` data + `Instructions`/`Mentions`/`CacheKey` | `internal/types/kind.go` |
 | access levels + `TypePolicy` + redaction *rules* | `internal/types/policy.go` |
-| `DataTypeCapability`, `Operation`, … | `internal/types/capabilities.go` |
+| `KindCapability`, `Operation`, … | `internal/types/capabilities.go` |
 | `ErrUnauthorized` and shared list status shapes | `internal/types/…` |
 
 Leave in core: `handleLibraryAggregate`, `collectProviders`, `hasProvider`,
@@ -418,7 +418,7 @@ ownership proofs (#20), multi-user (#149), replacing named connectors.
 |------|------------|
 | Import cycles Server ↔ kinds ↔ connectors | Host seam first; types pure; core owns runtime predicates |
 | 27k-line test churn | Phase 1 stays in-package; move tests only with the source they cover |
-| Path classification regressions | Table-driven parity tests for every `DataTypeForPath` case before the switch |
+| Path classification regressions | Table-driven parity tests for every `KindForPath` case before the switch |
 | Permission dual-path confusion (#148) | Document compatibility window; clamp overrides; AGENTS.md pitfalls row |
 | Coverage floor noise from moved files | Keep statement coverage identical; run full CI shape each PR |
 | Scope creep into UDT feature | Phases 5–6 gated; Phase 1–4 accept no product change |

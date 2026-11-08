@@ -41,10 +41,10 @@ func (c *GoogleContactsConnector) GoogleContactsUpstreamBase() string {
 	return c.host.UpstreamBaseFor(GoogleContactsServiceID, "https://people.googleapis.com/v1")
 }
 
-// Capabilities returns what Google Contacts data types and operations are supported.
+// Capabilities returns what Google Contacts kinds and operations are supported.
 func (c *GoogleContactsConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "contacts",
 				Description: "Address book — list contacts (metadata only)",

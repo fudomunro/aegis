@@ -126,8 +126,8 @@ func TestMaturityCatalogCoversEveryConnector(t *testing.T) {
 		if m.Transport == "" {
 			t.Errorf("connector %q has no transport classification", c.id)
 		}
-		if len(m.DataTypes) == 0 {
-			t.Errorf("connector %q catalog entry lists no data types", c.id)
+		if len(m.Kinds) == 0 {
+			t.Errorf("connector %q catalog entry lists no kinds", c.id)
 		}
 	}
 }
@@ -145,12 +145,12 @@ func TestMaturityCatalogNeverUnderclaims(t *testing.T) {
 			continue
 		}
 		supported := map[string]bool{}
-		for _, dt := range m.DataTypes {
+		for _, dt := range m.Kinds {
 			if dt.Supported {
 				supported[dt.Name] = true
 			}
 		}
-		for _, dt := range c.conn.Capabilities().DataTypes {
+		for _, dt := range c.conn.Capabilities().Kinds {
 			// Empty Operations means "recognized, not implemented" — the
 			// catalog may call those either way. Callable ops must be
 			// marked supported.
@@ -170,7 +170,7 @@ func TestMaturityCatalogNeverUnderclaims(t *testing.T) {
 }
 
 // TestMaturityCatalogNeverOverclaims is the other direction: no entry may
-// claim support for a data type the connector does not advertise and does
+// claim support for a kind the connector does not advertise and does
 // not feed. Gap rows stay unsupported; supported rows must be real.
 func TestMaturityCatalogNeverOverclaims(t *testing.T) {
 	cat := maturityByService(t)
@@ -180,13 +180,13 @@ func TestMaturityCatalogNeverOverclaims(t *testing.T) {
 			continue
 		}
 		known := map[string]bool{}
-		for _, dt := range c.conn.Capabilities().DataTypes {
+		for _, dt := range c.conn.Capabilities().Kinds {
 			known[dt.Name] = true
 		}
 		for kind := range providerKindNames(c.conn) {
 			known[kind] = true
 		}
-		for _, dt := range m.DataTypes {
+		for _, dt := range m.Kinds {
 			if dt.Supported && !known[dt.Name] {
 				t.Errorf("connector %q: catalog claims support for %q, which no capability or library feed recognizes", c.id, dt.Name)
 			}
@@ -195,12 +195,12 @@ func TestMaturityCatalogNeverOverclaims(t *testing.T) {
 }
 
 // TestMaturityCatalogFieldCoverageIsReal keeps declared field coverage
-// inside the neutral-model content fields for that data type. Hand-built
+// inside the neutral-model content fields for that kind. Hand-built
 // Fields slices must not invent field names; FieldCoverageFor already
 // enforces this on the common path.
 func TestMaturityCatalogFieldCoverageIsReal(t *testing.T) {
 	for _, m := range ConnectionMaturityCatalog() {
-		for _, dt := range m.DataTypes {
+		for _, dt := range m.Kinds {
 			want := map[string]bool{}
 			for _, f := range types.MaturityContentFields[dt.Name] {
 				want[f] = true

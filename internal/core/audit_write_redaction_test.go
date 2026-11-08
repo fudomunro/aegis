@@ -32,7 +32,7 @@ func TestAuditLog_WriteListAndRedaction(t *testing.T) {
 		Agent:    "alice@example.com",
 		Surface:  MetricSurfaceLibrary,
 		Target:   "tracks",
-		DataType: "tracks",
+		Kind:     "tracks",
 		Cache:    MetricCacheMiss,
 		Decision: audit.DecisionAllow,
 		Method:   http.MethodGet,
@@ -42,7 +42,7 @@ func TestAuditLog_WriteListAndRedaction(t *testing.T) {
 		Agent:    "bob@example.com",
 		Surface:  MetricSurfaceService,
 		Target:   "spotify",
-		DataType: "player",
+		Kind:     "player",
 		Decision: audit.DecisionDeny,
 		Reason:   "permission",
 		Method:   http.MethodPost,
@@ -88,7 +88,7 @@ func TestAuditLog_WriteListAndRedaction(t *testing.T) {
 
 	// Redaction: rows never carry token material.
 	for _, row := range all {
-		blob := row.Agent + row.Target + row.Reason + row.DataType + row.Cache + row.Method
+		blob := row.Agent + row.Target + row.Reason + row.Kind + row.Cache + row.Method
 		for _, bad := range []string{"Bearer ", "eyJ", "refresh_token", "access_token"} {
 			if strings.Contains(blob, bad) {
 				t.Fatalf("audit row looks like it holds secret material: %+v", row)

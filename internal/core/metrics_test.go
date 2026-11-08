@@ -18,10 +18,10 @@ func TestAccessMetrics_AgentDetailBreakdown(t *testing.T) {
 	m := NewAccessMetrics(16)
 	now := time.Now()
 
-	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", DataType: "tracks"})
-	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", DataType: "tracks"})
-	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceLibrary, Target: "playlists", DataType: "playlists"})
-	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "bob@example.com", Surface: MetricSurfaceService, Target: "youtube-music", DataType: "tracks"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", Kind: "tracks"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", Kind: "tracks"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceLibrary, Target: "playlists", Kind: "playlists"})
+	m.Record(AccessEvent{At: now.Add(-time.Minute), Agent: "bob@example.com", Surface: MetricSurfaceService, Target: "youtube-music", Kind: "tracks"})
 
 	snap := m.Snapshot(time.Hour)
 	if snap.Agents.Distinct != 2 {
@@ -45,8 +45,8 @@ func TestAccessMetrics_AgentDetailBreakdown(t *testing.T) {
 	if alice.Libraries["playlists"] != 1 {
 		t.Fatalf("alice playlists = %d, want 1", alice.Libraries["playlists"])
 	}
-	if alice.DataTypes["tracks"] != 2 || alice.DataTypes["playlists"] != 1 {
-		t.Fatalf("alice data types = %v, want tracks=2 playlists=1", alice.DataTypes)
+	if alice.Kinds["tracks"] != 2 || alice.Kinds["playlists"] != 1 {
+		t.Fatalf("alice kinds = %v, want tracks=2 playlists=1", alice.Kinds)
 	}
 	if alice.LastAt.IsZero() {
 		t.Fatal("expected alice last_at")
@@ -85,10 +85,10 @@ func TestAccessMetrics_RecordAndSnapshotWindows(t *testing.T) {
 	m := NewAccessMetrics(16)
 	now := time.Now()
 
-	m.Record(AccessEvent{At: now.Add(-2 * time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", DataType: "tracks", Cache: MetricCacheMiss})
-	m.Record(AccessEvent{At: now.Add(-10 * time.Minute), Agent: "bob@example.com", Surface: MetricSurfaceService, Target: "spotify", DataType: "playlists", Cache: MetricCacheHit})
-	m.Record(AccessEvent{At: now.Add(-30 * time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceLibrary, Target: "tracks", DataType: "tracks", Cache: MetricCacheMiss})
-	m.Record(AccessEvent{At: now.Add(-2 * time.Hour), Agent: "carol@example.com", Surface: MetricSurfaceService, Target: "youtube-music", DataType: "tracks"})
+	m.Record(AccessEvent{At: now.Add(-2 * time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceService, Target: "spotify", Kind: "tracks", Cache: MetricCacheMiss})
+	m.Record(AccessEvent{At: now.Add(-10 * time.Minute), Agent: "bob@example.com", Surface: MetricSurfaceService, Target: "spotify", Kind: "playlists", Cache: MetricCacheHit})
+	m.Record(AccessEvent{At: now.Add(-30 * time.Minute), Agent: "alice@example.com", Surface: MetricSurfaceLibrary, Target: "tracks", Kind: "tracks", Cache: MetricCacheMiss})
+	m.Record(AccessEvent{At: now.Add(-2 * time.Hour), Agent: "carol@example.com", Surface: MetricSurfaceService, Target: "youtube-music", Kind: "tracks"})
 
 	five := m.Snapshot(5 * time.Minute)
 	if five.Agents.Distinct != 1 {
@@ -112,8 +112,8 @@ func TestAccessMetrics_RecordAndSnapshotWindows(t *testing.T) {
 	if oneHour.Libraries["tracks"].Hits != 1 {
 		t.Fatalf("1h tracks library hits = %d, want 1", oneHour.Libraries["tracks"].Hits)
 	}
-	if oneHour.Services["spotify"].DataTypes["tracks"] != 1 {
-		t.Fatalf("1h spotify tracks type count = %d, want 1", oneHour.Services["spotify"].DataTypes["tracks"])
+	if oneHour.Services["spotify"].Kinds["tracks"] != 1 {
+		t.Fatalf("1h spotify tracks type count = %d, want 1", oneHour.Services["spotify"].Kinds["tracks"])
 	}
 
 	day := m.Snapshot(24 * time.Hour)
@@ -205,8 +205,8 @@ func TestHandleServiceProxy_RecordsAccessStats(t *testing.T) {
 	if st.Hits != 1 {
 		t.Fatalf("spotify hits = %d, want 1", st.Hits)
 	}
-	if st.DataTypes["playlists"] != 1 {
-		t.Fatalf("data types = %v, want playlists=1", st.DataTypes)
+	if st.Kinds["playlists"] != 1 {
+		t.Fatalf("kinds = %v, want playlists=1", st.Kinds)
 	}
 	if st.CacheMiss != 1 {
 		t.Fatalf("cache misses = %d, want 1", st.CacheMiss)
@@ -371,11 +371,11 @@ func TestHandleAdminRoutes_LibraryRequiresAuth(t *testing.T) {
 func TestMetrics_Redacted_NoBodiesOrKeys(t *testing.T) {
 	m := NewAccessMetrics(8)
 	m.Record(AccessEvent{
-		Agent:    "api-key",
-		Surface:  MetricSurfaceService,
-		Target:   "spotify",
-		DataType: "tracks",
-		Cache:    MetricCacheHit,
+		Agent:   "api-key",
+		Surface: MetricSurfaceService,
+		Target:  "spotify",
+		Kind:    "tracks",
+		Cache:   MetricCacheHit,
 	})
 	raw, err := json.Marshal(m.Snapshot(time.Hour))
 	if err != nil {

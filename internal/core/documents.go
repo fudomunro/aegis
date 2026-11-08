@@ -313,7 +313,7 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 			Agent:    agent,
 			Surface:  MetricSurfaceLibrary,
 			Target:   kind.ID,
-			DataType: kind.ID,
+			Kind:     kind.ID,
 			Decision: audit.DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
@@ -361,10 +361,10 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 	}
 	shared.WriteJSON(w, result)
 	s.recordAccessFrom(r, AccessEvent{
-		Agent:    agent,
-		Surface:  MetricSurfaceLibrary,
-		Target:   kind.ID,
-		DataType: kind.ID,
-		Cache:    MetricCacheMiss,
+		Agent:   agent,
+		Surface: MetricSurfaceLibrary,
+		Target:  kind.ID,
+		Kind:    kind.ID,
+		Cache:   MetricCacheMiss,
 	})
 }

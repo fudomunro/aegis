@@ -51,10 +51,10 @@ func (c *GoogleCalendarConnector) GoogleCalendarUpstreamBase() string {
 	return c.host.UpstreamBaseFor(GoogleCalendarServiceID, "https://www.googleapis.com/calendar/v3")
 }
 
-// Capabilities returns what Google Calendar data types and operations are supported.
+// Capabilities returns what Google Calendar kinds and operations are supported.
 func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "events",
 				Description: "Calendar events — list calendars and events (metadata only; event content stays on Google Calendar)",

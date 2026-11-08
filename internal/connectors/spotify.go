@@ -35,10 +35,10 @@ func NewSpotifyConnector(host Host) *SpotifyConnector {
 	return &SpotifyConnector{host: host}
 }
 
-// Capabilities returns what Spotify data types and operations are supported.
+// Capabilities returns what Spotify kinds and operations are supported.
 func (c *SpotifyConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "user",
 				Description: "Current user profile",

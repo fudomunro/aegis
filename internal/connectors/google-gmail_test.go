@@ -391,13 +391,13 @@ func TestGoogleGmailConnector_SystemInstructions_MentionLibrary(t *testing.T) {
 func TestGoogleGmailConnector_Capabilities_ReadOnlyMessages(t *testing.T) {
 	conn := NewGoogleGmailConnector(newTestHost("https://aegis.example.com"))
 	caps := conn.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "messages" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "messages" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if types.DataTypeHasAgentWriteOp(caps, "messages") {
+	if types.KindHasAgentWriteOp(caps, "messages") {
 		t.Fatal("messages must not advertise agent write ops in this phase")
 	}
-	for _, op := range caps.DataTypes[0].Operations {
+	for _, op := range caps.Kinds[0].Operations {
 		if types.IsMutatingMethod(op.Method) {
 			t.Fatalf("unexpected mutating op: %+v", op)
 		}

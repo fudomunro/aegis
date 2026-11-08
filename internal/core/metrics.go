@@ -33,12 +33,12 @@ const defaultMetricsCapacity = 4096
 // bodies, tokens, raw query strings, or full paths (issue #32). Decision and
 // Reason feed the durable audit sink (issue #105).
 type AccessEvent struct {
-	At       time.Time
-	Agent    string
-	Surface  string
-	Target   string // service id or library kind id
-	DataType string
-	Cache    string // hit, miss, or empty
+	At      time.Time
+	Agent   string
+	Surface string
+	Target  string // service id or library kind id
+	Kind    string
+	Cache   string // hit, miss, or empty
 	// Decision is audit.DecisionAllow or audit.DecisionDeny. Empty is treated as allow
 	// for compatibility with older in-memory events.
 	Decision string
@@ -104,9 +104,9 @@ type MetricsAgentDetail struct {
 	Services map[string]int `json:"services,omitempty"`
 	// Libraries maps library kind id → hits on the unified library surface.
 	Libraries map[string]int `json:"libraries,omitempty"`
-	// DataTypes maps recorded data type → hits across both surfaces.
-	DataTypes map[string]int `json:"data_types,omitempty"`
-	LastAt    time.Time      `json:"last_at,omitempty"`
+	// Kinds maps recorded kind → hits across both surfaces.
+	Kinds  map[string]int `json:"data_types,omitempty"`
+	LastAt time.Time      `json:"last_at,omitempty"`
 }
 
 // MetricsAgentStats summarizes distinct callers in a window.
@@ -123,17 +123,17 @@ type MetricsEndpointStats struct {
 	Agents    int            `json:"agents"`
 	CacheHits int            `json:"cache_hits,omitempty"`
 	CacheMiss int            `json:"cache_misses,omitempty"`
-	DataTypes map[string]int `json:"data_types,omitempty"`
+	Kinds     map[string]int `json:"data_types,omitempty"`
 }
 
 // MetricsRecentAccess is a redacted sample row for admin detail views.
 type MetricsRecentAccess struct {
-	At       time.Time `json:"at"`
-	Agent    string    `json:"agent"`
-	Surface  string    `json:"surface"`
-	Target   string    `json:"target"`
-	DataType string    `json:"data_type,omitempty"`
-	Cache    string    `json:"cache,omitempty"`
+	At      time.Time `json:"at"`
+	Agent   string    `json:"agent"`
+	Surface string    `json:"surface"`
+	Target  string    `json:"target"`
+	Kind    string    `json:"data_type,omitempty"`
+	Cache   string    `json:"cache,omitempty"`
 }
 
 // MetricsSnapshot aggregates events inside a time window.
@@ -188,7 +188,7 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 					ID:        ev.Agent,
 					Services:  make(map[string]int),
 					Libraries: make(map[string]int),
-					DataTypes: make(map[string]int),
+					Kinds:     make(map[string]int),
 				}
 				agentDetail[ev.Agent] = d
 			}
@@ -198,8 +198,8 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 			} else if ev.Target != "" {
 				d.Services[ev.Target]++
 			}
-			if ev.DataType != "" {
-				d.DataTypes[ev.DataType]++
+			if ev.Kind != "" {
+				d.Kinds[ev.Kind]++
 			}
 			if ev.At.After(d.LastAt) {
 				d.LastAt = ev.At
@@ -220,22 +220,22 @@ func (m *AccessMetrics) Snapshot(window time.Duration) MetricsSnapshot {
 		} else if ev.Cache == MetricCacheMiss {
 			st.CacheMiss++
 		}
-		if ev.DataType != "" {
-			if st.DataTypes == nil {
-				st.DataTypes = make(map[string]int)
+		if ev.Kind != "" {
+			if st.Kinds == nil {
+				st.Kinds = make(map[string]int)
 			}
-			st.DataTypes[ev.DataType]++
+			st.Kinds[ev.Kind]++
 		}
 		bucket[ev.Target] = st
 
 		if len(recent) < metricsRecentLimit {
 			recent = append(recent, MetricsRecentAccess{
-				At:       ev.At,
-				Agent:    ev.Agent,
-				Surface:  ev.Surface,
-				Target:   ev.Target,
-				DataType: ev.DataType,
-				Cache:    ev.Cache,
+				At:      ev.At,
+				Agent:   ev.Agent,
+				Surface: ev.Surface,
+				Target:  ev.Target,
+				Kind:    ev.Kind,
+				Cache:   ev.Cache,
 			})
 		}
 	}
@@ -350,7 +350,7 @@ func (s *Server) recordAccess(ev AccessEvent) {
 			Agent:    ev.Agent,
 			Surface:  ev.Surface,
 			Target:   ev.Target,
-			DataType: ev.DataType,
+			Kind:     ev.Kind,
 			Decision: ev.Decision,
 			Reason:   ev.Reason,
 			Cache:    ev.Cache,

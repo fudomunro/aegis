@@ -826,7 +826,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 		if svc.Action != "inject" {
 			continue
 		}
-		// Skip services that deny every data type — nothing useful to inject.
+		// Skip services that deny every kind — nothing useful to inject.
 		if allDataDenied(s.requestPermissions(r, &svc)) {
 			logger.Info("skipping inject: all kinds denied by permission", "service", svc.ID)
 			continue

@@ -6,26 +6,26 @@ import (
 )
 
 func TestCapabilityHelpers(t *testing.T) {
-	caps := ServiceCapabilities{DataTypes: []DataTypeCapability{
+	caps := ServiceCapabilities{Kinds: []KindCapability{
 		{Name: "tracks", Operations: []Operation{
 			{Name: "list", Method: "GET"},
 			{Name: "save", Method: "POST"},
 		}},
 		{Name: "playlists", Operations: []Operation{{Name: "list", Method: "GET"}}},
 	}}
-	if !DataTypeKnown(caps, "tracks") || DataTypeKnown(caps, "nope") {
-		t.Fatal("DataTypeKnown")
+	if !KindKnown(caps, "tracks") || KindKnown(caps, "nope") {
+		t.Fatal("KindKnown")
 	}
-	if DataTypeHasWriteOp(caps, "playlists") || !DataTypeHasWriteOp(caps, "tracks") {
-		t.Fatal("DataTypeHasWriteOp")
+	if KindHasWriteOp(caps, "playlists") || !KindHasWriteOp(caps, "tracks") {
+		t.Fatal("KindHasWriteOp")
 	}
-	if DataTypeHasAgentWriteOp(caps, "playlists") || !DataTypeHasAgentWriteOp(caps, "tracks") {
-		t.Fatal("DataTypeHasAgentWriteOp")
+	if KindHasAgentWriteOp(caps, "playlists") || !KindHasAgentWriteOp(caps, "tracks") {
+		t.Fatal("KindHasAgentWriteOp")
 	}
 	if !IsMutatingMethod(http.MethodPost) || IsMutatingMethod(http.MethodGet) {
 		t.Fatal("IsMutatingMethod")
 	}
-	writable := WritableDataTypesFromCapabilities(caps)
+	writable := WritableKindsFromCapabilities(caps)
 	if len(writable) != 1 || writable[0] != "tracks" {
 		t.Fatalf("writable = %v", writable)
 	}
@@ -165,14 +165,14 @@ func TestMergeArtistLibrary_NameMerge(t *testing.T) {
 	}
 }
 
-func TestDataTypeForPath_QueryAndSlash(t *testing.T) {
-	if DataTypeForPath("/me/tracks?limit=1") != "tracks" {
+func TestKindForPath_QueryAndSlash(t *testing.T) {
+	if KindForPath("/me/tracks?limit=1") != "tracks" {
 		t.Fatal("query strip")
 	}
-	if DataTypeForPath("   ") != "" {
+	if KindForPath("   ") != "" {
 		t.Fatal("blank")
 	}
-	if DataTypeForPath("/me/../secret") != "" {
+	if KindForPath("/me/../secret") != "" {
 		t.Fatal("dotdot must be non-canonical")
 	}
 }

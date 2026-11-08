@@ -12,14 +12,14 @@ func BuiltinKindPaths() []string {
 	return out
 }
 
-// ReservedDataTypeKeys returns permission / path-classification keys owned
+// ReservedKindKeys returns permission / path-classification keys owned
 // by built-in types: every BuiltinLibraryKinds ID plus non-kind proxy keys.
-func ReservedDataTypeKeys() map[string]bool {
-	out := make(map[string]bool, len(BuiltinLibraryKinds)+len(nonKindDataTypeKeys))
+func ReservedKindKeys() map[string]bool {
+	out := make(map[string]bool, len(BuiltinLibraryKinds)+len(nonKindKeys))
 	for _, k := range BuiltinLibraryKinds {
 		out[k.ID] = true
 	}
-	for id := range nonKindDataTypeKeys {
+	for id := range nonKindKeys {
 		out[id] = true
 	}
 	return out

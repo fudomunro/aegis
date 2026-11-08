@@ -58,9 +58,9 @@ func (c *SampleLibraryConnector) Capabilities() types.ServiceCapabilities {
 		"playlists", "tracks", "albums", "artists", "contacts",
 		"photos", "events", "messages", "transactions", "places", "documents",
 	}
-	dts := make([]types.DataTypeCapability, 0, len(kinds))
+	dts := make([]types.KindCapability, 0, len(kinds))
 	for _, k := range kinds {
-		dts = append(dts, types.DataTypeCapability{
+		dts = append(dts, types.KindCapability{
 			Name:        k,
 			Description: "Synthetic fixture data (no upstream provider).",
 			Operations: []types.Operation{
@@ -77,7 +77,7 @@ func (c *SampleLibraryConnector) Capabilities() types.ServiceCapabilities {
 			},
 		})
 	}
-	return types.ServiceCapabilities{DataTypes: dts}
+	return types.ServiceCapabilities{Kinds: dts}
 }
 
 func (c *SampleLibraryConnector) SystemInstructions(baseURL string) string {

@@ -17,7 +17,7 @@ const dataGrantsFileVersion = 3
 
 // dataGrantsOverlayFile is the admin-edited data-grant overlay (data_grants.json).
 //
-// Primary (v3): DataGrants maps data-type keys to DataGrant —
+// Primary (v3): DataGrants maps kind keys to DataGrant —
 // default access level plus optional per-provider tighten-only overrides.
 // This is the product "data grant" for the LLM agent (issue #174).
 //

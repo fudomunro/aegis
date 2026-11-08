@@ -9,7 +9,7 @@ import "github.com/fudomunro/aegis/internal/shared"
 // resolvers stay separate so a scope fix cannot silently change owner
 // behavior and vice versa.
 
-// ScopeGrantsAccess resolves an external principal's access for a data type
+// ScopeGrantsAccess resolves an external principal's access for a kind
 // from its scope grants. Resolution table (docs/external-access.md):
 //
 //	type absent, no "default" key                     → none
@@ -20,24 +20,24 @@ import "github.com/fudomunro/aegis/internal/shared"
 //
 // Opt-in types (places) require an explicit name — the reserved "default" key
 // never enables them. Provider overrides can only tighten a stated level,
-// never open a closed type. Unclassified lookups (empty dataType) resolve to
+// never open a closed type. Unclassified lookups (empty kind) resolve to
 // the strictest level of the grant map so unknown surface cannot leak
 // (issue #94).
-func ScopeGrantsAccess(grants DataGrants, dataType, provider string) string {
-	if dataType == "" {
+func ScopeGrantsAccess(grants DataGrants, kind, provider string) string {
+	if kind == "" {
 		return ScopeGrantsPermissions(grants).Strictest()
 	}
-	if dataType == PermissionDefaultKey {
-		return scopeGrantEntryLevel(grants.For(dataType), provider)
+	if kind == PermissionDefaultKey {
+		return scopeGrantEntryLevel(grants.For(kind), provider)
 	}
-	if entry, listed := grants[dataType]; listed {
+	if entry, listed := grants[kind]; listed {
 		return scopeGrantEntryLevel(entry, provider)
 	}
 	def, hasDefault := grants[PermissionDefaultKey]
 	if !hasDefault {
 		return AccessNone
 	}
-	if shared.KindDefaultsNone(dataType) {
+	if shared.KindDefaultsNone(kind) {
 		return AccessNone
 	}
 	return scopeGrantEntryLevel(def, provider)
@@ -82,11 +82,11 @@ func ScopeGrantsPermissions(grants DataGrants) Permissions {
 	} else {
 		out[PermissionDefaultKey] = AccessNone
 	}
-	for dataType := range grants {
-		if dataType == PermissionDefaultKey {
+	for kind := range grants {
+		if kind == PermissionDefaultKey {
 			continue
 		}
-		out[dataType] = ScopeGrantsAccess(grants, dataType, "")
+		out[kind] = ScopeGrantsAccess(grants, kind, "")
 	}
 	return out
 }
@@ -94,8 +94,8 @@ func ScopeGrantsPermissions(grants DataGrants) Permissions {
 // ScopeTighten ANDs a scope grant into an owner-tier level: the effective
 // level is the stricter of both layers, so a scope grant can never exceed
 // what the agent data grants already allow.
-func ScopeTighten(grants DataGrants, ownerLevel, dataType, provider string) string {
-	return stricterAccess(ownerLevel, ScopeGrantsAccess(grants, dataType, provider))
+func ScopeTighten(grants DataGrants, ownerLevel, kind, provider string) string {
+	return stricterAccess(ownerLevel, ScopeGrantsAccess(grants, kind, provider))
 }
 
 // ScopeTightenPermissions ANDs scope grants into an owner-tier Permissions
@@ -105,24 +105,24 @@ func ScopeTightenPermissions(grants DataGrants, owner Permissions) Permissions {
 	scope := ScopeGrantsPermissions(grants)
 	out := Permissions{}
 	out[PermissionDefaultKey] = stricterAccess(unlistedLevel(owner), unlistedLevel(scope))
-	for dataType := range owner {
-		if dataType == PermissionDefaultKey {
+	for kind := range owner {
+		if kind == PermissionDefaultKey {
 			continue
 		}
-		out[dataType] = stricterAccess(owner.For(dataType), scope.For(dataType))
+		out[kind] = stricterAccess(owner.For(kind), scope.For(kind))
 	}
-	for dataType := range scope {
-		if dataType == PermissionDefaultKey {
+	for kind := range scope {
+		if kind == PermissionDefaultKey {
 			continue
 		}
-		if _, ok := out[dataType]; !ok {
-			out[dataType] = stricterAccess(owner.For(dataType), scope.For(dataType))
+		if _, ok := out[kind]; !ok {
+			out[kind] = stricterAccess(owner.For(kind), scope.For(kind))
 		}
 	}
 	return out
 }
 
-// unlistedLevel is the map's opinion on data types it does not list.
+// unlistedLevel is the map's opinion on kinds it does not list.
 func unlistedLevel(p Permissions) string {
 	if level, ok := p[PermissionDefaultKey]; ok {
 		return NormalizeAccess(level)

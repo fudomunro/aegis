@@ -141,7 +141,7 @@ type ServiceConnector interface {
 }
 ```
 
-- `DataTypeCapability.Operations` is `[]Operation` (method, path, parameters,
+- `KindCapability.Operations` is `[]Operation` (method, path, parameters,
   response spec) — not `[]string`.
 - Empty `[]Operation{}` means “type recognized, not implemented”.
 - New library kinds plug into the `BuiltinLibraryKinds` registry in `internal/types/librarykinds.go`.

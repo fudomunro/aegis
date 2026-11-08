@@ -233,7 +233,7 @@ func TestUserDefinedTypeSchema_RejectsHijacking(t *testing.T) {
 			PermType: "playlists",
 			Fields:   map[string]UserDefinedField{"title": {}},
 		}},
-		{"built-in data type id", UserDefinedTypeSchema{
+		{"built-in kind id", UserDefinedTypeSchema{
 			ID:     "tracks",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
