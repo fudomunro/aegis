@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Split listeners (docs/external-access.md): the API listener carries the
@@ -106,14 +107,62 @@ func apiRouteAllowed(method, path string) bool {
 		// Library reads. Writes (mirror, photo share, entity-link
 		// mutations) are admin-side by method. Merge review and the copy
 		// ledger expose owner-internal maintenance state that kind
-		// grants do not filter, so they stay admin-side too.
+		// grants do not filter, so they stay admin-side too — the deny
+		// list stays explicit. The allow side derives from the kind Route
+		// declarations (issue #312); an unlisted multi-segment path is
+		// not an agent route.
+		if method != http.MethodGet && method != http.MethodHead {
+			return false
+		}
 		if path == "/v1/library/review" || strings.HasPrefix(path, "/v1/library/review/") ||
 			path == "/v1/library/copies" || strings.HasPrefix(path, "/v1/library/copies/") {
 			return false
 		}
-		return method == http.MethodGet || method == http.MethodHead
+		return libraryAgentReadable(path)
 	}
 	return false
+}
+
+// libraryAgentReadable reports whether a library GET/HEAD path is an
+// agent-tier read on the API listener. The allowlist derives from the kind
+// Route declarations; the cross-kind entity-link reads and single-segment
+// user-defined kind paths (runtime-registered; packs never shadow a
+// built-in) are the only other entries.
+func libraryAgentReadable(path string) bool {
+	for _, rt := range kindRuntime {
+		for _, route := range rt.Routes {
+			if routePatternMatches(route.Pattern, path) {
+				return true
+			}
+		}
+	}
+	if path == "/v1/library/links" || strings.HasPrefix(path, "/v1/library/links/") {
+		return true
+	}
+	seg := strings.TrimPrefix(path, "/v1/library/")
+	if seg != "" && !strings.Contains(seg, "/") {
+		return !types.IsReservedUserDefinedID(seg)
+	}
+	return false
+}
+
+// routePatternMatches reports whether a request path matches a declared
+// ServeMux-style Route pattern ("{name}" matches exactly one segment).
+func routePatternMatches(pattern, path string) bool {
+	pp := strings.Split(strings.Trim(pattern, "/"), "/")
+	qp := strings.Split(strings.Trim(path, "/"), "/")
+	if len(pp) != len(qp) {
+		return false
+	}
+	for i := range pp {
+		if strings.HasPrefix(pp[i], "{") && strings.HasSuffix(pp[i], "}") {
+			continue
+		}
+		if pp[i] != qp[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // validateAdminListenAddr refuses admin-listener binds that are reachable

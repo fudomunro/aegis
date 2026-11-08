@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"sort"
 	"strings"
 	"sync"
 
@@ -21,7 +22,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -190,19 +190,21 @@ type Server struct {
 	udts *userDefinedRegistry
 }
 
-// appExtraPaths are non-kind library paths a third-party app token may call
-// (freebusy is the events availability view, not a LibraryKind).
-var appExtraPaths = []string{
-	"/v1/library/freebusy",
-}
-
-// appAllowedPaths returns path prefixes a third-party app token may call.
-// Derived from LibraryKind.AppReadable plus appExtraPaths (issue #183).
-// Apps are data readers only — never admin, OAuth, proxy, mail, or
-// document full-text subpaths. User-defined kinds are not app-readable.
+// appAllowedPaths returns the exact paths a third-party app token may call.
+// Derived from the kind Route declarations (issue #312): a route is
+// app-readable exactly when its declaration says so. Apps are data readers
+// only — never admin, OAuth, proxy, mail, or unexposed subroutes like
+// document full text. User-defined kinds are not app-readable.
 func appAllowedPaths() []string {
-	out := append([]string{}, appExtraPaths...)
-	out = append(out, types.AppReadableKindPaths()...)
+	var out []string
+	for _, rt := range kindRuntime {
+		for _, route := range rt.Routes {
+			if route.AppReadable {
+				out = append(out, route.Pattern)
+			}
+		}
+	}
+	sort.Strings(out)
 	return out
 }
 
