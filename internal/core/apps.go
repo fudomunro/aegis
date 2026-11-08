@@ -36,7 +36,7 @@ type App struct {
 	TokenHash string `json:"token_hash"`
 	// TokenHint is a short non-secret prefix for admin UIs (first 12 chars).
 	TokenHint string `json:"token_hint,omitempty"`
-	// Scopes restrict which library data types the app may read, using the
+	// Scopes restrict which library kinds the app may read, using the
 	// same access levels as service permissions (none / freebusy / read /
 	// write / read-write). freebusy is events-only.
 	Scopes policy.Permissions `json:"scopes"`

@@ -23,9 +23,9 @@ const (
 // agentAccessorID is the primary LLM-agent row (type-owned policy).
 const agentAccessorID = "agent"
 
-// permissionsOverview builds the type-centric permissions model
-// (issue #160): one row per data type with the agent policy level plus
-// only the other accessors (apps, sync pipelines) that apply to that type.
+// permissionsOverview builds the kind-centric permissions model
+// (issue #160): one row per kind with the agent policy level plus
+// only the other accessors (apps, sync pipelines) that apply to that kind.
 // The admin map shows what each accessor has accessed; this view shows
 // what each is allowed to access.
 func (s *Server) permissionsOverview() policy.PermissionsOverview {
@@ -50,7 +50,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		}
 	}
 
-	dataTypes := policy.OverviewDataTypes(preferred, extra)
+	kinds := policy.OverviewKinds(preferred, extra)
 	accessors := make([]policy.Accessor, 0, 8)
 
 	// Agents: type-owned policy is primary (issue #148).
@@ -59,7 +59,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		Kind:   policy.AccessorAgent,
 		Label:  "LLM agents",
 		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. Data grants are primary; per-service forms only tighten.",
-		Levels: policy.AgentOverviewLevels(policies, dataTypes),
+		Levels: policy.AgentOverviewLevels(policies, kinds),
 		// Edited via the data-grant form in the data grants editor.
 		Editable: true,
 	})
@@ -78,7 +78,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			for k, v := range app.Scopes {
 				scopes[k] = v
 			}
-			levels, explicit := policy.AppOverviewLevels(scopes, dataTypes)
+			levels, explicit := policy.AppOverviewLevels(scopes, kinds)
 			accessors = append(accessors, policy.Accessor{
 				ID:       "app:" + app.ID,
 				Kind:     policy.AccessorApp,
@@ -95,7 +95,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 
 	// Aegis-internal sync pipelines (issue #160). Levels describe what the
 	// pipeline may store — not agent visibility. Only named types are
-	// relevant under a data-type row.
+	// relevant under a kind row.
 	if s.mail != nil {
 		accessors = append(accessors, policy.Accessor{
 			ID:       syncMailID,
@@ -198,7 +198,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		})
 	}
 
-	// Fill non-agent missing levels with none so BuildTypeAccess can read
+	// Fill non-agent missing levels with none so BuildKindAccess can read
 	// a concrete level; relevance still uses Explicit / non-none checks.
 	for i := range accessors {
 		if accessors[i].Kind == policy.AccessorAgent {
@@ -207,7 +207,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		if accessors[i].Levels == nil {
 			accessors[i].Levels = map[string]string{}
 		}
-		for _, dt := range dataTypes {
+		for _, dt := range kinds {
 			if _, ok := accessors[i].Levels[dt]; !ok {
 				accessors[i].Levels[dt] = policy.AccessNone
 			}
@@ -215,8 +215,8 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	}
 
 	return policy.PermissionsOverview{
-		DataTypes: dataTypes,
-		Types:     policy.BuildTypeAccess(dataTypes, accessors),
+		Kinds: kinds,
+		Rows:  policy.BuildKindAccess(kinds, accessors),
 	}
 }
 
@@ -281,7 +281,7 @@ func serviceProvidedTypes(conn any) []string {
 		Capabilities() types.ServiceCapabilities
 	}
 	if c, ok := conn.(named); ok {
-		for _, dt := range c.Capabilities().DataTypes {
+		for _, dt := range c.Capabilities().Kinds {
 			if libraryTypes[dt.Name] {
 				add(dt.Name)
 			}
@@ -292,13 +292,13 @@ func serviceProvidedTypes(conn any) []string {
 	return out
 }
 
-// HandleAdminPermissionsOverview returns the type-centric permissions
+// HandleAdminPermissionsOverview returns the kind-centric permissions
 // editor model (issue #160).
 //
 //	GET /v1/admin/permissions
 //
-// One entry per data type with its agent level and the non-agent accessors
-// (apps, sync) that are relevant to that type. The admin map remains the
+// One entry per kind with its agent level and the non-agent accessors
+// (apps, sync) that are relevant to that kind. The admin map remains the
 // "what they have accessed" view; this endpoint is "what they may access".
 func (s *Server) HandleAdminPermissionsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

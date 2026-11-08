@@ -493,10 +493,10 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 		t.Fatalf("get status = %d", w.Code)
 	}
 	var got struct {
-		ServiceID          string            `json:"service_id"`
-		GrantLimits        map[string]string `json:"grant_limits"`
-		AvailableDataTypes []string          `json:"available_data_types"`
-		WritableDataTypes  []string          `json:"writable_data_types"`
+		ServiceID      string            `json:"service_id"`
+		GrantLimits    map[string]string `json:"grant_limits"`
+		AvailableKinds []string          `json:"available_data_types"`
+		WritableKinds  []string          `json:"writable_data_types"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -504,12 +504,12 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	if got.ServiceID != "spotify" || got.GrantLimits["player"] != "none" {
 		t.Fatalf("get = %+v", got)
 	}
-	if !stringSliceContains(got.AvailableDataTypes, "playlists") {
-		t.Fatalf("available types = %v", got.AvailableDataTypes)
+	if !stringSliceContains(got.AvailableKinds, "playlists") {
+		t.Fatalf("available types = %v", got.AvailableKinds)
 	}
 	// Spotify has no agent-meaningful write ops — form must not offer Editable.
-	if len(got.WritableDataTypes) != 0 {
-		t.Fatalf("spotify writable types should be empty (mirror is not Editable), got %v", got.WritableDataTypes)
+	if len(got.WritableKinds) != 0 {
+		t.Fatalf("spotify writable types should be empty (mirror is not Editable), got %v", got.WritableKinds)
 	}
 
 	// Invalid level rejected.
@@ -531,7 +531,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	}
 }
 
-func TestAdminSummary_IncludesAvailableDataTypes(t *testing.T) {
+func TestAdminSummary_IncludesAvailableKinds(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
@@ -548,8 +548,8 @@ func TestAdminSummary_IncludesAvailableDataTypes(t *testing.T) {
 	if len(summary.Services) != 1 {
 		t.Fatalf("services = %d", len(summary.Services))
 	}
-	if !stringSliceContains(summary.Services[0].AvailableDataTypes, "player") {
-		t.Fatalf("available types = %v", summary.Services[0].AvailableDataTypes)
+	if !stringSliceContains(summary.Services[0].AvailableKinds, "player") {
+		t.Fatalf("available types = %v", summary.Services[0].AvailableKinds)
 	}
 }
 

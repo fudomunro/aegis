@@ -2,9 +2,9 @@ package types
 
 import "testing"
 
-// TestDataTypeForPath_Contacts pins the contacts proxy paths (issue #254 —
+// TestKindForPath_Contacts pins the contacts proxy paths (issue #254 —
 // these cases lived in core's contacts_test.go).
-func TestDataTypeForPath_Contacts(t *testing.T) {
+func TestKindForPath_Contacts(t *testing.T) {
 	cases := map[string]string{
 		"/me/contacts":      "contacts",
 		"/contacts":         "contacts",
@@ -15,15 +15,15 @@ func TestDataTypeForPath_Contacts(t *testing.T) {
 		"/me/contact-lists": "",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
 
-// TestDataTypeForPath_Documents pins the document-proxy paths, including the
+// TestKindForPath_Documents pins the document-proxy paths, including the
 // Paperless and Google Drive shapes.
-func TestDataTypeForPath_Documents(t *testing.T) {
+func TestKindForPath_Documents(t *testing.T) {
 	cases := map[string]string{
 		"/me/documents":          "documents",
 		"/documents/11":          "documents",
@@ -38,13 +38,13 @@ func TestDataTypeForPath_Documents(t *testing.T) {
 		"/drive/files/gdoc-1":    "documents",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Fatalf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Fatalf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
 
-func TestDataTypeForPath(t *testing.T) {
+func TestKindForPath(t *testing.T) {
 	cases := map[string]string{
 		"/me":                        "user",
 		"/me/":                       "user",
@@ -98,13 +98,13 @@ func TestDataTypeForPath(t *testing.T) {
 		"/unknown/./thing": "",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
 
-func TestDataTypeForPath_Photos(t *testing.T) {
+func TestKindForPath_Photos(t *testing.T) {
 	cases := map[string]string{
 		"/me/photos":           "photos",
 		"/photos":              "photos",
@@ -116,13 +116,13 @@ func TestDataTypeForPath_Photos(t *testing.T) {
 		"/mediaItems?pageSize": "photos",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
 
-func TestDataTypeForPath_Picker(t *testing.T) {
+func TestKindForPath_Picker(t *testing.T) {
 	cases := map[string]string{
 		"/picker/sessions":          "photos",
 		"/picker/sessions/abc":      "photos",
@@ -130,13 +130,13 @@ func TestDataTypeForPath_Picker(t *testing.T) {
 		"/mediaItems?sessionId=s-1": "photos",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
 
-func TestDataTypeForPath_Places(t *testing.T) {
+func TestKindForPath_Places(t *testing.T) {
 	cases := map[string]string{
 		"/me/places":        "places",
 		"/visits":           "places",
@@ -146,37 +146,37 @@ func TestDataTypeForPath_Places(t *testing.T) {
 		"/timeline/2023-01": "places",
 	}
 	for p, want := range cases {
-		if got := DataTypeForPath(p); got != want {
-			t.Fatalf("DataTypeForPath(%q) = %q, want %q", p, got, want)
+		if got := KindForPath(p); got != want {
+			t.Fatalf("KindForPath(%q) = %q, want %q", p, got, want)
 		}
 	}
 }
 
-func TestDataTypeForPath_Transactions(t *testing.T) {
+func TestKindForPath_Transactions(t *testing.T) {
 	for _, p := range []string{
 		"/budgets", "/budgets/x/transactions", "/accounts", "/transactions",
 		"/me/transactions", "/categories", "/payees", "/quicken/import",
 	} {
-		if got := DataTypeForPath(p); got != "transactions" {
-			t.Fatalf("DataTypeForPath(%q) = %q", p, got)
+		if got := KindForPath(p); got != "transactions" {
+			t.Fatalf("KindForPath(%q) = %q", p, got)
 		}
 	}
 }
 
-func TestDataTypeForPath_PeopleAPI(t *testing.T) {
+func TestKindForPath_PeopleAPI(t *testing.T) {
 	cases := map[string]string{
 		"/people/me/connections": "contacts",
 		"/people/c123":           "contacts",
 		"/people:searchContacts": "contacts",
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }
 
-func TestDataTypeForPath_ImmichAssets(t *testing.T) {
+func TestKindForPath_ImmichAssets(t *testing.T) {
 	cases := map[string]string{
 		"/search/metadata":      "photos",
 		"/assets/abc/original":  "photos",
@@ -184,8 +184,8 @@ func TestDataTypeForPath_ImmichAssets(t *testing.T) {
 		"/albums":               "albums", // music albums win; Immich albums via connector proxy still work under default
 	}
 	for path, want := range cases {
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }

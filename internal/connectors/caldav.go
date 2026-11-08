@@ -56,7 +56,7 @@ func (c *CalDAVConnector) auth() davAuth {
 // Capabilities returns CalDAV calendar operations.
 func (c *CalDAVConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "events",
 				Description: "CalDAV calendar — iCalendar VEVENT entries (metadata only; content stays on the DAV server)",

@@ -151,7 +151,7 @@ func connectorAgentSamples(t *testing.T, host connectors.Host) []agentStringSamp
 			text: e.conn.SystemInstructions(base),
 		})
 		caps := e.conn.Capabilities()
-		for _, dt := range caps.DataTypes {
+		for _, dt := range caps.Kinds {
 			out = append(out, agentStringSample{
 				name: fmt.Sprintf("Capabilities/%s/%s", e.id, dt.Name),
 				text: dt.Description,

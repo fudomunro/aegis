@@ -1,7 +1,7 @@
 package types
 
 // SearchSpec declares how one library kind is searched (issue #178). It is
-// part of the type definition — builtin kinds declare it in the registry and
+// part of the kind definition — builtin kinds declare it in the registry and
 // user-defined packs declare it in the schema — so search stays pluggable
 // instead of a per-handler afterthought.
 type SearchSpec struct {

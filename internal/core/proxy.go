@@ -62,7 +62,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Agent:    agentForRequest(r),
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
-			DataType: types.DataTypeForPath(remainingPath),
+			Kind:     types.KindForPath(remainingPath),
 			Decision: audit.DecisionDeny,
 			Reason:   "not_content_path",
 			Method:   r.Method,
@@ -74,8 +74,8 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dataType := types.DataTypeForPath(remainingPath)
-	accessLevel := s.requestLevel(r, svc, dataType)
+	kind := types.KindForPath(remainingPath)
+	accessLevel := s.requestLevel(r, svc, kind)
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)
@@ -83,7 +83,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			Agent:    agentForRequest(r),
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
-			DataType: dataType,
+			Kind:     kind,
 			Decision: audit.DecisionDeny,
 			Reason:   "service_blocked",
 			Method:   r.Method,
@@ -94,17 +94,17 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Enforce data-type permissions before any upstream or connector work.
+	// Enforce kind permissions before any upstream or connector work.
 	if !s.AllowDataPermission(w, r, svc, remainingPath) {
 		logger.Warn("data grant denied",
-			"data_type", dataType,
+			"data_type", kind,
 			"permission", accessLevel,
 		)
 		s.recordAccess(AccessEvent{
 			Agent:    agentForRequest(r),
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
-			DataType: dataType,
+			Kind:     kind,
 			Decision: audit.DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
@@ -124,11 +124,11 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	connector.HandleProxy(w, r, remainingPath)
-	s.recordProxyAccess(r, serviceID, dataType, w.Header().Get("X-Aegis-Cache"))
+	s.recordProxyAccess(r, serviceID, kind, w.Header().Get("X-Aegis-Cache"))
 }
 
 // recordProxyAccess records a redacted service-proxy access event (issue #32).
-func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache string) {
+func (s *Server) recordProxyAccess(r *http.Request, serviceID, kind, cache string) {
 	switch cache {
 	case "hit":
 		cache = MetricCacheHit
@@ -141,7 +141,7 @@ func (s *Server) recordProxyAccess(r *http.Request, serviceID, dataType, cache s
 		Agent:    agentForRequest(r),
 		Surface:  MetricSurfaceService,
 		Target:   serviceID,
-		DataType: dataType,
+		Kind:     kind,
 		Cache:    cache,
 		Method:   r.Method,
 		ClientIP: s.clientIPFor(r),

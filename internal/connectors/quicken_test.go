@@ -213,7 +213,7 @@ func TestQuickenConnector_ListUserTransactions(t *testing.T) {
 func TestQuickenCapabilitiesAndInstructions(t *testing.T) {
 	c := NewQuickenConnector(nil)
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
 	}
 	s := c.SystemInstructions("https://aegis.example.com")

@@ -294,7 +294,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 				return
 			}
 			_ = svc.GrantLimits.AllowsRead("tracks")
-			_ = svc.GrantLimits.AccessForDataType("")
+			_ = svc.GrantLimits.AccessForKind("")
 			_ = svc.Endpoint
 		}
 	}()

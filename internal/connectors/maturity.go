@@ -12,10 +12,10 @@ import "github.com/fudomunro/aegis/internal/types"
 // class of metadata as Capabilities(). core's maturity_test.go holds them
 // honest against the connectors themselves: every callable capability and
 // every implemented library feed must be marked supported, and no entry may
-// claim support for a type the connector does not recognize at all. Field
+// claim support for a kind the connector does not recognize at all. Field
 // coverage is graded against types.MaturityContentFields.
 //
-// Add a data type row when a service offers a recognizable kind of thing
+// Add a kind row when a service offers a recognizable kind of thing
 // Aegis does not serve — shows, audiobooks, photo albums, drafts, posts,
 // budgets — because the unsupported gap is the point of the catalog. Do not
 // add rows for concepts a supported type already carries as populated
@@ -59,7 +59,7 @@ func signalMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionImport,
 			Label: "Import Signal chats",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "messages", Description: "Imported chat messages", Supported: true,
 				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to",
 					"sent_at", "received_at", "direction", "read", "thread_id", "labels")},
@@ -79,7 +79,7 @@ func quickenMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionImport,
 			Label: "Import Quicken exports",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "transactions", Description: "Imported QIF/QFX line items", Supported: true,
 				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
 					"merchant", "category", "memo", "account", "status", "entity_id")},
@@ -97,7 +97,7 @@ func timelineMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionImport,
 			Label: "Import Timeline exports",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "places", Description: "Imported Timeline visits and trips", Supported: true,
 				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
 			{Name: "location_points", Description: "Raw Timeline location points", Supported: false},
@@ -113,7 +113,7 @@ func spotifyMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Spotify",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "user", Description: "Current user profile", Supported: true},
 			{Name: "tracks", Description: "Saved and top tracks", Supported: true,
 				Fields: types.FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "entity_id")},
@@ -141,7 +141,7 @@ func youtubeMusicMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect YouTube Music",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "user", Description: "Current user profile", Supported: true},
 			{Name: "tracks", Description: "Liked songs and videos", Supported: true,
 				Fields: types.FieldCoverageFor("tracks", "name", "artists", "duration_ms", "duration")},
@@ -166,7 +166,7 @@ func amazonMusicMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Amazon Music",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "user", Description: "Current user profile", Supported: true},
 			{Name: "tracks", Description: "Songs, including playlist items", Supported: true,
 				Fields: types.FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "duration", "entity_id")},
@@ -192,7 +192,7 @@ func googleGmailMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Gmail",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "messages", Description: "Mail messages and threads", Supported: true,
 				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to", "cc",
 					"sent_at", "received_at", "direction", "read", "thread_id", "entity_id", "labels")},
@@ -211,7 +211,7 @@ func googlePhotosMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Google Photos",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "photos", Description: "Picked library media items", Supported: true,
 				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename")},
 			{Name: "albums", Description: "Photo albums", Supported: false},
@@ -228,7 +228,7 @@ func googleContactsMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Google Contacts",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "contacts", Description: "People API contacts", Supported: true,
 				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "organization")},
 		},
@@ -243,7 +243,7 @@ func googleCalendarMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Google Calendar",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "events", Description: "Calendar entries", Supported: true,
 				Fields: types.FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
 					"location", "status", "calendar_id", "calendar_name", "organizer", "attendees", "entity_id")},
@@ -260,7 +260,7 @@ func googleDriveMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Google Drive",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "documents", Description: "Drive files and exports", Supported: true,
 				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "modified_at",
 					"correspondent", "document_type", "excerpt", "people", "entity_id")},
@@ -276,7 +276,7 @@ func immichMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionSetup,
 			Label: "Set up Immich",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "photos", Description: "Library assets", Supported: true,
 				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename", "caption")},
 			{Name: "albums", Description: "Photo albums and shared albums", Supported: false},
@@ -293,7 +293,7 @@ func blueskyMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Bluesky",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "messages", Description: "Notifications and chat messages", Supported: true,
 				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from",
 					"sent_at", "received_at", "direction", "read", "thread_id", "entity_id", "labels")},
@@ -316,7 +316,7 @@ func ynabMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionSetup,
 			Label: "Set up YNAB",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "transactions", Description: "Budget transactions", Supported: true,
 				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
 					"merchant", "category", "memo", "account", "status", "entity_id")},
@@ -335,7 +335,7 @@ func ownTracksMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect OwnTracks",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "places", Description: "Recorder visits and trips", Supported: true,
 				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
 			{Name: "location_points", Description: "Raw GPS samples", Supported: false},
@@ -351,7 +351,7 @@ func calDAVMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect CalDAV",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "events", Description: "Calendar entries", Supported: true,
 				Fields: types.FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
 					"location", "status", "calendar_id", "calendar_name", "organizer", "attendees", "entity_id")},
@@ -369,7 +369,7 @@ func cardDAVMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect CardDAV",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "contacts", Description: "Address book contacts", Supported: true,
 				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
 		},
@@ -384,7 +384,7 @@ func paperlessMaturity() types.ConnectionMaturity {
 			Kind:  types.OwnershipActionConnect,
 			Label: "Connect Paperless",
 		},
-		DataTypes: []types.DataMaturity{
+		Kinds: []types.KindMaturity{
 			{Name: "documents", Description: "Archived documents", Supported: true,
 				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "modified_at",
 					"correspondent", "document_type", "tags", "excerpt", "people", "entity_id")},

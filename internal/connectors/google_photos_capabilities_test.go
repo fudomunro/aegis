@@ -178,10 +178,10 @@ func TestWriteGooglePhotosUpstreamError(t *testing.T) {
 func TestGoogleContactsConnector_Capabilities(t *testing.T) {
 	conn := NewGoogleContactsConnector(newTestHost("https://aegis.example.com"))
 	caps := conn.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "contacts" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "contacts" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	ops := caps.DataTypes[0].Operations
+	ops := caps.Kinds[0].Operations
 	if len(ops) < 2 {
 		t.Fatalf("ops = %+v", ops)
 	}
@@ -197,10 +197,10 @@ func TestGoogleContactsConnector_Capabilities(t *testing.T) {
 func TestImmichConnector_Capabilities(t *testing.T) {
 	conn := NewImmichConnector(newTestHost("https://aegis.example.com"))
 	caps := conn.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "photos" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "photos" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	ops := caps.DataTypes[0].Operations
+	ops := caps.Kinds[0].Operations
 	names := map[string]bool{}
 	for _, op := range ops {
 		names[op.Name] = true

@@ -16,10 +16,10 @@ import (
 // stores. maturity_test.go holds the aggregate honest against the
 // connectors themselves: every callable capability and every implemented
 // library feed must be marked supported, and no entry may claim support for
-// a type the connector does not recognize at all. Field coverage is graded
+// a kind the connector does not recognize at all. Field coverage is graded
 // against types.MaturityContentFields.
 //
-// Add a data type row when a service offers a recognizable kind of thing
+// Add a kind row when a service offers a recognizable kind of thing
 // Aegis does not serve — shows, audiobooks, photo albums, drafts, posts,
 // budgets — because the unsupported gap is the point of the catalog. Do not
 // add rows for concepts a supported type already carries as populated

@@ -140,9 +140,15 @@ mean in prose:
 
 - `perm_type` (schema packs, permissions maps) — a **library kind**. The key
   keeps its name because live schema packs read it.
-- `data_types` (capabilities, maturity, accessors, flow responses) — the
-  **kinds** of a service. Response shape stays stable; the Go identifiers
-  behind them move to `Kind*` separately.
+- `data_types` (capabilities, maturity, accessors, flow responses) and
+  `types` (permissions overview) — the **kinds** of a service. JSON shapes
+  stay stable; the Go identifiers behind them are now `Kind*`
+  (`KindCapability`, `KindMaturity`, `KindAccess`, `KindAccessor`,
+  `FlowLibraryKind`, `KindForPath`, `kindPathRules`) and
+  `PermissionsOverview.Types` became `Rows`. `DataTypeCapability`,
+  `TypeAccess`, and friends are gone from the Go surface — if you meet one
+  in an old branch, it means **library kind**. Field-shape `Type` /
+  `type` is untouched.
 - **Data grant** — deliberately *not* “kind grant”. It names what is granted
   (the user's data); **library kind** names the slice it is keyed by. “Kind
   grant on the kind `tracks`” loads one word with two senses.

@@ -75,8 +75,8 @@ func TestPermissionsOverview_SignalImport(t *testing.T) {
 	srv.connectors[connectors.SignalServiceID] = connectors.NewSignalConnector(store)
 
 	overview := srv.permissionsOverview()
-	byID := map[string]policy.TypeAccess{}
-	for _, row := range overview.Types {
+	byID := map[string]policy.KindAccess{}
+	for _, row := range overview.Rows {
 		byID[row.ID] = row
 	}
 

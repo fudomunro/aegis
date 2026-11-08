@@ -90,7 +90,7 @@ func (c *OwnTracksConnector) OwnTracksUpstreamBase() string {
 
 func (c *OwnTracksConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "places",
 				Description: "OwnTracks visits and trips derived from Recorder history",

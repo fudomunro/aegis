@@ -58,7 +58,7 @@ the most weight in product language.
 | **EffectiveAccess** | code |
 | Access levels (`none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write`) | product + code |
 | Accessor / AccessorKind (issue #160) | code + admin |
-| PermissionsOverview / TypeAccess | admin |
+| PermissionsOverview / KindAccess | admin |
 | PeerIdentity / auth modes (`auto` / `tailnet` / `api-key`) | product + code |
 | **Admin principal** (admin API key / allowed admin logins) | product + code |
 | Third-party app tokens + app data grants (issue #131) | product + code |
@@ -128,7 +128,7 @@ edits the repo. Same word, two audiences (see audience map §F).
 
 ### 2.3 Permissions vocabulary cluster
 
-`DataGrant`, `Permissions`, `EffectiveAccess`, `Accessor`, `TypeAccess`,
+`DataGrant`, `Permissions`, `EffectiveAccess`, `Accessor`, `KindAccess`,
 `PermissionsOverview`, access-level tokens, service `permissions` maps,
 `data_grants` config, and admin “Data grants by kind”.
 

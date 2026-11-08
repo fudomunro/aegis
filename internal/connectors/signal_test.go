@@ -261,15 +261,15 @@ func TestSignalConnector_Lists(t *testing.T) {
 func TestSignalCapabilitiesAndInstructions(t *testing.T) {
 	c := NewSignalConnector(nil)
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 2 {
+	if len(caps.Kinds) != 2 {
 		t.Fatalf("caps = %+v", caps)
 	}
 	names := map[string]bool{}
-	for _, dt := range caps.DataTypes {
+	for _, dt := range caps.Kinds {
 		names[dt.Name] = true
 	}
 	if !names["contacts"] || !names["messages"] {
-		t.Fatalf("data types = %+v", names)
+		t.Fatalf("kinds = %+v", names)
 	}
 	s := c.SystemInstructions("https://aegis.example.com")
 	if !strings.Contains(s, "Signal") || !strings.Contains(s, "/v1/library/messages") {

@@ -100,7 +100,7 @@ func (c *PaperlessConnector) paperlessToken(logger *slog.Logger) string {
 // Capabilities returns Paperless document operations reachable through the proxy.
 func (c *PaperlessConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "documents",
 				Description: "Self-hosted Paperless-ngx documents — metadata + short excerpt; files stay on Paperless (foreign/local canonical)",

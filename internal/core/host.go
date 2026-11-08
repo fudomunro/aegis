@@ -60,7 +60,7 @@ func (s *Server) CacheSet(key, value string, ttl time.Duration) {
 }
 
 // LibraryReadable reports whether agents can currently read the given library
-// kind: a provider is registered and the type policy allows reads. Backs
+// kind: a provider is registered and the kind policy allows reads. Backs
 // connectors.Host for setup readiness reporting (issue #265).
 func (s *Server) LibraryReadable(kind string) bool {
 	if s == nil {

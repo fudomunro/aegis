@@ -42,13 +42,13 @@ type LibraryKind struct {
 	// canonical_for list (issue #16).
 	CanonicalAllowed bool
 
-	// AllowedLevels lists optional access levels this type honors between
+	// AllowedLevels lists optional access levels this kind honors between
 	// none and full (freebusy, summary, city, precise, metadata). Empty
 	// means only none/read/write/read-write apply (issue #183). Tokens are
 	// the policy level names defined in internal/core/policy.
 	AllowedLevels []string
 
-	// DefaultNone keeps the type hidden unless a permissions map / data
+	// DefaultNone keeps the kind hidden unless a permissions map / data
 	// grant names it explicitly (places pattern, issue #142).
 	DefaultNone bool
 

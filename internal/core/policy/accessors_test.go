@@ -2,8 +2,8 @@ package policy
 
 import "testing"
 
-func TestOverviewDataTypes_PrefersLibraryOrderThenExtras(t *testing.T) {
-	got := OverviewDataTypes(
+func TestOverviewKinds_PrefersLibraryOrderThenExtras(t *testing.T) {
+	got := OverviewKinds(
 		[]string{"tracks", "photos", "places"},
 		[]string{"custom", "tracks", "default", "", "zzz"},
 	)
@@ -19,12 +19,12 @@ func TestOverviewDataTypes_PrefersLibraryOrderThenExtras(t *testing.T) {
 }
 
 func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
-	dataTypes := []string{"tracks", "places", "events"}
+	kinds := []string{"tracks", "places", "events"}
 	got := AgentOverviewLevels(DataGrants{
 		"events": {Default: AccessFreeBusy},
 		"places": {Default: AccessCity},
 		"tracks": {Default: AccessRead},
-	}, dataTypes)
+	}, kinds)
 	if got["tracks"] != AccessRead {
 		t.Fatalf("tracks = %q, want read", got["tracks"])
 	}
@@ -35,7 +35,7 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 		t.Fatalf("events = %q, want freebusy", got["events"])
 	}
 
-	got = AgentOverviewLevels(DataGrants{}, dataTypes)
+	got = AgentOverviewLevels(DataGrants{}, kinds)
 	if got["tracks"] != DefaultAccessType {
 		t.Fatalf("unset tracks = %q, want %q", got["tracks"], DefaultAccessType)
 	}
@@ -45,9 +45,9 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 }
 
 func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
-	dataTypes := []string{"tracks", "places", "events"}
-	levels, explicit := AppOverviewLevels(nil, dataTypes)
-	for _, dt := range dataTypes {
+	kinds := []string{"tracks", "places", "events"}
+	levels, explicit := AppOverviewLevels(nil, kinds)
+	for _, dt := range kinds {
 		if levels[dt] != AccessNone {
 			t.Fatalf("nil scopes %s = %q, want none", dt, levels[dt])
 		}
@@ -61,7 +61,7 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 		"events":             AccessFreeBusy,
 		"places":             AccessPrecise,
 		"tracks":             AccessRead,
-	}, dataTypes)
+	}, kinds)
 	if levels["events"] != AccessFreeBusy {
 		t.Fatalf("events = %q, want freebusy", levels["events"])
 	}
@@ -74,7 +74,7 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 
 	levels, _ = AppOverviewLevels(Permissions{
 		PermissionDefaultKey: AccessRead,
-	}, dataTypes)
+	}, kinds)
 	if levels["tracks"] != AccessRead {
 		t.Fatalf("tracks via default = %q, want read", levels["tracks"])
 	}
@@ -89,7 +89,7 @@ func TestAccessorRelevantTo(t *testing.T) {
 		Levels: map[string]string{"tracks": AccessRead, "places": AccessNone},
 	}
 	if !agent.RelevantTo("tracks") || !agent.RelevantTo("places") {
-		t.Fatal("agent should be relevant to every data type")
+		t.Fatal("agent should be relevant to every kind")
 	}
 
 	app := Accessor{
@@ -106,7 +106,7 @@ func TestAccessorRelevantTo(t *testing.T) {
 	}
 	// Unnamed, none — not relevant.
 	if app.RelevantTo("photos") {
-		t.Fatal("app should not be relevant for unnamed none type")
+		t.Fatal("app should not be relevant for unnamed none kind")
 	}
 
 	sync := Accessor{
@@ -122,8 +122,8 @@ func TestAccessorRelevantTo(t *testing.T) {
 	}
 }
 
-func TestBuildTypeAccess_OnlyRelevantOthers(t *testing.T) {
-	dataTypes := []string{"tracks", "messages", "places"}
+func TestBuildKindAccess_OnlyRelevantOthers(t *testing.T) {
+	kinds := []string{"tracks", "messages", "places"}
 	accessors := []Accessor{
 		{
 			ID:     agentAccessorForTest,
@@ -145,7 +145,7 @@ func TestBuildTypeAccess_OnlyRelevantOthers(t *testing.T) {
 			Levels: map[string]string{"tracks": AccessNone, "messages": AccessRead, "places": AccessNone},
 		},
 	}
-	rows := BuildTypeAccess(dataTypes, accessors)
+	rows := BuildKindAccess(kinds, accessors)
 	if len(rows) != 3 {
 		t.Fatalf("rows = %d, want 3", len(rows))
 	}

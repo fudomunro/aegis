@@ -69,7 +69,7 @@ func normalizeDriveProxyPath(remainingPath string) string {
 // Capabilities returns Drive document operations reachable through the proxy.
 func (c *GoogleDriveConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "documents",
 				Description: "Google Docs via Drive — metadata + HTML/plain-text export; files stay on Drive (non-Aegis canonical)",
@@ -270,7 +270,7 @@ func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) types.Document
 		MimeType:   f.MimeType,
 		CreatedAt:  f.CreatedTime,
 		ModifiedAt: f.ModifiedTime,
-		// Drive has no Paperless-style document_type; native Docs are the type.
+		// Drive has no Paperless-style document_type; native Docs are that kind.
 		DocumentType: "google-doc",
 		Excerpt:      strings.TrimSpace(f.Description),
 		EntityID:     f.ID,

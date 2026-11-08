@@ -74,7 +74,7 @@ func TestCapabilities_PlaylistFieldsUseSources(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	check := func(name string, caps types.ServiceCapabilities) {
 		t.Helper()
-		for _, dt := range caps.DataTypes {
+		for _, dt := range caps.Kinds {
 			if dt.Name != "playlists" {
 				continue
 			}
@@ -91,7 +91,7 @@ func TestCapabilities_PlaylistFieldsUseSources(t *testing.T) {
 			}
 			return
 		}
-		t.Errorf("%s: no playlists data type", name)
+		t.Errorf("%s: no playlists kind", name)
 	}
 	check("spotify", connectors.NewSpotifyConnector(srv).Capabilities())
 	check("youtube-music", connectors.NewYouTubeMusicConnector(srv).Capabilities())

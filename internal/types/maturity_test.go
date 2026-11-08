@@ -37,7 +37,7 @@ func TestGradeConnectionMaturityComplete(t *testing.T) {
 	m := ConnectionMaturity{
 		Service:   "spotify",
 		Transport: TransportAPI,
-		DataTypes: []DataMaturity{
+		Kinds: []KindMaturity{
 			{Name: "tracks", Supported: true, Fields: FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "duration", "entity_id")},
 			{Name: "artists", Supported: true, Fields: FieldCoverageFor("artists", "name", "entity_id")},
 		},
@@ -58,7 +58,7 @@ func TestGradeConnectionMaturityBandsOnLowerAxis(t *testing.T) {
 	// All types supported, but half the fields missing: the level must
 	// follow fields (50% → partial), not the 100% type coverage.
 	m := ConnectionMaturity{
-		DataTypes: []DataMaturity{
+		Kinds: []KindMaturity{
 			{Name: "tracks", Supported: true, Fields: FieldCoverageFor("tracks", "name", "artists", "album")},
 			{Name: "search", Supported: true},
 		},
@@ -77,7 +77,7 @@ func TestGradeConnectionMaturityBandsOnLowerAxis(t *testing.T) {
 
 func TestGradeConnectionMaturityUnsupportedTypesCount(t *testing.T) {
 	m := ConnectionMaturity{
-		DataTypes: []DataMaturity{
+		Kinds: []KindMaturity{
 			{Name: "tracks", Supported: true, Fields: FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "duration", "entity_id")},
 			{Name: "shows", Supported: false},
 			{Name: "audiobooks", Supported: false},
@@ -98,7 +98,7 @@ func TestGradeConnectionMaturityUnsupportedTypesCount(t *testing.T) {
 func TestGradeConnectionMaturityNoModelTypes(t *testing.T) {
 	// Operational types only: no field axis, level follows coverage.
 	m := ConnectionMaturity{
-		DataTypes: []DataMaturity{
+		Kinds: []KindMaturity{
 			{Name: "user", Supported: true},
 			{Name: "search", Supported: true},
 			{Name: "player", Supported: false},
@@ -113,7 +113,7 @@ func TestGradeConnectionMaturityNoModelTypes(t *testing.T) {
 	}
 
 	threeOfFour := m
-	threeOfFour.DataTypes = append(append([]DataMaturity{}, m.DataTypes...), DataMaturity{Name: "library", Supported: true})
+	threeOfFour.Kinds = append(append([]KindMaturity{}, m.Kinds...), KindMaturity{Name: "library", Supported: true})
 	if got := GradeConnectionMaturity(threeOfFour).Level; got != "substantial" {
 		t.Fatalf("3 of 4 level = %q, want substantial (75%%)", got)
 	}
@@ -146,14 +146,14 @@ func TestMaturityLevelThresholds(t *testing.T) {
 	}
 }
 
-func TestUnsupportedDataTypesAreTheGap(t *testing.T) {
-	m := ConnectionMaturity{DataTypes: []DataMaturity{
+func TestUnsupportedKindsAreTheGap(t *testing.T) {
+	m := ConnectionMaturity{Kinds: []KindMaturity{
 		{Name: "tracks", Supported: true},
 		{Name: "shows", Supported: false},
 		{Name: "audiobooks", Supported: false},
 	}}
 	var unsupported, names []string
-	for _, dt := range m.DataTypes {
+	for _, dt := range m.Kinds {
 		names = append(names, dt.Name)
 		if !dt.Supported {
 			unsupported = append(unsupported, dt.Name)

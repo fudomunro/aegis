@@ -58,10 +58,10 @@ type FlowNode struct {
 	// Parent nests this node inside another (e.g. aegis inside aperture).
 	Parent string `json:"parent,omitempty"`
 	// Status applies mainly to services (connected, needs-auth, …).
-	Status    string   `json:"status,omitempty"`
-	Action    string   `json:"action,omitempty"`
-	Endpoint  string   `json:"endpoint,omitempty"`
-	DataTypes []string `json:"data_types,omitempty"`
+	Status   string   `json:"status,omitempty"`
+	Action   string   `json:"action,omitempty"`
+	Endpoint string   `json:"endpoint,omitempty"`
+	Kinds    []string `json:"data_types,omitempty"`
 	// Providers lists unified library kinds this service can feed.
 	Providers []string `json:"providers,omitempty"`
 	// Notes are short caveats (e.g. photo bytes stay upstream).
@@ -96,10 +96,10 @@ type FlowLibrary struct {
 	Hits int `json:"hits,omitempty"`
 }
 
-// FlowDataType is one synced library data type shown on the admin map.
+// FlowLibraryKind is one synced library kind shown on the admin map.
 // Map chips are limited to library kinds Aegis merges; proxy-only
 // connector surfaces are not listed here.
-type FlowDataType struct {
+type FlowLibraryKind struct {
 	ID string `json:"id"`
 	// Label is the human name ("liked tracks").
 	Label string `json:"label"`
@@ -109,7 +109,7 @@ type FlowDataType struct {
 	Kind string `json:"kind"`
 	// Readable is true when at least one non-blocked service allows reads.
 	Readable bool `json:"readable"`
-	// Providers lists non-blocked services that can supply this type.
+	// Providers lists non-blocked services that can supply this kind.
 	Providers []string `json:"providers,omitempty"`
 }
 
@@ -128,9 +128,9 @@ type FlowAgentDetail struct {
 	Services map[string]int `json:"services,omitempty"`
 	// Libraries maps library kind id → unified library hits.
 	Libraries map[string]int `json:"libraries,omitempty"`
-	// DataTypes maps recorded data type → hits.
-	DataTypes map[string]int `json:"data_types,omitempty"`
-	LastAt    time.Time      `json:"last_at,omitempty"`
+	// Kinds maps recorded kind → hits.
+	Kinds  map[string]int `json:"data_types,omitempty"`
+	LastAt time.Time      `json:"last_at,omitempty"`
 }
 
 // FlowAgentStats is the distinct-agent summary for the active window.
@@ -147,17 +147,17 @@ type FlowEndpointStats struct {
 	Agents    int            `json:"agents"`
 	CacheHits int            `json:"cache_hits,omitempty"`
 	CacheMiss int            `json:"cache_misses,omitempty"`
-	DataTypes map[string]int `json:"data_types,omitempty"`
+	Kinds     map[string]int `json:"data_types,omitempty"`
 }
 
 // FlowRecentAccess is a redacted sample of recent agent access (no bodies).
 type FlowRecentAccess struct {
-	At       time.Time `json:"at"`
-	Agent    string    `json:"agent"`
-	Surface  string    `json:"surface"`
-	Target   string    `json:"target"`
-	DataType string    `json:"data_type,omitempty"`
-	Cache    string    `json:"cache,omitempty"`
+	At      time.Time `json:"at"`
+	Agent   string    `json:"agent"`
+	Surface string    `json:"surface"`
+	Target  string    `json:"target"`
+	Kind    string    `json:"data_type,omitempty"`
+	Cache   string    `json:"cache,omitempty"`
 }
 
 // FlowStats is the live access summary embedded in the admin map payload.
@@ -176,12 +176,12 @@ var FlowStatsWindows = []string{"5m", "1h", "24h"}
 
 // FlowTopology is the admin data-flow map payload (issue #25, #32).
 type FlowTopology struct {
-	Runtime   FlowRuntime    `json:"runtime"`
-	Narrative string         `json:"narrative"`
-	Nodes     []FlowNode     `json:"nodes"`
-	Edges     []FlowEdge     `json:"edges"`
-	Libraries []FlowLibrary  `json:"libraries"`
-	DataTypes []FlowDataType `json:"data_types"`
+	Runtime   FlowRuntime       `json:"runtime"`
+	Narrative string            `json:"narrative"`
+	Nodes     []FlowNode        `json:"nodes"`
+	Edges     []FlowEdge        `json:"edges"`
+	Libraries []FlowLibrary     `json:"libraries"`
+	Kinds     []FlowLibraryKind `json:"data_types"`
 	// Stats is recent agent access for the requested window (issue #32).
 	Stats FlowStats `json:"stats"`
 }
@@ -358,11 +358,11 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		connector, hasConnector := s.connectors[svc.ID]
 		if hasConnector {
 			caps := connector.Capabilities()
-			dataTypes := make([]string, 0, len(caps.DataTypes))
-			for _, dt := range caps.DataTypes {
-				dataTypes = append(dataTypes, dt.Name)
+			kinds := make([]string, 0, len(caps.Kinds))
+			for _, dt := range caps.Kinds {
+				kinds = append(kinds, dt.Name)
 			}
-			node.DataTypes = dataTypes
+			node.Kinds = kinds
 
 			for _, kind := range s.allLibraryKinds() {
 				if flowProvidesKind(connector, kind.ID) {
@@ -467,9 +467,9 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	}
 
 	stats := s.buildFlowStats(window, windowLabel)
-	// Individual agent nodes + access arrows to library data types they used
+	// Individual agent nodes + access arrows to library kinds they used
 	// (issue #114). Agent → service arrows are omitted so the map keeps focus
-	// on data types rather than backends.
+	// on kinds rather than backends.
 	for _, ad := range stats.Agents.Detail {
 		nodes = append(nodes, FlowNode{
 			ID:     "agent:" + ad.ID,
@@ -527,11 +527,11 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		}
 	}
 
-	// Map data types are the core synced library kinds only (issue #32 cleanup).
+	// Map kinds are the core synced library kinds only (issue #32 cleanup).
 	// Proxy-only connector surfaces stay on service nodes, not as chips.
-	dataTypes := make([]FlowDataType, 0, len(libraries))
+	mapKinds := make([]FlowLibraryKind, 0, len(libraries))
 	for _, lib := range libraries {
-		dataTypes = append(dataTypes, FlowDataType{
+		mapKinds = append(mapKinds, FlowLibraryKind{
 			ID:        lib.ID,
 			Label:     lib.Label,
 			Path:      lib.Path,
@@ -553,7 +553,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		Nodes:     nodes,
 		Edges:     edges,
 		Libraries: libraries,
-		DataTypes: dataTypes,
+		Kinds:     mapKinds,
 		Stats:     stats,
 	}
 }

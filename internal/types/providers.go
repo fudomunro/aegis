@@ -228,7 +228,7 @@ func DocumentServiceName(d Document) string {
 }
 
 // Cursor-paged reads and placement writes (issue #254 mirror rethink).
-// Mirroring is not a data type: it is reconciliation over data types. Core
+// Mirroring is not a kind: it is reconciliation over kinds. Core
 // plans what should exist where and schedules the work; connectors expose
 // the operations below — read a list in pages, place items into a playlist,
 // save liked tracks — and report per-item skips so planning can react.

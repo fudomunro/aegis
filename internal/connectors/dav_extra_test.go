@@ -14,7 +14,7 @@ import (
 func TestCardDAVConnector_CapabilitiesAndInstructions(t *testing.T) {
 	c := NewCardDAVConnector(newTestHost("https://aegis.example.com"))
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "contacts" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "contacts" {
 		t.Fatalf("caps = %+v", caps)
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")
@@ -46,7 +46,7 @@ func TestCardDAVConnector_ApplyAuth(t *testing.T) {
 func TestCalDAVConnector_CapabilitiesAndInstructions(t *testing.T) {
 	c := NewCalDAVConnector(newTestHost("https://aegis.example.com"))
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "events" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "events" {
 		t.Fatalf("caps = %+v", caps)
 	}
 	instr := c.SystemInstructions("https://aegis.example.com")

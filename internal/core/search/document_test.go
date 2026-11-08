@@ -115,4 +115,3 @@ func TestSearchSourceServices_Dedups(t *testing.T) {
 		t.Fatalf("services = %v", services)
 	}
 }
-

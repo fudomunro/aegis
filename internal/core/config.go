@@ -457,19 +457,19 @@ func (c *Config) SetDataGrants(policies policy.DataGrants) error {
 // SeedDataGrant installs a data-grant default when the key has no entry yet.
 // Used for user-defined kinds whose schema declares default_access (issue #15).
 // Never overwrites an existing grant and never persists — admin overlay wins.
-func (c *Config) SeedDataGrant(dataType string, grant policy.DataGrant) {
+func (c *Config) SeedDataGrant(kind string, grant policy.DataGrant) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if dataType == "" {
+	if kind == "" {
 		return
 	}
 	if c.typePolicies == nil {
 		c.typePolicies = policy.DataGrants{}
 	}
-	if _, exists := c.typePolicies[dataType]; exists {
+	if _, exists := c.typePolicies[kind]; exists {
 		return
 	}
-	c.typePolicies[dataType] = grant
+	c.typePolicies[kind] = grant
 }
 
 // EffectivePermissions returns the resolved service-scoped permission map
@@ -488,9 +488,9 @@ func (c *Config) EffectivePermissions(serviceID string) policy.Permissions {
 	return policy.EffectivePermissions(c.typePolicies, legacy, serviceID)
 }
 
-// EffectiveAccess resolves one data type for a provider. Unclassified paths
-// pass dataType == "" and get the Strictest view (issue #94).
-func (c *Config) EffectiveAccess(serviceID, dataType string) string {
+// EffectiveAccess resolves one kind for a provider. Unclassified paths
+// pass kind == "" and get the Strictest view (issue #94).
+func (c *Config) EffectiveAccess(serviceID, kind string) string {
 	// Same reasoning as EffectivePermissions: read the live maps under the
 	// lock rather than handing them to an unlocked caller.
 	c.mu.RLock()
@@ -499,5 +499,5 @@ func (c *Config) EffectiveAccess(serviceID, dataType string) string {
 	if svc := c.serviceByID(serviceID); svc != nil {
 		legacy = svc.GrantLimits
 	}
-	return policy.EffectiveAccess(c.typePolicies, legacy, dataType, serviceID)
+	return policy.EffectiveAccess(c.typePolicies, legacy, kind, serviceID)
 }

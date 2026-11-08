@@ -524,8 +524,8 @@ func TestBuildMaintenanceDashboard_Maturity(t *testing.T) {
 	if svc.Maturity.Service != "spotify" || svc.MaturityGrade.Level == "" {
 		t.Fatalf("spotify maturity = %+v grade = %+v", svc.Maturity, svc.MaturityGrade)
 	}
-	if svc.MaturityGrade.Offered != len(spotify.DataTypes) {
-		t.Fatalf("offered = %d, want %d", svc.MaturityGrade.Offered, len(spotify.DataTypes))
+	if svc.MaturityGrade.Offered != len(spotify.Kinds) {
+		t.Fatalf("offered = %d, want %d", svc.MaturityGrade.Offered, len(spotify.Kinds))
 	}
 	if harness.Maturity != nil || harness.MaturityGrade != nil {
 		t.Fatalf("harness maturity = %+v, want nil for a non-catalog service", harness.Maturity)

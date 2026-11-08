@@ -219,8 +219,8 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	if ynab == nil {
 		t.Fatal("ynab missing from summary")
 	}
-	if len(ynab.AvailableDataTypes) != 1 || ynab.AvailableDataTypes[0] != "transactions" {
-		t.Fatalf("available_data_types = %v, want [transactions]", ynab.AvailableDataTypes)
+	if len(ynab.AvailableKinds) != 1 || ynab.AvailableKinds[0] != "transactions" {
+		t.Fatalf("available_data_types = %v, want [transactions]", ynab.AvailableKinds)
 	}
 	if !ynab.HasTransaction {
 		t.Fatal("has_transaction_provider not set")
@@ -229,11 +229,11 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 
 func TestYNABCapabilities_OnlyTransactions(t *testing.T) {
 	caps := connectors.NewYNABConnector(&Server{}).Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
 	}
 	qcaps := connectors.NewQuickenConnector(nil).Capabilities()
-	if len(qcaps.DataTypes) != 1 || qcaps.DataTypes[0].Name != "transactions" {
+	if len(qcaps.Kinds) != 1 || qcaps.Kinds[0].Name != "transactions" {
 		t.Fatalf("quicken caps = %+v", qcaps)
 	}
 }

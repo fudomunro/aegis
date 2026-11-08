@@ -25,12 +25,12 @@ func TestConnectionMaturityCatalog(t *testing.T) {
 		if _, ok := serviceNames[m.Service]; !ok {
 			t.Errorf("catalog entry %q is not a registered connector service", m.Service)
 		}
-		if len(m.DataTypes) == 0 {
-			t.Errorf("catalog entry %q has no data types", m.Service)
+		if len(m.Kinds) == 0 {
+			t.Errorf("catalog entry %q has no kinds", m.Service)
 		}
-		for _, dt := range m.DataTypes {
+		for _, dt := range m.Kinds {
 			if dt.Name == "" {
-				t.Errorf("catalog entry %q has a data type with empty name", m.Service)
+				t.Errorf("catalog entry %q has a kind with empty name", m.Service)
 			}
 		}
 	}

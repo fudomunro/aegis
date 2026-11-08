@@ -28,8 +28,8 @@ func TestLibraryKinds_RegistryConsistency(t *testing.T) {
 		if !k.CanonicalAllowed && isCanonicalKindID(k.ID) {
 			t.Errorf("kind %q not CanonicalAllowed but isCanonicalKindID is true", k.ID)
 		}
-		if !types.IsReservedDataTypeKey(k.ID) {
-			t.Errorf("kind %q missing reserved data-type key", k.ID)
+		if !types.IsReservedKindKey(k.ID) {
+			t.Errorf("kind %q missing reserved kind key", k.ID)
 		}
 	}
 }

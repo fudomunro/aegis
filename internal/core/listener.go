@@ -105,7 +105,7 @@ func apiRouteAllowed(method, path string) bool {
 	case strings.HasPrefix(path, "/v1/library/"):
 		// Library reads. Writes (mirror, photo share, entity-link
 		// mutations) are admin-side by method. Merge review and the copy
-		// ledger expose owner-internal maintenance state that data-type
+		// ledger expose owner-internal maintenance state that kind
 		// grants do not filter, so they stay admin-side too.
 		if path == "/v1/library/review" || strings.HasPrefix(path, "/v1/library/review/") ||
 			path == "/v1/library/copies" || strings.HasPrefix(path, "/v1/library/copies/") {

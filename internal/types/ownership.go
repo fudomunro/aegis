@@ -7,7 +7,7 @@ package types
 //
 // Distinct from connection maturity (issue #247). Maturity grades how
 // completely one connector covers the types its service offers; ownership
-// tracks how completely the user's data of one type is under management —
+// tracks how completely the user's data of one kind is under management —
 // which sources are in use, which declared routes are still unused, and
 // whether the user has confirmed the collection is complete.
 

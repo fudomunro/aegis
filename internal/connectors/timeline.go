@@ -608,7 +608,7 @@ func NewTimelineConnector(store *TimelineStore) *TimelineConnector {
 
 func (c *TimelineConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "places",
 				Description: "Imported Google Maps Timeline visits and trips",

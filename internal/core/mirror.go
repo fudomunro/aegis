@@ -86,7 +86,7 @@ type MirrorResult struct {
 // HandleLibraryMirror copies a playlist or liked-tracks list from one service
 // to another (issue #16 phase 3). Aegis still stores no media; it reads
 // from the source service and writes through the target's upstream API using
-// the stored OAuth token. Placement is reconciliation over data types
+// the stored OAuth token. Placement is reconciliation over kinds
 // (issue #254): core plans against neutral models, connectors execute the
 // placement and report per-item skips.
 //
