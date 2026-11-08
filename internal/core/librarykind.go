@@ -21,6 +21,28 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
+// routeHandle is a *Server handler method value, e.g.
+// (*Server).HandleLibraryTracks. kindRuntime is a package-level registry,
+// so handlers bind to a Server at registration time.
+type routeHandle func(*Server, http.ResponseWriter, *http.Request)
+
+// Route is one agent-tier GET/HEAD route owned by a library kind. The
+// declaration carries the route's exposure: the API-listener and app-token
+// allowlists derive from it. Kinds declare reads only — writes (mirror,
+// photos/share) stay admin-registered in core (issue #312). This is the
+// route-declaration shape internal/kinds will export.
+type Route struct {
+	// Pattern is the ServeMux pattern: the kind path, or a kind subroute
+	// like "/v1/library/documents/{service}/{id}/text".
+	Pattern string
+	// Handle is the route handler as a *Server method value.
+	Handle routeHandle
+	// AppReadable marks third-party app-token exposure (freebusy: yes;
+	// document text: no). The kind's list route derives this from the
+	// kind data; subroutes declare it.
+	AppReadable bool
+}
+
 // kindRuntimeEntry is core-owned visibility wiring for one library kind.
 // Predicates stay here — not on types.LibraryKind (issue #15).
 type kindRuntimeEntry struct {
@@ -32,16 +54,29 @@ type kindRuntimeEntry struct {
 	HasProviders func(s *Server) bool
 	// Readable reports whether any non-blocked service allows reads.
 	Readable func(s *Server) bool
+	// Routes are the agent-tier GET/HEAD routes this kind owns (issue
+	// #312). The first is the kind's list route; the rest are subroutes
+	// (document text, the freebusy view).
+	Routes []Route
 }
 
 // newKindRuntime wires a kind whose live sources are exactly the connectors
-// implementing P. Override HasProviders on the result when a local store can
-// feed the kind without a connector (mail archive, Timeline import).
-func newKindRuntime[P any](kind string) kindRuntimeEntry {
+// implementing P. The kind's list route is declared from the kind data
+// (path and app exposure come from types.BuiltinKindByID); pass extra
+// subroutes after handle. Override HasProviders on the result when a local
+// store can feed the kind without a connector (mail archive, Timeline
+// import).
+func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kindRuntimeEntry {
 	provides := func(c connectors.ServiceConnector) bool {
 		_, ok := any(c).(P)
 		return ok
 	}
+	k := types.BuiltinKindByID(kind)
+	routes := append([]Route{{
+		Pattern:     k.Path,
+		Handle:      handle,
+		AppReadable: k.AppReadable,
+	}}, extra...)
 	return kindRuntimeEntry{
 		Provides: provides,
 		HasProviders: func(s *Server) bool {
@@ -53,29 +88,36 @@ func newKindRuntime[P any](kind string) kindRuntimeEntry {
 			return false
 		},
 		Readable: func(s *Server) bool { return s.libraryReadableFor(kind) },
+		Routes:   routes,
 	}
 }
 
-// kindRuntime maps kind ID → visibility predicates. Keys must match
-// types.BuiltinLibraryKinds (TestLibraryKinds_KindRuntimeInSync).
+// kindRuntime maps kind ID → visibility predicates and route declarations.
+// Keys must match types.BuiltinLibraryKinds (TestLibraryKinds_KindRuntimeInSync,
+// TestLibraryKinds_RoutesInSync).
 var kindRuntime = map[string]kindRuntimeEntry{
-	"playlists":    newKindRuntime[types.PlaylistProvider]("playlists"),
-	"tracks":       newKindRuntime[types.LikedTrackProvider]("tracks"),
-	"albums":       newKindRuntime[types.AlbumProvider]("albums"),
-	"artists":      newKindRuntime[types.ArtistProvider]("artists"),
-	"contacts":     newKindRuntime[types.ContactProvider]("contacts"),
-	"photos":       newKindRuntime[types.PhotoProvider]("photos"),
-	"events":       newKindRuntime[types.CalendarEventProvider]("events"),
+	"playlists": newKindRuntime[types.PlaylistProvider]("playlists", (*Server).HandleLibraryPlaylists),
+	"tracks":    newKindRuntime[types.LikedTrackProvider]("tracks", (*Server).HandleLibraryTracks),
+	"albums":    newKindRuntime[types.AlbumProvider]("albums", (*Server).HandleLibraryAlbums),
+	"artists":   newKindRuntime[types.ArtistProvider]("artists", (*Server).HandleLibraryArtists),
+	"contacts":  newKindRuntime[types.ContactProvider]("contacts", (*Server).HandleLibraryContacts),
+	"photos":    newKindRuntime[types.PhotoProvider]("photos", (*Server).HandleLibraryPhotos),
+	"events": newKindRuntime[types.CalendarEventProvider]("events", (*Server).HandleLibraryEvents,
+		// Freebusy is the events availability view, not a LibraryKind —
+		// declared as an events subroute so its exposure is data, not a
+		// hardcoded app extra (issue #312).
+		Route{Pattern: "/v1/library/freebusy", Handle: (*Server).HandleLibraryFreeBusy, AppReadable: true}),
 	"messages":     messagesKindRuntime(),
-	"transactions": newKindRuntime[types.TransactionProvider]("transactions"),
+	"transactions": newKindRuntime[types.TransactionProvider]("transactions", (*Server).HandleLibraryTransactions),
 	"places":       placesKindRuntime(),
-	"documents":    newKindRuntime[types.DocumentProvider]("documents"),
+	"documents": newKindRuntime[types.DocumentProvider]("documents", (*Server).HandleLibraryDocuments,
+		Route{Pattern: "/v1/library/documents/{service}/{id}/text", Handle: (*Server).HandleLibraryDocumentText}),
 }
 
 // messagesKindRuntime adds the local mail archive (Gmail sync + Takeout) as a
 // collection source even without a live connector (issue #139).
 func messagesKindRuntime() kindRuntimeEntry {
-	e := newKindRuntime[types.MessageProvider]("messages")
+	e := newKindRuntime[types.MessageProvider]("messages", (*Server).HandleLibraryMessages)
 	live := e.HasProviders
 	e.HasProviders = func(s *Server) bool {
 		return live(s) || (s.mail != nil && s.mailReadable())
@@ -86,7 +128,7 @@ func messagesKindRuntime() kindRuntimeEntry {
 // placesKindRuntime adds the local Timeline import store as a collection
 // source even without a live connector (issue #142).
 func placesKindRuntime() kindRuntimeEntry {
-	e := newKindRuntime[types.PlaceVisitProvider]("places")
+	e := newKindRuntime[types.PlaceVisitProvider]("places", (*Server).HandleLibraryPlaceVisits)
 	live := e.HasProviders
 	e.HasProviders = func(s *Server) bool {
 		return live(s) || (s.timeline != nil && s.timeline.Enabled())
@@ -219,29 +261,26 @@ func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 	return out
 }
 
-// libraryRouteHandlers maps each kind path to its HTTP handler so main can
-// register every dataset from the registry. User-defined kinds (issue #15)
-// are merged in when schemas are loaded.
+// libraryRouteHandlers maps each library route to its HTTP handler so main
+// can register every dataset from the registry. Kind-owned routes come from
+// the Route declarations on kindRuntime (issue #312); user-defined kinds
+// (issue #15) are merged in when schemas are loaded.
 func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
-	handlers := map[string]http.HandlerFunc{
-		"/v1/library/playlists":                     s.HandleLibraryPlaylists,
-		"/v1/library/tracks":                        s.HandleLibraryTracks,
-		"/v1/library/albums":                        s.HandleLibraryAlbums,
-		"/v1/library/artists":                       s.HandleLibraryArtists,
-		"/v1/library/contacts":                      s.HandleLibraryContacts,
-		"/v1/library/photos":                        s.HandleLibraryPhotos,
-		"/v1/library/events":                        s.HandleLibraryEvents,
-		"/v1/library/freebusy":                      s.HandleLibraryFreeBusy,
-		"/v1/library/messages":                      s.HandleLibraryMessages,
-		"/v1/library/transactions":                  s.HandleLibraryTransactions,
-		"/v1/library/places":                        s.HandleLibraryPlaceVisits,
-		"/v1/library/documents":                     s.HandleLibraryDocuments,
-		"/v1/library/documents/{service}/{id}/text": s.HandleLibraryDocumentText,
-		"/v1/library/copies":                        s.HandleLibraryCopies,
-		"/v1/library/review":                        s.HandleMergeReview,
-		"/v1/library/links":                         s.HandleEntityLinks,
-		"/v1/library/links/":                        s.HandleEntityLinks,
+	handlers := map[string]http.HandlerFunc{}
+	for _, rt := range kindRuntime {
+		for _, route := range rt.Routes {
+			handlers[route.Pattern] = func(w http.ResponseWriter, r *http.Request) {
+				route.Handle(s, w, r)
+			}
+		}
 	}
+	// Cross-kind maintenance reads (copy ledger, merge review, entity
+	// links) are not owned by any kind: fixed registrations here, and the
+	// API-listener deny list names the admin-side ones explicitly.
+	handlers["/v1/library/copies"] = s.HandleLibraryCopies
+	handlers["/v1/library/review"] = s.HandleMergeReview
+	handlers["/v1/library/links"] = s.HandleEntityLinks
+	handlers["/v1/library/links/"] = s.HandleEntityLinks
 	// User-defined packs must never shadow a built-in route (issue #183).
 	// Normalize rejects reserved ids; this is the defense-in-depth check
 	// against registry/handler drift.

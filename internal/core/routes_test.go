@@ -157,3 +157,37 @@ func TestRegisterRoutes_UnknownAuthPath(t *testing.T) {
 		t.Fatalf("body = %s, want unknown auth endpoint", w.Body.String())
 	}
 }
+
+// TestRegisterRoutes_FullMuxNoPanic builds the complete mux — built-ins
+// plus a user-defined kind fixture — and asserts ServeMux registration
+// does not panic. Go's mux panics on conflicting patterns at registration,
+// which is the real shadow check behind mergeUDTRoutes' exact-string
+// comparison (issue #312).
+func TestRegisterRoutes_FullMuxNoPanic(t *testing.T) {
+	dir := t.TempDir()
+	writeSchemaFile(t, dir, "schema.json", `{
+		"id": "widgets",
+		"fields": {"title": {"type": "string"}},
+		"identity": {"fields": ["title"]},
+		"sources": [{"id": "s", "kind": "file_json", "path": "widgets.json", "field_map": {"title": "t"}}]
+	}`)
+	writeSchemaFile(t, dir, "widgets.json", `{"t": "hi"}`)
+	reg, _ := LoadUserDefinedTypes(dir, "", nil)
+
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.udts = reg
+	mux := http.NewServeMux()
+	registerRoutes(mux, srv, nil)
+
+	for _, path := range []string{
+		"/v1/library/playlists",
+		"/v1/library/freebusy",
+		"/v1/library/documents/svc/abc/text",
+		"/v1/library/widgets",
+	} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		if _, pattern := mux.Handler(req); pattern == "" {
+			t.Errorf("no mux route matches %s", path)
+		}
+	}
+}
