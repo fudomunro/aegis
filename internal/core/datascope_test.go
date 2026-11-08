@@ -445,7 +445,7 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/library/tracks"))
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/library/tracks"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("unlisted type status = %d body=%s", w.Code, w.Body.String())
 	}

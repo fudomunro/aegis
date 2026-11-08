@@ -358,14 +358,14 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		connector, hasConnector := s.connectors[svc.ID]
 		if hasConnector {
 			caps := connector.Capabilities()
-			kinds := make([]string, 0, len(caps.Kinds))
+			kindList := make([]string, 0, len(caps.Kinds))
 			for _, dt := range caps.Kinds {
-				kinds = append(kinds, dt.Name)
+				kindList = append(kindList, dt.Name)
 			}
-			node.Kinds = kinds
+			node.Kinds = kindList
 
 			for _, kind := range s.allLibraryKinds() {
-				if flowProvidesKind(connector, kind.ID) {
+				if s.flowProvidesKind(connector, kind.ID) {
 					node.Providers = append(node.Providers, kind.ID)
 					if !strings.EqualFold(svc.Action, "block") {
 						libraryProviders[kind.ID] = append(libraryProviders[kind.ID], svc.ID)
@@ -446,9 +446,9 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		return edges[i].Label < edges[j].Label
 	})
 
-	kinds := s.allLibraryKinds()
-	libraries := make([]FlowLibrary, 0, len(kinds))
-	for _, kind := range kinds {
+	kindList := s.allLibraryKinds()
+	libraries := make([]FlowLibrary, 0, len(kindList))
+	for _, kind := range kindList {
 		providers := append([]string(nil), libraryProviders[kind.ID]...)
 		// User-defined kinds are fed by schema sources, not OAuth connectors.
 		if schema, ok := s.udtSchemaForKind(kind.ID); ok && len(providers) == 0 {
@@ -707,9 +707,13 @@ func staticCredentialLabel(svc Service) string {
 }
 
 // flowProvidesKind reports whether the connector feeds the named library
-// kind. Dispatch is registry-driven (kindRuntime.Provides) so a new kind
-// cannot silently drop out of the flow map (issue #254).
-func flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
+// kind. Dispatch is registry-driven so a new kind cannot silently drop out
+// of the flow map (issue #254): kinds.Builtin() for moved kinds,
+// kindRuntime for the rest. // transitional (#312)
+func (s *Server) flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
+	if k, ok := s.builtinKind(kindID); ok {
+		return k.Provides(connector)
+	}
 	rt, ok := kindRuntime[kindID]
 	return ok && rt.Provides != nil && rt.Provides(connector)
 }

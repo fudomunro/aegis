@@ -70,6 +70,7 @@ func eventsProviderTargets(s *Server, r *http.Request, permType string) ([]kinds
 // scope is freebusy get the same redaction across all services (issue #131).
 func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
+	mark, copies := kinds.Stamps(s, "events", forEachCalendarEventSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.CalendarEvent]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.CalendarEvent], []string) {
@@ -105,8 +106,8 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 		RedactSearch: func(items []types.CalendarEvent, r *http.Request) []types.CalendarEvent {
 			return s.searchRedactEvents(items, r)
 		},
-		MarkCanonical: s.stampCalendarEventCanonical,
-		StampCopies:   s.stampEventCopies,
+		MarkCanonical: mark,
+		StampCopies:   copies,
 	})
 }
 
@@ -142,6 +143,7 @@ func (s *Server) searchRedactEvents(items []types.CalendarEvent, r *http.Request
 // GET /v1/library/freebusy (issue #128).
 func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
+	mark, copies := kinds.Stamps(s, "events", forEachCalendarEventSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.CalendarEvent]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.CalendarEvent], []string) {
@@ -153,8 +155,20 @@ func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
 		Encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			return freeBusyListFromEvents(items, page, bySvc)
 		},
-		MarkCanonical: s.stampCalendarEventCanonical,
-		StampCopies:   s.stampEventCopies,
+		MarkCanonical: mark,
+		StampCopies:   copies,
 		CacheKey:      "library:freebusy",
 	})
+}
+
+func forEachCalendarEventSource(item *types.CalendarEvent, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

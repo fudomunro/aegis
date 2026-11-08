@@ -2,16 +2,21 @@ package core
 
 import (
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
-// TestLibraryKinds_KindRuntimeInSync keeps the data registry and core
-// visibility predicates aligned (issue #15). A kind with no kindRuntime row
-// silently disappears from pre-request hints; a leftover runtime key is dead
-// code. Both fail this test. Provides is required so the flow map's
-// per-service kind listing cannot drift out of step either (issue #254).
+// TestLibraryKinds_KindRuntimeInSync keeps the data registry and the
+// visibility predicates aligned (issue #15). A kind with no wiring silently
+// disappears from pre-request hints; leftover wiring is dead code. Both
+// fail this test. // transitional (#312): kinds live in kindRuntime until
+// they move into kinds.Builtin(); this test pins the union with no gaps
+// and no extras in either registry.
 func TestLibraryKinds_KindRuntimeInSync(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	builtin := map[string]bool{}
+	for _, k := range srv.builtinKinds() {
+		builtin[k.Def().ID] = true
+	}
+
 	seen := map[string]bool{}
 	for _, k := range libraryKinds {
 		if k.ID == "" {
@@ -21,9 +26,14 @@ func TestLibraryKinds_KindRuntimeInSync(t *testing.T) {
 			t.Fatalf("duplicate libraryKinds ID %q", k.ID)
 		}
 		seen[k.ID] = true
+		if builtin[k.ID] {
+			// Moved kinds expose Provides/HasProviders/Readable as
+			// interface methods — they cannot be nil.
+			continue
+		}
 		rt, ok := kindRuntime[k.ID]
 		if !ok {
-			t.Errorf("kind %q missing kindRuntime entry", k.ID)
+			t.Errorf("kind %q missing from kindRuntime and kinds.Builtin()", k.ID)
 			continue
 		}
 		if rt.Provides == nil {
@@ -41,6 +51,11 @@ func TestLibraryKinds_KindRuntimeInSync(t *testing.T) {
 			t.Errorf("kindRuntime has extra key %q with no libraryKinds entry", id)
 		}
 	}
+	for id := range builtin {
+		if !seen[id] {
+			t.Errorf("kinds.Builtin has extra kind %q with no libraryKinds entry", id)
+		}
+	}
 }
 
 // TestLibraryKinds_RoutesInSync keeps route declarations and the kind
@@ -49,32 +64,11 @@ func TestLibraryKinds_KindRuntimeInSync(t *testing.T) {
 // registered library route is either kind-declared or a fixed cross-kind
 // entry — no route without a kind.
 func TestLibraryKinds_RoutesInSync(t *testing.T) {
-	for _, k := range libraryKinds {
-		rt := kindRuntime[k.ID]
-		var primary *Route
-		for i := range rt.Routes {
-			if rt.Routes[i].Pattern == k.Path {
-				primary = &rt.Routes[i]
-			}
-		}
-		if primary == nil {
-			t.Errorf("kind %q has no declared route at %s", k.ID, k.Path)
-			continue
-		}
-		if primary.Handle == nil {
-			t.Errorf("kind %q primary route has no handler", k.ID)
-		}
-		if primary.AppReadable != k.AppReadable {
-			t.Errorf("kind %q primary route AppReadable = %v, kind data = %v",
-				k.ID, primary.AppReadable, k.AppReadable)
-		}
-	}
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 
 	declared := map[string]string{} // pattern → owning kind ID
+	appReadable := map[string]bool{}
 	for id, rt := range kindRuntime {
-		if types.BuiltinKindByID(id) == nil {
-			t.Errorf("kindRuntime entry %q declares routes but has no registry kind", id)
-		}
 		for _, route := range rt.Routes {
 			if route.Pattern == "" || route.Handle == nil {
 				t.Errorf("kind %q declares an incomplete route (%q)", id, route.Pattern)
@@ -84,6 +78,36 @@ func TestLibraryKinds_RoutesInSync(t *testing.T) {
 				t.Errorf("route %q declared by both %q and %q", route.Pattern, prev, id)
 			}
 			declared[route.Pattern] = id
+			appReadable[route.Pattern] = route.AppReadable
+		}
+	}
+	for _, bk := range srv.builtinKinds() {
+		id := bk.Def().ID
+		for _, route := range bk.Routes() {
+			if route.Pattern == "" || route.Handler == nil {
+				t.Errorf("kind %q declares an incomplete route (%q)", id, route.Pattern)
+				continue
+			}
+			if prev, dup := declared[route.Pattern]; dup {
+				t.Errorf("route %q declared by both %q and %q", route.Pattern, prev, id)
+			}
+			declared[route.Pattern] = id
+			appReadable[route.Pattern] = route.AppReadable
+		}
+	}
+
+	for _, k := range libraryKinds {
+		owner, ok := declared[k.Path]
+		if !ok {
+			t.Errorf("kind %q has no declared route at %s", k.ID, k.Path)
+			continue
+		}
+		if owner != k.ID {
+			t.Errorf("kind %q route at %s is owned by %q", k.ID, k.Path, owner)
+		}
+		if appReadable[k.Path] != k.AppReadable {
+			t.Errorf("kind %q primary route AppReadable = %v, kind data = %v",
+				k.ID, appReadable[k.Path], k.AppReadable)
 		}
 	}
 

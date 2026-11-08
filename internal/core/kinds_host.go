@@ -6,6 +6,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // kindsHost adapts the hub onto the kinds.Host seam (issue #312). The
@@ -119,7 +120,47 @@ func (s *Server) SourceName(id string) string {
 	return id
 }
 
+// CopyInfo implements kinds.Host.
+func (s *Server) CopyInfo(kind, serviceID, externalID string) *types.CopyInfo {
+	return s.copyInfoFor(kind, serviceID, externalID)
+}
+
 var _ kinds.Host = (*Server)(nil)
+
+// builtinKinds returns the kinds the kinds package owns so far, wired over
+// this server. Built lazily so &Server{} fixtures fail open (issue #312);
+// the list grows as kinds move out of the hub. // transitional (#312)
+func (s *Server) builtinKinds() []kinds.Kind {
+	s.builtinKindsOnce.Do(func() {
+		s.kindList = kinds.Builtin(s, s.libraryEngine(), kinds.Deps{
+			PlaylistLinkKey: s.links.PlaylistLinkKey,
+			ResolveTracks:   s.resolveTrackEntities,
+			ResolveAlbums:   s.resolveAlbumEntities,
+			ResolveArtists:  s.resolveArtistEntities,
+		})
+	})
+	return s.kindList
+}
+
+// builtinKind returns the moved kind for id. // transitional (#312)
+func (s *Server) builtinKind(id string) (kinds.Kind, bool) {
+	for _, k := range s.builtinKinds() {
+		if k.Def().ID == id {
+			return k, true
+		}
+	}
+	return nil, false
+}
+
+// libraryHandler resolves a kind's list handler through the route
+// registry — the reach-through for tests and admin dispatch (issue #312).
+func (s *Server) libraryHandler(kindID string) http.HandlerFunc {
+	k := LibraryKindByID(kindID)
+	if k == nil {
+		return nil
+	}
+	return s.libraryRouteHandlers()[k.Path]
+}
 
 // libraryEngine returns the aggregate pipeline engine. Fixtures that skip
 // engine wiring get one lazily so &Server{} tests fail open instead of

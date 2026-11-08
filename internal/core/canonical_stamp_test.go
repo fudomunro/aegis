@@ -3,6 +3,7 @@ package core
 import (
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -12,6 +13,7 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		{ID: "google", Name: "Google", Action: "inject", CanonicalFor: []string{"contacts"}},
 		{ID: "tidal", Name: "Tidal", Action: "block", CanonicalFor: []string{"tracks"}},
 	}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
 	tracks := cfg.canonicalServiceIDs("tracks")
 	if !tracks["spotify"] || tracks["tidal"] || len(tracks) != 1 {
@@ -29,7 +31,8 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		{Name: "A", Sources: []types.TrackSource{{Service: "spotify", ID: "1"}, {Service: "youtube-music", ID: "2"}}},
 		{Name: "B", Sources: []types.TrackSource{{Service: "youtube-music", ID: "3"}}},
 	}
-	markTrackSourcesCanonical(items, "spotify")
+	markTracks, _ := kinds.Stamps(srv, "tracks", forEachTrackSource)
+	markTracks(items, "spotify")
 	if !items[0].Sources[0].Canonical || items[0].Sources[1].Canonical || items[1].Sources[0].Canonical {
 		t.Fatalf("track stamp = %+v", items)
 	}
@@ -40,7 +43,8 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 	contactsIn := []types.Contact{
 		{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ID: "c1"}, {Service: "immich", ID: "c2"}}},
 	}
-	markContactSourcesCanonical(contactsIn, "google")
+	markContacts, _ := kinds.Stamps(srv, "contacts", forEachContactSource)
+	markContacts(contactsIn, "google")
 	if !contactsIn[0].Sources[0].Canonical || contactsIn[0].Sources[1].Canonical {
 		t.Fatalf("contact stamp = %+v", contactsIn[0].Sources)
 	}
@@ -48,9 +52,9 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		t.Fatalf("CanonicalService = %q", contactsIn[0].CanonicalService())
 	}
 
-	// No-op when service does not appear.
-	markTrackSourcesCanonical(items, "amazon-music")
-	markContactSourcesCanonical(contactsIn, "spotify")
+	// No-op when service does not appear or is not canonical for the kind.
+	markTracks(items, "amazon-music")
+	markContacts(contactsIn, "spotify")
 }
 
 func TestStampTransactionCanonical_OnlyWhenConfigured(t *testing.T) {
@@ -70,9 +74,10 @@ func TestStampTransactionCanonical_OnlyWhenConfigured(t *testing.T) {
 			},
 		},
 	}
-	srv.stampTransactionCanonical(items, "ynab")
-	srv.stampTransactionCanonical(items, "quicken")
-	srv.stampTransactionCanonical(items, "missing")
+	mark, _ := kinds.Stamps(srv, "transactions", forEachTransactionSource)
+	mark(items, "ynab")
+	mark(items, "quicken")
+	mark(items, "missing")
 
 	if !items[0].Sources[0].Canonical {
 		t.Fatal("ynab source should be canonical")
@@ -101,8 +106,9 @@ func TestStampPlaceVisitCanonical_OnlyWhenConfigured(t *testing.T) {
 			},
 		},
 	}
-	srv.stampPlaceVisitCanonical(items, "google-timeline")
-	srv.stampPlaceVisitCanonical(items, "owntracks")
+	mark, _ := kinds.Stamps(srv, "places", forEachPlaceVisitSource)
+	mark(items, "google-timeline")
+	mark(items, "owntracks")
 
 	if !items[0].Sources[0].Canonical {
 		t.Fatal("timeline source should be canonical")

@@ -100,7 +100,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403; body=%s", w.Code, w.Body.String())

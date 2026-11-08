@@ -18,7 +18,7 @@ import (
 // joined with live evidence. Fail-open throughout — a store or ledger that
 // cannot be read simply drops its evidence from the derivation.
 func (s *Server) ownershipStatuses() []types.OwnershipStatus {
-	kinds := s.allLibraryKinds()
+	kindList := s.allLibraryKinds()
 	sources, routes := s.ownershipEvidence()
 	freshness := s.ownershipFreshnessByKind()
 
@@ -27,8 +27,8 @@ func (s *Server) ownershipStatuses() []types.OwnershipStatus {
 		entries = s.ownership.List()
 	}
 
-	out := make([]types.OwnershipStatus, 0, len(kinds))
-	for _, kind := range kinds {
+	out := make([]types.OwnershipStatus, 0, len(kindList))
+	for _, kind := range kindList {
 		st := types.OwnershipStatus{
 			Kind:            kind.ID,
 			Label:           kind.Label,
@@ -77,7 +77,7 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 		u := use[svc.ID]
 		name := ownershipServiceName(svc, conn)
 		for _, kind := range s.allLibraryKinds() {
-			if !flowProvidesKind(conn, kind.ID) {
+			if !s.flowProvidesKind(conn, kind.ID) {
 				continue
 			}
 			if u.inUse {

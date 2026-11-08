@@ -61,7 +61,7 @@ func TestLibraryTracks_PagesWithoutDuplicatesOrGaps(t *testing.T) {
 		req := httptest.NewRequest("GET", url, nil)
 		req.Header.Set("Authorization", "Bearer test-key")
 		w := httptest.NewRecorder()
-		srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+		srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 		}
@@ -104,7 +104,7 @@ func TestLibraryTracks_InvalidCursorIs400(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks?cursor=not-a-cursor", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
 	}
@@ -120,7 +120,7 @@ func TestLibraryTracks_LimitClampsAndCachesPerWindow(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks?limit=9999", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -141,7 +141,7 @@ func TestLibraryTracks_LimitClampsAndCachesPerWindow(t *testing.T) {
 	req2 := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w2, req2)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w2, req2)
 	var page1 types.TrackList
 	if err := json.Unmarshal(w2.Body.Bytes(), &page1); err != nil {
 		t.Fatalf("decode: %v", err)

@@ -197,6 +197,7 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 	// Encode-time redaction is a second belt: even if a service returned an
 	// excerpt, metadata-only surfaces must not ship it.
 	metaOnly := policy.IsMetadataAccess(appLevel)
+	mark, copies := kinds.Stamps(s, "documents", forEachDocumentSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Document]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Document], []string) {
@@ -219,8 +220,8 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 		RedactSearch: func(items []types.Document, r *http.Request) []types.Document {
 			return s.searchRedactDocuments(items, r)
 		},
-		MarkCanonical: s.stampDocumentCanonical,
-		StampCopies:   s.stampDocumentCopies,
+		MarkCanonical: mark,
+		StampCopies:   copies,
 		CacheKey:      "library:documents" + filters.cacheKeySuffix() + "|meta:" + boolKey(metaOnly),
 	})
 }
@@ -368,4 +369,16 @@ func (s *Server) HandleLibraryDocumentText(w http.ResponseWriter, r *http.Reques
 		Kind:    kind.ID,
 		Cache:   MetricCacheMiss,
 	})
+}
+
+func forEachDocumentSource(item *types.Document, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

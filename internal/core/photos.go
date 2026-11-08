@@ -17,6 +17,7 @@ func photoServiceName(p types.Photo) string {
 // photo-capable service: GET /v1/library/photos
 func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("photos")
+	mark, copies := kinds.Stamps(s, "photos", forEachPhotoSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Photo]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Photo], []string) {
@@ -32,7 +33,19 @@ func (s *Server) HandleLibraryPhotos(w http.ResponseWriter, r *http.Request) {
 			pageItems, pr := types.SlicePage(items, page)
 			return types.PhotoList{Photos: pageItems, LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc)}
 		},
-		MarkCanonical: s.stampPhotoCanonical,
-		StampCopies:   s.stampPhotoCopies,
+		MarkCanonical: mark,
+		StampCopies:   copies,
 	})
+}
+
+func forEachPhotoSource(item *types.Photo, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

@@ -29,6 +29,7 @@ const mailArchiveSourceID = "mail-archive"
 // merged into one collection: GET /v1/library/messages
 func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("messages")
+	mark, copies := kinds.Stamps(s, "messages", forEachMessageSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Message]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Message], []string) {
@@ -59,8 +60,8 @@ func (s *Server) HandleLibraryMessages(w http.ResponseWriter, r *http.Request) {
 			pageItems, pr := types.SlicePage(items, page)
 			return types.MessageList{Messages: pageItems, LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc)}
 		},
-		MarkCanonical: s.stampMessageCanonical,
-		StampCopies:   s.stampMessageCopies,
+		MarkCanonical: mark,
+		StampCopies:   copies,
 		Status:        s.messagesStatusHooks(),
 	})
 }
@@ -165,5 +166,17 @@ func (s *Server) expandMailArchiveSources(bySvc map[string]types.LibraryServiceS
 			Role:         role,
 			Parent:       parent,
 		}
+	}
+}
+
+func forEachMessageSource(item *types.Message, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
 	}
 }

@@ -8,6 +8,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -40,7 +41,8 @@ func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
 			{Service: "youtube-music", ID: "xyz"},
 		},
 	}}
-	srv.stampPlaylistCopies(items)
+	_, stampPlaylists := kinds.Stamps(srv, "playlists", forEachPlaylistSource)
+	stampPlaylists(items)
 	if items[0].Sources[0].Copy != nil {
 		t.Fatal("source origin should remain unstamped")
 	}
@@ -195,31 +197,36 @@ func TestStampOtherKinds(t *testing.T) {
 	}
 
 	photos := []types.Photo{{Sources: []types.PhotoSource{{Service: "immich", ID: "img1"}}}}
-	srv.stampPhotoCopies(photos)
+	_, stampPhotos := kinds.Stamps(srv, "photos", forEachPhotoSource)
+	stampPhotos(photos)
 	if photos[0].Sources[0].Copy == nil {
 		t.Fatal("photo copy stamp missing")
 	}
 
 	msgs := []types.Message{{Sources: []types.MessageSource{{Service: "google-gmail", ID: "m1"}}}}
-	srv.stampMessageCopies(msgs)
+	_, stampMsgs := kinds.Stamps(srv, "messages", forEachMessageSource)
+	stampMsgs(msgs)
 	if msgs[0].Sources[0].Copy == nil {
 		t.Fatal("message copy stamp missing")
 	}
 
 	contacts := []types.Contact{{Sources: []types.ContactSource{{Service: "google-contacts", ID: "c1"}}}}
-	srv.stampContactCopies(contacts)
+	_, stampContacts := kinds.Stamps(srv, "contacts", forEachContactSource)
+	stampContacts(contacts)
 	if contacts[0].Sources[0].Copy == nil {
 		t.Fatal("contact copy stamp missing")
 	}
 
 	events := []types.CalendarEvent{{Sources: []types.CalendarEventSource{{Service: "google-calendar", ID: "e1"}}}}
-	srv.stampEventCopies(events)
+	_, stampEvents := kinds.Stamps(srv, "events", forEachCalendarEventSource)
+	stampEvents(events)
 	if events[0].Sources[0].Copy == nil {
 		t.Fatal("event copy stamp missing")
 	}
 
 	tracks := []types.Track{{Sources: []types.TrackSource{{Service: "spotify", ID: "t1"}}}}
-	srv.stampTrackCopies(tracks)
+	_, stampTracks := kinds.Stamps(srv, "tracks", forEachTrackSource)
+	stampTracks(tracks)
 	if tracks[0].Sources[0].Copy == nil {
 		t.Fatal("track copy stamp missing")
 	}

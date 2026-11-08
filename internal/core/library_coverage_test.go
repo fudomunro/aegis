@@ -21,10 +21,10 @@ import (
 func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	for _, h := range []http.HandlerFunc{
-		srv.HandleLibraryTracks,
-		srv.HandleLibraryAlbums,
-		srv.HandleLibraryArtists,
-		srv.HandleLibraryPlaylists,
+		srv.libraryHandler("tracks"),
+		srv.libraryHandler("albums"),
+		srv.libraryHandler("artists"),
+		srv.libraryHandler("playlists"),
 		srv.HandleLibraryContacts,
 		srv.HandleLibraryPhotos,
 		srv.HandleLibraryEvents,
@@ -60,7 +60,7 @@ func TestLibraryTracks_CacheHit(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
@@ -83,7 +83,7 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
 	var resp types.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -105,7 +105,7 @@ func TestLibraryTracks_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -127,7 +127,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
@@ -152,7 +152,7 @@ func TestLibraryAlbums_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -174,7 +174,7 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 
 	var resp types.AlbumList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -198,7 +198,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -214,7 +214,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	// recovers, the next request re-fetches instead of replaying unauthorized.
 	srv.connectors["spotify"] = &fakeArtistProvider{artists: []types.Artist{types.NewArtist("spotify", "Spotify", "1", "X")}}
 	w2 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w2, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w2, req)
 	if w2.Header().Get("X-Aegis-Cache") != "miss" {
 		t.Fatalf("expected cache miss after recovery, got %q", w2.Header().Get("X-Aegis-Cache"))
 	}
@@ -228,7 +228,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 
 	// Healthy aggregate is cached.
 	w3 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w3, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w3, req)
 	if w3.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("expected cache hit on healthy aggregate, got %q", w3.Header().Get("X-Aegis-Cache"))
 	}
@@ -244,7 +244,7 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 
 	var resp types.ArtistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -274,7 +274,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
@@ -285,7 +285,7 @@ func TestLibraryArtists_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -726,7 +726,7 @@ func TestLibraryAlbums_CacheHit(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 	if w.Header().Get("X-Aegis-Cache") != "hit" {
 		t.Fatalf("cache header = %q", w.Header().Get("X-Aegis-Cache"))
 	}
@@ -824,7 +824,7 @@ func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
@@ -848,7 +848,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
 	var resp types.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {

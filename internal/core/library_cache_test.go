@@ -65,7 +65,7 @@ func getTracksPage(t *testing.T, srv *Server, path string) (types.TrackList, *ht
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET %s status = %d body=%s", path, w.Code, w.Body.String())
 	}
@@ -149,7 +149,7 @@ func TestLibraryAggregate_SingleflightParallel(t *testing.T) {
 			req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 			req.Header.Set("Authorization", "Bearer test-key")
 			w := httptest.NewRecorder()
-			srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+			srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 			if w.Code != http.StatusOK {
 				errs <- fmt.Errorf("status = %d body=%s", w.Code, w.Body.String())
 			}

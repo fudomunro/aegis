@@ -249,7 +249,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -322,7 +322,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	req3 := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req3.Header.Set("X-Api-Key", "test-key")
 	w3 := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w3, req3)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w3, req3)
 	if w3.Code != http.StatusOK {
 		t.Fatalf("agent status = %d body=%s", w3.Code, w3.Body.String())
 	}

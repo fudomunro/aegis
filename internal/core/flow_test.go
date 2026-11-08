@@ -591,13 +591,14 @@ func (placesDocumentsConnector) FetchDocumentText(context.Context, string) (stri
 // dispatch. The pre-#254 hardcoded switch in flowProvidesKind silently
 // dropped places and documents from the flow map's per-service kind list.
 func TestFlowProvidesKind_CoversEveryProviderKind(t *testing.T) {
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	conn := placesDocumentsConnector{}
 	for _, kind := range []string{"places", "documents"} {
-		if !flowProvidesKind(conn, kind) {
+		if !srv.flowProvidesKind(conn, kind) {
 			t.Errorf("flowProvidesKind(conn, %q) = false, want true", kind)
 		}
 	}
-	if flowProvidesKind(conn, "tracks") {
+	if srv.flowProvidesKind(conn, "tracks") {
 		t.Error(`flowProvidesKind(conn, "tracks") = true, want false`)
 	}
 }

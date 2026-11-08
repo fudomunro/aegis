@@ -21,6 +21,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -263,4 +264,31 @@ func writeDataScopes(t *testing.T, list []scopes.Scope) string {
 		t.Fatal(err)
 	}
 	return path
+}
+
+// forEachPlaylistSource and forEachTrackSource project sources for generic
+// stamping of the kinds already moved into the kinds package (issue #312) —
+// their production projections live beside those kinds and are unexported.
+func forEachPlaylistSource(p *types.Playlist, f func(kinds.SourceMut)) {
+	for i := range p.Sources {
+		src := &p.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
+}
+
+func forEachTrackSource(t *types.Track, f func(kinds.SourceMut)) {
+	for i := range t.Sources {
+		src := &t.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

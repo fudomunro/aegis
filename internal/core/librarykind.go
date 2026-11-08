@@ -81,16 +81,15 @@ func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kind
 	}
 }
 
-// kindRuntime maps kind ID → visibility predicates and route declarations.
-// Keys must match types.BuiltinLibraryKinds (TestLibraryKinds_KindRuntimeInSync,
-// TestLibraryKinds_RoutesInSync).
+// kindRuntime maps kind ID → visibility predicates and route declarations
+// for kinds still in the hub. Keys must match types.BuiltinLibraryKinds
+// minus the kinds already moved to kinds.Builtin()
+// (TestLibraryKinds_KindRuntimeInSync, TestLibraryKinds_RoutesInSync).
+// // transitional (#312) — shrinks to empty as kinds move; delete with the
+// last move.
 var kindRuntime = map[string]kindRuntimeEntry{
-	"playlists": newKindRuntime[types.PlaylistProvider]("playlists", (*Server).HandleLibraryPlaylists),
-	"tracks":    newKindRuntime[types.LikedTrackProvider]("tracks", (*Server).HandleLibraryTracks),
-	"albums":    newKindRuntime[types.AlbumProvider]("albums", (*Server).HandleLibraryAlbums),
-	"artists":   newKindRuntime[types.ArtistProvider]("artists", (*Server).HandleLibraryArtists),
-	"contacts":  newKindRuntime[types.ContactProvider]("contacts", (*Server).HandleLibraryContacts),
-	"photos":    newKindRuntime[types.PhotoProvider]("photos", (*Server).HandleLibraryPhotos),
+	"contacts": newKindRuntime[types.ContactProvider]("contacts", (*Server).HandleLibraryContacts),
+	"photos":   newKindRuntime[types.PhotoProvider]("photos", (*Server).HandleLibraryPhotos),
 	"events": newKindRuntime[types.CalendarEventProvider]("events", (*Server).HandleLibraryEvents,
 		// Freebusy is the events availability view, not a LibraryKind —
 		// declared as an events subroute so its exposure is data, not a
@@ -130,6 +129,9 @@ func kindHasProviders(id string, s *Server) bool {
 	if schema, ok := s.udtSchemaForKind(id); ok {
 		return len(schema.Sources) > 0
 	}
+	if k, ok := s.builtinKind(id); ok {
+		return k.HasProviders(s)
+	}
 	rt := kindRuntime[id]
 	if rt.HasProviders == nil {
 		return false
@@ -141,6 +143,9 @@ func kindHasProviders(id string, s *Server) bool {
 func kindReadable(id string, s *Server) bool {
 	if schema, ok := s.udtSchemaForKind(id); ok {
 		return s.userDefinedReadable(schema.PermType)
+	}
+	if k, ok := s.builtinKind(id); ok {
+		return k.Readable(s)
 	}
 	rt := kindRuntime[id]
 	if rt.Readable == nil {
@@ -250,6 +255,13 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 			handlers[route.Pattern] = func(w http.ResponseWriter, r *http.Request) {
 				route.Handle(s, w, r)
 			}
+		}
+	}
+	// Kinds moved into the kinds package ship bound handlers.
+	// // transitional (#312) — this loop replaces the one above.
+	for _, k := range s.builtinKinds() {
+		for _, route := range k.Routes() {
+			handlers[route.Pattern] = route.Handler
 		}
 	}
 	// Cross-kind maintenance reads (copy ledger, merge review, entity
