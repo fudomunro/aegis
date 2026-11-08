@@ -14,6 +14,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -41,7 +42,7 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 // so a handler request can be served from cache (issue #273 format).
 func seedLibraryAggregate[T any](t *testing.T, srv *Server, kindID string, items []T) {
 	t.Helper()
-	raw, err := json.Marshal(libraryFetch[T]{Items: items, BySvc: map[string]types.LibraryServiceStatus{}, NTargets: 1})
+	raw, err := json.Marshal(kinds.Fetch[T]{Items: items, BySvc: map[string]types.LibraryServiceStatus{}, NTargets: 1})
 	if err != nil {
 		t.Fatal(err)
 	}

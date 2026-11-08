@@ -21,6 +21,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -111,13 +112,11 @@ type Server struct {
 	rl *rateLimiter
 	// refreshFlight coalesces concurrent OAuth refresh calls per connection.
 	refreshFlight shared.FlightGroup[*tokens.OAuthToken]
-	// libraryFlight coalesces concurrent aggregate fetches per cache key
-	// (issue #273) so parallel identical requests share one provider fan-out.
-	libraryFlight shared.FlightGroup[any]
-	// indexWG tracks async search-index write-behind goroutines (issue #273)
-	// so tests and shutdown can wait for them.
-	indexWG    sync.WaitGroup
-	connectors map[string]connectors.ServiceConnector
+	// kindEngine owns the aggregate pipeline's cache coalescing and search
+	// write-behind (issue #312); built over cache and search below.
+	kindEngine     *kinds.Engine
+	kindEngineOnce sync.Once
+	connectors     map[string]connectors.ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).

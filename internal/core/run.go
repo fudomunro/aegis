@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 
 	"context"
@@ -468,6 +469,10 @@ func Run() {
 		prom:          NewPromMetrics(),
 		apertureURL:   *apertureURL,
 	}
+
+	// The kinds aggregate engine owns fetch coalescing and search
+	// write-behind over the shared cache and index (issue #312).
+	srv.kindEngine = kinds.NewEngine(srv.cache, srv.search)
 
 	// Drain async search-index write-behind before searchIndex.Close (its
 	// defer runs later) — registered after the store's defer on purpose.

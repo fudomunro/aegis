@@ -9,6 +9,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -24,7 +25,7 @@ func TestEnrichLibraryServiceStatuses_NameCanonicalRole(t *testing.T) {
 		"spotify":       {Status: types.LibraryStatusOK, Count: 12},
 		"youtube-music": {Status: types.LibraryStatusOK, Count: 8},
 	}
-	enrichLibraryServiceStatuses(srv, "playlists", bySvc)
+	kinds.EnrichStatuses(srv, "playlists", kinds.StatusHooks{}, bySvc)
 
 	if bySvc["spotify"].Name != "Spotify" {
 		t.Fatalf("spotify name = %q", bySvc["spotify"].Name)
@@ -90,7 +91,7 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 		"mail-archive":                  {Status: types.LibraryStatusOK, Count: 3},
 		connectors.GoogleGmailServiceID: {Status: types.LibraryStatusOK, Count: 3},
 	}
-	enrichLibraryServiceStatuses(srv, "messages", bySvc)
+	kinds.EnrichStatuses(srv, "messages", srv.messagesStatusHooks(), bySvc)
 
 	to, ok := bySvc[connectors.TakeoutServiceID]
 	if !ok {

@@ -12,6 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -122,12 +123,12 @@ func TestLibrarySearch_UnsupportedKindRejectsQ(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts?q=x", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	handleLibraryAggregate(srv, w, req, libraryKindSpec[types.Contact]{
-		kind:      types.LibraryKind{ID: "notes", Label: "notes"},
-		serviceOf: func(types.Contact) string { return "" },
-		sortKey:   func(types.Contact) string { return "" },
-		merge:     func(in []types.Contact) []types.Contact { return in },
-		encode: func(items []types.Contact, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+	kinds.Aggregate(srv, srv.libraryEngine(), w, req, kinds.Spec[types.Contact]{
+		Kind:      types.LibraryKind{ID: "notes", Label: "notes"},
+		ServiceOf: func(types.Contact) string { return "" },
+		SortKey:   func(types.Contact) string { return "" },
+		Merge:     func(in []types.Contact) []types.Contact { return in },
+		Encode: func(items []types.Contact, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			return types.ContactList{Contacts: items}
 		},
 	})

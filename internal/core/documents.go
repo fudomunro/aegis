@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -149,15 +150,15 @@ func redactDocumentsForLevel(items []types.Document, level string) []types.Docum
 // documentsProviderTargets collects providers, applying per-service and
 // app-level metadata/read redaction so a metadata-only surface never
 // contributes excerpts (issue #143).
-func documentsProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]namedLister[types.Document], []string) {
-	targets, denied := collectProviders[types.Document, types.DocumentProvider](s, r, permType,
+func documentsProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]kinds.NamedLister[types.Document], []string) {
+	targets, denied := kinds.Collect[types.Document, types.DocumentProvider](s, r, permType,
 		func(p types.DocumentProvider) func(context.Context) ([]types.Document, bool, error) {
 			return p.ListUserDocuments
 		})
 	appMeta := policy.IsMetadataAccess(appLevel)
 	for i := range targets {
-		id := targets[i].id
-		inner := targets[i].list
+		id := targets[i].ID
+		inner := targets[i].List
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
 			level = s.requestLevel(r, svc, permType)
@@ -169,7 +170,7 @@ func documentsProviderTargets(s *Server, r *http.Request, permType string, appLe
 		if effective == level && !policy.IsMetadataAccess(level) {
 			continue
 		}
-		targets[i].list = func(ctx context.Context) ([]types.Document, bool, error) {
+		targets[i].List = func(ctx context.Context) ([]types.Document, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactDocumentsForLevel(items, effective), truncated, err
 		}
@@ -196,15 +197,15 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 	// Encode-time redaction is a second belt: even if a service returned an
 	// excerpt, metadata-only surfaces must not ship it.
 	metaOnly := policy.IsMetadataAccess(appLevel)
-	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Document]{
-		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[types.Document], []string) {
+	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Document]{
+		Kind: kind,
+		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Document], []string) {
 			return documentsProviderTargets(s, r, kind.PermType, appLevel)
 		},
-		serviceOf: documentServiceName,
-		sortKey:   types.DocumentIdentityKey,
-		merge:     types.MergeDocuments,
-		encode: func(items []types.Document, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: documentServiceName,
+		SortKey:   types.DocumentIdentityKey,
+		Merge:     types.MergeDocuments,
+		Encode: func(items []types.Document, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterDocuments(items, filters)
 			if metaOnly {
 				filtered = redactDocumentsForLevel(filtered, policy.AccessMetadata)
@@ -212,15 +213,15 @@ func (s *Server) HandleLibraryDocuments(w http.ResponseWriter, r *http.Request) 
 			pageItems, pr := types.SlicePage(filtered, page)
 			return types.DocumentList{
 				Documents:       pageItems,
-				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
+				LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		redactSearch: func(items []types.Document, r *http.Request) []types.Document {
+		RedactSearch: func(items []types.Document, r *http.Request) []types.Document {
 			return s.searchRedactDocuments(items, r)
 		},
-		markCanonical: s.stampDocumentCanonical,
-		stampCopies:   s.stampDocumentCopies,
-		cacheKey:      "library:documents" + filters.cacheKeySuffix() + "|meta:" + boolKey(metaOnly),
+		MarkCanonical: s.stampDocumentCanonical,
+		StampCopies:   s.stampDocumentCopies,
+		CacheKey:      "library:documents" + filters.cacheKeySuffix() + "|meta:" + boolKey(metaOnly),
 	})
 }
 

@@ -26,9 +26,9 @@ import (
 // fudomunro/aegis packages it may import. Anything else is a boundary
 // violation. Empty means "no fudomunro/aegis imports at all".
 var allowedImports = map[string][]string{
-	"internal/shared":       nil,
-	"internal/types":        {"github.com/fudomunro/aegis/internal/shared"},
-	"internal/core/policy":  {"github.com/fudomunro/aegis/internal/shared"},
+	"internal/shared":      nil,
+	"internal/types":       {"github.com/fudomunro/aegis/internal/shared"},
+	"internal/core/policy": {"github.com/fudomunro/aegis/internal/shared"},
 	"internal/connectors": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/types",
