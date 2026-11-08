@@ -20,6 +20,11 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **OwnershipEntry moves to its store package.** The user-confirmation
+  record (`Confirmed` / `ConfirmedAt` / `Note`) leaves `internal/types` for
+  `internal/core/ownership`, which stores it — matching `scopes.Scope`. The
+  ownership connector-declaration and status shapes stay in `internal/types`
+  (connectors declare them beside maturity). No behavior change.
 - **Kind-rule lookups become shared plumbing.** The generic queries over
   kind rules — which optional level tokens a kind honors, whether it is
   opt-in (`DefaultNone`), and which kinds allow a level — move from

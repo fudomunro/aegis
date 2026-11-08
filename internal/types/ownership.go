@@ -11,18 +11,6 @@ package types
 // which sources are in use, which declared routes are still unused, and
 // whether the user has confirmed the collection is complete.
 
-// OwnershipEntry is the user's confirmation for one library kind.
-type OwnershipEntry struct {
-	// Confirmed is the user's statement that Aegis holds all the data of
-	// this kind they care about. False (or absent) keeps the call to action.
-	Confirmed bool `json:"confirmed"`
-	// ConfirmedAt is when the user confirmed (RFC3339). Empty when not
-	// confirmed or when the entry was reopened.
-	ConfirmedAt string `json:"confirmed_at,omitempty"`
-	// Note is an optional user note ("work email only", …).
-	Note string `json:"note,omitempty"`
-}
-
 // OwnershipSource is one source currently feeding a kind.
 type OwnershipSource struct {
 	ServiceID    string `json:"service_id"`

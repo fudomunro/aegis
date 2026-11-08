@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Data-ownership state (issue #165): per-kind user confirmation that Aegis
@@ -23,20 +22,33 @@ import (
 // declarations, configured services, and local store counts — the same
 // declared metadata the sync dashboard reads (issue #254).
 
+// OwnershipEntry is the user's confirmation for one library kind — the
+// store's record type (kept with the store, not the data-type layer).
+type OwnershipEntry struct {
+	// Confirmed is the user's statement that Aegis holds all the data of
+	// this kind they care about. False (or absent) keeps the call to action.
+	Confirmed bool `json:"confirmed"`
+	// ConfirmedAt is when the user confirmed (RFC3339). Empty when not
+	// confirmed or when the entry was reopened.
+	ConfirmedAt string `json:"confirmed_at,omitempty"`
+	// Note is an optional user note ("work email only", …).
+	Note string `json:"note,omitempty"`
+}
+
 // fileVersion is the on-disk schema version for ownership.json.
 const fileVersion = 1
 
 // file is the on-disk format.
 type file struct {
-	Version   int                             `json:"version"`
-	Ownership map[string]types.OwnershipEntry `json:"ownership"`
+	Version   int                       `json:"version"`
+	Ownership map[string]OwnershipEntry `json:"ownership"`
 }
 
 // Store is a mutex-guarded map of kind id → user confirmation.
 type Store struct {
 	mu     sync.RWMutex
 	path   string
-	byKind map[string]types.OwnershipEntry
+	byKind map[string]OwnershipEntry
 }
 
 // NewStore loads ownership.json. A missing file yields an empty
@@ -45,7 +57,7 @@ type Store struct {
 func NewStore(path string) (*Store, error) {
 	s := &Store{
 		path:   path,
-		byKind: make(map[string]types.OwnershipEntry),
+		byKind: make(map[string]OwnershipEntry),
 	}
 	if path == "" {
 		return s, nil
@@ -75,17 +87,17 @@ func NewStore(path string) (*Store, error) {
 
 // Get returns the confirmation entry for a kind. The zero value means
 // unconfirmed.
-func (s *Store) Get(kind string) types.OwnershipEntry {
+func (s *Store) Get(kind string) OwnershipEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.byKind[kind]
 }
 
 // List returns a copy of all entries keyed by kind id.
-func (s *Store) List() map[string]types.OwnershipEntry {
+func (s *Store) List() map[string]OwnershipEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make(map[string]types.OwnershipEntry, len(s.byKind))
+	out := make(map[string]OwnershipEntry, len(s.byKind))
 	for k, v := range s.byKind {
 		out[k] = v
 	}
@@ -94,11 +106,11 @@ func (s *Store) List() map[string]types.OwnershipEntry {
 
 // Confirm records the user's statement that the kind is complete. A
 // non-empty note is stored beside it; confirmed_at is stamped now.
-func (s *Store) Confirm(kind, note string) (types.OwnershipEntry, error) {
+func (s *Store) Confirm(kind, note string) (OwnershipEntry, error) {
 	if strings.TrimSpace(kind) == "" {
-		return types.OwnershipEntry{}, fmt.Errorf("kind is required")
+		return OwnershipEntry{}, fmt.Errorf("kind is required")
 	}
-	entry := types.OwnershipEntry{
+	entry := OwnershipEntry{
 		Confirmed:   true,
 		ConfirmedAt: time.Now().UTC().Format(time.RFC3339),
 		Note:        strings.TrimSpace(note),
@@ -116,20 +128,20 @@ func (s *Store) Confirm(kind, note string) (types.OwnershipEntry, error) {
 			delete(s.byKind, kind)
 		}
 		s.mu.Unlock()
-		return types.OwnershipEntry{}, err
+		return OwnershipEntry{}, err
 	}
 	return entry, nil
 }
 
 // Reopen clears a confirmation, returning the kind to the call-to-action
 // state. The note is kept so the user's context survives a reopen.
-func (s *Store) Reopen(kind string) (types.OwnershipEntry, error) {
+func (s *Store) Reopen(kind string) (OwnershipEntry, error) {
 	if strings.TrimSpace(kind) == "" {
-		return types.OwnershipEntry{}, fmt.Errorf("kind is required")
+		return OwnershipEntry{}, fmt.Errorf("kind is required")
 	}
 	s.mu.Lock()
 	prev, existed := s.byKind[kind]
-	entry := types.OwnershipEntry{Note: prev.Note}
+	entry := OwnershipEntry{Note: prev.Note}
 	s.byKind[kind] = entry
 	s.mu.Unlock()
 	if err := s.persist(); err != nil {
@@ -140,7 +152,7 @@ func (s *Store) Reopen(kind string) (types.OwnershipEntry, error) {
 			delete(s.byKind, kind)
 		}
 		s.mu.Unlock()
-		return types.OwnershipEntry{}, err
+		return OwnershipEntry{}, err
 	}
 	return entry, nil
 }
@@ -154,7 +166,7 @@ func (s *Store) persist() error {
 	s.mu.RLock()
 	file := file{
 		Version:   fileVersion,
-		Ownership: make(map[string]types.OwnershipEntry, len(s.byKind)),
+		Ownership: make(map[string]OwnershipEntry, len(s.byKind)),
 	}
 	for k, v := range s.byKind {
 		file.Ownership[k] = v

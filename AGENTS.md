@@ -418,7 +418,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
 | Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors/mail_ingest.go`, `internal/core/mail_ingest.go` |
 | Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
-| Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/types/ownership.go`, `internal/core/ownership.go` | Per-kind user confirmation + derived evidence; distinct from connection maturity |
+| Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/core/ownership` (`OwnershipEntry` store), `internal/types/ownership.go` (status + declaration shapes), `internal/core/ownership.go` (derivation) | Per-kind user confirmation + derived evidence; distinct from connection maturity |
 | Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |

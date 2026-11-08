@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
@@ -21,7 +22,7 @@ func (s *Server) ownershipStatuses() []types.OwnershipStatus {
 	sources, routes := s.ownershipEvidence()
 	freshness := s.ownershipFreshnessByKind()
 
-	entries := map[string]types.OwnershipEntry{}
+	entries := map[string]ownership.OwnershipEntry{}
 	if s.ownership != nil {
 		entries = s.ownership.List()
 	}
