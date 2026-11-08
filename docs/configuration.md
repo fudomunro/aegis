@@ -27,7 +27,7 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](../aegis.example
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
-| `grant_limits` | Optional map of data type → access level for agents (migration override; can only tighten data grant — see [Data grants](configuration.md)) |
+| `grant_limits` | Optional map of kind → access level for agents (migration override; can only tighten data grant — see [Data grants](configuration.md)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](configuration.md)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
@@ -140,7 +140,7 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 ### Data grants
 
 What you do to let an LLM agent or app use your data is a **data grant**: an
-allow rule on a **data type** at an **access level** (`none`, `freebusy`,
+allow rule on a **kind** at an **access level** (`none`, `freebusy`,
 `summary`, `city`, `precise`, `metadata`, `read`, `write`, `read-write`). This is the
 application-layer side of Tailscale-style access — you already use a tailnet
 grant so callers can *reach* Aegis; data grants say what they may *use*.
@@ -151,27 +151,27 @@ grants live; **Service limits** can only tighten that default;
 **app data grants** scope third-party tokens. JSON/config keys stay
 `data_grants`, `grant_limits`, `data_grants.json`.
 
-Data grants live with **data types**, not service providers. The
-primary model is a per-data grant: a type-level default plus optional
+Data grants live with **kinds**, not service providers. The
+primary model is a per-data grant: a kind-level default plus optional
 per-provider overrides that can only **tighten** that default. Service
 `permissions` maps remain as migration overrides and can only further
 restrict what a data grant allows.
 
 **Accessors.** Data is not only reached by LLM agents. Aegis also
 runs sync pipelines (mail archive, copy ledger, timeline/quicken import) and
-third-party apps hold scoped tokens. The data grants editor is **type-centric**:
-each data type shows the agent data grant (editable) plus only the other
-accessors that apply to that type (read-only). `GET /v1/admin/permissions`
+third-party apps hold scoped tokens. The data grants editor is **kind-centric**:
+each kind shows the agent data grant (editable) plus only the other
+accessors that apply to that kind (read-only). `GET /v1/admin/permissions`
 returns that same model. The map on Home answers the other half of confidence:
 what each has *actually* accessed. Multi-user principals will
 appear as additional accessor rows.
 
-| Accessor kind | Where levels come from | In the type editor |
+| Accessor kind | Where levels come from | In the kind editor |
 |---------------|------------------------|--------------------|
-| `agent` | type-owned policy (`data_grants` / `data_grants.json`) | editable — admin “Data grants” / `PUT /v1/admin/data-grants` |
-| `app` | app `scopes` on the third-party record (fail closed) | read-only (edit via `PATCH /v1/admin/apps/{id}`); shown when the type is named or the level is not `none` |
-| `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for types the pipeline stores |
-| `service` | configured connector that syncs that library type (e.g. Spotify, YouTube Music under `playlists`) | read-only for now |
+| `agent` | kind-owned policy (`data_grants` / `data_grants.json`) | editable — admin “Data grants” / `PUT /v1/admin/data-grants` |
+| `app` | app `scopes` on the third-party record (fail closed) | read-only (edit via `PATCH /v1/admin/apps/{id}`); shown when the kind is named or the level is not `none` |
+| `sync` | fixed by the pipeline (what Aegis may store while archiving/mirroring) | read-only; shown only for kinds the pipeline stores |
+| `service` | configured connector that syncs that library kind (e.g. Spotify, YouTube Music under `playlists`) | read-only for now |
 
 Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data grants”):
 
@@ -208,7 +208,7 @@ exists for that key):
 
 | Level | Allowed methods |
 |-------|-----------------|
-| `none` | none — 403 for that data type |
+| `none` | none — 403 for that kind |
 | `freebusy` | `GET`, `HEAD` on `events`, but responses reduced to availability only |
 | `summary` | `GET`, `HEAD` on `transactions`, but responses reduced to totals by category/month only — no line items |
 | `city` | `GET`, `HEAD` on `places`, reduced to locality, country, and the visit/trip time window |
@@ -220,35 +220,35 @@ exists for that key):
 
 **Resolution order**:
 
-1. **Type default** — `types[type].default`. Empty default keeps previous
- unrestricted behavior (`read-write`) except for opt-in types.
+1. **Kind default** — `types[type].default`. Empty default keeps previous
+ unrestricted behavior (`read-write`) except for opt-in kinds.
 2. **Provider override** — `types[type].providers[service_id]`, which can
- only tighten the type default (e.g. `read` → `none`, `precise` → `city`).
+ only tighten the kind default (e.g. `read` → `none`, `precise` → `city`).
 3. **Legacy service `permissions`** — during the migration window these are
  provider overrides and can only tighten. When **no data grant exists** for
  a key, the service map remains authoritative (so existing configs and
  places opt-in keep working).
 
-- The reserved key `default` in a service map applies to data types not listed —
+- The reserved key `default` in a service map applies to kinds not listed —
  **except `places`**, which is opt-in (see below). Data grant has no cross-type
- `default` key: each type owns its own default.
+ `default` key: each kind owns its own default.
 - **`freebusy` is events-only**. Scheduling apps can see when you
  are busy without reading titles, attendees, locations, or descriptions.
  Responses keep only `start_at`, `end_at`, `all_day`, and `status`. Prefer
  `GET /v1/library/freebusy` for availability; `/v1/library/events` and the
  calendar proxy apply the same redaction when events access is `freebusy`.
- The level is rejected on other data types and on `default`.
+ The level is rejected on other kinds and on `default`.
 - **`summary` is transactions-only**. Apps can see how much was
  spent by category or month without reading line items or account names.
  Responses keep only `summary` totals (`count`, `total_amount`, `by_category`,
  `by_month`). Prefer `GET /v1/library/transactions` with `summary` access for
  budget dashboards; `read` adds line items with merchant but still strips
- account identifiers. The level is rejected on other data types and on
+ account identifiers. The level is rejected on other kinds and on
  `default`.
 - **`places` is opt-in and uses a city / read / precise ladder**.
- Location history is the most sensitive data type we ship: **default is
- `none`**, and neither a type-level empty default nor a service `default` key
- enables it. Name it explicitly — type default, type `providers[id]`, or a
+ Location history is the most sensitive kind we ship: **default is
+ `none`**, and neither a kind-level empty default nor a service `default` key
+ enables it. Name it explicitly — kind default, kind `providers[id]`, or a
  service `permissions.places` entry. Pre-request injection never advertises
  `places` until it is named. Granularity:
  - `city` — locality, country, and the visit/trip window only (enough for
@@ -266,13 +266,13 @@ exists for that key):
  a short excerpt on list rows. Full text is only at
  `GET /v1/library/documents/{service}/{id}/text`, which requires `read` —
  metadata access is list-only and cannot fetch text. The level is rejected
- on other data types and on `default`. Per-tag allow/deny (e.g. hide
+ on other kinds and on `default`. Per-tag allow/deny (e.g. hide
  `medical`) is a design spike, not implemented.
-- **Unknown proxy paths** (not a mapped data type) use the **strictest**
- configured level, not a type default, so a tight type cannot be bypassed by an
+- **Unknown proxy paths** (not a mapped kind) use the **strictest**
+ configured level, not a kind default, so a tight kind cannot be bypassed by an
  unmapped endpoint.
 - Proxy paths are **canonicalized before classification**. Duplicate slashes
- (including `%2f`) collapse to the real type; `.` / `..` segments are rejected
+ (including `%2f`) collapse to the real kind; `.` / `..` segments are rejected
  with `400`. Classification and upstream routing always see the same path.
 - If neither data grant nor service `permissions` is set, agents keep
  unrestricted access (previous behavior).
@@ -286,9 +286,9 @@ exists for that key):
  (`services` only) still load. The overlay holds no secrets — admin
  permission edits never rewrite OAuth client credentials.
 - Permissions **further constrain** the connector; they never add capabilities.
- The admin form only offers **Editable** for types with a true agent data-write
+ The admin form only offers **Editable** for kinds with a true agent data-write
  operation on the connector. Mirror backup writes and photo-picker session
- creates are not Editable. Write / read-write on a type the form cannot offer
+ creates are not Editable. Write / read-write on a kind the form cannot offer
  is treated as read when saved from the admin UI (proxy still allows mutating
  methods the connector implements if the config already has write and you do
  not re-save). Enable write explicitly when a real agent write op appears.
@@ -299,9 +299,9 @@ exists for that key):
  per-service override (and still reports `effective_permissions` after
  data-grant resolution).
 
-Known data types: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
+Known kinds: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,
-`events`, `messages`, `transactions`, `places`, `documents`. Paths that do not map to a known type fall through to the
+`events`, `messages`, `transactions`, `places`, `documents`. Paths that do not map to a known kind fall through to the
 `default` level.
 
 ### Canonical sources (non-Aegis)
@@ -590,7 +590,7 @@ DELETE /v1/admin/ownership/{kind}   # reopen (clear the confirmation)
 ```
 
 Unconfirmed ownership never blocks reads. The admin UI merges the controls
-into the Library tab's sources display: the box showing a type's configured
+into the Library tab's sources display: the box showing a kind's configured
 sources also carries the "I have all my …" toggle (tinting the box when
 on) and the declared call-to-action routes.
 
@@ -942,11 +942,11 @@ multi-user isolation seam — see [`docs/data-scopes.md`](data-scopes.md).
   invisible (not 403). Empty `dataset` is the owner/default view (no filter).
 - `read_only` rejects mutating agent methods except the pre-request hook.
 - `grants` is the **complete allow list** for that principal —
-  **deny-by-default**: an unlisted data type resolves to `none`. A reserved
-  `default` entry sets the level for unlisted types. Ambiguity is fail-closed:
-  a listed type with an empty entry, or with only `providers` overrides,
+  **deny-by-default**: an unlisted kind resolves to `none`. A reserved
+  `default` entry sets the level for unlisted kinds. Ambiguity is fail-closed:
+  a listed kind with an empty entry, or with only `providers` overrides,
   resolves to `none` (provider entries tighten, they never open a closed
-  type — set the type's `default` field to grant access). (Owner-tier
+  type — set the kind's `default` field to grant access). (Owner-tier
   credentials — the shared agent key and tailnet logins — keep the usual
   agent data grant semantics, where omit means unrestricted.) Scope grants
   also never exceed agent data grants.

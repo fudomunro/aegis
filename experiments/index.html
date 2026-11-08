@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ c9d18b6</title>
+<title>Aegis — Code Walkthrough @ 52bbb9c</title>
 <meta name="generator" content="experiments/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>c9d18b6</span>
-    <span class="version-meta">refactor/kind-rules-shared · 2026-11-07 · Merge pull request #303 from fudomunro/refactor/data-grants-core-policy · generated 2026-11-08 03:40 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>52bbb9c</span>
+    <span class="version-meta">docs/issue-305-kind-vocabulary · 2026-11-08 · Merge pull request #304 from fudomunro/refactor/kind-rules-shared · generated 2026-11-08 05:54 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,8 +306,8 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">54,853</div><div class="l">source LOC (no tests)</div></div>
-    <div class="stat"><div class="v">179</div><div class="l">Go source files</div></div>
+    <div class="stat"><div class="v">54,865</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">180</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">12</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">11</div><div class="l">library kinds</div></div>
   </div>
@@ -1073,7 +1073,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">10</span>Data permissions</h2>
   <p>
     Beyond <code>action: inject|block</code>, each service can restrict
-    <strong>which data types agents may touch</strong>. Permissions are data on the
+    <strong>which kinds agents may touch</strong>. Permissions are data on the
     service config, enforced on proxy, library, capabilities, and injection.
   </p>
   <table>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ c9d18b6</h2>
+  <h2><span class="n">13</span>File map @ 52bbb9c</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1262,7 +1262,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/types/merge.go</code></td><td class="mono">710</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>internal/types/kind.go</code></td><td class="mono">106</td><td>LibraryKind data (instructions, keywords, cache key)</td></tr>
       <tr><td><code>internal/core/policy/policy.go</code></td><td class="mono">671</td><td>Access levels, Permissions map, DataGrant (#148)</td></tr>
-      <tr><td><code>internal/types/pathclass.go</code></td><td class="mono">180</td><td>Proxy path → data-type classification table</td></tr>
+      <tr><td><code>internal/types/pathclass.go</code></td><td class="mono">180</td><td>Proxy path → kind classification table</td></tr>
       <tr><td><code>internal/types/capabilities.go</code></td><td class="mono">132</td><td>ServiceCapabilities / Operation shapes + filtering</td></tr>
       <tr><td><code>internal/types/providers.go</code></td><td class="mono">353</td><td>Provider interfaces + ErrUnauthorized + service-name helpers</td></tr>
       <tr><td><code>internal/types/udt.go</code></td><td class="mono">579</td><td>User-defined type schema, neutral item, merge (#15)</td></tr>
@@ -1350,7 +1350,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/identity.go</code></td><td class="mono">286</td><td>Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
       <tr><td><code>internal/core/import_admin.go</code></td><td class="mono">113</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/library.go</code></td><td class="mono">100</td><td>Thin per-kind library handlers + aggregate wiring</td></tr>
-      <tr><td><code>internal/core/librarykind.go</code></td><td class="mono">983</td><td>Library kind registry + kindRuntime predicates + aggregate pipeline</td></tr>
+      <tr><td><code>internal/core/librarykind.go</code></td><td class="mono">984</td><td>Library kind registry + kindRuntime predicates + aggregate pipeline</td></tr>
       <tr><td><code>internal/core/links/links.go</code></td><td class="mono">197</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/listener.go</code></td><td class="mono">144</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/mail/archive.go</code></td><td class="mono">881</td><td>Supporting code</td></tr>
@@ -1371,8 +1371,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/musicbrainz.go</code></td><td class="mono">280</td><td>Optional durable IDs (MBID) for artists/tracks/albums</td></tr>
       <tr><td><code>internal/core/oauth.go</code></td><td class="mono">278</td><td>Login, callback, code exchange, token refresh, revoke</td></tr>
       <tr><td><code>internal/core/onboarding.go</code></td><td class="mono">191</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/core/ownership.go</code></td><td class="mono">410</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/core/ownership/store.go</code></td><td class="mono">156</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/ownership.go</code></td><td class="mono">411</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/ownership/store.go</code></td><td class="mono">167</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/permissions.go</code></td><td class="mono">185</td><td>Server-side permission clamp + per-request checks</td></tr>
       <tr><td><code>internal/core/permissions_overlay.go</code></td><td class="mono">192</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/permissions_overview.go</code></td><td class="mono">291</td><td>Supporting code</td></tr>
@@ -1388,13 +1388,14 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/sample_library.go</code></td><td class="mono">148</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/sampledata.go</code></td><td class="mono">1221</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/scopes/scopes.go</code></td><td class="mono">519</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/core/search/search.go</code></td><td class="mono">461</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/search/document.go</code></td><td class="mono">137</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/search/search.go</code></td><td class="mono">458</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/searchindex.go</code></td><td class="mono">38</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/secrets.go</code></td><td class="mono">96</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/signal_admin.go</code></td><td class="mono">20</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/syncfreshness.go</code></td><td class="mono">284</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/syncfreshness_runner.go</code></td><td class="mono">90</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/core/syncjobs.go</code></td><td class="mono">1049</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/core/syncjobs.go</code></td><td class="mono">1057</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/syncjobs_admin.go</code></td><td class="mono">283</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/syncrunner_canary.go</code></td><td class="mono">54</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/syncrunner_mail.go</code></td><td class="mono">216</td><td>Supporting code</td></tr>
@@ -1431,9 +1432,9 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/types/merge_places.go</code></td><td class="mono">242</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/merge_transactions.go</code></td><td class="mono">245</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/onboarding.go</code></td><td class="mono">366</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/types/ownership.go</code></td><td class="mono">92</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/types/ownership.go</code></td><td class="mono">81</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/page.go</code></td><td class="mono">152</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/types/search.go</code></td><td class="mono">146</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/types/search.go</code></td><td class="mono">14</td><td>Supporting code</td></tr>
     </tbody>
   </table>
 
@@ -1456,8 +1457,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>c9d18b6</code></strong>
-    (refactor/kind-rules-shared · 2026-11-07 · Merge pull request #303 from fudomunro/refactor/data-grants-core-policy).
+    <code>52bbb9c</code></strong>
+    (docs/issue-305-kind-vocabulary · 2026-11-08 · Merge pull request #304 from fudomunro/refactor/kind-rules-shared).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1488,12 +1489,12 @@ python3 experiments/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>c9d18b6</strong>
+  Generated for <strong>52bbb9c</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 179 files · 54,853 LOC · 12 connectors · 11 library kinds
-  · 2026-11-08 03:40 UTC
+  · 180 files · 54,865 LOC · 12 connectors · 11 library kinds
+  · 2026-11-08 05:54 UTC
 </footer>
 
 </div>

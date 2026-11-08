@@ -164,7 +164,7 @@ Reviewer checklist for fix PRs:
 - Upstream base read from configured `endpoint`, not hardcoded?
 - No weakened or skipped tests; coverage floor holds?
 - No secrets, no unscrubbed payloads in fixtures?
-- Product semantics unchanged (type-centric surface, media stays on the
+- Product semantics unchanged (kind-centric surface, media stays on the
   source service, no issue numbers in agent-facing strings)?
 
 ### Phase 5 — Release
@@ -360,15 +360,15 @@ outcomes:
 
 Each page also carries a **connection maturity** mark (issue #247) — a
 coverage statement, not an operational score, and the fourth thing a reader
-should not confuse with the three above. It answers: of the data types this
+should not confuse with the three above. It answers: of the kinds this
 service offers, how many does Aegis serve through the connection, and how
 completely does it fill their neutral-model fields? It moves only when the
 connector code moves:
 
-- **data types** — every type the service offers in theory, each marked
+- **kinds** — every kind the service offers in theory, each marked
   supported or not. The unsupported rows are the point: the gap is shown,
   not implied by absence.
-- **field coverage** — for supported types that map to a neutral model,
+- **field coverage** — for supported kinds that map to a neutral model,
   which content fields the connector populates. `sources[]` is structural
   and never graded.
 - **transport** — how the connection reaches the service (`api`,
@@ -378,16 +378,16 @@ connector code moves:
   folded into the number.
 
 The level (`complete` / `substantial` / `partial` / `basic`) bands on the
-lower of type coverage and field coverage, so a connection cannot read as
-mature by implementing one complete type out of ten. `complete` is the
-issue's bar: every offered type served and every graded field populated.
+lower of kind coverage and field coverage, so a connection cannot read as
+mature by implementing one complete kind out of ten. `complete` is the
+issue's bar: every offered kind served and every graded field populated.
 
 The declaration lives in code (`internal/core/maturity.go`, graded by
 `internal/types/maturity.go`) next to the connectors it describes — the
 same class of hand-maintained metadata as `Capabilities()`. Tests hold it
 honest against the connectors themselves: anything the connector serves
 (a callable operation or a library feed) must read as supported, and no
-entry may claim a type the connector does not recognize. Both the published
+entry may claim a kind the connector does not recognize. Both the published
 build and the instance build grade the same catalog.
 
 Two inputs shape the published build:
@@ -422,7 +422,7 @@ Deliberately out of scope while the loop proves out:
   release, but this doc's loop patches Go source and ships a release.
 - **A separate connectors repository** — single repo for now; revisit if
   contribution volume or CI cost demands it.
-- **Auto-merging core or type changes** — never in the loop.
+- **Auto-merging core or kind changes** — never in the loop.
 - **Fleet management for third-party instances** — collection assumes
   instances this project can reach on its tailnet.
 

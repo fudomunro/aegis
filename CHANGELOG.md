@@ -20,10 +20,29 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
-- **Search index format leaves the data-type layer.** `SearchDocument` and
+- **“Data type” is retired in favor of “library kind”.** The phrase read as
+  general development language and collided with the field-shape sense of
+  `type` (`"type": "string"` in `capabilities.go` and `udt.go`) — the same
+  word for two axes. The registry axis is already shipped as `kind` in
+  `/v1/library/{kind}` and `LibraryKind`, so prose now follows the API:
+  docs, admin copy, consent copy, the marketing site, and agent strings say
+  **library kind** (short: **kind**). Field shape keeps **type** /
+  **field type**. **Data grant** is deliberately *not* renamed to “kind
+  grant” — it names what is granted (the user's data) while **library kind**
+  names the slice it is keyed by, so “a data grant on kind `tracks` at
+  access level `read`” keeps three distinct nouns and avoids loading one
+  word with two senses. Config and response keys (`perm_type`,
+  `data_types`, `available_data_types`, `writable_data_types`,
+  `data_grants`) are unchanged and now documented as naming a kind.
+  `docs/adding-data-types.md` becomes `docs/adding-kinds.md`; the product
+  rule “Type-centric surface” becomes “Kind-centric surface”. The
+  glossary-avoid lists (`docsForbidden`, `agentStringForbidden`) now reject
+  “data type” in README headings, admin visible copy, and agent strings
+  (#305).
+- **Search index format leaves `internal/types`.** `SearchDocument` and
   `BuildSearchDocument` (the item→document flattening) move from
   `internal/types` to `internal/core/search`: the index record is
-  Aegis-internal metadata, not a managed data type. `SearchSpec` stays in
+  Aegis-internal metadata, not a managed kind. `SearchSpec` stays in
   `internal/types` — kinds and schema packs declare it (like `AllowedLevels`)
   and the engine is the machinery behind that declaration. The engine no
   longer references the agent page cap: the library search handler clamps

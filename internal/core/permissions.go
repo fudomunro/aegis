@@ -162,7 +162,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 func permissionNotice(p policy.Permissions) string {
 	var parts []string
 	if denied := p.DeniedDataTypes(); len(denied) > 0 {
-		parts = append(parts, "the following data types are not available and must not be requested: "+
+		parts = append(parts, "the following kinds are not available and must not be requested: "+
 			strings.Join(denied, ", "))
 	}
 	if limited := p.FreeBusyDataTypes(); len(limited) > 0 {

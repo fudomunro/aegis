@@ -380,7 +380,7 @@ func (s *Server) HandleAdminOwnership(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, kind string) {
 	if LibraryKindByID(kind) == nil {
 		if _, ok := s.udtSchemaForKind(kind); !ok {
-			shared.WriteJSONError(w, http.StatusNotFound, "unknown data type "+kind)
+			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}
 	}
@@ -409,7 +409,7 @@ func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, 
 func (s *Server) handleOwnershipReopen(w http.ResponseWriter, r *http.Request, kind string) {
 	if LibraryKindByID(kind) == nil {
 		if _, ok := s.udtSchemaForKind(kind); !ok {
-			shared.WriteJSONError(w, http.StatusNotFound, "unknown data type "+kind)
+			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}
 	}
@@ -434,5 +434,5 @@ func (s *Server) writeOwnershipStatus(w http.ResponseWriter, kind string) {
 			return
 		}
 	}
-	shared.WriteJSONError(w, http.StatusNotFound, "unknown data type "+kind)
+	shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 }

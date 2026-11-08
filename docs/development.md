@@ -1,7 +1,7 @@
 # Development
 
-Adding or maturing a unified library data type? Follow
-[docs/adding-data-types.md](adding-data-types.md) — the checklist for
+Adding or maturing a unified library kind? Follow
+[docs/adding-kinds.md](adding-kinds.md) — the checklist for
 neutral models, provider interfaces, merge identity, locations/copies,
 permissions, and sample fixtures (issue #92).
 
@@ -114,9 +114,9 @@ aegis/
   docs/configuring-aperture.md  Aperture operator guide
   aegis.example.json         Example configuration
   experiments/index.html     Code walkthrough (experimental; regenerate via experiments/generate_walkthrough.py)
-  docs/adding-data-types.md  Guide: defining a new library data type (issue #92)
+  docs/adding-kinds.md  Guide: defining a new library kind (issue #92)
 ```
 
-Layout is the #15 split: **types** (data) / **core** (runtime) / **connectors**
+Layout is the #15 split: **types** (neutral models + kind registry) / **core** (runtime) / **connectors**
 (named services). See `docs/restructure-core-types-connectors.md`.
 

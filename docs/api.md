@@ -126,7 +126,7 @@ Service-level playlist lists (`GET /v1/services/{id}/me/playlists`) are **not** 
 
 ## Library source overview
 
-Aggregate library responses enrich each `by_service` entry so clients can render a **source overview** — relative-sized boxes for every source of that data type (admin Library does this at the top of each kind):
+Aggregate library responses enrich each `by_service` entry so clients can render a **source overview** — relative-sized boxes for every source of that kind (admin Library does this at the top of each kind):
 
 | Field | Description |
 |-------|-------------|
@@ -243,11 +243,11 @@ Saved albums and followed/top artists follow the same library pattern. Connector
 - YouTube Music artists: channel subscriptions (`GET /subscriptions?mine=true`). No public saved-albums API — albums remain Spotify-only until one is available.
 - Permission key `artists` also gates the underlying proxy paths `/me/following` and `/me/subscriptions` so `artists: none` blocks both the library endpoint and the raw proxy.
 
-## Contact as a data type
+## Contact as a kind
 
 `Contact` is Aegis's neutral representation of a **person or other entity**
 who appears in personal data — someone in a photo, an email correspondent, a
-playlist collaborator, etc. Future data types (mail, photos, calendar) can
+playlist collaborator, etc. Future kinds (mail, photos, calendar) can
 embed `Contact` references the same way tracks embed `Artist`/`Album`.
 
 Neutral contact fields (user-facing):
@@ -310,7 +310,7 @@ on the service proxy).
 }
 ```
 
-## Photos as a data type
+## Photos as a kind
 
 `Photo` is Aegis's neutral representation of a photo (or video still).
 Service identity lives in `sources[]`, same as playlists and contacts.
@@ -382,7 +382,7 @@ This is an admin surface — the agent key is refused. See
 }
 ```
 
-## Calendar events as a data type
+## Calendar events as a kind
 
 `CalendarEvent` is Aegis's neutral representation of a calendar entry
 (meeting, appointment, all-day block). Service identity lives in `sources[]`,
@@ -468,7 +468,7 @@ service proxy).
 Organizer/attendee `Contact` values use the same identity matching as
 `/v1/library/contacts` and `Photo.people[]` (email → phone → handle → name).
 
-## Messages as a data type
+## Messages as a kind
 
 `Message` is Aegis's neutral representation of a **text communication
 between people** — either written by the user or written to the user by
@@ -489,8 +489,8 @@ conversation with them.
 Today some Gmail/Google Takeout mail still matches that notification shape
 (newsletters, alerts, receipts). Connectors should prefer real correspondence
 where they can tell the difference; do not add new notification-like items to
-this type. Longer term, operators should be able to reclassify notification
-items under a dedicated **Notifications** data type (not implemented yet)
+this kind. Longer term, operators should be able to reclassify notification
+items under a dedicated **Notifications** kind (not implemented yet)
 rather than growing `messages`.
 
 Service identity lives in `sources[]`, same as playlists, contacts, photos,
@@ -545,7 +545,7 @@ Permission key: `messages` (paths `/messages/*`, `/me/messages`, `/threads/*`,
 Participant `Contact` values use the same identity matching as
 `/v1/library/contacts` and calendar attendees (email → phone → handle → name).
 
-## Transactions as a data type
+## Transactions as a kind
 
 ```
 GET /v1/library/transactions
@@ -643,7 +643,7 @@ evening visit with a fireworks photo taken during it — see
 `TestPhotosPlacesJoinDemo`. Aegis does not store photo bytes; the join is
 metadata only.
 
-## Documents as a data type
+## Documents as a kind
 
 `GET /v1/library/documents` returns life-admin paperwork — receipts,
 warranties, leases, insurance policies, tax letters, medical letters, and
@@ -753,7 +753,7 @@ POST /v1/admin/sync/schedules/{id}/enable — resume a paused sync schedule
 POST /v1/admin/sync/schedules/{id}/disable — pause a sync schedule
 GET /v1/admin/library/{kind} — admin Library tab preview (; not counted as agent Home access)
 GET /v1/admin/search/status — search index health: enabled, path, per-kind searchable flag + indexed doc counts
-GET /v1/admin/permissions — type-centric data grants editor model: agent level + relevant apps/sync per data type
+GET /v1/admin/permissions — kind-centric data grants editor model: agent level + relevant apps/sync per kind
 GET /v1/admin/data-grants — agent data-grant map (primary,)
 PUT /v1/admin/data-grants — replace data grants {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
 GET /v1/admin/ownership — per-kind data-ownership status (confirmed state, sources under management, unused routes, copy freshness)
@@ -817,8 +817,8 @@ the admin UI does not inflate Home access counts. Agents still use
 
 The **Home** tab (default) is a live SVG overview of how data moves. Aperture
 is drawn as a container around Aegis; Aegis nests the token vault and
-response cache and lists every data type available on this instance (unified
-library kinds plus proxy-only types). Agents connect via the hook and
+response cache and lists every kind available on this instance (unified
+library kinds plus proxy-only kinds). Agents connect via the hook and
 proxy/library APIs; edges show OAuth reads, library fan-in, and blocked
 services. Service nodes are colored by status (connected, needs OAuth, expired,
 blocked). Photo services note that bytes stay upstream. Use it as a quick
@@ -830,16 +830,16 @@ hook health, unified library dataset cards, recent access
 samples, the response cache inventory (with clear), and runtime/auth endpoint
 info.
 
-On the **Services** tab, shared **Data grants by type** instructions sit above
-the filter. The data-grant editor lists each data type with its **agent**
-level (editable) and any other accessors that apply to that type (third-party
+On the **Services** tab, shared **Data grants by kind** instructions sit above
+the filter. The data-grant editor lists each kind with its **agent**
+level (editable) and any other accessors that apply to that kind (third-party
 apps, sync pipelines) as read-only chips — only when relevant to the type. Agent form controls (Available / Off always; **Editable** only
 when agents can truly
 change that data through Aegis — not mirror backups or picker sessions).
 Each service card keeps its own live permissions form under the title; every
 change saves immediately to `data_grants.json` (the admin overlay). Bootstrap
 defaults remain in `aegis.json`; the overlay wins for any service the admin
-UI has saved. Keys not shown in the form are preserved on save. Data-type rows
+UI has saved. Keys not shown in the form are preserved on save. Kind rows
 use the Home map icons.
 
 Each service card leads with **name** on the title line and **connection

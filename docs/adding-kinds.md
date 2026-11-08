@@ -1,8 +1,8 @@
-# Adding a data type
+# Adding a library kind
 
-This guide is the checklist for defining a new **data type** (library kind) in
+This guide is the checklist for defining a new **library kind** in
 Aegis. It extracts the patterns that already work for playlists, tracks,
-albums, artists, contacts, photos, events, and messages — so the next type
+albums, artists, contacts, photos, events, and messages — so the next kind
 does not rediscover them.
 
 Use it when you are:
@@ -13,7 +13,7 @@ Use it when you are:
   (see #91, #89, #76, #16, #4).
 
 Related product rules live in `AGENTS.md` and `README.md`. This file is about
-**how a type is structured**, not the full API surface.
+**how a kind is structured**, not the full API surface.
 
 ---
 
@@ -24,10 +24,10 @@ These three names often mean the same underlying concept. Keep them aligned.
 | Name | Where | Example |
 |------|-------|---------|
 | **Library kind ID** | `LibraryKind.ID`, cache keys, logs, metrics `DataType` | `tracks` |
-| **Permission / data-type key** | `LibraryKind.PermType`, `Permissions` map, `DataTypeCapability.Name`, `DataTypeForPath` | `tracks` |
+| **Permission / kind key** | `LibraryKind.PermType`, `Permissions` map, `DataTypeCapability.Name`, `DataTypeForPath` | `tracks` |
 | **Agent path** | `LibraryKind.Path` | `/v1/library/tracks` |
 
-A connector's **data-type capability** (`DataTypeCapability`) advertises what
+A connector's **kind capability** (`DataTypeCapability`) advertises what
 that *service* can do for the same key. A library kind is the **unified**
 cross-service view of that key.
 
@@ -43,14 +43,14 @@ Agent question
 
 ---
 
-## Product rules that shape every type
+## Product rules that shape every kind
 
-These are non-negotiable (see `AGENTS.md`). New types inherit them.
+These are non-negotiable (see `AGENTS.md`). New kinds inherit them.
 
-1. **Type-centric surface; named-service connectors.** Design the type first
+1. **Kind-centric surface; named-service connectors.** Design the kind first
    (`/v1/library/{kind}`, neutral model, `LibraryKind`). Real providers
    (Spotify, Gmail, …) are the connectors that populate it — not generic
-   auto-detected blobs. A type without a named connector (or a user-defined
+   auto-detected blobs. A kind without a named connector (or a user-defined
    source under #15) is a stub, not a feature.
 2. **Fail-open.** Fetch, parse, and match failures must not block the agent.
    Partial `by_service[]` status is fine; a hard 500 for one bad connector is not.
@@ -58,17 +58,17 @@ These are non-negotiable (see `AGENTS.md`). New types inherit them.
    service. Neutral models carry metadata and `sources[]` pointers.
 4. **Service identity lives in `sources[]`.** Never put service-local IDs,
    URIs, or deep links on the top-level user-facing object.
-5. **Permissions are data.** A type is not agent-visible until the permission
+5. **Permissions are data.** A kind is not agent-visible until the permission
    map and path classifier know its key.
 6. **Coverage floor stays.** New write paths need tests before merge
    (`go test` + 80% floor).
 
 ---
 
-## Anatomy of a data type
+## Anatomy of a kind
 
-A complete type touches these layers. Music types (`internal/types/merge.go`)
-and people/media types (`internal/types/merge_contacts.go`, `merge_photos.go`,
+A complete kind touches these layers. Music kinds (`internal/types/merge.go`)
+and people/media kinds (`internal/types/merge_contacts.go`, `merge_photos.go`,
 …) are the two templates.
 
 ```text
@@ -86,7 +86,7 @@ canonical.go                 stamp*Canonical (if sources can be home)
 copy_ledger_stamp.go         stamp*Copies (if sources can hold tracked copies)
 sampledata.go                Deterministic fixtures + deliberate merge pairs
 tests                        Merge, aggregate, permissions, sample-data query checks
-README.md                    Agent-facing semantics for the type
+README.md                    Agent-facing semantics for the kind
 ```
 
 ### Target package map (issue #15)
@@ -108,13 +108,13 @@ a migration override, not the primary model.
 
 You do **not** need every optional hook on day one. Ship the spine first
 (model + provider + kind + handler + tests), then add locations (#76), durable
-IDs (#4), and sample edge cases (#89) as the type matures.
+IDs (#4), and sample edge cases (#89) as the kind matures.
 
 ---
 
 ### 1. Neutral model (`internal/types/models.go`)
 
-Define three types: the user-facing item, its per-service source, and the list
+Define three structs: the user-facing item, its per-service source, and the list
 wrapper.
 
 ```go
@@ -170,7 +170,7 @@ schema.
 
 ### 2. Provider interface (`internal/types/providers.go`)
 
-One method, neutral types, explicit truncation. Put the interface next to the
+One method, neutral models, explicit truncation. Put the interface next to the
 other `*Provider` contracts in `internal/types/providers.go` (not in the kind
 handler file).
 
@@ -251,8 +251,8 @@ Field guidance:
 | `EmptyMsg` / `DenyMsg` / `FailMsg` | Short, agent-safe; no secrets, no stack traces |
 | `AppReadable` | `true` for built-in list kinds (apps are data readers). Document full-text and admin routes stay out of app scope. User-defined kinds are never app-readable by default. |
 | `CanonicalAllowed` | `true` when services can be the home copy for this kind |
-| `AllowedLevels` | Type-scoped redaction levels this kind can enforce (`AccessFreeBusy`, `AccessSummary`, `AccessCity`, `AccessPrecise`, `AccessMetadata`). Leave empty for none/read/write/read-write only. |
-| `DefaultNone` | `true` when the type stays hidden until a data grant names it (places pattern) |
+| `AllowedLevels` | Kind-scoped redaction levels this kind can enforce (`AccessFreeBusy`, `AccessSummary`, `AccessCity`, `AccessPrecise`, `AccessMetadata`). Leave empty for none/read/write/read-write only. |
+| `DefaultNone` | `true` when the kind stays hidden until a data grant names it (places pattern) |
 | `OptimisticCopies` | `true` for mail-like streams whose copy ledger tracks snapshot watermarks rather than per-object sync (issue #76) |
 | `ExtraInstructions` | Kind-specific agent copy appended to the system-message hint (issue #254). Carries its own leading separator (space or newline); `{root}` expands to the instance base URL. Keep per-kind copy here — core's `libraryInstructionsFor` does not branch on kind IDs. |
 | `Search` | `&types.SearchSpec` naming the neutral JSON fields `q=` full-text indexes (issue #178). Declare user-visible text only — identity/transport keys (`id`, `sources`, `entity_id`, …) are never indexed. Kinds with `AllowedLevels` must also set `libraryKindSpec.redactSearch` so index-hydrated hits re-apply fetch-time redaction. Nil means `q` is rejected. |
@@ -313,7 +313,7 @@ and optional enrich/stamps.
 
 ### 5. Identity and merge
 
-Cross-service identity is the hardest part of a new type. Follow the ladder
+Cross-service identity is the hardest part of a new kind. Follow the ladder
 already used by music and contacts:
 
 **Prefer durable IDs over names.**
@@ -345,7 +345,7 @@ Rules that keep merges honest:
 7. Fold fields with "fill empty, union lists, keep first extra" — see
    `mergeContactInto` / `mergePhotoInto` / `mergeMessageInto`.
 
-When a type has no good durable ID yet, leave `EntityID` empty and use a
+When a kind has no good durable ID yet, leave `EntityID` empty and use a
 narrow name key — then add enrichment later (`enrich` / MusicBrainz / etc.)
 rather than inventing a fake stable ID.
 
@@ -363,7 +363,7 @@ Every source that can be a **home** or a **tracked copy** should support:
 | `sources[].canonical` | Authoritative non-Aegis location | Connector (inherent) and/or config `canonical_for` |
 | `sources[].copy` | Durable copy-ledger row (role, sync mode, version) | `stamp*Copies` after fetch |
 
-Checklist when adding a type that participates:
+Checklist when adding a kind that participates:
 
 1. Set `CanonicalAllowed: true` on the registry entry (config validation
    derives `canonical_for` from it).
@@ -371,7 +371,7 @@ Checklist when adding a type that participates:
 3. Implement `stampWidgetCopies` in `copy_ledger_stamp.go` using
    `s.copyInfoFor(kindID, service, id)` — missing rows stay nil (fail-open).
 4. Wire both into the `libraryKindSpec`.
-5. If the type can be mirrored, teach the mirror path to write ledger rows
+5. If the kind can be mirrored, teach the mirror path to write ledger rows
    (`copy_ledger.go`) and document full vs optimistic fidelity in the README.
 
 Kinds that are pure references (albums/artists today) may omit `Canonical` /
@@ -386,7 +386,7 @@ auto-mirroring.
 
 ### 7. Permissions and connector capabilities
 
-A type is invisible until permissions and path classification know it.
+A kind is invisible until permissions and path classification know it.
 
 **Permission key** (`PermType` / `DataTypeCapability.Name`) must match what
 `DataTypeForPath` returns for that provider's proxy paths.
@@ -402,10 +402,10 @@ A type is invisible until permissions and path classification know it.
    `Operations[]`:
    - `Operations` is `[]Operation` (method, path, parameters, response spec),
      not `[]string`.
-   - Empty `[]Operation{}` means "type recognized, not implemented" — Amazon
+   - Empty `[]Operation{}` means "kind recognized, not implemented" — Amazon
      Music does this. That is valid.
    - Do not advertise methods the connector cannot serve.
-   - Capabilities are admin/connector metadata for available/writable types
+   - Capabilities are admin/connector metadata for available/writable kinds
      and path classification (issue #119). They are **not** an agent
      discovery API — permissions further constrain what agents may call via
      the content/ingest proxy and library; they never **add** capability.
@@ -415,7 +415,7 @@ A type is invisible until permissions and path classification know it.
    the configured `GetService(id).Endpoint` — never hardcode provider base URLs.
 
 4. **Admin surface**  
-   Available/writable data types come from capabilities; writable excludes
+   Available/writable kinds come from capabilities; writable excludes
    session/search-style side effects (picker, search POSTs). Do not special-case
    the UI when the capability model can express it.
 
@@ -424,7 +424,7 @@ A type is invisible until permissions and path classification know it.
 ### 8. Sample data (#89)
 
 Synthetic fixtures are how APIs mature without OAuth or real personal data.
-Extend `sampledata.go` whenever a type gains identity rules.
+Extend `sampledata.go` whenever a kind gains identity rules.
 
 **Requirements:**
 
@@ -434,14 +434,14 @@ Extend `sampledata.go` whenever a type gains identity rules.
 - **Deliberate merge pairs** — at least one shared durable ID pair, one
   name-only pair, and one near-miss that must **not** merge.
 - **Edge cases** — unicode/RTL names, missing timestamps, empty identity,
-  truncated-page simulation when the type has paging.
+  truncated-page simulation when the kind has paging.
 - **Every kind** in `SampleLibrarySet` — a new registry kind without fixtures
   is incomplete (see #89 / #77).
 
 Then cover them in `sampledata_query_test.go` (or a kind-specific test):
 
 - merge identity (`sources[]`, `entity_id`, `match=…`)
-- sort / filter / agent paging (`limit`/`cursor`/`next_cursor`, issue #185) if the type is queryable
+- sort / filter / agent paging (`limit`/`cursor`/`next_cursor`, issue #185) if the kind is queryable
 - permission-denied service still appears in `by_service` as denied
 - `truncated` when a provider hits the upstream page cap (independent of `next_cursor`)
 
@@ -450,7 +450,7 @@ Then cover them in `sampledata_query_test.go` (or a kind-specific test):
 ### 9. Agent-facing behavior (#78)
 
 Types exist so agents use Aegis instead of scraping providers. After the
-spine works, make the type **easy to use correctly**:
+spine works, make the kind **easy to use correctly**:
 
 | Surface | What to get right |
 |---------|-------------------|
@@ -460,10 +460,10 @@ spine works, make the type **easy to use correctly**:
 | `sources[].canonical` | Home copy for writes |
 | `sources[].copy` | Freshness / location when tracked |
 | Error messages | Actionable (`connect at /v1/auth/{id}/login`), never raw upstream dumps |
-| Logging | `slog` with `service`, `path`, `data type` fields for inefficient-use tracing |
+| Logging | `slog` with `service`, `path`, `kind` fields for inefficient-use tracing |
 
 Do not require agents to call three provider APIs when one library endpoint
-can answer the question. Prefer expanding the unified type over teaching
+can answer the question. Prefer expanding the unified kind over teaching
 agents more upstream shapes.
 
 ---
@@ -499,7 +499,7 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 - [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
 - [ ] `redactSearch` on the `libraryKindSpec` when the kind has `AllowedLevels` (search hits hydrate from the index and skip fetch-time redaction)
 - [ ] Identity key + `MergeWidgets` in `internal/types/merge_widgets.go` (durable ID first; record `Match`) — merge logic does not live in core
-- [ ] Connector implements `WidgetProvider` + `Capabilities()` data type
+- [ ] Connector implements `WidgetProvider` + `Capabilities()` kind
 - [ ] `DataTypeForPath` cases for the provider's paths
 - [ ] Tests: merge cases, aggregate happy path + unauthorized/error/truncated, permission deny
 
@@ -508,14 +508,14 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 - [ ] `CanonicalAllowed: true` on the registry entry
 - [ ] `stamp*Canonical` + `markCanonical` wired
 - [ ] `stamp*Copies` + `stampCopies` wired (fail-open on missing ledger)
-- [ ] README copy fidelity (full vs optimistic) if the type can be mirrored
+- [ ] README copy fidelity (full vs optimistic) if the kind can be mirrored
 
 **Maturation (#89 / #4 / #78)**
 
 - [ ] `GenerateSampleLibrary` fixtures + non-merge near-miss
 - [ ] Sample query/merge tests
 - [ ] Optional `enrich` for durable ID resolution
-- [ ] README section ("X as a data type") with example JSON
+- [ ] README section ("X as a kind") with example JSON
 - [ ] Pre-request keywords smoke-tested with a service-less question
 
 **Definition of done**
@@ -532,7 +532,7 @@ document full-text subpaths and not user-defined kinds (issue #183 / #131).
 
 | Look at | When you need |
 |---------|----------------|
-| `library.go` + `internal/types/merge.go` | Music-shaped types: durable IDs, duration guard, playlist links |
+| `library.go` + `internal/types/merge.go` | Music-shaped kinds: durable IDs, duration guard, playlist links |
 | `internal/types/merge_contacts.go` | Chained identity (email/phone/handle), union-find merge |
 | `internal/types/merge_photos.go` | Non-name identity (hash/time+dim), "bytes stay upstream" sources |
 | `internal/types/merge_events.go` | Time-windowed items, iCalUID vs title+start matching |
@@ -567,13 +567,13 @@ providers stay named connectors — UDT sources are user-supplied feeds.
 
 ## Out of scope (still open)
 
-Do not assume these are solved when designing a type:
+Do not assume these are solved when designing a kind:
 
 - Full UDT product surface (admin UI, hot-reload, sensitive-field redaction) —
   PoC only, see `docs/user-defined-types.md`
 - Photo ownership / provenance proofs (#20)
 - Live Immich canonical photos (#39)
-- Generic auto-detected type expansion (not the default; named services first)
+- Generic auto-detected kind expansion (not the default; named services first)
 
 If a design needs those, link the issue in the PR rather than half-shipping a
 parallel concept.

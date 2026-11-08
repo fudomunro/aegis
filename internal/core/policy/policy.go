@@ -447,7 +447,7 @@ func (tp DataGrants) PermissionsFor(provider string) Permissions {
 func ValidateDataGrants(policies DataGrants) error {
 	for dataType, policy := range policies {
 		if dataType == "" {
-			return fmt.Errorf("data grants: empty data type key")
+			return fmt.Errorf("data grants: empty kind key")
 		}
 		// Empty default is allowed (DefaultAccessType / opt-in none).
 		if policy.Default != "" {
@@ -606,7 +606,7 @@ func accessRank(level string) int {
 func ValidatePermissions(p Permissions) error {
 	for k, v := range p {
 		if k == "" {
-			return fmt.Errorf("permissions: empty data type key")
+			return fmt.Errorf("permissions: empty kind key")
 		}
 		switch NormalizeAccess(v) {
 		case AccessNone, AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessWrite, AccessFull:

@@ -126,7 +126,7 @@ Service history below still reflects captured signals.</div>
 <p class="legend">Success is the share of recorded problems resolved. Stability measures
 quiet, not health &mdash; days since the last recorded failure, over thirty; an old open
 problem does not lower it. Confidence grades the depth of the record. Maturity is a
-coverage statement &mdash; of the data types the service offers, how many this connection
+coverage statement &mdash; of the kinds the service offers, how many this connection
 serves, and how completely it fills their fields &mdash; not an operational score. It
 moves only when the connector moves. API-based transports read as more mature than
 export/import or reverse-engineered ones.</p>
@@ -221,24 +221,24 @@ problem does not lower it. Confidence grades the depth of the record.</p>
 <div class="cards">
   <div class="card"><div class="k">Maturity</div>
     <div class="v"><span class="badge {{ maturityBadge .Service.MaturityGrade.Level }}">{{ maturityLabel .Service.MaturityGrade.Level }}</span></div></div>
-  <div class="card"><div class="k">Data types served</div>
+  <div class="card"><div class="k">Kinds served</div>
     <div class="v">{{ maturityCoverage .Service.MaturityGrade }}</div></div>
   {{ if .Service.MaturityGrade.FieldPct }}<div class="card"><div class="k">Field coverage</div>
     <div class="v"><span class="badge {{ scoreBadge .Service.MaturityGrade.FieldPct }}">{{ fmtPct .Service.MaturityGrade.FieldPct }}</span></div></div>{{ end }}
   <div class="card"><div class="k">Transport</div>
     <div class="v"><span class="badge {{ transportBadge .Service.MaturityGrade.Transport }}">{{ transportLabel .Service.MaturityGrade.Transport }}</span></div></div>
 </div>
-<p class="legend">Maturity is a coverage statement, not an operational score: of the data
-types this service offers, how many the connection serves, and how completely it fills
+<p class="legend">Maturity is a coverage statement, not an operational score: of the kinds
+this service offers, how many the connection serves, and how completely it fills
 their neutral-model fields. It moves only when the connector code moves. The level bands
-on the lower of type coverage and field coverage. API-based transports read as more
+on the lower of kind coverage and field coverage. API-based transports read as more
 mature than export/import or reverse-engineered ones.</p>
 
 {{ if .Service.Maturity }}
-<h2>Data types</h2>
+<h2>Kinds</h2>
 <table>
   <thead>
-    <tr><th>Data type</th><th>What the service offers</th><th>Served here</th><th class="num">Fields</th></tr>
+    <tr><th>Kind</th><th>What the service offers</th><th>Served here</th><th class="num">Fields</th></tr>
   </thead>
   <tbody>
   {{ range .Service.Maturity.DataTypes }}

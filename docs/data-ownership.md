@@ -7,7 +7,7 @@ Related issues: **#165** (this note), **#247** (connection maturity — the
 complementary mark), **#227** (sync job queue; the evidence source),
 **#254** (connector-declared metadata), **#286** (mail ingest seam),
 **#266** (local import stores), **#162** (library source overview).
-Related product rules: fail-open; Aegis does not store media; type-centric
+Related product rules: fail-open; Aegis does not store media; kind-centric
 surface; no issue numbers in user-facing copy; coverage floor 80%.
 
 ---
@@ -24,8 +24,8 @@ Two questions have to stay distinct:
 
 | Mark | Question | Moves when |
 |------|----------|------------|
-| **Connection maturity** (#247) | How completely does one *connector* cover the types its service offers? | Connector code moves |
-| **Data ownership** (#165) | How completely is the *user's* data of one type under management? | The user ingests more, or confirms |
+| **Connection maturity** (#247) | How completely does one *connector* cover the kinds its service offers? | Connector code moves |
+| **Data ownership** (#165) | How completely is the *user's* data of one kind under management? | The user ingests more, or confirms |
 
 Maturity is a coverage statement in code. Ownership is user state joined
 with live evidence.
@@ -39,7 +39,7 @@ The approach leans on three seams that did not exist when #165 was filed:
    copy-freshness rollup. "What is under management" is evidence the system
    already collects — ownership must not invent a parallel tracker.
 2. **Connector-declared metadata (#254, #286, #266).** The
-   `ConnectionMaturityCatalog()` names every known connector and the types
+   `ConnectionMaturityCatalog()` names every known connector and the kinds
    it offers, connected or not. `MailSource` / `MailIngest` declare the mail
    ingest sources; `LocalStoreService` declares the import stores. So the
    call-to-action catalog is *derived from declarations*, never from a
@@ -69,7 +69,7 @@ A kind's ownership status joins three derived inputs:
   from route to source (issue #139).
 - **Unused routes** — declared ways to get more data of this kind that are
   not yet in use. Built from the maturity catalog (services offering the
-  type, connected or not) plus the mail ingest sources. Each route carries
+  kind, connected or not) plus the mail ingest sources. Each route carries
   a call-to-action declared beside its connector (issue #254): the action
   kind (`connect` / `setup` / `import`), its target, and the label the UI
   shows. Core never derives the action from interfaces or transport class.
@@ -114,7 +114,7 @@ not need a second fetch (the onboarding-runner pattern).
   declarations against the seams they name (setup ↔ `Onboarder`, import ↔
   the local-store connectors, connect otherwise).
 - **Phase 3 (this PR)** — admin UI: the controls merge into the Library
-  tab's sources display — the box listing a type's configured sources also
+  tab's sources display — the box listing a kind's configured sources also
   carries the "I have all my …" toggle (which tints the box) and the
   call-to-action routes. Labels render from the API (connector-declared
   copy is never restated in `admin.html`).

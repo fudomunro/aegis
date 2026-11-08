@@ -229,7 +229,7 @@ Aegis does **not** replace those apps and never ingests photo bytes into its own
 | **Fail-open** | A broken Immich must not take down the whole photo library or the pre-request hook. |
 
 Related product docs: [README — Immich](api.md),
-[Adding a data type](adding-data-types.md). Implementation: `immich.go`, `photos.go`.
+[Adding a library kind](adding-kinds.md). Implementation: `immich.go`, `photos.go`.
 
 ---
 

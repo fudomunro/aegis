@@ -111,7 +111,7 @@
       <div class="trait">
         <svg class="glyph" viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M23 3 9 23h10l-3 14 15-21H21z"/></svg>
         <h3>A precise sting</h3>
-        <p><b>Data grants</b> set an access level per data type —
+        <p><b>Data grants</b> set an access level per kind —
           <code>none</code>, <code>freebusy</code>, <code>summary</code>,
           <code>city</code>, <code>precise</code>, <code>metadata</code>,
           <code>read</code>, <code>write</code>. Reach too far and the answer is
@@ -406,7 +406,7 @@ GET /v1/library/events  <span class="ok">200 · 9 events</span></div>
 
       <details class="faq-item">
         <summary>What can an agent actually see, and how do I limit it?</summary>
-        <p>Only what you allow with <b>data grants</b>, which you set per data type
+        <p>Only what you allow with <b>data grants</b>, which you set per kind
           (playlists, contacts, places, …) on the admin page. Sensitive types start
           off: location history defaults to <code>none</code>, and user-defined types
           are always opt-in. Per-service limits can only narrow a grant, never widen
@@ -442,7 +442,7 @@ GET /v1/library/events  <span class="ok">200 · 9 events</span></div>
 
       <details class="faq-item">
         <summary>How do I see what my agents have accessed?</summary>
-        <p>The admin Home tab shows which agents touched which data types recently.
+        <p>The admin Home tab shows which agents touched which kinds recently.
           A local audit log records every access, allowed or denied, without tokens or
           message bodies, and keeps 30 days by default. Prometheus metrics are
           available at <code>/metrics</code>.</p>

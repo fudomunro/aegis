@@ -262,7 +262,7 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 		return fmt.Errorf("schema id %q must match %s", s.ID, userDefinedIDPattern)
 	}
 	if IsReservedUserDefinedID(s.ID) {
-		return fmt.Errorf("schema id %q is reserved by a built-in data type or /v1/library route", s.ID)
+		return fmt.Errorf("schema id %q is reserved by a built-in kind or /v1/library route", s.ID)
 	}
 	if s.Label == "" {
 		s.Label = s.ID

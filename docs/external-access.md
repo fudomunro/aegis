@@ -32,8 +32,8 @@ exposure, grant defaults, TLS/rate-limit duties, and the threat model.
    signup, passwords, or OIDC in this phase. An invite is minted by the
    admin and issued out-of-band.
 3. **Deny-by-default for external principals.** An external principal sees
-   only data types its data scope **explicitly grants**. Sharing is opt-in
-   per data type. (Owner-tier credentials keep today's semantics; see the
+   only kinds its data scope **explicitly grants**. Sharing is opt-in
+   per kind. (Owner-tier credentials keep today's semantics; see the
    split below.)
 4. **No federation features yet.** An external principal may be a person,
    an app, or *another Aegis instance's operator* — but it authenticates as
@@ -117,9 +117,9 @@ Owner-tier credentials are unchanged and are *not* external principals:
 
 For an invite token, the scope's `grants` map is the **complete allow list**:
 
-1. A data type not listed resolves to **`none`** for that principal —
+1. A kind not listed resolves to **`none`** for that principal —
    unlike agent data grants, where omit means unrestricted.
-2. A reserved `default` entry sets the level for **unlisted** types only, so
+2. A reserved `default` entry sets the level for **unlisted** kinds only, so
    "share everything read-only" stays expressible
    (`"grants": {"default": {"default": "read"}}`) without listing every
    kind.
@@ -136,9 +136,9 @@ For an invite token, the scope's `grants` map is the **complete allow list**:
 |-------|-------------|
 | Type absent, no `default` key | `none` |
 | Type absent, `default` key present | the `default` key's level |
-| `{"music": {}}` (listed, empty) | `none` — a listed type must state its own level |
-| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides can only **tighten** a level, never open a closed type. To grant, set the type's `default` field and use provider entries to narrow |
-| `{"default": {"default": "read"}, "music": {...}}` with `music.default` empty | `none` for `music` — the `default` key covers **unlisted** types only; listing a type is an explicit act |
+| `{"music": {}}` (listed, empty) | `none` — a listed kind must state its own level |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides can only **tighten** a level, never open a closed kind. To grant, set the kind's `default` field and use provider entries to narrow |
+| `{"default": {"default": "read"}, "music": {...}}` with `music.default` empty | `none` for `music` — the `default` key covers **unlisted** kinds only; listing a kind is an explicit act |
 
 This resolution runs in a **dedicated scope-grants resolver**, not in
 `policy.DataGrants.Access`. `DataGrants.Access` keeps owner-tier semantics
@@ -303,7 +303,7 @@ IP.
   callers are outside the tailnet.
 - **Fail-open** on provider fetch/parse errors. Authentication and
   authorization still fail closed (401/403).
-- **Type-centric surface.** External principals call the same
+- **Kind-centric surface.** External principals call the same
   `/v1/library/{kind}` as agents; grants narrow visibility, they do not
   invent a second API.
 - **App tokens.** Same shape; external access is what finally makes
