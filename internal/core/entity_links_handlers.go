@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -115,7 +116,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			trackProviders, _ := collectProviders[types.Track, types.LikedTrackProvider](s, r, "tracks",
+			trackProviders, _ := kinds.Collect[types.Track, types.LikedTrackProvider](s, r, "tracks",
 				func(p types.LikedTrackProvider) func(context.Context) ([]types.Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
@@ -142,7 +143,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			albumProviders, _ := collectProviders[types.Album, types.AlbumProvider](s, r, "albums",
+			albumProviders, _ := kinds.Collect[types.Album, types.AlbumProvider](s, r, "albums",
 				func(p types.AlbumProvider) func(context.Context) ([]types.Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
@@ -169,7 +170,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			artistProviders, _ := collectProviders[types.Artist, types.ArtistProvider](s, r, "artists",
+			artistProviders, _ := kinds.Collect[types.Artist, types.ArtistProvider](s, r, "artists",
 				func(p types.ArtistProvider) func(context.Context) ([]types.Artist, bool, error) {
 					return p.ListUserFollowedArtists
 				})
@@ -196,7 +197,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			plProviders, _ := collectProviders[types.Playlist, types.PlaylistProvider](s, r, "playlists",
+			plProviders, _ := kinds.Collect[types.Playlist, types.PlaylistProvider](s, r, "playlists",
 				func(p types.PlaylistProvider) func(context.Context) ([]types.Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
@@ -224,7 +225,7 @@ func (s *Server) HandleMergeReview(w http.ResponseWriter, r *http.Request) {
 
 // listProvidersParallel fans out named listers like handleLibraryAggregate.
 // Provider errors are skipped (same as the previous sequential review path).
-func listProvidersParallel[T any](ctx context.Context, providers []namedLister[T]) []T {
+func listProvidersParallel[T any](ctx context.Context, providers []kinds.NamedLister[T]) []T {
 	if len(providers) == 0 {
 		return nil
 	}
@@ -235,9 +236,9 @@ func listProvidersParallel[T any](ctx context.Context, providers []namedLister[T
 	)
 	for _, t := range providers {
 		wg.Add(1)
-		go func(t namedLister[T]) {
+		go func(t kinds.NamedLister[T]) {
 			defer wg.Done()
-			list, _, err := t.list(ctx)
+			list, _, err := t.List(ctx)
 			if err != nil || len(list) == 0 {
 				return
 			}

@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -26,9 +27,9 @@ func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) ht
 			schema = s.udts.SchemaWithOverlay(kindID)
 			kind = schema.LibraryKind()
 		}
-		handleLibraryAggregate(s, w, r, libraryKindSpec[types.UserDefinedItem]{
-			kind: kind,
-			targets: func(s *Server, r *http.Request) (targets []namedLister[types.UserDefinedItem], denied []string) {
+		kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.UserDefinedItem]{
+			Kind: kind,
+			Targets: func(r *http.Request) (targets []kinds.NamedLister[types.UserDefinedItem], denied []string) {
 				// Type-owned policy decides agent visibility (issue #148).
 				// UDTs are opt-in: without an enabling policy entry this denies.
 				if !s.userDefinedReadable(kind.PermType) {
@@ -41,9 +42,9 @@ func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) ht
 				}
 				for _, src := range schema.Sources {
 					src := src
-					targets = append(targets, namedLister[types.UserDefinedItem]{
-						id: src.ID,
-						list: func(ctx context.Context) ([]types.UserDefinedItem, bool, error) {
+					targets = append(targets, kinds.NamedLister[types.UserDefinedItem]{
+						ID: src.ID,
+						List: func(ctx context.Context) ([]types.UserDefinedItem, bool, error) {
 							// Fail-open per source: fetch errors surface as
 							// by_service status, never a hard 500 for the list.
 							return fetchUserDefinedSource(ctx, schema, src, baseDir, shared.HTTPClient)
@@ -52,17 +53,17 @@ func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) ht
 				}
 				return targets, nil
 			},
-			serviceOf: types.UserDefinedServiceName,
-			sortKey: func(item types.UserDefinedItem) string {
+			ServiceOf: types.UserDefinedServiceName,
+			SortKey: func(item types.UserDefinedItem) string {
 				if item.EntityID != "" {
 					return "e:" + item.EntityID
 				}
 				return "n:" + schema.UserDefinedIdentityKey(item)
 			},
-			merge: func(in []types.UserDefinedItem) []types.UserDefinedItem {
+			Merge: func(in []types.UserDefinedItem) []types.UserDefinedItem {
 				return types.MergeUserDefinedItems(schema, in)
 			},
-			encode: func(items []types.UserDefinedItem, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+			Encode: func(items []types.UserDefinedItem, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 				return types.EncodeUserDefinedList(schema, items, page, bySvc)
 			},
 		})

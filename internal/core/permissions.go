@@ -8,6 +8,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -97,7 +98,7 @@ func (s *Server) effectivePermissions(svc *Service) policy.Permissions {
 func (s *Server) requestLevel(r *http.Request, svc *Service, kind string) string {
 	level := s.effectivePermissions(svc).AccessForKind(kind)
 	sc := scopes.From(r)
-	if sc == nil || ownerView(r) {
+	if sc == nil || kinds.OwnerView(r) {
 		return level
 	}
 	provider := ""

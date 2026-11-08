@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -46,11 +47,11 @@ func (f *fakeFullLibraryProvider) ListUserFollowedArtists(context.Context) ([]ty
 }
 
 func TestListProvidersParallel_MergesAndSkipsErrors(t *testing.T) {
-	providers := []namedLister[int]{
-		{id: "a", list: func(context.Context) ([]int, bool, error) { return []int{1, 2}, false, nil }},
-		{id: "b", list: func(context.Context) ([]int, bool, error) { return nil, false, errors.New("boom") }},
-		{id: "c", list: func(context.Context) ([]int, bool, error) { return []int{3}, false, nil }},
-		{id: "d", list: func(context.Context) ([]int, bool, error) { return []int{}, false, nil }},
+	providers := []kinds.NamedLister[int]{
+		{ID: "a", List: func(context.Context) ([]int, bool, error) { return []int{1, 2}, false, nil }},
+		{ID: "b", List: func(context.Context) ([]int, bool, error) { return nil, false, errors.New("boom") }},
+		{ID: "c", List: func(context.Context) ([]int, bool, error) { return []int{3}, false, nil }},
+		{ID: "d", List: func(context.Context) ([]int, bool, error) { return []int{}, false, nil }},
 	}
 	got := listProvidersParallel[int](context.Background(), providers)
 	if len(got) != 3 {

@@ -241,7 +241,7 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 	if len(targets) != 1 || len(denied) != 0 {
 		t.Fatalf("targets = %d denied = %v", len(targets), denied)
 	}
-	items, _, err := targets[0].list(context.Background())
+	items, _, err := targets[0].List(context.Background())
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

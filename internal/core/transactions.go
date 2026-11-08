@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -161,16 +162,16 @@ func centsToAmount(cents int64) string {
 // transactionsProviderTargets collects providers, applying per-service and
 // app-level summary/read redaction so a summary-only surface never contributes
 // line items or account identifiers (issue #141).
-func transactionsProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]namedLister[types.Transaction], []string) {
-	targets, denied := collectProviders[types.Transaction, types.TransactionProvider](s, r, permType,
+func transactionsProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]kinds.NamedLister[types.Transaction], []string) {
+	targets, denied := kinds.Collect[types.Transaction, types.TransactionProvider](s, r, permType,
 		func(p types.TransactionProvider) func(context.Context) ([]types.Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
 	appSummary := policy.IsSummaryAccess(appLevel)
 	appRead := appLevel != "" && policy.NormalizeAccess(appLevel) == policy.AccessRead
 	for i := range targets {
-		id := targets[i].id
-		inner := targets[i].list
+		id := targets[i].ID
+		inner := targets[i].List
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
 			level = s.requestLevel(r, svc, permType)
@@ -184,7 +185,7 @@ func transactionsProviderTargets(s *Server, r *http.Request, permType string, ap
 		if effective == level && !policy.IsSummaryAccess(level) && policy.NormalizeAccess(level) != policy.AccessRead {
 			continue
 		}
-		targets[i].list = func(ctx context.Context) ([]types.Transaction, bool, error) {
+		targets[i].List = func(ctx context.Context) ([]types.Transaction, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactTransactionsForLevel(items, effective), truncated, err
 		}
@@ -212,36 +213,36 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 	// If the agent surface is unrestricted but every service is summary-only
 	// after redaction, encode() still has line items only when services
 	// returned them. Force summary-only encode when the app is summary.
-	handleLibraryAggregate(s, w, r, libraryKindSpec[types.Transaction]{
-		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[types.Transaction], []string) {
+	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Transaction]{
+		Kind: kind,
+		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Transaction], []string) {
 			return transactionsProviderTargets(s, r, kind.PermType, appLevel)
 		},
-		serviceOf: types.TransactionServiceName,
-		sortKey:   types.TransactionIdentityKey,
-		merge:     types.MergeTransactions,
-		encode: func(items []types.Transaction, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: types.TransactionServiceName,
+		SortKey:   types.TransactionIdentityKey,
+		Merge:     types.MergeTransactions,
+		Encode: func(items []types.Transaction, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterTransactions(items, filters)
 			// Summary covers the full filtered set, not the current page.
 			summary := buildTransactionSummary(filtered)
 			if summaryOnly {
 				return types.TransactionList{
 					Summary:         summary,
-					LibraryListMeta: types.MetaForPage(types.PageResult{Total: 0}, true, anyServiceTruncated(bySvc), bySvc),
+					LibraryListMeta: types.MetaForPage(types.PageResult{Total: 0}, true, kinds.AnyServiceTruncated(bySvc), bySvc),
 				}
 			}
 			pageItems, pr := types.SlicePage(filtered, page)
 			return types.TransactionList{
 				Transactions:    pageItems,
 				Summary:         summary,
-				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
+				LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		redactSearch: func(items []types.Transaction, r *http.Request) []types.Transaction {
+		RedactSearch: func(items []types.Transaction, r *http.Request) []types.Transaction {
 			return s.searchRedactTransactions(items, r)
 		},
-		markCanonical: s.stampTransactionCanonical,
-		cacheKey:      "library:transactions" + filters.CacheKeySuffix() + "|summary:" + strconv.FormatBool(summaryOnly),
+		MarkCanonical: s.stampTransactionCanonical,
+		CacheKey:      "library:transactions" + filters.CacheKeySuffix() + "|summary:" + strconv.FormatBool(summaryOnly),
 	})
 }
 

@@ -301,7 +301,7 @@ func TestIsAgentContentPath_EndToEndClassification(t *testing.T) {
 // Uses an in-memory token store that doesn't persist to disk.
 // Defaults to API-key auth so existing tests keep using the shared test key.
 func testServerWithBase(cfg *Config, baseURL string) *Server {
-	return &Server{
+	srv := &Server{
 		apiKey:      "test-key",
 		adminAPIKey: "test-key",
 		authMode:    AuthModeAPIKey,
@@ -318,6 +318,9 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		csrfTokens:  shared.NewStateStore(),
 		grants:      NewGrantStore(),
 	}
+	// kindEngine is built lazily (libraryEngine) so fixtures can set
+	// srv.search after construction.
+	return srv
 }
 
 func stringSliceContains(ss []string, v string) bool {

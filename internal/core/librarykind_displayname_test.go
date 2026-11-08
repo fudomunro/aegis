@@ -6,9 +6,10 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 )
 
-// TestLibrarySourceDisplayName pins the resolution order: core-local store
-// labels, then the connector registry's canonical name, then the configured
-// service name, then the raw ID.
+// TestLibrarySourceDisplayName pins the resolution order on the Host seam:
+// the connector registry's canonical name, then the configured service
+// name, then the raw ID. Kind-owned sources (the messages archive) override
+// through StatusHooks instead of the generic path (issue #312).
 func TestLibrarySourceDisplayName(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
@@ -23,7 +24,6 @@ func TestLibrarySourceDisplayName(t *testing.T) {
 		id   string
 		want string
 	}{
-		{"mail-archive", "Mail archive"},
 		{connectors.TakeoutServiceID, connectors.TakeoutServiceName},
 		// Canonical registry names win over configured names.
 		{"spotify", "Spotify"},
@@ -34,8 +34,17 @@ func TestLibrarySourceDisplayName(t *testing.T) {
 		{"unknown-service", "unknown-service"},
 	}
 	for _, tc := range cases {
-		if got := librarySourceDisplayName(srv, tc.id); got != tc.want {
-			t.Errorf("librarySourceDisplayName(%q) = %q, want %q", tc.id, got, tc.want)
+		if got := srv.SourceName(tc.id); got != tc.want {
+			t.Errorf("SourceName(%q) = %q, want %q", tc.id, got, tc.want)
 		}
+	}
+
+	// The messages kind labels its local archive via its declared hooks,
+	// not the generic seam.
+	if got, ok := srv.messagesSourceLabel("mail-archive"); !ok || got != "Mail archive" {
+		t.Errorf("messagesSourceLabel(mail-archive) = %q, %v; want %q, true", got, ok, "Mail archive")
+	}
+	if _, ok := srv.messagesSourceLabel("spotify"); ok {
+		t.Error("messagesSourceLabel must not claim sources it does not own")
 	}
 }

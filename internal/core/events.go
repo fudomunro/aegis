@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -48,15 +49,15 @@ func freeBusyListFromEvents(events []types.CalendarEvent, page types.PageRequest
 	pageItems, pr := types.SlicePage(busy, page)
 	return types.FreeBusyList{
 		Busy:            pageItems,
-		LibraryListMeta: types.MetaForPage(pr, false, anyServiceTruncated(bySvc), bySvc),
+		LibraryListMeta: types.MetaForPage(pr, false, kinds.AnyServiceTruncated(bySvc), bySvc),
 	}
 }
 
 // eventsProviderTargets collects calendar providers, applying free/busy
 // redaction per service so a freebusy-only surface never contributes titles
 // or attendees to the aggregate (issue #128).
-func eventsProviderTargets(s *Server, r *http.Request, permType string) ([]namedLister[types.CalendarEvent], []string) {
-	return collectProviders[types.CalendarEvent, types.CalendarEventProvider](s, r, permType,
+func eventsProviderTargets(s *Server, r *http.Request, permType string) ([]kinds.NamedLister[types.CalendarEvent], []string) {
+	return kinds.Collect[types.CalendarEvent, types.CalendarEventProvider](s, r, permType,
 		func(p types.CalendarEventProvider) func(context.Context) ([]types.CalendarEvent, bool, error) {
 			return p.ListCalendarEvents
 		})
@@ -69,17 +70,17 @@ func eventsProviderTargets(s *Server, r *http.Request, permType string) ([]named
 // scope is freebusy get the same redaction across all services (issue #131).
 func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[types.CalendarEvent]{
-		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[types.CalendarEvent], []string) {
+	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.CalendarEvent]{
+		Kind: kind,
+		Targets: func(r *http.Request) ([]kinds.NamedLister[types.CalendarEvent], []string) {
 			targets, denied := eventsProviderTargets(s, r, kind.PermType)
 			appFreeBusy := false
 			if app := AppIdentityFrom(r); app != nil {
 				appFreeBusy = policy.IsFreeBusyAccess(app.Scopes.For(kind.PermType))
 			}
 			for i := range targets {
-				id := targets[i].id
-				inner := targets[i].list
+				id := targets[i].ID
+				inner := targets[i].List
 				level := ""
 				if svc := s.config.GetService(id); svc != nil {
 					level = s.requestLevel(r, svc, kind.PermType)
@@ -87,25 +88,25 @@ func (s *Server) HandleLibraryEvents(w http.ResponseWriter, r *http.Request) {
 				if !appFreeBusy && !policy.IsFreeBusyAccess(level) {
 					continue
 				}
-				targets[i].list = func(ctx context.Context) ([]types.CalendarEvent, bool, error) {
+				targets[i].List = func(ctx context.Context) ([]types.CalendarEvent, bool, error) {
 					events, truncated, err := inner(ctx)
 					return types.RedactCalendarEventsFreeBusy(events), truncated, err
 				}
 			}
 			return targets, denied
 		},
-		serviceOf: calendarEventServiceName,
-		sortKey:   types.CalendarEventIdentityKey,
-		merge:     types.MergeCalendarEvents,
-		encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: calendarEventServiceName,
+		SortKey:   types.CalendarEventIdentityKey,
+		Merge:     types.MergeCalendarEvents,
+		Encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			pageItems, pr := types.SlicePage(items, page)
-			return types.CalendarEventList{Events: pageItems, LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc)}
+			return types.CalendarEventList{Events: pageItems, LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc)}
 		},
-		redactSearch: func(items []types.CalendarEvent, r *http.Request) []types.CalendarEvent {
+		RedactSearch: func(items []types.CalendarEvent, r *http.Request) []types.CalendarEvent {
 			return s.searchRedactEvents(items, r)
 		},
-		markCanonical: s.stampCalendarEventCanonical,
-		stampCopies:   s.stampEventCopies,
+		MarkCanonical: s.stampCalendarEventCanonical,
+		StampCopies:   s.stampEventCopies,
 	})
 }
 
@@ -141,19 +142,19 @@ func (s *Server) searchRedactEvents(items []types.CalendarEvent, r *http.Request
 // GET /v1/library/freebusy (issue #128).
 func (s *Server) HandleLibraryFreeBusy(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("events")
-	handleLibraryAggregate(s, w, r, libraryKindSpec[types.CalendarEvent]{
-		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[types.CalendarEvent], []string) {
+	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.CalendarEvent]{
+		Kind: kind,
+		Targets: func(r *http.Request) ([]kinds.NamedLister[types.CalendarEvent], []string) {
 			return eventsProviderTargets(s, r, kind.PermType)
 		},
-		serviceOf: calendarEventServiceName,
-		sortKey:   types.CalendarEventIdentityKey,
-		merge:     types.MergeCalendarEvents,
-		encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: calendarEventServiceName,
+		SortKey:   types.CalendarEventIdentityKey,
+		Merge:     types.MergeCalendarEvents,
+		Encode: func(items []types.CalendarEvent, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			return freeBusyListFromEvents(items, page, bySvc)
 		},
-		markCanonical: s.stampCalendarEventCanonical,
-		stampCopies:   s.stampEventCopies,
-		cacheKey:      "library:freebusy",
+		MarkCanonical: s.stampCalendarEventCanonical,
+		StampCopies:   s.stampEventCopies,
+		CacheKey:      "library:freebusy",
 	})
 }

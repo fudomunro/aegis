@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -79,15 +80,15 @@ func redactPlaceVisitsForLevel(items []types.PlaceVisit, level string) []types.P
 // placesProviderTargets collects providers, applying per-service and
 // app-level city/read/precise redaction so a city-only surface never
 // contributes place names or coordinates (issue #142).
-func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]namedLister[types.PlaceVisit], []string) {
-	targets, denied := collectProviders[types.PlaceVisit, types.PlaceVisitProvider](s, r, permType,
+func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel string) ([]kinds.NamedLister[types.PlaceVisit], []string) {
+	targets, denied := kinds.Collect[types.PlaceVisit, types.PlaceVisitProvider](s, r, permType,
 		func(p types.PlaceVisitProvider) func(context.Context) ([]types.PlaceVisit, bool, error) {
 			return p.ListUserPlaceVisits
 		})
 	appPlaces := policy.PlacesLevelForResponse(appLevel)
 	for i := range targets {
-		id := targets[i].id
-		inner := targets[i].list
+		id := targets[i].ID
+		inner := targets[i].List
 		level := ""
 		if svc := s.config.GetService(id); svc != nil {
 			level = s.requestLevel(r, svc, permType)
@@ -100,7 +101,7 @@ func placesProviderTargets(s *Server, r *http.Request, permType string, appLevel
 		if effective == policy.PlacesLevelForResponse(level) && effective != policy.AccessCity && effective != policy.AccessRead {
 			continue
 		}
-		targets[i].list = func(ctx context.Context) ([]types.PlaceVisit, bool, error) {
+		targets[i].List = func(ctx context.Context) ([]types.PlaceVisit, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactPlaceVisitsForLevel(items, effective), truncated, err
 		}
@@ -141,27 +142,27 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
 	}
-	handleLibraryAggregate(s, w, r, libraryKindSpec[types.PlaceVisit]{
-		kind: kind,
-		targets: func(s *Server, r *http.Request) ([]namedLister[types.PlaceVisit], []string) {
+	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.PlaceVisit]{
+		Kind: kind,
+		Targets: func(r *http.Request) ([]kinds.NamedLister[types.PlaceVisit], []string) {
 			return placesProviderTargets(s, r, kind.PermType, appLevel)
 		},
-		serviceOf: types.PlaceVisitServiceName,
-		sortKey:   types.PlaceIdentityKey,
-		merge:     types.MergePlaceVisits,
-		encode: func(items []types.PlaceVisit, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: types.PlaceVisitServiceName,
+		SortKey:   types.PlaceIdentityKey,
+		Merge:     types.MergePlaceVisits,
+		Encode: func(items []types.PlaceVisit, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
 			filtered := filterPlaceVisits(items, filters)
 			pageItems, pr := types.SlicePage(filtered, page)
 			return types.PlaceVisitList{
 				Visits:          pageItems,
-				LibraryListMeta: types.MetaForPage(pr, true, anyServiceTruncated(bySvc), bySvc),
+				LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		redactSearch: func(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
+		RedactSearch: func(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
 			return s.searchRedactPlaceVisits(items, r)
 		},
-		markCanonical: s.stampPlaceVisitCanonical,
-		cacheKey:      "library:places" + filters.CacheKeySuffix(),
+		MarkCanonical: s.stampPlaceVisitCanonical,
+		CacheKey:      "library:places" + filters.CacheKeySuffix(),
 	})
 }
 
