@@ -11,7 +11,10 @@
 Status: **landed** — the `internal/types` / `internal/core` /
 `internal/connectors` split is in the tree; this note is the design record
 for the work called for in #15, with #148 as the first product feature that
-landed on the type layer.
+landed on the type layer. **This document is a historical record, not the
+layout contract** — package placement is governed by "Package boundaries" in
+`AGENTS.md` (rewritten under #312); the aggregate pipeline is not a core
+responsibility.
 
 Related issues: **#15** (user-defined types; designated split point),
 **#148** (permissions live with kinds).  
@@ -168,7 +171,7 @@ github.com/fudomunro/aegis/
 |-------|------|--------------|
 | **shared** | `HTTPClient`, `LibraryPageCap`, `WriteJSON` / `WriteJSONError`, `TrimRightSlash`, generic map/JSON coercion (`ExtractNested`, `ExtractNames`, `ExtraOrNil`, `AsInt`), math helpers (`HaversineMeters`, `Iso8601DurationMs`) | Domain models, `Host`, service IDs, provider knowledge, policy — and it imports none of the other Aegis packages (stdlib only) |
 | **types** | Neutral models, identity/merge, `LibraryKind` *data*, type schema (including future UDT), `TypePolicy` / access levels, redaction *rules*, `KindCapability` / `Operation` shapes, error sentinels (`ErrUnauthorized`) | HTTP, tokens, config file I/O, `*Server`, provider HTTP |
-| **core** | `Server` / host, auth, config + overlays, OAuth + tokens, proxy + cache + httpclient, permission *enforcement*, `handleLibraryAggregate`, admin/flow/metrics, state stores (copy ledger, entity links, mail, …) | Provider-specific JSON, per-kind merge logic, service brand knowledge |
+| **core** | `Server` / host, auth, config + overlays, OAuth + tokens, proxy + cache + httpclient, permission *enforcement*, admin/flow/metrics, state stores (copy ledger, entity links, mail, …) | Provider-specific JSON, per-kind merge logic, service brand knowledge |
 | **connectors** | `ServiceConnector` impls, `Capabilities()`, `SystemInstructions`, `HandleProxy`, `ListUser*` providers, setup flows (Immich, YNAB), sample calendar, `DoUpstreamRequest` | Permission policy, neutral merge, admin HTML, token storage |
 
 ### Dependency rule

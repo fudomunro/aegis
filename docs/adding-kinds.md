@@ -15,6 +15,13 @@ Use it when you are:
 Related product rules live in `AGENTS.md` and `README.md`. This file is about
 **how a kind is structured**, not the full API surface.
 
+> **In transition (#312).** This checklist describes the current in-hub
+> shape (per-kind handler shims in `internal/core`). The target shape —
+> `internal/kinds/<kind>.go` plus one line in `kinds.Builtin()` — is
+> specified in AGENTS.md ("Refactor in progress (#312)"). This file gets a
+> full rewrite in the closing phase of that campaign; until then, follow it
+> for *what* to build and the refactor block for *where* it may live.
+
 ---
 
 ## Vocabulary

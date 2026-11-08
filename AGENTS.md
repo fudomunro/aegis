@@ -24,18 +24,10 @@ It does two jobs:
    #119) — not a general provider-API mirror. Aegis attaches OAuth tokens,
    caches, enforces data grants, and returns neutral models.
 
-Module: `github.com/fudomunro/aegis`  
-Layout: **`internal/types`** (neutral models + kind registry) + **`internal/core`**
-(runtime hub: auth, config, proxy, admin) with concern sub-packages
-(`core/tokens`, `core/audit`, `core/links`, `core/copies`, `core/mail`,
-`core/ownership`, `core/scopes`, `core/search`, `core/policy`) + **`internal/connectors`**
-(named-service adapters on `Host`) + **`internal/shared`** (stdlib-only
-transport/JSON/math/file/path plumbing + generic kind-rule table). Root
-`main.go` is thin
-(`core.Run()`). Sub-packages follow the Tailscale `ipn/` pattern: durable
-stores and engines get their own package, `*Server` wiring and HTTP/admin
-handlers stay in the hub. See `docs/restructure-core-types-connectors.md`
-for the earlier core/types/connectors split.  
+Module: `github.com/fudomunro/aegis`. Root `main.go` is thin (`core.Run()`).
+Package layout is governed by the principles in **Package boundaries** below —
+there is no closed list of packages. `docs/restructure-core-types-connectors.md`
+is a historical record of the #15 split, not the layout contract.  
 Runtime: Go **1.27.1** (`go.mod`); external deps: `golang.org/x/crypto`, `modernc.org/sqlite` (local mail archive FTS)
 
 ## Non-negotiable product rules
@@ -86,6 +78,16 @@ them away.
   at rest for invite tokens is a contract requirement. No self-service
   signup, passwords, OIDC, or instance federation in this phase. See
   `docs/external-access.md` and `SECURITY.md`.
+- **Core never names a built-in kind.** Built-in kinds declare their routes,
+  filters, redaction, and stamping beside their data; the hub does not switch
+  on kind IDs. Per-kind code that legitimately remains in the hub (writes,
+  ownership derivation, sync runners) sits behind a per-file allowlist that
+  may only shrink. Enforcement lands with `kind_literal_hygiene_test.go` as
+  the move completes (#312).
+- **Kind routes declare their exposure.** Every kind-owned route carries its
+  visibility (agent API, third-party app token) in its own declaration, and
+  the API-listener / app-token allowlists derive from those declarations.
+  Prefix-based allows must not grow (#312).
 - **No issue numbers in user-facing copy.** GitHub issue refs stay in code
   comments and maintainer docs only — never README headings, admin UI visible
   text, or LLM-agent strings. Enforced by `internal/core/docs_hygiene_test.go`
@@ -100,51 +102,49 @@ Agent → Aegis library / content transport / admin → provider APIs
 
 | Area | Where | Notes |
 |------|-------|-------|
-| Entry, flags, routes, connector registration | `internal/core/run.go` (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
-| Data directory + state path layout | `internal/core/datadir.go` | Defaults under OS app data dir; explicit path flags override (issue #74) |
-| Config + matching | `internal/core/config.go` | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
-| Admin permissions overlay | `internal/core/permissions_overlay.go` | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
+| Entry, flags, routes, connector registration | `internal/core` hub (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
+| Data directory + state path layout | `internal/core` hub | Defaults under OS app data dir; explicit path flags override (issue #74) |
+| Config + matching | `internal/core` hub (`Config`) | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
+| Admin permissions overlay | `internal/core` hub | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
 | Data scopes (principal → dataset) | `internal/core/scopes/`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
 | External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
-| Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
-| ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
-| Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
+| Pre-request injection | `internal/core` hub | `allow` / `block` / `modify`; structured `Operation` contract |
+| ServiceConnector interface | `internal/connectors/host.go` | `Capabilities` + `SystemInstructions` + `HandleProxy`; the hub wires the registry |
+| Generic/shared content transport | `internal/connectors` (upstream transport), `internal/core` hub (token injection/cache), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
 | Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
-| Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared/statestore.go`, `internal/core/oauth.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
-| Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Models and kind metadata in `internal/types`; aggregate pipeline lives in `internal/core` |
-| Merge / entity IDs | `internal/types/merge.go`, `internal/core/links/`, `internal/core/entity_links_handlers.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
-| Connectors | `internal/connectors/{spotify,youtube,amazonmusic,google-*,immich,bluesky,ynab,owntracks}.go`; local import stores `signal.go`, `quicken.go`, `timeline.go` + shared `localstore.go` | Register in `internal/core/run.go` `srv.connectors`; stores share the `ServiceConnector` surface with a local-transport constructor (design: `docs/local-import-stores.md`) |
-| Location history (places) | `internal/core/places.go`, `internal/connectors/{timeline,owntracks}.go` | Visits/trips, city/read/precise redaction (issue #142); default `none` |
+| Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
+| Neutral models + kind data | `internal/types` | Models and kind metadata; authorization policy is `internal/core/policy`, never here |
+| Library kinds + aggregate pipeline | one file per kind in the kinds domain (target `internal/kinds`, see Extension points); kind data in `internal/types` | In transition: pipeline and per-kind handlers still in the `internal/core` hub — see Refactor in progress (#312) |
+| Merge / entity IDs | `internal/types` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
+| Connectors | `internal/connectors` (one file per named service; local import stores share the surface) | Register in the hub's ordered `srv.connectors` list; stores use a local-transport constructor (design: `docs/local-import-stores.md`) |
+| Location history (places) | `internal/connectors` (timeline, owntracks), the places kind | Visits/trips, city/read/precise redaction (issue #142); default `none` |
 | Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
-| Onboarding runner | `internal/core/onboarding.go`; shapes `internal/types/onboarding.go`; impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
+| Onboarding runner | `internal/core` hub (host), `internal/types` (shapes), impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
 | Maintenance dashboard generator | `cmd/aegis-dashboard` | Static sync-maintenance dashboard build for `pages.yml`; instance-level captures stay on the admin surface |
 
 ### Extension points agents must use
 
-**New library kinds** follow `docs/adding-kinds.md`: neutral model +
-provider interface + `LibraryKind` registry entry + thin
-`handleLibraryAggregate` handler. Do not clone an aggregate pipeline.
+**New library kinds** (target state of #312): a `types.BuiltinLibraryKinds`
+entry, `internal/kinds/<kind>.go` with declared routes / filters / redaction /
+stamping, and one line in the ordered `kinds.Builtin()` list. Do not clone an
+aggregate pipeline. While the refactor window is open,
+`docs/adding-kinds.md` still describes the current in-hub shape.
 
 **User-defined types** (`docs/user-defined-types.md`, issue #15) are schema
 packs under `user-types/` loaded into the same pipeline. A pack can never
 self-enable, shadow a built-in `id`/`perm_type`/`path`, or store secrets in
 `http_json` headers. Local file selection is the `user_types.json` overlay.
 
-**New or changed service behavior** goes through `ServiceConnector`:
-
-```go
-type ServiceConnector interface {
-    Capabilities() ServiceCapabilities
-    SystemInstructions(baseURL string) string
-    HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string)
-}
-```
+**New or changed service behavior** goes through `ServiceConnector`
+(interface: `internal/connectors/host.go` — read the source; copies in docs
+drift and are not kept here).
 
 - `KindCapability.Operations` is `[]Operation` (method, path, parameters,
   response spec) — not `[]string`.
 - Empty `[]Operation{}` means “type recognized, not implemented”.
-- New library kinds plug into the `BuiltinLibraryKinds` registry in `internal/types/librarykinds.go`.
+- New library kinds plug into the `types.BuiltinLibraryKinds` registry (see
+  Extension points above for the full target shape).
 - Connectors must read **configured** `GetService(id).Endpoint` — never hardcode
   upstream base URLs (breaks mock tests and custom endpoints).
 - Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `shared.HTTPClient`
@@ -161,16 +161,8 @@ type ServiceConnector interface {
   `types.IsAgentContentPath` (issue #119).
 
 **Advanced setup flows** go through the optional `Onboarder` interface
-(`internal/connectors/host.go`; design: `docs/connector-onboarding.md`).
-Immich and YNAB are the worked examples.
-
-```go
-type Onboarder interface {
-    Onboarding() types.OnboardingSpec
-    OnboardingStatus(ctx context.Context) types.OnboardingStatus
-    OnboardingRun(ctx context.Context, action string, in types.OnboardingInput) (types.OnboardingResult, error)
-}
-```
+(`internal/connectors/host.go` — read the source; design:
+`docs/connector-onboarding.md`). Immich and YNAB are the worked examples.
 
 - The spec is the contract: fields, copyable guides (prose/command blocks,
   declared steps), ladder and checklist labels, and the verbs the flow runs.
@@ -191,15 +183,9 @@ type Onboarder interface {
 ### Mail ingest (local archive sources)
 
 Feed the local mail archive by implementing `MailIngest` beside the
-connector (`internal/connectors/mail_ingest.go`; design:
+connector (`internal/connectors/mail_ingest.go` — read the source; design:
 `docs/mail-ingest.md`). The Gmail connector's live paging and the Google
 Takeout export walk are the worked examples.
-
-```go
-type MailIngest interface {
-    IngestMail(ctx context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error)
-}
-```
 
 - The source writes through core's `MailSink` (store, cursor round-trip,
   ingest-private meta) and never sees the archive type or its SQL. Core
@@ -234,6 +220,70 @@ Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
 empty `-copy-ledger` disables the copy ledger; empty `-log-file` disables file
 logging. Startup logs the resolved directory and `/v1/admin/summary` exposes
 `runtime.data_dir`. Do not reintroduce cwd defaults for these files.
+
+## Package boundaries
+
+Principles, not a closed package list. `import_boundary_test.go` and
+`churn_guardrails_test.go` enforce these; this section explains them.
+
+1. **Dependency direction.** The hub (`internal/core`) sits at the top.
+   Nothing under `internal/` imports the hub; only `main` packages do (the
+   repo root and `cmd/*`). `internal/shared` (stdlib only) and
+   `internal/types` (models + kind data) are leaves. Domain packages
+   (`internal/connectors`, `internal/kinds`, `core/` stores and engines,
+   `core/policy`) import leaves and store sub-packages — never the hub, and
+   never each other's internals without a stated reason.
+2. **When a new package is allowed.** Any new internal package that (a)
+   exposes one documented seam interface that the hub implements (like
+   `connectors.Host`) or is a self-contained store/engine, (b) obeys the
+   dependency direction, and (c) is guarded by a test. No issue or doc
+   pre-approval is needed. Placement defaults still apply: managed data
+   models and kind metadata → `internal/types`; Aegis-internal
+   stores/engines/policy → a `core/` sub-package, or a seam package when the
+   engine is a domain with its own interface (`internal/kinds` under #312);
+   stdlib-only plumbing → `internal/shared`. Do not park new machinery in
+   `internal/types` by default — it was audited back out three times (policy,
+   search docs, kind rules).
+3. **What the hub owns.** The mux, auth/admin middleware, body limits, the
+   listener and app-token perimeters, config and overlays, state wiring, and
+   Host implementations. Handlers that need only a seam may live with their
+   domain (`ServiceConnector.HandleProxy` already does this).
+4. **Explicit wiring.** No `init()` registration of connectors or kinds.
+   Ordered literal lists (`srv.connectors`, `kinds.Builtin()`).
+5. **Enforce with tests, not prose.** `import_boundary_test.go` asserts the
+   dependency direction (hub imports only from `main` packages;
+   `internal/shared` stdlib-only; `internal/types` only stdlib + `shared`).
+   `churn_guardrails_test.go` holds the finer per-package import table, and
+   the hygiene tests (`mail_provider_hygiene_test.go`,
+   `agent_string_hygiene_test.go`, `docs_hygiene_test.go`) keep provider
+   literals and issue refs out of the wrong layers.
+
+## Refactor in progress (#312)
+
+Library kinds are moving out of the hub (issue #312). While that campaign
+runs, the following transitional states are **allowed** and are not
+violations of the rules above:
+
+- **Transitional shims are allowed.** Hub-side per-kind handler shims may
+  call the kinds aggregate between the engine extraction and the per-kind
+  moves. A temporarily exported name used only to bridge `core` ↔ `kinds` is
+  fine — mark it `// transitional (#312)`. The closing phase greps for these.
+- **Mechanical-move PRs may be large.** "One concern per PR" means one *kind*
+  of change: a PR that only moves and renames (use `git mv` first, so blame
+  survives) can cover several files or kinds. Behavior changes go in a
+  separate PR.
+- **Tests may stay put.** Server-backed tests can remain in `internal/core`
+  as integration tests, reaching handlers through a registry helper instead
+  of `srv.HandleLibraryX`. Moving tests into the kinds package is optional
+  per phase.
+- **Docs may be one phase behind.** `docs/adding-kinds.md` carries an
+  "in transition" banner until the closing phase; full rewrite then.
+  Agent-facing strings and `docs/api.md` must still be accurate in every PR
+  (there are no behavior changes in the move).
+- **Not relaxed:** the 80% coverage floor, `go vet` / race / staticcheck,
+  fail-open, the OAuth and secret rules, the external-access perimeter, the
+  no-issue-numbers-in-user-facing-copy rule, and the hygiene tests (extend
+  their scans as code moves; never skip them).
 
 ## How work happens here
 
@@ -329,28 +379,15 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **Packages follow the #15 split plus #301 sub-packages.** `internal/types`,
-  `internal/core` (hub + concern sub-packages), `internal/connectors`, and
-  `internal/shared` have landed. Sub-packages under `core/` are for
-  self-contained stores/engines (`tokens`, `audit`, `links`, `copies`,
-  `mail`, `ownership`, `scopes`, `search`, `policy`) — `*Server` wiring and
-  HTTP/admin handlers stay in the hub. `internal/shared` stays stdlib-only
-  plumbing.
-  Do not invent other internal packages outside
-  `docs/restructure-core-types-connectors.md` and the #301 layout.
-  `internal/shared` is stdlib-only transport/JSON/math plumbing — no domain
-  models, no `Host`, no service IDs, no provider knowledge, no policy.
+- **`internal/shared` is stdlib-only** transport/JSON/math plumbing — no
+  domain models, no `Host`, no service IDs, no provider knowledge, no policy.
   The generic **kind-rule table** (`kindrules.go`: level tokens +
   `DefaultNone` flags, `RegisterKindRule` / `KindAllowsLevel` / …) is shared
   plumbing on purpose: domain owners register rules (built-in kinds at init,
   user-defined packs at load) and `core/policy` resolves them, so policy and
-  `internal/types` never import each other for kind queries.
-  **Placement before writing:** managed data models and kind metadata →
-  `internal/types`; Aegis-internal stores/engines/policy → a `core/`
-  sub-package; stdlib-only plumbing → `internal/shared`. Do not park new
-  machinery in `internal/types` by default — it was audited back out three
-  times (policy, search docs, kind rules). `churn_guardrails_test.go`
-  enforces the import boundaries.
+  `internal/types` never import each other for kind queries. Placement and
+  dependency direction live under **Package boundaries** — there is no closed
+  package list.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -408,19 +445,17 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Fail-closed on fetch/parse errors | Fail-open / allow, log, continue |
 | Agents prompting users for OAuth | Central connections + setup/admin flows |
 | Caching 401/404/502 bodies | Cache 200 GET only |
-| `http.DefaultClient` / `http.PostForm` without timeout | `shared.HTTPClient` + context |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
 | Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
 | Large admin HTML pasted back into `admin.go` | Keep `internal/core/web/admin.html` embed |
-| Provider copy in `admin.html` / `docs/` | Declare it in the connector's `Onboarder` spec; hygiene tests reject restatements (issue #265) |
+| Kind route without declared exposure | Declare exposure on the route (`AppReadable`); API-listener and app-token allowlists derive from declarations — prefix allows must not grow (#312) |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
 | Name-only merges for music entities | Prefer ISRC/UPC/MBID; duration-guard name merges |
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `shared.LibraryPageCap`, singleflight |
 | Re-growing `writeJSON` / page-cap / URL-trim twins in `core` or `connectors` | One owner: `internal/shared` (issue #280) |
-| Service-ID switches or provider literals growing back into `core` mail paths | Declare grouping/canonical/freshness beside the ingest (`MailSource`, `types.SnapshotProber`); `mail_provider_hygiene_test.go` rejects provider literals (issue #286) |
-| Sequential multi-provider or multi-kind work when already parallelizable | Follow `internal/core/librarykind.go` fan-out; don’t serialize merge review without cause |
-| Local variables named after `core/` sub-packages (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
+| Sequential multi-provider or multi-kind work when already parallelizable | Follow the aggregate pipeline's fan-out; don’t serialize merge review without cause |
+| Local variables named after `internal/` package names (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`, `kinds`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, `kindList`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
 | Concept named before its glossary entry | `docs/glossary.md` entry in the introducing PR; retire synonyms in the same change |
 | New code parked in `internal/types` "for now" | `core/` sub-package or `shared` — policy, search docs, and kind rules were all audited back out of `types` |
 | Moving code again within weeks of its first move | Freeze the target layout for the duration of a move campaign; record layout questions in the design doc instead of another relocation |
@@ -430,23 +465,23 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 | Task | Start here |
 |------|------------|
-| New library kind | `docs/adding-kinds.md` (checklist), then `internal/types/librarykinds.go` |
-| Hook behavior / system instructions | `internal/core/handler.go`, connector `SystemInstructions` |
-| Proxy + cache + token injection | `internal/core/proxy.go`, `internal/connectors/proxy.go`, `internal/core/httpclient.go` |
-| Config schema / service matching | `internal/core/config.go`, `aegis.example.json`, README “Configuration” |
-| Admin data-grant writes | `internal/core/permissions_overlay.go`, `internal/core/config.go` `SetDataGrants` / `SetServicePermissions`, `docs/configuration.md` “Data grants” |
-| OAuth / connections / refresh | `internal/core/oauth.go`, `internal/core/connections.go`, `internal/core/tokens.go` |
-| Unified library + merge | `internal/core/librarykind.go`, `internal/types/{merge,models}.go` |
-| Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors/mail_ingest.go`, `internal/core/mail_ingest.go` |
-| Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `EffectiveAccess`), `internal/core/permissions_overlay.go`, `internal/core/permissions.go` (enforcement) | DataGrant map + provider tighten-only overrides; product English: **data grant** |
-| Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/core/ownership` (`OwnershipEntry` store), `internal/types/ownership.go` (status + declaration shapes), `internal/core/ownership.go` (derivation) | Per-kind user confirmation + derived evidence; distinct from connection maturity |
-| Admin map / flow | `internal/core/flow.go`, `internal/core/admin.go`, `internal/core/web/admin.html` |
-| Auth model / ACLs | `SECURITY.md`, `internal/core/identity.go` |
+| New library kind | `docs/adding-kinds.md` (checklist; in transition), `types.BuiltinLibraryKinds`; target shape: `internal/kinds/<kind>.go` + one line in `kinds.Builtin()` |
+| Hook behavior / system instructions | the `internal/core` hub (pre-request hook), connector `SystemInstructions` |
+| Proxy + cache + token injection | `internal/core` hub (proxy/cache/token injection), `internal/connectors` (upstream transport), `internal/shared` (HTTP client) |
+| Config schema / service matching | `internal/core` hub (`Config`), `aegis.example.json`, README “Configuration” |
+| Admin data-grant writes | `internal/core` hub (admin handlers), `internal/core/policy`, `docs/configuration.md` “Data grants” |
+| OAuth / connections / refresh | `internal/core` hub (flows), `internal/core/tokens/` (store) |
+| Unified library + merge | `internal/types` (models/merge/kind data), the kinds domain (aggregate — see Refactor in progress) |
+| Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors` (ingests), `internal/core` hub (`MailSink` wiring) |
+| Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `EffectiveAccess`) + hub enforcement | DataGrant map + provider tighten-only overrides; product English: **data grant** |
+| Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/core/ownership` (store), `internal/types` (shapes), hub (derivation) | Per-kind user confirmation + derived evidence; distinct from connection maturity |
+| Admin map / flow | `internal/core` hub, `internal/core/web/admin.html` |
+| Auth model / ACLs | `SECURITY.md`, `internal/core` hub (identity) |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |
 | Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); signals surface in `docs/observability.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
-| Shared plumbing helpers (HTTP client, JSON writers, URL/JSON/math utils, kind-rule lookup) | `internal/shared` (issue #280). `DoUpstreamRequest` stays in `internal/connectors/http.go` |
+| Shared plumbing helpers (HTTP client, JSON writers, URL/JSON/math utils, kind-rule lookup) | `internal/shared` (issue #280). `DoUpstreamRequest` stays in `internal/connectors` |
 
 ## Open direction (do not assume closed)
 

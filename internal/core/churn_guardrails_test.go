@@ -37,8 +37,8 @@ var allowedImports = map[string][]string{
 }
 
 // coreHubImport is the wiring package (*Server, routes, admin handlers).
-// No extracted store/engine may depend on it; that is what "the hub stays
-// in `internal/core`" means in AGENTS.md.
+// No extracted store/engine may depend on it; that is the dependency
+// direction of AGENTS.md "Package boundaries".
 const coreHubImport = "github.com/fudomunro/aegis/internal/core"
 
 func packageImportDecls(t *testing.T, dir string) map[string][]string {
@@ -128,7 +128,7 @@ func TestPackageImports_RespectLayerBoundaries(t *testing.T) {
 	}
 
 	if len(failures) > 0 {
-		t.Fatalf("package layer boundaries (AGENTS.md 'Code conventions') violated:\n%s",
+		t.Fatalf("package layer boundaries (AGENTS.md 'Package boundaries') violated:\n%s",
 			strings.Join(failures, "\n"))
 	}
 }
