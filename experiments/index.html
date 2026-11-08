@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Aegis — Code Walkthrough @ 245894a</title>
+<title>Aegis — Code Walkthrough @ c9d18b6</title>
 <meta name="generator" content="experiments/generate_walkthrough.py">
 <style>
   :root {
@@ -290,8 +290,8 @@
 
 <header class="hero">
   <div class="version-row">
-    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>245894a</span>
-    <span class="version-meta">refactor/data-grants-core-policy · 2026-11-07 · Merge pull request #302 from fudomunro/refactor/issue-301-core-subpackages · generated 2026-11-08 00:35 UTC</span>
+    <span class="version-badge" title="git rev-parse --short HEAD"><span class="dot"></span>c9d18b6</span>
+    <span class="version-meta">refactor/kind-rules-shared · 2026-11-07 · Merge pull request #303 from fudomunro/refactor/data-grants-core-policy · generated 2026-11-08 03:40 UTC</span>
   </div>
   <h1>Aegis</h1>
   <p class="lede">
@@ -306,7 +306,7 @@
     <span class="badge badge-neutral">Regenerable walkthrough for Python-leaning readers</span>
   </div>
   <div class="stats">
-    <div class="stat"><div class="v">54,805</div><div class="l">source LOC (no tests)</div></div>
+    <div class="stat"><div class="v">54,853</div><div class="l">source LOC (no tests)</div></div>
     <div class="stat"><div class="v">179</div><div class="l">Go source files</div></div>
     <div class="stat"><div class="v">12</div><div class="l">service connectors</div></div>
     <div class="stat"><div class="v">11</div><div class="l">library kinds</div></div>
@@ -1243,7 +1243,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
 
 <!-- ============================================================ -->
 <section id="filemap">
-  <h2><span class="n">13</span>File map @ 245894a</h2>
+  <h2><span class="n">13</span>File map @ c9d18b6</h2>
   <p>
     LOC counts are computed at generation time from non-test Go sources
     (plus <code>web/admin.html</code> when present). Roles are curated in
@@ -1261,12 +1261,12 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/types/models.go</code></td><td class="mono">840</td><td>Neutral Playlist / Track / Artist / Album / Contact / Photo</td></tr>
       <tr><td><code>internal/types/merge.go</code></td><td class="mono">710</td><td>Cross-service identity keys and merge algorithms</td></tr>
       <tr><td><code>internal/types/kind.go</code></td><td class="mono">106</td><td>LibraryKind data (instructions, keywords, cache key)</td></tr>
-      <tr><td><code>internal/core/policy/policy.go</code></td><td class="mono">683</td><td>Access levels, Permissions map, DataGrant (#148)</td></tr>
+      <tr><td><code>internal/core/policy/policy.go</code></td><td class="mono">671</td><td>Access levels, Permissions map, DataGrant (#148)</td></tr>
       <tr><td><code>internal/types/pathclass.go</code></td><td class="mono">180</td><td>Proxy path → data-type classification table</td></tr>
       <tr><td><code>internal/types/capabilities.go</code></td><td class="mono">132</td><td>ServiceCapabilities / Operation shapes + filtering</td></tr>
       <tr><td><code>internal/types/providers.go</code></td><td class="mono">353</td><td>Provider interfaces + ErrUnauthorized + service-name helpers</td></tr>
       <tr><td><code>internal/types/udt.go</code></td><td class="mono">579</td><td>User-defined type schema, neutral item, merge (#15)</td></tr>
-      <tr><td><code>internal/core/policy/optin.go</code></td><td class="mono">11</td><td>Opt-in data-type marks for UDTs / places (#15, #142)</td></tr>
+      <tr><td><code>internal/shared/kindrules.go</code></td><td class="mono">89</td><td>Generic kind-rule table: level tokens, opt-in marks (#15, #142)</td></tr>
       <tr><td><code>internal/core/udt.go</code></td><td class="mono">369</td><td>UDT pack loader, field map, file_json/http_json fetch (#15)</td></tr>
       <tr><td><code>internal/core/udt_handlers.go</code></td><td class="mono">127</td><td>UDT library aggregate handler + type-policy gate (#15)</td></tr>
       <tr><td><code>internal/core/udt_overlay.go</code></td><td class="mono">170</td><td>user_types.json overlay: admin local-file selection (#15)</td></tr>
@@ -1379,8 +1379,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/core/photos.go</code></td><td class="mono">33</td><td>Photo identity/merge; bytes stay on the source service</td></tr>
       <tr><td><code>internal/core/photos_share.go</code></td><td class="mono">198</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/places.go</code></td><td class="mono">199</td><td>Supporting code</td></tr>
-      <tr><td><code>internal/core/policy/accessors.go</code></td><td class="mono">254</td><td>Permissions-editor accessor view models (#160)</td></tr>
-      <tr><td><code>internal/core/policy/scopegrants.go</code></td><td class="mono">122</td><td>External-principal scope-grant resolution</td></tr>
+      <tr><td><code>internal/core/policy/accessors.go</code></td><td class="mono">257</td><td>Permissions-editor accessor view models (#160)</td></tr>
+      <tr><td><code>internal/core/policy/scopegrants.go</code></td><td class="mono">123</td><td>External-principal scope-grant resolution</td></tr>
       <tr><td><code>internal/core/proxy.go</code></td><td class="mono">177</td><td>Generic service proxy + connector delegation + cache</td></tr>
       <tr><td><code>internal/core/quicken_admin.go</code></td><td class="mono">20</td><td>Supporting code</td></tr>
       <tr><td><code>internal/core/ratelimit.go</code></td><td class="mono">344</td><td>Supporting code</td></tr>
@@ -1420,7 +1420,7 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
       <tr><td><code>internal/types/contact_builders.go</code></td><td class="mono">160</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/filters.go</code></td><td class="mono">173</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/identity.go</code></td><td class="mono">215</td><td>Tailscale Serve headers, WhoIs, MultiResolver, PeerIdentity</td></tr>
-      <tr><td><code>internal/types/librarykinds.go</code></td><td class="mono">382</td><td>Supporting code</td></tr>
+      <tr><td><code>internal/types/librarykinds.go</code></td><td class="mono">360</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/mail_ingest.go</code></td><td class="mono">65</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/maturity.go</code></td><td class="mono">178</td><td>Supporting code</td></tr>
       <tr><td><code>internal/types/merge_contacts.go</code></td><td class="mono">144</td><td>Supporting code</td></tr>
@@ -1456,8 +1456,8 @@ modified, err := <span class="fn">injectSystemMessage</span>(payload.RequestBody
   <h2><span class="n">14</span>Regenerating this page</h2>
   <p>
     This HTML is a <strong>snapshot of the tree at
-    <code>245894a</code></strong>
-    (refactor/data-grants-core-policy · 2026-11-07 · Merge pull request #302 from fudomunro/refactor/issue-301-core-subpackages).
+    <code>c9d18b6</code></strong>
+    (refactor/kind-rules-shared · 2026-11-07 · Merge pull request #303 from fudomunro/refactor/data-grants-core-policy).
     Prose and diagrams live in the template; version stamp, stats, connector list,
     library kinds, and file-map LOC are filled from the live tree.
   </p>
@@ -1488,12 +1488,12 @@ python3 experiments/generate_walkthrough.py --check</code></pre>
 
 <hr>
 <footer>
-  Generated for <strong>245894a</strong>
+  Generated for <strong>c9d18b6</strong>
   · Aegis code walkthrough
   · module <code>github.com/fudomunro/aegis</code>
   · Go source of truth, Python for comparison
-  · 179 files · 54,805 LOC · 12 connectors · 11 library kinds
-  · 2026-11-08 00:35 UTC
+  · 179 files · 54,853 LOC · 12 connectors · 11 library kinds
+  · 2026-11-08 03:40 UTC
 </footer>
 
 </div>

@@ -578,6 +578,65 @@ func TestRunnerRegistry(t *testing.T) {
 	}
 }
 
+func TestFormatSyncTime_OrdersLikeTheClock(t *testing.T) {
+	// Timestamps are compared lexicographically in SQL; the fixed-width
+	// fraction must keep string order identical to clock order even when
+	// the earlier instant ends in trailing zeros (RFC3339Nano trimming made
+	// "…40.58Z" sort after "…40.582Z").
+	pairs := [][2]time.Time{
+		{
+			time.Date(2026, time.November, 7, 23, 20, 40, 580_000_000, time.UTC),
+			time.Date(2026, time.November, 7, 23, 20, 40, 582_000_000, time.UTC),
+		},
+		{
+			time.Date(2026, time.November, 7, 23, 20, 40, 500_000_000, time.UTC),
+			time.Date(2026, time.November, 7, 23, 20, 40, 500_000_001, time.UTC),
+		},
+		{
+			time.Date(2026, time.November, 7, 23, 20, 40, 0, time.UTC),
+			time.Date(2026, time.November, 7, 23, 20, 40, 1, time.UTC),
+		},
+		{
+			time.Date(2026, time.November, 7, 23, 20, 39, 999_999_999, time.UTC),
+			time.Date(2026, time.November, 7, 23, 20, 40, 0, time.UTC),
+		},
+	}
+	for _, p := range pairs {
+		if formatSyncTime(p[0]) >= formatSyncTime(p[1]) {
+			t.Fatalf("formatSyncTime(%v)=%q must sort before %q",
+				p[0], formatSyncTime(p[0]), formatSyncTime(p[1]))
+		}
+	}
+	same := time.Date(2026, time.November, 7, 23, 20, 40, 580_000_000, time.UTC)
+	if formatSyncTime(same) != formatSyncTime(same.In(time.FixedZone("X", 3600))) {
+		t.Fatal("equal instants must format identically across zones")
+	}
+	if formatSyncTime(time.Time{}) != "" {
+		t.Fatal("zero time must format empty")
+	}
+}
+
+func TestJobStore_ClaimDueAcrossTrailingZeroBoundary(t *testing.T) {
+	s := testJobStore(t)
+	// Enqueue instant 40.580s and claim instant 40.582s: with trimmed
+	// RFC3339Nano the due time compared after the claim time and the job
+	// looked not-yet-due (the sync worker flake).
+	enqueuedAt := time.Date(2026, time.November, 7, 23, 20, 40, 580_000_000, time.UTC)
+	s.now = func() time.Time { return enqueuedAt }
+	mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+
+	job, ok, err := s.Claim("test-owner", enqueuedAt.Add(2*time.Millisecond))
+	if err != nil {
+		t.Fatalf("Claim: %v", err)
+	}
+	if !ok {
+		t.Fatal("job due at 40.580s must be claimable at 40.582s")
+	}
+	if job.State != SyncJobRunning {
+		t.Fatalf("state = %s, want running", job.State)
+	}
+}
+
 func TestSyncWorker_RunsJobToSuccess(t *testing.T) {
 	store := testJobStore(t)
 	reg := NewRunnerRegistry()

@@ -1,6 +1,10 @@
 package policy
 
-import "sort"
+import (
+	"sort"
+
+	"github.com/fudomunro/aegis/internal/shared"
+)
 
 // AccessorKind identifies who or what is accessing data through Aegis
 // (issue #160). Permissions editing must show every accessor class, not
@@ -254,7 +258,7 @@ func AppOverviewLevels(appScopes Permissions, dataTypes []string) (levels map[st
 		if appScopes != nil {
 			if v, ok := appScopes[dataType]; ok {
 				level = NormalizeAccess(v)
-			} else if !isOptInDefaultNone(dataType) {
+			} else if !shared.KindDefaultsNone(dataType) {
 				if v, ok := appScopes[PermissionDefaultKey]; ok {
 					level = NormalizeAccess(v)
 				}

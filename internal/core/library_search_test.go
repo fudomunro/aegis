@@ -171,7 +171,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 
 	// Seed the gondor partition so its query is warm and cannot bootstrap
 	// from the scope-unaware fake provider.
-	if err := srv.search.Upsert("contacts", "gondor", []types.SearchDocument{{
+	if err := srv.search.Upsert("contacts", "gondor", []search.SearchDocument{{
 		ItemID:   "g1",
 		Title:    "Gondor Contact",
 		Body:     "Gondor Contact",
@@ -222,7 +222,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
 	srv.waitIndex()
-	if err := srv.search.Upsert("contacts", "", []types.SearchDocument{{
+	if err := srv.search.Upsert("contacts", "", []search.SearchDocument{{
 		ItemID:   "secret",
 		Title:    "Secret Person",
 		Body:     "Secret Person",

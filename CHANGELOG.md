@@ -5,8 +5,45 @@ issue numbers; this file is where that context lives.
 
 ## Unreleased
 
+### Fixed
+
+- **Sync job timestamps compare in fixed-width format.** The job store
+  compares `next_run_at` / `lease_until` / `finished_at` lexicographically
+  as TEXT in SQL, but wrote them as RFC3339Nano, which trims trailing
+  zeros — so a job due at `…40.580s` was stored as `…40.58Z` and sorted
+  *after* the later claim time `…40.582Z`, making fresh work look
+  not-yet-due. `formatSyncTime` now emits a fixed nine-digit fraction
+  (string order == clock order) and the raw format sites in enqueue/claim/
+  reclaim go through it. `parseSyncTime` stays lenient, so rows written by
+  older builds still read correctly. This was the intermittent
+  `TestSyncWorker_RunsJobToSuccess` flake.
+
 ### Changed
 
+- **Search index format leaves the data-type layer.** `SearchDocument` and
+  `BuildSearchDocument` (the item→document flattening) move from
+  `internal/types` to `internal/core/search`: the index record is
+  Aegis-internal metadata, not a managed data type. `SearchSpec` stays in
+  `internal/types` — kinds and schema packs declare it (like `AllowedLevels`)
+  and the engine is the machinery behind that declaration. The engine no
+  longer references the agent page cap: the library search handler clamps
+  `limit` to `MaxPageLimit` at the API boundary (effective limits
+  unchanged).
+- **OwnershipEntry moves to its store package.** The user-confirmation
+  record (`Confirmed` / `ConfirmedAt` / `Note`) leaves `internal/types` for
+  `internal/core/ownership`, which stores it — matching `scopes.Scope`. The
+  ownership connector-declaration and status shapes stay in `internal/types`
+  (connectors declare them beside maturity). No behavior change.
+- **Kind-rule lookups become shared plumbing.** The generic queries over
+  kind rules — which optional level tokens a kind honors, whether it is
+  opt-in (`DefaultNone`), and which kinds allow a level — move from
+  `internal/types` to a rule table in `internal/shared`
+  (`RegisterKindRule` / `MarkKindDefaultNone` / `KindAllowsLevel` /
+  `KindDefaultsNone` / `KindsAllowingLevel`). Built-in kinds register at
+  package init; user-defined packs register at load. This removes the
+  `core/policy` → `internal/types` import (policy resolves rules through
+  shared only) and unifies the two halves of opt-in state (runtime marks
+  and built-in `DefaultNone` flags) into one table. No behavior change.
 - **Access policy moves to `internal/core/policy` (package cleanup).** Data
   grants, permission maps, the access-level vocabulary, grant resolution
   (`EffectiveAccess` / scope-grant resolvers), and the permissions-editor

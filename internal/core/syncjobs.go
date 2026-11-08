@@ -343,8 +343,8 @@ func (s *JobStore) Enqueue(req SyncEnqueue) (SyncJob, error) {
 	if runAt.IsZero() {
 		runAt = now
 	}
-	runAtS := runAt.UTC().Format(time.RFC3339Nano)
-	nowS := now.Format(time.RFC3339Nano)
+	runAtS := formatSyncTime(runAt)
+	nowS := formatSyncTime(now)
 
 	// New work for a paused scope lands in `paused` rather than `queued`, so
 	// a pause holds enqueues made while it is on — not just what was queued
@@ -500,11 +500,20 @@ func parseSyncTime(s string) time.Time {
 	return time.Time{}
 }
 
+// syncTimeLayout is RFC3339 UTC with a fixed nine-digit fraction. Timestamps
+// are compared lexicographically as TEXT in SQL (next_run_at <= ?, lease
+// expiry, schedule due), so RFC3339Nano's trailing-zero trimming is fatal:
+// the due time "…40.58Z" (0.580s) sorts *after* the later claim time
+// "…40.582Z", and a freshly enqueued job looks not-yet-due. Fixed width
+// keeps string order identical to clock order. parseSyncTime stays lenient
+// so rows written before this format still read correctly.
+const syncTimeLayout = "2006-01-02T15:04:05.000000000Z07:00"
+
 func formatSyncTime(t time.Time) string {
 	if t.IsZero() {
 		return ""
 	}
-	return t.UTC().Format(time.RFC3339Nano)
+	return t.UTC().Format(syncTimeLayout)
 }
 
 // Claim atomically takes the next due job: a queued job whose next_run_at has
@@ -518,8 +527,8 @@ func (s *JobStore) Claim(owner string, now time.Time) (SyncJob, bool, error) {
 	if owner == "" {
 		return SyncJob{}, false, fmt.Errorf("claim requires a lease owner")
 	}
-	nowS := now.UTC().Format(time.RFC3339Nano)
-	leaseUntil := now.Add(syncJobLease).UTC().Format(time.RFC3339Nano)
+	nowS := formatSyncTime(now)
+	leaseUntil := formatSyncTime(now.Add(syncJobLease))
 
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -880,7 +889,7 @@ func (s *JobStore) ReclaimExpired(now time.Time) (int, error) {
 	if !s.Enabled() {
 		return 0, nil
 	}
-	nowS := now.UTC().Format(time.RFC3339Nano)
+	nowS := formatSyncTime(now)
 	res, err := s.db.Exec(`
 UPDATE sync_jobs
 SET state='queued', lease_owner='', lease_until='', updated_at=?

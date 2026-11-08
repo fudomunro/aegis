@@ -1,5 +1,7 @@
 package policy
 
+import "github.com/fudomunro/aegis/internal/shared"
+
 // Scope grants are an external principal's complete allow list
 // (docs/external-access.md). Unlike DataGrants.Access — which keeps
 // owner-tier "unset = unrestricted" semantics — scope resolution is
@@ -35,7 +37,7 @@ func ScopeGrantsAccess(grants DataGrants, dataType, provider string) string {
 	if !hasDefault {
 		return AccessNone
 	}
-	if isOptInDefaultNone(dataType) {
+	if shared.KindDefaultsNone(dataType) {
 		return AccessNone
 	}
 	return scopeGrantEntryLevel(def, provider)

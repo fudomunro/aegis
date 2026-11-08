@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -37,7 +36,7 @@ type Query struct {
 
 // Result is the page of matching documents plus the full hit count.
 type Result struct {
-	Docs  []types.SearchDocument
+	Docs  []SearchDocument
 	Total int
 }
 
@@ -122,7 +121,7 @@ func (x *Index) Enabled() bool {
 
 // Upsert stores or replaces documents and refreshes their FTS rows. It never
 // deletes: use Sync when a complete fetch can refute stale rows.
-func (x *Index) Upsert(kind, dataset string, docs []types.SearchDocument) error {
+func (x *Index) Upsert(kind, dataset string, docs []SearchDocument) error {
 	if !x.Enabled() {
 		return fmt.Errorf("search index disabled")
 	}
@@ -150,7 +149,7 @@ func (x *Index) Upsert(kind, dataset string, docs []types.SearchDocument) error 
 // complete is also the set of services whose membership this fetch may
 // rewrite: a vouch from a service outside complete is preserved on upsert,
 // so a merged row does not lose a degraded source and become refutable later.
-func (x *Index) Sync(kind, dataset string, docs []types.SearchDocument, complete []string) error {
+func (x *Index) Sync(kind, dataset string, docs []SearchDocument, complete []string) error {
 	if !x.Enabled() {
 		return fmt.Errorf("search index disabled")
 	}
@@ -194,7 +193,7 @@ func (x *Index) Sync(kind, dataset string, docs []types.SearchDocument, complete
 }
 
 // upsertSearchDocs writes documents and refreshes their FTS rows inside tx.
-func upsertSearchDocs(tx *sql.Tx, kind, dataset string, docs []types.SearchDocument, now string) error {
+func upsertSearchDocs(tx *sql.Tx, kind, dataset string, docs []SearchDocument, now string) error {
 	for _, doc := range docs {
 		if doc.ItemID == "" {
 			continue
@@ -342,8 +341,9 @@ func (x *Index) Count(kind, dataset string) (int, error) {
 	return n, err
 }
 
-// Search runs a full-text match over one kind. Limit defaults to 25 (cap
-// types.MaxPageLimit). dataset="" searches every partition; a non-empty
+// Search runs a full-text match over one kind. Limit defaults to 25;
+// callers clamp to the agent-facing page cap. dataset="" searches every
+// partition; a non-empty
 // dataset restricts to that partition (docs/data-scopes.md).
 func (x *Index) Search(q Query) (Result, error) {
 	if !x.Enabled() {
@@ -352,9 +352,6 @@ func (x *Index) Search(q Query) (Result, error) {
 	limit := q.Limit
 	if limit <= 0 {
 		limit = 25
-	}
-	if limit > types.MaxPageLimit {
-		limit = types.MaxPageLimit
 	}
 	offset := q.Offset
 	if offset < 0 {
@@ -387,10 +384,10 @@ func (x *Index) Search(q Query) (Result, error) {
 		return Result{}, err
 	}
 	defer rows.Close()
-	docs := make([]types.SearchDocument, 0, limit)
+	docs := make([]SearchDocument, 0, limit)
 	for rows.Next() {
 		var (
-			doc         types.SearchDocument
+			doc         SearchDocument
 			servicesRaw []byte
 			payload     []byte
 		)
