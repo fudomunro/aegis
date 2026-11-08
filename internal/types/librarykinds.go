@@ -1,5 +1,7 @@
 package types
 
+import "github.com/fudomunro/aegis/internal/shared"
+
 // BuiltinLibraryKinds is the registry for every unified library dataset
 // (issue #183). Order is stable and used for route registration and
 // pre-request injection priority.
@@ -354,39 +356,14 @@ func IsCanonicalKindID(id string) bool {
 	return k != nil && k.CanonicalAllowed
 }
 
-// KindAllowsLevel reports whether a built-in type honors the optional
-// access level (freebusy, summary, city, precise, metadata).
-func KindAllowsLevel(dataType, level string) bool {
-	k := BuiltinKindByID(dataType)
-	if k == nil {
-		return false
-	}
-	for _, l := range k.AllowedLevels {
-		if l == level {
-			return true
-		}
-	}
-	return false
-}
-
-// KindDefaultsNone reports whether a built-in type is opt-in (hidden until
-// named). User-defined kinds are always opt-in via MarkOptInDataType.
-func KindDefaultsNone(dataType string) bool {
-	k := BuiltinKindByID(dataType)
-	return k != nil && k.DefaultNone
-}
-
-// KindsAllowingLevel lists built-in kind IDs that honor level (for error
-// messages and docs).
-func KindsAllowingLevel(level string) []string {
-	var out []string
+// Register the built-in kind rules with the shared rule table at package
+// init so policy resolves level tokens and opt-in flags without importing
+// this layer. User-defined packs register at load (issue #15).
+func init() {
 	for _, k := range BuiltinLibraryKinds {
-		for _, l := range k.AllowedLevels {
-			if l == level {
-				out = append(out, k.ID)
-				break
-			}
-		}
+		shared.RegisterKindRule(k.ID, shared.KindRule{
+			Levels:      k.AllowedLevels,
+			DefaultNone: k.DefaultNone,
+		})
 	}
-	return out
 }

@@ -80,7 +80,7 @@ func (s *Server) userDefinedReadable(permType string) bool {
 // registerUserDefinedKinds prepares loaded UDT kinds for serving.
 //
 // Visibility is never taken from the pack: every UDT stays opt-in
-// (policy.MarkOptInDataType at load) until an admin data grant names the
+// (shared.MarkKindDefaultNone at load) until an admin data grant names the
 // kind (issue #15 review — packs must not self-enable, including
 // default_access). Schema default_access is informational only.
 func (s *Server) registerUserDefinedKinds() {

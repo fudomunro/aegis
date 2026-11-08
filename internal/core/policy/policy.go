@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Access levels for agent access to a data type.
@@ -47,20 +47,6 @@ const (
 	AccessFull = "read-write"
 )
 
-// optInDefaultNone records runtime opt-in marks for data-type keys that
-// stay hidden unless the permissions map names them explicitly. Built-in
-// kinds set LibraryKind.DefaultNone instead (issue #183); user-defined
-// kinds call MarkOptInDataType at load (issue #15).
-var optInDefaultNone = map[string]bool{}
-
-// isOptInDefaultNone reports whether the data type requires explicit enable.
-func isOptInDefaultNone(dataType string) bool {
-	if optInDefaultNone[dataType] {
-		return true
-	}
-	return types.KindDefaultsNone(dataType)
-}
-
 // DefaultAccessType is used when a service has no permissions block, or when
 // a data type is not listed and no "default" key is set.
 const DefaultAccessType = AccessFull
@@ -80,7 +66,7 @@ type Permissions map[string]string
 // Proxy callers with an unclassified path must use Strictest instead so
 // unknown surface cannot outrank a tighter type (issue #94).
 func (p Permissions) For(dataType string) string {
-	if isOptInDefaultNone(dataType) {
+	if shared.KindDefaultsNone(dataType) {
 		if p != nil {
 			if level, ok := p[dataType]; ok {
 				return NormalizeAccess(level)
@@ -279,7 +265,7 @@ func (p Permissions) PlacesAccessLevels() map[string]string {
 		if NormalizeAccess(v) == AccessNone {
 			continue
 		}
-		if types.KindAllowsLevel(k, AccessCity) || types.KindAllowsLevel(k, AccessPrecise) {
+		if shared.KindAllowsLevel(k, AccessCity) || shared.KindAllowsLevel(k, AccessPrecise) {
 			out[k] = NormalizeAccess(v)
 		}
 	}
@@ -417,7 +403,7 @@ func (tp DataGrants) Access(dataType, provider string) string {
 			explicitProvider = NormalizeAccess(v)
 		}
 	}
-	if isOptInDefaultNone(dataType) {
+	if shared.KindDefaultsNone(dataType) {
 		if explicitProvider == "" {
 			if typeLevel == AccessNone {
 				return AccessNone
@@ -491,7 +477,7 @@ func legacyOverride(p Permissions, dataType string) (string, bool) {
 	if v, ok := p[dataType]; ok {
 		return NormalizeAccess(v), true
 	}
-	if isOptInDefaultNone(dataType) {
+	if shared.KindDefaultsNone(dataType) {
 		return "", false
 	}
 	if v, ok := p[PermissionDefaultKey]; ok {
@@ -531,7 +517,7 @@ func EffectiveAccess(policies DataGrants, legacy Permissions, dataType, provider
 	if legacy != nil {
 		return legacy.For(dataType)
 	}
-	if isOptInDefaultNone(dataType) {
+	if shared.KindDefaultsNone(dataType) {
 		return AccessNone
 	}
 	return DefaultAccessType
@@ -627,31 +613,31 @@ func ValidatePermissions(p Permissions) error {
 		default:
 			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, metadata, read, write, or read-write)", k, v)
 		}
-		if NormalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessFreeBusy) {
+		if NormalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessFreeBusy) {
 			return fmt.Errorf("permissions[%s]: freebusy is only supported for %s", k, joinKindsAllowing(AccessFreeBusy))
 		}
 		if NormalizeAccess(v) == AccessFreeBusy && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: freebusy is only supported for events")
 		}
-		if NormalizeAccess(v) == AccessSummary && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessSummary) {
+		if NormalizeAccess(v) == AccessSummary && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessSummary) {
 			return fmt.Errorf("permissions[%s]: summary is only supported for %s", k, joinKindsAllowing(AccessSummary))
 		}
 		if NormalizeAccess(v) == AccessSummary && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: summary is only supported for transactions")
 		}
-		if NormalizeAccess(v) == AccessCity && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessCity) {
+		if NormalizeAccess(v) == AccessCity && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessCity) {
 			return fmt.Errorf("permissions[%s]: city is only supported for %s", k, joinKindsAllowing(AccessCity))
 		}
 		if NormalizeAccess(v) == AccessCity && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: city is only supported for places")
 		}
-		if NormalizeAccess(v) == AccessPrecise && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessPrecise) {
+		if NormalizeAccess(v) == AccessPrecise && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessPrecise) {
 			return fmt.Errorf("permissions[%s]: precise is only supported for %s", k, joinKindsAllowing(AccessPrecise))
 		}
 		if NormalizeAccess(v) == AccessPrecise && k == PermissionDefaultKey {
 			return fmt.Errorf("permissions[default]: precise is only supported for places")
 		}
-		if NormalizeAccess(v) == AccessMetadata && k != PermissionDefaultKey && !types.KindAllowsLevel(k, AccessMetadata) {
+		if NormalizeAccess(v) == AccessMetadata && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessMetadata) {
 			return fmt.Errorf("permissions[%s]: metadata is only supported for %s", k, joinKindsAllowing(AccessMetadata))
 		}
 		if NormalizeAccess(v) == AccessMetadata && k == PermissionDefaultKey {
@@ -664,7 +650,7 @@ func ValidatePermissions(p Permissions) error {
 // joinKindsAllowing lists built-in kinds that honor an optional level for
 // validation error messages.
 func joinKindsAllowing(level string) string {
-	ids := types.KindsAllowingLevel(level)
+	ids := shared.KindsAllowingLevel(level)
 	if len(ids) == 0 {
 		return "no built-in type"
 	}

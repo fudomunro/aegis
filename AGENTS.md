@@ -30,7 +30,8 @@ Layout: **`internal/types`** (data-type layer) + **`internal/core`**
 (`core/tokens`, `core/audit`, `core/links`, `core/copies`, `core/mail`,
 `core/ownership`, `core/scopes`, `core/search`, `core/policy`) + **`internal/connectors`**
 (named-service adapters on `Host`) + **`internal/shared`** (stdlib-only
-transport/JSON/math/file/path plumbing). Root `main.go` is thin
+transport/JSON/math/file/path plumbing + generic kind-rule table). Root
+`main.go` is thin
 (`core.Run()`). Sub-packages follow the Tailscale `ipn/` pattern: durable
 stores and engines get their own package, `*Server` wiring and HTTP/admin
 handlers stay in the hub. See `docs/restructure-core-types-connectors.md`
@@ -108,7 +109,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Pre-request injection | `internal/core/handler.go` | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `internal/core/handler.go` | `Capabilities` + `SystemInstructions` + `HandleProxy` |
 | Generic/shared content transport | `internal/connectors/proxy.go`, `internal/core/proxy.go`, `internal/core/httpclient.go` | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
-| Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
+| Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared/statestore.go`, `internal/core/oauth.go`, `internal/core/connections.go` | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + library | `internal/types` (models/merge/kind), `internal/core/library.go`, `internal/core/librarykind.go` | Type-layer data in `internal/types`; aggregate pipeline lives in `internal/core` |
 | Merge / entity IDs | `internal/types/merge.go`, `internal/core/links/`, `internal/core/entity_links_handlers.go`, `internal/core/musicbrainz.go` | ISRC/UPC/MBID preferred over name |
@@ -328,6 +329,11 @@ over the hostile-input parsers, and `go build -o aegis .`.
   `docs/restructure-core-types-connectors.md` and the #301 layout.
   `internal/shared` is stdlib-only transport/JSON/math plumbing — no domain
   models, no `Host`, no service IDs, no provider knowledge, no policy.
+  The generic **kind-rule table** (`kindrules.go`: level tokens +
+  `DefaultNone` flags, `RegisterKindRule` / `KindAllowsLevel` / …) is shared
+  plumbing on purpose: domain owners register rules (built-in kinds at init,
+  user-defined packs at load) and `core/policy` resolves them, so policy and
+  the type layer never import each other for kind queries.
 - **Stdlib-first.** `net/http`, `log/slog`, `encoding/json`. Avoid new deps
   unless they clearly pay for themselves.
 - **Structured logs.** `log/slog` with useful fields (`service`, `login`,
@@ -419,7 +425,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); signals surface in `docs/observability.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
 | Concept vocabulary / overlapping names | `docs/glossary.md` (issue #174); inventory in `docs/core-concepts.md` |
-| Shared plumbing helpers (HTTP client, JSON writers, URL/JSON/math utils) | `internal/shared` (issue #280). `DoUpstreamRequest` stays in `internal/connectors/http.go` |
+| Shared plumbing helpers (HTTP client, JSON writers, URL/JSON/math utils, kind-rule lookup) | `internal/shared` (issue #280). `DoUpstreamRequest` stays in `internal/connectors/http.go` |
 
 ## Open direction (do not assume closed)
 

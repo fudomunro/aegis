@@ -3,6 +3,8 @@ package types
 import (
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // TestBuiltinLibraryKinds_UniqueIDs keeps registry ids unique and non-empty.
@@ -115,19 +117,19 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 	}
 
 	// Derived allowlists match AllowedLevels.
-	if !KindAllowsLevel("events", "freebusy") {
+	if !shared.KindAllowsLevel("events", "freebusy") {
 		t.Error("events should allow freebusy")
 	}
-	if KindAllowsLevel("tracks", "summary") {
+	if shared.KindAllowsLevel("tracks", "summary") {
 		t.Error("tracks must not allow summary")
 	}
-	if !KindDefaultsNone("places") {
+	if !shared.KindDefaultsNone("places") {
 		t.Error("places should default to none")
 	}
-	if KindDefaultsNone("documents") {
+	if shared.KindDefaultsNone("documents") {
 		t.Error("documents should not default to none")
 	}
-	if got := KindsAllowingLevel("metadata"); strings.Join(got, ",") != "documents" {
+	if got := shared.KindsAllowingLevel("metadata"); strings.Join(got, ",") != "documents" {
 		t.Errorf("KindsAllowingLevel(metadata) = %v, want [documents]", got)
 	}
 }

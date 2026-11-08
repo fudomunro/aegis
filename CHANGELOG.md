@@ -7,6 +7,16 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Kind-rule lookups become shared plumbing.** The generic queries over
+  kind rules — which optional level tokens a kind honors, whether it is
+  opt-in (`DefaultNone`), and which kinds allow a level — move from
+  `internal/types` to a rule table in `internal/shared`
+  (`RegisterKindRule` / `MarkKindDefaultNone` / `KindAllowsLevel` /
+  `KindDefaultsNone` / `KindsAllowingLevel`). Built-in kinds register at
+  package init; user-defined packs register at load. This removes the
+  `core/policy` → `internal/types` import (policy resolves rules through
+  shared only) and unifies the two halves of opt-in state (runtime marks
+  and built-in `DefaultNone` flags) into one table. No behavior change.
 - **Access policy moves to `internal/core/policy` (package cleanup).** Data
   grants, permission maps, the access-level vocabulary, grant resolution
   (`EffectiveAccess` / scope-grant resolvers), and the permissions-editor
