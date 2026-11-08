@@ -22,14 +22,14 @@ const (
 	// archives data (mail archive, copy ledger, timeline import, …).
 	AccessorSync AccessorKind = "sync"
 	// AccessorService is a configured connector service Aegis syncs with
-	// for a data type (e.g. Spotify / YouTube Music under playlists).
+	// for a kind (e.g. Spotify / YouTube Music under playlists).
 	// Read-only in the data grants editor for now (issue #160).
 	AccessorService AccessorKind = "service"
 	// AccessorUser is reserved for multi-user principals (issue #149).
 	AccessorUser AccessorKind = "user"
 )
 
-// Accessor is one principal's allowed access level per data type (issue #160).
+// Accessor is one principal's allowed access level per kind (issue #160).
 // This is the "what each accessor is allowed to access" half of confidence;
 // the admin map shows "what each accessor has accessed".
 type Accessor struct {
@@ -40,11 +40,11 @@ type Accessor struct {
 	Label string `json:"label"`
 	// Detail is a short description of how this accessor reaches data.
 	Detail string `json:"detail,omitempty"`
-	// Levels maps data-type / permission keys to access levels. Missing
+	// Levels maps kind / permission keys to access levels. Missing
 	// keys mean the kind-specific default (agents: DefaultAccessType /
 	// opt-in none; apps: none).
 	Levels map[string]string `json:"levels"`
-	// Explicit marks data-type keys the operator named on the record
+	// Explicit marks kind keys the operator named on the record
 	// (app scope key, sync pipeline type). Used to decide relevance.
 	Explicit map[string]bool `json:"explicit,omitempty"`
 	// Editable is true when the admin UI may change Levels.
@@ -53,48 +53,48 @@ type Accessor struct {
 	Disabled bool `json:"disabled,omitempty"`
 }
 
-// AccessorLevel returns the normalized level for a data type ("" when unset).
-func (a Accessor) AccessorLevel(dataType string) string {
+// AccessorLevel returns the normalized level for a kind ("" when unset).
+func (a Accessor) AccessorLevel(kind string) string {
 	if a.Levels == nil {
 		return ""
 	}
-	return NormalizeAccess(a.Levels[dataType])
+	return NormalizeAccess(a.Levels[kind])
 }
 
-// RelevantTo reports whether this accessor should appear under a data-type
+// RelevantTo reports whether this accessor should appear under a kind
 // row in the data grants editor (issue #160).
 //
 // Agents are always relevant (they own the editable policy). Apps appear
 // when they name the type or their effective level is not "none". Sync
 // pipelines appear only for the types they actually store.
-func (a Accessor) RelevantTo(dataType string) bool {
-	if dataType == "" || dataType == PermissionDefaultKey {
+func (a Accessor) RelevantTo(kind string) bool {
+	if kind == "" || kind == PermissionDefaultKey {
 		return false
 	}
 	switch a.Kind {
 	case AccessorAgent, AccessorUser:
 		return true
 	case AccessorApp:
-		if a.Explicit[dataType] {
+		if a.Explicit[kind] {
 			return true
 		}
-		return a.AccessorLevel(dataType) != "" && a.AccessorLevel(dataType) != AccessNone
+		return a.AccessorLevel(kind) != "" && a.AccessorLevel(kind) != AccessNone
 	case AccessorSync, AccessorService:
 		// Sync pipelines and service peers only appear for types they
 		// actually touch (issue #160).
-		if a.Explicit[dataType] {
+		if a.Explicit[kind] {
 			return true
 		}
-		level := a.AccessorLevel(dataType)
+		level := a.AccessorLevel(kind)
 		return level != "" && level != AccessNone
 	default:
 		return false
 	}
 }
 
-// TypeAccessor is one non-agent accessor row under a data type (issue #160).
-// The agent policy itself stays the editable control on that type.
-type TypeAccessor struct {
+// KindAccessor is one non-agent accessor row under a kind (issue #160).
+// The agent policy itself stays the editable control on that kind.
+type KindAccessor struct {
 	ID       string       `json:"id"`
 	Kind     AccessorKind `json:"kind"`
 	Label    string       `json:"label"`
@@ -103,46 +103,46 @@ type TypeAccessor struct {
 	Disabled bool         `json:"disabled,omitempty"`
 }
 
-// TypeAccess is the permissions-editor row for one data type: the agent
+// KindAccess is the permissions-editor row for one kind: the agent
 // level (editable in the admin form) plus only the other accessors that
-// are relevant to this type (read-only there).
-type TypeAccess struct {
+// are relevant to this kind (read-only there).
+type KindAccess struct {
 	ID         string         `json:"id"`
 	Label      string         `json:"label"`
 	AgentLevel string         `json:"agent_level"`
-	Accessors  []TypeAccessor `json:"accessors"`
+	Accessors  []KindAccessor `json:"accessors"`
 }
 
-// PermissionsOverview is the type-centric permissions-editor model
-// (issue #160). One entry per data type with its agent policy level and
-// the non-agent accessors that actually apply to that type.
+// PermissionsOverview is the kind-centric permissions-editor model
+// (issue #160). One entry per kind with its agent policy level and
+// the non-agent accessors that actually apply to that kind.
 type PermissionsOverview struct {
-	// DataTypes lists every permission key in stable order.
-	DataTypes []string `json:"data_types"`
-	// Types is one row per data type, ready for the admin editor.
-	Types []TypeAccess `json:"types"`
+	// Kinds lists every permission key in stable order.
+	Kinds []string `json:"data_types"`
+	// Rows is one row per kind, ready for the admin editor.
+	Rows []KindAccess `json:"types"`
 }
 
-// BuildTypeAccess assembles type-centric rows from accessors. Agent levels
+// BuildKindAccess assembles kind-centric rows from accessors. Agent levels
 // come from the agent accessor; other accessors are included only when
 // RelevantTo is true (issue #160).
-func BuildTypeAccess(dataTypes []string, accessors []Accessor) []TypeAccess {
-	out := make([]TypeAccess, 0, len(dataTypes))
-	for _, dataType := range dataTypes {
-		if dataType == "" || dataType == PermissionDefaultKey {
+func BuildKindAccess(kinds []string, accessors []Accessor) []KindAccess {
+	out := make([]KindAccess, 0, len(kinds))
+	for _, kind := range kinds {
+		if kind == "" || kind == PermissionDefaultKey {
 			continue
 		}
-		row := TypeAccess{ID: dataType}
+		row := KindAccess{ID: kind}
 		for _, acc := range accessors {
-			level := acc.AccessorLevel(dataType)
+			level := acc.AccessorLevel(kind)
 			if acc.Kind == AccessorAgent {
 				row.AgentLevel = level
 				continue
 			}
-			if !acc.RelevantTo(dataType) {
+			if !acc.RelevantTo(kind) {
 				continue
 			}
-			row.Accessors = append(row.Accessors, TypeAccessor{
+			row.Accessors = append(row.Accessors, KindAccessor{
 				ID:       acc.ID,
 				Kind:     acc.Kind,
 				Label:    acc.Label,
@@ -175,9 +175,9 @@ func BuildTypeAccess(dataTypes []string, accessors []Accessor) []TypeAccess {
 	return out
 }
 
-// OverviewDataTypes unions the preferred order (library kind IDs) with any
+// OverviewKinds unions the preferred order (library kind IDs) with any
 // extra keys that appear on policies, app scopes, or service maps.
-func OverviewDataTypes(preferred, extra []string) []string {
+func OverviewKinds(preferred, extra []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(preferred)+len(extra))
 	for _, id := range preferred {
@@ -213,7 +213,7 @@ func ExtraPermissionKeys(maps ...map[string]string) []string {
 	return out
 }
 
-// ExtraPolicyKeys collects data-type keys from a data-grant map.
+// ExtraPolicyKeys collects kind keys from a data-grant map.
 func ExtraPolicyKeys(policies DataGrants) []string {
 	if policies == nil {
 		return nil
@@ -229,13 +229,13 @@ func ExtraPolicyKeys(policies DataGrants) []string {
 }
 
 // AgentOverviewLevels materializes the type-owned agent policy into a
-// flat data-type → level map. Opt-in types (places) stay "none" unless
+// flat kind → level map. Opt-in types (places) stay "none" unless
 // the policy names them explicitly.
-func AgentOverviewLevels(policies DataGrants, dataTypes []string) map[string]string {
-	out := make(map[string]string, len(dataTypes))
-	for _, dataType := range dataTypes {
-		level := policies.Access(dataType, "")
-		out[dataType] = NormalizeAccess(level)
+func AgentOverviewLevels(policies DataGrants, kinds []string) map[string]string {
+	out := make(map[string]string, len(kinds))
+	for _, kind := range kinds {
+		level := policies.Access(kind, "")
+		out[kind] = NormalizeAccess(level)
 	}
 	return out
 }
@@ -244,8 +244,8 @@ func AgentOverviewLevels(policies DataGrants, dataTypes []string) map[string]str
 // types are none, matching Create's default=none rule. Opt-in types
 // (places) stay none unless the scope map names them. Explicit keys are
 // reported so the editor can treat a deliberate "none" as relevant.
-func AppOverviewLevels(appScopes Permissions, dataTypes []string) (levels map[string]string, explicit map[string]bool) {
-	levels = make(map[string]string, len(dataTypes))
+func AppOverviewLevels(appScopes Permissions, kinds []string) (levels map[string]string, explicit map[string]bool) {
+	levels = make(map[string]string, len(kinds))
 	explicit = make(map[string]bool, len(appScopes))
 	for k := range appScopes {
 		if k == "" || k == PermissionDefaultKey {
@@ -253,12 +253,12 @@ func AppOverviewLevels(appScopes Permissions, dataTypes []string) (levels map[st
 		}
 		explicit[k] = true
 	}
-	for _, dataType := range dataTypes {
+	for _, kind := range kinds {
 		level := AccessNone
 		if appScopes != nil {
-			if v, ok := appScopes[dataType]; ok {
+			if v, ok := appScopes[kind]; ok {
 				level = NormalizeAccess(v)
-			} else if !shared.KindDefaultsNone(dataType) {
+			} else if !shared.KindDefaultsNone(kind) {
 				if v, ok := appScopes[PermissionDefaultKey]; ok {
 					level = NormalizeAccess(v)
 				}
@@ -267,7 +267,7 @@ func AppOverviewLevels(appScopes Permissions, dataTypes []string) (levels map[st
 		if level == "" {
 			level = AccessNone
 		}
-		levels[dataType] = level
+		levels[kind] = level
 	}
 	return levels, explicit
 }

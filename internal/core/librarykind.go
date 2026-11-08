@@ -182,7 +182,7 @@ func anyServiceTruncated(bySvc map[string]types.LibraryServiceStatus) bool {
 }
 
 // libraryReadableFor reports whether at least one non-blocked service allows
-// read access to the given permission/data type.
+// read access to the given permission/kind.
 func (s *Server) libraryReadableFor(permType string) bool {
 	for _, svc := range s.config.ServiceSnapshots() {
 		if svc.Action == "block" {
@@ -311,7 +311,7 @@ func (s *Server) libraryIndexWriteable(r *http.Request, permType string) bool {
 		if !scopes.ServiceVisible(svc.Dataset, sc) {
 			continue
 		}
-		owner := policy.NormalizeAccess(s.effectivePermissions(&svc).AccessForDataType(permType))
+		owner := policy.NormalizeAccess(s.effectivePermissions(&svc).AccessForKind(permType))
 		if policy.NormalizeAccess(s.requestLevel(r, &svc, permType)) != owner {
 			return false
 		}
@@ -350,7 +350,7 @@ func collectProviders[T any, P any](
 	return targets, denied
 }
 
-// libraryKindSpec wires one typed dataset into the shared aggregate pipeline.
+// libraryKindSpec wires one kind's dataset into the shared aggregate pipeline.
 type libraryKindSpec[T any] struct {
 	kind    types.LibraryKind
 	targets func(s *Server, r *http.Request) (targets []namedLister[T], denied []string)
@@ -414,7 +414,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Agent:    agent,
 			Surface:  MetricSurfaceLibrary,
 			Target:   kind.ID,
-			DataType: kind.ID,
+			Kind:     kind.ID,
 			Cache:    MetricCacheMiss,
 			Decision: audit.DecisionDeny,
 			Reason:   "app_scope",
@@ -435,7 +435,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Agent:    agent,
 			Surface:  MetricSurfaceLibrary,
 			Target:   kind.ID,
-			DataType: kind.ID,
+			Kind:     kind.ID,
 			Cache:    MetricCacheMiss,
 			Decision: audit.DecisionDeny,
 			Reason:   "scope_grant",
@@ -477,11 +477,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			w.Header().Set("X-Aegis-Cache", "hit")
 			w.Write(result)
 			s.recordAccessFrom(r, AccessEvent{
-				Agent:    agent,
-				Surface:  MetricSurfaceLibrary,
-				Target:   kind.ID,
-				DataType: kind.ID,
-				Cache:    MetricCacheHit,
+				Agent:   agent,
+				Surface: MetricSurfaceLibrary,
+				Target:  kind.ID,
+				Kind:    kind.ID,
+				Cache:   MetricCacheHit,
 			})
 			return
 		}
@@ -525,7 +525,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 			Agent:    agent,
 			Surface:  MetricSurfaceService,
 			Target:   id,
-			DataType: kind.ID,
+			Kind:     kind.ID,
 			Decision: audit.DecisionDeny,
 			Reason:   "permission",
 			Method:   r.Method,
@@ -539,7 +539,7 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 				Agent:    agent,
 				Surface:  MetricSurfaceLibrary,
 				Target:   kind.ID,
-				DataType: kind.ID,
+				Kind:     kind.ID,
 				Decision: audit.DecisionDeny,
 				Reason:   "permission",
 				Method:   r.Method,
@@ -565,11 +565,11 @@ func handleLibraryAggregate[T any](s *Server, w http.ResponseWriter, r *http.Req
 	w.Header().Set("X-Aegis-Cache", "miss")
 	w.Write(result)
 	s.recordAccessFrom(r, AccessEvent{
-		Agent:    agent,
-		Surface:  MetricSurfaceLibrary,
-		Target:   kind.ID,
-		DataType: kind.ID,
-		Cache:    MetricCacheMiss,
+		Agent:   agent,
+		Surface: MetricSurfaceLibrary,
+		Target:  kind.ID,
+		Kind:    kind.ID,
+		Cache:   MetricCacheMiss,
 	})
 }
 
@@ -637,10 +637,10 @@ func fetchLibrary[T any](s *Server, r *http.Request, spec libraryKindSpec[T], lo
 					Truncated: truncated,
 				}
 				s.recordAccessFrom(r, AccessEvent{
-					Agent:    agent,
-					Surface:  MetricSurfaceService,
-					Target:   t.id,
-					DataType: kind.ID,
+					Agent:   agent,
+					Surface: MetricSurfaceService,
+					Target:  t.id,
+					Kind:    kind.ID,
 				})
 				if truncated {
 					logger.Warn("library "+kind.ID+" truncated by page cap",
@@ -723,7 +723,7 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 				Agent:    agent,
 				Surface:  MetricSurfaceLibrary,
 				Target:   kind.ID,
-				DataType: kind.ID,
+				Kind:     kind.ID,
 				Decision: audit.DecisionDeny,
 				Reason:   "permission",
 				Method:   r.Method,
@@ -760,11 +760,11 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 		w.Header().Set("X-Aegis-Cache", "hit")
 		w.Write([]byte(cached))
 		s.recordAccessFrom(r, AccessEvent{
-			Agent:    agent,
-			Surface:  MetricSurfaceLibrary,
-			Target:   kind.ID,
-			DataType: kind.ID,
-			Cache:    MetricCacheHit,
+			Agent:   agent,
+			Surface: MetricSurfaceLibrary,
+			Target:  kind.ID,
+			Kind:    kind.ID,
+			Cache:   MetricCacheHit,
 		})
 		return
 	}
@@ -828,11 +828,11 @@ func handleLibrarySearch[T any](s *Server, w http.ResponseWriter, r *http.Reques
 	w.Header().Set("X-Aegis-Cache", "miss")
 	w.Write(result)
 	s.recordAccessFrom(r, AccessEvent{
-		Agent:    agent,
-		Surface:  MetricSurfaceLibrary,
-		Target:   kind.ID,
-		DataType: kind.ID,
-		Cache:    MetricCacheMiss,
+		Agent:   agent,
+		Surface: MetricSurfaceLibrary,
+		Target:  kind.ID,
+		Kind:    kind.ID,
+		Cache:   MetricCacheMiss,
 	})
 }
 

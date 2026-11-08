@@ -177,20 +177,20 @@ func TestBlueskyHandleProxy_NotImplemented(t *testing.T) {
 func TestBlueskyCapabilitiesAndInstructions(t *testing.T) {
 	conn := NewBlueskyConnector(newBlueskyHost(t, "https://example.invalid"))
 	caps := conn.Capabilities()
-	if len(caps.DataTypes) != 2 {
-		t.Fatalf("caps types = %d, want 2 (photos+messages)", len(caps.DataTypes))
+	if len(caps.Kinds) != 2 {
+		t.Fatalf("caps types = %d, want 2 (photos+messages)", len(caps.Kinds))
 	}
-	if caps.DataTypes[0].Name != "photos" || caps.DataTypes[1].Name != "messages" {
-		t.Fatalf("caps = %+v", caps.DataTypes)
+	if caps.Kinds[0].Name != "photos" || caps.Kinds[1].Name != "messages" {
+		t.Fatalf("caps = %+v", caps.Kinds)
 	}
-	if len(caps.DataTypes[0].Operations) < 2 {
-		t.Fatalf("photos ops = %+v", caps.DataTypes[0].Operations)
+	if len(caps.Kinds[0].Operations) < 2 {
+		t.Fatalf("photos ops = %+v", caps.Kinds[0].Operations)
 	}
-	if caps.DataTypes[0].Operations[0].Method != "POST" {
-		t.Fatalf("first op = %+v", caps.DataTypes[0].Operations[0])
+	if caps.Kinds[0].Operations[0].Method != "POST" {
+		t.Fatalf("first op = %+v", caps.Kinds[0].Operations[0])
 	}
-	if caps.DataTypes[1].Operations[0].Method != "GET" {
-		t.Fatalf("messages op = %+v", caps.DataTypes[1].Operations[0])
+	if caps.Kinds[1].Operations[0].Method != "GET" {
+		t.Fatalf("messages op = %+v", caps.Kinds[1].Operations[0])
 	}
 	instr := conn.SystemInstructions("https://aegis.example.com")
 	if !strings.Contains(instr, "/v1/library/photos/share") || !strings.Contains(instr, "ownership") {

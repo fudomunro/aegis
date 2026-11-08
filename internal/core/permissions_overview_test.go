@@ -71,18 +71,18 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	srv.copyLedger = copyLedger
 
 	overview := srv.permissionsOverview()
-	if len(overview.DataTypes) == 0 || len(overview.Types) == 0 {
+	if len(overview.Kinds) == 0 || len(overview.Rows) == 0 {
 		t.Fatalf("overview = %+v", overview)
 	}
 
-	byID := map[string]policy.TypeAccess{}
-	for _, row := range overview.Types {
+	byID := map[string]policy.KindAccess{}
+	for _, row := range overview.Rows {
 		byID[row.ID] = row
 	}
 
 	tracks, ok := byID["tracks"]
 	if !ok {
-		t.Fatalf("missing tracks row: %+v", overview.Types)
+		t.Fatalf("missing tracks row: %+v", overview.Rows)
 	}
 	if tracks.AgentLevel != policy.AccessRead {
 		t.Fatalf("tracks agent = %q, want read", tracks.AgentLevel)
@@ -208,11 +208,11 @@ func TestHandleAdminPermissionsOverview(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &overview); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(overview.DataTypes) == 0 || len(overview.Types) == 0 {
+	if len(overview.Kinds) == 0 || len(overview.Rows) == 0 {
 		t.Fatalf("overview = %+v", overview)
 	}
 	sawAgentLevel := false
-	for _, row := range overview.Types {
+	for _, row := range overview.Rows {
 		if row.ID == "places" {
 			if row.AgentLevel != policy.AccessNone {
 				t.Fatalf("agent places = %q, want none", row.AgentLevel)
@@ -257,17 +257,17 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 	// Proxy-only capability surface must not create a playlists row.
 	srv.connectors["player-only"] = stubConnector{
-		caps: types.ServiceCapabilities{DataTypes: []types.DataTypeCapability{
+		caps: types.ServiceCapabilities{Kinds: []types.KindCapability{
 			{Name: "player"},
 			{Name: "search"},
 		}},
 	}
 
 	overview := srv.permissionsOverview()
-	var playlists *policy.TypeAccess
-	for i := range overview.Types {
-		if overview.Types[i].ID == "playlists" {
-			playlists = &overview.Types[i]
+	var playlists *policy.KindAccess
+	for i := range overview.Rows {
+		if overview.Rows[i].ID == "playlists" {
+			playlists = &overview.Rows[i]
 			break
 		}
 	}
@@ -275,7 +275,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 		t.Fatal("missing playlists row")
 	}
 
-	services := map[string]policy.TypeAccessor{}
+	services := map[string]policy.KindAccessor{}
 	for _, acc := range playlists.Accessors {
 		if acc.Kind == policy.AccessorService {
 			services[acc.ID] = acc
@@ -300,7 +300,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 	}
 
 	// Player-only stays off every library type row.
-	for _, row := range overview.Types {
+	for _, row := range overview.Rows {
 		for _, acc := range row.Accessors {
 			if acc.ID == "service:player-only" {
 				t.Fatalf("player-only under %s: %+v", row.ID, acc)

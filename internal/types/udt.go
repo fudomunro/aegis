@@ -55,7 +55,7 @@ type UserDefinedTypeSchema struct {
 	// Search declares which fields the search index covers (issue #178).
 	// Nil means the kind has no q= support.
 	Search *UserDefinedSearchSpec `json:"search,omitempty"`
-	// Sources lists how to fetch items for this type.
+	// Sources lists how to fetch items for this kind.
 	Sources []UserDefinedSourceSpec `json:"sources,omitempty"`
 	// DefaultAccess is informational only (admin UI display). UDTs are always
 	// opt-in — a pack cannot grant agent access (issue #15 review). Enable a
@@ -204,24 +204,24 @@ var ReservedLibraryPathIDs = map[string]bool{
 	"freebusy": true,
 }
 
-// nonKindDataTypeKeys are permission / path-classification keys owned by
+// nonKindKeys are permission / path-classification keys owned by
 // built-in proxy surfaces that are not LibraryKind entries (issue #183).
-var nonKindDataTypeKeys = map[string]bool{
+var nonKindKeys = map[string]bool{
 	"channels": true, "library": true, "player": true,
 	"recommendations": true, "search": true, "user": true,
 }
 
-// IsReservedDataTypeKey reports whether the key is a built-in data-type key.
-func IsReservedDataTypeKey(id string) bool {
+// IsReservedKindKey reports whether the key is a built-in kind key.
+func IsReservedKindKey(id string) bool {
 	if BuiltinKindByID(id) != nil {
 		return true
 	}
-	return nonKindDataTypeKeys[id]
+	return nonKindKeys[id]
 }
 
 // IsReservedUserDefinedID reports whether an id is owned by built-ins.
 func IsReservedUserDefinedID(id string) bool {
-	return ReservedLibraryPathIDs[id] || IsReservedDataTypeKey(id)
+	return ReservedLibraryPathIDs[id] || IsReservedKindKey(id)
 }
 
 // ValidateHTTPJSONHeaders rejects credential-bearing headers in schema packs.

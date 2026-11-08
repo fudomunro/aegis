@@ -32,7 +32,7 @@ func AccessEventToAudit(ev AccessEvent) audit.Event {
 		Agent:    ev.Agent,
 		Surface:  ev.Surface,
 		Target:   ev.Target,
-		DataType: ev.DataType,
+		Kind:     ev.Kind,
 		Decision: ev.Decision,
 		Reason:   ev.Reason,
 		Cache:    ev.Cache,

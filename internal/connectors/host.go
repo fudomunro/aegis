@@ -50,7 +50,7 @@ type Host interface {
 	// are disabled).
 	ObserveUpstream(serviceID string, elapsed time.Duration, status int)
 	// LibraryReadable reports whether agents can currently read the given
-	// library kind — a provider is registered and the type policy allows it.
+	// library kind — a provider is registered and the kind policy allows it.
 	// Setup flows use it to report readiness without reaching into core's
 	// registries.
 	LibraryReadable(kind string) bool
@@ -71,7 +71,7 @@ type Host interface {
 // ServiceConnector is an optional interface for services that provide
 // intelligent proxying beyond simple request forwarding.
 type ServiceConnector interface {
-	// Capabilities returns what data types and operations this connector supports.
+	// Capabilities returns what kinds and operations this connector supports.
 	Capabilities() types.ServiceCapabilities
 	// SystemInstructions returns the system message for agents referencing this service.
 	SystemInstructions(baseURL string) string

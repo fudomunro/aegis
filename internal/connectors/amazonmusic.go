@@ -36,11 +36,11 @@ func NewAmazonMusicConnector(host Host) *AmazonMusicConnector {
 	return &AmazonMusicConnector{host: host}
 }
 
-// Capabilities returns what Amazon Music data types are recognized.
+// Capabilities returns what Amazon Music kinds are recognized.
 // Amazon Music has no public API, so no operations are currently supported.
 func (c *AmazonMusicConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{Name: "user", Description: "Current user profile", Operations: []types.Operation{}},
 			{Name: "tracks", Description: "Individual songs", Operations: []types.Operation{}},
 			{Name: "albums", Description: "Albums", Operations: []types.Operation{}},

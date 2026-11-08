@@ -698,7 +698,7 @@ func NewQuickenConnector(store *QuickenStore) *QuickenConnector {
 // Capabilities returns Quicken import/list operations.
 func (c *QuickenConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "transactions",
 				Description: "Locally imported Quicken QIF/QFX transactions (line items only; statements/PDFs are never stored)",

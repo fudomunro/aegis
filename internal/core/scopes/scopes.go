@@ -503,15 +503,15 @@ func ServiceVisible(dataset string, sc *Scope) bool {
 }
 
 // Allows reports whether the request's data scope grants the method on
-// a data type. Deny-by-default: an unlisted type resolves to none. The owner
+// a kind. Deny-by-default: an unlisted type resolves to none. The owner
 // principal (no scope) is unrestricted here — owner-tier policy is enforced
 // separately so the two layers never drift into each other.
-func Allows(r *http.Request, dataType, method string) bool {
+func Allows(r *http.Request, kind, method string) bool {
 	sc := From(r)
 	if sc == nil {
 		return true
 	}
-	return policy.AllowsMethod(policy.ScopeGrantsAccess(sc.Grants, dataType, ""), method)
+	return policy.AllowsMethod(policy.ScopeGrantsAccess(sc.Grants, kind, ""), method)
 }
 
 // CacheSuffix namespaces library cache entries per principal so one

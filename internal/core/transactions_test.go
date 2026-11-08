@@ -442,13 +442,13 @@ func TestLibraryKindTransactions_Registered(t *testing.T) {
 	}
 }
 
-func TestSummaryDataTypes(t *testing.T) {
+func TestSummaryKinds(t *testing.T) {
 	p := policy.Permissions{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
-	got := p.SummaryDataTypes()
+	got := p.SummaryKinds()
 	if len(got) != 1 || got[0] != "transactions" {
-		t.Fatalf("SummaryDataTypes = %v", got)
+		t.Fatalf("SummaryKinds = %v", got)
 	}
-	if (&policy.Permissions{}).SummaryDataTypes() != nil {
+	if (&policy.Permissions{}).SummaryKinds() != nil {
 		t.Fatal("nil map should return nil")
 	}
 }
@@ -473,11 +473,11 @@ func TestRedactTransactionsForLevel(t *testing.T) {
 func TestYNABCapabilitiesAndInstructions(t *testing.T) {
 	c := connectors.NewYNABConnector(&Server{})
 	caps := c.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "transactions" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "transactions" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if len(caps.DataTypes[0].Operations) < 3 {
-		t.Fatalf("ops = %d", len(caps.DataTypes[0].Operations))
+	if len(caps.Kinds[0].Operations) < 3 {
+		t.Fatalf("ops = %d", len(caps.Kinds[0].Operations))
 	}
 	s := c.SystemInstructions("https://aegis.example.com")
 	if !strings.Contains(s, "/v1/library/transactions") {

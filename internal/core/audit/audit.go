@@ -12,7 +12,7 @@ import (
 )
 
 // Durable access audit trail (issue #105). Append-only SQLite store of who
-// accessed which service/data type and whether the call was allowed or
+// accessed which service/kind and whether the call was allowed or
 // denied. Redacted like AccessEvent: no tokens, bodies, query strings, or
 // full paths. Fail-open — a full disk or closed log never breaks a request.
 
@@ -65,7 +65,7 @@ type Event struct {
 	Agent    string
 	Surface  string
 	Target   string
-	DataType string
+	Kind     string
 	Decision string
 	Reason   string
 	Cache    string
@@ -232,7 +232,7 @@ func (a *Log) Write(ev Event) {
 INSERT INTO audit_events (
   at, agent, surface, target, data_type, decision, reason, cache, method, status, client_ip, created_at
 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		at, ev.Agent, ev.Surface, ev.Target, ev.DataType, ev.Decision,
+		at, ev.Agent, ev.Surface, ev.Target, ev.Kind, ev.Decision,
 		ev.Reason, ev.Cache, ev.Method, ev.Status, ev.ClientIP, created,
 	)
 	if err != nil {
@@ -342,7 +342,7 @@ FROM audit_events WHERE 1=1`
 			ev Event
 			at string
 		)
-		if err := rows.Scan(&at, &ev.Agent, &ev.Surface, &ev.Target, &ev.DataType,
+		if err := rows.Scan(&at, &ev.Agent, &ev.Surface, &ev.Target, &ev.Kind,
 			&ev.Decision, &ev.Reason, &ev.Cache, &ev.Method, &ev.Status, &ev.ClientIP); err != nil {
 			return nil, err
 		}

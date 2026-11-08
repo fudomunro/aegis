@@ -912,7 +912,7 @@ func TestAdminHTML_SimplePermForm(t *testing.T) {
 		"perm-live",
 		"applyPermissionsLocally",
 		`select[data-perm-key]`,
-		// Icons next to data types on permission rows
+		// Icons next to kinds on permission rows
 		"dataTypeIconHTML",
 		"perm-type-icon",
 		"perm-type-label",

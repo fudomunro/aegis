@@ -104,7 +104,7 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"renderPermEditor(svc)",
 		"perm-live",
 		"applyPermissionsLocally",
-		// Data-type icons on permission form labels
+		// Kind icons on permission form labels
 		"dataTypeIconHTML",
 		"perm-type-icon",
 		"data-type-icon",

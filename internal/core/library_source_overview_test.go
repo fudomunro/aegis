@@ -181,7 +181,7 @@ func TestAdminHTML_LibrarySourceOverview(t *testing.T) {
 		"source-role-canonical",
 		"source-role-mirror",
 		"data-source",
-		// Icons for data types + services/files (issue #162 follow-up).
+		// Icons for kinds + services/files (issue #162 follow-up).
 		"sourceIconHTML",
 		"sourceIconPath",
 		"dataTypeIconHTML",

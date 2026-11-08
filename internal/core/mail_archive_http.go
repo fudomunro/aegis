@@ -15,7 +15,7 @@ import (
 )
 
 // mailPermType is the permission key for the local mail archive surface.
-// It shares the messages data-type so admin already has a control for it.
+// It shares the messages kind so admin already has a control for it.
 const mailPermType = "messages"
 
 // handleMailRoutes dispatches /v1/mail/* under AuthMiddleware (registered in main).

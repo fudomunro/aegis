@@ -49,7 +49,7 @@ func (c *YNABConnector) YnabUpstreamBase() string {
 // Capabilities returns YNAB transaction operations reachable through the proxy.
 func (c *YNABConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "transactions",
 				Description: "YNAB budget transactions — line items with amount, payee, category, account ref (no full account numbers)",

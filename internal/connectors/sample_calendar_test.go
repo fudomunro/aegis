@@ -11,11 +11,11 @@ import (
 
 func TestSampleCalendarConnector_Capabilities(t *testing.T) {
 	caps := NewSampleCalendarConnector().Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "events" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "events" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if len(caps.DataTypes[0].Operations) != 1 || caps.DataTypes[0].Operations[0].Path != "/me/events" {
-		t.Fatalf("ops = %+v", caps.DataTypes[0].Operations)
+	if len(caps.Kinds[0].Operations) != 1 || caps.Kinds[0].Operations[0].Path != "/me/events" {
+		t.Fatalf("ops = %+v", caps.Kinds[0].Operations)
 	}
 }
 

@@ -29,7 +29,7 @@ func NewSampleCalendarConnector() *SampleCalendarConnector {
 
 func (c *SampleCalendarConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "events",
 				Description: "Synthetic calendar events for demos (no upstream provider).",

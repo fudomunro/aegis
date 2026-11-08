@@ -56,7 +56,7 @@ func (c *BlueskyConnector) BlueskyUpstreamBase() string {
 // Capabilities returns Bluesky share and library operations reachable through Aegis.
 func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "photos",
 				Description: "Share photos to Bluesky as public image posts, and list the user's Bluesky image posts (ownership-claim PoC). Photo bytes stay on the PDS/CDN; Aegis does not store media.",

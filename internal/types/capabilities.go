@@ -8,17 +8,17 @@ import (
 
 // ServiceCapabilities describes what a connector can do.
 type ServiceCapabilities struct {
-	DataTypes []DataTypeCapability `json:"data_types"`
+	Kinds []KindCapability `json:"data_types"`
 }
 
-// DataTypeCapability describes supported operations for a specific data type.
-type DataTypeCapability struct {
+// KindCapability describes supported operations for a specific kind.
+type KindCapability struct {
 	Name        string      `json:"name"`        // e.g. "tracks", "playlists", "search"
 	Description string      `json:"description"` // human-readable description
 	Operations  []Operation `json:"operations"`
 }
 
-// Operation describes a single callable operation on a data type.
+// Operation describes a single callable operation on a kind.
 type Operation struct {
 	Name        string       `json:"name"`        // "read_saved", "search", "get_by_id"
 	Description string       `json:"description"` // human-readable
@@ -54,29 +54,29 @@ func IsMutatingMethod(method string) bool {
 	}
 }
 
-// DataTypeKnown reports whether the connector advertises the data type.
-func DataTypeKnown(caps ServiceCapabilities, dataType string) bool {
-	if dataType == "" {
+// KindKnown reports whether the connector advertises the kind.
+func KindKnown(caps ServiceCapabilities, kind string) bool {
+	if kind == "" {
 		return false
 	}
-	for _, dt := range caps.DataTypes {
-		if dt.Name == dataType {
+	for _, dt := range caps.Kinds {
+		if dt.Name == kind {
 			return true
 		}
 	}
 	return false
 }
 
-// DataTypeHasWriteOp reports whether the connector exposes any mutating
-// operation for the data type (including session/search POSTs). Used for
+// KindHasWriteOp reports whether the connector exposes any mutating
+// operation for the kind (including session/search POSTs). Used for
 // proxy enforcement: a permission write level never unlocks methods the
 // connector does not implement at all.
-func DataTypeHasWriteOp(caps ServiceCapabilities, dataType string) bool {
-	if dataType == "" {
+func KindHasWriteOp(caps ServiceCapabilities, kind string) bool {
+	if kind == "" {
 		return false
 	}
-	for _, dt := range caps.DataTypes {
-		if dt.Name != dataType {
+	for _, dt := range caps.Kinds {
+		if dt.Name != kind {
 			continue
 		}
 		for _, op := range dt.Operations {
@@ -92,14 +92,14 @@ func DataTypeHasWriteOp(caps ServiceCapabilities, dataType string) bool {
 	return false
 }
 
-// DataTypeHasAgentWriteOp reports whether the connector exposes a mutating
-// operation that actually changes data of this type (not picker/search).
-func DataTypeHasAgentWriteOp(caps ServiceCapabilities, dataType string) bool {
-	if dataType == "" {
+// KindHasAgentWriteOp reports whether the connector exposes a mutating
+// operation that actually changes data of this kind (not picker/search).
+func KindHasAgentWriteOp(caps ServiceCapabilities, kind string) bool {
+	if kind == "" {
 		return false
 	}
-	for _, dt := range caps.DataTypes {
-		if dt.Name != dataType {
+	for _, dt := range caps.Kinds {
+		if dt.Name != kind {
 			continue
 		}
 		for _, op := range dt.Operations {
@@ -115,12 +115,12 @@ func DataTypeHasAgentWriteOp(caps ServiceCapabilities, dataType string) bool {
 	return false
 }
 
-// WritableDataTypesFromCapabilities lists data types with at least one
+// WritableKindsFromCapabilities lists kinds with at least one
 // agent-meaningful mutating connector operation.
-func WritableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
+func WritableKindsFromCapabilities(caps ServiceCapabilities) []string {
 	var out []string
-	for _, dt := range caps.DataTypes {
-		if DataTypeHasAgentWriteOp(caps, dt.Name) {
+	for _, dt := range caps.Kinds {
+		if KindHasAgentWriteOp(caps, dt.Name) {
 			out = append(out, dt.Name)
 		}
 	}
@@ -129,7 +129,7 @@ func WritableDataTypesFromCapabilities(caps ServiceCapabilities) []string {
 }
 
 // IsAgentDataWritePath filters mutating ops that are not "agents may change
-// this data type". Picker session creates and metadata search POSTs are
+// this kind". Picker session creates and metadata search POSTs are
 // operational helpers, not library write surface for the permissions form.
 func IsAgentDataWritePath(path string) bool {
 	p := strings.ToLower(path)

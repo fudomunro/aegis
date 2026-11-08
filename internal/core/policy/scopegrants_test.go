@@ -7,45 +7,45 @@ func TestScopeGrantsAccess_ResolutionTable(t *testing.T) {
 	tests := []struct {
 		name     string
 		grants   DataGrants
-		dataType string
+		kind     string
 		provider string
 		want     string
 	}{
 		{
-			name:     "type absent, no default key",
-			grants:   DataGrants{"music": {Default: AccessRead}},
-			dataType: "photos",
-			want:     AccessNone,
+			name:   "type absent, no default key",
+			grants: DataGrants{"music": {Default: AccessRead}},
+			kind:   "photos",
+			want:   AccessNone,
 		},
 		{
-			name:     "no grants at all",
-			grants:   nil,
-			dataType: "music",
-			want:     AccessNone,
+			name:   "no grants at all",
+			grants: nil,
+			kind:   "music",
+			want:   AccessNone,
 		},
 		{
-			name:     "type absent, default key present",
-			grants:   DataGrants{PermissionDefaultKey: {Default: AccessRead}},
-			dataType: "photos",
-			want:     AccessRead,
+			name:   "type absent, default key present",
+			grants: DataGrants{PermissionDefaultKey: {Default: AccessRead}},
+			kind:   "photos",
+			want:   AccessRead,
 		},
 		{
-			name:     "listed, empty entry",
-			grants:   DataGrants{"music": {}},
-			dataType: "music",
-			want:     AccessNone,
+			name:   "listed, empty entry",
+			grants: DataGrants{"music": {}},
+			kind:   "music",
+			want:   AccessNone,
 		},
 		{
 			name:     "listed, provider overrides only",
 			grants:   DataGrants{"music": {Providers: map[string]string{"spotify": AccessRead}}},
-			dataType: "music",
+			kind:     "music",
 			provider: "spotify",
 			want:     AccessNone,
 		},
 		{
 			name:     "listed, provider overrides only, other provider",
 			grants:   DataGrants{"music": {Providers: map[string]string{"spotify": AccessRead}}},
-			dataType: "music",
+			kind:     "music",
 			provider: "youtube",
 			want:     AccessNone,
 		},
@@ -55,8 +55,8 @@ func TestScopeGrantsAccess_ResolutionTable(t *testing.T) {
 				PermissionDefaultKey: {Default: AccessRead},
 				"music":              {},
 			},
-			dataType: "music",
-			want:     AccessNone,
+			kind: "music",
+			want: AccessNone,
 		},
 		{
 			name: "default key covers unlisted types only",
@@ -64,13 +64,13 @@ func TestScopeGrantsAccess_ResolutionTable(t *testing.T) {
 				PermissionDefaultKey: {Default: AccessRead},
 				"music":              {},
 			},
-			dataType: "photos",
-			want:     AccessRead,
+			kind: "photos",
+			want: AccessRead,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := ScopeGrantsAccess(tt.grants, tt.dataType, tt.provider); got != tt.want {
+			if got := ScopeGrantsAccess(tt.grants, tt.kind, tt.provider); got != tt.want {
 				t.Fatalf("ScopeGrantsAccess() = %q, want %q", got, tt.want)
 			}
 		})

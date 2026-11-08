@@ -64,7 +64,7 @@ func (c *ImmichConnector) ApplyImmichAuth(req *http.Request, logger *slog.Logger
 // Capabilities returns Immich photo operations reachable through the proxy.
 func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "photos",
 				Description: "Self-hosted Immich library — metadata only; bytes stay on Immich (foreign/local canonical)",

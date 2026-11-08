@@ -59,10 +59,10 @@ func (c *GooglePhotosConnector) GetLastSession() string {
 	return c.lastSessionID
 }
 
-// Capabilities returns what Google Photos data types and operations are supported.
+// Capabilities returns what Google Photos kinds and operations are supported.
 func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "photos",
 				Description: "Photos via the Google Photos Picker API — user selects photos; Aegis lists only that selection (metadata only; bytes stay on Google Photos)",

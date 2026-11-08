@@ -35,10 +35,10 @@ func NewYouTubeMusicConnector(host Host) *YouTubeMusicConnector {
 	return &YouTubeMusicConnector{host: host}
 }
 
-// Capabilities returns what YouTube Music data types and operations are supported.
+// Capabilities returns what YouTube Music kinds and operations are supported.
 func (c *YouTubeMusicConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "user",
 				Description: "Current user's YouTube channel",

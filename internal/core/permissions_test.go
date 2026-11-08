@@ -78,14 +78,14 @@ func TestPermissions_NormalizeAliases(t *testing.T) {
 	}
 }
 
-func TestPermissions_DeniedDataTypes(t *testing.T) {
+func TestPermissions_DeniedKinds(t *testing.T) {
 	p := policy.Permissions{
 		policy.PermissionDefaultKey: policy.AccessNone,
 		"player":                    "none",
 		"albums":                    policy.AccessRead,
 		"tracks":                    "deny",
 	}
-	denied := p.DeniedDataTypes()
+	denied := p.DeniedKinds()
 	if len(denied) != 2 || denied[0] != "player" || denied[1] != "tracks" {
 		t.Fatalf("denied = %v, want [player tracks]", denied)
 	}
@@ -167,16 +167,16 @@ func TestPermissions_Strictest(t *testing.T) {
 	}
 }
 
-func TestAccessForDataType(t *testing.T) {
+func TestAccessForKind(t *testing.T) {
 	p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone, "playlists": policy.AccessFull}
-	if got := p.AccessForDataType("player"); got != policy.AccessNone {
+	if got := p.AccessForKind("player"); got != policy.AccessNone {
 		t.Fatalf("player = %q", got)
 	}
-	if got := p.AccessForDataType("playlists"); got != policy.AccessFull {
+	if got := p.AccessForKind("playlists"); got != policy.AccessFull {
 		t.Fatalf("playlists = %q", got)
 	}
 	// Unclassified must not inherit default=read while player is none.
-	if got := p.AccessForDataType(""); got != policy.AccessNone {
+	if got := p.AccessForKind(""); got != policy.AccessNone {
 		t.Fatalf("unclassified = %q, want none", got)
 	}
 }
@@ -267,7 +267,7 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 }
 
 func TestClampPermissionsWithWritable(t *testing.T) {
-	caps := types.ServiceCapabilities{DataTypes: []types.DataTypeCapability{
+	caps := types.ServiceCapabilities{Kinds: []types.KindCapability{
 		{Name: "tracks", Operations: []types.Operation{{Method: "GET", Path: "/me/tracks"}}},
 		{Name: "photos", Operations: []types.Operation{
 			{Method: "GET", Path: "/photos"},
@@ -281,7 +281,7 @@ func TestClampPermissionsWithWritable(t *testing.T) {
 		}},
 	}}
 	// Picker POST is not agent-writable; contacts POST (data write) is.
-	writable := types.WritableDataTypesFromCapabilities(caps)
+	writable := types.WritableKindsFromCapabilities(caps)
 	if len(writable) != 1 || writable[0] != "contacts" {
 		t.Fatalf("writable from caps = %v, want [contacts]", writable)
 	}
@@ -345,8 +345,8 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 	}
 }
 
-func TestWritableDataTypes_ExcludesPickerAndSearch(t *testing.T) {
-	caps := types.ServiceCapabilities{DataTypes: []types.DataTypeCapability{
+func TestWritableKinds_ExcludesPickerAndSearch(t *testing.T) {
+	caps := types.ServiceCapabilities{Kinds: []types.KindCapability{
 		{Name: "photos", Operations: []types.Operation{
 			{Method: "GET", Path: "/photos"},
 			{Method: "POST", Path: "/picker/sessions"},
@@ -355,7 +355,7 @@ func TestWritableDataTypes_ExcludesPickerAndSearch(t *testing.T) {
 			{Method: "POST", Path: "/search/metadata"},
 		}},
 	}}
-	if got := types.WritableDataTypesFromCapabilities(caps); len(got) != 0 {
+	if got := types.WritableKindsFromCapabilities(caps); len(got) != 0 {
 		t.Fatalf("picker/search POSTs must not mark types writable, got %v", got)
 	}
 }

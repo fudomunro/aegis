@@ -559,7 +559,7 @@ var dashboardFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf("%.0f%%", pct)
 	},
-	"maturityFieldCount": func(f types.DataMaturity) string {
+	"maturityFieldCount": func(f types.KindMaturity) string {
 		if len(f.Fields) == 0 {
 			return "—"
 		}

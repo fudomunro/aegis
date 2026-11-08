@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-// TestDataTypePathRules_Parity pins the ordered rule table to the historical
-// DataTypeForPath switch (issue #15). When a type gains paths, extend both
+// TestKindPathRules_Parity pins the ordered rule table to the historical
+// KindForPath switch (issue #15). When a kind gains paths, extend both
 // the table and this map — do not reintroduce a switch.
-func TestDataTypePathRules_Parity(t *testing.T) {
+func TestKindPathRules_Parity(t *testing.T) {
 	cases := map[string]string{
 		"/me":                        "user",
 		"/me/player":                 "player",
@@ -59,11 +59,11 @@ func TestDataTypePathRules_Parity(t *testing.T) {
 		"/unknown/thing":             "",
 	}
 	for path, want := range cases {
-		if got := DataTypeForCanonicalPath(path); got != want {
-			t.Errorf("DataTypeForCanonicalPath(%q) = %q, want %q", path, got, want)
+		if got := KindForCanonicalPath(path); got != want {
+			t.Errorf("KindForCanonicalPath(%q) = %q, want %q", path, got, want)
 		}
-		if got := DataTypeForPath(path); got != want {
-			t.Errorf("DataTypeForPath(%q) = %q, want %q", path, got, want)
+		if got := KindForPath(path); got != want {
+			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
 		}
 	}
 }

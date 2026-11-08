@@ -8,9 +8,9 @@ package types
 //
 // Three axes, from the issue:
 //
-//  1. Awareness — the catalog names every data type the service offers,
+//  1. Awareness — the catalog names every kind the service offers,
 //     not only the ones Aegis implements.
-//  2. Indication — each type is marked supported or not, so the gap is
+//  2. Indication — each kind is marked supported or not, so the gap is
 //     visible instead of implied.
 //  3. Field coverage — supported types that map to a neutral model declare
 //     which content fields the connector populates.
@@ -47,18 +47,18 @@ type FieldCoverage struct {
 	Supported bool `json:"supported"`
 }
 
-// DataMaturity is one data type's coverage on one connection: every type
+// KindMaturity is one kind's coverage on one connection: every type
 // the service offers in theory, marked with whether Aegis makes it
 // available here.
-type DataMaturity struct {
-	// Name is the data type as Aegis names it: a library kind id
+type KindMaturity struct {
+	// Name is the kind as Aegis names it: a library kind id
 	// (playlists, tracks, …) or connector capability name (user, search,
 	// shows, …). Names may carry provider-local meaning per connection —
 	// "albums" is music albums on Spotify and photo albums on Immich.
 	Name string `json:"name"`
 	// Description is what the service offers under this name.
 	Description string `json:"description,omitempty"`
-	// Supported is true when the connection serves the type: a unified-
+	// Supported is true when the connection serves the kind: a unified-
 	// library feed, a callable connector operation, or a handled proxy
 	// path. Types the service offers but the connection does not serve
 	// stay false so the gap is visible.
@@ -73,7 +73,7 @@ type ConnectionMaturity struct {
 	// Service is the connector ID: "spotify", "google-gmail", ….
 	Service   string         `json:"service"`
 	Transport Transport      `json:"transport"`
-	DataTypes []DataMaturity `json:"data_types"`
+	Kinds     []KindMaturity `json:"data_types"`
 	// Start is how a user brings this connection's data under management
 	// (issue #165). Declared beside the connector; core never derives it
 	// from interfaces or transport class.
@@ -84,7 +84,7 @@ type ConnectionMaturity struct {
 type MaturityGrade struct {
 	// Level is complete | substantial | partial | basic.
 	Level string `json:"level"`
-	// CoveragePct is supported data types over offered, percent 0-100.
+	// CoveragePct is supported kinds over offered, percent 0-100.
 	CoveragePct float64 `json:"coverage_pct"`
 	// FieldPct is populated content fields over graded, percent 0-100
 	// across every supported model-backed type. Nil when no supported
@@ -96,7 +96,7 @@ type MaturityGrade struct {
 	Supported int       `json:"supported"`
 }
 
-// MaturityContentFields maps a data type name to the neutral-model content
+// MaturityContentFields maps a kind name to the neutral-model content
 // fields field coverage grades. sources[], extra, and match are structural
 // — filled by construction or merge — and are never graded. A type absent
 // from this map has no neutral model (user, search, shows, …) and takes no
@@ -115,12 +115,12 @@ var MaturityContentFields = map[string][]string{
 	"places":       {"start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id"},
 }
 
-// FieldCoverageFor grades one data type against the content fields the
-// connector populates. Populated names outside the type's content fields
+// FieldCoverageFor grades one kind against the content fields the
+// connector populates. Populated names outside the kind's content fields
 // are ignored; unlisted content fields grade as unsupported. Returns nil
 // for types with no neutral model.
-func FieldCoverageFor(dataType string, populated ...string) []FieldCoverage {
-	want, ok := MaturityContentFields[dataType]
+func FieldCoverageFor(kind string, populated ...string) []FieldCoverage {
+	want, ok := MaturityContentFields[kind]
 	if !ok {
 		return nil
 	}
@@ -141,13 +141,13 @@ func FieldCoverageFor(dataType string, populated ...string) []FieldCoverage {
 // complete type out of ten. Field coverage counts only supported types
 // that map to a neutral model.
 func GradeConnectionMaturity(m ConnectionMaturity) MaturityGrade {
-	g := MaturityGrade{Transport: m.Transport, Offered: len(m.DataTypes)}
-	if len(m.DataTypes) == 0 {
+	g := MaturityGrade{Transport: m.Transport, Offered: len(m.Kinds)}
+	if len(m.Kinds) == 0 {
 		g.Level = "basic"
 		return g
 	}
 	populated, graded := 0, 0
-	for _, dt := range m.DataTypes {
+	for _, dt := range m.Kinds {
 		if !dt.Supported {
 			continue
 		}

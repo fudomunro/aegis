@@ -58,7 +58,7 @@ func (c *CardDAVConnector) auth() davAuth {
 // Capabilities returns CardDAV contact operations.
 func (c *CardDAVConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "contacts",
 				Description: "CardDAV address book — vCard 3/4 contacts (metadata only)",

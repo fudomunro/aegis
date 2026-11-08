@@ -67,10 +67,10 @@ func (c *GoogleGmailConnector) GoogleGmailUpstreamBase() string {
 	return c.host.UpstreamBaseFor(GoogleGmailServiceID, "https://gmail.googleapis.com/gmail/v1")
 }
 
-// Capabilities returns what Gmail data types and operations are supported.
+// Capabilities returns what Gmail kinds and operations are supported.
 func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 	return types.ServiceCapabilities{
-		DataTypes: []types.DataTypeCapability{
+		Kinds: []types.KindCapability{
 			{
 				Name:        "messages",
 				Description: "Messages — list mail messages/threads (metadata/snippet only by default; body stays on Gmail)",

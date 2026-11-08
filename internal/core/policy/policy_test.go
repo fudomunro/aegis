@@ -29,8 +29,8 @@ func TestPermissions_AllowsAndClone(t *testing.T) {
 	if p["tracks"] != AccessRead {
 		t.Fatal("clone must be deep enough to not alias levels")
 	}
-	if got := p.DeniedDataTypes(); len(got) != 1 || got[0] != "playlists" {
-		t.Fatalf("DeniedDataTypes = %v", got)
+	if got := p.DeniedKinds(); len(got) != 1 || got[0] != "playlists" {
+		t.Fatalf("DeniedKinds = %v", got)
 	}
 }
 
@@ -41,11 +41,11 @@ func TestPermissions_RedactionLists(t *testing.T) {
 		"places":       AccessCity,
 		"tracks":       AccessRead,
 	}
-	if got := p.FreeBusyDataTypes(); len(got) != 1 || got[0] != "events" {
-		t.Fatalf("FreeBusyDataTypes = %v", got)
+	if got := p.FreeBusyKinds(); len(got) != 1 || got[0] != "events" {
+		t.Fatalf("FreeBusyKinds = %v", got)
 	}
-	if got := p.SummaryDataTypes(); len(got) != 1 || got[0] != "transactions" {
-		t.Fatalf("SummaryDataTypes = %v", got)
+	if got := p.SummaryKinds(); len(got) != 1 || got[0] != "transactions" {
+		t.Fatalf("SummaryKinds = %v", got)
 	}
 	if got := p.PlacesAccessLevels(); got["places"] != AccessCity {
 		t.Fatalf("PlacesAccessLevels = %v", got)
@@ -61,13 +61,13 @@ func TestPermissions_RedactionLists(t *testing.T) {
 	}
 }
 
-func TestPermissions_AccessForDataType(t *testing.T) {
+func TestPermissions_AccessForKind(t *testing.T) {
 	p := Permissions{"tracks": AccessNone, "default": AccessRead}
-	if got := p.AccessForDataType("tracks"); got != AccessNone {
+	if got := p.AccessForKind("tracks"); got != AccessNone {
 		t.Fatalf("classified tracks = %q", got)
 	}
 	// Unclassified uses Strictest (none), never default.
-	if got := p.AccessForDataType(""); got != AccessNone {
+	if got := p.AccessForKind(""); got != AccessNone {
 		t.Fatalf("unclassified = %q, want strictest none", got)
 	}
 }

@@ -483,7 +483,7 @@ func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
 }
 
 // TestScopeGrants_NeverExceedsOwnerDataGrants proves the two layers AND: a
-// scope grant cannot open a data type the owner tier closed.
+// scope grant cannot open a kind the owner tier closed.
 func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "house", Dataset: "shire", APIKey: "YOUR_HOUSE_KEY",

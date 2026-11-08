@@ -425,16 +425,16 @@ func TestGoogleCalendarConnector_SystemInstructions_MentionLibrary(t *testing.T)
 func TestGoogleCalendarConnector_Capabilities_ReadOnlyEvents(t *testing.T) {
 	conn := NewGoogleCalendarConnector(newTestHost("https://aegis.example.com"))
 	caps := conn.Capabilities()
-	if len(caps.DataTypes) != 1 || caps.DataTypes[0].Name != "events" {
+	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "events" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if types.DataTypeHasAgentWriteOp(caps, "events") {
+	if types.KindHasAgentWriteOp(caps, "events") {
 		t.Fatal("calendar events must not advertise agent write ops in this phase")
 	}
-	if !types.DataTypeHasWriteOp(caps, "events") {
+	if !types.KindHasWriteOp(caps, "events") {
 		// Still no mutating ops at all — proxy write is blocked by connector capability.
 	}
-	for _, op := range caps.DataTypes[0].Operations {
+	for _, op := range caps.Kinds[0].Operations {
 		if types.IsMutatingMethod(op.Method) {
 			t.Fatalf("unexpected mutating op: %+v", op)
 		}

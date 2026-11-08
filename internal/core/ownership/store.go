@@ -23,7 +23,7 @@ import (
 // declared metadata the sync dashboard reads (issue #254).
 
 // OwnershipEntry is the user's confirmation for one library kind — the
-// store's record type (kept with the store, not the data-type layer).
+// store's record type (kept with the store, not in `internal/types`).
 type OwnershipEntry struct {
 	// Confirmed is the user's statement that Aegis holds all the data of
 	// this kind they care about. False (or absent) keeps the call to action.
