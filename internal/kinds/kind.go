@@ -71,6 +71,7 @@ func Builtin(h Host, e *Engine, d Deps) []Kind {
 		newPhotosKind(h, e, d),
 		newEventsKind(h, e, d),
 		newPlacesKind(h, e, d),
+		newDocumentsKind(h, e, d),
 	}
 }
 

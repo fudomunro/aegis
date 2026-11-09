@@ -267,7 +267,7 @@ func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents?q=medical", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -372,7 +372,7 @@ func documentsQuery(t *testing.T, srv *Server, bearer, path string) []types.Docu
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("documents status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -480,7 +480,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer "+appToken)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -554,7 +554,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryDocuments)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("degraded list status = %d body=%s", w.Code, w.Body.String())
 	}
