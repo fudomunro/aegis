@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/links"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Fuzz targets for merge/matching heuristics (issue #107). These run on
@@ -15,7 +15,7 @@ import (
 func FuzzNormalizeIdentityKey(f *testing.F) {
 	f.Add("The Beatles")
 	f.Add("  The   Beatles  ")
-	f.Add("types.Artist - Topic")
+	f.Add("kinds.Artist - Topic")
 	f.Add("0\n- TopiC")
 	f.Add("- - TopiC TopiC")
 	f.Add("Name\r\n- Topic")
@@ -24,9 +24,9 @@ func FuzzNormalizeIdentityKey(f *testing.F) {
 	f.Add("a\x00b")
 	f.Add(strings.Repeat("x", 1000))
 	f.Fuzz(func(t *testing.T, name string) {
-		got := types.NormalizeIdentityKey(name)
+		got := kinds.NormalizeIdentityKey(name)
 		// Idempotent.
-		if again := types.NormalizeIdentityKey(got); again != got {
+		if again := kinds.NormalizeIdentityKey(got); again != got {
 			t.Fatalf("NormalizeIdentityKey not idempotent: %q -> %q -> %q", name, got, again)
 		}
 		// No surrounding space after normalize (unless empty).
@@ -44,40 +44,40 @@ func FuzzCleanYouTubeTitle(f *testing.F) {
 	f.Add("(((((")
 	f.Add("Song (Live) (Remix) (2020) (HD)")
 	f.Fuzz(func(t *testing.T, name string) {
-		got := types.CleanYouTubeTitle(name)
-		if again := types.CleanYouTubeTitle(got); again != got {
+		got := kinds.CleanYouTubeTitle(name)
+		if again := kinds.CleanYouTubeTitle(got); again != got {
 			t.Fatalf("cleanYouTubeTitle not idempotent: %q -> %q -> %q", name, got, again)
 		}
 	})
 }
 
 func FuzzMergeTracksSync(f *testing.F) {
-	f.Add("Song", "types.Artist", "ISRC1", "sp1")
-	f.Add("Song", "types.Artist", "", "yt1")
-	f.Add("Song - Topic", "types.Artist", "", "yt1")
-	f.Add("Song", "types.Artist", "ISRC1", "")
+	f.Add("Song", "kinds.Artist", "ISRC1", "sp1")
+	f.Add("Song", "kinds.Artist", "", "yt1")
+	f.Add("Song - Topic", "kinds.Artist", "", "yt1")
+	f.Add("Song", "kinds.Artist", "ISRC1", "")
 	f.Add("", "", "", "")
-	f.Add("Song", "types.Artist A", "ISRCX", "a")
-	f.Add("Song", "types.Artist B", "ISRCX", "b")
-	f.Add("Song", "types.Artist", "ISRC1", "a")
-	f.Add("Song", "types.Artist", "ISRC2", "b")
+	f.Add("Song", "kinds.Artist A", "ISRCX", "a")
+	f.Add("Song", "kinds.Artist B", "ISRCX", "b")
+	f.Add("Song", "kinds.Artist", "ISRC1", "a")
+	f.Add("Song", "kinds.Artist", "ISRC2", "b")
 	f.Fuzz(func(t *testing.T, title, artist, isrc, serviceID string) {
-		mk := func(id, name string) types.Track {
-			tr := types.Track{Name: name, EntityID: isrc, DurationMs: 200000}
+		mk := func(id, name string) kinds.Track {
+			tr := kinds.Track{Name: name, EntityID: isrc, DurationMs: 200000}
 			if artist != "" {
-				tr.Artists = []types.Artist{{Name: artist, Sources: []types.ArtistSource{{Service: serviceID, Name: artist}}}}
+				tr.Artists = []kinds.Artist{{Name: artist, Sources: []kinds.ArtistSource{{Service: serviceID, Name: artist}}}}
 			}
 			if serviceID != "" || id != "" {
-				tr.Sources = []types.TrackSource{{Service: serviceID, ID: id}}
+				tr.Sources = []kinds.TrackSource{{Service: serviceID, ID: id}}
 			}
 			return tr
 		}
-		in := []types.Track{
+		in := []kinds.Track{
 			mk("1", title),
 			mk("2", title),
-			mk("3", types.NormalizeIdentityKey(title)),
+			mk("3", kinds.NormalizeIdentityKey(title)),
 		}
-		out := types.MergeTracksSync(in)
+		out := kinds.MergeTracksSync(in)
 		if len(out) > len(in) {
 			t.Fatalf("merge grew the list: in=%d out=%d", len(in), len(out))
 		}
@@ -87,24 +87,24 @@ func FuzzMergeTracksSync(f *testing.F) {
 				// Empty stubs are allowed only if all inputs were empty.
 				continue
 			}
-			_ = types.TrackIdentityKey(tr)
-			_ = types.TrackEntityID(tr)
+			_ = kinds.TrackIdentityKey(tr)
+			_ = kinds.TrackEntityID(tr)
 		}
 	})
 }
 
 func FuzzTrackIdentityKey(f *testing.F) {
-	f.Add("Song", "types.Artist", "ISRC")
+	f.Add("Song", "kinds.Artist", "ISRC")
 	f.Add("", "", "")
-	f.Add("Song - Topic", "types.Artist - Topic", "")
+	f.Add("Song - Topic", "kinds.Artist - Topic", "")
 	f.Fuzz(func(t *testing.T, name, artist, isrc string) {
-		tr := types.Track{Name: name, EntityID: isrc}
+		tr := kinds.Track{Name: name, EntityID: isrc}
 		if artist != "" {
-			tr.Artists = []types.Artist{{Name: artist}}
+			tr.Artists = []kinds.Artist{{Name: artist}}
 		}
-		_ = types.TrackIdentityKey(tr)
-		_ = types.TrackEntityID(tr)
-		_ = types.DurationCompatible(tr, types.Track{Name: name, DurationMs: tr.DurationMs})
+		_ = kinds.TrackIdentityKey(tr)
+		_ = kinds.TrackEntityID(tr)
+		_ = kinds.DurationCompatible(tr, kinds.Track{Name: name, DurationMs: tr.DurationMs})
 	})
 }
 
@@ -115,21 +115,21 @@ func FuzzMergePlaylistsSync(f *testing.F) {
 	f.Add("A", "s", "1", "")
 	f.Add("B", "s", "2", "")
 	f.Fuzz(func(t *testing.T, name, service, id, linkKey string) {
-		p := types.Playlist{Name: name}
+		p := kinds.Playlist{Name: name}
 		if service != "" || id != "" {
-			p.Sources = []types.PlaylistSource{{Service: service, ID: id}}
+			p.Sources = []kinds.PlaylistSource{{Service: service, ID: id}}
 		}
-		in := []types.Playlist{p, p, {Name: name + " "}}
-		out := types.MergePlaylistsSyncLinked(in, nil)
+		in := []kinds.Playlist{p, p, {Name: name + " "}}
+		out := kinds.MergePlaylistsSyncLinked(in, nil)
 		if len(out) > len(in) {
 			t.Fatalf("playlist merge grew list: %d -> %d", len(out), len(in))
 		}
-		out2 := types.MergePlaylistsSyncLinked(in, func(types.Playlist) string { return linkKey })
+		out2 := kinds.MergePlaylistsSyncLinked(in, func(kinds.Playlist) string { return linkKey })
 		if len(out2) > len(in) {
 			t.Fatalf("linked playlist merge grew list: %d -> %d", len(out2), len(in))
 		}
 		_ = p.PrimaryService()
-		_ = types.NormalizeIdentityKey(name)
+		_ = kinds.NormalizeIdentityKey(name)
 	})
 }
 
@@ -143,7 +143,7 @@ func FuzzPlaylistLinkKey(f *testing.F) {
 			Kind:    "playlist",
 			Sources: []links.Source{{Service: service, ID: id}},
 		}}}
-		p := types.Playlist{Sources: []types.PlaylistSource{{Service: service, ID: id}}}
+		p := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: service, ID: id}}}
 		key := st.PlaylistLinkKey(p)
 		if service == "" && id == "" {
 			if key != "" && key != "link:L1" {
@@ -159,22 +159,22 @@ func FuzzPlaylistLinkKey(f *testing.F) {
 }
 
 func FuzzMergeAlbumsSync(f *testing.F) {
-	f.Add("types.Album", "types.Artist", "UPC1", "sp1")
-	f.Add("types.Album", "types.Artist", "", "sp1")
+	f.Add("kinds.Album", "kinds.Artist", "UPC1", "sp1")
+	f.Add("kinds.Album", "kinds.Artist", "", "sp1")
 	f.Add("", "", "", "")
 	f.Fuzz(func(t *testing.T, title, artist, upc, serviceID string) {
-		al := types.Album{Name: title, EntityID: upc}
+		al := kinds.Album{Name: title, EntityID: upc}
 		if artist != "" {
-			al.Artists = []types.Artist{{Name: artist}}
+			al.Artists = []kinds.Artist{{Name: artist}}
 		}
 		if serviceID != "" {
-			al.Sources = []types.AlbumSource{{Service: serviceID, ID: "1", Name: title}}
+			al.Sources = []kinds.AlbumSource{{Service: serviceID, ID: "1", Name: title}}
 		}
-		out := types.MergeAlbumsSync([]types.Album{al, al})
+		out := kinds.MergeAlbumsSync([]kinds.Album{al, al})
 		if len(out) > 2 {
 			t.Fatalf("album merge grew list to %d", len(out))
 		}
-		_ = types.AlbumIdentityKey(al)
-		_ = types.AlbumEntityID(al)
+		_ = kinds.AlbumIdentityKey(al)
+		_ = kinds.AlbumEntityID(al)
 	})
 }

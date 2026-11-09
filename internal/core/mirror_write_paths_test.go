@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func writeMirrorJSON(w http.ResponseWriter, v any) {
@@ -23,7 +23,7 @@ func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
 
 	t.Run("unauthorized sentinel", func(t *testing.T) {
 		w := httptest.NewRecorder()
-		srv.writeMirrorUpstreamError(w, logger, "spotify", types.ErrUnauthorized)
+		srv.writeMirrorUpstreamError(w, logger, "spotify", kinds.ErrUnauthorized)
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 		}
@@ -53,7 +53,7 @@ func TestWriteMirrorUpstreamError_AndUnauthorized(t *testing.T) {
 }
 
 func TestErrorsIsUnauthorized(t *testing.T) {
-	if !errorsIsUnauthorized(types.ErrUnauthorized) {
+	if !errorsIsUnauthorized(kinds.ErrUnauthorized) {
 		t.Fatal("sentinel should match")
 	}
 	if !errorsIsUnauthorized(errUnauthorizedString()) {

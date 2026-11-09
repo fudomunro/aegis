@@ -3,7 +3,7 @@ package connectors
 import (
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Minimal vCard 3/4 reader for CardDAV address books (issue #146). Covers the
@@ -15,7 +15,7 @@ import (
 // ParseVCard maps one vCard text body to a neutral Contact.
 // service/serviceName label the ContactSource. href is the resource URL.
 // etag is stored in source Extra for If-Match writes.
-func ParseVCard(service, serviceName, id, body, etag string) types.Contact {
+func ParseVCard(service, serviceName, id, body, etag string) kinds.Contact {
 	lines := unfoldVCard(body)
 	var fn, nick, org string
 	var given, family string
@@ -79,7 +79,7 @@ func ParseVCard(service, serviceName, id, body, etag string) types.Contact {
 		name = strings.TrimSpace(nick)
 	}
 
-	contact := types.NewContact(service, serviceName, id, name, emails, phones)
+	contact := kinds.NewContact(service, serviceName, id, name, emails, phones)
 	if contact.Name == "" && len(contact.Emails) == 0 && len(contact.Phones) == 0 {
 		// Still return a source-bearing contact when UID alone is present so
 		// the library can show an empty-card placeholder rather than drop it.
@@ -121,7 +121,7 @@ func ParseVCard(service, serviceName, id, body, etag string) types.Contact {
 }
 
 // EncodeVCard builds a vCard 3.0 body from a neutral Contact (for PUT).
-func EncodeVCard(c types.Contact) string {
+func EncodeVCard(c kinds.Contact) string {
 	var b strings.Builder
 	b.WriteString("BEGIN:VCARD\r\nVERSION:3.0\r\n")
 	name := strings.TrimSpace(c.Name)
@@ -158,7 +158,7 @@ func EncodeVCard(c types.Contact) string {
 	return b.String()
 }
 
-func contactUID(c types.Contact) string {
+func contactUID(c kinds.Contact) string {
 	if c.Extra != nil {
 		if v, ok := c.Extra["uid"].(string); ok {
 			return v
@@ -178,7 +178,7 @@ func contactUID(c types.Contact) string {
 }
 
 // contactETag returns the source etag used for If-Match writes.
-func contactETag(c types.Contact) string {
+func contactETag(c kinds.Contact) string {
 	for _, s := range c.Sources {
 		if s.Extra != nil {
 			if v, ok := s.Extra["etag"].(string); ok && v != "" {

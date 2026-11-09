@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"context"
 	"encoding/json"
@@ -74,14 +75,14 @@ func importTakeout(t *testing.T, a *mail.Archive, path string, reset bool) types
 	return res
 }
 
-func searchMergedShared(t *testing.T, a *mail.Archive) *types.Message {
+func searchMergedShared(t *testing.T, a *mail.Archive) *kinds.Message {
 	t.Helper()
 	hits, err := a.Search(mail.SearchQuery{Q: "Shared dual-source", WithBody: true})
 	if err != nil {
 		t.Fatalf("search: %v", err)
 	}
 	for i := range hits.Messages {
-		if types.NormalizeMessageID(hits.Messages[i].EntityID) == sharedMessageID {
+		if kinds.NormalizeMessageID(hits.Messages[i].EntityID) == sharedMessageID {
 			return &hits.Messages[i]
 		}
 	}
@@ -175,18 +176,18 @@ func TestMailSources_LibraryIncludesArchiveCollection(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.MessageList
+	var resp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["mail-archive"].Status != types.LibraryStatusOK {
+	if resp.ByService["mail-archive"].Status != kinds.LibraryStatusOK {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 
-	var shared, takeoutOnly *types.Message
+	var shared, takeoutOnly *kinds.Message
 	for i := range resp.Messages {
 		m := &resp.Messages[i]
-		if types.NormalizeMessageID(m.EntityID) == sharedMessageID {
+		if kinds.NormalizeMessageID(m.EntityID) == sharedMessageID {
 			shared = m
 		}
 		if strings.Contains(m.Subject, "Takeout hello") {

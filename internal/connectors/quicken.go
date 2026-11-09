@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
@@ -148,7 +149,7 @@ func OpenQuickenStore(path string) (*QuickenStore, error) {
 }
 
 // upsertTx stores or replaces one imported transaction keyed by source_id.
-func upsertQuickenTx(tx *sql.Tx, filePath string, t types.Transaction) error {
+func upsertQuickenTx(tx *sql.Tx, filePath string, t kinds.Transaction) error {
 	id := transactionSourceID(t)
 	if id == "" {
 		return fmt.Errorf("quicken transaction missing source id")
@@ -164,7 +165,7 @@ func upsertQuickenTx(tx *sql.Tx, filePath string, t types.Transaction) error {
 	category := strings.Join(t.Category, " | ")
 	fitid := ""
 	if len(t.Sources) > 0 {
-		fitid = types.ExtraString(t.Sources[0].Extra, "fitid")
+		fitid = kinds.ExtraString(t.Sources[0].Extra, "fitid")
 		if fitid == "" {
 			fitid = t.EntityID
 		}
@@ -200,7 +201,7 @@ ON CONFLICT(source_id) DO UPDATE SET
 }
 
 // Upsert stores or replaces one imported transaction keyed by source_id.
-func (s *QuickenStore) Upsert(filePath string, t types.Transaction) error {
+func (s *QuickenStore) Upsert(filePath string, t kinds.Transaction) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("quicken store disabled")
 	}
@@ -225,7 +226,7 @@ func (s *QuickenStore) Has(sourceID string) bool {
 }
 
 // List returns stored transactions (newest first), optional filters.
-func (s *QuickenStore) List(f types.TransactionFilters, limit int) ([]types.Transaction, error) {
+func (s *QuickenStore) List(f kinds.TransactionFilters, limit int) ([]kinds.Transaction, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("quicken store disabled")
 	}
@@ -242,13 +243,13 @@ LIMIT ?`, limit*4) // over-fetch then filter
 		return nil, err
 	}
 	defer rows.Close()
-	var out []types.Transaction
+	var out []kinds.Transaction
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var tx types.Transaction
+		var tx kinds.Transaction
 		if err := json.Unmarshal([]byte(raw), &tx); err != nil {
 			continue
 		}
@@ -275,7 +276,7 @@ func (s *QuickenStore) Count() (int, error) {
 	return n, err
 }
 
-func transactionSourceID(tx types.Transaction) string {
+func transactionSourceID(tx kinds.Transaction) string {
 	if id := strings.TrimSpace(tx.EntityID); id != "" {
 		return id
 	}
@@ -285,13 +286,13 @@ func transactionSourceID(tx types.Transaction) string {
 		}
 	}
 	// Deterministic fallback so re-imports of the same line stay stable.
-	return "hash:" + types.TransactionIdentityKey(tx)
+	return "hash:" + kinds.TransactionIdentityKey(tx)
 }
 
 // --- File parsers (QIF + QFX/OFX) ---
 
 // ParseQuickenFile detects QIF vs OFX/QFX and returns neutral transactions.
-func ParseQuickenFile(path string) ([]types.Transaction, error) {
+func ParseQuickenFile(path string) ([]kinds.Transaction, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
@@ -300,7 +301,7 @@ func ParseQuickenFile(path string) ([]types.Transaction, error) {
 }
 
 // ParseQuickenBytes parses QIF or OFX/QFX content.
-func ParseQuickenBytes(name string, data []byte) ([]types.Transaction, error) {
+func ParseQuickenBytes(name string, data []byte) ([]kinds.Transaction, error) {
 	head := strings.ToUpper(string(data[:min(512, len(data))]))
 	switch {
 	case strings.Contains(head, "OFXHEADER") || strings.Contains(head, "<OFX") || strings.Contains(head, "OFXSGML"):
@@ -324,10 +325,10 @@ func min(a, b int) int {
 }
 
 // ParseQIF parses Quicken Interchange Format bank/CCard transactions.
-func ParseQIF(name string, data []byte) ([]types.Transaction, error) {
+func ParseQIF(name string, data []byte) ([]kinds.Transaction, error) {
 	sc := bufio.NewScanner(strings.NewReader(string(data)))
 	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	var out []types.Transaction
+	var out []kinds.Transaction
 	var cur map[string]string
 	flush := func() {
 		if cur == nil {
@@ -377,14 +378,14 @@ func ParseQIF(name string, data []byte) ([]types.Transaction, error) {
 	return out, nil
 }
 
-func qifRecordToTransaction(name string, rec map[string]string) (types.Transaction, bool) {
+func qifRecordToTransaction(name string, rec map[string]string) (kinds.Transaction, bool) {
 	date := strings.TrimSpace(rec["D"])
 	amountRaw := strings.TrimSpace(rec["T"])
 	if amountRaw == "" {
 		amountRaw = strings.TrimSpace(rec["$"])
 	}
 	if date == "" || amountRaw == "" {
-		return types.Transaction{}, false
+		return kinds.Transaction{}, false
 	}
 	payee := strings.TrimSpace(rec["P"])
 	category := strings.TrimSpace(rec["L"])
@@ -393,20 +394,20 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		categories = []string{category}
 	}
 	memo := strings.TrimSpace(rec["M"])
-	status := types.TransactionStatusPosted
+	status := kinds.TransactionStatusPosted
 	if strings.Contains(strings.ToUpper(rec["C"]), "N") || strings.Contains(strings.ToUpper(rec["C"]), "U") || strings.Contains(strings.ToUpper(rec["C"]), "?") {
-		status = types.TransactionStatusPending
+		status = kinds.TransactionStatusPending
 	}
 	fitid := strings.TrimSpace(rec["N"])
 	if fitid == "" {
 		// Stable per-file identity when Quicken omitted a check number.
 		fitid = "qif:" + shortHash(name+"|"+date+"|"+amountRaw+"|"+payee+"|"+memo)
 	}
-	amount := types.NormalizeTransactionAmount(amountRaw)
-	posted := types.NormalizeTransactionDate(qifDate(date))
+	amount := kinds.NormalizeTransactionAmount(amountRaw)
+	posted := kinds.NormalizeTransactionDate(qifDate(date))
 	accountName := filepath.Base(name)
 	accountName = strings.TrimSuffix(accountName, filepath.Ext(accountName))
-	tx := types.Transaction{
+	tx := kinds.Transaction{
 		PostedAt:    posted,
 		Amount:      amount,
 		Currency:    "USD",
@@ -414,11 +415,11 @@ func qifRecordToTransaction(name string, rec map[string]string) (types.Transacti
 		Merchant:    payee,
 		Category:    categories,
 		Memo:        memo,
-		Account:     &types.TransactionAccount{Name: accountName, Type: "bank"},
+		Account:     &kinds.TransactionAccount{Name: accountName, Type: "bank"},
 		Status:      status,
 		EntityID:    fitid,
 	}
-	return types.NewTransaction(QuickenServiceID, QuickenServiceName, fitid, tx), true
+	return kinds.NewTransaction(QuickenServiceID, QuickenServiceName, fitid, tx), true
 }
 
 // qifDate normalizes Quicken date forms (MM/DD/YYYY, M/D/YY, DD/MM/YYYY with
@@ -444,14 +445,14 @@ func qifDate(raw string) string {
 			return t.UTC().Format("2006-01-02")
 		}
 	}
-	return types.NormalizeTransactionDate(raw)
+	return kinds.NormalizeTransactionDate(raw)
 }
 
 // ParseOFX parses OFX/QFX SGML or XML bank/CC statements.
-func ParseOFX(name string, data []byte) ([]types.Transaction, error) {
+func ParseOFX(name string, data []byte) ([]kinds.Transaction, error) {
 	text := string(data)
 	// Prefer XML-shaped STMTTRN blocks; fall back to SGML tag scan.
-	var out []types.Transaction
+	var out []kinds.Transaction
 	out = append(out, parseOFXStmtTrn(name, text)...)
 	if len(out) == 0 {
 		out = append(out, parseOFXSGML(name, text)...)
@@ -460,8 +461,8 @@ func ParseOFX(name string, data []byte) ([]types.Transaction, error) {
 }
 
 // parseOFXStmtTrn extracts <STMTTRN>…</STMTTRN> blocks (XML-ish).
-func parseOFXStmtTrn(name, text string) []types.Transaction {
-	var out []types.Transaction
+func parseOFXStmtTrn(name, text string) []kinds.Transaction {
+	var out []kinds.Transaction
 	upper := strings.ToUpper(text)
 	const open = "<STMTTRN>"
 	const closeTag = "</STMTTRN>"
@@ -487,7 +488,7 @@ func parseOFXStmtTrn(name, text string) []types.Transaction {
 }
 
 // parseOFXSGML walks SGML tags without requiring closing STMTTRN.
-func parseOFXSGML(name, text string) []types.Transaction {
+func parseOFXSGML(name, text string) []kinds.Transaction {
 	return parseOFXRecords(name, text)
 }
 
@@ -538,9 +539,9 @@ func splitOFXTags(text string) []ofxTag {
 }
 
 // parseOFXRecords walks tags and emits one transaction per FITID record.
-func parseOFXRecords(name, text string) []types.Transaction {
+func parseOFXRecords(name, text string) []kinds.Transaction {
 	tags := splitOFXTags(text)
-	var out []types.Transaction
+	var out []kinds.Transaction
 	cur := map[string]string{}
 	inTrn := false
 	flush := func() {
@@ -584,7 +585,7 @@ func ofxParseTags(block string) map[string]string {
 	return out
 }
 
-func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transaction, bool) {
+func ofxFieldsToTransaction(name string, fields map[string]string) (kinds.Transaction, bool) {
 	amountRaw := strings.TrimSpace(fields["TRNAMT"])
 	fitid := strings.TrimSpace(fields["FITID"])
 	dateRaw := strings.TrimSpace(fields["DTPOSTED"])
@@ -592,7 +593,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 		dateRaw = strings.TrimSpace(fields["DTUSER"])
 	}
 	if amountRaw == "" || dateRaw == "" {
-		return types.Transaction{}, false
+		return kinds.Transaction{}, false
 	}
 	payee := strings.TrimSpace(fields["NAME"])
 	if payee == "" {
@@ -600,7 +601,7 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	}
 	memo := strings.TrimSpace(fields["MEMO"])
 	trntype := strings.ToUpper(strings.TrimSpace(fields["TRNTYPE"]))
-	status := types.TransactionStatusPosted
+	status := kinds.TransactionStatusPosted
 	switch trntype {
 	case "PENDING", "AUTH", "DIRECTDEBIT":
 		// Keep posted unless OFX explicitly says pending elsewhere.
@@ -608,8 +609,8 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	if fitid == "" {
 		fitid = "ofx:" + shortHash(name+"|"+dateRaw+"|"+amountRaw+"|"+payee)
 	}
-	posted := types.NormalizeTransactionDate(dateRaw)
-	if d := types.TransactionDay(posted); d != "" {
+	posted := kinds.NormalizeTransactionDate(dateRaw)
+	if d := kinds.TransactionDay(posted); d != "" {
 		posted = d
 	}
 	accountName := filepath.Base(name)
@@ -618,19 +619,19 @@ func ofxFieldsToTransaction(name string, fields map[string]string) (types.Transa
 	if cat := strings.TrimSpace(fields["CATEGORY"]); cat != "" {
 		categories = []string{cat}
 	}
-	tx := types.Transaction{
+	tx := kinds.Transaction{
 		PostedAt:    posted,
-		Amount:      types.NormalizeTransactionAmount(amountRaw),
+		Amount:      kinds.NormalizeTransactionAmount(amountRaw),
 		Currency:    "USD",
 		Description: payee,
 		Merchant:    payee,
 		Category:    categories,
 		Memo:        memo,
-		Account:     &types.TransactionAccount{Name: accountName, Type: "bank"},
+		Account:     &kinds.TransactionAccount{Name: accountName, Type: "bank"},
 		Status:      status,
 		EntityID:    fitid,
 	}
-	src := types.NewTransaction(QuickenServiceID, QuickenServiceName, fitid, tx)
+	src := kinds.NewTransaction(QuickenServiceID, QuickenServiceName, fitid, tx)
 	if len(src.Sources) == 1 {
 		src.Sources[0].Extra = map[string]any{"fitid": fitid, "trntype": trntype}
 	}
@@ -675,7 +676,7 @@ func ImportQuickenPath(store *QuickenStore, path string) (QuickenImportResult, e
 		}
 		var st ImportStats
 		upsertRows(&store.localStore, &st, txs, transactionSourceID, quickenHasQuery,
-			func(tx *sql.Tx, t types.Transaction) error { return upsertQuickenTx(tx, file, t) })
+			func(tx *sql.Tx, t kinds.Transaction) error { return upsertQuickenTx(tx, file, t) })
 		res.Scanned += st.Scanned
 		res.Stored += st.Stored
 		res.Skipped += st.Skipped
@@ -757,7 +758,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 		}
 		shared.WriteJSON(w, map[string]any{"count": n, "path": store.Path()})
 	case r.Method == http.MethodGet && (remainingPath == "/transactions" || remainingPath == "transactions" || remainingPath == "" || remainingPath == "/"):
-		filters := types.ParseTransactionFilters(r)
+		filters := kinds.ParseTransactionFilters(r)
 		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
 			if n, err := strconv.Atoi(v); err == nil && n > 0 {
@@ -769,7 +770,7 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 			shared.WriteJSONError(w, http.StatusInternalServerError, "quicken store error")
 			return
 		}
-		shared.WriteJSON(w, types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		shared.WriteJSON(w, kinds.TransactionList{Transactions: list, LibraryListMeta: kinds.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && (remainingPath == "/import" || remainingPath == "import"):
 		var req struct {
 			Path string `json:"path"`
@@ -791,12 +792,12 @@ func (c *QuickenConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 }
 
 // ListUserTransactions returns imported Quicken line items.
-func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactions []types.Transaction, truncated bool, err error) {
+func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactions []kinds.Transaction, truncated bool, err error) {
 	store := c.store
 	if store == nil || !store.Enabled() {
 		return nil, false, nil
 	}
-	list, err := store.List(types.TransactionFilters{}, LibraryItemCap)
+	list, err := store.List(kinds.TransactionFilters{}, LibraryItemCap)
 	if err != nil {
 		return nil, false, err
 	}
@@ -816,5 +817,5 @@ func (c *QuickenConnector) ListUserTransactions(ctx context.Context) (transactio
 
 var (
 	_ ServiceConnector          = (*QuickenConnector)(nil)
-	_ types.TransactionProvider = (*QuickenConnector)(nil)
+	_ kinds.TransactionProvider = (*QuickenConnector)(nil)
 )

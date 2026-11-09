@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Link is a user-confirmed cross-service identity. Playlists have no
@@ -182,7 +182,7 @@ func (st *Store) Delete(id string) bool {
 
 // PlaylistLinkKey returns a stable merge key when any playlist source is in
 // an explicit link group; otherwise "".
-func (st *Store) PlaylistLinkKey(p types.Playlist) string {
+func (st *Store) PlaylistLinkKey(p kinds.Playlist) string {
 	if st == nil || len(p.Sources) == 0 {
 		return ""
 	}

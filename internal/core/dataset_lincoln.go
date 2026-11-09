@@ -3,7 +3,7 @@ package core
 import (
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Abraham Lincoln demo dataset pack (issue #217).
@@ -33,12 +33,12 @@ func GenerateLincolnMail(dataset string) SampleMailSet {
 	return lotRMail(LincolnDataset, lincolnMailRows())
 }
 
-func lincolnContact(id, name string, emails, phones []string) types.Contact {
-	return types.NewContact("google-contacts", "Google Contacts", id, name, emails, phones)
+func lincolnContact(id, name string, emails, phones []string) kinds.Contact {
+	return kinds.NewContact("google-contacts", "Google Contacts", id, name, emails, phones)
 }
 
 func lincolnLibrary() SampleLibrarySet {
-	contacts := []types.Contact{
+	contacts := []kinds.Contact{
 		lincolnContact("c-lincoln", "Abraham Lincoln", []string{"lincoln@lincoln.example"}, nil),
 		lincolnContact("c-mary", "Mary Todd Lincoln", []string{"mary@lincoln.example"}, []string{"+12170001"}),
 		lincolnContact("c-seward", "William H. Seward", []string{"seward@lincoln.example"}, []string{"+12170002"}),
@@ -52,116 +52,116 @@ func lincolnLibrary() SampleLibrarySet {
 		lincolnContact("c-grant-capt", "Captain Grant", nil, []string{"+12170004"}),
 	}
 
-	events := []types.CalendarEvent{
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-inaug1",
+	events := []kinds.CalendarEvent{
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-inaug1",
 			"First Inauguration", "1861-03-04T12:00:00Z", "1861-03-04T15:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-antietam",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-antietam",
 			"Battle of Antietam (awaiting news)", "1862-09-17T06:00:00Z", "1862-09-17T22:00:00Z", true),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-emancipation",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-emancipation",
 			"Emancipation Proclamation takes effect", "1863-01-01T00:00:00Z", "1863-01-01T23:59:00Z", true),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-gettysburg",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-gettysburg",
 			"Gettysburg dedication remarks", "1863-11-19T13:00:00Z", "1863-11-19T15:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-grant-chief",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-grant-chief",
 			"Grant named general-in-chief", "1864-03-09T11:00:00Z", "1864-03-09T12:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-citypoint",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-citypoint",
 			"Visit to City Point (Grant’s headquarters)", "1865-03-24T12:00:00Z", "1865-03-28T12:00:00Z", true),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-inaug2",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-inaug2",
 			"Second Inauguration", "1865-03-04T12:00:00Z", "1865-03-04T14:30:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-appomattox",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-appomattox",
 			"News from Appomattox Court House", "1865-04-09T17:00:00Z", "1865-04-09T19:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-fords",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-fords",
 			"Ford’s Theatre (evening)", "1865-04-14T20:00:00Z", "1865-04-14T23:30:00Z", false),
 	}
 
-	places := []types.PlaceVisit{
+	places := []kinds.PlaceVisit{
 		{
 			StartAt:    "1861-02-11T14:00:00Z",
 			EndAt:      "1861-02-23T18:00:00Z",
-			Kind:       types.PlaceKindTrip,
+			Kind:       kinds.PlaceKindTrip,
 			Mode:       "train",
 			Confidence: "high",
-			Place:      types.Place{Name: "Springfield to Washington (inaugural journey)", Locality: "Springfield", Country: "United States"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-inaug-train", Canonical: true}},
+			Place:      kinds.Place{Name: "Springfield to Washington (inaugural journey)", Locality: "Springfield", Country: "United States"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-inaug-train", Canonical: true}},
 		},
 		{
 			StartAt:    "1863-11-18T18:00:00Z",
 			EndAt:      "1863-11-20T12:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "high",
-			Place:      types.Place{Name: "Gettysburg, Pennsylvania", Locality: "Gettysburg", Country: "United States"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-gettysburg", Canonical: true}},
+			Place:      kinds.Place{Name: "Gettysburg, Pennsylvania", Locality: "Gettysburg", Country: "United States"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-gettysburg", Canonical: true}},
 		},
 		{
 			StartAt:    "1865-03-24T12:00:00Z",
 			EndAt:      "1865-03-28T12:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "medium",
-			Place:      types.Place{Name: "City Point, Virginia", Locality: "City Point", Country: "United States"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-citypoint", Canonical: true}},
+			Place:      kinds.Place{Name: "City Point, Virginia", Locality: "City Point", Country: "United States"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-citypoint", Canonical: true}},
 		},
 		{
 			StartAt:    "1865-04-04T12:00:00Z",
 			EndAt:      "1865-04-05T12:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "medium",
-			Place:      types.Place{Name: "Richmond, Virginia", Locality: "Richmond", Country: "United States"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-richmond", Canonical: true}},
+			Place:      kinds.Place{Name: "Richmond, Virginia", Locality: "Richmond", Country: "United States"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-richmond", Canonical: true}},
 		},
 		{
 			StartAt:    "1861-03-04T00:00:00Z",
 			EndAt:      "1865-04-14T23:59:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "high",
-			Place:      types.Place{Name: "Executive Mansion, Washington", Address: "1600 Pennsylvania Avenue", Locality: "Washington", Country: "United States"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-whitehouse", Canonical: true}},
+			Place:      kinds.Place{Name: "Executive Mansion, Washington", Address: "1600 Pennsylvania Avenue", Locality: "Washington", Country: "United States"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-whitehouse", Canonical: true}},
 		},
 	}
 
-	photos := []types.Photo{
-		types.NewPhoto("google-photos", "Google Photos", "gp-brady-1863", "brady-portrait-1863.jpg", "image/jpeg", "1863-02-08T15:00:00Z", 2400, 3000),
-		types.NewPhoto("google-photos", "Google Photos", "gp-gettysburg-crowd", "gettysburg-dedication.jpg", "image/jpeg", "1863-11-19T13:30:00Z", 2400, 1600),
-		types.NewPhoto("google-photos", "Google Photos", "gp-citypoint", "city-point-headquarters.jpg", "image/jpeg", "1865-03-25T10:00:00Z", 2000, 1400),
-		types.NewPhoto("google-photos", "Google Photos", "gp-richmond", "richmond-ruins-1865.jpg", "image/jpeg", "1865-04-04T14:00:00Z", 2200, 1500),
+	photos := []kinds.Photo{
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-brady-1863", "brady-portrait-1863.jpg", "image/jpeg", "1863-02-08T15:00:00Z", 2400, 3000),
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-gettysburg-crowd", "gettysburg-dedication.jpg", "image/jpeg", "1863-11-19T13:30:00Z", 2400, 1600),
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-citypoint", "city-point-headquarters.jpg", "image/jpeg", "1865-03-25T10:00:00Z", 2000, 1400),
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-richmond", "richmond-ruins-1865.jpg", "image/jpeg", "1865-04-04T14:00:00Z", 2200, 1500),
 	}
 	photos[0].Caption = "Studio portrait, Washington, 1863"
 	photos[1].Caption = "Crowd at the Gettysburg dedication"
 	photos[2].Caption = "Headquarters at City Point during the visit"
 	photos[3].Caption = "Richmond after the evacuation"
 
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		{
 			Name:    "The Battle Cry of Freedom",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-union-glee", "Union Glee Club")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-battle-cry", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-union-glee", "Union Glee Club")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-battle-cry", Canonical: true}},
 		},
 		{
 			Name:    "John Brown’s Body",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-union-glee", "Union Glee Club")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-john-brown", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-union-glee", "Union Glee Club")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-john-brown", Canonical: true}},
 		},
 		{
 			Name:    "Home, Sweet Home",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-brass-band", "Fifth Regiment Brass Band")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-home-sweet", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-brass-band", "Fifth Regiment Brass Band")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-home-sweet", Canonical: true}},
 		},
 	}
-	playlists := []types.Playlist{
+	playlists := []kinds.Playlist{
 		{
 			Name: "Songs of the Union",
-			Sources: []types.PlaylistSource{
+			Sources: []kinds.PlaylistSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "pl-union", Canonical: true},
 			},
 		},
 	}
-	albums := []types.Album{
-		{Name: "Campaign Airs, 1860–1864", Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al-campaign"}}},
+	albums := []kinds.Album{
+		{Name: "Campaign Airs, 1860–1864", Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al-campaign"}}},
 	}
-	artists := []types.Artist{
-		types.NewArtist("spotify", "Spotify", "ar-union-glee", "Union Glee Club"),
-		types.NewArtist("spotify", "Spotify", "ar-brass-band", "Fifth Regiment Brass Band"),
+	artists := []kinds.Artist{
+		kinds.NewArtist("spotify", "Spotify", "ar-union-glee", "Union Glee Club"),
+		kinds.NewArtist("spotify", "Spotify", "ar-brass-band", "Fifth Regiment Brass Band"),
 	}
 
-	documents := []types.Document{
+	documents := []kinds.Document{
 		{
 			Title:         "Memorandum on reconstruction (draft)",
 			MimeType:      "text/plain",
@@ -170,7 +170,7 @@ func lincolnLibrary() SampleLibrarySet {
 			DocumentType:  "memorandum",
 			Tags:          []string{"reconstruction", "draft"},
 			Excerpt:       "If the people of any State choose to return to the Union, let them take an oath of loyalty and set up a government — the rest can follow.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-recon", Canonical: true},
 			},
 		},
@@ -182,7 +182,7 @@ func lincolnLibrary() SampleLibrarySet {
 			DocumentType:  "remarks",
 			Tags:          []string{"gettysburg", "public"},
 			Excerpt:       "…government of the people, by the people, for the people, shall not perish from the earth.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-gettysburg", Canonical: true},
 			},
 		},
@@ -194,13 +194,13 @@ func lincolnLibrary() SampleLibrarySet {
 			DocumentType:  "remarks",
 			Tags:          []string{"inaugural", "public"},
 			Excerpt:       "With malice toward none, with charity for all… let us strive on to finish the work we are in.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-inaug2", Canonical: true},
 			},
 		},
 	}
 
-	messages := []types.Message{
+	messages := []kinds.Message{
 		lincolnLibraryMessage("msg-seward-1861", "Do not let the foreign powers drift",
 			"William H. Seward", "seward@lincoln.example", "Abraham Lincoln", "lincoln@lincoln.example",
 			"1861-03-29T10:00:00Z", "Sir — I urge a firm but quiet hand abroad. A single rash dispatch may cost us more than a battle."),
@@ -212,7 +212,7 @@ func lincolnLibrary() SampleLibrarySet {
 			"1864-06-12T20:00:00Z", "Dear Husband — Tad and I are well. Come home when the papers allow, and do not forget the strawberries."),
 	}
 
-	transactions := []types.Transaction{
+	transactions := []kinds.Transaction{
 		{
 			PostedAt:    "1863-11-18T12:00:00Z",
 			Amount:      "-2.50",
@@ -220,7 +220,7 @@ func lincolnLibrary() SampleLibrarySet {
 			Description: "Rail ticket Washington to Gettysburg",
 			Merchant:    "Northern Central Railway",
 			Category:    []string{"travel"},
-			Sources:     []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-rail-gb", Canonical: true}},
+			Sources:     []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-rail-gb", Canonical: true}},
 		},
 		{
 			PostedAt:    "1865-04-14T18:30:00Z",
@@ -229,7 +229,7 @@ func lincolnLibrary() SampleLibrarySet {
 			Description: "Theatre tickets — Ford’s",
 			Merchant:    "Ford’s Theatre",
 			Category:    []string{"entertainment"},
-			Sources:     []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-fords", Canonical: true}},
+			Sources:     []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-fords", Canonical: true}},
 		},
 	}
 
@@ -248,7 +248,7 @@ func lincolnLibrary() SampleLibrarySet {
 	}
 }
 
-func lincolnLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentAt, body string) types.Message {
+func lincolnLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentAt, body string) kinds.Message {
 	return lotRLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentAt, body)
 }
 

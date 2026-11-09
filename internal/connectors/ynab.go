@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -137,14 +138,14 @@ func (c *YNABConnector) TransformProxyResponse(method, path string, data []byte,
 	}
 	var accounts []YNABAccount
 	// Account names may already be embedded on each row.
-	list := make([]types.Transaction, 0, len(raw.Data.Transactions))
+	list := make([]kinds.Transaction, 0, len(raw.Data.Transactions))
 	for _, t := range raw.Data.Transactions {
 		if t.Deleted {
 			continue
 		}
 		list = append(list, c.NeutralTransaction("", accounts, t))
 	}
-	return types.TransactionList{Transactions: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}}
+	return kinds.TransactionList{Transactions: list, LibraryListMeta: kinds.LibraryListMeta{Total: len(list), Synced: true}}
 }
 
 // YnabToken resolves the Authorization token from static headers or OAuth.
@@ -170,7 +171,7 @@ func (c *YNABConnector) YnabToken(logger *slog.Logger) string {
 func (c *YNABConnector) APIGet(ctx context.Context, logger *slog.Logger, path string, query url.Values, out any) error {
 	token := c.YnabToken(logger)
 	if token == "" {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	u := c.YnabUpstreamBase() + path
 	if encoded := query.Encode(); encoded != "" {
@@ -192,7 +193,7 @@ func (c *YNABConnector) APIGet(ctx context.Context, logger *slog.Logger, path st
 		return err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("ynab %s returned %d", path, resp.StatusCode)
@@ -305,10 +306,10 @@ type YnabTransactionsResponse struct {
 }
 
 // YNABAccountByName maps account id → neutral account ref.
-func YNABAccountRef(accounts []YNABAccount, id, fallbackName string) *types.TransactionAccount {
+func YNABAccountRef(accounts []YNABAccount, id, fallbackName string) *kinds.TransactionAccount {
 	for _, a := range accounts {
 		if a.ID == id {
-			return &types.TransactionAccount{
+			return &kinds.TransactionAccount{
 				Name:  a.Name,
 				Type:  a.Type,
 				Last4: a.Last4,
@@ -319,20 +320,20 @@ func YNABAccountRef(accounts []YNABAccount, id, fallbackName string) *types.Tran
 	if name == "" {
 		return nil
 	}
-	return &types.TransactionAccount{Name: name}
+	return &kinds.TransactionAccount{Name: name}
 }
 
 // NeutralTransaction maps one YNAB row to the neutral model.
-func (c *YNABConnector) NeutralTransaction(budgetID string, accounts []YNABAccount, t YnabTransaction) types.Transaction {
+func (c *YNABConnector) NeutralTransaction(budgetID string, accounts []YNABAccount, t YnabTransaction) kinds.Transaction {
 	return c.NeutralTransactionCurrency(budgetID, accounts, t, "USD")
 }
 
 // NeutralTransactionCurrency maps one YNAB row using a budget currency code.
-func (c *YNABConnector) NeutralTransactionCurrency(budgetID string, accounts []YNABAccount, t YnabTransaction, currency string) types.Transaction {
-	amount := types.FormatMilliunitsAmount(t.Amount)
-	status := types.TransactionStatusPosted
+func (c *YNABConnector) NeutralTransactionCurrency(budgetID string, accounts []YNABAccount, t YnabTransaction, currency string) kinds.Transaction {
+	amount := kinds.FormatMilliunitsAmount(t.Amount)
+	status := kinds.TransactionStatusPosted
 	if strings.EqualFold(t.Cleared, "uncleared") {
-		status = types.TransactionStatusPending
+		status = kinds.TransactionStatusPending
 	}
 	merchant := ""
 	if t.PayeeName != nil {
@@ -352,7 +353,7 @@ func (c *YNABConnector) NeutralTransactionCurrency(budgetID string, accounts []Y
 		entityID = strings.TrimSpace(t.ID)
 	}
 	posted := t.Date
-	if day := types.NormalizeTransactionDate(posted); day != "" {
+	if day := kinds.NormalizeTransactionDate(posted); day != "" {
 		posted = day
 	}
 	if currency == "" {
@@ -374,7 +375,7 @@ func (c *YNABConnector) NeutralTransactionCurrency(budgetID string, accounts []Y
 		description = memo
 	}
 	deep := fmt.Sprintf("https://app.ynab.com/budgets/%s/transactions/%s", url.PathEscape(budgetID), url.PathEscape(t.ID))
-	out := types.NewTransaction(YNABServiceID, YNABServiceName, t.ID, types.Transaction{
+	out := kinds.NewTransaction(YNABServiceID, YNABServiceName, t.ID, kinds.Transaction{
 		PostedAt:    posted,
 		Amount:      amount,
 		Currency:    currency,
@@ -396,16 +397,16 @@ func (c *YNABConnector) NeutralTransactionCurrency(budgetID string, accounts []Y
 }
 
 // ListUserTransactions fetches YNAB transactions across the user's budgets.
-func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions []types.Transaction, truncated bool, err error) {
+func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions []kinds.Transaction, truncated bool, err error) {
 	logger := slog.With("service", YNABServiceID)
 	token := c.YnabToken(logger)
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	var budgetsResp BudgetsResponse
 	if err := c.APIGet(ctx, logger, "/budgets", nil, &budgetsResp); err != nil {
-		if err == types.ErrUnauthorized {
+		if err == kinds.ErrUnauthorized {
 			return nil, false, err
 		}
 		return nil, false, err
@@ -422,7 +423,7 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 	// Collect every mapped row from every budget first. The YNAB
 	// transactions endpoint is unpaginated — filtering to "first N" in API
 	// order dropped recent charges whenever the payload was oldest-first.
-	var all []types.Transaction
+	var all []kinds.Transaction
 	for _, b := range budgets {
 		currency := "USD"
 		if b.CurrencyFormat != nil && strings.TrimSpace(b.CurrencyFormat.ISOCode) != "" {
@@ -430,9 +431,9 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 		}
 		var accountsResp YNABAccountsResponse
 		accounts := []YNABAccount{}
-		if err := c.APIGet(ctx, logger, "/budgets/"+url.PathEscape(b.ID)+"/accounts", nil, &accountsResp); err != nil && err != types.ErrUnauthorized {
+		if err := c.APIGet(ctx, logger, "/budgets/"+url.PathEscape(b.ID)+"/accounts", nil, &accountsResp); err != nil && err != kinds.ErrUnauthorized {
 			logger.Warn("ynab accounts fetch failed", "budget", b.ID, "error", err)
-		} else if err == types.ErrUnauthorized {
+		} else if err == kinds.ErrUnauthorized {
 			return nil, false, err
 		} else {
 			accounts = accountsResp.Data.Accounts
@@ -440,7 +441,7 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 
 		var txResp YnabTransactionsResponse
 		if err := c.APIGet(ctx, logger, "/budgets/"+url.PathEscape(b.ID)+"/transactions", nil, &txResp); err != nil {
-			if err == types.ErrUnauthorized {
+			if err == kinds.ErrUnauthorized {
 				return nil, false, err
 			}
 			logger.Warn("ynab transactions fetch failed", "budget", b.ID, "error", err)
@@ -468,5 +469,5 @@ func (c *YNABConnector) ListUserTransactions(ctx context.Context) (transactions 
 // Ensure the connector implements the required interfaces at compile time.
 var (
 	_ ServiceConnector          = (*YNABConnector)(nil)
-	_ types.TransactionProvider = (*YNABConnector)(nil)
+	_ kinds.TransactionProvider = (*YNABConnector)(nil)
 )

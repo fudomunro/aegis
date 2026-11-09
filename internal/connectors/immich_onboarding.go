@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -862,7 +863,7 @@ func immichNextStepFrom(steps []types.OnboardingStepState, probe *types.ProbeRes
 }
 
 // immichStampSummary inspects one listing for the canonical + proxy stamp.
-func immichStampSummary(photos []types.Photo, baseURL string) (bool, string) {
+func immichStampSummary(photos []kinds.Photo, baseURL string) (bool, string) {
 	if len(photos) == 0 {
 		return false, "no photos to inspect"
 	}

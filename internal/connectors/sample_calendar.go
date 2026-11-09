@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -60,7 +61,7 @@ func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 		return
 	}
 	events := SampleCalendarEvents()
-	shared.WriteJSON(w, types.CalendarEventList{
+	shared.WriteJSON(w, kinds.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 	})
@@ -68,13 +69,13 @@ func (c *SampleCalendarConnector) HandleProxy(w http.ResponseWriter, r *http.Req
 
 // ListCalendarEvents implements CalendarEventProvider with deterministic
 // synthetic events near "now" so free/busy demos show busy blocks today.
-func (c *SampleCalendarConnector) ListCalendarEvents(_ context.Context) ([]types.CalendarEvent, bool, error) {
+func (c *SampleCalendarConnector) ListCalendarEvents(_ context.Context) ([]kinds.CalendarEvent, bool, error) {
 	return SampleCalendarEvents(), false, nil
 }
 
 // SampleCalendarEvents returns fictional events anchored a few days from now.
 // Cancelled rows exist to prove free/busy omits them (issue #128).
-func SampleCalendarEvents() []types.CalendarEvent {
+func SampleCalendarEvents() []kinds.CalendarEvent {
 	base := time.Now().UTC().Truncate(24 * time.Hour)
 	day := func(offset int, hour, minute, durMin int) (start, end string) {
 		s := base.AddDate(0, 0, offset).Add(time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute)
@@ -92,27 +93,27 @@ func SampleCalendarEvents() []types.CalendarEvent {
 	allDayStart := base.AddDate(0, 0, 3).Format(time.RFC3339)
 	allDayEnd := base.AddDate(0, 0, 4).Format(time.RFC3339)
 
-	full := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-1", "Project kickoff", s1, e1, false)
+	full := kinds.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-1", "Project kickoff", s1, e1, false)
 	full.Description = "Bring the roadmap draft"
 	full.Location = "Room 4B"
-	full.Attendees = []types.Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}}
+	full.Attendees = []kinds.Contact{{Name: "Ada Lovelace", Emails: []string{"ada@example.com"}}}
 	full.EntityID = "kickoff@synthetic.example"
 
-	oneOnOne := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-2", "1:1 with Grace", s2, e2, false)
+	oneOnOne := kinds.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-2", "1:1 with Grace", s2, e2, false)
 	oneOnOne.EntityID = "oneonone@synthetic.example"
 
-	workshop := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-3", "Design workshop", s3, e3, false)
+	workshop := kinds.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-3", "Design workshop", s3, e3, false)
 	workshop.Location = "Studio B"
 	workshop.EntityID = "workshop@synthetic.example"
 
-	allday := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-4", "Offsite", allDayStart, allDayEnd, true)
+	allday := kinds.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-4", "Offsite", allDayStart, allDayEnd, true)
 	allday.EntityID = "offsite@synthetic.example"
 
-	cancelled := types.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-5", "Cancelled standup", s5, e5, false)
+	cancelled := kinds.NewCalendarEvent(SampleCalendarServiceID, SampleCalendarServiceName, "s-ev-5", "Cancelled standup", s5, e5, false)
 	cancelled.Status = "cancelled"
 	cancelled.EntityID = "standup@synthetic.example"
 
-	return []types.CalendarEvent{full, oneOnOne, workshop, allday, cancelled}
+	return []kinds.CalendarEvent{full, oneOnOne, workshop, allday, cancelled}
 }
 
 // isSampleCalendarService reports whether a service endpoint is fixture-backed.

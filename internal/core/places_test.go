@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"context"
 	"encoding/json"
@@ -14,7 +15,7 @@ import (
 )
 
 type fakePlaceProvider struct {
-	visits    []types.PlaceVisit
+	visits    []kinds.PlaceVisit
 	truncated bool
 	err       error
 }
@@ -25,25 +26,25 @@ func (f *fakePlaceProvider) Capabilities() types.ServiceCapabilities {
 func (f *fakePlaceProvider) SystemInstructions(string) string { return "" }
 func (f *fakePlaceProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
-func (f *fakePlaceProvider) ListUserPlaceVisits(context.Context) ([]types.PlaceVisit, bool, error) {
+func (f *fakePlaceProvider) ListUserPlaceVisits(context.Context) ([]kinds.PlaceVisit, bool, error) {
 	return f.visits, f.truncated, f.err
 }
 
-func samplePlaces() []types.PlaceVisit {
+func samplePlaces() []kinds.PlaceVisit {
 	return GenerateSampleLibrary().Places
 }
 
 func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
-	if got := types.NormalizePlaceVisitKind("placeVisit"); got != types.PlaceKindVisit {
+	if got := kinds.NormalizePlaceVisitKind("placeVisit"); got != kinds.PlaceKindVisit {
 		t.Fatalf("kind = %q", got)
 	}
-	if got := types.NormalizePlaceVisitKind("activitySegment"); got != types.PlaceKindTrip {
+	if got := kinds.NormalizePlaceVisitKind("activitySegment"); got != kinds.PlaceKindTrip {
 		t.Fatalf("kind = %q", got)
 	}
-	if got := types.NormalizeTripMode("IN_PASSENGER_VEHICLE"); got != types.TripModeDrive {
+	if got := kinds.NormalizeTripMode("IN_PASSENGER_VEHICLE"); got != kinds.TripModeDrive {
 		t.Fatalf("mode = %q", got)
 	}
-	if got := types.NormalizeTripMode("FLYING"); got != types.TripModeFlight {
+	if got := kinds.NormalizeTripMode("FLYING"); got != kinds.TripModeFlight {
 		t.Fatalf("mode = %q", got)
 	}
 }
@@ -107,13 +108,13 @@ func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
 // visit work on sample data.
 func TestPhotosPlacesJoinDemo(t *testing.T) {
 	lib := GenerateSampleLibrary()
-	merged := types.MergePlaceVisits(lib.Places)
-	var harbor, lunenburg *types.PlaceVisit
+	merged := kinds.MergePlaceVisits(lib.Places)
+	var harbor, lunenburg *kinds.PlaceVisit
 	for i := range merged {
 		switch {
 		case merged[i].Place.Name == "Halifax Harbour" && merged[i].StartAt == "2023-07-04T16:00:00Z":
 			harbor = &merged[i]
-		case merged[i].Place.Name == "Lunenburg Beach" && merged[i].Kind == types.PlaceKindVisit:
+		case merged[i].Place.Name == "Lunenburg Beach" && merged[i].Kind == kinds.PlaceKindVisit:
 			lunenburg = &merged[i]
 		}
 	}
@@ -156,7 +157,7 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list types.PlaceVisitList
+	var list kinds.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +204,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list types.PlaceVisitList
+	var list kinds.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -238,7 +239,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list types.PlaceVisitList
+	var list kinds.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -270,7 +271,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
-	var list types.PlaceVisitList
+	var list kinds.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}

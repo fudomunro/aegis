@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -294,7 +295,7 @@ func (c *PaperlessConnector) apiGet(ctx context.Context, logger *slog.Logger, pa
 		return err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("paperless returned %d", resp.StatusCode)
@@ -386,11 +387,11 @@ func normalizePaperlessTime(raw string) string {
 }
 
 // NeutralDocument maps one Paperless row to a neutral Document.
-func (c *PaperlessConnector) NeutralDocument(doc paperlessDocument, tagNames, corrNames, typeNames map[string]string) types.Document {
+func (c *PaperlessConnector) NeutralDocument(doc paperlessDocument, tagNames, corrNames, typeNames map[string]string) kinds.Document {
 	id := strconv.Itoa(doc.ID)
 	web := c.PaperlessWebBase()
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + PaperlessServiceID
-	src := types.DocumentSource{
+	src := kinds.DocumentSource{
 		Service:     PaperlessServiceID,
 		ServiceName: PaperlessServiceName,
 		ID:          id,
@@ -440,7 +441,7 @@ func (c *PaperlessConnector) NeutralDocument(doc paperlessDocument, tagNames, co
 		mime = mimeFromFilename(doc.OriginalFileName)
 	}
 
-	d := types.Document{
+	d := kinds.Document{
 		Title:         strings.TrimSpace(doc.Title),
 		MimeType:      mime,
 		CreatedAt:     normalizePaperlessTime(doc.Created),
@@ -450,10 +451,10 @@ func (c *PaperlessConnector) NeutralDocument(doc paperlessDocument, tagNames, co
 		Tags:          tags,
 		Excerpt:       paperlessExcerpt(doc.Content),
 		EntityID:      entityID,
-		Sources:       []types.DocumentSource{src},
+		Sources:       []kinds.DocumentSource{src},
 	}
 	if corr != "" {
-		d.People = []types.Contact{{Name: corr}}
+		d.People = []kinds.Contact{{Name: corr}}
 	}
 	if d.Title == "" {
 		d.Title = doc.OriginalFileName
@@ -483,13 +484,13 @@ func mimeFromFilename(name string) string {
 
 // ListUserDocuments implements DocumentProvider. It pages GET /api/documents
 // and maps rows to neutral Document values with a short excerpt only.
-func (c *PaperlessConnector) ListUserDocuments(ctx context.Context) ([]types.Document, bool, error) {
+func (c *PaperlessConnector) ListUserDocuments(ctx context.Context) ([]kinds.Document, bool, error) {
 	logger := slog.Default()
 	tagNames := c.lookupNames(ctx, logger, "/tags")
 	corrNames := c.lookupNames(ctx, logger, "/correspondents")
 	typeNames := c.lookupNames(ctx, logger, "/document_types")
 
-	var out []types.Document
+	var out []kinds.Document
 	truncated := false
 	nextPath := "/documents"
 	query := url.Values{}
@@ -516,7 +517,7 @@ func (c *PaperlessConnector) ListUserDocuments(ctx context.Context) ([]types.Doc
 			}
 		}
 		if err := c.apiGet(ctx, logger, path, q, &envelope); err != nil {
-			if len(out) > 0 && err == types.ErrUnauthorized {
+			if len(out) > 0 && err == kinds.ErrUnauthorized {
 				return out, truncated, err
 			}
 			return out, truncated, err

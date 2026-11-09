@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Route is one agent-tier GET/HEAD route owned by a library kind. The
@@ -46,11 +45,11 @@ type Kind interface {
 type Deps struct {
 	// PlaylistLinkKey resolves confirmed cross-service playlist links
 	// (issue #4).
-	PlaylistLinkKey func(types.Playlist) string
+	PlaylistLinkKey func(Playlist) string
 	// MusicBrainz resolvers attach durable IDs before merge (issue #4).
-	ResolveTracks  func(context.Context, []types.Track)
-	ResolveAlbums  func(context.Context, []types.Album)
-	ResolveArtists func(context.Context, []types.Artist)
+	ResolveTracks  func(context.Context, []Track)
+	ResolveAlbums  func(context.Context, []Album)
+	ResolveArtists func(context.Context, []Artist)
 	// PlacesLocalSource reports whether the Timeline import store can feed
 	// the places kind without a live connector (issue #142) — the declared
 	// local-source shape, not a pipeline branch (issue #312).
@@ -144,7 +143,7 @@ func readableFor(h Host, kind string) bool {
 }
 
 // providerProvides builds a Provides predicate from a provider-interface
-// assertion, e.g. providerProvides[types.PlaylistProvider].
+// assertion, e.g. providerProvides[PlaylistProvider].
 func providerProvides[P any](connector any) bool {
 	_, ok := connector.(P)
 	return ok

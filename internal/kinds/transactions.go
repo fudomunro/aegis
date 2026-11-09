@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // transactionsKind owns the financial-transactions aggregate (issue #141):
@@ -18,7 +17,7 @@ type transactionsKind struct {
 	providerKind
 	h    Host
 	e    *Engine
-	mark func([]types.Transaction, string)
+	mark func([]Transaction, string)
 }
 
 func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
@@ -27,7 +26,7 @@ func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("transactions")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.TransactionProvider],
+		provides: providerProvides[TransactionProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -43,7 +42,7 @@ func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
 // AccessSummary returns totals only.
 func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
-	filters := types.ParseTransactionFilters(r)
+	filters := ParseTransactionFilters(r)
 	if kind.Search != nil {
 		// Free-text q is owned by the search index (issue #178). after/
 		// before/account/currency stay handler-side filters.
@@ -51,32 +50,32 @@ func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	appLevel, _ := k.h.AppLevel(r, kind.PermType)
 	summaryOnly := policy.IsSummaryAccess(appLevel)
-	Aggregate(k.h, k.e, w, r, Spec[types.Transaction]{
+	Aggregate(k.h, k.e, w, r, Spec[Transaction]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.Transaction], []string) {
+		Targets: func(r *http.Request) ([]NamedLister[Transaction], []string) {
 			return transactionsProviderTargets(k.h, r, kind.PermType, appLevel)
 		},
-		ServiceOf: types.TransactionServiceName,
-		SortKey:   types.TransactionIdentityKey,
-		Merge:     types.MergeTransactions,
-		Encode: func(items []types.Transaction, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: TransactionServiceName,
+		SortKey:   TransactionIdentityKey,
+		Merge:     MergeTransactions,
+		Encode: func(items []Transaction, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			filtered := filterTransactions(items, filters)
 			// Summary covers the full filtered set, not the current page.
 			summary := buildTransactionSummary(filtered)
 			if summaryOnly {
-				return types.TransactionList{
+				return TransactionList{
 					Summary:         summary,
-					LibraryListMeta: types.MetaForPage(types.PageResult{Total: 0}, true, AnyServiceTruncated(bySvc), bySvc),
+					LibraryListMeta: MetaForPage(PageResult{Total: 0}, true, AnyServiceTruncated(bySvc), bySvc),
 				}
 			}
-			pageItems, pr := types.SlicePage(filtered, page)
-			return types.TransactionList{
+			pageItems, pr := SlicePage(filtered, page)
+			return TransactionList{
 				Transactions:    pageItems,
 				Summary:         summary,
-				LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
+				LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		RedactSearch: func(items []types.Transaction, r *http.Request) []types.Transaction {
+		RedactSearch: func(items []Transaction, r *http.Request) []Transaction {
 			return searchRedactTransactions(k.h, items, r)
 		},
 		MarkCanonical: k.mark,
@@ -87,9 +86,9 @@ func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 // transactionsProviderTargets collects providers, applying per-service and
 // app-level summary/read redaction so a summary-only surface never
 // contributes line items or account identifiers (issue #141).
-func transactionsProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[types.Transaction], []string) {
-	targets, denied := Collect[types.Transaction, types.TransactionProvider](h, r, permType,
-		func(p types.TransactionProvider) func(context.Context) ([]types.Transaction, bool, error) {
+func transactionsProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[Transaction], []string) {
+	targets, denied := Collect[Transaction, TransactionProvider](h, r, permType,
+		func(p TransactionProvider) func(context.Context) ([]Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
 	appSummary := policy.IsSummaryAccess(appLevel)
@@ -110,7 +109,7 @@ func transactionsProviderTargets(h Host, r *http.Request, permType string, appLe
 		if effective == level && !policy.IsSummaryAccess(level) && policy.NormalizeAccess(level) != policy.AccessRead {
 			continue
 		}
-		targets[i].List = func(ctx context.Context) ([]types.Transaction, bool, error) {
+		targets[i].List = func(ctx context.Context) ([]Transaction, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactTransactionsForLevel(items, effective), truncated, err
 		}
@@ -121,12 +120,12 @@ func transactionsProviderTargets(h Host, r *http.Request, permType string, appLe
 // searchRedactTransactions re-applies per-source summary/read redaction to
 // index-hydrated transactions (issue #178). Applying every source's level
 // in turn settles on the most restrictive one (never under-redact).
-func searchRedactTransactions(h Host, items []types.Transaction, r *http.Request) []types.Transaction {
+func searchRedactTransactions(h Host, items []Transaction, r *http.Request) []Transaction {
 	appLevel, isApp := h.AppLevel(r, "transactions")
 	if !isApp {
 		appLevel = ""
 	}
-	out := make([]types.Transaction, 0, len(items))
+	out := make([]Transaction, 0, len(items))
 	for _, t := range items {
 		skip := false
 		for _, src := range t.Sources {
@@ -134,7 +133,7 @@ func searchRedactTransactions(h Host, items []types.Transaction, r *http.Request
 				continue
 			}
 			level := h.RequestLevel(r, src.Service, "transactions")
-			red := redactTransactionsForLevel([]types.Transaction{t}, level)
+			red := redactTransactionsForLevel([]Transaction{t}, level)
 			if len(red) == 0 {
 				skip = true
 				break
@@ -146,20 +145,20 @@ func searchRedactTransactions(h Host, items []types.Transaction, r *http.Request
 		}
 		switch {
 		case policy.IsSummaryAccess(appLevel):
-			t = redactTransactionsForLevel([]types.Transaction{t}, policy.AccessSummary)[0]
+			t = redactTransactionsForLevel([]Transaction{t}, policy.AccessSummary)[0]
 		case appLevel != "" && policy.NormalizeAccess(appLevel) == policy.AccessRead:
-			t = redactTransactionsForLevel([]types.Transaction{t}, policy.AccessRead)[0]
+			t = redactTransactionsForLevel([]Transaction{t}, policy.AccessRead)[0]
 		}
 		out = append(out, t)
 	}
 	return out
 }
 
-func filterTransactions(in []types.Transaction, f types.TransactionFilters) []types.Transaction {
+func filterTransactions(in []Transaction, f TransactionFilters) []Transaction {
 	if f.Empty() {
 		return in
 	}
-	out := make([]types.Transaction, 0, len(in))
+	out := make([]Transaction, 0, len(in))
 	for _, t := range in {
 		if f.Matches(t) {
 			out = append(out, t)
@@ -170,18 +169,18 @@ func filterTransactions(in []types.Transaction, f types.TransactionFilters) []ty
 
 // redactTransactionRead strips account identifiers from a line item while
 // keeping merchant/description for agent reasoning (issue #141).
-func redactTransactionRead(t types.Transaction) types.Transaction {
+func redactTransactionRead(t Transaction) Transaction {
 	t.Account = nil
 	return t
 }
 
-func redactTransactionsForLevel(items []types.Transaction, level string) []types.Transaction {
+func redactTransactionsForLevel(items []Transaction, level string) []Transaction {
 	switch policy.NormalizeAccess(level) {
 	case policy.AccessSummary:
 		// No line items at all.
 		return nil
 	case policy.AccessRead:
-		out := make([]types.Transaction, len(items))
+		out := make([]Transaction, len(items))
 		for i, t := range items {
 			out[i] = redactTransactionRead(t)
 		}
@@ -195,11 +194,11 @@ func redactTransactionsForLevel(items []types.Transaction, level string) []types
 // Multi-category line items (YNAB splits) credit their full amount to each
 // listed category so the transaction "shows up" where the user categorized
 // it; dig into YNAB for exact per-category amounts.
-func buildTransactionSummary(items []types.Transaction) *types.TransactionSummary {
+func buildTransactionSummary(items []Transaction) *TransactionSummary {
 	if len(items) == 0 {
 		return nil
 	}
-	sum := &types.TransactionSummary{
+	sum := &TransactionSummary{
 		Count:      len(items),
 		ByCategory: map[string]string{},
 		ByMonth:    map[string]string{},
@@ -227,9 +226,9 @@ func buildTransactionSummary(items []types.Transaction) *types.TransactionSummar
 			byCat[cat] += cents
 		}
 		month := ""
-		if day := types.TransactionDay(t.PostedAt); day != "" {
+		if day := TransactionDay(t.PostedAt); day != "" {
 			month = day[:7]
-		} else if day := types.TransactionDay(t.AuthorizedAt); day != "" {
+		} else if day := TransactionDay(t.AuthorizedAt); day != "" {
 			month = day[:7]
 		}
 		if month != "" {
@@ -261,7 +260,7 @@ func buildTransactionSummary(items []types.Transaction) *types.TransactionSummar
 }
 
 func amountToCents(raw string) (int64, bool) {
-	s := types.NormalizeTransactionAmount(raw)
+	s := NormalizeTransactionAmount(raw)
 	if s == "" {
 		return 0, false
 	}
@@ -302,14 +301,14 @@ func centsToAmount(cents int64) string {
 	return fmt.Sprintf("%s%d.%02d", sign, cents/100, cents%100)
 }
 
-func forEachTransactionSource(item *types.Transaction, f func(SourceMut)) {
+func forEachTransactionSource(item *Transaction, f func(SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
 }

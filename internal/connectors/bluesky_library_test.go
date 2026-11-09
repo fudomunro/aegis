@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestBlueskyListUserPhotos(t *testing.T) {
@@ -207,7 +207,7 @@ func TestBlueskyListMessages_OnlyOwnPostsAndReplies(t *testing.T) {
 	if len(msgs) != 2 {
 		t.Fatalf("msgs = %d: %+v", len(msgs), msgs)
 	}
-	if msgs[0].Channel != types.MessageChannelSocial || msgs[0].Direction != "outbound" {
+	if msgs[0].Channel != kinds.MessageChannelSocial || msgs[0].Direction != "outbound" {
 		t.Fatalf("msg0 = %+v", msgs[0])
 	}
 	if msgs[0].Subject != "hello world" {

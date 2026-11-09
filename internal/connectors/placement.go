@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Placement helpers shared by the write-side provider operations
@@ -37,7 +37,7 @@ func apiJSON(ctx context.Context, host Host, serviceID, method, path string, que
 	}
 	token := host.GetValidToken(serviceID, slog.Default())
 	if token == "" {
-		return nil, 0, types.ErrUnauthorized
+		return nil, 0, kinds.ErrUnauthorized
 	}
 
 	u := shared.TrimRightSlash(svc.Endpoint) + path
@@ -59,7 +59,7 @@ func apiJSON(ctx context.Context, host Host, serviceID, method, path string, que
 		return nil, status, err
 	}
 	if status == http.StatusUnauthorized {
-		return nil, status, types.ErrUnauthorized
+		return nil, status, kinds.ErrUnauthorized
 	}
 	if status >= 400 {
 		msg := strings.TrimSpace(string(data))
@@ -79,7 +79,7 @@ func apiJSON(ctx context.Context, host Host, serviceID, method, path string, que
 }
 
 // placeTrackDisplay names a track in skip reports.
-func placeTrackDisplay(t types.Track) string {
+func placeTrackDisplay(t kinds.Track) string {
 	names := make([]string, 0, len(t.Artists))
 	for _, a := range t.Artists {
 		if a.Name != "" {
@@ -95,7 +95,7 @@ func placeTrackDisplay(t types.Track) string {
 
 // placeTrackQuery is the catalog search query used when a track carries no
 // service-local reference: title plus the first artist.
-func placeTrackQuery(t types.Track) string {
+func placeTrackQuery(t kinds.Track) string {
 	if len(t.Artists) == 0 {
 		return t.Name
 	}
@@ -104,7 +104,7 @@ func placeTrackQuery(t types.Track) string {
 
 // placeTrackLocalRef returns the service-local id/uri a track carries for
 // this service, if any — the fast path that avoids catalog search.
-func placeTrackLocalRef(t types.Track, serviceID string) (id, uri string) {
+func placeTrackLocalRef(t kinds.Track, serviceID string) (id, uri string) {
 	for _, src := range t.Sources {
 		if src.Service != serviceID {
 			continue
@@ -122,7 +122,7 @@ func placeTrackLocalRef(t types.Track, serviceID string) (id, uri string) {
 }
 
 // placeContactDisplay names a contact in skip/conflict reports.
-func placeContactDisplay(c types.Contact) string {
+func placeContactDisplay(c kinds.Contact) string {
 	if c.Name != "" {
 		return c.Name
 	}
@@ -134,7 +134,7 @@ func placeContactDisplay(c types.Contact) string {
 
 // placeContactRef returns the service-local resource handle and etag a
 // contact carries for this service, if any — the update path.
-func placeContactRef(c types.Contact, serviceID string) (id, etag string) {
+func placeContactRef(c kinds.Contact, serviceID string) (id, etag string) {
 	for _, src := range c.Sources {
 		if src.Service != serviceID {
 			continue
@@ -151,7 +151,7 @@ func placeContactRef(c types.Contact, serviceID string) (id, etag string) {
 
 // placeEventRef returns the service-local resource handle and etag an event
 // carries for this service, if any — the update path.
-func placeEventRef(ev types.CalendarEvent, serviceID string) (id, etag string) {
+func placeEventRef(ev kinds.CalendarEvent, serviceID string) (id, etag string) {
 	for _, src := range ev.Sources {
 		if src.Service != serviceID {
 			continue
@@ -168,7 +168,7 @@ func placeEventRef(ev types.CalendarEvent, serviceID string) (id, etag string) {
 
 // placeContactUID returns the cross-source contact UID carried in any
 // source's extras — the stable vCard identity that follows a copy.
-func placeContactUID(c types.Contact) string {
+func placeContactUID(c kinds.Contact) string {
 	for _, src := range c.Sources {
 		if v, _ := src.Extra["uid"].(string); v != "" {
 			return v
@@ -179,7 +179,7 @@ func placeContactUID(c types.Contact) string {
 
 // placeEventUID returns the cross-source event identity: any source's uid,
 // else the catalog EntityID, else the first source's local id.
-func placeEventUID(ev types.CalendarEvent) string {
+func placeEventUID(ev kinds.CalendarEvent) string {
 	for _, src := range ev.Sources {
 		if v, _ := src.Extra["uid"].(string); v != "" {
 			return v

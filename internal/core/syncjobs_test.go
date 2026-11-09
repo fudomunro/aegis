@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func testJobStore(t *testing.T) *JobStore {
@@ -485,11 +485,11 @@ func TestClassifySyncError(t *testing.T) {
 		t.Fatalf("wrapped terminal class = %s", class)
 	}
 	// No usable token cannot be fixed by retrying — park it.
-	class, _ = classifySyncError(types.ErrUnauthorized, 1, 0)
+	class, _ = classifySyncError(kinds.ErrUnauthorized, 1, 0)
 	if class != SyncErrorClassTerminal {
 		t.Fatalf("unauthorized class = %s, want terminal", class)
 	}
-	class, _ = classifySyncError(fmt.Errorf("sync paused: %w", types.ErrUnauthorized), 1, 0)
+	class, _ = classifySyncError(fmt.Errorf("sync paused: %w", kinds.ErrUnauthorized), 1, 0)
 	if class != SyncErrorClassTerminal {
 		t.Fatalf("wrapped unauthorized class = %s, want terminal", class)
 	}

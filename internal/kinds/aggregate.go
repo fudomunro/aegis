@@ -17,7 +17,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // StatusHooks customizes the source-overview enrichment for kinds that own
@@ -34,7 +33,7 @@ type StatusHooks struct {
 	SourceLastSyncedAt func(id string) (string, bool)
 	// Expand adds or adjusts overview rows after the generic enrichment
 	// (the messages kind surfaces its archive ingest sources).
-	Expand func(bySvc map[string]types.LibraryServiceStatus)
+	Expand func(bySvc map[string]LibraryServiceStatus)
 }
 
 // Spec wires one kind's dataset into the shared aggregate pipeline.
@@ -49,9 +48,9 @@ type Spec[T any] struct {
 	SortKey func(T) string
 	Merge   func([]T) []T
 	// Encode builds the JSON response from the full filtered list plus the
-	// agent page window (issue #185). Implementations call types.SlicePage
+	// agent page window (issue #185). Implementations call SlicePage
 	// on whatever final item shape they expose (events vs freebusy blocks).
-	Encode func(items []T, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any
+	Encode func(items []T, page PageRequest, bySvc map[string]LibraryServiceStatus) any
 	// MarkCanonical stamps Source.Canonical on items from a config-declared
 	// canonical_for service (issue #16). Nil skips config stamping.
 	MarkCanonical func(items []T, serviceID string)
@@ -76,10 +75,10 @@ type Spec[T any] struct {
 // fields with JSON tags make the merged aggregate cacheable so pages can be
 // sliced without re-fanning-out (issue #273).
 type Fetch[T any] struct {
-	Items    []T                                   `json:"items"`
-	BySvc    map[string]types.LibraryServiceStatus `json:"by_service"`
-	Denied   []string                              `json:"denied,omitempty"`
-	NTargets int                                   `json:"n_targets"`
+	Items    []T                             `json:"items"`
+	BySvc    map[string]LibraryServiceStatus `json:"by_service"`
+	Denied   []string                        `json:"denied,omitempty"`
+	NTargets int                             `json:"n_targets"`
 }
 
 // searchHitCap bounds how many index hits are loaded before grant filtering
@@ -93,7 +92,7 @@ const aggregateTTL = 60 * time.Second
 
 // AnyServiceTruncated reports whether any source row is incomplete. Encode
 // closures surface it as the list's truncated flag (issue #185).
-func AnyServiceTruncated(bySvc map[string]types.LibraryServiceStatus) bool {
+func AnyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
 	for _, st := range bySvc {
 		if st.Truncated {
 			return true
@@ -154,7 +153,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 	logger := h.Logger(r, "library_"+kind.ID)
 	agent := h.Agent(r)
 
-	pageReq, pageErr := types.ParsePageRequest(r.URL.Query().Get("limit"), r.URL.Query().Get("cursor"))
+	pageReq, pageErr := ParsePageRequest(r.URL.Query().Get("limit"), r.URL.Query().Get("cursor"))
 	if pageErr != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, pageErr.Error())
 		return
@@ -337,7 +336,7 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 	targets, denied := spec.Targets(r)
 	out := Fetch[T]{Denied: denied, NTargets: len(targets), Items: []T{}}
 	if len(targets) == 0 {
-		out.BySvc = map[string]types.LibraryServiceStatus{}
+		out.BySvc = map[string]LibraryServiceStatus{}
 		return out
 	}
 
@@ -345,7 +344,7 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 		mu    sync.Mutex
 		wg    sync.WaitGroup
 		all   []T
-		bySvc = make(map[string]types.LibraryServiceStatus, len(targets))
+		bySvc = make(map[string]LibraryServiceStatus, len(targets))
 	)
 
 	ctx := r.Context()
@@ -371,14 +370,14 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 				}()
 				items, truncated, err = t.List(ctx)
 			}()
-			var status types.LibraryServiceStatus
+			var status LibraryServiceStatus
 			switch {
 			case err == nil:
 				if spec.MarkCanonical != nil {
 					spec.MarkCanonical(items, t.ID)
 				}
-				status = types.LibraryServiceStatus{
-					Status:    types.LibraryStatusOK,
+				status = LibraryServiceStatus{
+					Status:    LibraryStatusOK,
 					Count:     len(items),
 					Truncated: truncated,
 				}
@@ -395,15 +394,15 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 				mu.Lock()
 				all = append(all, items...)
 				mu.Unlock()
-			case errors.Is(err, types.ErrUnauthorized):
+			case errors.Is(err, ErrUnauthorized):
 				logger.Info("library "+kind.ID+" unauthorized", "service", t.ID)
-				status = types.LibraryServiceStatus{
-					Status: types.LibraryStatusUnauthorized,
+				status = LibraryServiceStatus{
+					Status: LibraryStatusUnauthorized,
 					Error:  "not authorized — connect at /v1/auth/" + t.ID + "/login",
 				}
 			default:
 				logger.Warn("library "+kind.ID+" failed", "service", t.ID, "error", err)
-				status = types.LibraryServiceStatus{Status: types.LibraryStatusError, Error: kind.FailMsg}
+				status = LibraryServiceStatus{Status: LibraryStatusError, Error: kind.FailMsg}
 			}
 			mu.Lock()
 			bySvc[t.ID] = status
@@ -441,7 +440,7 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 // #178). A cold index (nothing materialized for this kind+dataset) is
 // bootstrapped from one live fetch first, so results are correct from the
 // first query. Hits pass the same per-service read gate as the aggregate.
-func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request, spec Spec[T], q string, pageReq types.PageRequest, agent string, appLevel string, isApp bool) {
+func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request, spec Spec[T], q string, pageReq PageRequest, agent string, appLevel string, isApp bool) {
 	kind := spec.Kind
 	logger := h.Logger(r, "library_"+kind.ID+"_search")
 
@@ -524,14 +523,14 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 	}
 
 	// Clamp at the API boundary: the engine trusts its caller's limit.
-	res, err := e.search.Search(search.Query{Kind: kind.ID, Dataset: dataset, Q: q, Limit: min(searchHitCap, types.MaxPageLimit)})
+	res, err := e.search.Search(search.Query{Kind: kind.ID, Dataset: dataset, Q: q, Limit: min(searchHitCap, MaxPageLimit)})
 	if err != nil {
 		logger.Error("search index query failed", "error", err)
 		shared.WriteJSONError(w, http.StatusInternalServerError, "search index unavailable")
 		return
 	}
 	hits := make([]T, 0, len(res.Docs))
-	bySvc := make(map[string]types.LibraryServiceStatus)
+	bySvc := make(map[string]LibraryServiceStatus)
 	for _, doc := range res.Docs {
 		if !searchHitReadable(doc.Services, readable, configured, localSource) {
 			continue
@@ -544,7 +543,7 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		hits = append(hits, item)
 		for _, svc := range doc.Services {
 			st := bySvc[svc]
-			st.Status = types.LibraryStatusOK
+			st.Status = LibraryStatusOK
 			st.Count++
 			bySvc[svc] = st
 		}
@@ -628,10 +627,10 @@ func indexAsync[T any](h Host, e *Engine, spec Spec[T], dataset string, fetched 
 // completeServices lists the services whose fetch succeeded in full
 // (status ok, not truncated). Only those can refute an indexed row; a
 // degraded or truncated service leaves its rows untouched (issue #272).
-func completeServices(bySvc map[string]types.LibraryServiceStatus) []string {
+func completeServices(bySvc map[string]LibraryServiceStatus) []string {
 	out := make([]string, 0, len(bySvc))
 	for id, st := range bySvc {
-		if st.Status == types.LibraryStatusOK && !st.Truncated {
+		if st.Status == LibraryStatusOK && !st.Truncated {
 			out = append(out, id)
 		}
 	}
@@ -641,9 +640,9 @@ func completeServices(bySvc map[string]types.LibraryServiceStatus) []string {
 
 // aggregateDegraded reports whether any provider failed or was
 // unauthorized. Degraded aggregates must not be cached.
-func aggregateDegraded(bySvc map[string]types.LibraryServiceStatus) bool {
+func aggregateDegraded(bySvc map[string]LibraryServiceStatus) bool {
 	for _, st := range bySvc {
-		if st.Status != types.LibraryStatusOK {
+		if st.Status != LibraryStatusOK {
 			return true
 		}
 	}
@@ -655,7 +654,7 @@ func aggregateDegraded(bySvc map[string]types.LibraryServiceStatus) bool {
 // missing config or archive metadata leaves the original status. Kinds
 // declare local-source naming and expansion through StatusHooks (issue
 // #312) — no kind or source ids are named here.
-func EnrichStatuses(h Host, kindID string, hooks StatusHooks, bySvc map[string]types.LibraryServiceStatus) {
+func EnrichStatuses(h Host, kindID string, hooks StatusHooks, bySvc map[string]LibraryServiceStatus) {
 	if len(bySvc) == 0 {
 		return
 	}

@@ -4,11 +4,10 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestDocumentFilters_Match(t *testing.T) {
-	doc := types.Document{
+	doc := Document{
 		Title:         "Apartment lease 2024",
 		Correspondent: "Harbour Property",
 		DocumentType:  "lease",
@@ -40,7 +39,7 @@ func TestDocumentFilters_Match(t *testing.T) {
 }
 
 func TestRedactDocumentMetadata_StripsExcerpt(t *testing.T) {
-	d := types.Document{Title: "Lease", Excerpt: "secret text", Tags: []string{"a"}}
+	d := Document{Title: "Lease", Excerpt: "secret text", Tags: []string{"a"}}
 	got := redactDocumentMetadata(d)
 	if got.Excerpt != "" {
 		t.Fatalf("excerpt = %q, want empty", got.Excerpt)
@@ -48,13 +47,13 @@ func TestRedactDocumentMetadata_StripsExcerpt(t *testing.T) {
 	if got.Title != "Lease" || len(got.Tags) != 1 {
 		t.Fatalf("metadata fields should survive: %+v", got)
 	}
-	if got := redactDocumentsForLevel([]types.Document{d}, policy.AccessMetadata); got[0].Excerpt != "" {
+	if got := redactDocumentsForLevel([]Document{d}, policy.AccessMetadata); got[0].Excerpt != "" {
 		t.Fatal("metadata level should strip excerpt")
 	}
-	if got := redactDocumentsForLevel([]types.Document{d}, policy.AccessRead); got[0].Excerpt != "secret text" {
+	if got := redactDocumentsForLevel([]Document{d}, policy.AccessRead); got[0].Excerpt != "secret text" {
 		t.Fatal("read level should keep excerpt")
 	}
-	if got := redactDocumentsForLevel([]types.Document{d}, policy.AccessNone); got != nil {
+	if got := redactDocumentsForLevel([]Document{d}, policy.AccessNone); got != nil {
 		t.Fatal("none should return no items")
 	}
 }

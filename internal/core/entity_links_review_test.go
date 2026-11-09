@@ -19,10 +19,10 @@ import (
 )
 
 type fakeFullLibraryProvider struct {
-	playlists []types.Playlist
-	tracks    []types.Track
-	albums    []types.Album
-	artists   []types.Artist
+	playlists []kinds.Playlist
+	tracks    []kinds.Track
+	albums    []kinds.Album
+	artists   []kinds.Artist
 	err       error
 }
 
@@ -33,16 +33,16 @@ func (f *fakeFullLibraryProvider) SystemInstructions(string) string { return "fa
 func (f *fakeFullLibraryProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeFullLibraryProvider) ListUserPlaylists(context.Context) ([]types.Playlist, bool, error) {
+func (f *fakeFullLibraryProvider) ListUserPlaylists(context.Context) ([]kinds.Playlist, bool, error) {
 	return f.playlists, false, f.err
 }
-func (f *fakeFullLibraryProvider) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
+func (f *fakeFullLibraryProvider) ListUserLikedTracks(context.Context) ([]kinds.Track, bool, error) {
 	return f.tracks, false, f.err
 }
-func (f *fakeFullLibraryProvider) ListUserSavedAlbums(context.Context) ([]types.Album, bool, error) {
+func (f *fakeFullLibraryProvider) ListUserSavedAlbums(context.Context) ([]kinds.Album, bool, error) {
 	return f.albums, false, f.err
 }
-func (f *fakeFullLibraryProvider) ListUserFollowedArtists(context.Context) ([]types.Artist, bool, error) {
+func (f *fakeFullLibraryProvider) ListUserFollowedArtists(context.Context) ([]kinds.Artist, bool, error) {
 	return f.artists, false, f.err
 }
 
@@ -71,10 +71,10 @@ func TestListProvidersParallel_MergesAndSkipsErrors(t *testing.T) {
 }
 
 func TestSourceRefHelpers(t *testing.T) {
-	tr := types.Track{Sources: []types.TrackSource{{Service: "spotify", ID: "t1"}, {Service: "youtube-music", ID: "t2"}}}
-	al := types.Album{Sources: []types.AlbumSource{{Service: "spotify", ID: "a1"}}}
-	ar := types.Artist{Sources: []types.ArtistSource{{Service: "google", ID: "p1"}, {Service: "spotify", ID: "p2"}}}
-	pl := types.Playlist{Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "PL"}}}
+	tr := kinds.Track{Sources: []kinds.TrackSource{{Service: "spotify", ID: "t1"}, {Service: "youtube-music", ID: "t2"}}}
+	al := kinds.Album{Sources: []kinds.AlbumSource{{Service: "spotify", ID: "a1"}}}
+	ar := kinds.Artist{Sources: []kinds.ArtistSource{{Service: "google", ID: "p1"}, {Service: "spotify", ID: "p2"}}}
+	pl := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "PL"}}}
 
 	if got := trackSourceRefs(tr); len(got) != 2 || got[0] != "spotify:t1" || got[1] != "youtube-music:t2" {
 		t.Fatalf("trackSourceRefs = %v", got)
@@ -88,7 +88,7 @@ func TestSourceRefHelpers(t *testing.T) {
 	if got := playlistSourceRefs(pl); len(got) != 1 || got[0] != "youtube-music:PL" {
 		t.Fatalf("playlistSourceRefs = %v", got)
 	}
-	if got := trackSourceRefs(types.Track{}); len(got) != 0 {
+	if got := trackSourceRefs(kinds.Track{}); len(got) != 0 {
 		t.Fatalf("empty track refs = %v", got)
 	}
 }
@@ -123,47 +123,47 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 	srv.mbCache.Set(releaseGroupMBIDCacheKey("After Hours", "The Weeknd"), "-", time.Hour)
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakeFullLibraryProvider{
-			playlists: []types.Playlist{{
+			playlists: []kinds.Playlist{{
 				Name:    "Road Trip",
-				Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl"}},
+				Sources: []kinds.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-pl"}},
 			}},
-			tracks: []types.Track{{
+			tracks: []kinds.Track{{
 				Name:    "Blinding Lights",
-				Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar1", "The Weeknd")},
-				Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-bl"}},
+				Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar1", "The Weeknd")},
+				Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-bl"}},
 			}, {
 				Name:    "Solo Hit",
-				Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar2", "Solo Artist")},
-				Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-solo"}},
+				Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar2", "Solo Artist")},
+				Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-solo"}},
 			}},
-			albums: []types.Album{{
+			albums: []kinds.Album{{
 				Name:    "After Hours",
-				Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar1", "The Weeknd")},
-				Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-al"}},
+				Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar1", "The Weeknd")},
+				Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-al"}},
 			}},
-			artists: []types.Artist{{
+			artists: []kinds.Artist{{
 				Name:    "The Weeknd",
-				Sources: []types.ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-ar"}},
+				Sources: []kinds.ArtistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-ar"}},
 			}},
 		},
 		"youtube-music": &fakeFullLibraryProvider{
-			playlists: []types.Playlist{{
+			playlists: []kinds.Playlist{{
 				Name:    "road trip",
-				Sources: []types.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-pl"}},
+				Sources: []kinds.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-pl"}},
 			}},
-			tracks: []types.Track{{
+			tracks: []kinds.Track{{
 				Name:    "Blinding Lights",
-				Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "ar1", "The Weeknd")},
-				Sources: []types.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-bl"}},
+				Artists: []kinds.Artist{kinds.NewArtist("youtube-music", "YouTube Music", "ar1", "The Weeknd")},
+				Sources: []kinds.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-bl"}},
 			}},
-			albums: []types.Album{{
+			albums: []kinds.Album{{
 				Name:    "After Hours",
-				Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "ar1", "The Weeknd")},
-				Sources: []types.AlbumSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-al"}},
+				Artists: []kinds.Artist{kinds.NewArtist("youtube-music", "YouTube Music", "ar1", "The Weeknd")},
+				Sources: []kinds.AlbumSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-al"}},
 			}},
-			artists: []types.Artist{{
+			artists: []kinds.Artist{{
 				Name:    "The Weeknd",
-				Sources: []types.ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-ar"}},
+				Sources: []kinds.ArtistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt-ar"}},
 			}},
 		},
 	}
@@ -186,7 +186,7 @@ func TestHandleMergeReview_NameOnlyMultiSourceEntities(t *testing.T) {
 	byKind := map[string][]MergeReviewItem{}
 	for _, item := range resp.Items {
 		byKind[item.Kind] = append(byKind[item.Kind], item)
-		if item.Match != types.TrackMatchName && item.Match != types.PlaylistMatchName {
+		if item.Match != kinds.TrackMatchName && item.Match != kinds.PlaylistMatchName {
 			t.Fatalf("unexpected match %q on %+v", item.Match, item)
 		}
 		if len(item.Sources) < 2 {
@@ -228,7 +228,7 @@ func TestHandleMergeReview_ProviderErrorsStillReturn200(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakeFullLibraryProvider{err: types.ErrUnauthorized},
+		"spotify": &fakeFullLibraryProvider{err: kinds.ErrUnauthorized},
 	}
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/review", nil)
 	w := httptest.NewRecorder()

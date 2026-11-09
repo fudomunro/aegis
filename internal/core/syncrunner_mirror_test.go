@@ -13,7 +13,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // --- mirror runner ---
@@ -27,12 +27,12 @@ type recordingMirrorTarget struct {
 	failOnce bool
 }
 
-func (t *recordingMirrorTarget) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []types.Track) (types.PlacePlaylistItemsResult, error) {
+func (t *recordingMirrorTarget) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []kinds.Track) (kinds.PlacePlaylistItemsResult, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	if t.failOnce {
 		t.failOnce = false
-		return types.PlacePlaylistItemsResult{PlaylistID: playlistID}, fmt.Errorf("upstream 502")
+		return kinds.PlacePlaylistItemsResult{PlaylistID: playlistID}, fmt.Errorf("upstream 502")
 	}
 	if playlistID == "" {
 		t.created++
@@ -42,32 +42,32 @@ func (t *recordingMirrorTarget) PlacePlaylistItems(ctx context.Context, playlist
 	}
 	t.lastID = playlistID
 	t.copied += len(tracks)
-	return types.PlacePlaylistItemsResult{
+	return kinds.PlacePlaylistItemsResult{
 		PlaylistID: playlistID,
 		URL:        "https://example.com/" + playlistID,
 		Copied:     len(tracks),
 	}, nil
 }
 
-func (t *recordingMirrorTarget) SaveLikedTracks(ctx context.Context, tracks []types.Track) (types.SaveLikedTracksResult, error) {
+func (t *recordingMirrorTarget) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.copied += len(tracks)
-	return types.SaveLikedTracksResult{Copied: len(tracks)}, nil
+	return kinds.SaveLikedTracksResult{Copied: len(tracks)}, nil
 }
 
 // stubMirrorSource serves pages from a fixed slice.
 type stubMirrorSource struct {
-	tracks []types.Track
+	tracks []kinds.Track
 	name   string
 }
 
 // srcTrack builds a stub fixture track with a service-local id.
-func srcTrack(name, id string) types.Track {
-	return types.Track{Name: name, Sources: []types.TrackSource{{Service: "stub", ID: id}}}
+func srcTrack(name, id string) kinds.Track {
+	return kinds.Track{Name: name, Sources: []kinds.TrackSource{{Service: "stub", ID: id}}}
 }
 
-func (s *stubMirrorSource) ListPlaylistItems(ctx context.Context, id, cursor string, limit int) (types.Playlist, types.TrackPage, error) {
+func (s *stubMirrorSource) ListPlaylistItems(ctx context.Context, id, cursor string, limit int) (kinds.Playlist, kinds.TrackPage, error) {
 	offset := 0
 	if cursor != "" {
 		fmt.Sscanf(cursor, "%d", &offset)
@@ -84,15 +84,15 @@ func (s *stubMirrorSource) ListPlaylistItems(ctx context.Context, id, cursor str
 	if end < len(s.tracks) {
 		next = fmt.Sprint(end)
 	}
-	return types.Playlist{Name: s.name, Sources: []types.PlaylistSource{{Service: "stub", ID: id}}},
-		types.TrackPage{Tracks: page, Total: len(s.tracks), Next: next}, nil
+	return kinds.Playlist{Name: s.name, Sources: []kinds.PlaylistSource{{Service: "stub", ID: id}}},
+		kinds.TrackPage{Tracks: page, Total: len(s.tracks), Next: next}, nil
 }
 
-func (s *stubMirrorSource) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
+func (s *stubMirrorSource) ListUserLikedTracks(ctx context.Context) ([]kinds.Track, bool, error) {
 	return s.tracks, false, nil
 }
 
-func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (types.TrackPage, error) {
+func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (kinds.TrackPage, error) {
 	_, page, err := s.ListPlaylistItems(ctx, "liked", cursor, limit)
 	return page, err
 }
@@ -131,7 +131,7 @@ func mirrorTestServer(t *testing.T, src mirrorSource, dst mirrorTarget) (*Server
 }
 
 func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		srcTrack("One", "t1"), srcTrack("Two", "t2"),
 		srcTrack("Three", "t3"), srcTrack("Four", "t4"),
 		srcTrack("Five", "t5"),
@@ -176,7 +176,7 @@ func TestMirrorRunner_ChainsIntoOneTargetPlaylist(t *testing.T) {
 }
 
 func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		srcTrack("One", "t1"), srcTrack("Two", "t2"),
 		srcTrack("Three", "t3"),
 	}
@@ -208,13 +208,13 @@ func TestMirrorRunner_LikedTracksChainAndStamp(t *testing.T) {
 func TestMirrorRunner_RepairSkipsWhatTheTargetHolds(t *testing.T) {
 	source := &stubMirrorSource{
 		name: "Road trip",
-		tracks: []types.Track{
+		tracks: []kinds.Track{
 			srcTrack("One", "t1"), srcTrack("Two", "t2"),
 		},
 	}
 	// The target's source reader reports it already holds "One".
 	target := &stubMirrorSource{
-		tracks: []types.Track{srcTrack("One", "t1")},
+		tracks: []kinds.Track{srcTrack("One", "t1")},
 	}
 	dst := &recordingMirrorTarget{}
 	srv := mirrorStubServer(t, nil, dst)
@@ -256,7 +256,7 @@ func TestMirrorRunner_RepairSkipsWhatTheTargetHolds(t *testing.T) {
 }
 
 func TestMirrorRunner_TerminalValidation(t *testing.T) {
-	src := &stubMirrorSource{tracks: []types.Track{srcTrack("A", "a")}}
+	src := &stubMirrorSource{tracks: []kinds.Track{srcTrack("A", "a")}}
 	dst := &recordingMirrorTarget{}
 	_, store, w := mirrorTestServer(t, src, dst)
 
@@ -282,7 +282,7 @@ func TestMirrorRunner_TerminalValidation(t *testing.T) {
 }
 
 func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
-	src := &stubMirrorSource{tracks: []types.Track{srcTrack("A", "a")}, name: "L"}
+	src := &stubMirrorSource{tracks: []kinds.Track{srcTrack("A", "a")}, name: "L"}
 	dst := &recordingMirrorTarget{}
 	srv, store, w := mirrorTestServer(t, src, dst)
 	mustEnqueue(t, store, SyncEnqueue{
@@ -308,7 +308,7 @@ func TestMirrorRunner_DryRunPlacesNothing(t *testing.T) {
 }
 
 func TestMirrorRunner_RetriesUpstreamError(t *testing.T) {
-	src := &stubMirrorSource{tracks: []types.Track{srcTrack("A", "a")}, name: "L"}
+	src := &stubMirrorSource{tracks: []kinds.Track{srcTrack("A", "a")}, name: "L"}
 	dst := &recordingMirrorTarget{failOnce: true}
 	_, store, w := mirrorTestServer(t, src, dst)
 	mustEnqueue(t, store, SyncEnqueue{

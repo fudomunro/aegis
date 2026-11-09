@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"context"
 	"encoding/json"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func flowTestServer() *Server {
@@ -575,11 +575,11 @@ type placesDocumentsConnector struct {
 	stubConnector
 }
 
-func (placesDocumentsConnector) ListUserPlaceVisits(context.Context) ([]types.PlaceVisit, bool, error) {
+func (placesDocumentsConnector) ListUserPlaceVisits(context.Context) ([]kinds.PlaceVisit, bool, error) {
 	return nil, false, nil
 }
 
-func (placesDocumentsConnector) ListUserDocuments(context.Context) ([]types.Document, bool, error) {
+func (placesDocumentsConnector) ListUserDocuments(context.Context) ([]kinds.Document, bool, error) {
 	return nil, false, nil
 }
 

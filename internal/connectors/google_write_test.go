@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestGoogleContacts_CreateAndUpdateContact(t *testing.T) {
@@ -37,7 +37,7 @@ func TestGoogleContacts_CreateAndUpdateContact(t *testing.T) {
 	h.setToken(GoogleContactsServiceID, "tok")
 	c := NewGoogleContactsConnector(h)
 
-	contact := types.NewContact(GoogleContactsServiceID, GoogleContactsServiceName,
+	contact := kinds.NewContact(GoogleContactsServiceID, GoogleContactsServiceName,
 		"", "Ada Lovelace", []string{"ada@example.com"}, []string{"+15550100"})
 	contact.Organization = "Engines"
 
@@ -81,7 +81,7 @@ func TestGoogleCalendar_CreateAndUpdateEvent(t *testing.T) {
 	h.setToken(GoogleCalendarServiceID, "tok")
 	c := NewGoogleCalendarConnector(h)
 
-	ev := types.NewCalendarEvent(GoogleCalendarServiceID, GoogleCalendarServiceName,
+	ev := kinds.NewCalendarEvent(GoogleCalendarServiceID, GoogleCalendarServiceName,
 		"", "Doctor", "2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z", false)
 	id, link, etag, err := c.CreateGoogleEvent(context.Background(), "primary", ev)
 	if err != nil || id != "ev-new" || etag != "e1" || link == "" {
@@ -109,7 +109,7 @@ func TestGoogleCalendar_CreateAllDayEvent(t *testing.T) {
 	h := newTestHostWithService(GoogleCalendarServiceID, ts.URL, "https://aegis.example.com")
 	h.setToken(GoogleCalendarServiceID, "tok")
 	c := NewGoogleCalendarConnector(h)
-	ev := types.NewCalendarEvent(GoogleCalendarServiceID, GoogleCalendarServiceName,
+	ev := kinds.NewCalendarEvent(GoogleCalendarServiceID, GoogleCalendarServiceName,
 		"", "Offsite", "2026-03-05T00:00:00Z", "2026-03-06T00:00:00Z", true)
 	if _, _, _, err := c.CreateGoogleEvent(context.Background(), "", ev); err != nil {
 		t.Fatalf("CreateGoogleEvent: %v", err)
@@ -127,12 +127,12 @@ func TestMustJSON_AndContactETag(t *testing.T) {
 	if mustJSON(make(chan int)) != "{}" {
 		t.Fatal("mustJSON fallback")
 	}
-	c := types.NewContact("s", "S", "id", "N", nil, nil)
+	c := kinds.NewContact("s", "S", "id", "N", nil, nil)
 	c.Sources[0].Extra = map[string]any{"etag": `"e"`}
 	if contactETag(c) != `"e"` {
 		t.Fatalf("etag = %q", contactETag(c))
 	}
-	if contactETag(types.Contact{}) != "" {
+	if contactETag(kinds.Contact{}) != "" {
 		t.Fatal("empty etag")
 	}
 }

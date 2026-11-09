@@ -15,7 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // readAllGrants is the migrated "share everything read-only" grant map
@@ -513,14 +513,14 @@ func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
 			Grants: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}}},
 	})
 
-	call := func(key string) []types.CalendarEvent {
+	call := func(key string) []kinds.CalendarEvent {
 		t.Helper()
 		w := httptest.NewRecorder()
 		srv.AuthMiddleware(srv.libraryHandler("events"))(w, scopeRequest(key, "/v1/library/events"))
 		if w.Code != http.StatusOK {
 			t.Fatalf("events %s status = %d body=%s", key, w.Code, w.Body.String())
 		}
-		var list types.CalendarEventList
+		var list kinds.CalendarEventList
 		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 			t.Fatalf("parse events %s: %v", key, err)
 		}

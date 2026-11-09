@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // placesKind owns the visits/trips aggregate (issue #142): city/read/
@@ -15,7 +14,7 @@ type placesKind struct {
 	providerKind
 	h           Host
 	e           *Engine
-	mark        func([]types.PlaceVisit, string)
+	mark        func([]PlaceVisit, string)
 	localSource func() bool
 }
 
@@ -25,7 +24,7 @@ func newPlacesKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("places")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.PlaceVisitProvider],
+		provides: providerProvides[PlaceVisitProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -50,25 +49,25 @@ func (k *placesKind) HasProviders(h Host) bool {
 // city|read|precise redacts.
 func (k *placesKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
-	filters := types.ParsePlaceVisitFilters(r)
+	filters := ParsePlaceVisitFilters(r)
 	appLevel, _ := k.h.AppLevel(r, kind.PermType)
-	Aggregate(k.h, k.e, w, r, Spec[types.PlaceVisit]{
+	Aggregate(k.h, k.e, w, r, Spec[PlaceVisit]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.PlaceVisit], []string) {
+		Targets: func(r *http.Request) ([]NamedLister[PlaceVisit], []string) {
 			return placesProviderTargets(k.h, r, kind.PermType, appLevel)
 		},
-		ServiceOf: types.PlaceVisitServiceName,
-		SortKey:   types.PlaceIdentityKey,
-		Merge:     types.MergePlaceVisits,
-		Encode: func(items []types.PlaceVisit, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		ServiceOf: PlaceVisitServiceName,
+		SortKey:   PlaceIdentityKey,
+		Merge:     MergePlaceVisits,
+		Encode: func(items []PlaceVisit, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			filtered := filterPlaceVisits(items, filters)
-			pageItems, pr := types.SlicePage(filtered, page)
-			return types.PlaceVisitList{
+			pageItems, pr := SlicePage(filtered, page)
+			return PlaceVisitList{
 				Visits:          pageItems,
-				LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
+				LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		RedactSearch: func(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
+		RedactSearch: func(items []PlaceVisit, r *http.Request) []PlaceVisit {
 			return searchRedactPlaceVisits(k.h, items, r)
 		},
 		MarkCanonical: k.mark,
@@ -79,9 +78,9 @@ func (k *placesKind) serve(w http.ResponseWriter, r *http.Request) {
 // placesProviderTargets collects providers, applying per-service and
 // app-level city/read/precise redaction so a city-only surface never
 // contributes place names or coordinates (issue #142).
-func placesProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[types.PlaceVisit], []string) {
-	targets, denied := Collect[types.PlaceVisit, types.PlaceVisitProvider](h, r, permType,
-		func(p types.PlaceVisitProvider) func(context.Context) ([]types.PlaceVisit, bool, error) {
+func placesProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[PlaceVisit], []string) {
+	targets, denied := Collect[PlaceVisit, PlaceVisitProvider](h, r, permType,
+		func(p PlaceVisitProvider) func(context.Context) ([]PlaceVisit, bool, error) {
 			return p.ListUserPlaceVisits
 		})
 	appPlaces := policy.PlacesLevelForResponse(appLevel)
@@ -100,7 +99,7 @@ func placesProviderTargets(h Host, r *http.Request, permType string, appLevel st
 		if effective == policy.PlacesLevelForResponse(level) && effective != policy.AccessCity && effective != policy.AccessRead {
 			continue
 		}
-		targets[i].List = func(ctx context.Context) ([]types.PlaceVisit, bool, error) {
+		targets[i].List = func(ctx context.Context) ([]PlaceVisit, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactPlaceVisitsForLevel(items, effective), truncated, err
 		}
@@ -112,13 +111,13 @@ func placesProviderTargets(h Host, r *http.Request, permType string, appLevel st
 // to index-hydrated visits (issue #178). Applying every source's level in
 // turn settles on the most restrictive one (never under-redact); the app
 // scope is an additional clamp, matching the fetch path.
-func searchRedactPlaceVisits(h Host, items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
+func searchRedactPlaceVisits(h Host, items []PlaceVisit, r *http.Request) []PlaceVisit {
 	appLevel, isApp := h.AppLevel(r, "places")
 	appPlaces := ""
 	if isApp {
 		appPlaces = policy.PlacesLevelForResponse(appLevel)
 	}
-	out := make([]types.PlaceVisit, 0, len(items))
+	out := make([]PlaceVisit, 0, len(items))
 	for _, v := range items {
 		skip := false
 		for _, src := range v.Sources {
@@ -129,7 +128,7 @@ func searchRedactPlaceVisits(h Host, items []types.PlaceVisit, r *http.Request) 
 			if appPlaces != "" && appPlaces != policy.AccessNone {
 				level = tighterPlacesLevel(appPlaces, level)
 			}
-			red := redactPlaceVisitsForLevel([]types.PlaceVisit{v}, level)
+			red := redactPlaceVisitsForLevel([]PlaceVisit{v}, level)
 			if len(red) == 0 {
 				skip = true
 				break
@@ -140,7 +139,7 @@ func searchRedactPlaceVisits(h Host, items []types.PlaceVisit, r *http.Request) 
 			continue
 		}
 		if appPlaces != "" && appPlaces != policy.AccessNone {
-			red := redactPlaceVisitsForLevel([]types.PlaceVisit{v}, appPlaces)
+			red := redactPlaceVisitsForLevel([]PlaceVisit{v}, appPlaces)
 			if len(red) == 0 {
 				continue
 			}
@@ -151,11 +150,11 @@ func searchRedactPlaceVisits(h Host, items []types.PlaceVisit, r *http.Request) 
 	return out
 }
 
-func filterPlaceVisits(in []types.PlaceVisit, f types.PlaceVisitFilters) []types.PlaceVisit {
+func filterPlaceVisits(in []PlaceVisit, f PlaceVisitFilters) []PlaceVisit {
 	if f.Empty() {
 		return in
 	}
-	out := make([]types.PlaceVisit, 0, len(in))
+	out := make([]PlaceVisit, 0, len(in))
 	for _, v := range in {
 		if f.Matches(v) {
 			out = append(out, v)
@@ -167,8 +166,8 @@ func filterPlaceVisits(in []types.PlaceVisit, f types.PlaceVisitFilters) []types
 // redactPlaceVisitCity keeps only locality, country, and the time window —
 // enough for "was I out of town?" without names, addresses, coordinates, or
 // raw point IDs (issue #142).
-func redactPlaceVisitCity(v types.PlaceVisit) types.PlaceVisit {
-	v.Place = types.Place{
+func redactPlaceVisitCity(v PlaceVisit) PlaceVisit {
+	v.Place = Place{
 		Locality: v.Place.Locality,
 		Country:  v.Place.Country,
 	}
@@ -188,7 +187,7 @@ func redactPlaceVisitCity(v types.PlaceVisit) types.PlaceVisit {
 
 // redactPlaceVisitRead keeps full place names and addresses but drops
 // coordinates and raw point IDs (issue #142).
-func redactPlaceVisitRead(v types.PlaceVisit) types.PlaceVisit {
+func redactPlaceVisitRead(v PlaceVisit) PlaceVisit {
 	v.Place.Lat = 0
 	v.Place.Lng = 0
 	for i := range v.Sources {
@@ -197,18 +196,18 @@ func redactPlaceVisitRead(v types.PlaceVisit) types.PlaceVisit {
 	return v
 }
 
-func redactPlaceVisitsForLevel(items []types.PlaceVisit, level string) []types.PlaceVisit {
+func redactPlaceVisitsForLevel(items []PlaceVisit, level string) []PlaceVisit {
 	switch policy.PlacesLevelForResponse(level) {
 	case policy.AccessNone:
 		return nil
 	case policy.AccessCity:
-		out := make([]types.PlaceVisit, len(items))
+		out := make([]PlaceVisit, len(items))
 		for i, v := range items {
 			out[i] = redactPlaceVisitCity(v)
 		}
 		return out
 	case policy.AccessRead:
-		out := make([]types.PlaceVisit, len(items))
+		out := make([]PlaceVisit, len(items))
 		for i, v := range items {
 			out[i] = redactPlaceVisitRead(v)
 		}
@@ -241,14 +240,14 @@ func tighterPlacesLevel(a, b string) string {
 	return policy.PlacesLevelForResponse(b)
 }
 
-func forEachPlaceVisitSource(item *types.PlaceVisit, f func(SourceMut)) {
+func forEachPlaceVisitSource(item *PlaceVisit, f func(SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
 }

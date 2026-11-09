@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 const sampleTimelineJSON = `{
@@ -76,7 +76,7 @@ func TestParseTimelineJSON(t *testing.T) {
 	if len(visits) != 3 {
 		t.Fatalf("got %d objects, want 3", len(visits))
 	}
-	if visits[0].Kind != types.PlaceKindVisit || visits[0].Place.Name != "Googleplex" {
+	if visits[0].Kind != kinds.PlaceKindVisit || visits[0].Place.Name != "Googleplex" {
 		t.Fatalf("visit[0] = %+v", visits[0])
 	}
 	if visits[0].Place.Lat == 0 {
@@ -85,7 +85,7 @@ func TestParseTimelineJSON(t *testing.T) {
 	if visits[0].Place.Locality == "" {
 		t.Fatalf("expected locality from address: %+v", visits[0].Place)
 	}
-	if visits[1].Kind != types.PlaceKindTrip || visits[1].Mode != types.TripModeDrive {
+	if visits[1].Kind != kinds.PlaceKindTrip || visits[1].Mode != kinds.TripModeDrive {
 		t.Fatalf("trip[1] = %+v", visits[1])
 	}
 	if visits[2].Place.Name != "San Francisco" {

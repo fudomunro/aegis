@@ -5,7 +5,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Lord of the Rings demo dataset pack (issue #217).
@@ -50,8 +50,8 @@ func GenerateLotRMail(dataset string) SampleMailSet {
 	return SampleMailSet{}
 }
 
-func lotRContact(service, id, name string, emails, phones []string) types.Contact {
-	return types.NewContact(service, "Google Contacts", id, name, emails, phones)
+func lotRContact(service, id, name string, emails, phones []string) kinds.Contact {
+	return kinds.NewContact(service, "Google Contacts", id, name, emails, phones)
 }
 
 func lotRMail(dataset string, rows []SampleMailRow) SampleMailSet {
@@ -77,7 +77,7 @@ func lotRMail(dataset string, rows []SampleMailRow) SampleMailSet {
 			Dataset:     dataset,
 		}
 		if row.ToName != "" || row.ToEmail != "" {
-			rec.To = []types.Contact{types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", row.ToName, []string{row.ToEmail}, nil)}
+			rec.To = []kinds.Contact{kinds.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", row.ToName, []string{row.ToEmail}, nil)}
 		}
 		recs = append(recs, rec)
 	}
@@ -104,7 +104,7 @@ type SampleMailRow struct {
 
 func lotRShireLibrary() SampleLibrarySet {
 	const svc = "google-contacts"
-	contacts := []types.Contact{
+	contacts := []kinds.Contact{
 		lotRContact(svc, "c-frodo", "Frodo Baggins", []string{"frodo@middle-earth.example"}, []string{"+64110001"}),
 		lotRContact(svc, "c-sam", "Samwise Gamgee", []string{"sam@middle-earth.example"}, []string{"+64110002"}),
 		lotRContact(svc, "c-merry", "Meriadoc Brandybuck", []string{"merry@middle-earth.example"}, nil),
@@ -117,88 +117,88 @@ func lotRShireLibrary() SampleLibrarySet {
 		lotRContact(svc, "c-aragorn", "Aragorn", []string{"aragorn@middle-earth.example"}, []string{"+64110099"}),
 	}
 
-	events := []types.CalendarEvent{
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-farewell",
+	events := []kinds.CalendarEvent{
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-farewell",
 			"Farewell party for Bilbo", "2023-04-22T18:00:00Z", "2023-04-22T23:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-departure",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-departure",
 			"Leave Bag End at first light", "2023-04-25T05:30:00Z", "2023-04-25T09:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-bree",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-bree",
 			"Meet at the Prancing Pony, Bree", "2023-04-29T20:00:00Z", "2023-04-29T22:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-rivendell",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-rivendell",
 			"Council of Elrond (hobbit seats)", "2023-05-08T09:00:00Z", "2023-05-08T17:00:00Z", true),
 	}
 
-	places := []types.PlaceVisit{
+	places := []kinds.PlaceVisit{
 		{
 			StartAt:    "2023-04-25T05:30:00Z",
 			EndAt:      "2023-04-25T18:00:00Z",
-			Kind:       types.PlaceKindTrip,
+			Kind:       kinds.PlaceKindTrip,
 			Mode:       "walk",
 			Confidence: "high",
-			Place:      types.Place{Name: "Hobbiton to Bywater", Locality: "The Shire", Country: "Eriador"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-shire-leg1", Canonical: true}},
+			Place:      kinds.Place{Name: "Hobbiton to Bywater", Locality: "The Shire", Country: "Eriador"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-shire-leg1", Canonical: true}},
 		},
 		{
 			StartAt:    "2023-04-29T12:00:00Z",
 			EndAt:      "2023-04-30T10:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "high",
-			Place:      types.Place{Name: "Bree (Prancing Pony)", Locality: "Bree", Country: "Eriador"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-bree", Canonical: true}},
+			Place:      kinds.Place{Name: "Bree (Prancing Pony)", Locality: "Bree", Country: "Eriador"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-bree", Canonical: true}},
 		},
 		{
 			StartAt:    "2023-05-07T16:00:00Z",
 			EndAt:      "2023-05-12T12:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "medium",
-			Place:      types.Place{Name: "Rivendell", Locality: "Imladris", Country: "Eriador"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-rivendell", Canonical: true}},
+			Place:      kinds.Place{Name: "Rivendell", Locality: "Imladris", Country: "Eriador"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-rivendell", Canonical: true}},
 		},
 	}
 
-	photos := []types.Photo{
-		types.NewPhoto("google-photos", "Google Photos", "gp-bag-end", "bag-end-morning.jpg", "image/jpeg", "2023-04-25T05:45:00Z", 2048, 1365),
-		types.NewPhoto("google-photos", "Google Photos", "gp-pony", "prancing-pony-sign.jpg", "image/jpeg", "2023-04-29T20:15:00Z", 1600, 1200),
-		types.NewPhoto("google-photos", "Google Photos", "gp-rivendell", "rivendell-falls.jpg", "image/jpeg", "2023-05-08T11:00:00Z", 2400, 1600),
+	photos := []kinds.Photo{
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-bag-end", "bag-end-morning.jpg", "image/jpeg", "2023-04-25T05:45:00Z", 2048, 1365),
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-pony", "prancing-pony-sign.jpg", "image/jpeg", "2023-04-29T20:15:00Z", 1600, 1200),
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-rivendell", "rivendell-falls.jpg", "image/jpeg", "2023-05-08T11:00:00Z", 2400, 1600),
 	}
 	photos[0].Caption = "Bag End in the early light before departure"
 	photos[1].Caption = "Sign of the Prancing Pony, Bree"
 	photos[2].Caption = "The falls above Rivendell on council morning"
 
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		{
 			Name:    "The Road from the Door",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-walker", "The Walking Songsters")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-road", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-walker", "The Walking Songsters")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-road", Canonical: true}},
 		},
 		{
 			Name:    "Smoke Rings Over Bywater",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-green", "Green Dragon Players")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-smoke", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-green", "Green Dragon Players")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-smoke", Canonical: true}},
 		},
 		{
 			Name:    "Harvest Dance in Hobbiton",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-green", "Green Dragon Players")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-harvest", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-green", "Green Dragon Players")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-harvest", Canonical: true}},
 		},
 	}
-	playlists := []types.Playlist{
+	playlists := []kinds.Playlist{
 		{
 			Name: "Walking Songs for the Road",
-			Sources: []types.PlaylistSource{
+			Sources: []kinds.PlaylistSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "pl-walking", Canonical: true},
 			},
 		},
 	}
-	albums := []types.Album{
-		{Name: "Songs of the Shire", Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al-shire"}}},
+	albums := []kinds.Album{
+		{Name: "Songs of the Shire", Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al-shire"}}},
 	}
-	artists := []types.Artist{
-		types.NewArtist("spotify", "Spotify", "ar-green", "Green Dragon Players"),
-		types.NewArtist("spotify", "Spotify", "ar-walker", "The Walking Songsters"),
+	artists := []kinds.Artist{
+		kinds.NewArtist("spotify", "Spotify", "ar-green", "Green Dragon Players"),
+		kinds.NewArtist("spotify", "Spotify", "ar-walker", "The Walking Songsters"),
 	}
 
-	documents := []types.Document{
+	documents := []kinds.Document{
 		{
 			Title:         "Note on the inheritance (private)",
 			MimeType:      "text/plain",
@@ -207,7 +207,7 @@ func lotRShireLibrary() SampleLibrarySet {
 			DocumentType:  "note",
 			Tags:          []string{"private", "inheritance"},
 			Excerpt:       "Keep this matter quiet. The road will be long, and I would not have the whole Shire talking.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-inherit", Canonical: true},
 			},
 		},
@@ -219,13 +219,13 @@ func lotRShireLibrary() SampleLibrarySet {
 			DocumentType:  "note",
 			Tags:          []string{"packing"},
 			Excerpt:       "Rope, salt, potatoes, and the grey cloak. Do not forget the second breakfast rations.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-packing", Canonical: true},
 			},
 		},
 	}
 
-	messages := []types.Message{
+	messages := []kinds.Message{
 		lotRLibraryMessage("msg-bilbo-farewell", "A word before I go",
 			"Bilbo Baggins", "bilbo@middle-earth.example", "Frodo Baggins", "frodo@middle-earth.example",
 			"2023-04-20T14:00:00Z", "The party will be loud, and then it will be quiet. Keep the house in order and do not let the Sackville-Bagginses in."),
@@ -237,7 +237,7 @@ func lotRShireLibrary() SampleLibrarySet {
 			"2023-04-24T19:10:00Z", "Everything on the list is packed twice over. I will be at the gate before the sun."),
 	}
 
-	transactions := []types.Transaction{
+	transactions := []kinds.Transaction{
 		{
 			PostedAt:    "2023-04-21T12:00:00Z",
 			Amount:      "-12.50",
@@ -245,7 +245,7 @@ func lotRShireLibrary() SampleLibrarySet {
 			Description: "Green Dragon — farewell round",
 			Merchant:    "Green Dragon Inn",
 			Category:    []string{"dining"},
-			Sources:     []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-green", Canonical: true}},
+			Sources:     []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-green", Canonical: true}},
 		},
 		{
 			PostedAt:    "2023-04-24T09:00:00Z",
@@ -254,7 +254,7 @@ func lotRShireLibrary() SampleLibrarySet {
 			Description: "Stocks for the road (salt, flour, rope)",
 			Merchant:    "Bywater Market",
 			Category:    []string{"supplies"},
-			Sources:     []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-market", Canonical: true}},
+			Sources:     []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-market", Canonical: true}},
 		},
 	}
 
@@ -273,19 +273,19 @@ func lotRShireLibrary() SampleLibrarySet {
 	}
 }
 
-func lotRLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentAt, body string) types.Message {
-	return types.Message{
-		Channel:   types.MessageChannelEmail,
+func lotRLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentAt, body string) kinds.Message {
+	return kinds.Message{
+		Channel:   kinds.MessageChannelEmail,
 		Subject:   subject,
 		Snippet:   snippetOf(body),
 		Body:      body,
-		From:      &types.Contact{Name: fromName, Emails: []string{fromEmail}},
-		To:        []types.Contact{{Name: toName, Emails: []string{toEmail}}},
+		From:      &kinds.Contact{Name: fromName, Emails: []string{fromEmail}},
+		To:        []kinds.Contact{{Name: toName, Emails: []string{toEmail}}},
 		SentAt:    sentAt,
 		Direction: "inbound",
 		Read:      true,
 		EntityID:  id + "@middle-earth.example",
-		Sources: []types.MessageSource{{
+		Sources: []kinds.MessageSource{{
 			Service:     connectors.GoogleGmailServiceID,
 			ServiceName: connectors.GoogleGmailServiceName,
 			ID:          id,
@@ -297,7 +297,7 @@ func lotRLibraryMessage(id, subject, fromName, fromEmail, toName, toEmail, sentA
 
 func lotRGondorLibrary() SampleLibrarySet {
 	const svc = "google-contacts"
-	contacts := []types.Contact{
+	contacts := []kinds.Contact{
 		lotRContact(svc, "c-gandalf-w", "Gandalf the White", []string{"gandalf@middle-earth.example"}, nil),
 		lotRContact(svc, "c-aragorn-k", "Aragorn Elessar", []string{"aragorn@middle-earth.example"}, []string{"+64110099"}),
 		lotRContact(svc, "c-elrond", "Elrond", []string{"elrond@middle-earth.example"}, nil),
@@ -308,87 +308,87 @@ func lotRGondorLibrary() SampleLibrarySet {
 		lotRContact(svc, "c-theoden", "Théoden", []string{"theoden@middle-earth.example"}, nil),
 	}
 
-	events := []types.CalendarEvent{
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-council",
+	events := []kinds.CalendarEvent{
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-council",
 			"Council of Elrond", "2023-05-08T09:00:00Z", "2023-05-08T17:00:00Z", true),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-helms",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-helms",
 			"Battle of the Hornburg (Helm's Deep)", "2023-06-15T18:00:00Z", "2023-06-16T06:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-pelennor",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-pelennor",
 			"Battle of the Pelennor Fields", "2023-06-25T06:00:00Z", "2023-06-25T22:00:00Z", false),
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ev-coronation",
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ev-coronation",
 			"Coronation of the King", "2023-07-01T12:00:00Z", "2023-07-01T16:00:00Z", false),
 	}
 
-	places := []types.PlaceVisit{
+	places := []kinds.PlaceVisit{
 		{
 			StartAt:    "2023-06-14T12:00:00Z",
 			EndAt:      "2023-06-16T08:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "high",
-			Place:      types.Place{Name: "Helm's Deep", Locality: "Rohan", Country: "Rohan"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-helms", Canonical: true}},
+			Place:      kinds.Place{Name: "Helm's Deep", Locality: "Rohan", Country: "Rohan"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-helms", Canonical: true}},
 		},
 		{
 			StartAt:    "2023-06-24T18:00:00Z",
 			EndAt:      "2023-06-26T10:00:00Z",
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: "high",
-			Place:      types.Place{Name: "Minas Tirith", Locality: "Gondor", Country: "Gondor"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-minas", Canonical: true}},
+			Place:      kinds.Place{Name: "Minas Tirith", Locality: "Gondor", Country: "Gondor"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-minas", Canonical: true}},
 		},
 		{
 			StartAt:    "2023-05-20T09:00:00Z",
 			EndAt:      "2023-05-22T17:00:00Z",
-			Kind:       types.PlaceKindTrip,
+			Kind:       kinds.PlaceKindTrip,
 			Mode:       "ride",
 			Confidence: "medium",
-			Place:      types.Place{Name: "Isengard (after the fall)", Locality: "Nan Curunír", Country: "Rohan"},
-			Sources:    []types.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-isengard", Canonical: true}},
+			Place:      kinds.Place{Name: "Isengard (after the fall)", Locality: "Nan Curunír", Country: "Rohan"},
+			Sources:    []kinds.PlaceVisitSource{{Service: "google-timeline", ServiceName: "Google Timeline", ID: "tl-isengard", Canonical: true}},
 		},
 	}
 
-	photos := []types.Photo{
-		types.NewPhoto("google-photos", "Google Photos", "gp-helms", "hornburg-dawn.jpg", "image/jpeg", "2023-06-16T05:40:00Z", 2400, 1600),
-		types.NewPhoto("google-photos", "Google Photos", "gp-white-tree", "white-tree-in-bloom.jpg", "image/jpeg", "2023-07-01T13:00:00Z", 1800, 1200),
+	photos := []kinds.Photo{
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-helms", "hornburg-dawn.jpg", "image/jpeg", "2023-06-16T05:40:00Z", 2400, 1600),
+		kinds.NewPhoto("google-photos", "Google Photos", "gp-white-tree", "white-tree-in-bloom.jpg", "image/jpeg", "2023-07-01T13:00:00Z", 1800, 1200),
 	}
 	photos[0].Caption = "Dawn after the siege at the Hornburg"
 	photos[1].Caption = "The White Tree in bloom at the coronation"
 
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		{
 			Name:    "Horns at Dawn",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-rohan", "Riders of Rohan Choir")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-horns", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-rohan", "Riders of Rohan Choir")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-horns", Canonical: true}},
 		},
 		{
 			Name:    "City of White Stone",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-gondor", "Minas Tirith Ensemble")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-city", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-gondor", "Minas Tirith Ensemble")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-city", Canonical: true}},
 		},
 		{
 			Name:    "Song of the Grey Company",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "ar-grey", "Grey Company")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-grey", Canonical: true}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "ar-grey", "Grey Company")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp-grey", Canonical: true}},
 		},
 	}
-	playlists := []types.Playlist{
+	playlists := []kinds.Playlist{
 		{
 			Name: "Songs of War and Return",
-			Sources: []types.PlaylistSource{
+			Sources: []kinds.PlaylistSource{
 				{Service: "spotify", ServiceName: "Spotify", ID: "pl-war", Canonical: true},
 			},
 		},
 	}
-	albums := []types.Album{
-		{Name: "Music of the South-kingdom", Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al-south"}}},
+	albums := []kinds.Album{
+		{Name: "Music of the South-kingdom", Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "al-south"}}},
 	}
-	artists := []types.Artist{
-		types.NewArtist("spotify", "Spotify", "ar-rohan", "Riders of Rohan Choir"),
-		types.NewArtist("spotify", "Spotify", "ar-gondor", "Minas Tirith Ensemble"),
-		types.NewArtist("spotify", "Spotify", "ar-grey", "Grey Company"),
+	artists := []kinds.Artist{
+		kinds.NewArtist("spotify", "Spotify", "ar-rohan", "Riders of Rohan Choir"),
+		kinds.NewArtist("spotify", "Spotify", "ar-gondor", "Minas Tirith Ensemble"),
+		kinds.NewArtist("spotify", "Spotify", "ar-grey", "Grey Company"),
 	}
 
-	documents := []types.Document{
+	documents := []kinds.Document{
 		{
 			Title:         "Dispatch from the Hornburg (draft)",
 			MimeType:      "text/plain",
@@ -397,7 +397,7 @@ func lotRGondorLibrary() SampleLibrarySet {
 			DocumentType:  "dispatch",
 			Tags:          []string{"war", "rohan"},
 			Excerpt:       "The wall held at the deeping wall. Riders came at first light and the field is ours for now.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-helms", Canonical: true},
 			},
 		},
@@ -409,13 +409,13 @@ func lotRGondorLibrary() SampleLibrarySet {
 			DocumentType:  "proclamation",
 			Tags:          []string{"gondor", "crown"},
 			Excerpt:       "The days of the stewardship are ended. Let the city be opened and the tree tended.",
-			Sources: []types.DocumentSource{
+			Sources: []kinds.DocumentSource{
 				{Service: "google-drive", ServiceName: "Google Drive", ID: "gd-coronation", Canonical: true},
 			},
 		},
 	}
 
-	messages := []types.Message{
+	messages := []kinds.Message{
 		lotRLibraryMessage("msg-elrond-summon", "You are summoned to the council",
 			"Elrond", "elrond@middle-earth.example", "Gandalf", "gandalf@middle-earth.example",
 			"2023-05-06T10:00:00Z", "Come at once. Matters that concern the whole North must be spoken of openly."),
@@ -427,7 +427,7 @@ func lotRGondorLibrary() SampleLibrarySet {
 			"2023-06-14T07:00:00Z", "We hold the keep as long as the horn lasts. Send word if the field turns."),
 	}
 
-	transactions := []types.Transaction{
+	transactions := []kinds.Transaction{
 		{
 			PostedAt:    "2023-06-10T12:00:00Z",
 			Amount:      "-250.00",
@@ -435,7 +435,7 @@ func lotRGondorLibrary() SampleLibrarySet {
 			Description: "Remounts and grain for the muster",
 			Merchant:    "Edoras Stables",
 			Category:    []string{"supplies"},
-			Sources:     []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-muster", Canonical: true}},
+			Sources:     []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "ynab-muster", Canonical: true}},
 		},
 	}
 

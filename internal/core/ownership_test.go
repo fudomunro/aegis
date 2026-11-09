@@ -2,13 +2,14 @@ package core
 
 import (
 	"encoding/json"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
@@ -70,8 +71,8 @@ func TestOwnershipStatuses_EmptyArchiveStoreStaysARoute(t *testing.T) {
 	}
 
 	// A row import flips it to under management for the kinds it feeds.
-	if err := store.UpsertMessage("f1", types.Message{
-		Channel: "signal", Subject: "hi", Sources: []types.MessageSource{{Service: connectors.SignalServiceID, ID: "m1"}},
+	if err := store.UpsertMessage("f1", kinds.Message{
+		Channel: "signal", Subject: "hi", Sources: []kinds.MessageSource{{Service: connectors.SignalServiceID, ID: "m1"}},
 	}); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}

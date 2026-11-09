@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -136,7 +137,7 @@ Library (metadata only; bytes stay on Bluesky):
 
 Aegis does not store photo bytes. The share downloads the original from the canonical photo service, hashes it (claim.sha256), posts a copy to Bluesky, and discards the local buffer. claim is a PoC — content hash + public post — not a cryptographic proof.
 
-%s`, root, root, root, root, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, root, root, kinds.PhotoSourceDiscipline())
 }
 
 // HandleProxy serves read-only Bluesky xrpc paths that agents need for
@@ -174,7 +175,7 @@ func (c *BlueskyConnector) handleGetBlob(w http.ResponseWriter, r *http.Request,
 	}
 	sess, err := c.createSession(r.Context())
 	if err != nil {
-		if err == types.ErrUnauthorized {
+		if err == kinds.ErrUnauthorized {
 			shared.WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
 			return
 		}
@@ -222,7 +223,7 @@ func (c *BlueskyConnector) handleAuthorFeedProxy(w http.ResponseWriter, r *http.
 func (c *BlueskyConnector) handleXRPCGet(w http.ResponseWriter, r *http.Request, path string, logger *slog.Logger) {
 	sess, err := c.createSession(r.Context())
 	if err != nil {
-		if err == types.ErrUnauthorized {
+		if err == kinds.ErrUnauthorized {
 			shared.WriteJSONError(w, http.StatusUnauthorized, "no valid Bluesky credentials — set X-Bluesky-Handle and X-Bluesky-App-Password")
 			return
 		}
@@ -322,7 +323,7 @@ type blueskyCreateRecordResponse struct {
 func (c *BlueskyConnector) createSession(ctx context.Context) (blueskySession, error) {
 	cred, ok := c.credentials()
 	if !ok {
-		return blueskySession{}, types.ErrUnauthorized
+		return blueskySession{}, kinds.ErrUnauthorized
 	}
 	body, err := json.Marshal(map[string]string{
 		"identifier": cred.Handle,
@@ -348,7 +349,7 @@ func (c *BlueskyConnector) createSession(ctx context.Context) (blueskySession, e
 		return blueskySession{}, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return blueskySession{}, types.ErrUnauthorized
+		return blueskySession{}, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
 		return blueskySession{}, fmt.Errorf("bluesky createSession returned %d: %s", resp.StatusCode, truncateBytes(data, 200))
@@ -363,15 +364,15 @@ func (c *BlueskyConnector) createSession(ctx context.Context) (blueskySession, e
 	return sess, nil
 }
 
-// SharePhoto implements types.PhotoShareTarget. It uploads the image blob and
+// SharePhoto implements kinds.PhotoShareTarget. It uploads the image blob and
 // creates an app.bsky.feed.post with an images embed. Bytes are used only for
 // this call.
-func (c *BlueskyConnector) SharePhoto(ctx context.Context, req types.PhotoShareRequest) (types.PhotoShareResult, error) {
+func (c *BlueskyConnector) SharePhoto(ctx context.Context, req kinds.PhotoShareRequest) (kinds.PhotoShareResult, error) {
 	if len(req.Data) == 0 {
-		return types.PhotoShareResult{}, fmt.Errorf("no photo bytes to share")
+		return kinds.PhotoShareResult{}, fmt.Errorf("no photo bytes to share")
 	}
 	if len(req.Data) > blueskyImageMaxBytes {
-		return types.PhotoShareResult{}, fmt.Errorf(
+		return kinds.PhotoShareResult{}, fmt.Errorf(
 			"photo is %d bytes; Bluesky image embeds cap at %d — share a smaller derivative",
 			len(req.Data), blueskyImageMaxBytes)
 	}
@@ -380,18 +381,18 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req types.PhotoShareR
 		mime = "image/jpeg"
 	}
 	if !strings.HasPrefix(mime, "image/") {
-		return types.PhotoShareResult{}, fmt.Errorf("bluesky share requires an image/* mime type, got %q", mime)
+		return kinds.PhotoShareResult{}, fmt.Errorf("bluesky share requires an image/* mime type, got %q", mime)
 	}
 
 	logger := slog.With("service", BlueskyServiceID)
 	sess, err := c.createSession(ctx)
 	if err != nil {
-		return types.PhotoShareResult{}, err
+		return kinds.PhotoShareResult{}, err
 	}
 
 	blob, err := c.uploadBlob(ctx, sess.AccessJwt, req.Data, mime)
 	if err != nil {
-		return types.PhotoShareResult{}, err
+		return kinds.PhotoShareResult{}, err
 	}
 
 	alt := strings.TrimSpace(req.Alt)
@@ -426,41 +427,41 @@ func (c *BlueskyConnector) SharePhoto(ctx context.Context, req types.PhotoShareR
 		"record":     record,
 	})
 	if err != nil {
-		return types.PhotoShareResult{}, err
+		return kinds.PhotoShareResult{}, err
 	}
 
 	endpoint := shared.TrimRightSlash(c.BlueskyUpstreamBase()) + "/xrpc/com.atproto.repo.createRecord"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(createBody))
 	if err != nil {
-		return types.PhotoShareResult{}, err
+		return kinds.PhotoShareResult{}, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Authorization", "Bearer "+sess.AccessJwt)
 
 	resp, err := shared.HTTPClient.Do(httpReq)
 	if err != nil {
-		return types.PhotoShareResult{}, err
+		return kinds.PhotoShareResult{}, err
 	}
 	defer resp.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	if err != nil {
-		return types.PhotoShareResult{}, err
+		return kinds.PhotoShareResult{}, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return types.PhotoShareResult{}, types.ErrUnauthorized
+		return kinds.PhotoShareResult{}, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
-		return types.PhotoShareResult{}, fmt.Errorf("bluesky createRecord returned %d: %s", resp.StatusCode, truncateBytes(data, 200))
+		return kinds.PhotoShareResult{}, fmt.Errorf("bluesky createRecord returned %d: %s", resp.StatusCode, truncateBytes(data, 200))
 	}
 	var created blueskyCreateRecordResponse
 	if err := json.Unmarshal(data, &created); err != nil {
-		return types.PhotoShareResult{}, fmt.Errorf("decode bluesky createRecord: %w", err)
+		return kinds.PhotoShareResult{}, fmt.Errorf("decode bluesky createRecord: %w", err)
 	}
 	if created.URI == "" {
-		return types.PhotoShareResult{}, fmt.Errorf("bluesky createRecord returned no uri")
+		return kinds.PhotoShareResult{}, fmt.Errorf("bluesky createRecord returned no uri")
 	}
 
-	result := types.PhotoShareResult{
+	result := kinds.PhotoShareResult{
 		Service:  BlueskyServiceID,
 		PostURI:  created.URI,
 		PostID:   rkeyFromATURI(created.URI),
@@ -493,7 +494,7 @@ func (c *BlueskyConnector) uploadBlob(ctx context.Context, accessJWT string, dat
 		return blueskyBlob{}, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return blueskyBlob{}, types.ErrUnauthorized
+		return blueskyBlob{}, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
 		return blueskyBlob{}, fmt.Errorf("bluesky uploadBlob returned %d: %s", resp.StatusCode, truncateBytes(body, 200))

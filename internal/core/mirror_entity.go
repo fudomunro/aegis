@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Contacts and events mirror (issue #146) is reconciliation over neutral
@@ -81,12 +81,12 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 
 	switch req.Kind {
 	case MirrorKindContacts:
-		src, err := mirrorOpFor[types.ContactProvider](s, sourceService, "contact mirror source")
+		src, err := mirrorOpFor[kinds.ContactProvider](s, sourceService, "contact mirror source")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		dst, err := mirrorOpFor[types.ContactWriteProvider](s, req.TargetService, "contact mirror target")
+		dst, err := mirrorOpFor[kinds.ContactWriteProvider](s, req.TargetService, "contact mirror target")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
@@ -132,12 +132,12 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 			Truncated: truncated,
 		}
 	case MirrorKindEvents:
-		src, err := mirrorOpFor[types.CalendarEventProvider](s, sourceService, "event mirror source")
+		src, err := mirrorOpFor[kinds.CalendarEventProvider](s, sourceService, "event mirror source")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		dst, err := mirrorOpFor[types.CalendarEventWriteProvider](s, req.TargetService, "event mirror target")
+		dst, err := mirrorOpFor[kinds.CalendarEventWriteProvider](s, req.TargetService, "event mirror target")
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return

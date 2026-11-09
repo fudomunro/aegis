@@ -3,16 +3,14 @@ package kinds
 import (
 	"context"
 	"net/http"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type photosKind struct {
 	providerKind
 	h      Host
 	e      *Engine
-	mark   func([]types.Photo, string)
-	copies func([]types.Photo)
+	mark   func([]Photo, string)
+	copies func([]Photo)
 }
 
 func newPhotosKind(h Host, e *Engine, d Deps) Kind {
@@ -21,7 +19,7 @@ func newPhotosKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("photos")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.PhotoProvider],
+		provides: providerProvides[PhotoProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -33,38 +31,38 @@ func newPhotosKind(h Host, e *Engine, d Deps) Kind {
 
 func (k *photosKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
-	Aggregate(k.h, k.e, w, r, Spec[types.Photo]{
+	Aggregate(k.h, k.e, w, r, Spec[Photo]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.Photo], []string) {
-			return Collect[types.Photo, types.PhotoProvider](k.h, r, kind.PermType,
-				func(p types.PhotoProvider) func(context.Context) ([]types.Photo, bool, error) {
+		Targets: func(r *http.Request) ([]NamedLister[Photo], []string) {
+			return Collect[Photo, PhotoProvider](k.h, r, kind.PermType,
+				func(p PhotoProvider) func(context.Context) ([]Photo, bool, error) {
 					return p.ListUserPhotos
 				})
 		},
 		ServiceOf: photoServiceName,
-		SortKey:   types.PhotoIdentityKey,
-		Merge:     types.MergePhotos,
-		Encode: func(items []types.Photo, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
-			pageItems, pr := types.SlicePage(items, page)
-			return types.PhotoList{Photos: pageItems, LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
+		SortKey:   PhotoIdentityKey,
+		Merge:     MergePhotos,
+		Encode: func(items []Photo, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
+			pageItems, pr := SlicePage(items, page)
+			return PhotoList{Photos: pageItems, LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
 		},
 		MarkCanonical: k.mark,
 		StampCopies:   k.copies,
 	})
 }
 
-func photoServiceName(p types.Photo) string {
-	return types.PhotoServiceName(p)
+func photoServiceName(p Photo) string {
+	return PhotoServiceName(p)
 }
 
-func forEachPhotoSource(item *types.Photo, f func(SourceMut)) {
+func forEachPhotoSource(item *Photo, f func(SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
 }

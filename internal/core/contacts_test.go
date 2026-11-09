@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"context"
 	"encoding/json"
@@ -16,7 +17,7 @@ import (
 )
 
 type fakeContactProvider struct {
-	contacts []types.Contact
+	contacts []kinds.Contact
 	err      error
 }
 
@@ -27,7 +28,7 @@ func (f *fakeContactProvider) SystemInstructions(string) string { return "fake" 
 func (f *fakeContactProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeContactProvider) ListUserContacts(context.Context) ([]types.Contact, bool, error) {
+func (f *fakeContactProvider) ListUserContacts(context.Context) ([]kinds.Contact, bool, error) {
 	return f.contacts, false, f.err
 }
 
@@ -41,26 +42,26 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{
-			contacts: []types.Contact{
+			contacts: []kinds.Contact{
 				{
 					Name:    "Ada Lovelace",
 					Emails:  []string{"ada@example.com"},
-					Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
+					Sources: []kinds.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
 				},
 			},
 		},
 		"outlook": &fakeContactProvider{
-			contacts: []types.Contact{
+			contacts: []kinds.Contact{
 				{
 					Name:    "Ada Lovelace",
 					Emails:  []string{"ada@example.com"},
 					Phones:  []string{"+15551234567"},
-					Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o1"}},
+					Sources: []kinds.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o1"}},
 				},
 				{
 					Name:    "Grace Hopper",
 					Emails:  []string{"grace@example.com"},
-					Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o2"}},
+					Sources: []kinds.ContactSource{{Service: "outlook", ServiceName: "Outlook", ID: "o2"}},
 				},
 			},
 		},
@@ -75,7 +76,7 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
 
-	var resp types.ContactList
+	var resp kinds.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -93,10 +94,10 @@ func TestHandleLibraryContacts_AggregatesServices(t *testing.T) {
 	if resp.Contacts[1].Name != "Grace Hopper" {
 		t.Fatalf("grace = %+v", resp.Contacts[1])
 	}
-	if resp.ByService["google"].Status != types.LibraryStatusOK || resp.ByService["google"].Count != 1 {
+	if resp.ByService["google"].Status != kinds.LibraryStatusOK || resp.ByService["google"].Count != 1 {
 		t.Fatalf("google status = %+v", resp.ByService["google"])
 	}
-	if resp.ByService["outlook"].Status != types.LibraryStatusOK || resp.ByService["outlook"].Count != 2 {
+	if resp.ByService["outlook"].Status != kinds.LibraryStatusOK || resp.ByService["outlook"].Count != 2 {
 		t.Fatalf("outlook status = %+v", resp.ByService["outlook"])
 	}
 }
@@ -133,7 +134,7 @@ func TestHandleLibraryContacts_DeniedByPermission(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{
-			contacts: []types.Contact{{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ID: "1"}}}},
+			contacts: []kinds.Contact{{Name: "Ada", Sources: []kinds.ContactSource{{Service: "google", ID: "1"}}}},
 		},
 	}
 
@@ -157,11 +158,11 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google": &fakeContactProvider{
-			contacts: []types.Contact{
-				{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}}},
+			contacts: []kinds.Contact{
+				{Name: "Ada", Sources: []kinds.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}}},
 			},
 		},
-		"outlook": &fakeContactProvider{err: types.ErrUnauthorized},
+		"outlook": &fakeContactProvider{err: kinds.ErrUnauthorized},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
@@ -172,11 +173,11 @@ func TestHandleLibraryContacts_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
 	}
-	var resp types.ContactList
+	var resp kinds.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["outlook"].Status != types.LibraryStatusUnauthorized {
+	if resp.ByService["outlook"].Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("outlook = %+v", resp.ByService["outlook"])
 	}
 	if !strings.Contains(resp.ByService["outlook"].Error, "/v1/auth/outlook/login") {
@@ -201,11 +202,11 @@ func TestHandleLibraryContacts_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var resp types.ContactList
+	var resp kinds.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google"].Status != types.LibraryStatusError {
+	if resp.ByService["google"].Status != kinds.LibraryStatusError {
 		t.Fatalf("google = %+v", resp.ByService["google"])
 	}
 	if len(resp.Contacts) != 0 {

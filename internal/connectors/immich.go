@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -130,7 +131,7 @@ Byte transport only (not a general Immich API):
 GET %s/v1/services/immich/assets/{id}/original — original bytes
 GET %s/v1/services/immich/assets/{id}/thumbnail — thumbnail bytes
 
-%s`, root, root, root, types.PhotoSourceDiscipline())
+%s`, root, root, root, kinds.PhotoSourceDiscipline())
 }
 
 // HandleProxy forwards Immich API paths, attaching the configured API key.
@@ -217,11 +218,11 @@ func (c *ImmichConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 // ListUserPhotos implements PhotoProvider. It pages Immich POST /search/metadata
 // and maps assets to neutral Photo values with canonical sources pointing at
 // Immich (via Aegis proxy download URLs).
-func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bool, error) {
+func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]kinds.Photo, bool, error) {
 	logger := slog.Default()
 	upstream := c.ImmichUpstreamBase() + "/search/metadata"
 
-	var all []types.Photo
+	var all []kinds.Photo
 	truncated := false
 	nextPage := 1
 	for page := 0; page < shared.LibraryPageCap; page++ {
@@ -252,7 +253,7 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 			return nil, false, err
 		}
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-			return nil, false, types.ErrUnauthorized
+			return nil, false, kinds.ErrUnauthorized
 		}
 		if resp.StatusCode != http.StatusOK {
 			msg := strings.TrimSpace(string(data))
@@ -289,14 +290,14 @@ func (c *ImmichConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bo
 }
 
 // NeutralPhoto maps one Immich asset to Aegis's Photo shape.
-func (c *ImmichConnector) NeutralPhoto(a immichAsset) types.Photo {
+func (c *ImmichConnector) NeutralPhoto(a immichAsset) kinds.Photo {
 	taken := ""
 	if a.Exif.DateTimeOriginal != "" {
 		taken = a.Exif.DateTimeOriginal
 	} else if a.FileCreatedAt != "" {
 		taken = a.FileCreatedAt
 	}
-	taken = types.NormalizePhotoTakenAt(taken)
+	taken = kinds.NormalizePhotoTakenAt(taken)
 
 	mime := ImmichMimeForType(a.Type, a.OriginalFileName)
 	filename := a.OriginalFileName
@@ -305,7 +306,7 @@ func (c *ImmichConnector) NeutralPhoto(a immichAsset) types.Photo {
 	}
 
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + ImmichServiceID
-	src := types.PhotoSource{
+	src := kinds.PhotoSource{
 		Service:      ImmichServiceID,
 		ServiceName:  ImmichServiceName,
 		ID:           a.ID,
@@ -322,19 +323,19 @@ func (c *ImmichConnector) NeutralPhoto(a immichAsset) types.Photo {
 		src.Extra["checksum"] = strings.ToLower(a.Checksum)
 	}
 
-	p := types.Photo{
+	p := kinds.Photo{
 		TakenAt:  taken,
 		Width:    a.Exif.ExifImageWidth,
 		Height:   a.Exif.ExifImageHeight,
 		MimeType: mime,
 		Filename: filename,
 		Caption:  strings.TrimSpace(a.Exif.Description),
-		Sources:  []types.PhotoSource{src},
+		Sources:  []kinds.PhotoSource{src},
 	}
 	return p
 }
 
-// FetchPhotoBytes implements types.PhotoBytesProvider for the photo-share /
+// FetchPhotoBytes implements kinds.PhotoBytesProvider for the photo-share /
 // ownership-claim PoC (issue #20). It downloads one asset original from
 // Immich and returns the bytes for this call only — Aegis still does not
 // store photo bytes on disk or in cache.
@@ -362,7 +363,7 @@ func (c *ImmichConnector) FetchPhotoBytes(ctx context.Context, id string) ([]byt
 		return nil, "", err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, "", types.ErrUnauthorized
+		return nil, "", kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
 		msg := strings.TrimSpace(string(data))

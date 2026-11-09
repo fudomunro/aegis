@@ -1,8 +1,7 @@
 // Package kinds owns the library aggregate pipeline over a narrow Host
-// seam that the core hub implements (issue #312) and the kind registry
-// data (issue #325). Neutral models still come from internal/types until
-// their move lands; authorization vocabulary comes from core/policy; the
-// package never imports the hub.
+// seam that the core hub implements (issue #312), and the kind registry,
+// neutral models, and merge for library kinds (issue #325). Authorization
+// vocabulary comes from core/policy; the package never imports the hub.
 package kinds
 
 import (
@@ -10,8 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ServiceView is the neutral service fact the pipeline needs. No
@@ -100,7 +97,7 @@ type Host interface {
 	SourceName(id string) string
 	// CopyInfo returns durable copy-ledger metadata for one item source
 	// (issue #76), or nil when untracked.
-	CopyInfo(kind, serviceID, externalID string) *types.CopyInfo
+	CopyInfo(kind, serviceID, externalID string) *CopyInfo
 }
 
 // ownerViewKey marks an internal owner-tier fetch (issue #272). One owner

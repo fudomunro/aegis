@@ -1,8 +1,9 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // TestLibraryKinds_RegistryConsistency (issue #183) proves the hand-copied

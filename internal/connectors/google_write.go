@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Google People / Calendar write helpers used by the contacts and events
@@ -63,10 +63,10 @@ type googleCalendarEventID struct {
 
 // CreateGoogleContact creates a person on Google Contacts and returns the
 // resource name and etag.
-func (c *GoogleContactsConnector) CreateGoogleContact(ctx context.Context, contact types.Contact) (resourceName, etag string, err error) {
+func (c *GoogleContactsConnector) CreateGoogleContact(ctx context.Context, contact kinds.Contact) (resourceName, etag string, err error) {
 	token := c.host.GetValidToken(GoogleContactsServiceID, nil)
 	if token == "" {
-		return "", "", types.ErrUnauthorized
+		return "", "", kinds.ErrUnauthorized
 	}
 	body := googlePeopleCreate{}
 	name := strings.TrimSpace(contact.Name)
@@ -114,10 +114,10 @@ func (c *GoogleContactsConnector) CreateGoogleContact(ctx context.Context, conta
 
 // UpdateGoogleContact updates a person. When etag is non-empty it is sent for
 // optimistic concurrency; a 409 returns ErrConflict.
-func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resourceName, etag string, contact types.Contact) (newETag string, err error) {
+func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resourceName, etag string, contact kinds.Contact) (newETag string, err error) {
 	token := c.host.GetValidToken(GoogleContactsServiceID, nil)
 	if token == "" {
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	}
 	if resourceName == "" {
 		return "", fmt.Errorf("google contact update requires a resource name")
@@ -175,7 +175,7 @@ func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resou
 	body, _ := readAllLimit(resp.Body, 1<<20)
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	case resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusPreconditionFailed:
 		return "", ErrConflict
 	case resp.StatusCode >= 400:
@@ -190,10 +190,10 @@ func (c *GoogleContactsConnector) UpdateGoogleContact(ctx context.Context, resou
 
 // CreateGoogleEvent inserts an event on the given calendar (or "primary").
 // Returns the event id, htmlLink, and etag.
-func (c *GoogleCalendarConnector) CreateGoogleEvent(ctx context.Context, calendarID string, ev types.CalendarEvent) (id, htmlLink, etag string, err error) {
+func (c *GoogleCalendarConnector) CreateGoogleEvent(ctx context.Context, calendarID string, ev kinds.CalendarEvent) (id, htmlLink, etag string, err error) {
 	token := c.host.GetValidToken(GoogleCalendarServiceID, nil)
 	if token == "" {
-		return "", "", "", types.ErrUnauthorized
+		return "", "", "", kinds.ErrUnauthorized
 	}
 	if calendarID == "" {
 		calendarID = "primary"
@@ -242,10 +242,10 @@ func (c *GoogleCalendarConnector) CreateGoogleEvent(ctx context.Context, calenda
 
 // UpdateGoogleEvent replaces one event. When etag is non-empty it is sent as
 // If-Match; 409/412 map to ErrConflict.
-func (c *GoogleCalendarConnector) UpdateGoogleEvent(ctx context.Context, calendarID, eventID, etag string, ev types.CalendarEvent) (newETag string, err error) {
+func (c *GoogleCalendarConnector) UpdateGoogleEvent(ctx context.Context, calendarID, eventID, etag string, ev kinds.CalendarEvent) (newETag string, err error) {
 	token := c.host.GetValidToken(GoogleCalendarServiceID, nil)
 	if token == "" {
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	}
 	if calendarID == "" {
 		calendarID = "primary"
@@ -302,7 +302,7 @@ func (c *GoogleCalendarConnector) UpdateGoogleEvent(ctx context.Context, calenda
 	data, _ := readAllLimit(resp.Body, 1<<20)
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	case resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusPreconditionFailed:
 		return "", ErrConflict
 	case resp.StatusCode >= 400:
@@ -334,7 +334,7 @@ func (c *GoogleContactsConnector) postJSON(ctx context.Context, token, u string,
 	data, _ := readAllLimit(resp.Body, 1<<20)
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	case resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusPreconditionFailed:
 		return ErrConflict
 	case resp.StatusCode >= 400:
@@ -359,7 +359,7 @@ func (c *GoogleCalendarConnector) postJSON(ctx context.Context, token, u string,
 	data, _ := readAllLimit(resp.Body, 1<<20)
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	case resp.StatusCode == http.StatusConflict || resp.StatusCode == http.StatusPreconditionFailed:
 		return ErrConflict
 	case resp.StatusCode >= 400:

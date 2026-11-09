@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -223,7 +224,7 @@ func (c *YNABConnector) ynabProbe(ctx context.Context) types.ProbeResult {
 	var out BudgetsResponse
 	err := c.APIGet(ctx, slog.With("handler", "admin_ynab"), "/budgets", nil, &out)
 	switch {
-	case err == types.ErrUnauthorized:
+	case err == kinds.ErrUnauthorized:
 		return types.ProbeResult{
 			OK:      false,
 			Code:    "unauthorized",

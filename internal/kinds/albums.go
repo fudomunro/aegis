@@ -3,15 +3,13 @@ package kinds
 import (
 	"context"
 	"net/http"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type albumsKind struct {
 	providerKind
 	h       Host
 	e       *Engine
-	resolve func(context.Context, []types.Album)
+	resolve func(context.Context, []Album)
 }
 
 func newAlbumsKind(h Host, e *Engine, d Deps) Kind {
@@ -19,7 +17,7 @@ func newAlbumsKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("albums")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.AlbumProvider],
+		provides: providerProvides[AlbumProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -31,25 +29,25 @@ func newAlbumsKind(h Host, e *Engine, d Deps) Kind {
 
 func (k *albumsKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
-	Aggregate(k.h, k.e, w, r, Spec[types.Album]{
+	Aggregate(k.h, k.e, w, r, Spec[Album]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.Album], []string) {
-			return Collect[types.Album, types.AlbumProvider](k.h, r, kind.PermType,
-				func(p types.AlbumProvider) func(context.Context) ([]types.Album, bool, error) {
+		Targets: func(r *http.Request) ([]NamedLister[Album], []string) {
+			return Collect[Album, AlbumProvider](k.h, r, kind.PermType,
+				func(p AlbumProvider) func(context.Context) ([]Album, bool, error) {
 					return p.ListUserSavedAlbums
 				})
 		},
-		ServiceOf: types.AlbumServiceName,
-		SortKey:   types.AlbumIdentityKey,
-		Merge:     types.MergeAlbumsSync,
-		Enrich: func(ctx context.Context, albums []types.Album) {
+		ServiceOf: AlbumServiceName,
+		SortKey:   AlbumIdentityKey,
+		Merge:     MergeAlbumsSync,
+		Enrich: func(ctx context.Context, albums []Album) {
 			if k.resolve != nil {
 				k.resolve(ctx, albums)
 			}
 		},
-		Encode: func(items []types.Album, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
-			pageItems, pr := types.SlicePage(items, page)
-			return types.AlbumList{Albums: pageItems, LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
+		Encode: func(items []Album, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
+			pageItems, pr := SlicePage(items, page)
+			return AlbumList{Albums: pageItems, LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
 		},
 	})
 }

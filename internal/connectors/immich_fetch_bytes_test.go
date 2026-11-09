@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestImmichFetchPhotoBytes(t *testing.T) {
@@ -53,7 +53,7 @@ func TestImmichFetchPhotoBytes(t *testing.T) {
 		host := newTestHost("https://aegis.example.com")
 		host.setService(ImmichServiceID, ts.URL)
 		conn := NewImmichConnector(host)
-		if _, _, err := conn.FetchPhotoBytes(context.Background(), "a1"); err != types.ErrUnauthorized {
+		if _, _, err := conn.FetchPhotoBytes(context.Background(), "a1"); err != kinds.ErrUnauthorized {
 			t.Fatalf("err = %v", err)
 		}
 	})

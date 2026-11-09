@@ -14,6 +14,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -37,9 +38,9 @@ func (f *fakePhotoBytesProvider) FetchPhotoBytes(_ context.Context, id string) (
 }
 
 type fakePhotoShareTarget struct {
-	result types.PhotoShareResult
+	result kinds.PhotoShareResult
 	err    error
-	req    types.PhotoShareRequest
+	req    kinds.PhotoShareRequest
 }
 
 func (f *fakePhotoShareTarget) Capabilities() types.ServiceCapabilities {
@@ -49,7 +50,7 @@ func (f *fakePhotoShareTarget) SystemInstructions(string) string { return "fake"
 func (f *fakePhotoShareTarget) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakePhotoShareTarget) SharePhoto(_ context.Context, req types.PhotoShareRequest) (types.PhotoShareResult, error) {
+func (f *fakePhotoShareTarget) SharePhoto(_ context.Context, req kinds.PhotoShareRequest) (kinds.PhotoShareResult, error) {
 	f.req = req
 	return f.result, f.err
 }
@@ -76,7 +77,7 @@ func testPhotoShareServer(t *testing.T, sourceWrite, targetWrite bool) (*Server,
 		mimeType: "image/jpeg",
 	}
 	dst := &fakePhotoShareTarget{
-		result: types.PhotoShareResult{
+		result: kinds.PhotoShareResult{
 			Service: "bluesky",
 			PostURI: "at://did:plc:alice/app.bsky.feed.post/3kxyz",
 			PostURL: "https://bsky.app/profile/alice.bsky.social/post/3kxyz",
@@ -121,7 +122,7 @@ func TestHandlePhotoShare_HappyPathClaim(t *testing.T) {
 	if dst.req.ContentSHA256 == "" || len(dst.req.Data) != 8 {
 		t.Fatalf("share request = %+v data=%q", dst.req, dst.req.Data)
 	}
-	var resp types.PhotoShareResponse
+	var resp kinds.PhotoShareResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -176,7 +177,7 @@ func TestHandlePhotoShare_DryRunDoesNotPublish(t *testing.T) {
 	if dst.req.Data != nil {
 		t.Fatal("dry-run should not publish")
 	}
-	var resp types.PhotoShareResponse
+	var resp kinds.PhotoShareResponse
 	json.Unmarshal(w.Body.Bytes(), &resp)
 	if !resp.DryRun || resp.Claim != nil {
 		t.Fatalf("resp = %+v", resp)
@@ -238,7 +239,7 @@ func TestHandlePhotoShare_PermissionDenials(t *testing.T) {
 func TestHandlePhotoShare_UpstreamErrors(t *testing.T) {
 	t.Run("unauthorized source", func(t *testing.T) {
 		srv, src, _ := testPhotoShareServer(t, true, true)
-		src.err = types.ErrUnauthorized
+		src.err = kinds.ErrUnauthorized
 		w := postPhotoShare(t, srv, map[string]any{"source_service": "immich", "source_id": "a"})
 		if w.Code != http.StatusUnauthorized {
 			t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
@@ -351,7 +352,7 @@ func TestBlueskySharePhoto_IntegrationMock(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.PhotoShareResponse
+	var resp kinds.PhotoShareResponse
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}

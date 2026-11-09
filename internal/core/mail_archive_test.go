@@ -12,6 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -128,7 +129,7 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("get code = %d body=%s", w.Code, w.Body.String())
 	}
-	var msg types.Message
+	var msg kinds.Message
 	if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
 		t.Fatalf("get json: %v", err)
 	}

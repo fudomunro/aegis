@@ -19,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -78,10 +79,10 @@ func NewTakeoutIngest() *TakeoutIngest { return &TakeoutIngest{} }
 
 var (
 	_ MailIngest           = (*TakeoutIngest)(nil)
-	_ types.SnapshotProber = (*TakeoutIngest)(nil)
+	_ kinds.SnapshotProber = (*TakeoutIngest)(nil)
 )
 
-// SnapshotProbe implements types.SnapshotProber: the copy's contract is
+// SnapshotProbe implements kinds.SnapshotProber: the copy's contract is
 // "this export was ingested", so freshness is the export still being at
 // the recorded location (issue #76/#286).
 func (TakeoutIngest) SnapshotProbe(location string) (bool, string, error) {
@@ -569,11 +570,11 @@ func isMboxFromLine(line []byte) bool {
 
 // parseTakeoutMessage maps one RFC822 blob from a Takeout export into a
 // neutral Message. Missing fields stay empty rather than failing ingest.
-func parseTakeoutMessage(raw []byte, source string) (types.Message, error) {
+func parseTakeoutMessage(raw []byte, source string) (kinds.Message, error) {
 	raw = bytes.TrimPrefix(raw, []byte("\n"))
 	msg, err := mail.ReadMessage(bytes.NewReader(raw))
 	if err != nil {
-		return types.Message{}, err
+		return kinds.Message{}, err
 	}
 	decode := func(v string) string {
 		if v == "" {
@@ -585,7 +586,7 @@ func parseTakeoutMessage(raw []byte, source string) (types.Message, error) {
 		return strings.TrimSpace(v)
 	}
 	subject := decode(msg.Header.Get("Subject"))
-	messageID := types.NormalizeMessageID(msg.Header.Get("Message-ID"))
+	messageID := kinds.NormalizeMessageID(msg.Header.Get("Message-ID"))
 	sentAt := GmailHeaderDateRFC3339(msg.Header.Get("Date"))
 	if sentAt == "" {
 		sentAt = time.Now().UTC().Format(time.RFC3339)
@@ -600,8 +601,8 @@ func parseTakeoutMessage(raw []byte, source string) (types.Message, error) {
 	}
 	labels := TakeoutLabels(msg, source)
 
-	out := types.Message{
-		Channel:    types.MessageChannelEmail,
+	out := kinds.Message{
+		Channel:    kinds.MessageChannelEmail,
 		Subject:    subject,
 		Snippet:    snippet,
 		Body:       body,
@@ -613,7 +614,7 @@ func parseTakeoutMessage(raw []byte, source string) (types.Message, error) {
 		Read:       TakeoutRead(labels),
 		EntityID:   messageID,
 		Labels:     labels,
-		Sources: []types.MessageSource{{
+		Sources: []kinds.MessageSource{{
 			Service:     TakeoutServiceID,
 			ServiceName: TakeoutServiceName,
 			ID:          TakeoutMessageID(messageID, raw),

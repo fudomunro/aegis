@@ -1,22 +1,18 @@
 package copies
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
-)
-
-import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
-	"os"
-	"path/filepath"
-
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
+
 	_ "modernc.org/sqlite"
 )
 
@@ -587,12 +583,12 @@ func scanRecord(row shared.RowScanner) (Record, error) {
 }
 
 // toCopyInfo projects a ledger row onto a library source stamp.
-func (rec Record) ToCopyInfo() *types.CopyInfo {
+func (rec Record) ToCopyInfo() *kinds.CopyInfo {
 	asOf := rec.LastSyncedAt
 	if asOf == "" {
 		asOf = rec.Watermark
 	}
-	return &types.CopyInfo{
+	return &kinds.CopyInfo{
 		Role:       rec.Role,
 		SyncMode:   rec.SyncMode,
 		SyncStatus: rec.Status,

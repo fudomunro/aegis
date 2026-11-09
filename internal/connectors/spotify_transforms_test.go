@@ -8,7 +8,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestSimplify(t *testing.T) {
@@ -280,20 +280,20 @@ func TestFetchAllPagesRaw(t *testing.T) {
 }
 
 func TestNewAlbum(t *testing.T) {
-	if types.NewAlbum("spotify", "Spotify", "1", "  ") != nil {
+	if kinds.NewAlbum("spotify", "Spotify", "1", "  ") != nil {
 		t.Fatal("blank album name should be nil")
 	}
-	a := types.NewAlbum("spotify", "Spotify", "1", " Kind of Blue ")
+	a := kinds.NewAlbum("spotify", "Spotify", "1", " Kind of Blue ")
 	if a == nil || a.Name != "Kind of Blue" || a.Sources[0].Service != "spotify" {
 		t.Fatalf("album = %+v", a)
 	}
 }
 
 func TestFirstSourceID(t *testing.T) {
-	if types.FirstSourceID(types.Playlist{}) != "" {
+	if kinds.FirstSourceID(kinds.Playlist{}) != "" {
 		t.Fatal("empty sources")
 	}
-	if types.FirstSourceID(types.Playlist{Sources: []types.PlaylistSource{{ID: "pl1"}}}) != "pl1" {
+	if kinds.FirstSourceID(kinds.Playlist{Sources: []kinds.PlaylistSource{{ID: "pl1"}}}) != "pl1" {
 		t.Fatal("id")
 	}
 }

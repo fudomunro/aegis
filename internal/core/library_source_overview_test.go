@@ -21,9 +21,9 @@ func TestEnrichLibraryServiceStatuses_NameCanonicalRole(t *testing.T) {
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	bySvc := map[string]types.LibraryServiceStatus{
-		"spotify":       {Status: types.LibraryStatusOK, Count: 12},
-		"youtube-music": {Status: types.LibraryStatusOK, Count: 8},
+	bySvc := map[string]kinds.LibraryServiceStatus{
+		"spotify":       {Status: kinds.LibraryStatusOK, Count: 12},
+		"youtube-music": {Status: kinds.LibraryStatusOK, Count: 8},
 	}
 	kinds.EnrichStatuses(srv, "playlists", kinds.StatusHooks{}, bySvc)
 
@@ -87,9 +87,9 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 		t.Fatalf("save takeout cursor: %v", err)
 	}
 
-	bySvc := map[string]types.LibraryServiceStatus{
-		"mail-archive":                  {Status: types.LibraryStatusOK, Count: 3},
-		connectors.GoogleGmailServiceID: {Status: types.LibraryStatusOK, Count: 3},
+	bySvc := map[string]kinds.LibraryServiceStatus{
+		"mail-archive":                  {Status: kinds.LibraryStatusOK, Count: 3},
+		connectors.GoogleGmailServiceID: {Status: kinds.LibraryStatusOK, Count: 3},
 	}
 	kinds.EnrichStatuses(srv, "messages", kinds.MessagesStatusHooks(srv, mailArchive{srv}), bySvc)
 
@@ -117,7 +117,7 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 		t.Fatalf("gmail name = %q", gm.Name)
 	}
 	// mail-archive rollup stays for by_service compatibility.
-	if bySvc["mail-archive"].Status != types.LibraryStatusOK {
+	if bySvc["mail-archive"].Status != kinds.LibraryStatusOK {
 		t.Fatalf("mail-archive = %+v", bySvc["mail-archive"])
 	}
 }
@@ -132,13 +132,13 @@ func TestHandleLibraryPlaylists_SourceOverviewFields(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakePlaylistProvider{
-			playlists: []types.Playlist{
-				{Name: "Jazz", TrackCount: 3, Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}},
+			playlists: []kinds.Playlist{
+				{Name: "Jazz", TrackCount: 3, Sources: []kinds.PlaylistSource{{Service: "spotify", ID: "sp1"}}},
 			},
 		},
 		"youtube-music": &fakePlaylistProvider{
-			playlists: []types.Playlist{
-				{Name: "Focus", TrackCount: 9, Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}},
+			playlists: []kinds.Playlist{
+				{Name: "Focus", TrackCount: 9, Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}},
 			},
 		},
 	}
@@ -151,7 +151,7 @@ func TestHandleLibraryPlaylists_SourceOverviewFields(t *testing.T) {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	var resp types.PlaylistList
+	var resp kinds.PlaylistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

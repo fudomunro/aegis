@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -35,8 +36,8 @@ func NewGoogleGmailConnector(host Host) *GoogleGmailConnector {
 }
 
 var (
-	_ types.MessageProvider  = (*GoogleGmailConnector)(nil)
-	_ types.DocumentProvider = (*GoogleGmailConnector)(nil)
+	_ kinds.MessageProvider  = (*GoogleGmailConnector)(nil)
+	_ kinds.DocumentProvider = (*GoogleGmailConnector)(nil)
 )
 
 // GoogleGmailServiceID is the connector/service ID used in config, tokens,
@@ -382,7 +383,7 @@ func (c *GoogleGmailConnector) IngestMail(ctx context.Context, sink MailSink, op
 	if token == "" {
 		res.Error = "no valid Gmail token"
 		_ = sink.SaveCursor(GoogleGmailServiceID, types.MailIngestCursor{Error: res.Error})
-		return res, types.ErrUnauthorized
+		return res, kinds.ErrUnauthorized
 	}
 
 	cursor, err := sink.LoadCursor(GoogleGmailServiceID)
@@ -656,7 +657,7 @@ func GmailBareIDFromProxyPath(remainingPath, kind string) (string, bool) {
 func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http.Request) {
 	messages, truncated, err := c.ListMessagesWithQuery(r.Context(), r.URL.Query())
 	if err != nil {
-		if err == types.ErrUnauthorized {
+		if err == kinds.ErrUnauthorized {
 			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Gmail token — authorize at /v1/auth/"+GoogleGmailServiceID+"/login")
 			return
@@ -666,16 +667,16 @@ func (c *GoogleGmailConnector) HandleListMessages(w http.ResponseWriter, r *http
 		return
 	}
 	if messages == nil {
-		messages = []types.Message{}
+		messages = []kinds.Message{}
 	}
-	result := types.MessageList{
+	result := kinds.MessageList{
 		Messages:  messages,
 		Total:     len(messages),
 		Synced:    true,
 		Truncated: truncated,
-		ByService: map[string]types.LibraryServiceStatus{
+		ByService: map[string]kinds.LibraryServiceStatus{
 			GoogleGmailServiceID: {
-				Status:    types.LibraryStatusOK,
+				Status:    kinds.LibraryStatusOK,
 				Count:     len(messages),
 				Truncated: truncated,
 			},
@@ -710,8 +711,8 @@ func (c *GoogleGmailConnector) HandleListThreads(w http.ResponseWriter, r *http.
 		"threads":   threads,
 		"total":     len(threads),
 		"truncated": truncated,
-		"by_service": map[string]types.LibraryServiceStatus{
-			GoogleGmailServiceID: {Status: types.LibraryStatusOK, Count: len(threads), Truncated: truncated},
+		"by_service": map[string]kinds.LibraryServiceStatus{
+			GoogleGmailServiceID: {Status: kinds.LibraryStatusOK, Count: len(threads), Truncated: truncated},
 		},
 	}
 	data, err := json.Marshal(result)
@@ -878,7 +879,7 @@ func (c *GoogleGmailConnector) HandleGetThread(w http.ResponseWriter, r *http.Re
 		shared.WriteJSONError(w, http.StatusBadGateway, "failed to parse Gmail thread response")
 		return
 	}
-	messages := make([]types.Message, 0, len(raw.Messages))
+	messages := make([]kinds.Message, 0, len(raw.Messages))
 	for _, m := range raw.Messages {
 		messages = append(messages, MapGoogleGmailMessage(m, googleGmailMetadataFormat))
 	}
@@ -897,14 +898,14 @@ func (c *GoogleGmailConnector) HandleGetThread(w http.ResponseWriter, r *http.Re
 
 // ListMessages implements MessageProvider. Fetches recent Gmail messages and
 // hydrates headers into neutral Message metadata.
-func (c *GoogleGmailConnector) ListMessages(ctx context.Context) ([]types.Message, bool, error) {
+func (c *GoogleGmailConnector) ListMessages(ctx context.Context) ([]kinds.Message, bool, error) {
 	return c.ListMessagesWithQuery(ctx, nil)
 }
 
-func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.Values) ([]types.Message, bool, error) {
+func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.Values) ([]kinds.Message, bool, error) {
 	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	query := googleGmailDefaultQuery
 	if q != nil {
@@ -937,7 +938,7 @@ func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.
 		}
 	}
 
-	var all []types.Message
+	var all []kinds.Message
 	truncated := false
 	hydrated := 0
 	for page := 0; page < shared.LibraryPageCap; page++ {
@@ -1005,10 +1006,10 @@ func (c *GoogleGmailConnector) ListMessagesWithQuery(ctx context.Context, q url.
 	return all, truncated, nil
 }
 
-func (c *GoogleGmailConnector) FetchAndMapMessage(ctx context.Context, token, id string) (types.Message, error) {
+func (c *GoogleGmailConnector) FetchAndMapMessage(ctx context.Context, token, id string) (kinds.Message, error) {
 	raw, err := c.FetchGmailMessage(ctx, token, id, googleGmailMetadataFormat)
 	if err != nil {
-		return types.Message{}, err
+		return kinds.Message{}, err
 	}
 	return MapGoogleGmailMessage(raw, googleGmailMetadataFormat), nil
 }
@@ -1148,7 +1149,7 @@ func GmailHeaderDateRFC3339(raw string) string {
 }
 
 // MapGmailAddressHeader parses a single address or address list into Contacts.
-func MapGmailAddressHeader(raw string) []types.Contact {
+func MapGmailAddressHeader(raw string) []kinds.Contact {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return nil
@@ -1157,13 +1158,13 @@ func MapGmailAddressHeader(raw string) []types.Contact {
 	if err != nil {
 		// Fail-open: keep a crude name/email split rather than dropping the party.
 		if strings.Contains(raw, "@") {
-			c := types.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", "", []string{raw}, nil)
-			return []types.Contact{c}
+			c := kinds.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", "", []string{raw}, nil)
+			return []kinds.Contact{c}
 		}
-		c := types.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", raw, nil, nil)
-		return []types.Contact{c}
+		c := kinds.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", raw, nil, nil)
+		return []kinds.Contact{c}
 	}
-	out := make([]types.Contact, 0, len(addrs))
+	out := make([]kinds.Contact, 0, len(addrs))
 	for _, a := range addrs {
 		if a == nil {
 			continue
@@ -1172,7 +1173,7 @@ func MapGmailAddressHeader(raw string) []types.Contact {
 		if a.Address != "" {
 			emails = []string{a.Address}
 		}
-		out = append(out, types.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", a.Name, emails, nil))
+		out = append(out, kinds.NewContact(GoogleGmailServiceID, GoogleGmailServiceName, "", a.Name, emails, nil))
 	}
 	return out
 }
@@ -1272,10 +1273,10 @@ func gmailPartFilename(part gmailMessagePart) string {
 // NeutralAttachmentDocument maps one attachment to the neutral Document shape
 // used by /v1/library/documents. Source is google-gmail (same connector as the
 // parent message); bytes stay on Gmail via sources[].blob_url.
-func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage, att GmailAttachmentSummary) types.Document {
+func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage, att GmailAttachmentSummary) kinds.Document {
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + GoogleGmailServiceID
 	docID := GmailAttachmentDocumentID(raw.ID, att.ID)
-	src := types.DocumentSource{
+	src := kinds.DocumentSource{
 		Service:     GoogleGmailServiceID,
 		ServiceName: GoogleGmailServiceName,
 		ID:          docID,
@@ -1294,14 +1295,14 @@ func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage,
 	if sentAt == "" {
 		sentAt = GmailHeaderDateRFC3339(GmailHeaderValue(raw, "Date"))
 	}
-	d := types.Document{
+	d := kinds.Document{
 		Title:        title,
 		MimeType:     att.MimeType,
 		CreatedAt:    sentAt,
 		DocumentType: "email-attachment",
 		Excerpt:      strings.TrimSpace(raw.Snippet),
 		EntityID:     docID,
-		Sources:      []types.DocumentSource{src},
+		Sources:      []kinds.DocumentSource{src},
 	}
 	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
 	if len(fromList) > 0 {
@@ -1311,13 +1312,13 @@ func (c *GoogleGmailConnector) NeutralAttachmentDocument(raw GoogleGmailMessage,
 		} else if len(f.Emails) > 0 {
 			d.Correspondent = f.Emails[0]
 		}
-		d.People = []types.Contact{f}
+		d.People = []kinds.Contact{f}
 	}
 	return d
 }
 
 // MapGoogleGmailMessage converts a Gmail message into the neutral shape.
-func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message {
+func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) kinds.Message {
 	fromList := MapGmailAddressHeader(GmailHeaderValue(raw, "From"))
 	toList := MapGmailAddressHeader(GmailHeaderValue(raw, "To"))
 	ccList := MapGmailAddressHeader(GmailHeaderValue(raw, "Cc"))
@@ -1325,19 +1326,19 @@ func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message 
 	if decoded, err := new(mime.WordDecoder).DecodeHeader(subject); err == nil {
 		subject = strings.TrimSpace(decoded)
 	}
-	messageID := types.NormalizeMessageID(GmailHeaderValue(raw, "Message-ID"))
+	messageID := kinds.NormalizeMessageID(GmailHeaderValue(raw, "Message-ID"))
 	sentAt := GmailInternalDateRFC3339(raw.InternalDate)
 	if sentAt == "" {
 		sentAt = GmailHeaderDateRFC3339(GmailHeaderValue(raw, "Date"))
 	}
 
-	var from *types.Contact
+	var from *kinds.Contact
 	if len(fromList) > 0 {
 		f := fromList[0]
 		from = &f
 	}
 
-	src := types.MessageSource{
+	src := kinds.MessageSource{
 		Service:     GoogleGmailServiceID,
 		ServiceName: GoogleGmailServiceName,
 		ID:          raw.ID,
@@ -1360,8 +1361,8 @@ func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message 
 		src.Extra = extra
 	}
 
-	msg := types.Message{
-		Channel:    types.MessageChannelEmail,
+	msg := kinds.Message{
+		Channel:    kinds.MessageChannelEmail,
 		Subject:    subject,
 		Snippet:    raw.Snippet,
 		From:       from,
@@ -1374,7 +1375,7 @@ func MapGoogleGmailMessage(raw GoogleGmailMessage, format string) types.Message 
 		ThreadID:   raw.ThreadID,
 		EntityID:   messageID,
 		Labels:     append([]string(nil), raw.LabelIDs...),
-		Sources:    []types.MessageSource{src},
+		Sources:    []kinds.MessageSource{src},
 	}
 	if format == "full" {
 		msg.Body = GmailDecodeBody(raw)
@@ -1466,12 +1467,12 @@ func ParseIntLoose(s string) (int, error) {
 // same connector as the parent message — so case-file evidence stays linked.
 // Transient upstream errors keep partial results (fail-open) so one bad page
 // does not report "failed to fetch documents" and drop every PDF already found.
-func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.Document, bool, error) {
+func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]kinds.Document, bool, error) {
 	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
-	var out []types.Document
+	var out []kinds.Document
 	truncated := false
 	pageToken := ""
 	hydrated := 0
@@ -1543,7 +1544,7 @@ func (c *GoogleGmailConnector) ListUserDocuments(ctx context.Context) ([]types.D
 // gmailDocumentsResult keeps attachments already collected when a later page
 // fails. The library aggregate drops items whenever err != nil, so partial
 // success must report a clean truncated list instead of FailMsg.
-func gmailDocumentsResult(out []types.Document, truncated bool, hydrated int, err error) ([]types.Document, bool, error) {
+func gmailDocumentsResult(out []kinds.Document, truncated bool, hydrated int, err error) ([]kinds.Document, bool, error) {
 	if err == nil {
 		return out, truncated, nil
 	}
@@ -1564,7 +1565,7 @@ func (c *GoogleGmailConnector) FetchDocumentText(ctx context.Context, id string)
 	}
 	token := c.host.GetValidToken(GoogleGmailServiceID, slog.Default())
 	if token == "" {
-		return "", false, types.ErrUnauthorized
+		return "", false, kinds.ErrUnauthorized
 	}
 	raw, err := c.FetchGmailMessage(ctx, token, messageID, "full")
 	if err != nil {

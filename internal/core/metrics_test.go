@@ -11,7 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestAccessMetrics_AgentDetailBreakdown(t *testing.T) {
@@ -243,7 +243,7 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = &fakePlaylistProvider{
-		playlists: []types.Playlist{{Name: "Mix", Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
+		playlists: []kinds.Playlist{{Name: "Mix", Sources: []kinds.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
@@ -276,7 +276,7 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = &fakePlaylistProvider{
-		playlists: []types.Playlist{{Name: "Mix", Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
+		playlists: []kinds.Playlist{{Name: "Mix", Sources: []kinds.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}}}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/admin/library/playlists", nil)

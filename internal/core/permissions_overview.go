@@ -1,18 +1,15 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
-)
-
-import (
 	"net/http"
 	"sort"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
@@ -246,37 +243,37 @@ func serviceProvidedTypes(conn any) []string {
 		out = append(out, name)
 	}
 
-	if _, ok := conn.(types.PlaylistProvider); ok {
+	if _, ok := conn.(kinds.PlaylistProvider); ok {
 		add("playlists")
 	}
-	if _, ok := conn.(types.LikedTrackProvider); ok {
+	if _, ok := conn.(kinds.LikedTrackProvider); ok {
 		add("tracks")
 	}
-	if _, ok := conn.(types.AlbumProvider); ok {
+	if _, ok := conn.(kinds.AlbumProvider); ok {
 		add("albums")
 	}
-	if _, ok := conn.(types.ArtistProvider); ok {
+	if _, ok := conn.(kinds.ArtistProvider); ok {
 		add("artists")
 	}
-	if _, ok := conn.(types.ContactProvider); ok {
+	if _, ok := conn.(kinds.ContactProvider); ok {
 		add("contacts")
 	}
-	if _, ok := conn.(types.PhotoProvider); ok {
+	if _, ok := conn.(kinds.PhotoProvider); ok {
 		add("photos")
 	}
-	if _, ok := conn.(types.CalendarEventProvider); ok {
+	if _, ok := conn.(kinds.CalendarEventProvider); ok {
 		add("events")
 	}
-	if _, ok := conn.(types.MessageProvider); ok {
+	if _, ok := conn.(kinds.MessageProvider); ok {
 		add("messages")
 	}
-	if _, ok := conn.(types.TransactionProvider); ok {
+	if _, ok := conn.(kinds.TransactionProvider); ok {
 		add("transactions")
 	}
-	if _, ok := conn.(types.PlaceVisitProvider); ok {
+	if _, ok := conn.(kinds.PlaceVisitProvider); ok {
 		add("places")
 	}
-	if _, ok := conn.(types.DocumentProvider); ok {
+	if _, ok := conn.(kinds.DocumentProvider); ok {
 		add("documents")
 	}
 

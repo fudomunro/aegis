@@ -1,12 +1,10 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-)
-
-import (
 	"fmt"
 	"strings"
+
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // canonicalKindIDs returns kinds allowed in a service's canonical_for list

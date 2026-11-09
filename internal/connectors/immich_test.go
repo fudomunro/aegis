@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // newTestImmichHost wires a mock Immich upstream behind the test Host with the
@@ -144,8 +144,8 @@ func TestImmichConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 		w.Write([]byte(`{"message":"Invalid API key"}`))
 	}))
 	_, _, err := NewImmichConnector(host).ListUserPhotos(context.Background())
-	if err != types.ErrUnauthorized {
-		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
+	if err != kinds.ErrUnauthorized {
+		t.Fatalf("err = %v, want kinds.ErrUnauthorized", err)
 	}
 }
 

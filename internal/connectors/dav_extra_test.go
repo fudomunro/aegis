@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestCardDAVConnector_CapabilitiesAndInstructions(t *testing.T) {
@@ -133,7 +133,7 @@ func TestSanitizeHrefName_AndContactCardName(t *testing.T) {
 	if got := sanitizeHrefName("Ada Lovelace <ada@example.com>"); got == "" {
 		t.Fatal("empty sanitize")
 	}
-	c := types.NewContact("dav-contacts", "DAV Contacts", "x", "Ada Lovelace", []string{"ada@example.com"}, nil)
+	c := kinds.NewContact("dav-contacts", "DAV Contacts", "x", "Ada Lovelace", []string{"ada@example.com"}, nil)
 	name := contactCardName(c)
 	if !strings.HasSuffix(name, ".vcf") {
 		t.Fatalf("name = %q", name)
@@ -212,15 +212,15 @@ func TestDavCollectionAndResourceURL(t *testing.T) {
 }
 
 func TestContactCardName_Variants(t *testing.T) {
-	c := types.NewContact("s", "S", "", "Ada Lovelace", nil, nil)
+	c := kinds.NewContact("s", "S", "", "Ada Lovelace", nil, nil)
 	if n := contactCardName(c); !strings.Contains(n, "Ada") && !strings.Contains(n, "ada") {
 		t.Fatalf("name = %q", n)
 	}
-	c = types.NewContact("s", "S", "", "", []string{"bob@example.com"}, nil)
+	c = kinds.NewContact("s", "S", "", "", []string{"bob@example.com"}, nil)
 	if n := contactCardName(c); !strings.Contains(n, "bob") {
 		t.Fatalf("email name = %q", n)
 	}
-	c = types.NewContact("s", "S", "uid-9", "X", nil, nil)
+	c = kinds.NewContact("s", "S", "uid-9", "X", nil, nil)
 	if n := contactCardName(c); !strings.HasPrefix(n, "uid-9") {
 		t.Fatalf("uid name = %q", n)
 	}

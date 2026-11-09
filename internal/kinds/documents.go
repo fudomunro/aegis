@@ -10,7 +10,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // documentsKind owns the documents aggregate and its full-text subroute
@@ -20,8 +19,8 @@ type documentsKind struct {
 	providerKind
 	h      Host
 	e      *Engine
-	mark   func([]types.Document, string)
-	copies func([]types.Document)
+	mark   func([]Document, string)
+	copies func([]Document)
 }
 
 func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
@@ -30,7 +29,7 @@ func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("documents")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.DocumentProvider],
+		provides: providerProvides[DocumentProvider],
 		routes: []Route{
 			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve},
 			// Full text is a separate read: app tokens and metadata-only
@@ -57,26 +56,26 @@ func (k *documentsKind) serve(w http.ResponseWriter, r *http.Request) {
 	// Encode-time redaction is a second belt: even if a service returned an
 	// excerpt, metadata-only surfaces must not ship it.
 	metaOnly := policy.IsMetadataAccess(appLevel)
-	Aggregate(k.h, k.e, w, r, Spec[types.Document]{
+	Aggregate(k.h, k.e, w, r, Spec[Document]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.Document], []string) {
+		Targets: func(r *http.Request) ([]NamedLister[Document], []string) {
 			return documentsProviderTargets(k.h, r, kind.PermType, appLevel)
 		},
 		ServiceOf: documentServiceName,
-		SortKey:   types.DocumentIdentityKey,
-		Merge:     types.MergeDocuments,
-		Encode: func(items []types.Document, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		SortKey:   DocumentIdentityKey,
+		Merge:     MergeDocuments,
+		Encode: func(items []Document, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			filtered := filterDocuments(items, filters)
 			if metaOnly {
 				filtered = redactDocumentsForLevel(filtered, policy.AccessMetadata)
 			}
-			pageItems, pr := types.SlicePage(filtered, page)
-			return types.DocumentList{
+			pageItems, pr := SlicePage(filtered, page)
+			return DocumentList{
 				Documents:       pageItems,
-				LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
+				LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		RedactSearch: func(items []types.Document, r *http.Request) []types.Document {
+		RedactSearch: func(items []Document, r *http.Request) []Document {
 			return searchRedactDocuments(k.h, items, r)
 		},
 		MarkCanonical: k.mark,
@@ -145,7 +144,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 		return
 	}
-	provider, ok := connector.(types.DocumentProvider)
+	provider, ok := connector.(DocumentProvider)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusNotFound, "service does not provide documents")
 		return
@@ -159,7 +158,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case err == nil:
 		// ok
-	case errors.Is(err, types.ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized"):
+	case errors.Is(err, ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized"):
 		shared.WriteJSONError(w, http.StatusUnauthorized,
 			"not authorized — connect at /v1/auth/"+serviceID+"/login")
 		return
@@ -169,7 +168,7 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := types.DocumentText{
+	result := DocumentText{
 		Service:   serviceID,
 		ID:        id,
 		Text:      text,
@@ -187,8 +186,8 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 
 // documentServiceName returns the first source service name for stable
 // pre-sort.
-func documentServiceName(d types.Document) string {
-	return types.DocumentServiceName(d)
+func documentServiceName(d Document) string {
+	return DocumentServiceName(d)
 }
 
 // documentFilters are agent-facing list filters for GET /v1/library/documents.
@@ -239,18 +238,18 @@ func (f documentFilters) cacheKeySuffix() string {
 }
 
 // matches reports whether a document passes every active filter.
-func (f documentFilters) matches(d types.Document) bool {
+func (f documentFilters) matches(d Document) bool {
 	if f.empty() {
 		return true
 	}
 	day := documentDay(d.CreatedAt)
 	if f.After != "" {
-		if day == "" || !types.DateAtOrAfter(day, f.After) {
+		if day == "" || !DateAtOrAfter(day, f.After) {
 			return false
 		}
 	}
 	if f.Before != "" {
-		if day == "" || !types.DateBefore(day, f.Before) {
+		if day == "" || !DateBefore(day, f.Before) {
 			return false
 		}
 	}
@@ -280,14 +279,14 @@ func (f documentFilters) matches(d types.Document) bool {
 }
 
 func documentDay(raw string) string {
-	return types.TransactionDay(raw)
+	return TransactionDay(raw)
 }
 
-func filterDocuments(in []types.Document, f documentFilters) []types.Document {
+func filterDocuments(in []Document, f documentFilters) []Document {
 	if f.empty() {
 		return in
 	}
-	out := make([]types.Document, 0, len(in))
+	out := make([]Document, 0, len(in))
 	for _, d := range in {
 		if f.matches(d) {
 			out = append(out, d)
@@ -298,15 +297,15 @@ func filterDocuments(in []types.Document, f documentFilters) []types.Document {
 
 // redactDocumentMetadata strips excerpt/text from a document while keeping
 // titles, dates, tags, and sources (issue #143).
-func redactDocumentMetadata(d types.Document) types.Document {
+func redactDocumentMetadata(d Document) Document {
 	d.Excerpt = ""
 	return d
 }
 
-func redactDocumentsForLevel(items []types.Document, level string) []types.Document {
+func redactDocumentsForLevel(items []Document, level string) []Document {
 	switch policy.DocumentsLevelForResponse(level) {
 	case policy.AccessMetadata:
-		out := make([]types.Document, len(items))
+		out := make([]Document, len(items))
 		for i, d := range items {
 			out[i] = redactDocumentMetadata(d)
 		}
@@ -321,9 +320,9 @@ func redactDocumentsForLevel(items []types.Document, level string) []types.Docum
 // documentsProviderTargets collects providers, applying per-service and
 // app-level metadata/read redaction so a metadata-only surface never
 // contributes excerpts (issue #143).
-func documentsProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[types.Document], []string) {
-	targets, denied := Collect[types.Document, types.DocumentProvider](h, r, permType,
-		func(p types.DocumentProvider) func(context.Context) ([]types.Document, bool, error) {
+func documentsProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[Document], []string) {
+	targets, denied := Collect[Document, DocumentProvider](h, r, permType,
+		func(p DocumentProvider) func(context.Context) ([]Document, bool, error) {
 			return p.ListUserDocuments
 		})
 	appMeta := policy.IsMetadataAccess(appLevel)
@@ -341,7 +340,7 @@ func documentsProviderTargets(h Host, r *http.Request, permType string, appLevel
 		if effective == level && !policy.IsMetadataAccess(level) {
 			continue
 		}
-		targets[i].List = func(ctx context.Context) ([]types.Document, bool, error) {
+		targets[i].List = func(ctx context.Context) ([]Document, bool, error) {
 			items, truncated, err := inner(ctx)
 			return redactDocumentsForLevel(items, effective), truncated, err
 		}
@@ -353,12 +352,12 @@ func documentsProviderTargets(h Host, r *http.Request, permType string, appLevel
 // index-hydrated documents (issue #178). Redactions only remove data, so
 // applying every source's level in turn settles on the most restrictive
 // one (mixed-source hits may over-redact; never under-redact).
-func searchRedactDocuments(h Host, items []types.Document, r *http.Request) []types.Document {
+func searchRedactDocuments(h Host, items []Document, r *http.Request) []Document {
 	appLevel, isApp := h.AppLevel(r, "documents")
 	if !isApp {
 		appLevel = ""
 	}
-	out := make([]types.Document, 0, len(items))
+	out := make([]Document, 0, len(items))
 	for _, d := range items {
 		skip := false
 		for _, src := range d.Sources {
@@ -367,7 +366,7 @@ func searchRedactDocuments(h Host, items []types.Document, r *http.Request) []ty
 				continue
 			}
 			level := h.RequestLevel(r, src.Service, "documents")
-			red := redactDocumentsForLevel([]types.Document{d}, policy.DocumentsLevelForResponse(level))
+			red := redactDocumentsForLevel([]Document{d}, policy.DocumentsLevelForResponse(level))
 			if len(red) == 0 {
 				skip = true
 				break
@@ -392,14 +391,14 @@ func boolKey(v bool) string {
 	return "false"
 }
 
-func forEachDocumentSource(item *types.Document, f func(SourceMut)) {
+func forEachDocumentSource(item *Document, f func(SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
 }

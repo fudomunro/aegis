@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -149,7 +150,7 @@ CREATE INDEX IF NOT EXISTS timeline_visits_locality ON timeline_visits(place_loc
 `
 
 // upsertTimelineTx stores or replaces one imported visit keyed by source_id.
-func upsertTimelineTx(tx *sql.Tx, filePath string, v types.PlaceVisit) error {
+func upsertTimelineTx(tx *sql.Tx, filePath string, v kinds.PlaceVisit) error {
 	id := placeVisitSourceID(v)
 	if id == "" {
 		return fmt.Errorf("timeline visit missing source id")
@@ -185,8 +186,8 @@ ON CONFLICT(source_id) DO UPDATE SET
   place_id=excluded.place_id,
   raw_json=excluded.raw_json
 `,
-		id, filePath, v.StartAt, v.EndAt, types.NormalizePlaceVisitKind(v.Kind),
-		types.NormalizeTripMode(v.Mode), v.Confidence,
+		id, filePath, v.StartAt, v.EndAt, kinds.NormalizePlaceVisitKind(v.Kind),
+		kinds.NormalizeTripMode(v.Mode), v.Confidence,
 		v.Place.Name, v.Place.Address, v.Place.Locality, v.Place.Country,
 		lat, lng, v.EntityID, string(raw),
 	)
@@ -194,7 +195,7 @@ ON CONFLICT(source_id) DO UPDATE SET
 }
 
 // Upsert stores or replaces one imported visit keyed by source_id.
-func (s *TimelineStore) Upsert(filePath string, v types.PlaceVisit) error {
+func (s *TimelineStore) Upsert(filePath string, v kinds.PlaceVisit) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("timeline store disabled")
 	}
@@ -219,7 +220,7 @@ func (s *TimelineStore) Has(sourceID string) bool {
 }
 
 // List returns stored visits (chronological), optional filters.
-func (s *TimelineStore) List(f types.PlaceVisitFilters, limit int) ([]types.PlaceVisit, error) {
+func (s *TimelineStore) List(f kinds.PlaceVisitFilters, limit int) ([]kinds.PlaceVisit, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("timeline store disabled")
 	}
@@ -233,13 +234,13 @@ func (s *TimelineStore) List(f types.PlaceVisitFilters, limit int) ([]types.Plac
 		return nil, err
 	}
 	defer rows.Close()
-	var out []types.PlaceVisit
+	var out []kinds.PlaceVisit
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var v types.PlaceVisit
+		var v kinds.PlaceVisit
 		if err := json.Unmarshal([]byte(raw), &v); err != nil {
 			continue
 		}
@@ -261,19 +262,19 @@ func (s *TimelineStore) Count() (int, error) {
 	return n, err
 }
 
-func placeVisitSourceID(v types.PlaceVisit) string {
+func placeVisitSourceID(v kinds.PlaceVisit) string {
 	if id := strings.TrimSpace(v.EntityID); id != "" {
 		return "e:" + id
 	}
 	for _, src := range v.Sources {
-		if id := strings.TrimSpace(types.ExtraString(src.Extra, "provider_id")); id != "" {
+		if id := strings.TrimSpace(kinds.ExtraString(src.Extra, "provider_id")); id != "" {
 			return "p:" + src.Service + ":" + id
 		}
 		if id := strings.TrimSpace(src.ID); id != "" {
 			return "s:" + src.Service + ":" + id
 		}
 	}
-	return "w:" + types.PlaceIdentityKey(v)
+	return "w:" + kinds.PlaceIdentityKey(v)
 }
 
 // --- Google Timeline JSON shapes ---
@@ -324,7 +325,7 @@ type timelineDuration struct {
 
 func (d timelineDuration) start() string {
 	if d.StartTimestamp != "" {
-		return types.NormalizePlaceVisitTime(d.StartTimestamp)
+		return kinds.NormalizePlaceVisitTime(d.StartTimestamp)
 	}
 	if d.StartTimestampMs != "" {
 		if ms, err := strconv.ParseInt(d.StartTimestampMs, 10, 64); err == nil {
@@ -336,7 +337,7 @@ func (d timelineDuration) start() string {
 
 func (d timelineDuration) end() string {
 	if d.EndTimestamp != "" {
-		return types.NormalizePlaceVisitTime(d.EndTimestamp)
+		return kinds.NormalizePlaceVisitTime(d.EndTimestamp)
 	}
 	if d.EndTimestampMs != "" {
 		if ms, err := strconv.ParseInt(d.EndTimestampMs, 10, 64); err == nil {
@@ -346,8 +347,8 @@ func (d timelineDuration) end() string {
 	return ""
 }
 
-func (l timelineLocation) place() types.Place {
-	p := types.Place{
+func (l timelineLocation) place() kinds.Place {
+	p := kinds.Place{
 		Name:    strings.TrimSpace(l.Name),
 		Address: strings.TrimSpace(l.Address),
 	}
@@ -379,12 +380,12 @@ func (l timelineLocation) place() types.Place {
 
 // ParseTimelineJSON parses one Semantic Location History file into visits
 // (placeVisit) and trips (activitySegment).
-func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
+func ParseTimelineJSON(name string, data []byte) ([]kinds.PlaceVisit, error) {
 	var root timelineExport
 	if err := json.Unmarshal(data, &root); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", name, err)
 	}
-	var out []types.PlaceVisit
+	var out []kinds.PlaceVisit
 	for _, obj := range root.TimelineObjects {
 		if obj.PlaceVisit != nil {
 			v := obj.PlaceVisit
@@ -407,11 +408,11 @@ func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 			if pid == "" {
 				pid = v.PlaceID
 			}
-			visit := types.NewPlaceVisit(TimelineServiceID, TimelineServiceName, pid, types.PlaceVisit{
+			visit := kinds.NewPlaceVisit(TimelineServiceID, TimelineServiceName, pid, kinds.PlaceVisit{
 				StartAt:    v.Duration.start(),
 				EndAt:      v.Duration.end(),
 				Place:      place,
-				Kind:       types.PlaceKindVisit,
+				Kind:       kinds.PlaceKindVisit,
 				Confidence: conf,
 				EntityID:   pid,
 			})
@@ -439,12 +440,12 @@ func ParseTimelineJSON(name string, data []byte) ([]types.PlaceVisit, error) {
 			if aid == "" {
 				aid = a.StartLocation.PlaceID
 			}
-			trip := types.NewPlaceVisit(TimelineServiceID, TimelineServiceName, "seg:"+a.Duration.start(), types.PlaceVisit{
+			trip := kinds.NewPlaceVisit(TimelineServiceID, TimelineServiceName, "seg:"+a.Duration.start(), kinds.PlaceVisit{
 				StartAt: a.Duration.start(),
 				EndAt:   a.Duration.end(),
 				Place:   place,
-				Kind:    types.PlaceKindTrip,
-				Mode:    types.NormalizeTripMode(a.ActivityType),
+				Kind:    kinds.PlaceKindTrip,
+				Mode:    kinds.NormalizeTripMode(a.ActivityType),
 			})
 			trip.Sources[0].Extra = map[string]any{"activity_type": a.ActivityType}
 			if aid != "" {
@@ -507,7 +508,7 @@ func ImportTimelinePath(store *TimelineStore, path string) (TimelineImportResult
 		}
 		var st ImportStats
 		upsertRows(&store.localStore, &st, visits, placeVisitSourceID, timelineHasQuery,
-			func(tx *sql.Tx, v types.PlaceVisit) error { return upsertTimelineTx(tx, f, v) })
+			func(tx *sql.Tx, v kinds.PlaceVisit) error { return upsertTimelineTx(tx, f, v) })
 		res.Scanned += st.Scanned
 		res.Stored += st.Stored
 		res.Skipped += st.Skipped
@@ -536,7 +537,7 @@ func isTimelineJSONName(name string) bool {
 		strings.Contains(lower, "semantic")
 }
 
-func parseTimelineFile(path string) ([]types.PlaceVisit, error) {
+func parseTimelineFile(path string) ([]kinds.PlaceVisit, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
@@ -645,12 +646,12 @@ func (c *TimelineConnector) HandleProxy(w http.ResponseWriter, r *http.Request, 
 }
 
 // ListUserPlaceVisits returns imported visits as a PlaceVisitProvider.
-func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []types.PlaceVisit, truncated bool, err error) {
+func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []kinds.PlaceVisit, truncated bool, err error) {
 	if c == nil || c.store == nil || !c.store.Enabled() {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	logger := slog.With("connector", TimelineServiceID)
-	items, listErr := c.store.List(types.PlaceVisitFilters{}, LibraryItemCap)
+	items, listErr := c.store.List(kinds.PlaceVisitFilters{}, LibraryItemCap)
 	if listErr != nil {
 		logger.Error("timeline store list failed", "error", listErr)
 		return nil, false, listErr
@@ -658,9 +659,9 @@ func (c *TimelineConnector) ListUserPlaceVisits(ctx context.Context) (visits []t
 	if n, cntErr := c.store.Count(); cntErr == nil && n > len(items) {
 		truncated = true
 	}
-	out := make([]types.PlaceVisit, 0, len(items))
+	out := make([]kinds.PlaceVisit, 0, len(items))
 	for _, v := range items {
-		out = append(out, types.NewPlaceVisit(TimelineServiceID, TimelineServiceName, placeVisitSourceID(v), v))
+		out = append(out, kinds.NewPlaceVisit(TimelineServiceID, TimelineServiceName, placeVisitSourceID(v), v))
 	}
 	return out, truncated, nil
 }

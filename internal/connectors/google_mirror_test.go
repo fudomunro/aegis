@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestGoogleContactsPlaceContacts_CreateAndConflict(t *testing.T) {
@@ -34,7 +34,7 @@ func TestGoogleContactsPlaceContacts_CreateAndConflict(t *testing.T) {
 	c := NewGoogleContactsConnector(th)
 
 	// Update path with conflict.
-	res, err := c.PlaceContacts(context.Background(), []types.Contact{
+	res, err := c.PlaceContacts(context.Background(), []kinds.Contact{
 		refContact(GoogleContactsServiceID, "Ada", "people/c1", `"stale"`, "ada@example.com"),
 	})
 	if err != nil {
@@ -48,7 +48,7 @@ func TestGoogleContactsPlaceContacts_CreateAndConflict(t *testing.T) {
 	}
 
 	// Create path.
-	res2, err := c.PlaceContacts(context.Background(), []types.Contact{
+	res2, err := c.PlaceContacts(context.Background(), []kinds.Contact{
 		refContact(GoogleContactsServiceID, "Grace", "", "", "grace@example.com"),
 	})
 	if err != nil || res2.Copied != 1 {
@@ -79,7 +79,7 @@ func TestGoogleCalendarPlaceEvents_CreateAndConflict(t *testing.T) {
 	c := NewGoogleCalendarConnector(th)
 
 	// Update path with conflict.
-	res, err := c.PlaceEvents(context.Background(), []types.CalendarEvent{
+	res, err := c.PlaceEvents(context.Background(), []kinds.CalendarEvent{
 		withCalendar(refEvent(GoogleCalendarServiceID, "Doctor", "ev-1", `"stale"`, "",
 			"2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z"), "primary"),
 	})
@@ -91,7 +91,7 @@ func TestGoogleCalendarPlaceEvents_CreateAndConflict(t *testing.T) {
 	}
 
 	// Create path.
-	res2, err := c.PlaceEvents(context.Background(), []types.CalendarEvent{
+	res2, err := c.PlaceEvents(context.Background(), []kinds.CalendarEvent{
 		withCalendar(refEvent(GoogleCalendarServiceID, "New", "", "", "",
 			"2026-03-03T10:00:00Z", "2026-03-03T11:00:00Z"), "primary"),
 	})
@@ -103,7 +103,7 @@ func TestGoogleCalendarPlaceEvents_CreateAndConflict(t *testing.T) {
 	}
 }
 
-func withCalendar(ev types.CalendarEvent, calendarID string) types.CalendarEvent {
+func withCalendar(ev kinds.CalendarEvent, calendarID string) kinds.CalendarEvent {
 	ev.CalendarID = calendarID
 	return ev
 }

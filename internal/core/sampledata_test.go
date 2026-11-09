@@ -10,6 +10,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -100,8 +101,8 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 
 	// Contact chain: email + phone + handle on Ada must union-find to one entity.
-	merged := types.MergeContacts(lib.Contacts)
-	var ada *types.Contact
+	merged := kinds.MergeContacts(lib.Contacts)
+	var ada *kinds.Contact
 	for i := range merged {
 		if strings.Contains(strings.ToLower(merged[i].Name), "ada") {
 			ada = &merged[i]
@@ -116,8 +117,8 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 
 	// Message-ID pair merges; subject+from+time pair merges without Message-ID.
-	mergedMsgs := types.MergeMessages(lib.Messages)
-	var ship, invoice *types.Message
+	mergedMsgs := kinds.MergeMessages(lib.Messages)
+	var ship, invoice *kinds.Message
 	for i := range mergedMsgs {
 		switch mergedMsgs[i].Subject {
 		case "Ship the release":
@@ -137,7 +138,7 @@ func TestGenerateSampleLibrary_MergeFixtures(t *testing.T) {
 	}
 
 	// Document checksum pair merges; same-title different-date must not.
-	mergedDocs := types.MergeDocuments(lib.Documents)
+	mergedDocs := kinds.MergeDocuments(lib.Documents)
 	leaseSources := 0
 	warrantyTitles := 0
 	for _, d := range mergedDocs {

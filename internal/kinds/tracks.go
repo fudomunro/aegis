@@ -3,17 +3,15 @@ package kinds
 import (
 	"context"
 	"net/http"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type tracksKind struct {
 	providerKind
 	h       Host
 	e       *Engine
-	resolve func(context.Context, []types.Track)
-	mark    func([]types.Track, string)
-	copies  func([]types.Track)
+	resolve func(context.Context, []Track)
+	mark    func([]Track, string)
+	copies  func([]Track)
 }
 
 func newTracksKind(h Host, e *Engine, d Deps) Kind {
@@ -22,7 +20,7 @@ func newTracksKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("tracks")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.LikedTrackProvider],
+		provides: providerProvides[LikedTrackProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -34,39 +32,39 @@ func newTracksKind(h Host, e *Engine, d Deps) Kind {
 
 func (k *tracksKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
-	Aggregate(k.h, k.e, w, r, Spec[types.Track]{
+	Aggregate(k.h, k.e, w, r, Spec[Track]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.Track], []string) {
-			return Collect[types.Track, types.LikedTrackProvider](k.h, r, kind.PermType,
-				func(p types.LikedTrackProvider) func(context.Context) ([]types.Track, bool, error) {
+		Targets: func(r *http.Request) ([]NamedLister[Track], []string) {
+			return Collect[Track, LikedTrackProvider](k.h, r, kind.PermType,
+				func(p LikedTrackProvider) func(context.Context) ([]Track, bool, error) {
 					return p.ListUserLikedTracks
 				})
 		},
-		ServiceOf: types.TrackServiceName,
-		SortKey:   types.TrackIdentityKey,
-		Merge:     types.MergeTracksSync,
-		Enrich: func(ctx context.Context, tracks []types.Track) {
+		ServiceOf: TrackServiceName,
+		SortKey:   TrackIdentityKey,
+		Merge:     MergeTracksSync,
+		Enrich: func(ctx context.Context, tracks []Track) {
 			if k.resolve != nil {
 				k.resolve(ctx, tracks)
 			}
 		},
-		Encode: func(items []types.Track, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
-			pageItems, pr := types.SlicePage(items, page)
-			return types.TrackList{Tracks: pageItems, LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
+		Encode: func(items []Track, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
+			pageItems, pr := SlicePage(items, page)
+			return TrackList{Tracks: pageItems, LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
 		},
 		MarkCanonical: k.mark,
 		StampCopies:   k.copies,
 	})
 }
 
-func forEachTrackSource(t *types.Track, f func(SourceMut)) {
+func forEachTrackSource(t *Track, f func(SourceMut)) {
 	for i := range t.Sources {
 		src := &t.Sources[i]
 		f(SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
 }

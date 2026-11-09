@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -63,37 +64,37 @@ func maturityTestConnectors() []catalogTestConnector {
 // kind id the catalog uses for that feed.
 func providerKindNames(v any) map[string]bool {
 	out := map[string]bool{}
-	if _, ok := v.(types.PlaylistProvider); ok {
+	if _, ok := v.(kinds.PlaylistProvider); ok {
 		out["playlists"] = true
 	}
-	if _, ok := v.(types.LikedTrackProvider); ok {
+	if _, ok := v.(kinds.LikedTrackProvider); ok {
 		out["tracks"] = true
 	}
-	if _, ok := v.(types.AlbumProvider); ok {
+	if _, ok := v.(kinds.AlbumProvider); ok {
 		out["albums"] = true
 	}
-	if _, ok := v.(types.ArtistProvider); ok {
+	if _, ok := v.(kinds.ArtistProvider); ok {
 		out["artists"] = true
 	}
-	if _, ok := v.(types.ContactProvider); ok {
+	if _, ok := v.(kinds.ContactProvider); ok {
 		out["contacts"] = true
 	}
-	if _, ok := v.(types.MessageProvider); ok {
+	if _, ok := v.(kinds.MessageProvider); ok {
 		out["messages"] = true
 	}
-	if _, ok := v.(types.PhotoProvider); ok {
+	if _, ok := v.(kinds.PhotoProvider); ok {
 		out["photos"] = true
 	}
-	if _, ok := v.(types.CalendarEventProvider); ok {
+	if _, ok := v.(kinds.CalendarEventProvider); ok {
 		out["events"] = true
 	}
-	if _, ok := v.(types.TransactionProvider); ok {
+	if _, ok := v.(kinds.TransactionProvider); ok {
 		out["transactions"] = true
 	}
-	if _, ok := v.(types.PlaceVisitProvider); ok {
+	if _, ok := v.(kinds.PlaceVisitProvider); ok {
 		out["places"] = true
 	}
-	if _, ok := v.(types.DocumentProvider); ok {
+	if _, ok := v.(kinds.DocumentProvider); ok {
 		out["documents"] = true
 	}
 	return out

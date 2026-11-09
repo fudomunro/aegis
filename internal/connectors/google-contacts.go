@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -144,7 +145,7 @@ func ContactIDFromProxyPath(remainingPath string) (string, bool) {
 func (c *GoogleContactsConnector) HandleListContacts(w http.ResponseWriter, r *http.Request) {
 	contacts, truncated, err := c.ListUserContacts(r.Context())
 	if err != nil {
-		if err == types.ErrUnauthorized {
+		if err == kinds.ErrUnauthorized {
 			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Google Contacts token — authorize at /v1/auth/"+GoogleContactsServiceID+"/login")
 			return
@@ -154,17 +155,17 @@ func (c *GoogleContactsConnector) HandleListContacts(w http.ResponseWriter, r *h
 		return
 	}
 	if contacts == nil {
-		contacts = []types.Contact{}
+		contacts = []kinds.Contact{}
 	}
-	result := types.ContactList{
+	result := kinds.ContactList{
 		Contacts: contacts,
-		LibraryListMeta: types.LibraryListMeta{
+		LibraryListMeta: kinds.LibraryListMeta{
 			Total:     len(contacts),
 			Synced:    true,
 			Truncated: truncated,
-			ByService: map[string]types.LibraryServiceStatus{
+			ByService: map[string]kinds.LibraryServiceStatus{
 				GoogleContactsServiceID: {
-					Status:    types.LibraryStatusOK,
+					Status:    kinds.LibraryStatusOK,
 					Count:     len(contacts),
 					Truncated: truncated,
 				},
@@ -243,14 +244,14 @@ func NormalizeGooglePeopleResourceName(id string) string {
 // ListUserContacts implements ContactProvider. Fetches People API connections
 // and maps them into neutral Contact values for the unified library and for
 // photo.people[] cross-type matching.
-func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types.Contact, bool, error) {
+func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact, bool, error) {
 	token := c.host.GetValidToken(GoogleContactsServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.GoogleContactsUpstreamBase()
-	var all []types.Contact
+	var all []kinds.Contact
 	pageToken := ""
 	truncated := false
 	for page := 0; page < shared.LibraryPageCap; page++ {
@@ -281,7 +282,7 @@ func (c *GoogleContactsConnector) ListUserContacts(ctx context.Context) ([]types
 		}
 		for _, person := range raw.Connections {
 			mapped := MapGooglePerson(person)
-			if types.PrimaryContactKey(mapped) != "" || len(mapped.Sources) > 0 {
+			if kinds.PrimaryContactKey(mapped) != "" || len(mapped.Sources) > 0 {
 				all = append(all, mapped)
 			}
 		}
@@ -323,7 +324,7 @@ type googlePeopleConnectionsList struct {
 	TotalItems    int                  `json:"totalItems"`
 }
 
-func MapGooglePerson(person googlePeoplePerson) types.Contact {
+func MapGooglePerson(person googlePeoplePerson) kinds.Contact {
 	name := ""
 	if len(person.Names) > 0 {
 		name = person.Names[0].DisplayName
@@ -338,7 +339,7 @@ func MapGooglePerson(person googlePeoplePerson) types.Contact {
 	for _, p := range person.PhoneNumbers {
 		phones = append(phones, p.Value)
 	}
-	contact := types.NewContact(
+	contact := kinds.NewContact(
 		GoogleContactsServiceID,
 		GoogleContactsServiceName,
 		person.ResourceName,

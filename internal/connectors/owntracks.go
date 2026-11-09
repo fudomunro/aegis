@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -175,10 +176,10 @@ func (c *OwnTracksConnector) OwnTracksToken(logger *slog.Logger) string {
 	return c.host.GetValidToken(OwnTracksServiceID, logger)
 }
 
-func (c *OwnTracksConnector) ListUserPlaceVisits(ctx context.Context) (visits []types.PlaceVisit, truncated bool, err error) {
+func (c *OwnTracksConnector) ListUserPlaceVisits(ctx context.Context) (visits []kinds.PlaceVisit, truncated bool, err error) {
 	base := c.OwnTracksUpstreamBase()
 	if base == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	logger := slog.With("connector", OwnTracksServiceID)
 	// Prefer explicit visits when the Recorder exposes them.
@@ -195,7 +196,7 @@ func (c *OwnTracksConnector) ListUserPlaceVisits(ctx context.Context) (visits []
 	return ClusterOwnTracksVisits(locs), truncated, nil
 }
 
-func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string, logger *slog.Logger) ([]types.PlaceVisit, bool, error) {
+func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string, logger *slog.Logger) ([]kinds.PlaceVisit, bool, error) {
 	q := url.Values{}
 	q.Set("limit", strconv.Itoa(shared.LibraryPageCap*2))
 	var parsed ownTracksVisitsResponse
@@ -205,7 +206,7 @@ func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string
 	if len(parsed.Data) == 0 {
 		return nil, false, fmt.Errorf("no visit rows")
 	}
-	out := make([]types.PlaceVisit, 0, len(parsed.Data))
+	out := make([]kinds.PlaceVisit, 0, len(parsed.Data))
 	for _, v := range parsed.Data {
 		start := time.Unix(v.Tst, 0).UTC().Format(time.RFC3339)
 		end := ""
@@ -226,13 +227,13 @@ func (c *OwnTracksConnector) ListRecorderVisits(ctx context.Context, base string
 		} else if v.Vac > 50 {
 			conf = "medium"
 		}
-		visit := types.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, id, types.PlaceVisit{
+		visit := kinds.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, id, kinds.PlaceVisit{
 			StartAt:    start,
 			EndAt:      end,
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: conf,
 			EntityID:   id,
-			Place: types.Place{
+			Place: kinds.Place{
 				Name: name,
 				Lat:  v.Lat,
 				Lng:  v.Lon,
@@ -258,7 +259,7 @@ func (c *OwnTracksConnector) ListRecorderLocations(ctx context.Context, base str
 func (c *OwnTracksConnector) OwnTracksAPIGet(ctx context.Context, logger *slog.Logger, rawURL string, query url.Values, out any) error {
 	token := c.OwnTracksToken(logger)
 	if token == "" {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	u, err := url.Parse(rawURL)
 	if err != nil {
@@ -279,7 +280,7 @@ func (c *OwnTracksConnector) OwnTracksAPIGet(ctx context.Context, logger *slog.L
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("owntracks: unexpected status %d", resp.StatusCode)
@@ -290,7 +291,7 @@ func (c *OwnTracksConnector) OwnTracksAPIGet(ctx context.Context, logger *slog.L
 // ClusterOwnTracksVisits groups consecutive samples that stay within
 // ~200m for at least 15 minutes into a visit. Movement between clusters is
 // recorded as a trip when the gap is short enough to be travel (issue #142).
-func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
+func ClusterOwnTracksVisits(locs []OwnTracksLocation) []kinds.PlaceVisit {
 	if len(locs) == 0 {
 		return nil
 	}
@@ -332,7 +333,7 @@ func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 		clusters = append(clusters, *cur)
 	}
 
-	out := make([]types.PlaceVisit, 0, len(clusters))
+	out := make([]kinds.PlaceVisit, 0, len(clusters))
 	for i, cl := range clusters {
 		dwell := cl.end.Sub(cl.start)
 		if dwell < minDwell && len(cl.points) < 2 {
@@ -356,13 +357,13 @@ func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 		if len(cl.points) >= 3 {
 			conf = "high"
 		}
-		visit := types.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, id, types.PlaceVisit{
+		visit := kinds.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, id, kinds.PlaceVisit{
 			StartAt:    cl.start.UTC().Format(time.RFC3339),
 			EndAt:      cl.end.UTC().Format(time.RFC3339),
-			Kind:       types.PlaceKindVisit,
+			Kind:       kinds.PlaceKindVisit,
 			Confidence: conf,
 			EntityID:   id,
-			Place: types.Place{
+			Place: kinds.Place{
 				Name:    name,
 				Address: addr,
 				Lat:     cl.lat,
@@ -387,17 +388,17 @@ func ClusterOwnTracksVisits(locs []OwnTracksLocation) []types.PlaceVisit {
 				dist := shared.HaversineMeters(cl.lat, cl.lng, next.lat, next.lng)
 				if dist > stayRadiusM {
 					tid := "ott:" + strconv.FormatInt(cl.end.Unix(), 10) + ":" + strconv.FormatInt(next.start.Unix(), 10)
-					mode := types.TripModeDrive
+					mode := kinds.TripModeDrive
 					if dist < 2000 && gap > 30*time.Minute {
-						mode = types.TripModeWalk
+						mode = kinds.TripModeWalk
 					}
-					trip := types.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, tid, types.PlaceVisit{
+					trip := kinds.NewPlaceVisit(OwnTracksServiceID, OwnTracksServiceName, tid, kinds.PlaceVisit{
 						StartAt:  cl.end.UTC().Format(time.RFC3339),
 						EndAt:    next.start.UTC().Format(time.RFC3339),
-						Kind:     types.PlaceKindTrip,
+						Kind:     kinds.PlaceKindTrip,
 						Mode:     mode,
 						EntityID: tid,
-						Place: types.Place{
+						Place: kinds.Place{
 							Name: next.points[0].Desc,
 							Lat:  next.lat,
 							Lng:  next.lng,

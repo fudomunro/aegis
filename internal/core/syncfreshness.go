@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Copy freshness checks (issue #227 phase 2, closing the observational
@@ -210,7 +210,7 @@ func (e *FreshnessEngine) RunBatch(ctx context.Context, kind string, afterID int
 // --- checkers ---
 
 // musicMirrorChecker validates mirrored playlists and liked-tracks lists
-// against the target service's live metadata (types.PlaylistMetaProvider)
+// against the target service's live metadata (kinds.PlaylistMetaProvider)
 // — the same "snapshot_id / item_count" tokens the copy fidelity table
 // promises. Endpoint comes from the connector's configured service (never
 // hardcoded), per the connector rules.
@@ -224,7 +224,7 @@ func (c *musicMirrorChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
 func (c *musicMirrorChecker) Check(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
-	p, ok := c.srv.connectors[c.service].(types.PlaylistMetaProvider)
+	p, ok := c.srv.connectors[c.service].(kinds.PlaylistMetaProvider)
 	if !ok {
 		return copies.Version{}, false, false, nil
 	}
@@ -267,7 +267,7 @@ func (c *snapshotChecker) Services() []string { return []string{c.service} }
 
 // Check implements CopyChecker.
 func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
-	p, ok := c.srv.mailIngestFor(c.service).(types.SnapshotProber)
+	p, ok := c.srv.mailIngestFor(c.service).(kinds.SnapshotProber)
 	if !ok {
 		return copies.Version{}, false, false, nil
 	}
@@ -287,7 +287,7 @@ func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Ve
 
 // newCheckerRegistry wires the checkers this build supports. Music services
 // register from the connector map: any connector exposing
-// types.PlaylistMetaProvider gets the shared mirror checker. Local-snapshot
+// kinds.PlaylistMetaProvider gets the shared mirror checker. Local-snapshot
 // ingest sources (issue #286) register from the ingest registry the same
 // way. Services with no checker (Bluesky shares, DAV item etags) are
 // deliberately absent: their rows stay `unknown` until a checker lands,
@@ -295,12 +295,12 @@ func (c *snapshotChecker) Check(_ context.Context, rec copies.Record) (copies.Ve
 func newCheckerRegistry(srv *Server) *CheckerRegistry {
 	r := NewCheckerRegistry()
 	for id, conn := range srv.connectors {
-		if _, ok := conn.(types.PlaylistMetaProvider); ok {
+		if _, ok := conn.(kinds.PlaylistMetaProvider); ok {
 			r.Register(&musicMirrorChecker{srv: srv, service: id})
 		}
 	}
 	for id, ing := range srv.mailIngests {
-		if _, ok := ing.(types.SnapshotProber); ok {
+		if _, ok := ing.(kinds.SnapshotProber); ok {
 			r.Register(&snapshotChecker{srv: srv, service: id})
 		}
 	}

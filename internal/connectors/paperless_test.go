@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestPaperlessListUserDocuments_MapsNeutralShape(t *testing.T) {
@@ -132,7 +132,7 @@ func TestPaperlessUnauthorized(t *testing.T) {
 	h := newTestHostWithService(PaperlessServiceID, srv.URL+"/api", "https://aegis.example.com")
 	c := NewPaperlessConnector(h)
 	_, _, err := c.ListUserDocuments(context.Background())
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
 }

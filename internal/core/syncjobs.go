@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Sync job queue (issue #227): durable, restartable units of data-movement
@@ -739,7 +739,7 @@ func classifySyncError(runErr error, attempt int, retryAfter time.Duration) (cla
 	if errors.Is(runErr, ErrSyncTerminal) {
 		return SyncErrorClassTerminal, after
 	}
-	if errors.Is(runErr, types.ErrUnauthorized) {
+	if errors.Is(runErr, kinds.ErrUnauthorized) {
 		return SyncErrorClassTerminal, after
 	}
 	var ra *SyncRetryAfter

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -97,11 +98,11 @@ func (c *CardDAVConnector) HandleProxy(w http.ResponseWriter, r *http.Request, r
 }
 
 // ListUserContacts fetches the address book via CardDAV REPORT.
-func (c *CardDAVConnector) ListUserContacts(ctx context.Context) ([]types.Contact, bool, error) {
+func (c *CardDAVConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact, bool, error) {
 	logger := slog.With("service", CardDAVServiceID)
 	auth := c.auth()
 	if !auth.configured() {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	collection, err := c.resolveCollection(ctx, auth)
@@ -123,7 +124,7 @@ func (c *CardDAVConnector) ListUserContacts(ctx context.Context) ([]types.Contac
 		return c.listViaPropfind(ctx, collection, auth, logger)
 	}
 
-	var contacts []types.Contact
+	var contacts []kinds.Contact
 	for _, r := range ms.Responses {
 		prop, ok := propstatOK(r.Propstat)
 		if !ok {
@@ -145,7 +146,7 @@ func (c *CardDAVConnector) ListUserContacts(ctx context.Context) ([]types.Contac
 	return contacts, false, nil
 }
 
-func (c *CardDAVConnector) listViaPropfind(ctx context.Context, collection string, auth davAuth, logger *slog.Logger) ([]types.Contact, bool, error) {
+func (c *CardDAVConnector) listViaPropfind(ctx context.Context, collection string, auth davAuth, logger *slog.Logger) ([]kinds.Contact, bool, error) {
 	body := `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:getcontenttype/><d:resourcetype/></d:prop></d:propfind>`
 	resp, err := davRequest(ctx, "PROPFIND", collection, auth, map[string]string{"Depth": davDepthOne}, body)
@@ -154,7 +155,7 @@ func (c *CardDAVConnector) listViaPropfind(ctx context.Context, collection strin
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode >= 400 {
 		return nil, false, fmt.Errorf("carddav PROPFIND returned %d", resp.StatusCode)
@@ -168,7 +169,7 @@ func (c *CardDAVConnector) listViaPropfind(ctx context.Context, collection strin
 		return nil, false, err
 	}
 
-	var contacts []types.Contact
+	var contacts []kinds.Contact
 	truncated := false
 	n := 0
 	for _, r := range ms.Responses {
@@ -219,10 +220,10 @@ func (c *CardDAVConnector) resolveCollection(ctx context.Context, auth davAuth) 
 
 // PutContact writes one vCard with If-Match (or If-None-Match for create).
 // Returns the new ETag. ErrConflict means a newer remote edit exists.
-func (c *CardDAVConnector) PutContact(ctx context.Context, href, etag string, contact types.Contact) (string, error) {
+func (c *CardDAVConnector) PutContact(ctx context.Context, href, etag string, contact kinds.Contact) (string, error) {
 	auth := c.auth()
 	if !auth.configured() {
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	}
 	if strings.TrimSpace(href) == "" {
 		col, err := c.resolveCollection(ctx, auth)
@@ -244,7 +245,7 @@ func (c *CardDAVConnector) PutContact(ctx context.Context, href, etag string, co
 func (c *CardDAVConnector) DeleteContact(ctx context.Context, href, etag string) error {
 	auth := c.auth()
 	if !auth.configured() {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	headers := map[string]string{}
 	if strings.TrimSpace(etag) != "" {
@@ -256,7 +257,7 @@ func (c *CardDAVConnector) DeleteContact(ctx context.Context, href, etag string)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	if resp.StatusCode == http.StatusPreconditionFailed {
 		return ErrConflict
@@ -267,7 +268,7 @@ func (c *CardDAVConnector) DeleteContact(ctx context.Context, href, etag string)
 	return nil
 }
 
-func contactCardName(c types.Contact) string {
+func contactCardName(c kinds.Contact) string {
 	if uid := contactUID(c); uid != "" {
 		return sanitizeHrefName(uid) + ".vcf"
 	}

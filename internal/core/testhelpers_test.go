@@ -17,7 +17,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // AccessEventToAudit projects a redacted access event onto the durable
@@ -66,37 +65,37 @@ func (c *Config) updateService(id string, mut func(*Service)) bool {
 }
 
 // newMessage builds a single-source neutral message.
-func newMessage(service, serviceName, id, channel, subject, snippet, sentAt string) types.Message {
-	src := types.MessageSource{
+func newMessage(service, serviceName, id, channel, subject, snippet, sentAt string) kinds.Message {
+	src := kinds.MessageSource{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,
 		Canonical:   true,
 	}
-	return types.Message{
+	return kinds.Message{
 		Channel: channel,
 		Subject: subject,
 		Snippet: snippet,
 		SentAt:  sentAt,
-		Sources: []types.MessageSource{src},
+		Sources: []kinds.MessageSource{src},
 	}
 }
 
 // PhotosTakenDuring returns photos whose taken_at falls inside the visit or
 // trip window (issue #142). This is the photos/places join demo: sample
 // fixtures pair visits with photos captured during them.
-func PhotosTakenDuring(photos []types.Photo, v types.PlaceVisit) []types.Photo {
-	start := types.NormalizePlaceVisitTime(v.StartAt)
-	end := types.NormalizePlaceVisitTime(v.EndAt)
+func PhotosTakenDuring(photos []kinds.Photo, v kinds.PlaceVisit) []kinds.Photo {
+	start := kinds.NormalizePlaceVisitTime(v.StartAt)
+	end := kinds.NormalizePlaceVisitTime(v.EndAt)
 	if end == "" {
 		end = start
 	}
 	if start == "" {
 		return nil
 	}
-	out := make([]types.Photo, 0, 8)
+	out := make([]kinds.Photo, 0, 8)
 	for _, p := range photos {
-		taken := types.NormalizePlaceVisitTime(p.TakenAt)
+		taken := kinds.NormalizePlaceVisitTime(p.TakenAt)
 		if taken == "" {
 			continue
 		}
@@ -222,26 +221,26 @@ func writeDataScopes(t *testing.T, list []scopes.Scope) string {
 // forEachPlaylistSource and forEachTrackSource project sources for generic
 // stamping of the kinds already moved into the kinds package (issue #312) —
 // their production projections live beside those kinds and are unexported.
-func forEachPlaylistSource(p *types.Playlist, f func(kinds.SourceMut)) {
+func forEachPlaylistSource(p *kinds.Playlist, f func(kinds.SourceMut)) {
 	for i := range p.Sources {
 		src := &p.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
 
-func forEachTrackSource(t *types.Track, f func(kinds.SourceMut)) {
+func forEachTrackSource(t *kinds.Track, f func(kinds.SourceMut)) {
 	for i := range t.Sources {
 		src := &t.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
@@ -249,26 +248,26 @@ func forEachTrackSource(t *types.Track, f func(kinds.SourceMut)) {
 // forEachContactSource and forEachPhotoSource project sources for generic
 // stamping of the kinds already moved into the kinds package (issue #312) —
 // their production projections live beside those kinds and are unexported.
-func forEachContactSource(item *types.Contact, f func(kinds.SourceMut)) {
+func forEachContactSource(item *kinds.Contact, f func(kinds.SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
 
-func forEachPhotoSource(item *types.Photo, f func(kinds.SourceMut)) {
+func forEachPhotoSource(item *kinds.Photo, f func(kinds.SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
@@ -276,14 +275,14 @@ func forEachPhotoSource(item *types.Photo, f func(kinds.SourceMut)) {
 // forEachCalendarEventSource projects sources for generic stamping of the
 // kind already moved into the kinds package (issue #312) — its production
 // projection lives beside that kind and is unexported.
-func forEachCalendarEventSource(item *types.CalendarEvent, f func(kinds.SourceMut)) {
+func forEachCalendarEventSource(item *kinds.CalendarEvent, f func(kinds.SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
@@ -291,14 +290,14 @@ func forEachCalendarEventSource(item *types.CalendarEvent, f func(kinds.SourceMu
 // forEachPlaceVisitSource projects sources for generic stamping of the
 // kind already moved into the kinds package (issue #312) — its production
 // projection lives beside that kind and is unexported.
-func forEachPlaceVisitSource(item *types.PlaceVisit, f func(kinds.SourceMut)) {
+func forEachPlaceVisitSource(item *kinds.PlaceVisit, f func(kinds.SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
@@ -306,14 +305,14 @@ func forEachPlaceVisitSource(item *types.PlaceVisit, f func(kinds.SourceMut)) {
 // forEachTransactionSource projects sources for generic stamping of the
 // kind already moved into the kinds package (issue #312) — its production
 // projection lives beside that kind and is unexported.
-func forEachTransactionSource(item *types.Transaction, f func(kinds.SourceMut)) {
+func forEachTransactionSource(item *kinds.Transaction, f func(kinds.SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }
@@ -321,14 +320,14 @@ func forEachTransactionSource(item *types.Transaction, f func(kinds.SourceMut)) 
 // forEachMessageSource projects sources for generic stamping of the kind
 // already moved into the kinds package (issue #312) — its production
 // projection lives beside that kind and is unexported.
-func forEachMessageSource(item *types.Message, f func(kinds.SourceMut)) {
+func forEachMessageSource(item *kinds.Message, f func(kinds.SourceMut)) {
 	for i := range item.Sources {
 		src := &item.Sources[i]
 		f(kinds.SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *kinds.CopyInfo) { src.Copy = info },
 		})
 	}
 }

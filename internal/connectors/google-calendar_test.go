@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -181,8 +182,8 @@ func TestGoogleCalendarConnector_ListCalendarEvents_Unauthorized(t *testing.T) {
 	host := newTestHostWithService(GoogleCalendarServiceID, "", "https://aegis.example.com")
 	conn := NewGoogleCalendarConnector(host)
 	_, _, err := conn.ListCalendarEvents(context.Background())
-	if !errors.Is(err, types.ErrUnauthorized) {
-		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
+	if !errors.Is(err, kinds.ErrUnauthorized) {
+		t.Fatalf("err = %v, want kinds.ErrUnauthorized", err)
 	}
 }
 
@@ -263,7 +264,7 @@ func TestGoogleCalendarConnector_HandleProxy_ListEvents(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -338,7 +339,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventByID(t *testing.T) {
 	if gotPath != "/calendars/primary/events/abc" {
 		t.Fatalf("upstream path = %q", gotPath)
 	}
-	var ev types.CalendarEvent
+	var ev kinds.CalendarEvent
 	if err := json.Unmarshal(w.Body.Bytes(), &ev); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -374,7 +375,7 @@ func TestGoogleCalendarConnector_HandleProxy_GetEventFromCalendarPath(t *testing
 	if !strings.Contains(gotPath, "/calendars/family@example.com/events/xyz") {
 		t.Fatalf("upstream path = %q", gotPath)
 	}
-	var ev types.CalendarEvent
+	var ev kinds.CalendarEvent
 	if err := json.Unmarshal(w.Body.Bytes(), &ev); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

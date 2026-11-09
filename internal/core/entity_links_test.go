@@ -10,15 +10,15 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/links"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	// Different names but explicitly linked → one entity, match=link.
-	merged := types.MergePlaylistsSyncLinked([]types.Playlist{
-		{Name: "Road Trip", Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}},
-		{Name: "Vacation Mix", Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}},
-	}, func(p types.Playlist) string {
+	merged := kinds.MergePlaylistsSyncLinked([]kinds.Playlist{
+		{Name: "Road Trip", Sources: []kinds.PlaylistSource{{Service: "spotify", ID: "sp1"}}},
+		{Name: "Vacation Mix", Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}},
+	}, func(p kinds.Playlist) string {
 		if len(p.Sources) > 0 && p.Sources[0].ID == "sp1" {
 			return "link:abc"
 		}
@@ -30,7 +30,7 @@ func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	if len(merged) != 1 {
 		t.Fatalf("want linked merge, got %+v", merged)
 	}
-	if merged[0].Match != types.PlaylistMatchLink {
+	if merged[0].Match != kinds.PlaylistMatchLink {
 		t.Fatalf("match = %q", merged[0].Match)
 	}
 	if len(merged[0].Sources) != 2 {
@@ -38,11 +38,11 @@ func TestMergePlaylistsSyncLinked_ExplicitLinkWins(t *testing.T) {
 	}
 
 	// Same name without link → match=name.
-	merged = types.MergePlaylistsSyncLinked([]types.Playlist{
-		{Name: "Road Trip", Sources: []types.PlaylistSource{{Service: "spotify", ID: "a"}}},
-		{Name: "road trip", Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "b"}}},
+	merged = kinds.MergePlaylistsSyncLinked([]kinds.Playlist{
+		{Name: "Road Trip", Sources: []kinds.PlaylistSource{{Service: "spotify", ID: "a"}}},
+		{Name: "road trip", Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "b"}}},
 	}, nil)
-	if len(merged) != 1 || merged[0].Match != types.PlaylistMatchName {
+	if len(merged) != 1 || merged[0].Match != kinds.PlaylistMatchName {
 		t.Fatalf("name merge = %+v", merged)
 	}
 }

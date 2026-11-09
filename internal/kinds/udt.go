@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // UserDefinedTypeSchema is the JSON description of a bring-your-own library
@@ -142,8 +140,8 @@ type UserDefinedSource struct {
 	// (issue #16). Stamped by config canonical_for.
 	Canonical bool `json:"canonical,omitempty"`
 	// Copy is copy-ledger metadata when tracked (issue #76). Nil when untracked.
-	Copy  *types.CopyInfo `json:"copy,omitempty"`
-	Extra map[string]any  `json:"extra,omitempty"`
+	Copy  *CopyInfo      `json:"copy,omitempty"`
+	Extra map[string]any `json:"extra,omitempty"`
 }
 
 // UserDefinedItem is one neutral row of a user-defined kind. Schema-declared
@@ -174,7 +172,7 @@ type UserDefinedList struct {
 	SchemaID string `json:"schema_id"`
 	// Fields describes the declared field shape (for agent self-description).
 	Fields map[string]UserDefinedField `json:"fields,omitempty"`
-	types.LibraryListMeta
+	LibraryListMeta
 }
 
 // Match methods for UserDefinedItem.
@@ -459,7 +457,7 @@ func (s UserDefinedTypeSchema) UserDefinedIdentityKey(item UserDefinedItem) stri
 			parts = append(parts, "")
 			continue
 		}
-		parts = append(parts, types.NormalizeIdentityKey(fmt.Sprint(v)))
+		parts = append(parts, NormalizeIdentityKey(fmt.Sprint(v)))
 	}
 	return strings.Join(parts, "\x00")
 }
@@ -585,7 +583,7 @@ func MergeUserDefinedItems(schema UserDefinedTypeSchema, in []UserDefinedItem) [
 }
 
 // EncodeUserDefinedList builds the neutral list envelope for a schema.
-func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) UserDefinedList {
+func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem, page PageRequest, bySvc map[string]LibraryServiceStatus) UserDefinedList {
 	truncated := false
 	for _, st := range bySvc {
 		if st.Truncated {
@@ -593,12 +591,12 @@ func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem
 			break
 		}
 	}
-	pageItems, pr := types.SlicePage(items, page)
+	pageItems, pr := SlicePage(items, page)
 	return UserDefinedList{
 		Items:           pageItems,
 		SchemaID:        schema.ID,
 		Fields:          schema.Fields,
-		LibraryListMeta: types.MetaForPage(pr, true, truncated, bySvc),
+		LibraryListMeta: MetaForPage(pr, true, truncated, bySvc),
 	}
 }
 

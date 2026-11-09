@@ -14,7 +14,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
@@ -93,7 +93,7 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	srv.audit = a
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &fakePlaylistProvider{
-			playlists: []types.Playlist{{Name: "Jazz", Sources: []types.PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
+			playlists: []kinds.Playlist{{Name: "Jazz", Sources: []kinds.PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
 		},
 	}
 
@@ -162,14 +162,14 @@ func TestResolveStatePaths_AuditLog(t *testing.T) {
 
 // Ensure fakePlaylistProvider still satisfies the connector surface used by
 // the deny path (compile-time check).
-var _ types.LikedTrackProvider = (*fakeLikedTracks)(nil)
+var _ kinds.LikedTrackProvider = (*fakeLikedTracks)(nil)
 
 type fakeLikedTracks struct {
 	fakePlaylistProvider
-	tracks []types.Track
+	tracks []kinds.Track
 }
 
-func (f *fakeLikedTracks) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
+func (f *fakeLikedTracks) ListUserLikedTracks(context.Context) ([]kinds.Track, bool, error) {
 	return f.tracks, false, nil
 }
 

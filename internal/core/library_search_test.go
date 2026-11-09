@@ -3,12 +3,12 @@ package core
 import (
 	"encoding/json"
 	"errors"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
@@ -16,7 +16,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 )
 
-func searchTestServer(t *testing.T, contacts ...types.Contact) *Server {
+func searchTestServer(t *testing.T, contacts ...kinds.Contact) *Server {
 	t.Helper()
 	cfg := &Config{Services: []Service{{ID: "google", Name: "Google", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -27,13 +27,13 @@ func searchTestServer(t *testing.T, contacts ...types.Contact) *Server {
 	return srv
 }
 
-func searchRequest(t *testing.T, srv *Server, handler http.HandlerFunc, path string) (*httptest.ResponseRecorder, types.ContactList) {
+func searchRequest(t *testing.T, srv *Server, handler http.HandlerFunc, path string) (*httptest.ResponseRecorder, kinds.ContactList) {
 	t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(handler)(w, req)
-	var resp types.ContactList
+	var resp kinds.ContactList
 	if w.Code == http.StatusOK {
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal: %v", err)
@@ -44,15 +44,15 @@ func searchRequest(t *testing.T, srv *Server, handler http.HandlerFunc, path str
 
 func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 	srv := searchTestServer(t,
-		types.Contact{
+		kinds.Contact{
 			Name:    "Ada Lovelace",
 			Emails:  []string{"ada@example.com"},
-			Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
+			Sources: []kinds.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
 		},
-		types.Contact{
+		kinds.Contact{
 			Name:    "Grace Hopper",
 			Emails:  []string{"grace@example.com"},
-			Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g2"}},
+			Sources: []kinds.ContactSource{{Service: "google", ServiceName: "Google", ID: "g2"}},
 		},
 	)
 
@@ -87,10 +87,10 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 }
 
 func TestLibrarySearch_ColdIndexBootstrapsFromFetch(t *testing.T) {
-	srv := searchTestServer(t, types.Contact{
+	srv := searchTestServer(t, kinds.Contact{
 		Name:    "Katherine Johnson",
 		Emails:  []string{"kj@example.com"},
-		Sources: []types.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
+		Sources: []kinds.ContactSource{{Service: "google", ServiceName: "Google", ID: "g1"}},
 	})
 
 	// First-ever query with an empty index: one live fetch materializes it.
@@ -107,9 +107,9 @@ func TestLibrarySearch_ColdIndexBootstrapsFromFetch(t *testing.T) {
 }
 
 func TestLibrarySearch_DisabledIndex(t *testing.T) {
-	srv := searchTestServer(t, types.Contact{
+	srv := searchTestServer(t, kinds.Contact{
 		Name:    "Ada Lovelace",
-		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
+		Sources: []kinds.ContactSource{{Service: "google", ID: "g1"}},
 	})
 	srv.search = nil
 	w, _ := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=ada")
@@ -123,13 +123,13 @@ func TestLibrarySearch_UnsupportedKindRejectsQ(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts?q=x", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	kinds.Aggregate(srv, srv.libraryEngine(), w, req, kinds.Spec[types.Contact]{
+	kinds.Aggregate(srv, srv.libraryEngine(), w, req, kinds.Spec[kinds.Contact]{
 		Kind:      kinds.LibraryKind{ID: "notes", Label: "notes"},
-		ServiceOf: func(types.Contact) string { return "" },
-		SortKey:   func(types.Contact) string { return "" },
-		Merge:     func(in []types.Contact) []types.Contact { return in },
-		Encode: func(items []types.Contact, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
-			return types.ContactList{Contacts: items}
+		ServiceOf: func(kinds.Contact) string { return "" },
+		SortKey:   func(kinds.Contact) string { return "" },
+		Merge:     func(in []kinds.Contact) []kinds.Contact { return in },
+		Encode: func(items []kinds.Contact, page kinds.PageRequest, bySvc map[string]kinds.LibraryServiceStatus) any {
+			return kinds.ContactList{Contacts: items}
 		},
 	})
 	if w.Code != http.StatusBadRequest {
@@ -138,9 +138,9 @@ func TestLibrarySearch_UnsupportedKindRejectsQ(t *testing.T) {
 }
 
 func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
-	srv := searchTestServer(t, types.Contact{
+	srv := searchTestServer(t, kinds.Contact{
 		Name:    "Frodo Baggins",
-		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
+		Sources: []kinds.ContactSource{{Service: "google", ID: "g1"}},
 	})
 	shire := &scopes.Scope{ID: "shire", Dataset: "shire", Grants: readAllGrants()}
 	gondor := &scopes.Scope{ID: "gondor", Dataset: "gondor", Grants: readAllGrants()}
@@ -162,7 +162,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("shire search status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.ContactList
+	var resp kinds.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -188,7 +188,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("gondor search status = %d body=%s", w.Code, w.Body.String())
 	}
-	resp = types.ContactList{}
+	resp = kinds.ContactList{}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -206,13 +206,13 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google": &fakeContactProvider{contacts: []types.Contact{{
+		"google": &fakeContactProvider{contacts: []kinds.Contact{{
 			Name:    "Ada Lovelace",
-			Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
+			Sources: []kinds.ContactSource{{Service: "google", ID: "g1"}},
 		}}},
-		"outlook": &fakeContactProvider{contacts: []types.Contact{{
+		"outlook": &fakeContactProvider{contacts: []kinds.Contact{{
 			Name:    "Secret Person",
-			Sources: []types.ContactSource{{Service: "outlook", ID: "o1"}},
+			Sources: []kinds.ContactSource{{Service: "outlook", ID: "o1"}},
 		}}},
 	}
 
@@ -259,7 +259,7 @@ func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{documents: []types.Document{
+		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "sensitive excerpt"),
 		}},
 	}
@@ -271,7 +271,7 @@ func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.DocumentList
+	var resp kinds.DocumentList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
@@ -295,9 +295,9 @@ func TestLibrarySearch_InstructionsMentionQ(t *testing.T) {
 }
 
 func TestHandleAdminSearchStatus(t *testing.T) {
-	srv := searchTestServer(t, types.Contact{
+	srv := searchTestServer(t, kinds.Contact{
 		Name:    "Ada Lovelace",
-		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
+		Sources: []kinds.ContactSource{{Service: "google", ID: "g1"}},
 	})
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -367,7 +367,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 }
 
 // documentsQuery runs GET path as bearer and returns the document hits.
-func documentsQuery(t *testing.T, srv *Server, bearer, path string) []types.Document {
+func documentsQuery(t *testing.T, srv *Server, bearer, path string) []kinds.Document {
 	t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer "+bearer)
@@ -376,7 +376,7 @@ func documentsQuery(t *testing.T, srv *Server, bearer, path string) []types.Docu
 	if w.Code != http.StatusOK {
 		t.Fatalf("documents status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.DocumentList
+	var resp kinds.DocumentList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -384,7 +384,7 @@ func documentsQuery(t *testing.T, srv *Server, bearer, path string) []types.Docu
 }
 
 // eventsQuery runs GET path as bearer and returns the calendar-event hits.
-func eventsQuery(t *testing.T, srv *Server, bearer, path string) []types.CalendarEvent {
+func eventsQuery(t *testing.T, srv *Server, bearer, path string) []kinds.CalendarEvent {
 	t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer "+bearer)
@@ -393,7 +393,7 @@ func eventsQuery(t *testing.T, srv *Server, bearer, path string) []types.Calenda
 	if w.Code != http.StatusOK {
 		t.Fatalf("events status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -462,7 +462,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{documents: []types.Document{
+		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "sensitive excerpt"),
 		}},
 	}
@@ -501,7 +501,7 @@ func TestLibrarySearch_CompleteFetchDropsDeletedItems(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
-	provider := &fakeDocumentProvider{documents: []types.Document{
+	provider := &fakeDocumentProvider{documents: []kinds.Document{
 		sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "one"),
 		sampleDoc("paperless", "Paperless-ngx", "2", "Lease agreement", "2024-02-01T00:00:00Z", "two"),
 	}}
@@ -537,7 +537,7 @@ func TestLibrarySearch_DegradedOrTruncatedFetchKeepsIndexRows(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
-	provider := &fakeDocumentProvider{documents: []types.Document{
+	provider := &fakeDocumentProvider{documents: []kinds.Document{
 		sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "one"),
 		sampleDoc("paperless", "Paperless-ngx", "2", "Lease agreement", "2024-02-01T00:00:00Z", "two"),
 	}}

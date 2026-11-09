@@ -1,6 +1,7 @@
 package mail
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -8,11 +9,11 @@ import (
 // never see the archive type or its SQL.
 type Sink struct{ A *Archive }
 
-func (s Sink) HasMessage(service string, msg types.Message) (bool, error) {
+func (s Sink) HasMessage(service string, msg kinds.Message) (bool, error) {
 	return s.A.hasSourceRecord(RecordFromMessage(service, "", msg, nil))
 }
 
-func (s Sink) Store(service string, msg types.Message, rawPayload []byte) error {
+func (s Sink) Store(service string, msg kinds.Message, rawPayload []byte) error {
 	gz, err := GzipPayload(rawPayload)
 	if err != nil {
 		return err

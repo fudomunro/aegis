@@ -3,12 +3,13 @@ package core
 import (
 	"bytes"
 	"encoding/json"
-	"github.com/fudomunro/aegis/internal/kinds"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
