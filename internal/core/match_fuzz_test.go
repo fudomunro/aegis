@@ -17,6 +17,7 @@ func FuzzNormalizeIdentityKey(f *testing.F) {
 	f.Add("  The   Beatles  ")
 	f.Add("types.Artist - Topic")
 	f.Add("0\n- TopiC")
+	f.Add("- - TopiC TopiC")
 	f.Add("Name\r\n- Topic")
 	f.Add("")
 	f.Add("Артист")

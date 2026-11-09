@@ -15,6 +15,8 @@ func TestNormalizeIdentityKey(t *testing.T) {
 		{"Name\n- Topic", "name"},
 		{" - Topic bar", "bar"},
 		{"- topic - topic", ""},
+		{"- - TopiC TopiC", ""},
+		{"- - topic", "-"},
 		{"foo - topicbar", "foo - topicbar"},
 		{"", ""},
 	}
