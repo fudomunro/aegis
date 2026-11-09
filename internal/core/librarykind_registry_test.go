@@ -7,7 +7,7 @@ import (
 )
 
 // TestLibraryKinds_RegistryConsistency (issue #183) proves the hand-copied
-// kind lists are gone: every built-in kind is routed, reserved for UDTs,
+// kind lists are gone: every built-in kind is routed, reserved for UDKs,
 // canonical-checkable when declared, and present in the permissions overview
 // library set.
 func TestLibraryKinds_RegistryConsistency(t *testing.T) {
@@ -73,7 +73,7 @@ func TestAppPathAllowed_IncludesDerivedKinds(t *testing.T) {
 	}
 	// User-defined kinds are not app-readable (documented decision).
 	if appPathAllowed("/v1/library/reading-list") {
-		t.Error("UDT paths must not be app-readable by default")
+		t.Error("UDK paths must not be app-readable by default")
 	}
 }
 
@@ -100,10 +100,10 @@ func TestIsCanonicalKindID_Derived(t *testing.T) {
 	}
 }
 
-func TestUDTSchemaRejectsEveryBuiltinKindID(t *testing.T) {
+func TestUDKSchemaRejectsEveryBuiltinKindID(t *testing.T) {
 	// A pack named after any built-in (including documents) is rejected.
 	for _, k := range kinds.BuiltinLibraryKinds {
-		s := kinds.UserDefinedTypeSchema{
+		s := kinds.UserDefinedKindSchema{
 			ID:     k.ID,
 			Fields: map[string]kinds.UserDefinedField{"name": {}},
 			Identity: kinds.UserDefinedIdentity{
@@ -111,7 +111,7 @@ func TestUDTSchemaRejectsEveryBuiltinKindID(t *testing.T) {
 			},
 		}
 		if err := s.Normalize(); err == nil {
-			t.Errorf("UDT schema id %q should be rejected", k.ID)
+			t.Errorf("UDK schema id %q should be rejected", k.ID)
 		}
 	}
 }

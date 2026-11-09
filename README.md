@@ -70,7 +70,7 @@ You should see neutral playlist objects with `sources[]` provenance. Vocabulary 
 | [docs/glossary.md](docs/glossary.md) | Canonical product vocabulary |
 | [docs/caldav-carddav.md](docs/caldav-carddav.md) | Nextcloud/iCloud/Fastmail DAV setup |
 | [docs/configuring-aperture.md](docs/configuring-aperture.md) | Aperture operator guide |
-| [docs/user-defined-types.md](docs/user-defined-types.md) | Schema packs / user-defined types |
+| [docs/user-defined-kinds.md](docs/user-defined-kinds.md) | Schema packs / user-defined kinds |
 | [docs/adding-kinds.md](docs/adding-kinds.md) | Checklist for new library kinds |
 | [docs/development.md](docs/development.md) | Tests, project structure, sample data |
 | [CHANGELOG.md](CHANGELOG.md) | History and design decisions |

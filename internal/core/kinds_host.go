@@ -150,19 +150,19 @@ func (s *Server) builtinKinds() []kinds.Kind {
 
 // kindRegistry returns the composed kind registry: the wired built-ins
 // plus any loaded user-defined kinds, with the shadow check applied
-// (issue #312). UDT kinds are composed per call so fixtures that load
+// (issue #312). UDK kinds are composed per call so fixtures that load
 // packs late still see them, matching the old per-request route merge.
 func (s *Server) kindRegistry() []kinds.Kind {
 	builtin := s.builtinKinds()
-	if s == nil || s.udts == nil {
+	if s == nil || s.udks == nil {
 		return builtin
 	}
-	schemas := s.udts.All()
-	udts := make([]kinds.Kind, 0, len(schemas))
+	schemas := s.udks.All()
+	udks := make([]kinds.Kind, 0, len(schemas))
 	for _, schema := range schemas {
-		udts = append(udts, kinds.UserDefined(s, s.libraryEngine(), schema, s.userDefinedDeps()))
+		udks = append(udks, kinds.UserDefined(s, s.libraryEngine(), schema, s.userDefinedDeps()))
 	}
-	merged, _ := kinds.MergeUserDefined(builtin, udts)
+	merged, _ := kinds.MergeUserDefined(builtin, udks)
 	return merged
 }
 
@@ -191,17 +191,17 @@ func listHandler(k kinds.Kind) http.HandlerFunc {
 // gate.
 func (s *Server) userDefinedDeps() kinds.UserDefinedDeps {
 	return kinds.UserDefinedDeps{
-		Schema: func(id string) kinds.UserDefinedTypeSchema {
-			if s.udts == nil {
-				return kinds.UserDefinedTypeSchema{}
+		Schema: func(id string) kinds.UserDefinedKindSchema {
+			if s.udks == nil {
+				return kinds.UserDefinedKindSchema{}
 			}
-			return s.udts.SchemaWithOverlay(id)
+			return s.udks.SchemaWithOverlay(id)
 		},
 		BaseDir: func(id string) string {
-			if s.udts == nil {
+			if s.udks == nil {
 				return ""
 			}
-			return s.udts.DirFor(id)
+			return s.udks.DirFor(id)
 		},
 		Readable: s.userDefinedReadable,
 	}

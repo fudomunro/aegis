@@ -10,7 +10,7 @@ import (
 //
 // This is the single source for per-kind policy flags (AppReadable,
 // CanonicalAllowed, AllowedLevels, DefaultNone). Derived lists — reserved
-// UDT ids, app-token paths, canonical_for keys, access-level allowlists —
+// UDK ids, app-token paths, canonical_for keys, access-level allowlists —
 // are computed from this slice. Do not copy the kind list by hand.
 //
 // Runtime visibility predicates (HasProviders / Readable) live on the

@@ -810,12 +810,12 @@ GET /v1/admin/signal/status — Signal import store status
 POST /v1/admin/signal/import {"path":"…"} — import a Signal export
 GET /v1/admin/timeline/status — Google Timeline import store status
 POST /v1/admin/timeline/import {"path":"…"} — import Timeline JSON, a directory, or a Takeout zip
-GET /v1/admin/udt/status — user-defined types: overlay path, loaded kinds, hints
-GET /v1/admin/udt/browse?path= — list local files for schema-pack file sources
-PUT /v1/admin/udt/kinds/{kind}/sources/{id} — set local files {"paths":[…]} ({"clear":true} resets)
-DELETE /v1/admin/udt/kinds/{kind}/sources/{id}
-POST /v1/admin/udt/kinds/{kind}/extra {"extra":{…}} — attach an extra local JSON file to a kind
-DELETE /v1/admin/udt/kinds/{kind}/extra/{id}
+GET /v1/admin/udk/status — user-defined kinds: overlay path, loaded kinds, hints
+GET /v1/admin/udk/browse?path= — list local files for schema-pack file sources
+PUT /v1/admin/udk/kinds/{kind}/sources/{id} — set local files {"paths":[…]} ({"clear":true} resets)
+DELETE /v1/admin/udk/kinds/{kind}/sources/{id}
+POST /v1/admin/udk/kinds/{kind}/extra {"extra":{…}} — attach an extra local JSON file to a kind
+DELETE /v1/admin/udk/kinds/{kind}/extra/{id}
 GET /v1/admin/apps — list third-party apps (token hints only)
 POST /v1/admin/apps {"id","name","scopes"} — create an app; returns its token once
 GET /v1/admin/apps/{id} — inspect an app

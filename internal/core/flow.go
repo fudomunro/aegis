@@ -452,7 +452,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 	for _, kind := range kindList {
 		providers := append([]string(nil), libraryProviders[kind.ID]...)
 		// User-defined kinds are fed by schema sources, not OAuth connectors.
-		if schema, ok := s.udtSchemaForKind(kind.ID); ok && len(providers) == 0 {
+		if schema, ok := s.udkSchemaForKind(kind.ID); ok && len(providers) == 0 {
 			for _, src := range schema.Sources {
 				providers = append(providers, src.ID)
 			}

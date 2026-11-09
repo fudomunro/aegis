@@ -1,4 +1,4 @@
-package udt
+package udk
 
 import (
 	"encoding/json"
@@ -13,12 +13,12 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// Registry holds loaded UDT schemas (issue #15 Phase 6 PoC).
+// Registry holds loaded UDK schemas (issue #15 Phase 6 PoC).
 // Schemas are data files under a user-types directory; this package maps
 // them onto the type layer and the existing library aggregate pipeline.
 type Registry struct {
 	mu        sync.RWMutex
-	byID      map[string]kinds.UserDefinedTypeSchema
+	byID      map[string]kinds.UserDefinedKindSchema
 	byPath    map[string]string // path → kind id
 	schemaDir map[string]string // kind id → directory of its schema.json
 	baseDir   string            // user-types root (discovery only)
@@ -26,13 +26,13 @@ type Registry struct {
 	overlayPath string
 	// overlay is the cached overlay so library GETs do not re-read disk on
 	// every request (issue #15 review). Invalidated on admin save.
-	overlay   *UserTypesOverlay
+	overlay   *UserKindsOverlay
 	overlayMu sync.Mutex // serializes admin read-modify-write of user_types.json
 }
 
 func newRegistry() *Registry {
 	return &Registry{
-		byID:      map[string]kinds.UserDefinedTypeSchema{},
+		byID:      map[string]kinds.UserDefinedKindSchema{},
 		byPath:    map[string]string{},
 		schemaDir: map[string]string{},
 	}
@@ -59,7 +59,7 @@ func (reg *Registry) LockOverlayWrite()   { reg.overlayMu.Lock() }
 func (reg *Registry) UnlockOverlayWrite() { reg.overlayMu.Unlock() }
 
 // SetOverlay caches a just-saved overlay (and clears it when nil).
-func (reg *Registry) SetOverlay(ov *UserTypesOverlay) {
+func (reg *Registry) SetOverlay(ov *UserKindsOverlay) {
 	if reg == nil {
 		return
 	}
@@ -69,9 +69,9 @@ func (reg *Registry) SetOverlay(ov *UserTypesOverlay) {
 }
 
 // Overlay returns the cached overlay, loading from disk on first use.
-func (reg *Registry) Overlay() *UserTypesOverlay {
+func (reg *Registry) Overlay() *UserKindsOverlay {
 	if reg == nil {
-		return &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
+		return &UserKindsOverlay{Kinds: map[string]KindOverlay{}}
 	}
 	reg.mu.RLock()
 	cached := reg.overlay
@@ -81,7 +81,7 @@ func (reg *Registry) Overlay() *UserTypesOverlay {
 	}
 	ov, err := LoadOverlay(reg.OverlayPath())
 	if err != nil {
-		return &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
+		return &UserKindsOverlay{Kinds: map[string]KindOverlay{}}
 	}
 	reg.SetOverlay(ov)
 	return ov
@@ -90,13 +90,13 @@ func (reg *Registry) Overlay() *UserTypesOverlay {
 // SchemaWithOverlay returns the kind schema with admin-selected local files
 // applied (issue #15). Falls back to the bare schema when the overlay is
 // missing or unreadable. Safe on a nil registry.
-func (reg *Registry) SchemaWithOverlay(id string) kinds.UserDefinedTypeSchema {
+func (reg *Registry) SchemaWithOverlay(id string) kinds.UserDefinedKindSchema {
 	if reg == nil {
-		return kinds.UserDefinedTypeSchema{}
+		return kinds.UserDefinedKindSchema{}
 	}
 	schema, _ := reg.Get(id)
 	ov := reg.Overlay()
-	return applyUserTypesOverlay(schema, ov.Kinds[id])
+	return applyUserKindsOverlay(schema, ov.Kinds[id])
 }
 
 // DirFor returns the pack directory that holds a kind's schema and relative
@@ -107,7 +107,7 @@ func (reg *Registry) DirFor(id string) string {
 	return reg.schemaDir[id]
 }
 
-// LoadUserDefinedTypes reads user-defined schema packs from dir.
+// LoadUserDefinedKinds reads user-defined schema packs from dir.
 // overlayPath (optional) is the admin user_types.json that selects local files.
 //
 // Layout (pack model used by examples/user-types/):
@@ -117,15 +117,15 @@ func (reg *Registry) DirFor(id string) string {
 //	dir/standalone.json                  # also accepted at the top level
 //
 // Invalid schemas are skipped with a log line — fail-open for the server
-// (issue #15: a bad UDT file must not take down built-in kinds).
-func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*Registry, []kinds.UserDefinedTypeSchema) {
+// (issue #15: a bad UDK file must not take down built-in kinds).
+func LoadUserDefinedKinds(dir, overlayPath string, logger *slog.Logger) (*Registry, []kinds.UserDefinedKindSchema) {
 	reg := newRegistry()
 	reg.baseDir = dir
 	reg.overlayPath = overlayPath
 	if dir == "" {
 		return reg, nil
 	}
-	var loaded []kinds.UserDefinedTypeSchema
+	var loaded []kinds.UserDefinedKindSchema
 	for _, path := range discoverSchemaFiles(dir, logger) {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -134,7 +134,7 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*Regist
 			}
 			continue
 		}
-		var schema kinds.UserDefinedTypeSchema
+		var schema kinds.UserDefinedKindSchema
 		if err := json.Unmarshal(raw, &schema); err != nil {
 			if logger != nil {
 				logger.Warn("user-defined types: parse failed", "path", path, "error", err)
@@ -172,7 +172,7 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*Regist
 		reg.byID[schema.ID] = schema
 		reg.schemaDir[schema.ID] = schemaDir
 		reg.byPath[schema.Path] = schema.ID
-		// UDTs are opt-in until data grant / permissions name them (places).
+		// UDKs are opt-in until data grant / permissions name them (places).
 		shared.MarkKindDefaultNone(schema.PermType)
 		loaded = append(loaded, schema)
 		if logger != nil {
@@ -210,7 +210,7 @@ func discoverSchemaFiles(dir string, logger *slog.Logger) []string {
 }
 
 // Get returns a schema by kind id.
-func (reg *Registry) Get(id string) (kinds.UserDefinedTypeSchema, bool) {
+func (reg *Registry) Get(id string) (kinds.UserDefinedKindSchema, bool) {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	s, ok := reg.byID[id]
@@ -227,10 +227,10 @@ func (reg *Registry) SchemaIDForPath(path string) (string, bool) {
 
 // All returns every loaded schema (stable registration order is not
 // guaranteed across map iteration; callers sort if needed).
-func (reg *Registry) All() []kinds.UserDefinedTypeSchema {
+func (reg *Registry) All() []kinds.UserDefinedKindSchema {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
-	out := make([]kinds.UserDefinedTypeSchema, 0, len(reg.byID))
+	out := make([]kinds.UserDefinedKindSchema, 0, len(reg.byID))
 	for _, s := range reg.byID {
 		out = append(out, s)
 	}

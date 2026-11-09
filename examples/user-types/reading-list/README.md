@@ -1,6 +1,6 @@
-# reading-list (user-defined type example)
+# reading-list (user-defined kind example)
 
-A portable **schema pack** for Aegis user-defined types (issue #15). Copy this
+A portable **schema pack** for Aegis user-defined kinds (issue #15). Copy this
 directory into Aegis's `user-types/` folder (or point `AEGIS_USER_TYPES_DIR`
 at a tree that contains it) and restart:
 
@@ -50,7 +50,7 @@ aegis-user-types/                  # proposed standalone repo
     ...
 ```
 
-See `docs/user-defined-types.md` for the schema format and the monorepo vs
+See `docs/user-defined-kinds.md` for the schema format and the monorepo vs
 own-repo tradeoff.
 
 ## Trying an HTTP source
@@ -75,4 +75,4 @@ Swap the sample source for a live feed (same field map idea):
 ```
 
 `file_json` is for demos and exports; `http_json` is for a JSON HTTP feed.
-Named OAuth providers stay named connectors — not UDT sources.
+Named OAuth providers stay named connectors — not UDK sources.

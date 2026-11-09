@@ -49,7 +49,7 @@ the shared word “agent”.
 | Aperture ops guide | `docs/configuring-aperture.md` | Human ops | Hooks, grants, Guardian migration. |
 | Immich runbook | `docs/immich-live-testing.md` | Human ops, QA | Live checklist; product contract callouts. |
 | CalDAV/CardDAV guide | `docs/caldav-carddav.md` | Human ops, End user | Nextcloud / iCloud app-specific passwords; mirror + freebusy. |
-| UDT design spike | `docs/user-defined-types.md`, `examples/user-types/` | Developer integrator, Pack author | Schema pack format. |
+| UDK design spike | `docs/user-defined-kinds.md`, `examples/user-types/` | Developer integrator, Pack author | Schema pack format. |
 | Architecture plan | `docs/restructure-core-types-connectors.md` | Coding agent | Historical; phases marked done. |
 | Example config | `aegis.example.json` | End user, Developer integrator | Self-describing `description` fields. |
 | Site README | `site/README.md` | Maintainer of marketing copy | Claim-sync guardrails. |
@@ -85,7 +85,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | Write policy | `core/canonical.go` | Runtime LLM agent | Canonical home first; no auto-mirror. |
 | Mail archive hints | `core/mail_archive_http.go` | Runtime LLM agent | Endpoint cookbook + sort recipes. |
 | Photo source discipline | `internal/kinds/builders.go` | Runtime LLM agent (as security policy) | No Photos.app / Immich env / raw CDN. |
-| UDT hints | `core/udt_handlers.go` | Runtime LLM agent + pack author | Schema field list. |
+| UDK hints | `core/udk_handlers.go` | Runtime LLM agent + pack author | Schema field list. |
 | Capabilities / Operation | `internal/shared/capabilities.go` + `Capabilities()` | Admin metadata (not agent discovery) | Provider-shaped English; **dialect differs** from SystemInstructions. |
 
 ### Logs and config
@@ -96,7 +96,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | CLI flag help (`run.go`) | Human ops, Coding agent | `-data-dir`, `-import-quicken`, `-auth-mode`, `-admin-api-key`, `-admin-logins`, empty-path disables. |
 | `aegis.json` / `data_grants.json` / `user_types.json` | End user (via admin), Human ops | Data, not comments. Admin saves never rewrite `aegis.json`. |
 | Encrypted secrets (`tokens.json`, static service credentials) | Human ops | AES-256-GCM under `-token-pass`; presence flags only in admin/API. |
-| UDT `schema.json` packs | Pack author | Field descriptions; “Always opt-in”. |
+| UDK `schema.json` packs | Pack author | Field descriptions; “Always opt-in”. |
 
 ---
 
@@ -114,7 +114,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 
 **Strengths:** setup path is real; secrets never displayed.
 
-**Gaps:** no non-admin household UI; admin often ops-heavy; UDT product surface still design-level (#15) while the site markets it.
+**Gaps:** no non-admin household UI; admin often ops-heavy; UDK product surface still design-level (#15) while the site markets it.
 
 ### C. Human ops / troubleshooter
 **Surfaces:** README ops sections (flags, cache, data dir), `docs/configuring-aperture.md`, `docs/caldav-carddav.md`, hook-health `fix` strings, slog, `/healthz` `/readyz` `/metrics`, admin Advanced, Immich runbook, import CLI flags, admin credentials (`-admin-api-key`, `-admin-logins`).

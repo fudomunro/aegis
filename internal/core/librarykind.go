@@ -37,7 +37,7 @@ func LibraryKindByID(id string) *kinds.LibraryKind {
 
 // allLibraryKinds returns every registered kind — built-in and
 // user-defined (issue #15). Prefer this over ranging libraryKinds directly
-// so UDTs appear in pre-request injection, admin listings, and flow maps.
+// so UDKs appear in pre-request injection, admin listings, and flow maps.
 func (s *Server) allLibraryKinds() []kinds.LibraryKind {
 	registry := s.kindRegistry()
 	out := make([]kinds.LibraryKind, 0, len(registry))
@@ -47,12 +47,12 @@ func (s *Server) allLibraryKinds() []kinds.LibraryKind {
 	return out
 }
 
-// udtSchemaForKind returns the user-defined schema backing a kind id, if any.
-func (s *Server) udtSchemaForKind(id string) (kinds.UserDefinedTypeSchema, bool) {
-	if s == nil || s.udts == nil {
-		return kinds.UserDefinedTypeSchema{}, false
+// udkSchemaForKind returns the user-defined schema backing a kind id, if any.
+func (s *Server) udkSchemaForKind(id string) (kinds.UserDefinedKindSchema, bool) {
+	if s == nil || s.udks == nil {
+		return kinds.UserDefinedKindSchema{}, false
 	}
-	return s.udts.Get(id)
+	return s.udks.Get(id)
 }
 
 // libraryInstructionsFor returns kind instructions plus a configured canonical
@@ -102,7 +102,7 @@ func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 		if !scopes.Allows(r, k.PermType, http.MethodGet) {
 			continue
 		}
-		if schema, ok := s.udtSchemaForKind(k.ID); ok {
+		if schema, ok := s.udkSchemaForKind(k.ID); ok {
 			out = append(out, s.userDefinedHint(schema))
 			continue
 		}

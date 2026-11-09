@@ -13,7 +13,7 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
-	schema := kinds.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedKindSchema{
 		ID:              "reading-list",
 		Label:           "reading list",
 		Path:            "/v1/library/reading-list",

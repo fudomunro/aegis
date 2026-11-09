@@ -26,7 +26,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/core/udt"
+	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -497,15 +497,15 @@ func Run() {
 	// User-defined types (issue #15): load schema packs from the user-types
 	// directory (default <data-dir>/user-types). Fail-open — a bad schema is
 	// skipped and logged; built-in kinds always stay available.
-	userTypesDir := filepath.Join(paths.Dir, "user-types")
+	userKindsDir := filepath.Join(paths.Dir, "user-types")
 	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
-		userTypesDir = shared.ExpandUserPath(v)
+		userKindsDir = shared.ExpandUserPath(v)
 	}
-	udtReg, udtLoaded := udt.LoadUserDefinedTypes(userTypesDir, udt.DefaultOverlayPath(paths.Config), slog.Default())
-	srv.udts = udtReg
+	udkReg, udkLoaded := udk.LoadUserDefinedKinds(userKindsDir, udk.DefaultOverlayPath(paths.Config), slog.Default())
+	srv.udks = udkReg
 	srv.registerUserDefinedKinds()
-	if len(udtLoaded) > 0 {
-		slog.Info("user-defined types ready", "dir", userTypesDir, "count", len(udtLoaded))
+	if len(udkLoaded) > 0 {
+		slog.Info("user-defined types ready", "dir", userKindsDir, "count", len(udkLoaded))
 	}
 
 	// Register service connectors.

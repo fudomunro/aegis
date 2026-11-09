@@ -595,7 +595,7 @@
         <a href="#section-takeout">Google Takeout</a>
         <a href="#section-quicken">Quicken import</a>
         <a href="#section-signal">Signal import</a>
-        <a href="#section-user-types">User-defined types</a>
+        <a href="#section-user-kinds">User-defined kinds</a>
         <a href="#section-sync">Data sync</a>
         <a href="#section-copies">Copy ledger</a>
         <a href="#section-cache">Cache</a>
@@ -756,23 +756,23 @@
       <div id="signal-result" class="meta"></div>
       <div id="signal-hints" class="meta" style="margin-top:0.35rem"></div>
 
-      <h2 class="section-heading" id="section-user-types">User-defined types (local files)</h2>
+      <h2 class="section-heading" id="section-user-kinds">User-defined kinds (local files)</h2>
       <div class="help-box">
         <h3>Select local JSON files for your types</h3>
-        <p>User-defined types load schema packs from the <code>user-types</code> directory. Use this panel to pick the local export files that feed each <code>file_json</code> source, or add an extra file. Selections save to <code>user_types.json</code> — schema packs are never rewritten. Agents read the result at <code>/v1/library/&lt;kind&gt;</code>.</p>
+        <p>User-defined kinds load schema packs from the <code>user-types</code> directory. Use this panel to pick the local export files that feed each <code>file_json</code> source, or add an extra file. Selections save to <code>user_types.json</code> — schema packs are never rewritten. Agents read the result at <code>/v1/library/&lt;kind&gt;</code>.</p>
       </div>
-      <div id="udt-status" class="meta">Loading…</div>
-      <div id="udt-kinds" style="margin-top:0.75rem"></div>
-      <div id="udt-browse" class="card" hidden style="margin-top:0.85rem">
+      <div id="udk-status" class="meta">Loading…</div>
+      <div id="udk-kinds" style="margin-top:0.75rem"></div>
+      <div id="udk-browse" class="card" hidden style="margin-top:0.85rem">
         <div class="toolbar">
-          <strong id="udt-browse-title">Browse files</strong>
+          <strong id="udk-browse-title">Browse files</strong>
           <div class="grow"></div>
-          <button class="btn" id="udt-browse-up" type="button">Up</button>
-          <button class="btn" id="udt-browse-close" type="button">Close</button>
+          <button class="btn" id="udk-browse-up" type="button">Up</button>
+          <button class="btn" id="udk-browse-close" type="button">Close</button>
         </div>
-        <div class="meta" id="udt-browse-path"></div>
-        <div id="udt-browse-entries" style="max-height:16rem; overflow:auto; margin-top:0.5rem"></div>
-        <div id="udt-browse-hint" class="meta" style="margin-top:0.35rem"></div>
+        <div class="meta" id="udk-browse-path"></div>
+        <div id="udk-browse-entries" style="max-height:16rem; overflow:auto; margin-top:0.5rem"></div>
+        <div id="udk-browse-hint" class="meta" style="margin-top:0.35rem"></div>
       </div>
 
       <h2 class="section-heading" id="section-sync">Data sync</h2>
@@ -2710,7 +2710,7 @@
   };
 
   // ensureLibraryKindEntry registers a kind the switcher does not know —
-  // user-defined types arrive with the ownership status and serve through
+  // user-defined kinds arrive with the ownership status and serve through
   // the generic item payload.
   function ensureLibraryKindEntry(st) {
     if (!st || !st.kind || LIBRARY_KINDS[st.kind]) return;
@@ -4630,10 +4630,10 @@ function selectTab(name, opts) {
   $("signal-refresh").addEventListener("click", () => loadSignalStatus());
   loadSignalStatus();
 
-  // --- User-defined type local files (issue #15) ---
-  let udtBrowseTarget = null; // {kindId, sourceId} or {kindId, extraId}
+  // --- User-defined kind local files (issue #15) ---
+  let udkBrowseTarget = null; // {kindId, sourceId} or {kindId, extraId}
 
-  function udtKindCard(k) {
+  function udkKindCard(k) {
     const fields = Object.keys(k.fields || {}).map((n) => {
       const f = k.fields[n];
       return escapeHtml(n) + (f && f.required ? "*" : "");
@@ -4657,8 +4657,8 @@ function selectTab(name, opts) {
         html += '<div class="meta"><strong>' + escapeHtml(src.name || src.id) + '</strong> <code>' + escapeHtml(src.id) + '</code></div>';
         html += '<div class="meta" style="margin:0.25rem 0">' + paths + "</div>";
         html += '<div class="toolbar">';
-        html += '<button class="btn" type="button" data-udt-browse="' + escapeHtml(k.id) + '" data-udt-source="' + escapeHtml(src.id) + '">Browse…</button>';
-        html += '<button class="btn" type="button" data-udt-clear="' + escapeHtml(k.id) + '" data-udt-source="' + escapeHtml(src.id) + '">Use schema default</button>';
+        html += '<button class="btn" type="button" data-udk-browse="' + escapeHtml(k.id) + '" data-udk-source="' + escapeHtml(src.id) + '">Browse…</button>';
+        html += '<button class="btn" type="button" data-udk-clear="' + escapeHtml(k.id) + '" data-udk-source="' + escapeHtml(src.id) + '">Use schema default</button>';
         html += "</div></div>";
       }
     } else {
@@ -4669,54 +4669,54 @@ function selectTab(name, opts) {
       html += '<div class="meta" style="margin-top:0.5rem"><strong>Extra files</strong></div>';
       for (const ef of extras) {
         html += '<div class="meta">· ' + escapeHtml(ef.name || ef.id) + ' — <code>' + escapeHtml(ef.path || "") + '</code> ';
-        html += '<button class="btn" type="button" data-udt-del-extra="' + escapeHtml(k.id) + '" data-udt-extra="' + escapeHtml(ef.id) + '">Remove</button></div>';
+        html += '<button class="btn" type="button" data-udk-del-extra="' + escapeHtml(k.id) + '" data-udk-extra="' + escapeHtml(ef.id) + '">Remove</button></div>';
       }
     }
     html += '<div class="toolbar" style="margin-top:0.55rem">';
-    html += '<button class="btn" type="button" data-udt-add-extra="' + escapeHtml(k.id) + '">Add extra file…</button>';
+    html += '<button class="btn" type="button" data-udk-add-extra="' + escapeHtml(k.id) + '">Add extra file…</button>';
     html += "</div></div>";
     return html;
   }
 
-  async function loadUDTStatus() {
-    const statusEl = $("udt-status");
-    const kindsEl = $("udt-kinds");
+  async function loadUDKStatus() {
+    const statusEl = $("udk-status");
+    const kindsEl = $("udk-kinds");
     if (!statusEl) return;
     try {
-      const st = await api("/v1/admin/udt/status");
+      const st = await api("/v1/admin/udk/status");
       const kinds = st.kinds || [];
       statusEl.innerHTML = st.enabled
-        ? '<div class="meta">User-types: <code>' + escapeHtml(st.user_types_dir || "") + "</code> · overlay <code>" +
+        ? '<div class="meta">User-kinds: <code>' + escapeHtml(st.user_kinds_dir || "") + "</code> · overlay <code>" +
           escapeHtml(st.overlay || "") + "</code> · " + kinds.length + " kind(s)</div>" +
           (st.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("")
-        : '<div class="error-box">' + escapeHtml((st.hints && st.hints[0]) || "No user-defined types loaded.") + "</div>";
-      kindsEl.innerHTML = kinds.map(udtKindCard).join("") ||
+        : '<div class="error-box">' + escapeHtml((st.hints && st.hints[0]) || "No user-defined kinds loaded.") + "</div>";
+      kindsEl.innerHTML = kinds.map(udkKindCard).join("") ||
         '<div class="meta">No schema packs found.</div>';
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
-      else statusEl.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load user-defined types") + "</div>";
+      else statusEl.innerHTML = '<div class="error-box">' + escapeHtml(err.message || "failed to load user-defined kinds") + "</div>";
     }
   }
 
-  async function udtBrowse(path) {
-    const panel = $("udt-browse");
-    const entriesEl = $("udt-browse-entries");
-    const pathEl = $("udt-browse-path");
-    const hintEl = $("udt-browse-hint");
+  async function udkBrowse(path) {
+    const panel = $("udk-browse");
+    const entriesEl = $("udk-browse-entries");
+    const pathEl = $("udk-browse-path");
+    const hintEl = $("udk-browse-hint");
     if (!panel) return;
     panel.hidden = false;
     pathEl.textContent = "Loading…";
     try {
       const q = path ? "?path=" + encodeURIComponent(path) : "";
-      const res = await api("/v1/admin/udt/browse" + q);
+      const res = await api("/v1/admin/udk/browse" + q);
       pathEl.textContent = res.path || "";
-      $("udt-browse-title").textContent = udtBrowseTarget && udtBrowseTarget.extraId
+      $("udk-browse-title").textContent = udkBrowseTarget && udkBrowseTarget.extraId
         ? "Choose extra file"
         : "Choose file for source";
       const rows = (res.entries || []).map((e) => {
         const label = e.is_dir ? "📁 " + e.name : "📄 " + e.name;
-        return '<button class="btn" type="button" style="display:block;width:100%;text-align:left;margin:0.15rem 0" data-udt-pick="' +
-          escapeHtml(e.path) + '" data-udt-isdir="' + (e.is_dir ? "1" : "0") + '">' + escapeHtml(label) + "</button>";
+        return '<button class="btn" type="button" style="display:block;width:100%;text-align:left;margin:0.15rem 0" data-udk-pick="' +
+          escapeHtml(e.path) + '" data-udk-isdir="' + (e.is_dir ? "1" : "0") + '">' + escapeHtml(label) + "</button>";
       }).join("");
       entriesEl.innerHTML = rows || '<div class="meta">Empty</div>';
       hintEl.innerHTML = (res.hints || []).map((h) => "<div>" + escapeHtml(h) + "</div>").join("");
@@ -4727,105 +4727,105 @@ function selectTab(name, opts) {
     }
   }
 
-  async function udtSaveSource(kindId, sourceId, paths) {
+  async function udkSaveSource(kindId, sourceId, paths) {
     try {
-      await api("/v1/admin/udt/kinds/" + encodeURIComponent(kindId) + "/sources/" + encodeURIComponent(sourceId), {
+      await api("/v1/admin/udk/kinds/" + encodeURIComponent(kindId) + "/sources/" + encodeURIComponent(sourceId), {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ paths }),
       });
-      $("udt-browse").hidden = true;
-      await loadUDTStatus();
+      $("udk-browse").hidden = true;
+      await loadUDKStatus();
     } catch (err) {
       if (err.status === 401) showAuthGate(true);
-      else $("udt-browse-hint").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "save failed") + "</div>";
+      else $("udk-browse-hint").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "save failed") + "</div>";
     }
   }
 
-  async function udtClearSource(kindId, sourceId) {
+  async function udkClearSource(kindId, sourceId) {
     try {
-      await api("/v1/admin/udt/kinds/" + encodeURIComponent(kindId) + "/sources/" + encodeURIComponent(sourceId), {
+      await api("/v1/admin/udk/kinds/" + encodeURIComponent(kindId) + "/sources/" + encodeURIComponent(sourceId), {
         method: "DELETE",
       });
-      await loadUDTStatus();
+      await loadUDKStatus();
     } catch (err) {
-      $("udt-status").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "clear failed") + "</div>";
+      $("udk-status").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "clear failed") + "</div>";
     }
   }
 
-  async function udtSaveExtra(kindId, path) {
+  async function udkSaveExtra(kindId, path) {
     try {
-      await api("/v1/admin/udt/kinds/" + encodeURIComponent(kindId) + "/extra", {
+      await api("/v1/admin/udk/kinds/" + encodeURIComponent(kindId) + "/extra", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ extra: { path } }),
       });
-      $("udt-browse").hidden = true;
-      await loadUDTStatus();
+      $("udk-browse").hidden = true;
+      await loadUDKStatus();
     } catch (err) {
-      $("udt-browse-hint").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "save failed") + "</div>";
+      $("udk-browse-hint").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "save failed") + "</div>";
     }
   }
 
-  async function udtDeleteExtra(kindId, extraId) {
+  async function udkDeleteExtra(kindId, extraId) {
     try {
-      await api("/v1/admin/udt/kinds/" + encodeURIComponent(kindId) + "/extra/" + encodeURIComponent(extraId), {
+      await api("/v1/admin/udk/kinds/" + encodeURIComponent(kindId) + "/extra/" + encodeURIComponent(extraId), {
         method: "DELETE",
       });
-      await loadUDTStatus();
+      await loadUDKStatus();
     } catch (err) {
-      $("udt-status").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "remove failed") + "</div>";
+      $("udk-status").innerHTML = '<div class="error-box">' + escapeHtml(err.message || "remove failed") + "</div>";
     }
   }
 
   document.addEventListener("click", (e) => {
     const t = e.target;
     if (!(t instanceof HTMLElement)) return;
-    if (t.dataset.udtBrowse) {
-      udtBrowseTarget = { kindId: t.dataset.udtBrowse, sourceId: t.dataset.udtSource || "" };
-      udtBrowse(null);
+    if (t.dataset.udkBrowse) {
+      udkBrowseTarget = { kindId: t.dataset.udkBrowse, sourceId: t.dataset.udkSource || "" };
+      udkBrowse(null);
       return;
     }
-    if (t.dataset.udtAddExtra) {
-      udtBrowseTarget = { kindId: t.dataset.udtAddExtra, extraId: "new" };
-      udtBrowse(null);
+    if (t.dataset.udkAddExtra) {
+      udkBrowseTarget = { kindId: t.dataset.udkAddExtra, extraId: "new" };
+      udkBrowse(null);
       return;
     }
-    if (t.dataset.udtClear) {
-      udtClearSource(t.dataset.udtClear, t.dataset.udtSource);
+    if (t.dataset.udkClear) {
+      udkClearSource(t.dataset.udkClear, t.dataset.udkSource);
       return;
     }
-    if (t.dataset.udtDelExtra) {
+    if (t.dataset.udkDelExtra) {
       if (confirm("Remove this extra file from the kind?")) {
-        udtDeleteExtra(t.dataset.udtDelExtra, t.dataset.udtExtra);
+        udkDeleteExtra(t.dataset.udkDelExtra, t.dataset.udkExtra);
       }
       return;
     }
-    if (t.dataset.udtPick !== undefined) {
-      const path = t.dataset.udtPick;
-      if (t.dataset.udtIsdir === "1") {
-        udtBrowse(path);
+    if (t.dataset.udkPick !== undefined) {
+      const path = t.dataset.udkPick;
+      if (t.dataset.udkIsdir === "1") {
+        udkBrowse(path);
         return;
       }
-      if (!udtBrowseTarget) return;
-      if (udtBrowseTarget.extraId === "new") {
-        udtSaveExtra(udtBrowseTarget.kindId, path);
+      if (!udkBrowseTarget) return;
+      if (udkBrowseTarget.extraId === "new") {
+        udkSaveExtra(udkBrowseTarget.kindId, path);
       } else {
-        udtSaveSource(udtBrowseTarget.kindId, udtBrowseTarget.sourceId, [path]);
+        udkSaveSource(udkBrowseTarget.kindId, udkBrowseTarget.sourceId, [path]);
       }
       return;
     }
-    if (t.id === "udt-browse-up") {
-      const panel = $("udt-browse");
-      udtBrowse(panel && panel.dataset.parent ? panel.dataset.parent : null);
+    if (t.id === "udk-browse-up") {
+      const panel = $("udk-browse");
+      udkBrowse(panel && panel.dataset.parent ? panel.dataset.parent : null);
       return;
     }
-    if (t.id === "udt-browse-close") {
-      $("udt-browse").hidden = true;
+    if (t.id === "udk-browse-close") {
+      $("udk-browse").hidden = true;
     }
   });
 
-  loadUDTStatus();
+  loadUDKStatus();
   $("clear-cache").addEventListener("click", async () => {
     if (!confirm("Clear all cached responses?")) return;
     $("clear-cache").disabled = true;

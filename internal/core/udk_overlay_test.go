@@ -10,11 +10,11 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/core/udt"
+	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
+func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 	pack := t.TempDir()
 	kindDir := filepath.Join(pack, "reading-list")
 	if err := os.MkdirAll(kindDir, 0o755); err != nil {
@@ -40,24 +40,24 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	}`), 0o600)
 
 	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
-	reg, loaded := udt.LoadUserDefinedTypes(pack, overlayPath, nil)
+	reg, loaded := udk.LoadUserDefinedKinds(pack, overlayPath, nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.udts = reg
+	srv.udks = reg
 	srv.registerUserDefinedKinds()
 
 	// Status
-	req := httptest.NewRequest(http.MethodGet, "/v1/admin/udt/status", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/admin/udk/status", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDT)(w, req)
+	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status code=%d body=%s", w.Code, w.Body.String())
 	}
-	var st udtAdminStatus
+	var st udkAdminStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatal(err)
 	}
@@ -69,14 +69,14 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	browseDir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(browseDir, "picked.json"), []byte(`{}`), 0o600)
 	_ = os.WriteFile(filepath.Join(browseDir, "skip.txt"), []byte(`x`), 0o600)
-	req = httptest.NewRequest(http.MethodGet, "/v1/admin/udt/browse?path="+browseDir, nil)
+	req = httptest.NewRequest(http.MethodGet, "/v1/admin/udk/browse?path="+browseDir, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDT)(w, req)
+	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("browse code=%d body=%s", w.Code, w.Body.String())
 	}
-	var br udtBrowseResult
+	var br udkBrowseResult
 	if err := json.Unmarshal(w.Body.Bytes(), &br); err != nil {
 		t.Fatal(err)
 	}
@@ -87,11 +87,11 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	// Select that file for the source
 	picked := filepath.Join(browseDir, "picked.json")
 	body, _ := json.Marshal(map[string]any{"paths": []string{picked}})
-	req = httptest.NewRequest(http.MethodPut, "/v1/admin/udt/kinds/reading-list/sources/sample-export", bytes.NewReader(body))
+	req = httptest.NewRequest(http.MethodPut, "/v1/admin/udk/kinds/reading-list/sources/sample-export", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDT)(w, req)
+	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("select code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -121,10 +121,10 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	}
 
 	// Clear selection
-	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/udt/kinds/reading-list/sources/sample-export", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/udk/kinds/reading-list/sources/sample-export", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDT)(w, req)
+	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("clear code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -134,7 +134,7 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	}
 }
 
-func TestHandleAdminUDT_ExtraFile(t *testing.T) {
+func TestHandleAdminUDK_ExtraFile(t *testing.T) {
 	pack := t.TempDir()
 	_ = os.WriteFile(filepath.Join(pack, "schema.json"), []byte(`{
 		"id": "notes",
@@ -150,20 +150,20 @@ func TestHandleAdminUDT_ExtraFile(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(pack, "notes.json"), []byte(`[{"title":"a"}]`), 0o600)
 
 	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
-	reg, _ := udt.LoadUserDefinedTypes(pack, overlayPath, nil)
+	reg, _ := udk.LoadUserDefinedKinds(pack, overlayPath, nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.udts = reg
+	srv.udks = reg
 
 	extraPath := filepath.Join(t.TempDir(), "extra.json")
 	_ = os.WriteFile(extraPath, []byte(`[{"title":"b"}]`), 0o600)
 	body, _ := json.Marshal(map[string]any{
 		"extra": map[string]any{"id": "my-extra", "path": extraPath},
 	})
-	req := httptest.NewRequest(http.MethodPost, "/v1/admin/udt/kinds/notes/extra", bytes.NewReader(body))
+	req := httptest.NewRequest(http.MethodPost, "/v1/admin/udk/kinds/notes/extra", bytes.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDT)(w, req)
+	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("extra code=%d body=%s", w.Code, w.Body.String())
 	}
@@ -172,10 +172,10 @@ func TestHandleAdminUDT_ExtraFile(t *testing.T) {
 		t.Fatalf("sources = %+v", schema.Sources)
 	}
 
-	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/udt/kinds/notes/extra/my-extra", nil)
+	req = httptest.NewRequest(http.MethodDelete, "/v1/admin/udk/kinds/notes/extra/my-extra", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminUDT)(w, req)
+	srv.AuthMiddleware(srv.HandleAdminUDK)(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("delete extra code=%d", w.Code)
 	}

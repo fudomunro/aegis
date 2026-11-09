@@ -1,4 +1,4 @@
-package udt
+package udk
 
 import (
 	"os"
@@ -20,7 +20,7 @@ func writeSchemaFile(t *testing.T, dir, name, content string) {
 	}
 }
 
-func TestLoadUserDefinedTypes_DefaultAccessCanonicalized(t *testing.T) {
+func TestLoadUserDefinedKinds_DefaultAccessCanonicalized(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name, schema string) {
 		t.Helper()
@@ -30,7 +30,7 @@ func TestLoadUserDefinedTypes_DefaultAccessCanonicalized(t *testing.T) {
 	}
 	write("synonym.json", `{"id": "syn-1", "label": "syn one", "default_access": "rw", "fields": {"name": {"type": "string"}}}`)
 	write("omitted.json", `{"id": "syn-2", "label": "syn two", "fields": {"name": {"type": "string"}}}`)
-	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
+	reg, loaded := LoadUserDefinedKinds(dir, "", nil)
 	if len(loaded) != 2 {
 		t.Fatalf("loaded %d schemas, want 2", len(loaded))
 	}
@@ -42,7 +42,7 @@ func TestLoadUserDefinedTypes_DefaultAccessCanonicalized(t *testing.T) {
 	}
 }
 
-func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
+func TestLoadUserDefinedKinds_SkipsInvalidAndCollisions(t *testing.T) {
 	dir := t.TempDir()
 	writeSchemaFile(t, dir, "bad.json", "{not json")
 	writeSchemaFile(t, dir, "no-fields.json", `{"id":"x","label":"x"}`)
@@ -59,7 +59,7 @@ func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
 		"identity": {"fields": ["name"]},
 		"sources": [{"id": "s", "kind": "file_json", "path": "plants.json", "field_map": {"name": "name"}}]
 	}`)
-	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
+	reg, loaded := LoadUserDefinedKinds(dir, "", nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded %d schemas, want 1: %+v", len(loaded), loaded)
 	}
@@ -71,14 +71,14 @@ func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
 	}
 }
 
-func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
+func TestUserKindsOverlay_ApplyFileSourcePaths(t *testing.T) {
 	dir := t.TempDir()
 	a := filepath.Join(dir, "a.json")
 	b := filepath.Join(dir, "b.json")
 	_ = os.WriteFile(a, []byte(`{}`), 0o600)
 	_ = os.WriteFile(b, []byte(`{}`), 0o600)
 
-	schema := kinds.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedKindSchema{
 		ID:     "reading-list",
 		Fields: map[string]kinds.UserDefinedField{"title": {}},
 		Sources: []kinds.UserDefinedSourceSpec{{
@@ -88,12 +88,12 @@ func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
 			FieldMap: map[string]string{"title": "title"},
 		}},
 	}
-	ov := UDTKindOverlay{
-		FileSources: map[string]UDTFileSourceOverlay{
+	ov := KindOverlay{
+		FileSources: map[string]FileSourceOverlay{
 			"sample-export": {Paths: []string{a, b}},
 		},
 	}
-	got := applyUserTypesOverlay(schema, ov)
+	got := applyUserKindsOverlay(schema, ov)
 	if len(got.Sources) != 2 {
 		t.Fatalf("sources = %+v", got.Sources)
 	}
@@ -105,8 +105,8 @@ func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
 	}
 }
 
-func TestUserTypesOverlay_ExtraFile(t *testing.T) {
-	schema := kinds.UserDefinedTypeSchema{
+func TestUserKindsOverlay_ExtraFile(t *testing.T) {
+	schema := kinds.UserDefinedKindSchema{
 		ID: "notes",
 		Fields: map[string]kinds.UserDefinedField{
 			"title":  {},
@@ -119,13 +119,13 @@ func TestUserTypesOverlay_ExtraFile(t *testing.T) {
 			FieldMap: map[string]string{"title": "t"},
 		}},
 	}
-	ov := UDTKindOverlay{
-		ExtraFiles: []UDTExtraFile{{
+	ov := KindOverlay{
+		ExtraFiles: []ExtraFile{{
 			ID:   "my-export",
 			Path: "/tmp/export.json",
 		}},
 	}
-	got := applyUserTypesOverlay(schema, ov)
+	got := applyUserKindsOverlay(schema, ov)
 	if len(got.Sources) != 2 {
 		t.Fatalf("sources = %+v", got.Sources)
 	}
@@ -138,14 +138,14 @@ func TestUserTypesOverlay_ExtraFile(t *testing.T) {
 	}
 }
 
-func TestLoadSaveUserTypesOverlay(t *testing.T) {
+func TestLoadSaveUserKindsOverlay(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "user_types.json")
 	ov, err := LoadOverlay(path)
 	if err != nil || len(ov.Kinds) != 0 {
 		t.Fatalf("empty overlay: %v %+v", err, ov)
 	}
-	ov.Kinds["reading-list"] = UDTKindOverlay{
-		FileSources: map[string]UDTFileSourceOverlay{
+	ov.Kinds["reading-list"] = KindOverlay{
+		FileSources: map[string]FileSourceOverlay{
 			"sample-export": {Paths: []string{"/tmp/books.json"}},
 		},
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// UserDefinedTypeSchema is the JSON description of a bring-your-own library
+// UserDefinedKindSchema is the JSON description of a bring-your-own library
 // kind (issue #15). Schemas are data, not compiled Go structs: a user (or an
 // example pack in its own repo) can define a type and source mapping without
 // changing Aegis.
@@ -21,7 +21,7 @@ import (
 //	  "identity": { "fields": ["title", "author"], "entity_id_field": "id" },
 //	  "sources": [ { "kind": "file_json", "path": "sample/books.json", ... } ]
 //	}
-type UserDefinedTypeSchema struct {
+type UserDefinedKindSchema struct {
 	// Version is the schema-format version. Empty is treated as "1".
 	Version string `json:"version,omitempty"`
 	// ID is the short kind name ("reading-list") used in cache keys, logs,
@@ -57,7 +57,7 @@ type UserDefinedTypeSchema struct {
 	Search *UserDefinedSearchSpec `json:"search,omitempty"`
 	// Sources lists how to fetch items for this kind.
 	Sources []UserDefinedSourceSpec `json:"sources,omitempty"`
-	// DefaultAccess is informational only (admin UI display). UDTs are always
+	// DefaultAccess is informational only (admin UI display). UDKs are always
 	// opt-in — a pack cannot grant agent access (issue #15 review). Enable a
 	// kind via data grants admin, never via the schema file.
 	DefaultAccess string `json:"default_access,omitempty"`
@@ -99,9 +99,9 @@ type UserDefinedSearchSpec struct {
 	TitleField string `json:"title_field,omitempty"`
 }
 
-// UserDefinedSourceSpec is one fetch mapping for a UDT. PoC supports
+// UserDefinedSourceSpec is one fetch mapping for a UDK. PoC supports
 // "file_json" (local sample / export) and "http_json" (GET + field map).
-// Named-service connectors stay the path for OAuth providers; UDT sources
+// Named-service connectors stay the path for OAuth providers; UDK sources
 // are user-supplied endpoints or files (issue #15).
 type UserDefinedSourceSpec struct {
 	// ID is the source / service id written into Sources[].Service.
@@ -194,7 +194,7 @@ var userDefinedSchemaFormatVersions = map[string]bool{
 var userDefinedIDPattern = regexp.MustCompile(`^[a-z][a-z0-9-]*$`)
 
 // ReservedLibraryPathIDs are /v1/library/{id} segments owned by built-in
-// routes that are not LibraryKind entries (links, review, …). A UDT id may
+// routes that are not LibraryKind entries (links, review, …). A UDK id may
 // never claim these paths (issue #15 review: path collision / mux panic).
 var ReservedLibraryPathIDs = map[string]bool{
 	"links":    true,
@@ -247,7 +247,7 @@ func ValidateHTTPJSONHeaders(headers map[string]string) error {
 //   - id matches userDefinedIDPattern and is not a reserved library path
 //   - perm_type is always the id (no override that could shadow built-ins)
 //   - path is always "/v1/library/" + id (no free-form mux patterns)
-func (s *UserDefinedTypeSchema) Normalize() error {
+func (s *UserDefinedKindSchema) Normalize() error {
 	if s == nil {
 		return fmt.Errorf("nil schema")
 	}
@@ -384,7 +384,7 @@ func (s *UserDefinedTypeSchema) Normalize() error {
 
 // LibraryKind converts the schema into type-layer kind metadata. Runtime
 // visibility predicates stay on the core registration wrapper (issue #15).
-func (s UserDefinedTypeSchema) LibraryKind() LibraryKind {
+func (s UserDefinedKindSchema) LibraryKind() LibraryKind {
 	k := LibraryKind{
 		ID:              s.ID,
 		Path:            s.Path,
@@ -411,7 +411,7 @@ func (s UserDefinedTypeSchema) LibraryKind() LibraryKind {
 
 // UserDefinedItemName picks the display name for an item: preferred identity
 // field, then name/title/label, then source id.
-func (s UserDefinedTypeSchema) UserDefinedItemName(item UserDefinedItem) string {
+func (s UserDefinedKindSchema) UserDefinedItemName(item UserDefinedItem) string {
 	if item.Name != "" {
 		return item.Name
 	}
@@ -429,7 +429,7 @@ func (s UserDefinedTypeSchema) UserDefinedItemName(item UserDefinedItem) string 
 }
 
 // UserDefinedEntityID returns the durable id when the schema declares one.
-func (s UserDefinedTypeSchema) UserDefinedEntityID(item UserDefinedItem) string {
+func (s UserDefinedKindSchema) UserDefinedEntityID(item UserDefinedItem) string {
 	if item.EntityID != "" {
 		return item.EntityID
 	}
@@ -449,7 +449,7 @@ func (s UserDefinedTypeSchema) UserDefinedEntityID(item UserDefinedItem) string 
 
 // UserDefinedIdentityKey builds the name-normalized multi-field identity key
 // used when no durable EntityID is present.
-func (s UserDefinedTypeSchema) UserDefinedIdentityKey(item UserDefinedItem) string {
+func (s UserDefinedKindSchema) UserDefinedIdentityKey(item UserDefinedItem) string {
 	parts := make([]string, 0, len(s.Identity.Fields))
 	for _, name := range s.Identity.Fields {
 		v, ok := item.Fields[name]
@@ -468,7 +468,7 @@ func (s UserDefinedTypeSchema) UserDefinedIdentityKey(item UserDefinedItem) stri
 //
 // Multi-source entries union Sources in first-seen order. Field conflicts keep
 // the first non-empty value (same fail-open spirit as name merges elsewhere).
-func MergeUserDefinedItems(schema UserDefinedTypeSchema, in []UserDefinedItem) []UserDefinedItem {
+func MergeUserDefinedItems(schema UserDefinedKindSchema, in []UserDefinedItem) []UserDefinedItem {
 	type acc struct {
 		item UserDefinedItem
 		seen map[string]bool // source service+id already present
@@ -583,7 +583,7 @@ func MergeUserDefinedItems(schema UserDefinedTypeSchema, in []UserDefinedItem) [
 }
 
 // EncodeUserDefinedList builds the neutral list envelope for a schema.
-func EncodeUserDefinedList(schema UserDefinedTypeSchema, items []UserDefinedItem, page PageRequest, bySvc map[string]LibraryServiceStatus) UserDefinedList {
+func EncodeUserDefinedList(schema UserDefinedKindSchema, items []UserDefinedItem, page PageRequest, bySvc map[string]LibraryServiceStatus) UserDefinedList {
 	truncated := false
 	for _, st := range bySvc {
 		if st.Truncated {

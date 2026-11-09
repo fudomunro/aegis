@@ -1,4 +1,4 @@
-package udt
+package udk
 
 import (
 	"encoding/json"
@@ -11,8 +11,8 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// userTypesFileVersion is the on-disk schema for user_types.json.
-const userTypesFileVersion = 1
+// userKindsFileVersion is the on-disk schema for user_types.json.
+const userKindsFileVersion = 1
 
 // DefaultOverlayPath returns the overlay path beside aegis.json.
 func DefaultOverlayPath(configPath string) string {
@@ -26,15 +26,15 @@ func DefaultOverlayPath(configPath string) string {
 	return "user_types.json"
 }
 
-// UDTFileSourceOverlay points a schema file_json source at local files chosen
+// FileSourceOverlay points a schema file_json source at local files chosen
 // in the admin UI (issue #15). Paths replaces the schema's single Path.
-type UDTFileSourceOverlay struct {
+type FileSourceOverlay struct {
 	Paths []string `json:"paths"`
 }
 
-// UDTExtraFile is an admin-added local JSON file for a kind. When FieldMap is
+// ExtraFile is an admin-added local JSON file for a kind. When FieldMap is
 // empty the mapper name-matches schema fields to top-level JSON keys.
-type UDTExtraFile struct {
+type ExtraFile struct {
 	ID          string            `json:"id"`
 	Name        string            `json:"name,omitempty"`
 	Path        string            `json:"path"`
@@ -44,23 +44,23 @@ type UDTExtraFile struct {
 	URLTemplate string            `json:"url_template,omitempty"`
 }
 
-// UDTKindOverlay is the admin-owned source configuration for one UDT kind.
-type UDTKindOverlay struct {
-	FileSources map[string]UDTFileSourceOverlay `json:"file_sources,omitempty"`
-	ExtraFiles  []UDTExtraFile                  `json:"extra_files,omitempty"`
+// KindOverlay is the admin-owned source configuration for one UDK kind.
+type KindOverlay struct {
+	FileSources map[string]FileSourceOverlay `json:"file_sources,omitempty"`
+	ExtraFiles  []ExtraFile                  `json:"extra_files,omitempty"`
 }
 
-// UserTypesOverlay is the admin-edited overlay (user_types.json). It never
+// UserKindsOverlay is the admin-edited overlay (user_types.json). It never
 // rewrites schema packs — only local file selection / extra feeds.
-type UserTypesOverlay struct {
-	Version int                       `json:"version"`
-	Kinds   map[string]UDTKindOverlay `json:"kinds"`
+type UserKindsOverlay struct {
+	Version int                    `json:"version"`
+	Kinds   map[string]KindOverlay `json:"kinds"`
 }
 
-func LoadOverlay(path string) (*UserTypesOverlay, error) {
-	ov := &UserTypesOverlay{
-		Version: userTypesFileVersion,
-		Kinds:   map[string]UDTKindOverlay{},
+func LoadOverlay(path string) (*UserKindsOverlay, error) {
+	ov := &UserKindsOverlay{
+		Version: userKindsFileVersion,
+		Kinds:   map[string]KindOverlay{},
 	}
 	if strings.TrimSpace(path) == "" {
 		return ov, nil
@@ -76,21 +76,21 @@ func LoadOverlay(path string) (*UserTypesOverlay, error) {
 		return nil, fmt.Errorf("parsing user-types overlay: %w", err)
 	}
 	if ov.Kinds == nil {
-		ov.Kinds = map[string]UDTKindOverlay{}
+		ov.Kinds = map[string]KindOverlay{}
 	}
 	return ov, nil
 }
 
-func SaveOverlay(path string, ov *UserTypesOverlay) error {
+func SaveOverlay(path string, ov *UserKindsOverlay) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("user-types overlay has no path; cannot save")
 	}
-	out := UserTypesOverlay{
-		Version: userTypesFileVersion,
+	out := UserKindsOverlay{
+		Version: userKindsFileVersion,
 		Kinds:   ov.Kinds,
 	}
 	if out.Kinds == nil {
-		out.Kinds = map[string]UDTKindOverlay{}
+		out.Kinds = map[string]KindOverlay{}
 	}
 	data, err := json.MarshalIndent(out, "", "  ")
 	if err != nil {
@@ -105,9 +105,9 @@ func SaveOverlay(path string, ov *UserTypesOverlay) error {
 	return nil
 }
 
-// applyUserTypesOverlay returns a copy of schema with admin-selected local
+// applyUserKindsOverlay returns a copy of schema with admin-selected local
 // file paths and extra files applied. Schema packs stay untouched on disk.
-func applyUserTypesOverlay(schema kinds.UserDefinedTypeSchema, ov UDTKindOverlay) kinds.UserDefinedTypeSchema {
+func applyUserKindsOverlay(schema kinds.UserDefinedKindSchema, ov KindOverlay) kinds.UserDefinedKindSchema {
 	out := schema
 	out.Sources = append([]kinds.UserDefinedSourceSpec(nil), schema.Sources...)
 	for i := range out.Sources {

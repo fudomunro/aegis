@@ -4,8 +4,8 @@ import (
 	"testing"
 )
 
-func TestUserDefinedTypeSchema_SearchDeclaration(t *testing.T) {
-	s := UserDefinedTypeSchema{
+func TestUserDefinedKindSchema_SearchDeclaration(t *testing.T) {
+	s := UserDefinedKindSchema{
 		ID:    "reading-list",
 		Label: "reading list",
 		Fields: map[string]UserDefinedField{
@@ -30,9 +30,9 @@ func TestUserDefinedTypeSchema_SearchDeclaration(t *testing.T) {
 	}
 }
 
-func TestUserDefinedTypeSchema_SearchValidation(t *testing.T) {
-	base := func() UserDefinedTypeSchema {
-		return UserDefinedTypeSchema{
+func TestUserDefinedKindSchema_SearchValidation(t *testing.T) {
+	base := func() UserDefinedKindSchema {
+		return UserDefinedKindSchema{
 			ID:    "reading-list",
 			Label: "reading list",
 			Fields: map[string]UserDefinedField{

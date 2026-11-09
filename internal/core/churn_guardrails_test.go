@@ -52,9 +52,9 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/shared",
 	},
-	// the UDT registry loads schema packs and applies the admin overlay;
+	// the UDK registry loads schema packs and applies the admin overlay;
 	// kind queries go through kinds, access defaults through policy.
-	"internal/core/udt": {
+	"internal/core/udk": {
 		"github.com/fudomunro/aegis/internal/core/policy",
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/shared",

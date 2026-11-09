@@ -43,7 +43,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Copy ledger** | Durable record of mirrored/backup copies | |
 | **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
-| **User-defined type** | Schema pack under `user-types/` | The extension mechanism, in plain English — not the registry axis; that is a **library kind**. **Schema pack** is the on-disk artifact (file/dir). Avoid “type pack” |
+| **User-defined kind (UDK)** | Schema pack under `user-types/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
 | **Free/busy** | Busy intervals only (no titles/attendees) | Also `summary` (transactions), `city`/`precise` (places) |
 
@@ -51,7 +51,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 
 “Data type” reads as general development language (Go’s `type`, int/string) and
 collides with the **field type** axis, whose own `type` key already lives beside
-it in `internal/shared/capabilities.go` and `internal/kinds/udt.go`. The
+it in `internal/shared/capabilities.go` and `internal/kinds/userdefined_schema.go`. The
 registry axis is already shipped as `kind` in the URL and in `LibraryKind`, so
 prose follows the API. Keep the three policy nouns distinct — **data grant**
 (what the user allows), **library kind** (which slice), **access level** (how
@@ -72,7 +72,7 @@ axis it is keyed by.
 | **Effective access** | Resolved level after data grant + service tighten | |
 | **Accessor** | Principal-level data grant per library kind (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
-| **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDT file selection); agent credentials are never admin (issue #181) |
+| **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDK file selection); agent credentials are never admin (issue #181) |
 | **External principal** | Caller holding an **invite token** (a data-scope key) | Deny-by-default grants; never admin; may be a person, backend, or another Aegis operator |
 | **Invite token** | The credential issued to an external principal | Data-scope key, **hashed at rest** (`api_key_hash`, 0600) like app tokens. Minted/rotated by the admin (`/v1/admin/data-scopes`), plaintext shown once; legacy plaintext entries migrate on load |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
@@ -152,5 +152,8 @@ mean in prose:
 - **Data grant** — deliberately *not* “kind grant”. It names what is granted
   (the user's data); **library kind** names the slice it is keyed by. “Kind
   grant on the kind `tracks`” loads one word with two senses.
-- **User-defined type** — the extension mechanism in plain English. The
-  registry axis it contributes to is still a **library kind**.
+- **User-defined kind (UDK)** — the extension mechanism in plain English; it
+  publishes a **library kind**, which stays the registry axis. Retired
+  synonyms: “user-defined type”, “UDT”, “type pack”. Wire names follow the
+  new concept (`/v1/admin/udk`, `user_kinds_dir`); on-disk names are frozen
+  for now — `user_types.json`, `user-types/`, `AEGIS_USER_TYPES_DIR`.

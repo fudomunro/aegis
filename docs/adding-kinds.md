@@ -262,7 +262,7 @@ directions — a kind missing a route or a route without a kind fails CI.
 
 Schema packs under `user-types/` load through `kinds.UserDefined(schema)`
 into the same pipeline and registry (`kinds.MergeUserDefined` refuses any
-pack that shadows a built-in). See `docs/user-defined-types.md`. Packs
+pack that shadows a built-in). See `docs/user-defined-kinds.md`. Packs
 declare sources and fields as data; they never self-enable (an admin data
 grant names the kind) and never store secrets in `http_json` headers.
 

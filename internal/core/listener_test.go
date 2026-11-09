@@ -25,7 +25,7 @@ func TestAPIRouteAllowed(t *testing.T) {
 		{http.MethodGet, "/v1/library/messages/google-gmail/abc"},
 		{http.MethodGet, "/v1/library/documents/immich/abc/text"},
 		{http.MethodGet, "/v1/library/links"},
-		{http.MethodGet, "/v1/library/review-page-of-udt"},
+		{http.MethodGet, "/v1/library/review-page-of-udk"},
 		{http.MethodHead, "/v1/library/contacts"},
 		{http.MethodGet, "/v1/services/immich/assets/abc/original"},
 		{http.MethodPost, "/v1/services/signal/import"},
