@@ -25,20 +25,26 @@ const (
 // https://github.com/fudomunro/aegis/issues/4
 func NormalizeIdentityKey(name string) string {
 	// Compare on whitespace-collapsed tokens and drop the YouTube "- topic"
-	// unit wherever it appears ("Name - Topic" / "Name\n- Topic"). Token
-	// pairing keeps this idempotent; a raw " - topic" replace does not once
-	// Fields has already eaten the leading space (issue #107 fuzz).
+	// unit wherever it appears ("Name - Topic" / "Name\n- Topic"). The pair
+	// drop runs to a fixpoint: one greedy pass is not idempotent when its
+	// leftovers re-pair across the join ("- - topic topic" -> "- topic" ->
+	// ""), which the issue #107 fuzz target checks.
 	words := strings.Fields(strings.ToLower(strings.TrimSpace(name)))
-	out := make([]string, 0, len(words))
-	for i := 0; i < len(words); {
-		if i+1 < len(words) && words[i] == "-" && words[i+1] == "topic" {
-			i += 2
-			continue
+	for changed := true; changed; {
+		out := make([]string, 0, len(words))
+		changed = false
+		for i := 0; i < len(words); {
+			if i+1 < len(words) && words[i] == "-" && words[i+1] == "topic" {
+				i += 2
+				changed = true
+				continue
+			}
+			out = append(out, words[i])
+			i++
 		}
-		out = append(out, words[i])
-		i++
+		words = out
 	}
-	return strings.Join(out, " ")
+	return strings.Join(words, " ")
 }
 
 // NewArtist builds a unified artist from one service spelling.
