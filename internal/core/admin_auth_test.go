@@ -23,8 +23,8 @@ var adminWriteCases = []struct {
 }{
 	{"data-grants", http.MethodPut, "/v1/admin/data-grants", `{"data_grants":{}}`},
 	{"apps-create", http.MethodPost, "/v1/admin/apps", `{"name":"evil","scopes":{"tracks":"read"}}`},
-	{"udt-source", http.MethodPut, "/v1/admin/udt/kinds/k/sources/s", `{"path":"/etc/passwd"}`},
-	{"udt-extra", http.MethodPost, "/v1/admin/udt/kinds/k/extra", `{"path":"/etc/passwd"}`},
+	{"udk-source", http.MethodPut, "/v1/admin/udk/kinds/k/sources/s", `{"path":"/etc/passwd"}`},
+	{"udk-extra", http.MethodPost, "/v1/admin/udk/kinds/k/extra", `{"path":"/etc/passwd"}`},
 	{"mirror", http.MethodPost, "/v1/library/mirror", `{"kind":"tracks"}`},
 	{"photos-share", http.MethodPost, "/v1/library/photos/share", `{"service":"immich","id":"p1"}`},
 	{"links-create", http.MethodPost, "/v1/library/links", `{"kind":"playlist","sources":[]}`},

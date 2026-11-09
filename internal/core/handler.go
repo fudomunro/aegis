@@ -23,7 +23,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/core/udt"
+	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -192,9 +192,9 @@ type Server struct {
 	grants *GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
 	csrfTokens *shared.StateStore
-	// udts holds user-defined type schemas loaded from the user-types
+	// udks holds user-defined type schemas loaded from the user-types
 	// directory (issue #15). May be nil when none are configured.
-	udts *udt.Registry
+	udks *udk.Registry
 }
 
 // appAllowedPaths returns the exact paths a third-party app token may call.

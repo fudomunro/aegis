@@ -277,11 +277,11 @@ from other LAN interfaces.
     mode 0700 directory, not world-readable, included in the same backup
     you use for other Aegis state. Default retention is 30 days
     (`-audit-retention-days`).
-13. **User-defined type file access is admin-equivalent.**
-    `GET /v1/admin/udt/browse` lists directories on the Aegis host and the
+13. **User-defined kind file access is admin-equivalent.**
+    `GET /v1/admin/udk/browse` lists directories on the Aegis host and the
     source/extra endpoints accept absolute local paths. Those endpoints
     require an **admin** principal (issue #181). Whatever file is selected can
-    then be read through `/v1/library/{udt}` by authorized agents — so the
+    then be read through `/v1/library/{udk}` by authorized agents — so the
     *selection* is the dangerous step and is no longer on the agent credential.
     Schema packs must not embed secrets in `http_json` headers (rejected at
     load); use named connections / the encrypted token store.

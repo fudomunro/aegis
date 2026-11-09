@@ -160,8 +160,8 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 	mux.HandleFunc("/v1/admin/timeline/{path...}", admin(srv.HandleAdminTimeline))
 	mux.HandleFunc("/v1/admin/signal", admin(srv.HandleAdminSignal))
 	mux.HandleFunc("/v1/admin/signal/{path...}", admin(srv.HandleAdminSignal))
-	mux.HandleFunc("/v1/admin/udt", admin(srv.HandleAdminUDT))
-	mux.HandleFunc("/v1/admin/udt/{path...}", admin(srv.HandleAdminUDT))
+	mux.HandleFunc("/v1/admin/udk", admin(srv.HandleAdminUDK))
+	mux.HandleFunc("/v1/admin/udk/{path...}", admin(srv.HandleAdminUDK))
 
 	// Fallback: unlisted /v1/admin/* paths answer 404 (the former
 	// handleAdminRoutes default case). Pattern specificity ensures every

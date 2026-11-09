@@ -34,7 +34,7 @@ func TestBuiltinLibraryKinds_UniqueIDs(t *testing.T) {
 func TestBuiltinLibraryKinds_Reserved(t *testing.T) {
 	for _, k := range BuiltinLibraryKinds {
 		if !IsReservedUserDefinedID(k.ID) {
-			t.Errorf("kind %q is not reserved; a UDT pack could shadow it", k.ID)
+			t.Errorf("kind %q is not reserved; a UDK pack could shadow it", k.ID)
 		}
 		if !IsReservedKindKey(k.ID) {
 			t.Errorf("kind %q missing from reserved kind keys", k.ID)
@@ -60,13 +60,13 @@ func TestBuiltinLibraryKinds_Reserved(t *testing.T) {
 		}
 	}
 	if IsReservedUserDefinedID("reading-list") {
-		t.Error("unrelated UDT id must not be reserved")
+		t.Error("unrelated UDK id must not be reserved")
 	}
 }
 
-func TestUserDefinedTypeSchema_NormalizeRejectsBuiltinIDs(t *testing.T) {
+func TestUserDefinedKindSchema_NormalizeRejectsBuiltinIDs(t *testing.T) {
 	for _, k := range BuiltinLibraryKinds {
-		s := UserDefinedTypeSchema{
+		s := UserDefinedKindSchema{
 			ID:     k.ID,
 			Fields: map[string]UserDefinedField{"name": {}},
 			Identity: UserDefinedIdentity{

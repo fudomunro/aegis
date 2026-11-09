@@ -229,7 +229,7 @@ func TestWriteRoutes_CrossOriginFormAndTextPlain(t *testing.T) {
 		{http.MethodPost, "/v1/admin/apps", "text/plain", `{"id":"eco","name":"eco"}`, true},
 		{http.MethodPost, "/v1/admin/cache/clear", "text/plain", `{}`, true},
 		{http.MethodPost, "/v1/admin/mail/sync", "text/plain", `{"max_messages":1}`, true},
-		{http.MethodPost, "/v1/admin/udt/sources", "text/plain", `{"id":"x"}`, true},
+		{http.MethodPost, "/v1/admin/udk/sources", "text/plain", `{"id":"x"}`, true},
 		{http.MethodPost, "/v1/library/mirror", "text/plain", `{}`, true},
 		{http.MethodDelete, "/v1/library/links/abc", "application/json", `{}`, true},
 	}

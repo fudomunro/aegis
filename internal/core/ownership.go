@@ -378,7 +378,7 @@ func (s *Server) HandleAdminOwnership(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, kind string) {
 	if LibraryKindByID(kind) == nil {
-		if _, ok := s.udtSchemaForKind(kind); !ok {
+		if _, ok := s.udkSchemaForKind(kind); !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}
@@ -407,7 +407,7 @@ func (s *Server) handleOwnershipConfirm(w http.ResponseWriter, r *http.Request, 
 
 func (s *Server) handleOwnershipReopen(w http.ResponseWriter, r *http.Request, kind string) {
 	if LibraryKindByID(kind) == nil {
-		if _, ok := s.udtSchemaForKind(kind); !ok {
+		if _, ok := s.udkSchemaForKind(kind); !ok {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown kind "+kind)
 			return
 		}

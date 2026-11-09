@@ -1,4 +1,4 @@
-# User-defined types (issue #15) — design spike + PoC
+# User-defined kinds (issue #15) — design spike + PoC
 
 Status: **draft PoC** on `feat/issue-15-user-defined-types`.
 Related: restructure plan (`docs/restructure-core-types-connectors.md` Phase 6),
@@ -17,10 +17,10 @@ the same kind-centric surface as built-ins:
 
 - `GET /v1/library/{kind}`
 - neutral list (`name`, `fields`, `sources[]`)
-- type-owned permissions (opt-in by default)
+- kind-owned permissions (opt-in by default)
 - pre-request keyword injection
 
-Named connectors (Spotify, Gmail, …) stay the path for OAuth providers. UDTs
+Named connectors (Spotify, Gmail, …) stay the path for OAuth providers. UDKs
 cover **user-supplied** shapes: a spreadsheet export, a JSON HTTP feed, a wiki
 API — data that will never be a compiled-in Aegis connector.
 
@@ -30,9 +30,9 @@ Open product questions intentionally **not** closed by this PoC:
 |----------|------------|
 | v1 sources | `file_json` + `http_json` only. SQL / CalDAV / scrapers later. |
 | Who authors schemas | Config files on disk (`user-types/`). Admin UI later. |
-| Canonical ownership | UDTs can set `canonical_for` via existing config; no new semantics. |
+| Canonical ownership | UDKs can set `canonical_for` via existing config; no new semantics. |
 | Field-level redaction | Schema marks `sensitive: true`; enforcement is future #148 work. |
-| Write-back / mirrors | Out of scope. UDTs are read-only lists in this PoC. |
+| Write-back / mirrors | Out of scope. UDKs are read-only lists in this PoC. |
 
 ---
 
@@ -96,7 +96,7 @@ One JSON file per kind. Example: `examples/user-types/reading-list/schema.json`.
 
 ### Neutral response envelope
 
-Built-in kinds share one envelope; UDTs keep it:
+Built-in kinds share one envelope; UDKs keep it:
 
 ```json
 {
@@ -116,12 +116,12 @@ Built-in kinds share one envelope; UDTs keep it:
 }
 ```
 
-Product rules that stay true for UDTs:
+Product rules that stay true for UDKs:
 
 1. **Service identity lives in `sources[]`** — never top-level.
 2. **Fail-open** — one bad source degrades `by_service`; the list still returns.
 3. **Aegis does not store media** — only the mapped metadata.
-4. **Permissions are data** — UDTs are opt-in until data grant enables them.
+4. **Permissions are data** — UDKs are opt-in until data grant enables them.
 5. **Coverage floor** — schema load / map / merge are unit-tested in this PR.
 
 ---
@@ -130,9 +130,9 @@ Product rules that stay true for UDTs:
 
 ```text
 schema.json
-    │  LoadUserDefinedTypes
+    │  LoadUserDefinedKinds
     ▼
-kinds.UserDefinedTypeSchema ──► kinds.LibraryKind
+kinds.UserDefinedKindSchema ──► kinds.LibraryKind
     │                               │
     │  field_map + dottedPath       │  allLibraryKinds()
     ▼                               ▼
@@ -146,30 +146,30 @@ kinds.Aggregate  (same pipeline as playlists/tracks/…)
 GET /v1/library/{id}
 ```
 
-| Layer | UDT responsibility |
+| Layer | UDK responsibility |
 |-------|-------------------|
 | `internal/kinds` | Schema, neutral item, identity/merge, list encode |
 | `internal/shared` | Opt-in kind-rule registration (`MarkKindDefaultNone`) |
 | `internal/core` | Load dir, map source JSON, generic fetch, aggregate handler |
-| `internal/connectors` | *Not used* — UDT sources are data feeds, not OAuth connectors |
+| `internal/connectors` | *Not used* — UDK sources are data feeds, not OAuth connectors |
 
-Named-service connectors remain first-class. UDTs do **not** replace them and
+Named-service connectors remain first-class. UDKs do **not** replace them and
 do not invent a second proxy path.
 
 ---
 
 ## 4. Permissions
 
-- Every UDT id is marked **opt-in** (`shared.MarkKindDefaultNone`) so a new pack
+- Every UDK id is marked **opt-in** (`shared.MarkKindDefaultNone`) so a new pack
   is never agent-visible by accident.
-- **Packs cannot self-enable.** `default_access` is informational only; type
-  policy must name the kind (admin UI / `PUT /v1/admin/data-grants`).
-- `id` must match `^[a-z][a-z0-9-]*$` and must not collide with built-in data
-  types or `/v1/library` reserved segments (`links`, `review`, `copies`, …).
+- **Packs cannot self-enable.** `default_access` is informational only; a data
+  grant must name the kind (admin UI / `PUT /v1/admin/data-grants`).
+- `id` must match `^[a-z][a-z0-9-]*$` and must not collide with built-in library
+  kinds or `/v1/library` reserved segments (`links`, `review`, `copies`, …).
   `perm_type` is always the id; `path` is always `/v1/library/{id}`.
 - Empty / `none` keeps the kind hidden until the admin enables it — same as
   places (#142).
-- Provider overrides do not apply: UDT sources are not OAuth services.
+- Provider overrides do not apply: UDK sources are not OAuth services.
 
 ---
 
@@ -177,12 +177,12 @@ do not invent a second proxy path.
 
 | Piece | Location |
 |-------|----------|
-| Schema + item + merge | `internal/kinds/udt.go` |
+| Schema + item + merge | `internal/kinds/userdefined_schema.go` |
 | Opt-in registration | `internal/shared/kindrules.go` (`MarkKindDefaultNone`) |
-| Loader + field map + fetch | `internal/core/udt/` |
-| Aggregate handler | `internal/core/udt_handlers.go` |
+| Loader + field map + fetch | `internal/core/udk/` |
+| Aggregate handler | `internal/core/udk_handlers.go` |
 | Example pack | `examples/user-types/reading-list/` |
-| Tests | `internal/kinds/udt_test.go`, `internal/core/udt/`, `internal/core/udt_test.go` |
+| Tests | `internal/kinds/udk_test.go`, `internal/core/udk/`, `internal/core/udk_test.go` |
 
 Try it:
 
@@ -199,15 +199,15 @@ on the multi-source rows, `by_service.sample-export` ok.
 
 ### Deliberately not in this draft
 
-- Admin UI to author schemas from scratch (file selection **is** in: Advanced → User-defined types)
-- Write / mirror / copy-ledger stamping for UDTs
+- Admin UI to author schemas from scratch (file selection **is** in: Advanced → User-defined kinds)
+- Write / mirror / copy-ledger stamping for UDKs
 - SQL / spreadsheet / CalDAV sources
 - Field-level sensitive redaction enforcement
 - Schema hot-reload (restart to pick up new packs; **file path selection** hot-applies via overlay)
 
 ### Admin local-file selection (this PR)
 
-Advanced → **User-defined types** lists loaded packs and their `file_json`
+Advanced → **User-defined kinds** lists loaded packs and their `file_json`
 sources. Operators can:
 
 1. **Browse** the local disk (folders + `.json`) and click a file to select it
@@ -240,7 +240,7 @@ The example directory is a **portable pack** (`schema.json` + `sample/` +
 - Example PRs mix with product PRs in review queue.
 - Non-Go contributors still need to clone the service repo.
 
-### Option B — standalone `aegis-user-types` (or `aegis-udt-examples`) repo
+### Option B — standalone `aegis-user-types` (or `aegis-udk-examples`) repo
 
 **Pros**
 
@@ -262,7 +262,7 @@ The example directory is a **portable pack** (`schema.json` + `sample/` +
 **Start in monorepo (this PR), extract once the format stabilizes.**
 
 1. Keep `examples/user-types/reading-list/` as the reference pack and the
-   regression fixture (`internal/core/udt_test.go` loads it).
+   regression fixture (`internal/core/udk_test.go` loads it).
 2. When schema v1 is no longer expected to break, move packs to
    `github.com/fudomunro/aegis-user-types` (git subtree split or copy), leave
    a one-line pointer in `examples/user-types/README.md`.
@@ -282,7 +282,7 @@ permissions**; users own **their types and sources**.
 |------|------------|
 | Schema id collides with built-in kind | Loader skips and logs (already implemented). |
 | Hostile / huge JSON feed | Item cap (`maxUserDefinedItems`), 4 MiB body limit, fail-open. |
-| UDT becomes a parallel permissions path | Uses the same `DataGrant` + `AllowsMethod` enforcement. |
+| UDK becomes a parallel permissions path | Uses the same `DataGrant` + `AllowsMethod` enforcement. |
 | Name-only merge over-merges | Entity id preferred; name key is schema-declared fields only. |
 | Pack authors leak secrets in `headers` | Docs say non-secret headers only; later lint in content-repo CI. |
 

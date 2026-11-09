@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/core/udt"
+	"github.com/fudomunro/aegis/internal/core/udk"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
-// writeSchemaFile drops a schema fixture on disk. The udt package tests keep
+// writeSchemaFile drops a schema fixture on disk. The udk package tests keep
 // their own copy.
 func writeSchemaFile(t *testing.T, dir, name, content string) {
 	t.Helper()
@@ -25,9 +25,9 @@ func writeSchemaFile(t *testing.T, dir, name, content string) {
 	}
 }
 
-func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
+func TestLoadUserDefinedKinds_FromExamplePack(t *testing.T) {
 	dir := filepath.Join("..", "..", "examples", "user-types")
-	reg, loaded := udt.LoadUserDefinedTypes(dir, "", nil)
+	reg, loaded := udk.LoadUserDefinedKinds(dir, "", nil)
 	if len(loaded) == 0 {
 		t.Fatal("expected the reading-list example pack to load")
 	}
@@ -40,7 +40,7 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.udts = reg
+	srv.udks = reg
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -78,7 +78,7 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	}
 }
 
-func TestServer_UDTRouteAndAggregate(t *testing.T) {
+func TestServer_UDKRouteAndAggregate(t *testing.T) {
 	dir := t.TempDir()
 	writeSchemaFile(t, dir, "books.json", `{"items":[
 		{"row_id":"r1","id":"1","title":"Dune","author":"Herbert","status":"want"},
@@ -104,12 +104,12 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 		}]
 	}`)
 
-	reg, loaded := udt.LoadUserDefinedTypes(dir, "", nil)
+	reg, loaded := udk.LoadUserDefinedKinds(dir, "", nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
 	}
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.udts = reg
+	srv.udks = reg
 	srv.registerUserDefinedKinds()
 	// Packs cannot self-enable; an admin data grant must name the kind.
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
@@ -138,7 +138,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 
 	handlers := srv.libraryRouteHandlers()
 	if _, ok := handlers["/v1/library/reading-list"]; !ok {
-		t.Error("UDT route not registered in libraryRouteHandlers")
+		t.Error("UDK route not registered in libraryRouteHandlers")
 	}
 	kinds := srv.allLibraryKinds()
 	found := false
@@ -152,7 +152,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	}
 }
 
-func TestServer_UDTDeniedWhenNotEnabled(t *testing.T) {
+func TestServer_UDKDeniedWhenNotEnabled(t *testing.T) {
 	dir := t.TempDir()
 	writeSchemaFile(t, dir, "schema.json", `{
 		"id": "secret-log",
@@ -162,9 +162,9 @@ func TestServer_UDTDeniedWhenNotEnabled(t *testing.T) {
 	}`)
 	writeSchemaFile(t, dir, "x.json", `{"t": "hi"}`)
 
-	reg, _ := udt.LoadUserDefinedTypes(dir, "", nil)
+	reg, _ := udk.LoadUserDefinedKinds(dir, "", nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.udts = reg
+	srv.udks = reg
 	srv.registerUserDefinedKinds()
 	schema, _ := reg.Get("secret-log")
 	handler := srv.routeHandler(schema.Path)

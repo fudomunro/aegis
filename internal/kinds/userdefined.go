@@ -17,13 +17,13 @@ import (
 // #15, issue #312): schema overlay resolution and local-file base paths.
 type UserDefinedDeps struct {
 	// Schema resolves the current schema for an id with the admin
-	// file-selection overlay applied. Called per request so /v1/admin/udt
+	// file-selection overlay applied. Called per request so /v1/admin/udk
 	// picks apply without a restart.
-	Schema func(id string) UserDefinedTypeSchema
+	Schema func(id string) UserDefinedKindSchema
 	// BaseDir returns the pack directory holding a kind's schema and its
 	// relative source files.
 	BaseDir func(id string) string
-	// Readable reports whether the data grant allows GET on a UDT
+	// Readable reports whether the data grant allows GET on a UDK
 	// permType. Packs never self-enable (issue #15 review).
 	Readable func(permType string) bool
 }
@@ -34,7 +34,7 @@ type UserDefinedDeps struct {
 type userDefinedKind struct {
 	h      Host
 	e      *Engine
-	schema UserDefinedTypeSchema
+	schema UserDefinedKindSchema
 	deps   UserDefinedDeps
 	routes []Route
 }
@@ -42,7 +42,7 @@ type userDefinedKind struct {
 // UserDefined returns the Kind for one loaded schema pack (issue #312).
 // The construction schema drives identity and routes; the serve path
 // re-resolves it per request so admin file selection applies live.
-func UserDefined(h Host, e *Engine, schema UserDefinedTypeSchema, d UserDefinedDeps) Kind {
+func UserDefined(h Host, e *Engine, schema UserDefinedKindSchema, d UserDefinedDeps) Kind {
 	k := &userDefinedKind{h: h, e: e, schema: schema, deps: d}
 	k.routes = []Route{{
 		Pattern: schema.Path,
@@ -56,7 +56,7 @@ func (k *userDefinedKind) Def() LibraryKind { return k.schema.LibraryKind() }
 
 func (k *userDefinedKind) Routes() []Route { return k.routes }
 
-// Provides reports whether a connector instance feeds this kind. UDTs are
+// Provides reports whether a connector instance feeds this kind. UDKs are
 // fed by schema sources, not OAuth connectors.
 func (k *userDefinedKind) Provides(connector any) bool { return false }
 
@@ -87,7 +87,7 @@ func (k *userDefinedKind) serve(w http.ResponseWriter, r *http.Request) {
 		Kind: kind,
 		Targets: func(r *http.Request) (targets []NamedLister[UserDefinedItem], denied []string) {
 			// Type-owned policy decides agent visibility (issue #148).
-			// UDTs are opt-in: without an enabling policy entry this denies.
+			// UDKs are opt-in: without an enabling policy entry this denies.
 			if !k.Readable(k.h) {
 				denied = append(denied, schema.ID)
 				return targets, denied
@@ -126,7 +126,7 @@ func (k *userDefinedKind) serve(w http.ResponseWriter, r *http.Request) {
 // ServeMux-pattern conflicts are rejected — registration itself is the
 // shadow check (issue #312; docs/user-defined-types.md promises packs
 // never shadow built-ins).
-func MergeUserDefined(builtin []Kind, udts []Kind) (merged []Kind, skipped []string) {
+func MergeUserDefined(builtin []Kind, udks []Kind) (merged []Kind, skipped []string) {
 	merged = append([]Kind(nil), builtin...)
 	ids := map[string]bool{}
 	mux := http.NewServeMux()
@@ -137,7 +137,7 @@ func MergeUserDefined(builtin []Kind, udts []Kind) (merged []Kind, skipped []str
 			// test covers it. Keep the kind so failure stays visible.
 		}
 	}
-	for _, k := range udts {
+	for _, k := range udks {
 		id := k.Def().ID
 		if ids[id] || IsReservedUserDefinedID(id) || !tryRegisterRoutes(mux, k.Routes()) {
 			skipped = append(skipped, id)
@@ -173,7 +173,7 @@ const maxUserDefinedBytes = 4 << 20
 
 // fetchUserDefinedSource loads and maps one schema source. file_json paths
 // are resolved relative to the schema directory when not absolute.
-func fetchUserDefinedSource(ctx context.Context, schema UserDefinedTypeSchema, src UserDefinedSourceSpec, baseDir string) ([]UserDefinedItem, bool, error) {
+func fetchUserDefinedSource(ctx context.Context, schema UserDefinedKindSchema, src UserDefinedSourceSpec, baseDir string) ([]UserDefinedItem, bool, error) {
 	var body []byte
 	var err error
 	switch src.Kind {
@@ -263,7 +263,7 @@ func dottedPath(v any, path string) any {
 // mapUserDefinedItem turns one source JSON object into a neutral item using
 // the schema field map. Missing paths leave fields unset; required-field
 // validation is intentionally deferred (fail-open listing).
-func mapUserDefinedItem(schema UserDefinedTypeSchema, src UserDefinedSourceSpec, raw any) UserDefinedItem {
+func mapUserDefinedItem(schema UserDefinedKindSchema, src UserDefinedSourceSpec, raw any) UserDefinedItem {
 	fields := map[string]any{}
 	for name, path := range src.FieldMap {
 		if v := dottedPath(raw, path); v != nil {
@@ -300,7 +300,7 @@ func mapUserDefinedItem(schema UserDefinedTypeSchema, src UserDefinedSourceSpec,
 }
 
 // mapUserDefinedDocument maps a decoded source document into neutral items.
-func mapUserDefinedDocument(schema UserDefinedTypeSchema, src UserDefinedSourceSpec, doc any) []UserDefinedItem {
+func mapUserDefinedDocument(schema UserDefinedKindSchema, src UserDefinedSourceSpec, doc any) []UserDefinedItem {
 	rows := any(doc)
 	if src.ItemsPath != "" {
 		rows = dottedPath(doc, src.ItemsPath)

@@ -4,9 +4,9 @@ import (
 	"testing"
 )
 
-func sampleReadingListSchema(t *testing.T) UserDefinedTypeSchema {
+func sampleReadingListSchema(t *testing.T) UserDefinedKindSchema {
 	t.Helper()
-	s := UserDefinedTypeSchema{
+	s := UserDefinedKindSchema{
 		Version:         "1",
 		ID:              "reading-list",
 		Label:           "reading list",
@@ -44,8 +44,8 @@ func sampleReadingListSchema(t *testing.T) UserDefinedTypeSchema {
 	return s
 }
 
-func TestUserDefinedTypeSchema_NormalizeDefaults(t *testing.T) {
-	s := UserDefinedTypeSchema{
+func TestUserDefinedKindSchema_NormalizeDefaults(t *testing.T) {
+	s := UserDefinedKindSchema{
 		ID:     "garden-plants",
 		Label:  "garden plants",
 		Fields: map[string]UserDefinedField{"name": {Type: "string"}},
@@ -67,23 +67,23 @@ func TestUserDefinedTypeSchema_NormalizeDefaults(t *testing.T) {
 	}
 }
 
-func TestUserDefinedTypeSchema_NormalizeRejects(t *testing.T) {
+func TestUserDefinedKindSchema_NormalizeRejects(t *testing.T) {
 	cases := []struct {
 		name   string
-		schema UserDefinedTypeSchema
+		schema UserDefinedKindSchema
 	}{
-		{"no id", UserDefinedTypeSchema{Fields: map[string]UserDefinedField{"a": {}}}},
-		{"slash id", UserDefinedTypeSchema{ID: "a/b", Fields: map[string]UserDefinedField{"a": {}}}},
-		{"no fields", UserDefinedTypeSchema{ID: "x"}},
-		{"bad version", UserDefinedTypeSchema{Version: "9", ID: "x", Fields: map[string]UserDefinedField{"a": {}}}},
-		{"unknown identity field", UserDefinedTypeSchema{
+		{"no id", UserDefinedKindSchema{Fields: map[string]UserDefinedField{"a": {}}}},
+		{"slash id", UserDefinedKindSchema{ID: "a/b", Fields: map[string]UserDefinedField{"a": {}}}},
+		{"no fields", UserDefinedKindSchema{ID: "x"}},
+		{"bad version", UserDefinedKindSchema{Version: "9", ID: "x", Fields: map[string]UserDefinedField{"a": {}}}},
+		{"unknown identity field", UserDefinedKindSchema{
 			ID:     "x",
 			Fields: map[string]UserDefinedField{"title": {}},
 			Identity: UserDefinedIdentity{
 				Fields: []string{"missing"},
 			},
 		}},
-		{"source missing path", UserDefinedTypeSchema{
+		{"source missing path", UserDefinedKindSchema{
 			ID:     "x",
 			Fields: map[string]UserDefinedField{"title": {}},
 			Sources: []UserDefinedSourceSpec{{
@@ -92,7 +92,7 @@ func TestUserDefinedTypeSchema_NormalizeRejects(t *testing.T) {
 				FieldMap: map[string]string{"title": "t"},
 			}},
 		}},
-		{"source unknown field map", UserDefinedTypeSchema{
+		{"source unknown field map", UserDefinedKindSchema{
 			ID:     "x",
 			Fields: map[string]UserDefinedField{"title": {}},
 			Sources: []UserDefinedSourceSpec{{
@@ -102,7 +102,7 @@ func TestUserDefinedTypeSchema_NormalizeRejects(t *testing.T) {
 				FieldMap: map[string]string{"nope": "t"},
 			}},
 		}},
-		{"bad source kind", UserDefinedTypeSchema{
+		{"bad source kind", UserDefinedKindSchema{
 			ID:     "x",
 			Fields: map[string]UserDefinedField{"title": {}},
 			Sources: []UserDefinedSourceSpec{{
@@ -122,7 +122,7 @@ func TestUserDefinedTypeSchema_NormalizeRejects(t *testing.T) {
 	}
 }
 
-func TestUserDefinedTypeSchema_LibraryKind(t *testing.T) {
+func TestUserDefinedKindSchema_LibraryKind(t *testing.T) {
 	s := sampleReadingListSchema(t)
 	k := s.LibraryKind()
 	if k.ID != "reading-list" || k.Path != "/v1/library/reading-list" {
@@ -223,39 +223,39 @@ func TestEncodeUserDefinedList(t *testing.T) {
 	}
 }
 
-func TestUserDefinedTypeSchema_RejectsHijacking(t *testing.T) {
+func TestUserDefinedKindSchema_RejectsHijacking(t *testing.T) {
 	cases := []struct {
 		name   string
-		schema UserDefinedTypeSchema
+		schema UserDefinedKindSchema
 	}{
-		{"built-in perm_type", UserDefinedTypeSchema{
+		{"built-in perm_type", UserDefinedKindSchema{
 			ID:       "my-list",
 			PermType: "playlists",
 			Fields:   map[string]UserDefinedField{"title": {}},
 		}},
-		{"built-in kind id", UserDefinedTypeSchema{
+		{"built-in kind id", UserDefinedKindSchema{
 			ID:     "tracks",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
-		{"reserved path id", UserDefinedTypeSchema{
+		{"reserved path id", UserDefinedKindSchema{
 			ID:     "links",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
-		{"path collision", UserDefinedTypeSchema{
+		{"path collision", UserDefinedKindSchema{
 			ID:     "my-list",
 			Path:   "/v1/library/links",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
-		{"non-library path", UserDefinedTypeSchema{
+		{"non-library path", UserDefinedKindSchema{
 			ID:     "my-list",
 			Path:   "/v1/mail/",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
-		{"bad id charset", UserDefinedTypeSchema{
+		{"bad id charset", UserDefinedKindSchema{
 			ID:     "My_List",
 			Fields: map[string]UserDefinedField{"title": {}},
 		}},
-		{"forbidden header", UserDefinedTypeSchema{
+		{"forbidden header", UserDefinedKindSchema{
 			ID:     "my-list",
 			Fields: map[string]UserDefinedField{"title": {}},
 			Sources: []UserDefinedSourceSpec{{
@@ -277,8 +277,8 @@ func TestUserDefinedTypeSchema_RejectsHijacking(t *testing.T) {
 	}
 }
 
-func TestUserDefinedTypeSchema_RejectsPathOverride(t *testing.T) {
-	s := UserDefinedTypeSchema{
+func TestUserDefinedKindSchema_RejectsPathOverride(t *testing.T) {
+	s := UserDefinedKindSchema{
 		ID:     "reading-list",
 		Path:   "/v1/library/tracks",
 		Fields: map[string]UserDefinedField{"title": {}},

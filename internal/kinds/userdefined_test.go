@@ -33,16 +33,16 @@ func TestMergeUserDefined_RejectsShadowing(t *testing.T) {
 		stubKind{id: "documents", pattern: "/v1/library/documents"},
 		stubKind{id: "text", pattern: "/v1/library/documents/{service}/{id}/text"},
 	}
-	udts := []Kind{
+	udks := []Kind{
 		// ID collision with a built-in.
 		stubKind{id: "documents", pattern: "/v1/library/other-documents"},
 		// Pattern conflict with a built-in subroute (unequal patterns —
 		// only the ServeMux registration check catches this).
 		stubKind{id: "doc-text-clone", pattern: "/v1/library/documents/{a}/{b}/text"},
 		// Clean pack.
-		stubKind{id: "safe-udt", pattern: "/v1/library/safe-udt"},
+		stubKind{id: "safe-udk", pattern: "/v1/library/safe-udk"},
 	}
-	merged, skipped := MergeUserDefined(builtin, udts)
+	merged, skipped := MergeUserDefined(builtin, udks)
 
 	if len(skipped) != 2 || skipped[0] != "documents" || skipped[1] != "doc-text-clone" {
 		t.Fatalf("skipped = %v, want [documents doc-text-clone]", skipped)
@@ -52,15 +52,15 @@ func TestMergeUserDefined_RejectsShadowing(t *testing.T) {
 	}
 	found := false
 	for _, k := range merged {
-		if k.Def().ID == "safe-udt" {
+		if k.Def().ID == "safe-udk" {
 			found = true
 		}
 		if k.Def().ID == "doc-text-clone" {
-			t.Fatal("shadowing UDT must not merge")
+			t.Fatal("shadowing UDK must not merge")
 		}
 	}
 	if !found {
-		t.Fatal("non-colliding UDT not merged")
+		t.Fatal("non-colliding UDK not merged")
 	}
 }
 
@@ -75,7 +75,7 @@ func TestMergeUserDefined_RejectsReservedIDs(t *testing.T) {
 
 // listUserDefined fetches every source for one schema and returns the raw
 // pre-merge rows (the aggregate pipeline owns merge + encode).
-func listUserDefined(ctx context.Context, schema UserDefinedTypeSchema, baseDir string) (items []UserDefinedItem, truncated bool, err error) {
+func listUserDefined(ctx context.Context, schema UserDefinedKindSchema, baseDir string) (items []UserDefinedItem, truncated bool, err error) {
 	srcs := schema.Sources
 	if len(srcs) == 0 {
 		return nil, false, fmt.Errorf("no sources configured")
@@ -149,7 +149,7 @@ func TestMapUserDefinedDocument_HTTPSource(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	schema := UserDefinedTypeSchema{
+	schema := UserDefinedKindSchema{
 		ID:   "books",
 		Path: "/v1/library/books",
 		Fields: map[string]UserDefinedField{
@@ -198,7 +198,7 @@ func TestListUserDefined_FailOpenPartial(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "good.json"), []byte(`{"items":[{"title":"Only Good","author":"A"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	schema := UserDefinedTypeSchema{
+	schema := UserDefinedKindSchema{
 		ID:     "notes",
 		Fields: map[string]UserDefinedField{"title": {}, "author": {}},
 		Identity: UserDefinedIdentity{

@@ -1,6 +1,6 @@
 # examples/user-types
 
-Portable **schema packs** for Aegis user-defined types (issue #15).
+Portable **schema packs** for Aegis user-defined kinds (issue #15).
 
 Each subdirectory is one pack:
 
@@ -24,5 +24,5 @@ Restart Aegis and call `GET /v1/library/<pack-id>`.
 
 This tree is shaped to move to a standalone content repo
 (`aegis-user-types`) once schema v1 stabilizes. See
-`docs/user-defined-types.md` §6 for the tradeoff. The service repo will keep a
+`docs/user-defined-kinds.md` §6 for the tradeoff. The service repo will keep a
 minimal inline fixture so runtime tests do not depend on the content repo.

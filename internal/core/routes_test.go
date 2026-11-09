@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/udt"
+	"github.com/fudomunro/aegis/internal/core/udk"
 )
 
 // TestRegisterRoutes_AdminAuthPaths verifies every admin/auth path resolves
@@ -71,7 +71,7 @@ func TestAPIAllowlist_MatchesRoutes(t *testing.T) {
 		{"GET", "/v1/admin/quicken"},
 		{"GET", "/v1/admin/timeline"},
 		{"GET", "/v1/admin/signal"},
-		{"GET", "/v1/admin/udt"},
+		{"GET", "/v1/admin/udk"},
 		{"GET", "/v1/admin/library/playlists"},
 		{"GET", "/v1/admin/permissions"},
 		{"GET", "/v1/admin/sync"},
@@ -175,10 +175,10 @@ func TestRegisterRoutes_FullMuxNoPanic(t *testing.T) {
 		"sources": [{"id": "s", "kind": "file_json", "path": "widgets.json", "field_map": {"title": "t"}}]
 	}`)
 	writeSchemaFile(t, dir, "widgets.json", `{"t": "hi"}`)
-	reg, _ := udt.LoadUserDefinedTypes(dir, "", nil)
+	reg, _ := udk.LoadUserDefinedKinds(dir, "", nil)
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.udts = reg
+	srv.udks = reg
 	mux := http.NewServeMux()
 	registerRoutes(mux, srv, nil)
 

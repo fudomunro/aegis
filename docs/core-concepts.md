@@ -45,7 +45,7 @@ the most weight in product language.
 | Copy ledger / copy info | product + code |
 | Mirror / backup sync | product + code |
 | Truncated / sync completeness | product + code |
-| User-defined types (UDT) / schema packs | product + code |
+| User-defined kinds (UDK) / schema packs | product + code |
 | Free/busy, summary, city, precise redaction | product + code |
 
 ### Access and identity
@@ -153,12 +153,12 @@ response field, prose synonym, and method name.
 ### 2.5 Type / kind / data type / library kind / perm_type
 
 `LibraryKind`, `data type`, `kind` (URL segment), `perm_type` (permissions
-keys), `data_grants`, UDT “type”, `LibraryKind.ID`.
+keys), `data_grants`, UDK “type”, `LibraryKind.ID`.
 
 **Overlap:** the same registry entry was called four different names in product
 prose depending on surface (URL, permissions, admin UI, AGENTS), and “data
 type” also collided with the field-shape sense of `type` (`"type": "string"`
-in `capabilities.go` and `udt.go`).
+in `capabilities.go` and `udk.go`).
 
 **Resolution (glossary, issue #305):** two axes, each named once. The registry
 axis is **library kind** (short: **kind**) — already the URL segment and
@@ -190,13 +190,19 @@ Entity links (`entity_links.json`), merge heuristics (ISRC/UPC/MBID/name),
 **Overlap:** “identity”, “entity”, and “match” are three words for folding
 provider rows into one neutral item.
 
-### 2.9 UDT naming
+### 2.9 UDK naming
 
-User-defined types, UDT, schema packs (`user-types/` directory),
-`user_types.json` overlay, `UserDefinedTypeSchema`.
+User-defined kinds (UDK), schema packs (`user-types/` directory),
+`user_types.json` overlay, `UserDefinedKindSchema`.
 
-**Resolution (glossary):** the product concept is **user-defined type**;
-**schema pack** is the on-disk artifact name. Avoid **type pack**.
+**Resolution (glossary):** the product concept is **user-defined kind**;
+**schema pack** is the on-disk artifact name. Retired synonyms:
+“user-defined type”, “UDT”, “type pack”.
+
+This section previously resolved the same question toward “user-defined type
+(UDT)”. That resolution is superseded: a pack registers as a `LibraryKind`,
+so the name says kind. On-disk names (`user_types.json`, `user-types/`,
+`AEGIS_USER_TYPES_DIR`) are unchanged.
 
 ---
 
@@ -232,7 +238,7 @@ After the overlap call-outs above, the stable concepts.
 | **Mirror** | Deliberate copy of a playlist/liked tracks to another service (`POST /v1/library/mirror`). | `mirror.go` |
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `internal/kinds` |
 | **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
-| **User-defined type (UDT)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined type”; the file/directory is a schema pack. | `internal/kinds/udt.go`, `docs/user-defined-types.md` |
+| **User-defined kind (UDK)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined kind”; the file/directory is a schema pack. | `internal/kinds/userdefined_schema.go`, `docs/user-defined-kinds.md` |
 | **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/core/policy/policy.go`, `internal/kinds` |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/kinds/providers.go` |
 
@@ -269,7 +275,7 @@ After the overlap call-outs above, the stable concepts.
 | **Capabilities / Operation** | Structured metadata of what a connector can do (admin/connector, not agent discovery). | `internal/shared/capabilities.go` |
 | **IsAgentContentPath** | Gate on agent-facing `/v1/services` paths (content/ingest only). | `internal/core/agentpaths.go:13` |
 | **Path classification** | Ordered table mapping proxy paths → library kinds for permission checks. | `internal/core/pathclass.go` |
-| **LibraryKind registry** | The list of built-in kinds + UDT-published kinds. | `internal/kinds/librarykinds.go` |
+| **LibraryKind registry** | The list of built-in kinds + UDK-published kinds. | `internal/kinds/librarykinds.go` |
 
 ### Hook and ops
 
@@ -296,4 +302,4 @@ After the overlap call-outs above, the stable concepts.
 - Preferred English for overlapping names: [`glossary.md`](glossary.md)
 - Threat model for auditors: [`threat-model.md`](threat-model.md)
 - CalDAV/CardDAV setup: [`caldav-carddav.md`](caldav-carddav.md)
-- User-defined types: [`user-defined-types.md`](user-defined-types.md)
+- User-defined kinds: [`user-defined-kinds.md`](user-defined-kinds.md)

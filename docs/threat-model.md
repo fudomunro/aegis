@@ -109,7 +109,7 @@ caller may do with each kind*. Admin is never the agent key.
 | Reuse agent key as admin | Separate `-admin-api-key`; shared `-api-key` is never admin (#181) |
 | App token database stolen | Only SHA-256 hashes in `apps.json` (0600); plaintext shown once |
 | Invite token leaked or brute-forced | Only SHA-256 hashes at rest (`api_key_hash`, 0600), like `apps.json`; plaintext shown once at mint; revoke/disable per scope; rate limiting on token auth (`rate_limits`) bounds guessing |
-| Schema pack smuggles secrets | `http_json` credential headers rejected at UDT load |
+| Schema pack smuggles secrets | `http_json` credential headers rejected at UDK load |
 
 ### 5.2 Unauthorized access
 
@@ -160,7 +160,7 @@ caller may do with each kind*. Admin is never the agent key.
 | Root on the Aegis host | **Out of scope** — full token store and flags are readable |
 | World-readable data directory | Documented 0700; audit log and `tokens.json` share that boundary |
 | Log leakage of PII/tokens | slog fields avoid bodies/tokens; denials log route family not full paths; metrics never label agent identities |
-| UDT browse lists host paths | Admin-equivalent (#181); selection is the dangerous step |
+| UDK browse lists host paths | Admin-equivalent (#181); selection is the dangerous step |
 
 ### 5.7 Availability / integrity (lower emphasis)
 

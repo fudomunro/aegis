@@ -626,7 +626,7 @@ Schedules live in the same SQLite file as the job queue and copy ledger.
 | `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](configuration.md)) |
 | `AEGIS_MAINTENANCE_REPO` | `-maintenance-repo` | GitHub repo (`owner/name`) for sync-maintenance tickets |
 | `AEGIS_DEMO` | `-demo` | `1` enables demo mode |
-| `AEGIS_USER_TYPES_DIR` | | User-defined type schema-pack directory (default `<data-dir>/user-types`) |
+| `AEGIS_USER_TYPES_DIR` | | User-defined kind schema-pack directory (default `<data-dir>/user-types`) |
 
 ### Data directory
 
@@ -649,8 +649,8 @@ on first run with mode `0700` (it holds secrets).
  apps.json # third-party app registry (0600; token hashes only)
  data_scopes.json # principal → dataset registry (0600; invite key hashes)
  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (non-secret fields; secrets in tokens.json)
- user_types.json # admin UDT local-file selection overlay (beside -config; see below)
- user-types/ # user-defined type schema packs (or AEGIS_USER_TYPES_DIR)
+ user_types.json # admin UDK local-file selection overlay (beside -config; see below)
+ user-types/ # user-defined kind schema packs (or AEGIS_USER_TYPES_DIR)
  entity_links.json # confirmed playlist/entity links
  ownership.json # per-kind data-ownership confirmation (issue #165; see docs/data-ownership.md)
  tokens.json # encrypted OAuth tokens + static credentials (0600;)

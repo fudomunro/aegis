@@ -37,7 +37,7 @@ them away.
 
 - **Kind-centric surface; named-service connectors.** The product API is
   organized around kinds (`/v1/library/{kind}`, neutral models,
-  `LibraryKind`) — including user-defined types (#15) — not provider-shaped
+  `LibraryKind`) — including user-defined kinds (#15) — not provider-shaped
   endpoints. Named services (Spotify, YouTube Music, Amazon Music,
   Google Photos/Contacts, Immich, …) remain the first-class **connectors** and
   match targets; do not prioritize generic scrapers or ad-hoc type detection
@@ -115,7 +115,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
 | Sample/demo datasets + sample:// connector | `internal/core/sampledata/`, `docs/development.md`, `docs/demo-datasets.md` | Deterministic fixtures (generic + LotR/Lincoln packs), mbox/JSON writers, `SampleLibraryConnector`. Demo lockdown validation stays in the hub (`demo.go`) |
-| UDT registry + admin overlay | `internal/core/udt/` (registry/loader + `user_types.json` overlay), `internal/core` hub (`udt_admin.go`, `udt_handlers.go`) | User-defined types (issue #15). Schema packs under `user-types/` load into the same pipeline; the hub owns the admin handlers |
+| UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_types.json` overlay), `internal/core` hub (`udk_admin.go`, `udk_handlers.go`) | User-defined kinds (issue #15). Schema packs under `user-types/` load into the same pipeline; the hub owns the admin handlers |
 | Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization policy is `internal/core/policy`, never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; the hub keeps the fixed cross-kind routes and admin writes |
 | Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
@@ -134,7 +134,7 @@ declared routes / filters / redaction / stamping, and one line in the
 ordered `kinds.Builtin()` list — no `internal/core` edits. Do not clone an aggregate pipeline. Checklist:
 `docs/adding-kinds.md`.
 
-**User-defined types** (`docs/user-defined-types.md`, issue #15) are schema
+**User-defined kinds** (`docs/user-defined-kinds.md`, issue #15) are schema
 packs under `user-types/` loaded into the same pipeline. A pack can never
 self-enable, shadow a built-in `id`/`perm_type`/`path`, or store secrets in
 `http_json` headers. Local file selection is the `user_types.json` overlay.
@@ -438,7 +438,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `shared.LibraryPageCap`, singleflight |
 | Re-growing `writeJSON` / page-cap / URL-trim twins in `core` or `connectors` | One owner: `internal/shared` (issue #280) |
 | Sequential multi-provider or multi-kind work when already parallelizable | Follow the aggregate pipeline's fan-out; don’t serialize merge review without cause |
-| Local variables named after `internal/` package names (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`, `kinds`, `syncjobs`, `metrics`, `sampledata`, `udt`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, `kindList`, `jobStore`, `accessMetrics`, `sampleSet`, `udtReg`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
+| Local variables named after `internal/` package names (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`, `kinds`, `syncjobs`, `metrics`, `sampledata`, `udk`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, `kindList`, `jobStore`, `accessMetrics`, `sampleSet`, `udkReg`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
 | Concept named before its glossary entry | `docs/glossary.md` entry in the introducing PR; retire synonyms in the same change |
 | Parking kind data or seam shapes in a catch-all leaf "for now" | Kind data → `internal/kinds`, seam shapes → `internal/shared` — `internal/types` was audited back out three times, then dissolved (#325) |
 | Moving code again within weeks of its first move | Freeze the target layout for the duration of a move campaign; record layout questions in the design doc instead of another relocation |
@@ -476,7 +476,7 @@ decided:
 - Live Immich canonical photos testing (#39)
 - Obtaining data from other sources / photo storage (#34, #21)
 - Photo ownership / provenance proofs (#20)
-- User-defined types full product surface (admin authoring, hot-reload packs;
+- User-defined kinds full product surface (admin authoring, hot-reload packs;
   PoC + file selection land under #15)
 - First-run onboarding for tailnet + OAuth (#8)
 - Per-user provider connections (every principal reads the owner's connected

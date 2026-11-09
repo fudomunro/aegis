@@ -76,7 +76,7 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		add("libraryInstructionsFor/"+k.ID, srv.libraryInstructionsFor(k.ID))
 	}
 
-	schema := kinds.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedKindSchema{
 		ID:    "reading-list",
 		Label: "reading list",
 		Usage: "books the user is reading",
@@ -85,7 +85,7 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		},
 	}
 	if err := schema.Normalize(); err != nil {
-		t.Fatalf("normalize udt schema: %v", err)
+		t.Fatalf("normalize udk schema: %v", err)
 	}
 	add("userDefinedHint/default", srv.userDefinedHint(schema))
 	add("userDefinedHint.DenyMsg", schema.DenyMsg)
