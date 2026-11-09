@@ -9,101 +9,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/udt"
 	"github.com/fudomunro/aegis/internal/shared"
 )
-
-func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
-	dir := t.TempDir()
-	a := filepath.Join(dir, "a.json")
-	b := filepath.Join(dir, "b.json")
-	_ = os.WriteFile(a, []byte(`{}`), 0o600)
-	_ = os.WriteFile(b, []byte(`{}`), 0o600)
-
-	schema := kinds.UserDefinedTypeSchema{
-		ID:     "reading-list",
-		Fields: map[string]kinds.UserDefinedField{"title": {}},
-		Sources: []kinds.UserDefinedSourceSpec{{
-			ID:       "sample-export",
-			Kind:     "file_json",
-			Path:     "sample/books.json",
-			FieldMap: map[string]string{"title": "title"},
-		}},
-	}
-	ov := UDTKindOverlay{
-		FileSources: map[string]UDTFileSourceOverlay{
-			"sample-export": {Paths: []string{a, b}},
-		},
-	}
-	got := applyUserTypesOverlay(schema, ov)
-	if len(got.Sources) != 2 {
-		t.Fatalf("sources = %+v", got.Sources)
-	}
-	if got.Sources[0].Path != a || got.Sources[1].Path != b {
-		t.Errorf("paths = %q %q", got.Sources[0].Path, got.Sources[1].Path)
-	}
-	if got.Sources[0].FieldMap["title"] != "title" {
-		t.Error("field_map should be preserved from schema source")
-	}
-}
-
-func TestUserTypesOverlay_ExtraFile(t *testing.T) {
-	schema := kinds.UserDefinedTypeSchema{
-		ID: "notes",
-		Fields: map[string]kinds.UserDefinedField{
-			"title":  {},
-			"author": {},
-		},
-		Sources: []kinds.UserDefinedSourceSpec{{
-			ID:       "s",
-			Kind:     "file_json",
-			Path:     "x.json",
-			FieldMap: map[string]string{"title": "t"},
-		}},
-	}
-	ov := UDTKindOverlay{
-		ExtraFiles: []UDTExtraFile{{
-			ID:   "my-export",
-			Path: "/tmp/export.json",
-		}},
-	}
-	got := applyUserTypesOverlay(schema, ov)
-	if len(got.Sources) != 2 {
-		t.Fatalf("sources = %+v", got.Sources)
-	}
-	extra := got.Sources[1]
-	if extra.ID != "my-export" || extra.Kind != "file_json" {
-		t.Fatalf("extra = %+v", extra)
-	}
-	if extra.FieldMap["title"] != "title" || extra.FieldMap["author"] != "author" {
-		t.Errorf("name-match field map = %+v", extra.FieldMap)
-	}
-}
-
-func TestLoadSaveUserTypesOverlay(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "user_types.json")
-	ov, err := loadUserTypesOverlay(path)
-	if err != nil || len(ov.Kinds) != 0 {
-		t.Fatalf("empty overlay: %v %+v", err, ov)
-	}
-	ov.Kinds["reading-list"] = UDTKindOverlay{
-		FileSources: map[string]UDTFileSourceOverlay{
-			"sample-export": {Paths: []string{"/tmp/books.json"}},
-		},
-	}
-	if err := saveUserTypesOverlay(path, ov); err != nil {
-		t.Fatal(err)
-	}
-	back, err := loadUserTypesOverlay(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if back.Kinds["reading-list"].FileSources["sample-export"].Paths[0] != "/tmp/books.json" {
-		t.Fatalf("roundtrip = %+v", back)
-	}
-}
 
 func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	pack := t.TempDir()
@@ -131,7 +40,7 @@ func TestHandleAdminUDT_StatusBrowseAndSelect(t *testing.T) {
 	}`), 0o600)
 
 	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
-	reg, loaded := LoadUserDefinedTypes(pack, overlayPath, nil)
+	reg, loaded := udt.LoadUserDefinedTypes(pack, overlayPath, nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
 	}
@@ -241,7 +150,7 @@ func TestHandleAdminUDT_ExtraFile(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(pack, "notes.json"), []byte(`[{"title":"a"}]`), 0o600)
 
 	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
-	reg, _ := LoadUserDefinedTypes(pack, overlayPath, nil)
+	reg, _ := udt.LoadUserDefinedTypes(pack, overlayPath, nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
 

@@ -26,6 +26,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/core/udt"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -500,7 +501,7 @@ func Run() {
 	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
 		userTypesDir = shared.ExpandUserPath(v)
 	}
-	udtReg, udtLoaded := LoadUserDefinedTypes(userTypesDir, defaultUserTypesOverlayPath(paths.Config), slog.Default())
+	udtReg, udtLoaded := udt.LoadUserDefinedTypes(userTypesDir, udt.DefaultOverlayPath(paths.Config), slog.Default())
 	srv.udts = udtReg
 	srv.registerUserDefinedKinds()
 	if len(udtLoaded) > 0 {

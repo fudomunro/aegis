@@ -179,10 +179,10 @@ do not invent a second proxy path.
 |-------|----------|
 | Schema + item + merge | `internal/kinds/udt.go` |
 | Opt-in registration | `internal/shared/kindrules.go` (`MarkKindDefaultNone`) |
-| Loader + field map + fetch | `internal/core/udt.go` |
+| Loader + field map + fetch | `internal/core/udt/` |
 | Aggregate handler | `internal/core/udt_handlers.go` |
 | Example pack | `examples/user-types/reading-list/` |
-| Tests | `internal/kinds/udt_test.go`, `internal/core/udt_test.go` |
+| Tests | `internal/kinds/udt_test.go`, `internal/core/udt/`, `internal/core/udt_test.go` |
 
 Try it:
 

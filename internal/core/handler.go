@@ -23,6 +23,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/core/udt"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -193,7 +194,7 @@ type Server struct {
 	csrfTokens *shared.StateStore
 	// udts holds user-defined type schemas loaded from the user-types
 	// directory (issue #15). May be nil when none are configured.
-	udts *userDefinedRegistry
+	udts *udt.Registry
 }
 
 // appAllowedPaths returns the exact paths a third-party app token may call.

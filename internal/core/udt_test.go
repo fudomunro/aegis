@@ -8,13 +8,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/udt"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
+// writeSchemaFile drops a schema fixture on disk. The udt package tests keep
+// their own copy.
 func writeSchemaFile(t *testing.T, dir, name, content string) {
 	t.Helper()
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -22,7 +27,7 @@ func writeSchemaFile(t *testing.T, dir, name, content string) {
 
 func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	dir := filepath.Join("..", "..", "examples", "user-types")
-	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
+	reg, loaded := udt.LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) == 0 {
 		t.Fatal("expected the reading-list example pack to load")
 	}
@@ -73,57 +78,6 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	}
 }
 
-func TestLoadUserDefinedTypes_DefaultAccessCanonicalized(t *testing.T) {
-	dir := t.TempDir()
-	write := func(name, schema string) {
-		t.Helper()
-		if err := os.WriteFile(filepath.Join(dir, name), []byte(schema), 0o600); err != nil {
-			t.Fatal(err)
-		}
-	}
-	write("synonym.json", `{"id": "syn-1", "label": "syn one", "default_access": "rw", "fields": {"name": {"type": "string"}}}`)
-	write("omitted.json", `{"id": "syn-2", "label": "syn two", "fields": {"name": {"type": "string"}}}`)
-	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
-	if len(loaded) != 2 {
-		t.Fatalf("loaded %d schemas, want 2", len(loaded))
-	}
-	if s, _ := reg.Get("syn-1"); s.DefaultAccess != "read-write" {
-		t.Errorf("synonym DefaultAccess = %q, want read-write", s.DefaultAccess)
-	}
-	if s, _ := reg.Get("syn-2"); s.DefaultAccess != "none" {
-		t.Errorf("omitted DefaultAccess = %q, want none", s.DefaultAccess)
-	}
-}
-
-func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
-	dir := t.TempDir()
-	writeSchemaFile(t, dir, "bad.json", "{not json")
-	writeSchemaFile(t, dir, "no-fields.json", `{"id":"x","label":"x"}`)
-	writeSchemaFile(t, dir, "collides.json", `{
-		"id": "tracks",
-		"label": "tracks",
-		"fields": {"title": {"type": "string"}},
-		"identity": {"fields": ["title"]}
-	}`)
-	writeSchemaFile(t, dir, "ok.json", `{
-		"id": "garden-plants",
-		"label": "garden plants",
-		"fields": {"name": {"type": "string", "required": true}},
-		"identity": {"fields": ["name"]},
-		"sources": [{"id": "s", "kind": "file_json", "path": "plants.json", "field_map": {"name": "name"}}]
-	}`)
-	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
-	if len(loaded) != 1 {
-		t.Fatalf("loaded %d schemas, want 1: %+v", len(loaded), loaded)
-	}
-	if _, ok := reg.Get("garden-plants"); !ok {
-		t.Fatal("garden-plants missing")
-	}
-	if _, ok := reg.Get("tracks"); ok {
-		t.Fatal("built-in id must not be replaced")
-	}
-}
-
 func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	dir := t.TempDir()
 	writeSchemaFile(t, dir, "books.json", `{"items":[
@@ -150,7 +104,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 		}]
 	}`)
 
-	reg, loaded := LoadUserDefinedTypes(dir, "", nil)
+	reg, loaded := udt.LoadUserDefinedTypes(dir, "", nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
 	}
@@ -208,7 +162,7 @@ func TestServer_UDTDeniedWhenNotEnabled(t *testing.T) {
 	}`)
 	writeSchemaFile(t, dir, "x.json", `{"t": "hi"}`)
 
-	reg, _ := LoadUserDefinedTypes(dir, "", nil)
+	reg, _ := udt.LoadUserDefinedTypes(dir, "", nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
 	srv.registerUserDefinedKinds()
