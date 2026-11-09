@@ -53,7 +53,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}

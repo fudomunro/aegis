@@ -509,7 +509,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("contacts status = %d body=%s", w.Code, w.Body.String())
 	}

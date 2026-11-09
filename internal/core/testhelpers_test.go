@@ -292,3 +292,30 @@ func forEachTrackSource(t *types.Track, f func(kinds.SourceMut)) {
 		})
 	}
 }
+
+// forEachContactSource and forEachPhotoSource project sources for generic
+// stamping of the kinds already moved into the kinds package (issue #312) —
+// their production projections live beside those kinds and are unexported.
+func forEachContactSource(item *types.Contact, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
+}
+
+func forEachPhotoSource(item *types.Photo, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
+}

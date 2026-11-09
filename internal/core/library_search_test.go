@@ -58,7 +58,7 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 
 	// A bare list fetch materializes the index (write-behind, off the
 	// response path — wait for it before asserting index state).
-	w, _ := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts")
+	w, _ := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts")
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -68,7 +68,7 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 		t.Fatalf("index count = %d err=%v, want 2", n, err)
 	}
 
-	w, resp := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts?q=grace")
+	w, resp := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=grace")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -77,7 +77,7 @@ func TestLibrarySearch_QueryHitsIndexedItems(t *testing.T) {
 	}
 
 	// Multi-token queries AND together.
-	w, resp = searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts?q=grace+lovelace")
+	w, resp = searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=grace+lovelace")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -94,7 +94,7 @@ func TestLibrarySearch_ColdIndexBootstrapsFromFetch(t *testing.T) {
 	})
 
 	// First-ever query with an empty index: one live fetch materializes it.
-	w, resp := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts?q=katherine")
+	w, resp := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=katherine")
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -112,7 +112,7 @@ func TestLibrarySearch_DisabledIndex(t *testing.T) {
 		Sources: []types.ContactSource{{Service: "google", ID: "g1"}},
 	})
 	srv.search = nil
-	w, _ := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts?q=ada")
+	w, _ := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=ada")
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -149,7 +149,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	req = scopes.WithDataScope(req, shire)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("shire list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -158,7 +158,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	req = scopes.WithDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), shire)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("shire search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -184,7 +184,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 	req = scopes.WithDataScope(httptest.NewRequest("GET", "/v1/library/contacts?q=frodo", nil), gondor)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("gondor search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -218,7 +218,7 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 
 	// Index both rows via a fetch that includes only readable services, then
 	// write the denied one behind the scenes to prove query-time filtering.
-	w, _ := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts")
+	w, _ := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts")
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -233,14 +233,14 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	w, resp := searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts?q=secret")
+	w, resp := searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=secret")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
 	if resp.Total != 0 {
 		t.Fatalf("denied service leaked into search: %+v", resp.Contacts)
 	}
-	w, resp = searchRequest(t, srv, srv.HandleLibraryContacts, "/v1/library/contacts?q=ada")
+	w, resp = searchRequest(t, srv, srv.libraryHandler("contacts"), "/v1/library/contacts?q=ada")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -302,7 +302,7 @@ func TestHandleAdminSearchStatus(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", w.Code, w.Body.String())
 	}

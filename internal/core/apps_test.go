@@ -151,7 +151,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/contacts", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("contacts status = %d body = %s", w.Code, w.Body.String())
 	}

@@ -234,7 +234,7 @@ func TestDenyAuditRows_CarryClientIP(t *testing.T) {
 	req.RemoteAddr = "203.0.113.44:41000"
 	req.Header.Set("X-Api-Key", "wrong-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d", w.Code)
 	}

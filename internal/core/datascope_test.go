@@ -227,7 +227,7 @@ func TestMailMessage_CrossDatasetHidden(t *testing.T) {
 func callLibrary(t *testing.T, srv *Server, key, path string) string {
 	t.Helper()
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, scopeRequest(key, path))
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, scopeRequest(key, path))
 	if w.Code != http.StatusOK {
 		t.Fatalf("library %s status=%d body=%s", key, w.Code, w.Body.String())
 	}
@@ -407,7 +407,7 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 	srv := twoScopeServer(t)
 
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/library/contacts"))
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/library/contacts"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("library status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -494,7 +494,7 @@ func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
 	}
 
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryContacts)(w, scopeRequest("YOUR_HOUSE_KEY", "/v1/library/contacts"))
+	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, scopeRequest("YOUR_HOUSE_KEY", "/v1/library/contacts"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("owner denial must survive a granting scope: status = %d body=%s", w.Code, w.Body.String())
 	}

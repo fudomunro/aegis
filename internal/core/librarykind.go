@@ -88,8 +88,6 @@ func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kind
 // // transitional (#312) — shrinks to empty as kinds move; delete with the
 // last move.
 var kindRuntime = map[string]kindRuntimeEntry{
-	"contacts": newKindRuntime[types.ContactProvider]("contacts", (*Server).HandleLibraryContacts),
-	"photos":   newKindRuntime[types.PhotoProvider]("photos", (*Server).HandleLibraryPhotos),
 	"events": newKindRuntime[types.CalendarEventProvider]("events", (*Server).HandleLibraryEvents,
 		// Freebusy is the events availability view, not a LibraryKind —
 		// declared as an events subroute so its exposure is data, not a
