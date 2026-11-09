@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func newYouTubeMirror(t *testing.T, up http.Handler) *YouTubeMusicConnector {
@@ -191,7 +191,7 @@ func TestYouTubePlacePlaylistItems_CreateSearchAndSkips(t *testing.T) {
 		}
 	}))
 
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		placeTrack(YouTubeMusicServiceID, "HasID", "vid-direct", ""),
 		placeTrack("", "Found Song", "", "", "A"),
 		placeTrack("", "Missing Song", "", "", "B"),
@@ -233,7 +233,7 @@ func TestYouTubePlacePlaylistItems_CreateSearchAndSkips(t *testing.T) {
 				http.NotFound(w, r)
 			}
 		}))
-		res, err := c2.PlacePlaylistItems(context.Background(), "", "x", []types.Track{
+		res, err := c2.PlacePlaylistItems(context.Background(), "", "x", []kinds.Track{
 			placeTrack(YouTubeMusicServiceID, "T", "v1", ""),
 		})
 		if err == nil {
@@ -268,7 +268,7 @@ func TestYouTubePlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	}))
 
 	res, err := c.PlacePlaylistItems(context.Background(), "", "Backup",
-		[]types.Track{placeTrack(YouTubeMusicServiceID, "A", "v1", "")})
+		[]kinds.Track{placeTrack(YouTubeMusicServiceID, "A", "v1", "")})
 	if err != nil {
 		t.Fatalf("PlacePlaylistItems(create): %v", err)
 	}
@@ -280,7 +280,7 @@ func TestYouTubePlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	}
 
 	res2, err := c.PlacePlaylistItems(context.Background(), "PLy", "Backup",
-		[]types.Track{placeTrack(YouTubeMusicServiceID, "B", "v2", "")})
+		[]kinds.Track{placeTrack(YouTubeMusicServiceID, "B", "v2", "")})
 	if err != nil || res2.Copied != 1 {
 		t.Fatalf("append = (%+v,%v)", res2, err)
 	}
@@ -312,7 +312,7 @@ func TestYouTubeSaveLikedTracks(t *testing.T) {
 		}
 	}))
 
-	res, err := c.SaveLikedTracks(context.Background(), []types.Track{
+	res, err := c.SaveLikedTracks(context.Background(), []kinds.Track{
 		placeTrack(YouTubeMusicServiceID, "HasID", "vid1", ""),
 		placeTrack("", "Found Song", "", "", "A"),
 		placeTrack("", "Missing Song", "", "", "B"),
@@ -332,7 +332,7 @@ func TestYouTubeSaveLikedTracks_RateError(t *testing.T) {
 	c := newYouTubeMirror(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "no", http.StatusForbidden)
 	}))
-	_, err := c.SaveLikedTracks(context.Background(), []types.Track{
+	_, err := c.SaveLikedTracks(context.Background(), []kinds.Track{
 		placeTrack(YouTubeMusicServiceID, "T", "v1", ""),
 	})
 	if err == nil {

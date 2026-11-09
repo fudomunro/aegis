@@ -11,11 +11,12 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeDocumentProvider struct {
-	documents []types.Document
+	documents []kinds.Document
 	text      string
 	textErr   error
 	err       error
@@ -29,7 +30,7 @@ func (f *fakeDocumentProvider) SystemInstructions(string) string { return "fake"
 func (f *fakeDocumentProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeDocumentProvider) ListUserDocuments(context.Context) ([]types.Document, bool, error) {
+func (f *fakeDocumentProvider) ListUserDocuments(context.Context) ([]kinds.Document, bool, error) {
 	return f.documents, f.truncated, f.err
 }
 
@@ -37,12 +38,12 @@ func (f *fakeDocumentProvider) FetchDocumentText(context.Context, string) (strin
 	return f.text, false, f.textErr
 }
 
-func sampleDoc(service, name, id, title, created, excerpt string) types.Document {
-	return types.Document{
+func sampleDoc(service, name, id, title, created, excerpt string) kinds.Document {
+	return kinds.Document{
 		Title:     title,
 		CreatedAt: created,
 		Excerpt:   excerpt,
-		Sources: []types.DocumentSource{{
+		Sources: []kinds.DocumentSource{{
 			Service:     service,
 			ServiceName: name,
 			ID:          id,
@@ -59,11 +60,11 @@ func TestHandleLibraryDocuments_AggregatesAndFilters(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{documents: []types.Document{
+		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Apartment lease 2024", "2024-01-15T12:00:00Z", "lease excerpt"),
 			sampleDoc("paperless", "Paperless-ngx", "2", "Tax letter 2023", "2024-04-12T00:00:00Z", "tax excerpt"),
 		}},
-		"drive": &fakeDocumentProvider{documents: []types.Document{
+		"drive": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("drive", "Google Drive", "9", "Laptop warranty", "2023-06-01T00:00:00Z", "warranty excerpt"),
 		}},
 	}
@@ -75,7 +76,7 @@ func TestHandleLibraryDocuments_AggregatesAndFilters(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.DocumentList
+	var resp kinds.DocumentList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -99,7 +100,7 @@ func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{documents: []types.Document{
+		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Medical letter", "2024-01-01T00:00:00Z", "sensitive excerpt"),
 		}},
 	}
@@ -111,7 +112,7 @@ func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.DocumentList
+	var resp kinds.DocumentList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -135,7 +136,7 @@ func TestHandleLibraryDocuments_DeniedByPermission(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{documents: []types.Document{
+		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Lease", "2024-01-01T00:00:00Z", ""),
 		}},
 	}
@@ -155,10 +156,10 @@ func TestHandleLibraryDocuments_UnauthorizedAndError(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{documents: []types.Document{
+		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
 			sampleDoc("paperless", "Paperless-ngx", "1", "Lease", "2024-01-01T00:00:00Z", ""),
 		}},
-		"drive": &fakeDocumentProvider{err: types.ErrUnauthorized},
+		"drive": &fakeDocumentProvider{err: kinds.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -167,11 +168,11 @@ func TestHandleLibraryDocuments_UnauthorizedAndError(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.DocumentList
+	var resp kinds.DocumentList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.ByService["drive"].Status != types.LibraryStatusUnauthorized {
+	if resp.ByService["drive"].Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("drive status = %+v", resp.ByService["drive"])
 	}
 
@@ -183,11 +184,11 @@ func TestHandleLibraryDocuments_UnauthorizedAndError(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w2.Code, w2.Body.String())
 	}
-	var resp2 types.DocumentList
+	var resp2 kinds.DocumentList
 	if err := json.Unmarshal(w2.Body.Bytes(), &resp2); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp2.ByService["drive"].Status != types.LibraryStatusError {
+	if resp2.ByService["drive"].Status != kinds.LibraryStatusError {
 		t.Fatalf("drive status = %+v", resp2.ByService["drive"])
 	}
 }
@@ -241,7 +242,7 @@ func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("read access should fetch text: status = %d body=%s", w2.Code, w2.Body.String())
 	}
-	var got types.DocumentText
+	var got kinds.DocumentText
 	if err := json.Unmarshal(w2.Body.Bytes(), &got); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -254,7 +255,7 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "paperless", Name: "Paperless-ngx", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"paperless": &fakeDocumentProvider{textErr: types.ErrUnauthorized},
+		"paperless": &fakeDocumentProvider{textErr: kinds.ErrUnauthorized},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/documents/nope/1/text", nil)
@@ -331,7 +332,7 @@ func TestSampleDocuments_MergePairs(t *testing.T) {
 	if len(lib.Documents) == 0 {
 		t.Fatal("sample library must include documents")
 	}
-	merged := types.MergeDocuments(lib.Documents)
+	merged := kinds.MergeDocuments(lib.Documents)
 	byTitle := map[string]int{}
 	for _, d := range merged {
 		byTitle[d.Title]++

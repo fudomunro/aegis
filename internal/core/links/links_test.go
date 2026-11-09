@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestStore_AddListDelete(t *testing.T) {
@@ -47,13 +47,13 @@ func TestStore_AddListDelete(t *testing.T) {
 		t.Fatalf("reloaded links = %+v", st2.List())
 	}
 
-	key := st2.PlaylistLinkKey(types.Playlist{
-		Sources: []types.PlaylistSource{{Service: "youtube-music", ID: "PL1"}},
+	key := st2.PlaylistLinkKey(kinds.Playlist{
+		Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "PL1"}},
 	})
 	if key != "link:"+link.ID {
 		t.Fatalf("link key = %q", key)
 	}
-	if st2.PlaylistLinkKey(types.Playlist{Sources: []types.PlaylistSource{{Service: "spotify", ID: "other"}}}) != "" {
+	if st2.PlaylistLinkKey(kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: "spotify", ID: "other"}}}) != "" {
 		t.Fatal("unlinked playlist should have empty key")
 	}
 

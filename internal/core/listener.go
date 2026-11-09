@@ -1,16 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-)
-
-import (
 	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 

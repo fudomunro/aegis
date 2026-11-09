@@ -8,12 +8,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // refContact builds a contact fixture carrying a service-local ref + etag.
-func refContact(service, name, id, etag string, emails ...string) types.Contact {
-	ct := types.NewContact(service, service, id, name, emails, nil)
+func refContact(service, name, id, etag string, emails ...string) kinds.Contact {
+	ct := kinds.NewContact(service, service, id, name, emails, nil)
 	if etag != "" {
 		ct.Sources[0].Extra = map[string]any{"etag": etag}
 	}
@@ -21,8 +21,8 @@ func refContact(service, name, id, etag string, emails ...string) types.Contact 
 }
 
 // refEvent builds an event fixture carrying a service-local ref + etag/uid.
-func refEvent(service, title, id, etag, uid, startAt, endAt string) types.CalendarEvent {
-	ev := types.NewCalendarEvent(service, service, id, title, startAt, endAt, false)
+func refEvent(service, title, id, etag, uid, startAt, endAt string) kinds.CalendarEvent {
+	ev := kinds.NewCalendarEvent(service, service, id, title, startAt, endAt, false)
 	extra := map[string]any{}
 	if etag != "" {
 		extra["etag"] = etag
@@ -58,7 +58,7 @@ func TestCardDAVPlaceContacts_CreateUpdateAndConflict(t *testing.T) {
 	c := NewCardDAVConnector(th)
 
 	base := ts.URL + "/ab/"
-	contacts := []types.Contact{
+	contacts := []kinds.Contact{
 		refContact(CardDAVServiceID, "Ada Lovelace", base+"ada.vcf", `"stale"`, "ada@example.com"),
 		refContact(CardDAVServiceID, "Grace Hopper", base+"grace.vcf", `"old"`, "grace@example.com"),
 	}
@@ -107,7 +107,7 @@ func TestCardDAVPlaceContacts_CreateCarriesUID(t *testing.T) {
 
 	ct := refContact(CardDAVServiceID, "Ada Lovelace", "", "", "ada@example.com")
 	ct.Sources[0].Extra = map[string]any{"uid": "uid-1"}
-	res, err := c.PlaceContacts(context.Background(), []types.Contact{ct})
+	res, err := c.PlaceContacts(context.Background(), []kinds.Contact{ct})
 	if err != nil {
 		t.Fatalf("PlaceContacts: %v", err)
 	}
@@ -149,7 +149,7 @@ func TestCalDAVPlaceEvents_IfMatch(t *testing.T) {
 	th.CacheSet("caldav:collection", ts.URL+"/cal/", time.Hour)
 	c := NewCalDAVConnector(th)
 
-	events := []types.CalendarEvent{
+	events := []kinds.CalendarEvent{
 		refEvent(CalDAVServiceID, "S", "", `"stale"`, "u1", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z"),
 	}
 	res, err := c.PlaceEvents(context.Background(), events)
@@ -178,7 +178,7 @@ func TestParseRFC3339(t *testing.T) {
 }
 
 func TestPlaceEntityRefsAndUID(t *testing.T) {
-	ct := types.NewContact("s", "S", "id-1", "N", nil, nil)
+	ct := kinds.NewContact("s", "S", "id-1", "N", nil, nil)
 	ct.Sources[0].Extra = map[string]any{"etag": `"e"`, "uid": "u1"}
 	if id, etag := placeContactRef(ct, "s"); id != "id-1" || etag != `"e"` {
 		t.Fatalf("placeContactRef = %q %q", id, etag)
@@ -186,11 +186,11 @@ func TestPlaceEntityRefsAndUID(t *testing.T) {
 	if placeContactUID(ct) != "u1" {
 		t.Fatalf("placeContactUID = %q", placeContactUID(ct))
 	}
-	if placeContactDisplay(types.Contact{Emails: []string{"a@x"}}) != "a@x" {
+	if placeContactDisplay(kinds.Contact{Emails: []string{"a@x"}}) != "a@x" {
 		t.Fatal("display must fall back to email")
 	}
 
-	ev := types.NewCalendarEvent("s", "S", "ev-1", "T", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false)
+	ev := kinds.NewCalendarEvent("s", "S", "ev-1", "T", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false)
 	ev.Sources[0].Extra = map[string]any{"etag": `"x"`}
 	if id, etag := placeEventRef(ev, "s"); id != "ev-1" || etag != `"x"` {
 		t.Fatalf("placeEventRef = %q %q", id, etag)

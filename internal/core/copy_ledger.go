@@ -4,12 +4,12 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // copyInfoFor looks up a stamp for one service-local location. Returns nil
 // when disabled or unknown — library responses stay unchanged (fail-open).
-func (s *Server) copyInfoFor(kind, service, externalID string) *types.CopyInfo {
+func (s *Server) copyInfoFor(kind, service, externalID string) *kinds.CopyInfo {
 	if s == nil || s.copyLedger == nil || service == "" || externalID == "" {
 		return nil
 	}

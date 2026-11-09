@@ -11,7 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // davWriteMock is a CardDAV PUT sink for mirror tests (issue #146).
@@ -86,22 +86,22 @@ func TestEntityMirrorLookup_KnownAndUnknown(t *testing.T) {
 	srv.connectors[connectors.CalDAVServiceID] = connectors.NewCalDAVConnector(srv)
 	srv.connectors[connectors.GoogleCalendarServiceID] = connectors.NewGoogleCalendarConnector(srv)
 
-	if _, err := mirrorOpFor[types.ContactProvider](srv, connectors.CardDAVServiceID, "contact mirror source"); err != nil {
+	if _, err := mirrorOpFor[kinds.ContactProvider](srv, connectors.CardDAVServiceID, "contact mirror source"); err != nil {
 		t.Fatalf("carddav source: %v", err)
 	}
-	if _, err := mirrorOpFor[types.ContactWriteProvider](srv, connectors.GoogleContactsServiceID, "contact mirror target"); err != nil {
+	if _, err := mirrorOpFor[kinds.ContactWriteProvider](srv, connectors.GoogleContactsServiceID, "contact mirror target"); err != nil {
 		t.Fatalf("google contacts target: %v", err)
 	}
-	if _, err := mirrorOpFor[types.CalendarEventProvider](srv, connectors.CalDAVServiceID, "event mirror source"); err != nil {
+	if _, err := mirrorOpFor[kinds.CalendarEventProvider](srv, connectors.CalDAVServiceID, "event mirror source"); err != nil {
 		t.Fatalf("caldav source: %v", err)
 	}
-	if _, err := mirrorOpFor[types.CalendarEventWriteProvider](srv, connectors.GoogleCalendarServiceID, "event mirror target"); err != nil {
+	if _, err := mirrorOpFor[kinds.CalendarEventWriteProvider](srv, connectors.GoogleCalendarServiceID, "event mirror target"); err != nil {
 		t.Fatalf("google calendar target: %v", err)
 	}
-	if _, err := mirrorOpFor[types.ContactProvider](srv, "nope", "contact mirror source"); err == nil {
+	if _, err := mirrorOpFor[kinds.ContactProvider](srv, "nope", "contact mirror source"); err == nil {
 		t.Fatal("expected unknown source error")
 	}
-	if _, err := mirrorOpFor[types.CalendarEventWriteProvider](srv, "nope", "event mirror target"); err == nil {
+	if _, err := mirrorOpFor[kinds.CalendarEventWriteProvider](srv, "nope", "event mirror target"); err == nil {
 		t.Fatal("expected unknown target error")
 	}
 }

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // PhotoShareRequest is the agent-facing body for POST /v1/library/photos/share.
@@ -93,11 +93,11 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.SourceService))
 		return
 	}
-	bytesProvider, ok := src.(types.PhotoBytesProvider)
+	bytesProvider, ok := src.(kinds.PhotoBytesProvider)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest,
 			fmt.Sprintf("service %q cannot fetch photo bytes for share yet (supported: %s)",
-				req.SourceService, connectorIDsProviding[types.PhotoBytesProvider](s.connectors)))
+				req.SourceService, connectorIDsProviding[kinds.PhotoBytesProvider](s.connectors)))
 		return
 	}
 	dst, ok := s.connectors[req.TargetService]
@@ -105,11 +105,11 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("service %q is not connected", req.TargetService))
 		return
 	}
-	target, ok := dst.(types.PhotoShareTarget)
+	target, ok := dst.(kinds.PhotoShareTarget)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest,
 			fmt.Sprintf("service %q cannot accept photo shares yet (supported: %s)",
-				req.TargetService, connectorIDsProviding[types.PhotoShareTarget](s.connectors)))
+				req.TargetService, connectorIDsProviding[kinds.PhotoShareTarget](s.connectors)))
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	logger = logger.With("bytes", len(data), "sha256", sha, "mime_type", mime)
 
 	if req.DryRun {
-		shared.WriteJSON(w, types.PhotoShareResponse{
+		shared.WriteJSON(w, kinds.PhotoShareResponse{
 			TargetService: req.TargetService,
 			SourceService: req.SourceService,
 			SourceID:      req.SourceID,
@@ -136,7 +136,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := target.SharePhoto(r.Context(), types.PhotoShareRequest{
+	result, err := target.SharePhoto(r.Context(), kinds.PhotoShareRequest{
 		SourceService: req.SourceService,
 		SourceID:      req.SourceID,
 		Data:          data,
@@ -154,7 +154,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 	if sharedAt == "" {
 		sharedAt = time.Now().UTC().Format(time.RFC3339)
 	}
-	claim := &types.PhotoShareClaim{
+	claim := &kinds.PhotoShareClaim{
 		Type:          "sha256+public-post",
 		SHA256:        sha,
 		MimeType:      mime,
@@ -172,7 +172,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		req.SourceService, req.SourceID, req.TargetService,
 		result.PostID, result.PostURI, result.PostURL, sha, claim.Note)
 	logger.Info("photo shared", "post_uri", result.PostURI, "post_url", result.PostURL)
-	shared.WriteJSON(w, types.PhotoShareResponse{
+	shared.WriteJSON(w, kinds.PhotoShareResponse{
 		TargetService: req.TargetService,
 		SourceService: req.SourceService,
 		SourceID:      req.SourceID,
@@ -184,7 +184,7 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) writePhotoShareUpstreamError(w http.ResponseWriter, logger *slog.Logger, serviceID string, err error) {
-	if errors.Is(err, types.ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
+	if errors.Is(err, kinds.ErrUnauthorized) || strings.Contains(strings.ToLower(err.Error()), "unauthorized") {
 		logger.Warn("photo share unauthorized upstream", "service", serviceID, "error", err)
 		shared.WriteJSONError(w, http.StatusUnauthorized, fmt.Sprintf("%s rejected the request — check its credentials", serviceID))
 		return

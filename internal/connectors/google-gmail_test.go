@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -91,7 +92,7 @@ func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
 		t.Fatalf("got %d messages, want 2", len(messages))
 	}
 	inbox := messages[0]
-	if inbox.Subject != "Meeting" || inbox.Channel != types.MessageChannelEmail {
+	if inbox.Subject != "Meeting" || inbox.Channel != kinds.MessageChannelEmail {
 		t.Fatalf("inbox = %+v", inbox)
 	}
 	if inbox.EntityID != "meet@example.com" || inbox.ThreadID != "t1" {
@@ -128,8 +129,8 @@ func TestGoogleGmailConnector_ListMessages_Unauthorized(t *testing.T) {
 	host := newTestHostWithService(GoogleGmailServiceID, "", "https://aegis.example.com")
 	conn := NewGoogleGmailConnector(host)
 	_, _, err := conn.ListMessages(context.Background())
-	if !errors.Is(err, types.ErrUnauthorized) {
-		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
+	if !errors.Is(err, kinds.ErrUnauthorized) {
+		t.Fatalf("err = %v, want kinds.ErrUnauthorized", err)
 	}
 }
 
@@ -218,7 +219,7 @@ func TestGoogleGmailConnector_HandleProxy_ListMessages(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.MessageList
+	var resp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -262,7 +263,7 @@ func TestGoogleGmailConnector_HandleProxy_GetMessageFull(t *testing.T) {
 	if !strings.Contains(gotPath, "/users/me/messages/abc") || !strings.Contains(gotPath, "format=full") {
 		t.Fatalf("upstream = %q", gotPath)
 	}
-	var msg types.Message
+	var msg kinds.Message
 	if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -334,7 +335,7 @@ func TestGoogleGmailConnector_HandleProxy_ListAndGetThread(t *testing.T) {
 	var threadResp struct {
 		ID       string          `json:"id"`
 		Total    int             `json:"total"`
-		Messages []types.Message `json:"messages"`
+		Messages []kinds.Message `json:"messages"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &threadResp); err != nil {
 		t.Fatalf("decode thread: %v", err)

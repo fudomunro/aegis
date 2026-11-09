@@ -3,17 +3,15 @@ package kinds
 import (
 	"context"
 	"net/http"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type playlistsKind struct {
 	providerKind
 	h       Host
 	e       *Engine
-	linkKey func(types.Playlist) string
-	mark    func([]types.Playlist, string)
-	copies  func([]types.Playlist)
+	linkKey func(Playlist) string
+	mark    func([]Playlist, string)
+	copies  func([]Playlist)
 }
 
 func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
@@ -22,7 +20,7 @@ func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
 	def := *BuiltinKindByID("playlists")
 	k.providerKind = providerKind{
 		def:      def,
-		provides: providerProvides[types.PlaylistProvider],
+		provides: providerProvides[PlaylistProvider],
 		routes: []Route{{
 			Pattern:     def.Path,
 			AppReadable: def.AppReadable,
@@ -34,36 +32,36 @@ func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
 
 func (k *playlistsKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
-	Aggregate(k.h, k.e, w, r, Spec[types.Playlist]{
+	Aggregate(k.h, k.e, w, r, Spec[Playlist]{
 		Kind: kind,
-		Targets: func(r *http.Request) ([]NamedLister[types.Playlist], []string) {
-			return Collect[types.Playlist, types.PlaylistProvider](k.h, r, kind.PermType,
-				func(p types.PlaylistProvider) func(context.Context) ([]types.Playlist, bool, error) {
+		Targets: func(r *http.Request) ([]NamedLister[Playlist], []string) {
+			return Collect[Playlist, PlaylistProvider](k.h, r, kind.PermType,
+				func(p PlaylistProvider) func(context.Context) ([]Playlist, bool, error) {
 					return p.ListUserPlaylists
 				})
 		},
-		ServiceOf: types.PlaylistServiceName,
-		SortKey:   func(p types.Playlist) string { return p.Name },
-		Merge: func(in []types.Playlist) []types.Playlist {
-			return types.MergePlaylistsSyncLinked(in, k.linkKey)
+		ServiceOf: PlaylistServiceName,
+		SortKey:   func(p Playlist) string { return p.Name },
+		Merge: func(in []Playlist) []Playlist {
+			return MergePlaylistsSyncLinked(in, k.linkKey)
 		},
-		Encode: func(items []types.Playlist, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
-			pageItems, pr := types.SlicePage(items, page)
-			return types.PlaylistList{Playlists: pageItems, LibraryListMeta: types.MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
+		Encode: func(items []Playlist, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
+			pageItems, pr := SlicePage(items, page)
+			return PlaylistList{Playlists: pageItems, LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
 		},
 		MarkCanonical: k.mark,
 		StampCopies:   k.copies,
 	})
 }
 
-func forEachPlaylistSource(p *types.Playlist, f func(SourceMut)) {
+func forEachPlaylistSource(p *Playlist, f func(SourceMut)) {
 	for i := range p.Sources {
 		src := &p.Sources[i]
 		f(SourceMut{
 			Service:       src.Service,
 			ID:            src.ID,
 			MarkCanonical: func() { src.Canonical = true },
-			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+			SetCopy:       func(info *CopyInfo) { src.Copy = info },
 		})
 	}
 }

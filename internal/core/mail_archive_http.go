@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -116,7 +117,7 @@ func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	// Prefer opaque cursor (library contract); keep offset for admin UI.
 	if v := strings.TrimSpace(q.Get("cursor")); v != "" {
-		n, err := types.DecodeCursor(v)
+		n, err := kinds.DecodeCursor(v)
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return

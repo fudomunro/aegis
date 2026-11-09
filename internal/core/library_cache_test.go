@@ -12,13 +12,14 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
 // countingTrackProvider counts ListUserLikedTracks calls and can hold them
 // open so parallel requests are forced to overlap (issue #273).
 type countingTrackProvider struct {
-	tracks []types.Track
+	tracks []kinds.Track
 	calls  atomic.Int32
 	hold   chan struct{} // nil = no hold
 }
@@ -30,7 +31,7 @@ func (f *countingTrackProvider) SystemInstructions(string) string { return "fake
 func (f *countingTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *countingTrackProvider) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
+func (f *countingTrackProvider) ListUserLikedTracks(ctx context.Context) ([]kinds.Track, bool, error) {
 	f.calls.Add(1)
 	if f.hold != nil {
 		select {
@@ -42,25 +43,25 @@ func (f *countingTrackProvider) ListUserLikedTracks(ctx context.Context) ([]type
 	return f.tracks, false, nil
 }
 
-func countingTrackServer(tracks []types.Track, provider *countingTrackProvider) *Server {
+func countingTrackServer(tracks []kinds.Track, provider *countingTrackProvider) *Server {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{"spotify": provider}
 	return srv
 }
 
-func nTracks(n int) []types.Track {
-	tracks := make([]types.Track, n)
+func nTracks(n int) []kinds.Track {
+	tracks := make([]kinds.Track, n)
 	for i := range tracks {
-		tracks[i] = types.Track{
+		tracks[i] = kinds.Track{
 			Name:    fmt.Sprintf("T%03d", i),
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: fmt.Sprintf("t%03d", i)}},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: fmt.Sprintf("t%03d", i)}},
 		}
 	}
 	return tracks
 }
 
-func getTracksPage(t *testing.T, srv *Server, path string) (types.TrackList, *httptest.ResponseRecorder) {
+func getTracksPage(t *testing.T, srv *Server, path string) (kinds.TrackList, *httptest.ResponseRecorder) {
 	t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -69,7 +70,7 @@ func getTracksPage(t *testing.T, srv *Server, path string) (types.TrackList, *ht
 	if w.Code != http.StatusOK {
 		t.Fatalf("GET %s status = %d body=%s", path, w.Code, w.Body.String())
 	}
-	var resp types.TrackList
+	var resp kinds.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode %s: %v", path, err)
 	}

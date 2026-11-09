@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -347,15 +348,15 @@ func (c *YouTubeMusicConnector) TransformChannel(raw map[string]any) map[string]
 
 // ListUserFollowedArtists implements ArtistProvider. YouTube subscriptions
 // are the closest match to followed artists/channels.
-func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]types.Artist, bool, error) {
+func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]kinds.Artist, bool, error) {
 	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
-	var all []types.Artist
+	var all []kinds.Artist
 	pageToken := ""
 	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/subscriptions?part=snippet&mine=true&maxResults=50"
@@ -400,7 +401,7 @@ func (c *YouTubeMusicConnector) ListUserFollowedArtists(ctx context.Context) ([]
 					channelID = id
 				}
 			}
-			a := types.NewArtist(YouTubeMusicServiceID, "YouTube Music", channelID, title)
+			a := kinds.NewArtist(YouTubeMusicServiceID, "YouTube Music", channelID, title)
 			if len(a.Sources) > 0 && channelID != "" {
 				a.Sources[0].URL = "https://www.youtube.com/channel/" + channelID
 			}
@@ -484,10 +485,10 @@ func (c *YouTubeMusicConnector) FetchVideoSnippets(ctx context.Context, token, u
 // music-shaped videos via videos.list so the neutral library, agent answers,
 // and mirror do not treat tutorials/vlogs as liked songs.
 // https://github.com/fudomunro/aegis/issues/43
-func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
+func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]kinds.Track, bool, error) {
 	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	likedPlaylistID, err := c.GetLikedPlaylistID()
@@ -551,7 +552,7 @@ func (c *YouTubeMusicConnector) ListUserLikedTracks(ctx context.Context) ([]type
 		return nil, false, err
 	}
 
-	var all []types.Track
+	var all []kinds.Track
 	for _, p := range likedItems {
 		id := YoutubePlaylistItemVideoID(p)
 		video, ok := snippets[id]
@@ -605,15 +606,15 @@ func YoutubePlaylistItemVideoID(item map[string]any) string {
 
 // ListUserPlaylists implements PlaylistProvider. Fetches YouTube playlists
 // and returns them in Aegis's neutral format.
-func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
+func (c *YouTubeMusicConnector) ListUserPlaylists(ctx context.Context) ([]kinds.Playlist, bool, error) {
 	token := c.host.GetValidToken(YouTubeMusicServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor(YouTubeMusicServiceID, youtubeAPIBase)
 
-	var all []types.Playlist
+	var all []kinds.Playlist
 	pageToken := ""
 	for page := 0; page < shared.LibraryPageCap; page++ {
 		u := upstreamBase + "/playlists?part=snippet,contentDetails&mine=true&maxResults=50"
@@ -667,7 +668,7 @@ func YoutubePlaylistURL(id string) string {
 
 // neutralPlaylist maps a raw YouTube playlist resource into the neutral type.
 // Service identity lives in Sources.
-func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist {
+func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) kinds.Playlist {
 	id, _ := p["id"].(string)
 	snippet, _ := p["snippet"].(map[string]any)
 	contentDetails, _ := p["contentDetails"].(map[string]any)
@@ -690,13 +691,13 @@ func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist
 		extra["channel_id"] = channelID
 	}
 
-	return types.Playlist{
+	return kinds.Playlist{
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		Sources: []types.PlaylistSource{
-			types.PrimaryPlaylistSource(YouTubeMusicServiceID, "YouTube Music", id, YoutubePlaylistURL(id), extra),
+		Sources: []kinds.PlaylistSource{
+			kinds.PrimaryPlaylistSource(YouTubeMusicServiceID, "YouTube Music", id, YoutubePlaylistURL(id), extra),
 		},
 	}
 }
@@ -704,14 +705,14 @@ func (c *YouTubeMusicConnector) NeutralPlaylist(p map[string]any) types.Playlist
 // neutralYouTubeTrack maps a raw playlistItem / liked video into the neutral Track.
 // Titles are cleaned of YouTube decoration so name matching can join catalog
 // tracks (issue #4). Original title is preserved in source extra.
-func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.Track, bool) {
+func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (kinds.Track, bool) {
 	snippet, _ := item["snippet"].(map[string]any)
 	contentDetails, _ := item["contentDetails"].(map[string]any)
 	if snippet == nil {
-		return types.Track{}, false
+		return kinds.Track{}, false
 	}
 	rawName, _ := snippet["title"].(string)
-	name := types.CleanYouTubeTitle(rawName)
+	name := kinds.CleanYouTubeTitle(rawName)
 	if name == "" {
 		name = rawName
 	}
@@ -749,9 +750,9 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 		}
 	}
 
-	var artists []types.Artist
+	var artists []kinds.Artist
 	if channel != "" {
-		artists = []types.Artist{types.NewArtist(YouTubeMusicServiceID, "YouTube Music", "", channel)}
+		artists = []kinds.Artist{kinds.NewArtist(YouTubeMusicServiceID, "YouTube Music", "", channel)}
 	}
 
 	url := ""
@@ -766,12 +767,12 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 		durationMs = shared.Iso8601DurationMs(iso)
 	}
 
-	return types.Track{
+	return kinds.Track{
 		Name:       name,
 		Artists:    artists,
 		DurationMs: durationMs,
 		Duration:   duration,
-		Sources: []types.TrackSource{{
+		Sources: []kinds.TrackSource{{
 			Service:     YouTubeMusicServiceID,
 			ServiceName: "YouTube Music",
 			ID:          videoID,
@@ -781,9 +782,9 @@ func (c *YouTubeMusicConnector) NeutralYouTubeTrack(item map[string]any) (types.
 	}, true
 }
 
-func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) types.PlaylistList {
+func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) kinds.PlaylistList {
 	items, _ := raw["items"].([]any)
-	playlists := make([]types.Playlist, 0, len(items))
+	playlists := make([]kinds.Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -799,12 +800,12 @@ func (c *YouTubeMusicConnector) TransformPlaylistList(raw map[string]any) types.
 			total = n
 		}
 	}
-	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}
+	return kinds.PlaylistList{Playlists: playlists, LibraryListMeta: kinds.LibraryListMeta{Total: total}}
 }
 
 func (c *YouTubeMusicConnector) TransformPlaylistItems(raw map[string]any) map[string]any {
 	items, _ := raw["items"].([]any)
-	tracks := make([]types.Track, 0, len(items))
+	tracks := make([]kinds.Track, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -899,7 +900,7 @@ func (c *YouTubeMusicConnector) TransformPlaylistDetail(raw map[string]any) any 
 	}
 	p, _ := items[0].(map[string]any)
 	base := c.NeutralPlaylist(p)
-	return types.PlaylistDetail{
+	return kinds.PlaylistDetail{
 		Playlist:    base,
 		TotalTracks: base.TrackCount,
 	}

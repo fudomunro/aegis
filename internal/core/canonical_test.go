@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"context"
 	"encoding/json"
@@ -85,36 +86,36 @@ func TestLoadConfig_NormalizesCanonicalFor(t *testing.T) {
 }
 
 func TestCanonicalServiceHelpers(t *testing.T) {
-	p := types.Playlist{Sources: []types.PlaylistSource{
+	p := kinds.Playlist{Sources: []kinds.PlaylistSource{
 		{Service: "youtube-music"},
 		{Service: "spotify", Canonical: true},
 	}}
 	if p.CanonicalService() != "spotify" {
 		t.Fatalf("playlist CanonicalService = %q", p.CanonicalService())
 	}
-	tr := types.Track{Sources: []types.TrackSource{{Service: "a"}, {Service: "b", Canonical: true}}}
+	tr := kinds.Track{Sources: []kinds.TrackSource{{Service: "a"}, {Service: "b", Canonical: true}}}
 	if tr.CanonicalService() != "b" {
 		t.Fatalf("track CanonicalService = %q", tr.CanonicalService())
 	}
-	c := types.Contact{Sources: []types.ContactSource{{Service: "google"}, {Service: "outlook", Canonical: true}}}
+	c := kinds.Contact{Sources: []kinds.ContactSource{{Service: "google"}, {Service: "outlook", Canonical: true}}}
 	if c.CanonicalService() != "outlook" {
 		t.Fatalf("contact CanonicalService = %q", c.CanonicalService())
 	}
-	ph := types.Photo{Sources: []types.PhotoSource{{Service: "immich"}, {Service: "google-photos", Canonical: true}}}
+	ph := kinds.Photo{Sources: []kinds.PhotoSource{{Service: "immich"}, {Service: "google-photos", Canonical: true}}}
 	if ph.CanonicalService() != "google-photos" {
 		t.Fatalf("photo CanonicalService = %q", ph.CanonicalService())
 	}
 	// Fallback to first source when none marked.
-	plain := types.Playlist{Sources: []types.PlaylistSource{{Service: "spotify"}}}
+	plain := kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: "spotify"}}}
 	if plain.CanonicalService() != "spotify" {
 		t.Fatalf("fallback CanonicalService = %q", plain.CanonicalService())
 	}
 }
 
 func TestMergePlaylistsSync_CanonicalSortsFirst(t *testing.T) {
-	merged := types.MergePlaylistsSyncLinked([]types.Playlist{
-		{Name: "Mix", Sources: []types.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "y1"}}},
-		{Name: "Mix", Sources: []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "s1", Canonical: true}}},
+	merged := kinds.MergePlaylistsSyncLinked([]kinds.Playlist{
+		{Name: "Mix", Sources: []kinds.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "y1"}}},
+		{Name: "Mix", Sources: []kinds.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "s1", Canonical: true}}},
 	}, nil)
 	if len(merged) != 1 {
 		t.Fatalf("merged len = %d", len(merged))
@@ -128,9 +129,9 @@ func TestMergePlaylistsSync_CanonicalSortsFirst(t *testing.T) {
 }
 
 func TestMergeTracksSync_CanonicalSortsFirst(t *testing.T) {
-	merged := types.MergeTracksSync([]types.Track{
-		{Name: "Song", Artists: []types.Artist{{Name: "A"}}, Sources: []types.TrackSource{{Service: "youtube-music", ServiceName: "YT"}}},
-		{Name: "Song", Artists: []types.Artist{{Name: "A"}}, Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", Canonical: true}}},
+	merged := kinds.MergeTracksSync([]kinds.Track{
+		{Name: "Song", Artists: []kinds.Artist{{Name: "A"}}, Sources: []kinds.TrackSource{{Service: "youtube-music", ServiceName: "YT"}}},
+		{Name: "Song", Artists: []kinds.Artist{{Name: "A"}}, Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", Canonical: true}}},
 	})
 	if len(merged) != 1 || len(merged[0].Sources) != 2 {
 		t.Fatalf("merged = %+v", merged)
@@ -141,11 +142,11 @@ func TestMergeTracksSync_CanonicalSortsFirst(t *testing.T) {
 }
 
 func TestMergeContacts_CanonicalSortsFirst(t *testing.T) {
-	merged := types.MergeContacts([]types.Contact{
+	merged := kinds.MergeContacts([]kinds.Contact{
 		{Name: "Alex", Emails: []string{"alex@example.com"},
-			Sources: []types.ContactSource{{Service: "outlook", ServiceName: "Outlook"}}},
+			Sources: []kinds.ContactSource{{Service: "outlook", ServiceName: "Outlook"}}},
 		{Name: "Alex", Emails: []string{"alex@example.com"},
-			Sources: []types.ContactSource{{Service: "google", ServiceName: "Google Contacts", Canonical: true}}},
+			Sources: []kinds.ContactSource{{Service: "google", ServiceName: "Google Contacts", Canonical: true}}},
 	})
 	if len(merged) != 1 || len(merged[0].Sources) != 2 {
 		t.Fatalf("merged = %+v", merged)
@@ -163,11 +164,11 @@ func (twoSourcePlaylistProvider) Capabilities() types.ServiceCapabilities {
 func (twoSourcePlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (twoSourcePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
-func (twoSourcePlaylistProvider) ListUserPlaylists(context.Context) ([]types.Playlist, bool, error) {
-	return []types.Playlist{{
+func (twoSourcePlaylistProvider) ListUserPlaylists(context.Context) ([]kinds.Playlist, bool, error) {
+	return []kinds.Playlist{{
 		Name:       "Shared Mix",
 		TrackCount: 3,
-		Sources:    []types.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
+		Sources:    []kinds.PlaylistSource{{Service: "spotify", ServiceName: "Spotify", ID: "sp1"}},
 	}}, false, nil
 }
 
@@ -179,11 +180,11 @@ func (youtubePlaylistProvider) Capabilities() types.ServiceCapabilities {
 func (youtubePlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (youtubePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
-func (youtubePlaylistProvider) ListUserPlaylists(context.Context) ([]types.Playlist, bool, error) {
-	return []types.Playlist{{
+func (youtubePlaylistProvider) ListUserPlaylists(context.Context) ([]kinds.Playlist, bool, error) {
+	return []kinds.Playlist{{
 		Name:       "Shared Mix",
 		TrackCount: 5,
-		Sources:    []types.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt1"}},
+		Sources:    []kinds.PlaylistSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "yt1"}},
 	}}, false, nil
 }
 
@@ -207,7 +208,7 @@ func TestLibraryPlaylists_ConfigCanonicalForStampsAndSorts(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.PlaylistList
+	var resp kinds.PlaylistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

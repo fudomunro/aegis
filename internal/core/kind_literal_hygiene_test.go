@@ -1,7 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -9,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Kind literals (AGENTS.md "Non-negotiable product rules"): the hub never

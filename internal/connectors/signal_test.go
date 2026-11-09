@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestImportSignalPath_JSONL(t *testing.T) {
@@ -73,7 +73,7 @@ func TestImportSignalPath_JSONL(t *testing.T) {
 	if msgs[0].Body != "hi back" || msgs[0].Direction != "outbound" {
 		t.Fatalf("msg[0] = %+v", msgs[0])
 	}
-	if msgs[0].Channel != types.MessageChannelSignal {
+	if msgs[0].Channel != kinds.MessageChannelSignal {
 		t.Fatalf("channel = %q", msgs[0].Channel)
 	}
 }
@@ -233,8 +233,8 @@ func TestSignalConnector_Lists(t *testing.T) {
 	}
 
 	conn := NewSignalConnector(store)
-	var _ types.MessageProvider = conn
-	var _ types.ContactProvider = conn
+	var _ kinds.MessageProvider = conn
+	var _ kinds.ContactProvider = conn
 
 	contacts, truncated, err := conn.ListUserContacts(context.Background())
 	if err != nil || truncated || len(contacts) != 1 {
@@ -244,7 +244,7 @@ func TestSignalConnector_Lists(t *testing.T) {
 	if err != nil || truncated || len(msgs) != 1 {
 		t.Fatalf("messages=%v truncated=%v err=%v", msgs, truncated, err)
 	}
-	if msgs[0].Channel != types.MessageChannelSignal {
+	if msgs[0].Channel != kinds.MessageChannelSignal {
 		t.Fatalf("channel = %q", msgs[0].Channel)
 	}
 	if !msgs[0].Sources[0].Canonical {
@@ -253,7 +253,7 @@ func TestSignalConnector_Lists(t *testing.T) {
 
 	// Disabled store is unauthorized (like other import connectors).
 	empty := NewSignalConnector(nil)
-	if _, _, err := empty.ListMessages(context.Background()); err != types.ErrUnauthorized {
+	if _, _, err := empty.ListMessages(context.Background()); err != kinds.ErrUnauthorized {
 		t.Fatalf("disabled ListMessages err = %v", err)
 	}
 }
@@ -309,7 +309,7 @@ func TestSignalHandleProxy(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("messages code %d body=%s", w2.Code, w2.Body.String())
 	}
-	var msgs types.MessageList
+	var msgs kinds.MessageList
 	if err := json.Unmarshal(w2.Body.Bytes(), &msgs); err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestSignalHandleProxy(t *testing.T) {
 	if w3.Code != http.StatusOK {
 		t.Fatalf("contacts code %d body=%s", w3.Code, w3.Body.String())
 	}
-	var contacts types.ContactList
+	var contacts kinds.ContactList
 	if err := json.Unmarshal(w3.Body.Bytes(), &contacts); err != nil {
 		t.Fatal(err)
 	}
@@ -485,11 +485,11 @@ func TestNormalizeSignalDirection(t *testing.T) {
 }
 
 func TestSignalSourceIDFallbacks(t *testing.T) {
-	c := types.Contact{Name: "Solo"}
+	c := kinds.Contact{Name: "Solo"}
 	if id := signalContactSourceID(c); id != "name:solo" {
 		t.Fatalf("contact id = %q", id)
 	}
-	m := types.Message{ThreadID: "t", SentAt: "2024-01-01T00:00:00Z", Body: "hi"}
+	m := kinds.Message{ThreadID: "t", SentAt: "2024-01-01T00:00:00Z", Body: "hi"}
 	id := signalMessageSourceID(m)
 	if id == "" || !strings.HasPrefix(id, "sig-") {
 		t.Fatalf("message id = %q", id)

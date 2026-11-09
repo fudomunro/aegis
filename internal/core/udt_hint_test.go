@@ -1,9 +1,10 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {

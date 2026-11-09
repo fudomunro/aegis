@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // Minimal iCalendar VEVENT reader for CalDAV (issue #146). Maps SUMMARY,
@@ -173,7 +173,7 @@ func ExpandICalEvent(ev ICalEvent, start, end time.Time) []ICalEvent {
 }
 
 // MapICalEvent converts one occurrence into a neutral CalendarEvent.
-func MapICalEvent(service, serviceName, calendarID, calendarName string, ev ICalEvent) types.CalendarEvent {
+func MapICalEvent(service, serviceName, calendarID, calendarName string, ev ICalEvent) kinds.CalendarEvent {
 	startAt := ev.Start.UTC().Format(time.RFC3339)
 	endAt := ev.End.UTC().Format(time.RFC3339)
 	if ev.AllDay {
@@ -182,7 +182,7 @@ func MapICalEvent(service, serviceName, calendarID, calendarName string, ev ICal
 		endAt = ev.End.UTC().Format("2006-01-02") + "T00:00:00Z"
 	}
 
-	src := types.CalendarEventSource{
+	src := kinds.CalendarEventSource{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          ev.UID,
@@ -205,7 +205,7 @@ func MapICalEvent(service, serviceName, calendarID, calendarName string, ev ICal
 		src.Extra = extra
 	}
 
-	out := types.CalendarEvent{
+	out := kinds.CalendarEvent{
 		Title:        ev.Summary,
 		Description:  ev.Description,
 		StartAt:      startAt,
@@ -216,14 +216,14 @@ func MapICalEvent(service, serviceName, calendarID, calendarName string, ev ICal
 		CalendarID:   calendarID,
 		CalendarName: calendarName,
 		EntityID:     ev.UID,
-		Sources:      []types.CalendarEventSource{src},
+		Sources:      []kinds.CalendarEventSource{src},
 	}
 	if ev.Organizer != "" || ev.OrganizerCN != "" {
-		org := types.NewContact(service, serviceName, "", ev.OrganizerCN, []string{ev.Organizer}, nil)
+		org := kinds.NewContact(service, serviceName, "", ev.OrganizerCN, []string{ev.Organizer}, nil)
 		out.Organizer = &org
 	}
 	for _, a := range ev.Attendees {
-		c := types.NewContact(service, serviceName, "", a.CN, []string{a.Email}, nil)
+		c := kinds.NewContact(service, serviceName, "", a.CN, []string{a.Email}, nil)
 		if len(c.Sources) > 0 && a.Role != "" {
 			if c.Sources[0].Extra == nil {
 				c.Sources[0].Extra = map[string]any{}

@@ -2,7 +2,6 @@ package kinds
 
 import (
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // BuiltinLibraryKinds is the registry for every unified library dataset
@@ -161,7 +160,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed:  true,
 		AllowedLevels:     nil,
 		DefaultNone:       false,
-		ExtraInstructions: "\n" + types.PhotoSourceDiscipline(),
+		ExtraInstructions: "\n" + PhotoSourceDiscipline(),
 		Search:            &SearchSpec{Fields: []string{"filename", "caption", "people"}, TitleField: "filename"},
 	},
 	{

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestGoogleDriveListUserDocuments_MapsGoogleDocs(t *testing.T) {
@@ -140,7 +140,7 @@ func TestGoogleDriveUnauthorized(t *testing.T) {
 	h.setToken(GoogleDriveServiceID, "tok-1")
 	c := NewGoogleDriveConnector(h)
 	_, _, err := c.ListUserDocuments(context.Background())
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
 }
@@ -149,7 +149,7 @@ func TestGoogleDriveNoToken(t *testing.T) {
 	h := newTestHostWithService(GoogleDriveServiceID, "http://127.0.0.1:1", "https://aegis.example.com")
 	c := NewGoogleDriveConnector(h)
 	_, _, err := c.ListUserDocuments(context.Background())
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v, want ErrUnauthorized", err)
 	}
 }

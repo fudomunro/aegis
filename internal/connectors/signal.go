@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -171,7 +172,7 @@ func (s *SignalStore) Enabled() bool { return s != nil && s.db != nil }
 
 // upsertSignalContactTx stores or replaces one imported contact keyed by
 // source_id.
-func upsertSignalContactTx(tx *sql.Tx, filePath string, c types.Contact) error {
+func upsertSignalContactTx(tx *sql.Tx, filePath string, c kinds.Contact) error {
 	id := signalContactSourceID(c)
 	if id == "" {
 		return fmt.Errorf("signal contact missing source id")
@@ -204,7 +205,7 @@ ON CONFLICT(source_id) DO UPDATE SET
 
 // upsertSignalMessageTx stores or replaces one imported message keyed by
 // source_id.
-func upsertSignalMessageTx(tx *sql.Tx, filePath string, m types.Message) error {
+func upsertSignalMessageTx(tx *sql.Tx, filePath string, m kinds.Message) error {
 	id := signalMessageSourceID(m)
 	if id == "" {
 		return fmt.Errorf("signal message missing source id")
@@ -250,7 +251,7 @@ ON CONFLICT(source_id) DO UPDATE SET
 }
 
 // UpsertContact stores or replaces one imported contact keyed by source_id.
-func (s *SignalStore) UpsertContact(filePath string, c types.Contact) error {
+func (s *SignalStore) UpsertContact(filePath string, c kinds.Contact) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("signal store disabled")
 	}
@@ -268,7 +269,7 @@ func (s *SignalStore) UpsertContact(filePath string, c types.Contact) error {
 }
 
 // UpsertMessage stores or replaces one imported message keyed by source_id.
-func (s *SignalStore) UpsertMessage(filePath string, m types.Message) error {
+func (s *SignalStore) UpsertMessage(filePath string, m kinds.Message) error {
 	if s == nil || s.db == nil {
 		return fmt.Errorf("signal store disabled")
 	}
@@ -301,7 +302,7 @@ func (s *SignalStore) HasMessage(sourceID string) bool {
 }
 
 // ListContacts returns stored contacts (name order).
-func (s *SignalStore) ListContacts(limit int) ([]types.Contact, error) {
+func (s *SignalStore) ListContacts(limit int) ([]kinds.Contact, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("signal store disabled")
 	}
@@ -318,13 +319,13 @@ LIMIT ?`, limit)
 		return nil, err
 	}
 	defer rows.Close()
-	var out []types.Contact
+	var out []kinds.Contact
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var c types.Contact
+		var c kinds.Contact
 		if err := json.Unmarshal([]byte(raw), &c); err != nil {
 			continue
 		}
@@ -334,7 +335,7 @@ LIMIT ?`, limit)
 }
 
 // ListMessages returns stored messages (newest first).
-func (s *SignalStore) ListMessages(limit int) ([]types.Message, error) {
+func (s *SignalStore) ListMessages(limit int) ([]kinds.Message, error) {
 	if s == nil || s.db == nil {
 		return nil, fmt.Errorf("signal store disabled")
 	}
@@ -351,13 +352,13 @@ LIMIT ?`, limit)
 		return nil, err
 	}
 	defer rows.Close()
-	var out []types.Message
+	var out []kinds.Message
 	for rows.Next() {
 		var raw string
 		if err := rows.Scan(&raw); err != nil {
 			return nil, err
 		}
-		var m types.Message
+		var m kinds.Message
 		if err := json.Unmarshal([]byte(raw), &m); err != nil {
 			continue
 		}
@@ -382,19 +383,19 @@ func (s *SignalStore) Counts() (contacts, messages int, err error) {
 	return contacts, messages, nil
 }
 
-func signalContactSourceID(c types.Contact) string {
+func signalContactSourceID(c kinds.Contact) string {
 	if len(c.Sources) > 0 {
 		if id := strings.TrimSpace(c.Sources[0].ID); id != "" {
 			return id
 		}
 	}
-	if k := types.PrimaryContactKey(c); k != "" {
+	if k := kinds.PrimaryContactKey(c); k != "" {
 		return k
 	}
 	return ""
 }
 
-func signalMessageSourceID(m types.Message) string {
+func signalMessageSourceID(m kinds.Message) string {
 	if len(m.Sources) > 0 {
 		if id := strings.TrimSpace(m.Sources[0].ID); id != "" {
 			return id
@@ -408,12 +409,12 @@ func signalMessageSourceID(m types.Message) string {
 	return "sig-" + shortHash(strings.Join(parts, "\x00"))
 }
 
-func newSignalContact(id, name string, phones, emails, handles []string, organization string) types.Contact {
-	c := types.NewContact(SignalServiceID, SignalServiceName, id, name, emails, phones)
+func newSignalContact(id, name string, phones, emails, handles []string, organization string) kinds.Contact {
+	c := kinds.NewContact(SignalServiceID, SignalServiceName, id, name, emails, phones)
 	if c.Name == "" && len(c.Phones) == 0 && len(c.Emails) == 0 && len(handles) == 0 {
-		return types.Contact{}
+		return kinds.Contact{}
 	}
-	c.Handles = types.NormalizeHandleList(handles)
+	c.Handles = kinds.NormalizeHandleList(handles)
 	if organization != "" {
 		c.Organization = organization
 	}
@@ -426,7 +427,7 @@ func newSignalContact(id, name string, phones, emails, handles []string, organiz
 	return c
 }
 
-func newSignalMessage(rec signalMessageRecord) types.Message {
+func newSignalMessage(rec signalMessageRecord) kinds.Message {
 	id := strings.TrimSpace(rec.ID)
 	if id == "" {
 		id = "sig-" + shortHash(strings.Join([]string{rec.ThreadID, rec.SentAt, rec.Direction, rec.Body}, "\x00"))
@@ -434,16 +435,16 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 	from := rec.From
 	if from != nil {
 		// Normalize into a Signal-sourced contact spelling.
-		nc := types.NewContact(SignalServiceID, SignalServiceName, "", from.Name, from.Emails, from.Phones)
+		nc := kinds.NewContact(SignalServiceID, SignalServiceName, "", from.Name, from.Emails, from.Phones)
 		if nc.Name != "" || len(nc.Phones) > 0 || len(nc.Emails) > 0 {
 			from = &nc
 		} else {
 			from = nil
 		}
 	}
-	to := make([]types.Contact, 0, len(rec.To))
+	to := make([]kinds.Contact, 0, len(rec.To))
 	for _, t := range rec.To {
-		nc := types.NewContact(SignalServiceID, SignalServiceName, "", t.Name, t.Emails, t.Phones)
+		nc := kinds.NewContact(SignalServiceID, SignalServiceName, "", t.Name, t.Emails, t.Phones)
 		if nc.Name != "" || len(nc.Phones) > 0 || len(nc.Emails) > 0 {
 			to = append(to, nc)
 		}
@@ -455,7 +456,7 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 			snippet = snippet[:200]
 		}
 	}
-	src := types.MessageSource{
+	src := kinds.MessageSource{
 		Service:     SignalServiceID,
 		ServiceName: SignalServiceName,
 		ID:          id,
@@ -463,8 +464,8 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 		Canonical:   true,
 	}
 	// Signal has no RFC Message-ID; the service-local id is the durable key.
-	return types.Message{
-		Channel:    types.MessageChannelSignal,
+	return kinds.Message{
+		Channel:    kinds.MessageChannelSignal,
 		Subject:    rec.Subject,
 		Snippet:    snippet,
 		Body:       rec.Body,
@@ -476,7 +477,7 @@ func newSignalMessage(rec signalMessageRecord) types.Message {
 		Read:       rec.Read,
 		ThreadID:   rec.ThreadID,
 		Labels:     rec.Labels,
-		Sources:    []types.MessageSource{src},
+		Sources:    []kinds.MessageSource{src},
 	}
 }
 
@@ -512,8 +513,8 @@ type signalMessageRecord struct {
 	FromMe     bool
 	Read       bool
 	ThreadID   string
-	From       *types.Contact
-	To         []types.Contact
+	From       *kinds.Contact
+	To         []kinds.Contact
 	Labels     []string
 }
 
@@ -556,15 +557,15 @@ type signalJSONBundle struct {
 	Messages []signalJSONLLine `json:"messages"`
 }
 
-func (p signalPerson) contact() types.Contact {
-	return types.NewContact(SignalServiceID, SignalServiceName, "", p.Name, p.Emails, p.Phones)
+func (p signalPerson) contact() kinds.Contact {
+	return kinds.NewContact(SignalServiceID, SignalServiceName, "", p.Name, p.Emails, p.Phones)
 }
 
-func (l signalJSONLLine) toContact() types.Contact {
+func (l signalJSONLLine) toContact() kinds.Contact {
 	return newSignalContact(l.ID, l.Name, l.Phones, l.Emails, l.Handles, l.Organization)
 }
 
-func (l signalJSONLLine) toMessage() types.Message {
+func (l signalJSONLLine) toMessage() kinds.Message {
 	rec := signalMessageRecord{
 		ID:         l.ID,
 		Subject:    l.Subject,
@@ -755,8 +756,8 @@ func importSignalJSON(store *SignalStore, file string, res *SignalImportResult, 
 // messages are written in batched transactions (issue #266).
 type signalBatch struct {
 	file     string
-	contacts []types.Contact
-	messages []types.Message
+	contacts []kinds.Contact
+	messages []kinds.Message
 }
 
 // flush writes the collected rows and folds per-kind counters into res.
@@ -767,7 +768,7 @@ func (b *signalBatch) flush(store *SignalStore, res *SignalImportResult) {
 	if len(b.contacts) > 0 {
 		var st ImportStats
 		upsertRows(&store.localStore, &st, b.contacts, signalContactSourceID, signalContactHasQuery,
-			func(tx *sql.Tx, c types.Contact) error { return upsertSignalContactTx(tx, b.file, c) })
+			func(tx *sql.Tx, c kinds.Contact) error { return upsertSignalContactTx(tx, b.file, c) })
 		res.ContactsStored += st.Stored
 		res.ContactsSkipped += st.Skipped
 		res.Errors += st.Errors
@@ -776,7 +777,7 @@ func (b *signalBatch) flush(store *SignalStore, res *SignalImportResult) {
 	if len(b.messages) > 0 {
 		var st ImportStats
 		upsertRows(&store.localStore, &st, b.messages, signalMessageSourceID, signalMessageHasQuery,
-			func(tx *sql.Tx, m types.Message) error { return upsertSignalMessageTx(tx, b.file, m) })
+			func(tx *sql.Tx, m kinds.Message) error { return upsertSignalMessageTx(tx, b.file, m) })
 		res.MessagesStored += st.Stored
 		res.MessagesSkipped += st.Skipped
 		res.Errors += st.Errors
@@ -1180,7 +1181,7 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 			shared.WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		shared.WriteJSON(w, types.MessageList{Messages: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		shared.WriteJSON(w, kinds.MessageList{Messages: list, LibraryListMeta: kinds.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodGet && (path == "contacts" || path == "contacts/" || path == "me/contacts"):
 		limit := LibraryItemCap
 		if v := r.URL.Query().Get("limit"); v != "" {
@@ -1193,7 +1194,7 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 			shared.WriteJSONError(w, http.StatusInternalServerError, "signal store error")
 			return
 		}
-		shared.WriteJSON(w, types.ContactList{Contacts: list, LibraryListMeta: types.LibraryListMeta{Total: len(list), Synced: true}})
+		shared.WriteJSON(w, kinds.ContactList{Contacts: list, LibraryListMeta: kinds.LibraryListMeta{Total: len(list), Synced: true}})
 	case r.Method == http.MethodPost && path == "import":
 		var req struct {
 			Path string `json:"path"`
@@ -1215,10 +1216,10 @@ func (c *SignalConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 }
 
 // ListUserContacts returns imported Signal contacts as a ContactProvider.
-func (c *SignalConnector) ListUserContacts(ctx context.Context) (contacts []types.Contact, truncated bool, err error) {
+func (c *SignalConnector) ListUserContacts(ctx context.Context) (contacts []kinds.Contact, truncated bool, err error) {
 	store := c.store
 	if store == nil || !store.Enabled() {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	list, err := store.ListContacts(LibraryItemCap)
 	if err != nil {
@@ -1231,10 +1232,10 @@ func (c *SignalConnector) ListUserContacts(ctx context.Context) (contacts []type
 }
 
 // ListMessages returns imported Signal messages as a MessageProvider.
-func (c *SignalConnector) ListMessages(ctx context.Context) (messages []types.Message, truncated bool, err error) {
+func (c *SignalConnector) ListMessages(ctx context.Context) (messages []kinds.Message, truncated bool, err error) {
 	store := c.store
 	if store == nil || !store.Enabled() {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	list, err := store.ListMessages(LibraryItemCap)
 	if err != nil {
@@ -1254,6 +1255,6 @@ func (c *SignalConnector) ListMessages(ctx context.Context) (messages []types.Me
 
 var (
 	_ ServiceConnector      = (*SignalConnector)(nil)
-	_ types.MessageProvider = (*SignalConnector)(nil)
-	_ types.ContactProvider = (*SignalConnector)(nil)
+	_ kinds.MessageProvider = (*SignalConnector)(nil)
+	_ kinds.ContactProvider = (*SignalConnector)(nil)
 )

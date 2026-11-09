@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // YouTube Music reconciliation operations (issue #254): paged list reads,
@@ -19,30 +19,30 @@ import (
 // liked-tracks placement and probe read and write.
 const youtubeLikedPlaylistID = "LL"
 
-// GetPlaylistMeta implements types.PlaylistMetaProvider in one metadata
+// GetPlaylistMeta implements kinds.PlaylistMetaProvider in one metadata
 // call: title and item count (YouTube exposes no change token).
-func (c *YouTubeMusicConnector) GetPlaylistMeta(ctx context.Context, playlistID string) (types.PlaylistMeta, bool, error) {
+func (c *YouTubeMusicConnector) GetPlaylistMeta(ctx context.Context, playlistID string) (kinds.PlaylistMeta, bool, error) {
 	raw, status, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlists",
 		url.Values{"part": []string{"snippet,contentDetails"}, "id": []string{playlistID}}, nil)
 	if err != nil {
 		if status == http.StatusNotFound {
-			return types.PlaylistMeta{}, false, nil
+			return kinds.PlaylistMeta{}, false, nil
 		}
-		return types.PlaylistMeta{}, false, err
+		return kinds.PlaylistMeta{}, false, err
 	}
 	items, _ := raw["items"].([]any)
 	if len(items) == 0 {
-		return types.PlaylistMeta{}, false, nil
+		return kinds.PlaylistMeta{}, false, nil
 	}
 	pl, _ := items[0].(map[string]any)
 	snippet, _ := pl["snippet"].(map[string]any)
 	title, _ := snippet["title"].(string)
 	details, _ := pl["contentDetails"].(map[string]any)
 	count, _ := shared.AsInt(details["itemCount"])
-	return types.PlaylistMeta{Name: title, ItemCount: count}, true, nil
+	return kinds.PlaylistMeta{Name: title, ItemCount: count}, true, nil
 }
 
-// SavedTrackCount implements types.PlaylistMetaProvider via the liked-videos
+// SavedTrackCount implements kinds.PlaylistMetaProvider via the liked-videos
 // playlist — the mirror target for saved tracks.
 func (c *YouTubeMusicConnector) SavedTrackCount(ctx context.Context) (int, error) {
 	raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlists",
@@ -60,12 +60,12 @@ func (c *YouTubeMusicConnector) SavedTrackCount(ctx context.Context) (int, error
 	return count, nil
 }
 
-// ListPlaylistItems implements types.PlaylistItemsProvider. One page of a
+// ListPlaylistItems implements kinds.PlaylistItemsProvider. One page of a
 // YouTube playlist's items. The cursor is YouTube's opaque nextPageToken;
 // only the first page also fetches the playlist object for the ref name and
 // total item count.
-func (c *YouTubeMusicConnector) ListPlaylistItems(ctx context.Context, playlistID, cursor string, limit int) (types.Playlist, types.TrackPage, error) {
-	ref := types.Playlist{Sources: []types.PlaylistSource{{
+func (c *YouTubeMusicConnector) ListPlaylistItems(ctx context.Context, playlistID, cursor string, limit int) (kinds.Playlist, kinds.TrackPage, error) {
+	ref := kinds.Playlist{Sources: []kinds.PlaylistSource{{
 		Service: YouTubeMusicServiceID,
 		ID:      playlistID,
 		URL:     "https://www.youtube.com/playlist?list=" + playlistID,
@@ -78,11 +78,11 @@ func (c *YouTubeMusicConnector) ListPlaylistItems(ctx context.Context, playlistI
 		raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlists",
 			url.Values{"part": []string{"snippet,contentDetails"}, "id": []string{playlistID}}, nil)
 		if err != nil {
-			return ref, types.TrackPage{}, err
+			return ref, kinds.TrackPage{}, err
 		}
 		items, _ := raw["items"].([]any)
 		if len(items) == 0 {
-			return ref, types.TrackPage{}, fmt.Errorf("playlist %q not found on youtube-music", playlistID)
+			return ref, kinds.TrackPage{}, fmt.Errorf("playlist %q not found on youtube-music", playlistID)
 		}
 		pl, _ := items[0].(map[string]any)
 		snippet, _ := pl["snippet"].(map[string]any)
@@ -100,7 +100,7 @@ func (c *YouTubeMusicConnector) ListPlaylistItems(ctx context.Context, playlistI
 	}
 	raw, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "GET", "/playlistItems", q, nil)
 	if err != nil {
-		return ref, types.TrackPage{}, err
+		return ref, kinds.TrackPage{}, err
 	}
 	tracks := youtubeItemsToTracks(raw)
 	if total == 0 {
@@ -108,19 +108,19 @@ func (c *YouTubeMusicConnector) ListPlaylistItems(ctx context.Context, playlistI
 	}
 	ref.TrackCount = total
 	next, _ := raw["nextPageToken"].(string)
-	return ref, types.TrackPage{Tracks: tracks, Total: total, Next: next}, nil
+	return ref, kinds.TrackPage{Tracks: tracks, Total: total, Next: next}, nil
 }
 
-// ListUserLikedTracksPage implements types.LikedTrackPageProvider by paging
+// ListUserLikedTracksPage implements kinds.LikedTrackPageProvider by paging
 // the liked-videos playlist.
-func (c *YouTubeMusicConnector) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (types.TrackPage, error) {
+func (c *YouTubeMusicConnector) ListUserLikedTracksPage(ctx context.Context, cursor string, limit int) (kinds.TrackPage, error) {
 	_, page, err := c.ListPlaylistItems(ctx, youtubeLikedPlaylistID, cursor, limit)
 	return page, err
 }
 
 // youtubeItemsToTracks flattens a playlistItems page into neutral tracks.
-func youtubeItemsToTracks(raw map[string]any) []types.Track {
-	var out []types.Track
+func youtubeItemsToTracks(raw map[string]any) []kinds.Track {
+	var out []kinds.Track
 	items, _ := raw["items"].([]any)
 	for _, item := range items {
 		e, ok := item.(map[string]any)
@@ -138,25 +138,25 @@ func youtubeItemsToTracks(raw map[string]any) []types.Track {
 		if videoID == "" {
 			continue
 		}
-		artists := []types.Artist{}
+		artists := []kinds.Artist{}
 		if videoOwnerChannelTitle != "" {
-			artists = []types.Artist{types.NewArtist(YouTubeMusicServiceID, YouTubeMusicServiceName, "", videoOwnerChannelTitle)}
+			artists = []kinds.Artist{kinds.NewArtist(YouTubeMusicServiceID, YouTubeMusicServiceName, "", videoOwnerChannelTitle)}
 		}
-		out = append(out, types.Track{
+		out = append(out, kinds.Track{
 			Name:    title,
 			Artists: artists,
-			Sources: []types.TrackSource{{Service: YouTubeMusicServiceID, ID: videoID}},
+			Sources: []kinds.TrackSource{{Service: YouTubeMusicServiceID, ID: videoID}},
 		})
 	}
 	return out
 }
 
-// PlacePlaylistItems implements types.PlaylistItemWriteProvider. Creates
+// PlacePlaylistItems implements kinds.PlaylistItemWriteProvider. Creates
 // the target playlist when playlistID is empty, then resolves and appends
 // items one by one. An empty playlistID is the single-call path; a known
 // playlistID continues a chained job.
-func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []types.Track) (types.PlacePlaylistItemsResult, error) {
-	var result types.PlacePlaylistItemsResult
+func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlistID, name string, tracks []kinds.Track) (kinds.PlacePlaylistItemsResult, error) {
+	var result kinds.PlacePlaylistItemsResult
 	if playlistID == "" {
 		created, _, err := apiJSON(ctx, c.host, YouTubeMusicServiceID, "POST", "/playlists",
 			url.Values{"part": []string{"snippet,status"}},
@@ -202,10 +202,10 @@ func (c *YouTubeMusicConnector) PlacePlaylistItems(ctx context.Context, playlist
 	return result, nil
 }
 
-// SaveLikedTracks implements types.LikedTrackWriteProvider by rating the
+// SaveLikedTracks implements kinds.LikedTrackWriteProvider by rating the
 // resolved videos "like".
-func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []types.Track) (types.SaveLikedTracksResult, error) {
-	var result types.SaveLikedTracksResult
+func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []kinds.Track) (kinds.SaveLikedTracksResult, error) {
+	var result kinds.SaveLikedTracksResult
 	for _, t := range tracks {
 		videoID := c.resolveVideoID(ctx, t, &result.Skips)
 		if videoID == "" {
@@ -223,24 +223,24 @@ func (c *YouTubeMusicConnector) SaveLikedTracks(ctx context.Context, tracks []ty
 
 // resolveVideoID maps one track to a YouTube video ID, appending a skip
 // when it cannot be resolved.
-func (c *YouTubeMusicConnector) resolveVideoID(ctx context.Context, t types.Track, skips *[]types.PlaceSkip) string {
+func (c *YouTubeMusicConnector) resolveVideoID(ctx context.Context, t kinds.Track, skips *[]kinds.PlaceSkip) string {
 	id, _ := placeTrackLocalRef(t, YouTubeMusicServiceID)
 	if id == "" {
 		found, err := c.searchVideoID(ctx, t)
 		if err != nil {
-			*skips = append(*skips, types.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
+			*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: err.Error()})
 			return ""
 		}
 		id = found
 	}
 	if id == "" {
-		*skips = append(*skips, types.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on YouTube Music"})
+		*skips = append(*skips, kinds.PlaceSkip{Name: placeTrackDisplay(t), Reason: "no match on YouTube Music"})
 		return ""
 	}
 	return id
 }
 
-func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t types.Track) (string, error) {
+func (c *YouTubeMusicConnector) searchVideoID(ctx context.Context, t kinds.Track) (string, error) {
 	q := url.Values{
 		"part":            []string{"snippet"},
 		"q":               []string{placeTrackQuery(t)},

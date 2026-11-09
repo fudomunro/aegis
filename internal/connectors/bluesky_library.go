@@ -11,8 +11,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // blueskyLibraryCap bounds one list call so a huge feed cannot stall the
@@ -154,16 +154,16 @@ func didFromBlobURLs(fullsize, thumb, postURI string) string {
 	return didFromPostURI(postURI)
 }
 
-// ListUserPhotos implements types.PhotoProvider. It lists the user's own
+// ListUserPhotos implements kinds.PhotoProvider. It lists the user's own
 // Bluesky image posts (metadata only — bytes stay on the PDS / CDN).
-func (c *BlueskyConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, bool, error) {
+func (c *BlueskyConnector) ListUserPhotos(ctx context.Context) ([]kinds.Photo, bool, error) {
 	logger := slog.With("service", BlueskyServiceID)
 	sess, err := c.createSession(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	var all []types.Photo
+	var all []kinds.Photo
 	truncated := false
 	cursor := ""
 	for page := 0; page < shared.LibraryPageCap; page++ {
@@ -198,7 +198,7 @@ func (c *BlueskyConnector) ListUserPhotos(ctx context.Context) ([]types.Photo, b
 }
 
 // photosFromPost maps one post's image embeds to neutral Photo values.
-func (c *BlueskyConnector) photosFromPost(post blueskyPostView) []types.Photo {
+func (c *BlueskyConnector) photosFromPost(post blueskyPostView) []kinds.Photo {
 	if post.Embed == nil || len(post.Embed.Images) == 0 {
 		return nil
 	}
@@ -210,7 +210,7 @@ func (c *BlueskyConnector) photosFromPost(post blueskyPostView) []types.Photo {
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + BlueskyServiceID
 	web := blueskyPostURL("", post.URI)
 
-	out := make([]types.Photo, 0, len(post.Embed.Images))
+	out := make([]kinds.Photo, 0, len(post.Embed.Images))
 	for i, img := range post.Embed.Images {
 		blobCID := blobCIDFromImageRef(img.Image.Ref)
 		if blobCID == "" {
@@ -231,7 +231,7 @@ func (c *BlueskyConnector) photosFromPost(post blueskyPostView) []types.Photo {
 		if i > 0 {
 			id = rkey + "#" + strconv.Itoa(i)
 		}
-		src := types.PhotoSource{
+		src := kinds.PhotoSource{
 			Service:     BlueskyServiceID,
 			ServiceName: BlueskyServiceName,
 			ID:          id,
@@ -264,14 +264,14 @@ func (c *BlueskyConnector) photosFromPost(post blueskyPostView) []types.Photo {
 		}
 		// content_hash is left empty — the library merge can still group
 		// by taken_at + dimensions when they are known.
-		p := types.Photo{
-			TakenAt:  types.NormalizePhotoTakenAt(post.Record.CreatedAt),
+		p := kinds.Photo{
+			TakenAt:  kinds.NormalizePhotoTakenAt(post.Record.CreatedAt),
 			Width:    width,
 			Height:   height,
 			MimeType: mime,
 			Filename: "bsky-" + rkey + "-" + strconv.Itoa(i) + mimeExt(mime),
 			Caption:  strings.TrimSpace(post.Record.Text),
-			Sources:  []types.PhotoSource{src},
+			Sources:  []kinds.PhotoSource{src},
 		}
 		if img.Alt != "" && p.Caption == "" {
 			p.Caption = img.Alt
@@ -298,18 +298,18 @@ func mimeExt(mime string) string {
 // turn into an unbounded walk of the author feed.
 const blueskyOwnPostsMaxPages = 25
 
-// ListMessages implements types.MessageProvider. It lists only the user's
+// ListMessages implements kinds.MessageProvider. It lists only the user's
 // own Bluesky writing — original posts and replies they authored — and
 // intentionally skips reposts, likes, follows, and other non-authored
 // activity.
-func (c *BlueskyConnector) ListMessages(ctx context.Context) ([]types.Message, bool, error) {
+func (c *BlueskyConnector) ListMessages(ctx context.Context) ([]kinds.Message, bool, error) {
 	logger := slog.With("service", BlueskyServiceID)
 	sess, err := c.createSession(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	var all []types.Message
+	var all []kinds.Message
 	truncated := false
 	cursor := ""
 	for page := 0; page < blueskyOwnPostsMaxPages; page++ {
@@ -358,21 +358,21 @@ func (c *BlueskyConnector) ListMessages(ctx context.Context) ([]types.Message, b
 // neutralOwnPost maps one author-feed item to a Message only when the user
 // wrote it (original post or reply). Reposts and other people's content are
 // skipped.
-func (c *BlueskyConnector) neutralOwnPost(item blueskyFeedItem, sess blueskySession) (types.Message, bool) {
+func (c *BlueskyConnector) neutralOwnPost(item blueskyFeedItem, sess blueskySession) (kinds.Message, bool) {
 	// reasonRepost (and similar) wraps someone else's post — not our writing.
 	if item.Reason != nil {
-		return types.Message{}, false
+		return kinds.Message{}, false
 	}
 	post := item.Post
 	authorHandle := post.Author.Handle
 	authorDID := post.Author.DID
 	if authorHandle != sess.Handle && authorDID != sess.DID {
-		return types.Message{}, false
+		return kinds.Message{}, false
 	}
 
 	recordType := post.Record.Type
 	if recordType != "" && recordType != "app.bsky.feed.post" {
-		return types.Message{}, false
+		return kinds.Message{}, false
 	}
 
 	text := strings.TrimSpace(post.Record.Text)
@@ -384,17 +384,17 @@ func (c *BlueskyConnector) neutralOwnPost(item blueskyFeedItem, sess blueskySess
 		subject = subjectFromPostText(text, "Bluesky reply")
 	}
 
-	sentAt := types.NormalizePhotoTakenAt(post.Record.CreatedAt)
+	sentAt := kinds.NormalizePhotoTakenAt(post.Record.CreatedAt)
 	if sentAt == "" {
-		sentAt = types.NormalizePhotoTakenAt(item.ReasonIndexedAt)
+		sentAt = kinds.NormalizePhotoTakenAt(item.ReasonIndexedAt)
 	}
 	rkey := rkeyFromATURI(post.URI)
 	web := blueskyPostURL(sess.Handle, post.URI)
 
-	self := types.NewContact(BlueskyServiceID, BlueskyServiceName, sess.DID, sess.Handle, nil, nil)
+	self := kinds.NewContact(BlueskyServiceID, BlueskyServiceName, sess.DID, sess.Handle, nil, nil)
 	self.Handles = []string{sess.Handle}
 
-	src := types.MessageSource{
+	src := kinds.MessageSource{
 		Service:     BlueskyServiceID,
 		ServiceName: BlueskyServiceName,
 		ID:          post.URI,
@@ -414,8 +414,8 @@ func (c *BlueskyConnector) neutralOwnPost(item blueskyFeedItem, sess blueskySess
 		src.Extra["reply_root_uri"] = post.Record.Reply.Root.URI
 	}
 
-	msg := types.Message{
-		Channel:    types.MessageChannelSocial,
+	msg := kinds.Message{
+		Channel:    kinds.MessageChannelSocial,
 		Subject:    subject,
 		Snippet:    text,
 		Body:       text,
@@ -428,7 +428,7 @@ func (c *BlueskyConnector) neutralOwnPost(item blueskyFeedItem, sess blueskySess
 		ThreadID:  src.ThreadID,
 		EntityID:  post.URI,
 		Labels:    []string{kind, "bluesky", "authored"},
-		Sources:   []types.MessageSource{src},
+		Sources:   []kinds.MessageSource{src},
 		Extra: map[string]any{
 			"kind": kind,
 		},
@@ -452,16 +452,16 @@ func subjectFromPostText(text, fallback string) string {
 	return t
 }
 
-// ListUserContacts implements types.ContactProvider. It maps the user's
+// ListUserContacts implements kinds.ContactProvider. It maps the user's
 // Bluesky following list into neutral contacts (handle + display name + DID).
-func (c *BlueskyConnector) ListUserContacts(ctx context.Context) ([]types.Contact, bool, error) {
+func (c *BlueskyConnector) ListUserContacts(ctx context.Context) ([]kinds.Contact, bool, error) {
 	logger := slog.With("service", BlueskyServiceID)
 	sess, err := c.createSession(ctx)
 	if err != nil {
 		return nil, false, err
 	}
 
-	var all []types.Contact
+	var all []kinds.Contact
 	truncated := false
 	cursor := ""
 	for page := 0; page < shared.LibraryPageCap; page++ {
@@ -509,16 +509,16 @@ type blueskyProfile struct {
 	Avatar      string `json:"avatar"`
 }
 
-func (c *BlueskyConnector) neutralContact(f blueskyProfile) types.Contact {
+func (c *BlueskyConnector) neutralContact(f blueskyProfile) kinds.Contact {
 	name := strings.TrimSpace(f.DisplayName)
 	if name == "" {
 		name = strings.TrimSpace(f.Handle)
 	}
-	ct := types.NewContact(BlueskyServiceID, BlueskyServiceName, f.DID, name, nil, nil)
+	ct := kinds.NewContact(BlueskyServiceID, BlueskyServiceName, f.DID, name, nil, nil)
 	if h := strings.TrimSpace(f.Handle); h != "" {
 		ct.Handles = []string{h}
 	}
-	src := types.ContactSource{
+	src := kinds.ContactSource{
 		Service:     BlueskyServiceID,
 		ServiceName: BlueskyServiceName,
 		ID:          f.DID,
@@ -533,7 +533,7 @@ func (c *BlueskyConnector) neutralContact(f blueskyProfile) types.Contact {
 	if f.Avatar != "" {
 		src.Extra["avatar"] = f.Avatar
 	}
-	ct.Sources = []types.ContactSource{src}
+	ct.Sources = []kinds.ContactSource{src}
 	if d := strings.TrimSpace(f.Description); d != "" {
 		ct.Extra = map[string]any{"description": d}
 	}
@@ -561,7 +561,7 @@ func (c *BlueskyConnector) authedGet(ctx context.Context, accessJWT, path string
 		return nil, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return nil, types.ErrUnauthorized
+		return nil, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("bluesky %s returned %d: %s", path, resp.StatusCode, truncateBytes(data, 200))

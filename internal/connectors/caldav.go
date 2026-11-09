@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -100,18 +101,18 @@ func (c *CalDAVConnector) HandleProxy(w http.ResponseWriter, r *http.Request, re
 }
 
 // ListCalendarEvents fetches the default window via CalDAV REPORT.
-func (c *CalDAVConnector) ListCalendarEvents(ctx context.Context) ([]types.CalendarEvent, bool, error) {
+func (c *CalDAVConnector) ListCalendarEvents(ctx context.Context) ([]kinds.CalendarEvent, bool, error) {
 	now := time.Now()
 	start, end := CalendarWindow(now)
 	return c.ListEventsWithWindow(ctx, start, end)
 }
 
 // ListEventsWithWindow expands VEVENTs intersecting [start, end).
-func (c *CalDAVConnector) ListEventsWithWindow(ctx context.Context, start, end time.Time) ([]types.CalendarEvent, bool, error) {
+func (c *CalDAVConnector) ListEventsWithWindow(ctx context.Context, start, end time.Time) ([]kinds.CalendarEvent, bool, error) {
 	logger := slog.With("service", CalDAVServiceID)
 	auth := c.auth()
 	if !auth.configured() {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	if end.IsZero() {
 		_, end = CalendarWindow(time.Now())
@@ -133,7 +134,7 @@ func (c *CalDAVConnector) ListEventsWithWindow(ctx context.Context, start, end t
 	}
 
 	calendarName := ""
-	var events []types.CalendarEvent
+	var events []kinds.CalendarEvent
 	for _, r := range ms.Responses {
 		prop, ok := propstatOK(r.Propstat)
 		if !ok {
@@ -150,13 +151,13 @@ func (c *CalDAVConnector) ListEventsWithWindow(ctx context.Context, start, end t
 	return events, false, nil
 }
 
-func (c *CalDAVConnector) mapVCalendar(body, href, etag, calendarName string, start, end time.Time) []types.CalendarEvent {
+func (c *CalDAVConnector) mapVCalendar(body, href, etag, calendarName string, start, end time.Time) []kinds.CalendarEvent {
 	parsed := ParseICalendar(body)
 	if len(parsed) == 0 {
 		return nil
 	}
 	id := davHrefName(href)
-	var out []types.CalendarEvent
+	var out []kinds.CalendarEvent
 	for _, ev := range parsed {
 		ev.ETag = etag
 		ev.Href = href
@@ -170,7 +171,7 @@ func (c *CalDAVConnector) mapVCalendar(body, href, etag, calendarName string, st
 	return out
 }
 
-func (c *CalDAVConnector) listViaPropfind(ctx context.Context, collection string, auth davAuth, start, end time.Time) ([]types.CalendarEvent, bool, error) {
+func (c *CalDAVConnector) listViaPropfind(ctx context.Context, collection string, auth davAuth, start, end time.Time) ([]kinds.CalendarEvent, bool, error) {
 	body := `<?xml version="1.0" encoding="UTF-8"?>
 <d:propfind xmlns:d="DAV:"><d:prop><d:getetag/><d:getcontenttype/><d:resourcetype/><d:displayname/></d:prop></d:propfind>`
 	resp, err := davRequest(ctx, "PROPFIND", collection, auth, map[string]string{"Depth": davDepthOne}, body)
@@ -179,7 +180,7 @@ func (c *CalDAVConnector) listViaPropfind(ctx context.Context, collection string
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode >= 400 {
 		return nil, false, fmt.Errorf("caldav PROPFIND returned %d", resp.StatusCode)
@@ -193,7 +194,7 @@ func (c *CalDAVConnector) listViaPropfind(ctx context.Context, collection string
 		return nil, false, err
 	}
 
-	var events []types.CalendarEvent
+	var events []kinds.CalendarEvent
 	truncated := false
 	n := 0
 	for _, r := range ms.Responses {
@@ -235,7 +236,7 @@ func (c *CalDAVConnector) resolveCollection(ctx context.Context, auth davAuth) (
 func (c *CalDAVConnector) PutEvent(ctx context.Context, href, etag string, ev ICalEvent) (string, error) {
 	auth := c.auth()
 	if !auth.configured() {
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	}
 	if strings.TrimSpace(href) == "" {
 		col, err := c.resolveCollection(ctx, auth)

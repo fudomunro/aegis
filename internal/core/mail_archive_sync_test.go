@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"context"
 	"encoding/base64"
@@ -136,7 +137,7 @@ func TestGmailSyncUnauthorized(t *testing.T) {
 	// No token in the store.
 	conn := connectors.NewGoogleGmailConnector(srv)
 	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{})
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 	if res.Error == "" {

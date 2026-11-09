@@ -17,7 +17,7 @@ import (
 )
 
 type fakeMessageProvider struct {
-	messages  []types.Message
+	messages  []kinds.Message
 	err       error
 	truncated bool
 }
@@ -29,7 +29,7 @@ func (f *fakeMessageProvider) SystemInstructions(string) string { return "fake" 
 func (f *fakeMessageProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeMessageProvider) ListMessages(context.Context) ([]types.Message, bool, error) {
+func (f *fakeMessageProvider) ListMessages(context.Context) ([]kinds.Message, bool, error) {
 	return f.messages, f.truncated, f.err
 }
 
@@ -39,16 +39,16 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 		{ID: "outlook-mail", Name: "Outlook Mail", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	a := newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
+	a := newMessage("google-gmail", "Gmail", "g1", kinds.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
 	a.EntityID = "standup@example.com"
-	from := types.Contact{Emails: []string{"ada@example.com"}}
+	from := kinds.Contact{Emails: []string{"ada@example.com"}}
 	a.From = &from
-	b := newMessage("outlook-mail", "Outlook Mail", "o1", types.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
+	b := newMessage("outlook-mail", "Outlook Mail", "o1", kinds.MessageChannelEmail, "Standup notes", "notes", "2024-06-01T09:00:00Z")
 	b.EntityID = "standup@example.com"
-	c := newMessage("google-gmail", "Gmail", "g2", types.MessageChannelEmail, "Other", "", "2024-06-02T10:00:00Z")
+	c := newMessage("google-gmail", "Gmail", "g2", kinds.MessageChannelEmail, "Other", "", "2024-06-02T10:00:00Z")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-gmail": &fakeMessageProvider{messages: []types.Message{a, c}},
-		"outlook-mail": &fakeMessageProvider{messages: []types.Message{b}},
+		"google-gmail": &fakeMessageProvider{messages: []kinds.Message{a, c}},
+		"outlook-mail": &fakeMessageProvider{messages: []kinds.Message{b}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -58,7 +58,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.MessageList
+	var resp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	if resp.ByService["google-gmail"].Count != 2 || resp.ByService["outlook-mail"].Count != 1 {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
-	var standup *types.Message
+	var standup *kinds.Message
 	for i := range resp.Messages {
 		if resp.Messages[i].Subject == "Standup notes" {
 			standup = &resp.Messages[i]
@@ -90,8 +90,8 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-gmail": &fakeMessageProvider{messages: []types.Message{
-			newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
+		"google-gmail": &fakeMessageProvider{messages: []kinds.Message{
+			newMessage("google-gmail", "Gmail", "g1", kinds.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -101,7 +101,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.MessageList
+	var resp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -130,8 +130,8 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-gmail": &fakeMessageProvider{messages: []types.Message{
-			newMessage("google-gmail", "Gmail", "g1", types.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
+		"google-gmail": &fakeMessageProvider{messages: []kinds.Message{
+			newMessage("google-gmail", "Gmail", "g1", kinds.MessageChannelEmail, "Hello", "", "2024-06-01T09:00:00Z"),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
@@ -147,7 +147,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-gmail", Name: "Gmail", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-gmail": &fakeMessageProvider{err: types.ErrUnauthorized},
+		"google-gmail": &fakeMessageProvider{err: kinds.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -156,11 +156,11 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.MessageList
+	var resp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google-gmail"].Status != types.LibraryStatusUnauthorized {
+	if resp.ByService["google-gmail"].Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("status = %+v", resp.ByService)
 	}
 }
@@ -178,11 +178,11 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.MessageList
+	var resp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google-gmail"].Status != types.LibraryStatusError {
+	if resp.ByService["google-gmail"].Status != kinds.LibraryStatusError {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 }
@@ -236,9 +236,9 @@ func TestStampMessageCanonical_OnlyWhenConfigured(t *testing.T) {
 		{ID: "other-mail", Name: "Other", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	items := []types.Message{
-		{Sources: []types.MessageSource{{Service: "google-gmail"}}},
-		{Sources: []types.MessageSource{{Service: "other-mail"}}},
+	items := []kinds.Message{
+		{Sources: []kinds.MessageSource{{Service: "google-gmail"}}},
+		{Sources: []kinds.MessageSource{{Service: "other-mail"}}},
 	}
 	mark, _ := kinds.Stamps(srv, "messages", forEachMessageSource)
 	mark(items, "google-gmail")

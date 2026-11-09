@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"bytes"
 	"context"
@@ -12,8 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestPlacesAccessLevels(t *testing.T) {
@@ -39,18 +38,18 @@ func TestNormalizePlaceVisitTime_Variants(t *testing.T) {
 		"not-a-time":           "not-a-time",
 	}
 	for in, want := range cases {
-		if got := types.NormalizePlaceVisitTime(in); got != want {
+		if got := kinds.NormalizePlaceVisitTime(in); got != want {
 			t.Fatalf("normalize(%q)=%q want %q", in, got, want)
 		}
 	}
 }
 
 func TestRoundCoord(t *testing.T) {
-	if types.RoundCoord(44.64886) != 44.649 {
-		t.Fatalf("round = %v", types.RoundCoord(44.64886))
+	if kinds.RoundCoord(44.64886) != 44.649 {
+		t.Fatalf("round = %v", kinds.RoundCoord(44.64886))
 	}
-	if types.RoundCoord(-44.64886) != -44.649 {
-		t.Fatalf("round negative = %v", types.RoundCoord(-44.64886))
+	if kinds.RoundCoord(-44.64886) != -44.649 {
+		t.Fatalf("round negative = %v", kinds.RoundCoord(-44.64886))
 	}
 }
 
@@ -135,7 +134,7 @@ func TestOwnTracksConnector_Unauthorized(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: connectors.OwnTracksServiceID, Name: "OwnTracks"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	conn := connectors.NewOwnTracksConnector(srv)
-	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -232,7 +231,7 @@ func TestTimelineAdmin_StatusAndImport(t *testing.T) {
 
 func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
 	conn := connectors.NewTimelineConnector(nil)
-	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != types.ErrUnauthorized {
+	if _, _, err := conn.ListUserPlaceVisits(context.Background()); err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 	if caps := conn.Capabilities(); len(caps.Kinds) == 0 {
@@ -249,25 +248,25 @@ func TestTimelineConnector_CapabilitiesAndDisabled(t *testing.T) {
 }
 
 func TestPhotosTakenDuring_Edges(t *testing.T) {
-	v := types.PlaceVisit{StartAt: "2023-07-04T16:00:00Z"} // no end
+	v := kinds.PlaceVisit{StartAt: "2023-07-04T16:00:00Z"} // no end
 	if PhotosTakenDuring(nil, v) != nil && len(PhotosTakenDuring(nil, v)) != 0 {
 		t.Fatal("nil photos")
 	}
-	if len(PhotosTakenDuring([]types.Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, v)) != 1 {
+	if len(PhotosTakenDuring([]kinds.Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, v)) != 1 {
 		t.Fatal("open-ended window")
 	}
 	// Missing start → no join
-	if len(PhotosTakenDuring([]types.Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, types.PlaceVisit{})) != 0 {
+	if len(PhotosTakenDuring([]kinds.Photo{{TakenAt: "2023-07-04T17:00:00Z"}}, kinds.PlaceVisit{})) != 0 {
 		t.Fatal("missing start")
 	}
 }
 
 func TestPlaceVisitFilters_CacheKey(t *testing.T) {
-	f := types.PlaceVisitFilters{After: "2023-01-01T00:00:00Z", Before: "2023-02-01T00:00:00Z", Locality: "Halifax", Kind: types.PlaceKindVisit}
+	f := kinds.PlaceVisitFilters{After: "2023-01-01T00:00:00Z", Before: "2023-02-01T00:00:00Z", Locality: "Halifax", Kind: kinds.PlaceKindVisit}
 	if f.CacheKeySuffix() == "" {
 		t.Fatal("expected cache key")
 	}
-	if (types.PlaceVisitFilters{}).CacheKeySuffix() != "" {
+	if (kinds.PlaceVisitFilters{}).CacheKeySuffix() != "" {
 		t.Fatal("empty filters")
 	}
 }

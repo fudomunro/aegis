@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestAlbumServiceName_AndPhotosInstructions(t *testing.T) {
-	if types.AlbumServiceName(types.Album{}) != "" {
+	if kinds.AlbumServiceName(kinds.Album{}) != "" {
 		t.Fatal("empty album should have empty service name")
 	}
-	got := types.AlbumServiceName(types.Album{Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify"}}})
+	got := kinds.AlbumServiceName(kinds.Album{Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify"}}})
 	if got != "Spotify" {
-		t.Fatalf("types.AlbumServiceName = %q", got)
+		t.Fatalf("kinds.AlbumServiceName = %q", got)
 	}
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")

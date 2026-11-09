@@ -6,8 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // fakeHost implements Host over plain test state — the seam must be usable
@@ -53,11 +51,11 @@ func (f *fakeHost) Agent(r *http.Request) string { return "test-agent" }
 
 func (f *fakeHost) SourceName(id string) string { return "name:" + id }
 
-func (f *fakeHost) CopyInfo(kind, serviceID, externalID string) *types.CopyInfo {
+func (f *fakeHost) CopyInfo(kind, serviceID, externalID string) *CopyInfo {
 	if externalID == "" {
 		return nil
 	}
-	return &types.CopyInfo{Note: kind + "/" + serviceID + "/" + externalID}
+	return &CopyInfo{Note: kind + "/" + serviceID + "/" + externalID}
 }
 
 type testProvider interface {
@@ -116,10 +114,10 @@ func TestEnrichStatuses_CanonicalRoleAndHooks(t *testing.T) {
 			{ID: "mirror"},
 		},
 	}
-	bySvc := map[string]types.LibraryServiceStatus{
-		"home":   {Status: types.LibraryStatusOK, Count: 1},
-		"mirror": {Status: types.LibraryStatusOK, Count: 2},
-		"local":  {Status: types.LibraryStatusOK, Count: 3},
+	bySvc := map[string]LibraryServiceStatus{
+		"home":   {Status: LibraryStatusOK, Count: 1},
+		"mirror": {Status: LibraryStatusOK, Count: 2},
+		"local":  {Status: LibraryStatusOK, Count: 3},
 	}
 	hooks := StatusHooks{
 		SourceName: func(id string) (string, bool) {
@@ -134,8 +132,8 @@ func TestEnrichStatuses_CanonicalRoleAndHooks(t *testing.T) {
 			}
 			return "", false
 		},
-		Expand: func(bySvc map[string]types.LibraryServiceStatus) {
-			bySvc["extra"] = types.LibraryServiceStatus{Status: types.LibraryStatusOK, Count: 7}
+		Expand: func(bySvc map[string]LibraryServiceStatus) {
+			bySvc["extra"] = LibraryServiceStatus{Status: LibraryStatusOK, Count: 7}
 		},
 	}
 	EnrichStatuses(h, "widgets", hooks, bySvc)

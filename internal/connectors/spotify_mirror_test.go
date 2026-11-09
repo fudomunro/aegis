@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func writeMirrorJSON(w http.ResponseWriter, v any) {
@@ -19,22 +19,22 @@ func writeMirrorJSON(w http.ResponseWriter, v any) {
 }
 
 // placeTrack builds a neutral track with an optional service-local ref.
-func placeTrack(service, name, id, uri string, artists ...string) types.Track {
-	t := types.Track{Name: name}
+func placeTrack(service, name, id, uri string, artists ...string) kinds.Track {
+	t := kinds.Track{Name: name}
 	if id != "" || uri != "" {
-		src := types.TrackSource{Service: service, ID: id}
+		src := kinds.TrackSource{Service: service, ID: id}
 		if uri != "" {
 			src.Extra = map[string]any{"uri": uri}
 		}
-		t.Sources = []types.TrackSource{src}
+		t.Sources = []kinds.TrackSource{src}
 	}
 	for _, a := range artists {
-		t.Artists = append(t.Artists, types.Artist{Name: a})
+		t.Artists = append(t.Artists, kinds.Artist{Name: a})
 	}
 	return t
 }
 
-func sourceID(t types.Track) string {
+func sourceID(t kinds.Track) string {
 	if len(t.Sources) == 0 {
 		return ""
 	}
@@ -290,7 +290,7 @@ func TestSpotifyPlacePlaylistItems_CreateSearchFallbackAndSkips(t *testing.T) {
 		}
 	}))
 
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		placeTrack(SpotifyServiceID, "Direct", "", "spotify:track:direct"),
 		placeTrack(SpotifyServiceID, "FromID", "from-id", ""),
 		placeTrack("", "Found Song", "", "", "Finder"),
@@ -368,7 +368,7 @@ func TestSpotifyPlacePlaylistItems_UpstreamErrors(t *testing.T) {
 				http.NotFound(w, r)
 			}
 		}))
-		res, err := c.PlacePlaylistItems(context.Background(), "", "x", []types.Track{
+		res, err := c.PlacePlaylistItems(context.Background(), "", "x", []kinds.Track{
 			placeTrack(SpotifyServiceID, "T", "", "spotify:track:t"),
 		})
 		if err == nil {
@@ -403,7 +403,7 @@ func TestSpotifyPlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 	}))
 
 	res, err := c.PlacePlaylistItems(context.Background(), "", "Backup",
-		[]types.Track{placeTrack(SpotifyServiceID, "A", "", "spotify:track:a")})
+		[]kinds.Track{placeTrack(SpotifyServiceID, "A", "", "spotify:track:a")})
 	if err != nil {
 		t.Fatalf("PlacePlaylistItems(create): %v", err)
 	}
@@ -416,7 +416,7 @@ func TestSpotifyPlacePlaylistItems_CreatesThenAppends(t *testing.T) {
 
 	// A second step with a known playlist id must append, not create.
 	res2, err := c.PlacePlaylistItems(context.Background(), "PL1", "Backup",
-		[]types.Track{placeTrack(SpotifyServiceID, "B", "", "spotify:track:b")})
+		[]kinds.Track{placeTrack(SpotifyServiceID, "B", "", "spotify:track:b")})
 	if err != nil {
 		t.Fatalf("PlacePlaylistItems(append): %v", err)
 	}
@@ -455,7 +455,7 @@ func TestSpotifySaveLikedTracks(t *testing.T) {
 		}
 	}))
 
-	tracks := []types.Track{
+	tracks := []kinds.Track{
 		placeTrack(SpotifyServiceID, "HasID", "id-1", ""),
 		placeTrack(SpotifyServiceID, "HasURI", "", "spotify:track:uri-1"),
 		placeTrack("", "Found Song", "", "", "A"),
@@ -490,7 +490,7 @@ func TestSpotifySaveLikedTracks_PutError(t *testing.T) {
 		}
 		http.NotFound(w, r)
 	}))
-	_, err := c.SaveLikedTracks(context.Background(), []types.Track{
+	_, err := c.SaveLikedTracks(context.Background(), []kinds.Track{
 		placeTrack(SpotifyServiceID, "T", "id", ""),
 	})
 	if err == nil {
@@ -516,15 +516,15 @@ func TestSpotifySearchTrackURI_EdgeCases(t *testing.T) {
 	}))
 	ctx := context.Background()
 
-	uri, err := c.searchTrackURI(ctx, types.Track{Name: "Nope", Artists: []types.Artist{{Name: "X"}}})
+	uri, err := c.searchTrackURI(ctx, kinds.Track{Name: "Nope", Artists: []kinds.Artist{{Name: "X"}}})
 	if err != nil || uri != "" {
 		t.Fatalf("empty result = %q %v", uri, err)
 	}
-	uri, err = c.searchTrackURI(ctx, types.Track{Name: "BadItem"})
+	uri, err = c.searchTrackURI(ctx, kinds.Track{Name: "BadItem"})
 	if err != nil || uri != "" {
 		t.Fatalf("bad item = %q %v", uri, err)
 	}
-	uri, err = c.searchTrackURI(ctx, types.Track{Name: "EmptyURI"})
+	uri, err = c.searchTrackURI(ctx, kinds.Track{Name: "EmptyURI"})
 	if err != nil || uri != "" {
 		t.Fatalf("empty uri = %q %v", uri, err)
 	}

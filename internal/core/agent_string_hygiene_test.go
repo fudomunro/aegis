@@ -8,7 +8,6 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Agent-facing strings are what the LLM agent reads in pre-request injection
@@ -94,7 +93,7 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 	add("userDefinedHint.FailMsg", schema.FailMsg)
 
 	add("multiSourceMutationRule", multiSourceMutationRule())
-	add("PhotoSourceDiscipline", types.PhotoSourceDiscipline())
+	add("PhotoSourceDiscipline", kinds.PhotoSourceDiscipline())
 
 	for _, notice := range srv.writePolicyNotices(cfg.Services) {
 		add("writePolicyNotice", notice)

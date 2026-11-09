@@ -1,4 +1,4 @@
-package types
+package kinds
 
 // Playlist is the user-facing playlist. Service identity (connector ID,
 // service-local ID, deep link) is never top-level — it lives in Sources so

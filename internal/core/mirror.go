@@ -10,8 +10,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Mirror kinds supported by POST /v1/library/mirror.
@@ -167,7 +167,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ctx := r.Context()
-	var tracks []types.Track
+	var tracks []kinds.Track
 	var srcRef MirrorRef
 	var truncated bool
 
@@ -232,7 +232,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var skips []types.PlaceSkip
+	var skips []kinds.PlaceSkip
 	switch req.Kind {
 	case MirrorKindPlaylists:
 		res, err := dst.PlacePlaylistItems(ctx, "", name, tracks)
@@ -275,7 +275,7 @@ func (s *Server) writeMirrorUpstreamError(w http.ResponseWriter, logger *slog.Lo
 }
 
 func errorsIsUnauthorized(err error) bool {
-	return err != nil && (err == types.ErrUnauthorized || strings.Contains(err.Error(), "unauthorized"))
+	return err != nil && (err == kinds.ErrUnauthorized || strings.Contains(err.Error(), "unauthorized"))
 }
 
 // requireMirrorWritable checks the target allows writes for the kind.
@@ -323,9 +323,9 @@ func (s *Server) defaultMirrorSource(kind string) string {
 // mirrorSource is the read surface the mirror engine needs from a service:
 // the type-level list operations reconciliation plans against.
 type mirrorSource interface {
-	types.PlaylistItemsProvider
-	types.LikedTrackProvider
-	types.LikedTrackPageProvider
+	kinds.PlaylistItemsProvider
+	kinds.LikedTrackProvider
+	kinds.LikedTrackPageProvider
 }
 
 // mirrorTarget is the write surface: the type-level placement operations
@@ -333,8 +333,8 @@ type mirrorSource interface {
 // spread across job steps without creating a playlist per batch
 // (issue #227 phase 3).
 type mirrorTarget interface {
-	types.PlaylistItemWriteProvider
-	types.LikedTrackWriteProvider
+	kinds.PlaylistItemWriteProvider
+	kinds.LikedTrackWriteProvider
 }
 
 func (s *Server) mirrorSourceFor(serviceID, kind string) (mirrorSource, error) {
@@ -378,9 +378,9 @@ func mirrorSupportedFor[P any](s *Server) string {
 // loadMirrorPlaylistItems pages a source playlist through the items
 // operation, up to shared.LibraryPageCap pages. truncated reports the cap was hit
 // with more items still upstream.
-func loadMirrorPlaylistItems(ctx context.Context, src types.PlaylistItemsProvider, id string) (types.Playlist, []types.Track, bool, error) {
-	var ref types.Playlist
-	var tracks []types.Track
+func loadMirrorPlaylistItems(ctx context.Context, src kinds.PlaylistItemsProvider, id string) (kinds.Playlist, []kinds.Track, bool, error) {
+	var ref kinds.Playlist
+	var tracks []kinds.Track
 	cursor := ""
 	for page := 0; page < shared.LibraryPageCap; page++ {
 		r, p, err := src.ListPlaylistItems(ctx, id, cursor, 100)
@@ -400,7 +400,7 @@ func loadMirrorPlaylistItems(ctx context.Context, src types.PlaylistItemsProvide
 }
 
 // mirrorRefFromPlaylist projects a neutral playlist ref onto the API shape.
-func mirrorRefFromPlaylist(service string, p types.Playlist, count int) MirrorRef {
+func mirrorRefFromPlaylist(service string, p kinds.Playlist, count int) MirrorRef {
 	ref := MirrorRef{Service: service, Name: p.Name, Count: count}
 	if len(p.Sources) > 0 {
 		ref.ID = p.Sources[0].ID
@@ -410,7 +410,7 @@ func mirrorRefFromPlaylist(service string, p types.Playlist, count int) MirrorRe
 }
 
 // toMirrorSkips projects placement skips onto the API shape.
-func toMirrorSkips(skips []types.PlaceSkip) []MirrorSkip {
+func toMirrorSkips(skips []kinds.PlaceSkip) []MirrorSkip {
 	if len(skips) == 0 {
 		return nil
 	}
@@ -422,7 +422,7 @@ func toMirrorSkips(skips []types.PlaceSkip) []MirrorSkip {
 }
 
 // toMirrorConflicts projects placement conflicts onto the API shape.
-func toMirrorConflicts(conflicts []types.PlaceConflict) []MirrorConflict {
+func toMirrorConflicts(conflicts []kinds.PlaceConflict) []MirrorConflict {
 	if len(conflicts) == 0 {
 		return nil
 	}

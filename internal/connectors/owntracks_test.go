@@ -3,7 +3,7 @@ package connectors
 import (
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestOwnTracksClusterVisits(t *testing.T) {
@@ -22,7 +22,7 @@ func TestOwnTracksClusterVisits(t *testing.T) {
 	if len(visits) < 2 {
 		t.Fatalf("clusters = %d, want >= 2: %+v", len(visits), visits)
 	}
-	if visits[0].Kind != types.PlaceKindVisit {
+	if visits[0].Kind != kinds.PlaceKindVisit {
 		t.Fatalf("first = %+v", visits[0])
 	}
 	if visits[0].Place.Name != "Harbour" {

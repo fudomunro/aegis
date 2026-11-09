@@ -1,17 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
-)
-
-import (
 	"context"
 	"log/slog"
 	"net/http"
 	"sort"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // kindsHost adapts the hub onto the kinds.Host seam (issue #312). The
@@ -126,7 +122,7 @@ func (s *Server) SourceName(id string) string {
 }
 
 // CopyInfo implements kinds.Host.
-func (s *Server) CopyInfo(kind, serviceID, externalID string) *types.CopyInfo {
+func (s *Server) CopyInfo(kind, serviceID, externalID string) *kinds.CopyInfo {
 	return s.copyInfoFor(kind, serviceID, externalID)
 }
 
@@ -264,7 +260,7 @@ func (a mailArchive) Readable(r *http.Request) bool {
 }
 
 // List implements kinds.MailArchive.
-func (a mailArchive) List(_ context.Context, dataset string, cap int) ([]types.Message, bool, error) {
+func (a mailArchive) List(_ context.Context, dataset string, cap int) ([]kinds.Message, bool, error) {
 	if a.s.mail == nil {
 		return nil, false, nil
 	}

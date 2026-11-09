@@ -10,24 +10,23 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
-func freeBusyTestEvents() []types.CalendarEvent {
-	full := types.NewCalendarEvent("google-calendar", "Google Calendar", "e1", "Doctor appointment", "2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z", false)
+func freeBusyTestEvents() []kinds.CalendarEvent {
+	full := kinds.NewCalendarEvent("google-calendar", "Google Calendar", "e1", "Doctor appointment", "2026-03-02T10:00:00Z", "2026-03-02T10:30:00Z", false)
 	full.Description = "Bring insurance card"
 	full.Location = "Clinic"
-	full.Attendees = []types.Contact{{Name: "Dr. Ada", Emails: []string{"ada@example.com"}}}
+	full.Attendees = []kinds.Contact{{Name: "Dr. Ada", Emails: []string{"ada@example.com"}}}
 	full.EntityID = "e1@google.com"
-	cancelled := types.NewCalendarEvent("google-calendar", "Google Calendar", "e2", "Cancelled standup", "2026-03-02T15:00:00Z", "2026-03-02T15:15:00Z", false)
+	cancelled := kinds.NewCalendarEvent("google-calendar", "Google Calendar", "e2", "Cancelled standup", "2026-03-02T15:00:00Z", "2026-03-02T15:15:00Z", false)
 	cancelled.Status = "cancelled"
-	allday := types.NewCalendarEvent("google-calendar", "Google Calendar", "e3", "Offsite", "2026-03-05T00:00:00Z", "2026-03-06T00:00:00Z", true)
-	return []types.CalendarEvent{full, cancelled, allday}
+	allday := kinds.NewCalendarEvent("google-calendar", "Google Calendar", "e3", "Offsite", "2026-03-05T00:00:00Z", "2026-03-06T00:00:00Z", true)
+	return []kinds.CalendarEvent{full, cancelled, allday}
 }
 
 func TestRedactCalendarEventFreeBusy_StripsContent(t *testing.T) {
 	e := freeBusyTestEvents()[0]
-	got := types.RedactCalendarEventFreeBusy(e)
+	got := kinds.RedactCalendarEventFreeBusy(e)
 	if got.Title != "" || got.Description != "" || got.Location != "" ||
 		got.EntityID != "" || len(got.Attendees) != 0 || len(got.Sources) != 0 {
 		t.Fatalf("leaked content: %+v", got)
@@ -93,7 +92,7 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	var resp types.FreeBusyList
+	var resp kinds.FreeBusyList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -132,7 +131,7 @@ func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
 			t.Fatalf("leaked %q in %s", leak, body)
 		}
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -194,8 +193,8 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 		GrantLimits: policy.Permissions{"events": policy.AccessRead},
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
-	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: []types.CalendarEvent{
-		types.NewCalendarEvent("google-calendar", "Google Calendar", "ok", "Busy", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false),
+	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: []kinds.CalendarEvent{
+		kinds.NewCalendarEvent("google-calendar", "Google Calendar", "ok", "Busy", "2026-03-02T10:00:00Z", "2026-03-02T11:00:00Z", false),
 	}}
 
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
@@ -205,7 +204,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	var resp types.FreeBusyList
+	var resp kinds.FreeBusyList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -223,9 +222,9 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
-	targets, denied := kinds.Collect[types.CalendarEvent, types.CalendarEventProvider](srv,
+	targets, denied := kinds.Collect[kinds.CalendarEvent, kinds.CalendarEventProvider](srv,
 		httptest.NewRequest(http.MethodGet, "/v1/library/freebusy", nil), "events",
-		func(p types.CalendarEventProvider) func(context.Context) ([]types.CalendarEvent, bool, error) {
+		func(p kinds.CalendarEventProvider) func(context.Context) ([]kinds.CalendarEvent, bool, error) {
 			return p.ListCalendarEvents
 		})
 	if len(targets) != 1 || len(denied) != 0 {

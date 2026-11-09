@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ErrConflict is returned by DAV writes when If-Match/If-None-Match fails
@@ -446,7 +446,7 @@ func davReport(ctx context.Context, collection, reportXML string, auth davAuth) 
 		return nil, err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, types.ErrUnauthorized
+		return nil, kinds.ErrUnauthorized
 	}
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("dav REPORT %s returned %d", collection, resp.StatusCode)
@@ -466,7 +466,7 @@ func davGetETag(ctx context.Context, href string, auth davAuth) (body []byte, et
 		return nil, "", err
 	}
 	if resp.StatusCode == http.StatusUnauthorized {
-		return nil, "", types.ErrUnauthorized
+		return nil, "", kinds.ErrUnauthorized
 	}
 	if resp.StatusCode >= 400 {
 		return nil, "", fmt.Errorf("dav GET %s returned %d", href, resp.StatusCode)
@@ -492,7 +492,7 @@ func davPutIfMatch(ctx context.Context, href, etag, contentType, body string, au
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	case resp.StatusCode == http.StatusPreconditionFailed:
 		return "", ErrConflict
 	case resp.StatusCode >= 400:

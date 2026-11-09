@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -263,7 +264,7 @@ func (c *GoogleCalendarConnector) EventsFreeBusyOnly() bool {
 func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {
 	events, truncated, err := c.ListEventsWithWindow(r.Context(), r.URL.Query())
 	if err != nil {
-		if err == types.ErrUnauthorized {
+		if err == kinds.ErrUnauthorized {
 			shared.WriteJSONError(w, http.StatusUnauthorized,
 				"no valid Google Calendar token — authorize at /v1/auth/"+GoogleCalendarServiceID+"/login")
 			return
@@ -273,19 +274,19 @@ func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *htt
 		return
 	}
 	if events == nil {
-		events = []types.CalendarEvent{}
+		events = []kinds.CalendarEvent{}
 	}
 	if c.EventsFreeBusyOnly() {
-		events = types.RedactCalendarEventsFreeBusy(events)
+		events = kinds.RedactCalendarEventsFreeBusy(events)
 	}
-	result := types.CalendarEventList{
+	result := kinds.CalendarEventList{
 		Events:    events,
 		Total:     len(events),
 		Synced:    true,
 		Truncated: truncated,
-		ByService: map[string]types.LibraryServiceStatus{
+		ByService: map[string]kinds.LibraryServiceStatus{
 			GoogleCalendarServiceID: {
-				Status:    types.LibraryStatusOK,
+				Status:    kinds.LibraryStatusOK,
 				Count:     len(events),
 				Truncated: truncated,
 			},
@@ -314,18 +315,18 @@ func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter
 		return
 	}
 	if events == nil {
-		events = []types.CalendarEvent{}
+		events = []kinds.CalendarEvent{}
 	}
 	if c.EventsFreeBusyOnly() {
-		events = types.RedactCalendarEventsFreeBusy(events)
+		events = kinds.RedactCalendarEventsFreeBusy(events)
 	}
-	result := types.CalendarEventList{
+	result := kinds.CalendarEventList{
 		Events: events,
 		Total:  len(events),
 		Synced: true,
-		ByService: map[string]types.LibraryServiceStatus{
+		ByService: map[string]kinds.LibraryServiceStatus{
 			GoogleCalendarServiceID: {
-				Status:    types.LibraryStatusOK,
+				Status:    kinds.LibraryStatusOK,
 				Count:     len(events),
 				Truncated: truncated,
 			},
@@ -358,9 +359,9 @@ func (c *GoogleCalendarConnector) HandleListCalendars(w http.ResponseWriter, r *
 		"calendars": calendars,
 		"total":     len(calendars),
 		"truncated": truncated,
-		"by_service": map[string]types.LibraryServiceStatus{
+		"by_service": map[string]kinds.LibraryServiceStatus{
 			GoogleCalendarServiceID: {
-				Status:    types.LibraryStatusOK,
+				Status:    kinds.LibraryStatusOK,
 				Count:     len(calendars),
 				Truncated: truncated,
 			},
@@ -408,7 +409,7 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 	}
 	ev := MapGoogleCalendarEvent(raw, calendarID, GoogleCalendarServiceName)
 	if c.EventsFreeBusyOnly() {
-		ev = types.RedactCalendarEventFreeBusy(ev)
+		ev = kinds.RedactCalendarEventFreeBusy(ev)
 	}
 	out, err := json.Marshal(ev)
 	if err != nil {
@@ -421,20 +422,20 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 
 // ListCalendarEvents implements CalendarEventProvider. Fetches calendarList,
 // then events from each readable calendar within the default time window.
-func (c *GoogleCalendarConnector) ListCalendarEvents(ctx context.Context) ([]types.CalendarEvent, bool, error) {
+func (c *GoogleCalendarConnector) ListCalendarEvents(ctx context.Context) ([]kinds.CalendarEvent, bool, error) {
 	return c.ListEventsWithWindow(ctx, nil)
 }
 
-func (c *GoogleCalendarConnector) ListEventsWithWindow(ctx context.Context, q url.Values) ([]types.CalendarEvent, bool, error) {
+func (c *GoogleCalendarConnector) ListEventsWithWindow(ctx context.Context, q url.Values) ([]kinds.CalendarEvent, bool, error) {
 	token := c.host.GetValidToken(GoogleCalendarServiceID, slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 	calendars, calTruncated, err := c.ListCalendars(ctx, token, nil)
 	if err != nil {
 		return nil, false, err
 	}
-	var all []types.CalendarEvent
+	var all []kinds.CalendarEvent
 	truncated := calTruncated
 	for _, cal := range calendars {
 		events, tr, err := c.ListEventsForCalendar(ctx, token, cal.ID, q)
@@ -564,7 +565,7 @@ type googleCalendarEventsList struct {
 	NextPageToken string                `json:"nextPageToken"`
 }
 
-func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]types.CalendarEvent, bool, error) {
+func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, token, calendarID string, q url.Values) ([]kinds.CalendarEvent, bool, error) {
 	base := c.GoogleCalendarUpstreamBase() + "/calendars/" + url.PathEscape(calendarID) + "/events"
 	timeMin, timeMax := GoogleCalendarDefaultWindow()
 	if q != nil {
@@ -587,7 +588,7 @@ func (c *GoogleCalendarConnector) ListEventsForCalendar(ctx context.Context, tok
 	}
 
 	calName := calendarID
-	var all []types.CalendarEvent
+	var all []kinds.CalendarEvent
 	truncated := false
 	for page := 0; page < shared.LibraryPageCap; page++ {
 		values := url.Values{}
@@ -651,11 +652,11 @@ func GoogleCalendarDefaultWindow() (timeMin, timeMax string) {
 }
 
 // MapGoogleCalendarEvent converts a Google Calendar event into the neutral shape.
-func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName string) types.CalendarEvent {
+func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName string) kinds.CalendarEvent {
 	startAt, allDay := GoogleCalendarTimeToRFC3339(raw.Start)
 	endAt, _ := GoogleCalendarTimeToRFC3339(raw.End)
 
-	src := types.CalendarEventSource{
+	src := kinds.CalendarEventSource{
 		Service:     GoogleCalendarServiceID,
 		ServiceName: GoogleCalendarServiceName,
 		ID:          raw.ID,
@@ -678,7 +679,7 @@ func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 		src.Extra = extra
 	}
 
-	ev := types.CalendarEvent{
+	ev := kinds.CalendarEvent{
 		Title:        strings.TrimSpace(raw.Summary),
 		Description:  raw.Description,
 		StartAt:      startAt,
@@ -689,11 +690,11 @@ func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 		CalendarID:   calendarID,
 		CalendarName: calendarName,
 		EntityID:     raw.ICalUID,
-		Sources:      []types.CalendarEventSource{src},
+		Sources:      []kinds.CalendarEventSource{src},
 	}
 
 	if raw.Organizer != nil {
-		org := types.NewContact(
+		org := kinds.NewContact(
 			GoogleCalendarServiceID,
 			GoogleCalendarServiceName,
 			"",
@@ -708,7 +709,7 @@ func MapGoogleCalendarEvent(raw googleCalendarEvent, calendarID, calendarName st
 		if strings.TrimSpace(att.Email) == "" && strings.TrimSpace(att.DisplayName) == "" {
 			continue
 		}
-		c := types.NewContact(
+		c := kinds.NewContact(
 			GoogleCalendarServiceID,
 			GoogleCalendarServiceName,
 			"",

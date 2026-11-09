@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // proxyUpstream stands up a canned provider response and records the request
@@ -267,9 +267,9 @@ func TestYNABTransformProxyResponse(t *testing.T) {
 		{"id":"t2","amount":-500,"payee_name":"Gone","deleted":true}]}}`
 
 	got := c.TransformProxyResponse(http.MethodGet, "/budgets/b1/transactions", []byte(listing), slog.Default())
-	list, ok := got.(types.TransactionList)
+	list, ok := got.(kinds.TransactionList)
 	if !ok {
-		t.Fatalf("type = %T, want types.TransactionList", got)
+		t.Fatalf("type = %T, want kinds.TransactionList", got)
 	}
 	if list.Total != 1 {
 		t.Fatalf("total = %d, want 1 (deleted rows skipped)", list.Total)
@@ -299,7 +299,7 @@ func TestYNABHandleProxy_TransactionsUseNeutralShape(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list types.TransactionList
+	var list kinds.TransactionList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v body=%s", err, w.Body.String())
 	}

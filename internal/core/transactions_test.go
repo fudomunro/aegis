@@ -11,6 +11,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -26,8 +27,8 @@ func TestNormalizeTransactionAmount(t *testing.T) {
 		"  -1.5 ": "-1.50",
 	}
 	for in, want := range cases {
-		if got := types.NormalizeTransactionAmount(in); got != want {
-			t.Fatalf("types.NormalizeTransactionAmount(%q) = %q, want %q", in, got, want)
+		if got := kinds.NormalizeTransactionAmount(in); got != want {
+			t.Fatalf("kinds.NormalizeTransactionAmount(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -43,8 +44,8 @@ func TestFormatMilliunitsAmount(t *testing.T) {
 		1000000: "1000.00",
 	}
 	for in, want := range cases {
-		if got := types.FormatMilliunitsAmount(in); got != want {
-			t.Fatalf("types.FormatMilliunitsAmount(%d) = %q, want %q", in, got, want)
+		if got := kinds.FormatMilliunitsAmount(in); got != want {
+			t.Fatalf("kinds.FormatMilliunitsAmount(%d) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -85,11 +86,11 @@ func TestValidatePermissions_SummaryOnlyOnTransactions(t *testing.T) {
 }
 
 type fakeTransactionProvider struct {
-	txs []types.Transaction
+	txs []kinds.Transaction
 	err error
 }
 
-func (f *fakeTransactionProvider) ListUserTransactions(ctx context.Context) ([]types.Transaction, bool, error) {
+func (f *fakeTransactionProvider) ListUserTransactions(ctx context.Context) ([]kinds.Transaction, bool, error) {
 	if f.err != nil {
 		return nil, false, f.err
 	}
@@ -113,10 +114,10 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"ynab": &fakeTransactionProvider{txs: GenerateSampleLibrary().Transactions[:3]},
-		"quicken": &fakeTransactionProvider{txs: []types.Transaction{{
+		"quicken": &fakeTransactionProvider{txs: []kinds.Transaction{{
 			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
-			Account: &types.TransactionAccount{Name: "Credit Card"},
-			Sources: []types.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q-coffee"}},
+			Account: &kinds.TransactionAccount{Name: "Credit Card"},
+			Sources: []kinds.TransactionSource{{Service: "quicken", ServiceName: "Quicken", ID: "q-coffee"}},
 		}}},
 	}
 
@@ -126,7 +127,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list types.TransactionList
+	var list kinds.TransactionList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -156,9 +157,9 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"ynab": &fakeTransactionProvider{txs: []types.Transaction{
-			{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "1"}}},
-			{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Sources: []types.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "2"}}},
+		"ynab": &fakeTransactionProvider{txs: []kinds.Transaction{
+			{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Sources: []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "1"}}},
+			{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Sources: []kinds.TransactionSource{{Service: "ynab", ServiceName: "YNAB", ID: "2"}}},
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/transactions?after=2024-03-08", nil)
@@ -167,7 +168,7 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var list types.TransactionList
+	var list kinds.TransactionList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +201,7 @@ func TestYNABNeutralTransaction_Millunits(t *testing.T) {
 	if tx.Account == nil || tx.Account.Name != "Checking" {
 		t.Fatalf("account = %+v", tx.Account)
 	}
-	if tx.Status != types.TransactionStatusPosted {
+	if tx.Status != kinds.TransactionStatusPosted {
 		t.Fatalf("status = %q", tx.Status)
 	}
 }
@@ -212,8 +213,8 @@ func TestYNABListUserTransactions_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	c := connectors.NewYNABConnector(srv)
 	_, _, err := c.ListUserTransactions(context.Background())
-	if err != types.ErrUnauthorized {
-		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
+	if err != kinds.ErrUnauthorized {
+		t.Fatalf("err = %v, want kinds.ErrUnauthorized", err)
 	}
 }
 
@@ -316,7 +317,7 @@ func TestGenerateSampleLibrary_TransactionsMerge(t *testing.T) {
 	if len(set.Transactions) == 0 {
 		t.Fatal("no sample transactions")
 	}
-	merged := types.MergeTransactions(set.Transactions)
+	merged := kinds.MergeTransactions(set.Transactions)
 	// Amazon durable-ID pair must merge; coffee adjacent-day pair must merge;
 	// coffee-2 near-miss stays distinct. Split Costco stays one row.
 	// Inputs: 8 → outputs: 6.
@@ -457,11 +458,11 @@ func TestStrictest_Summary(t *testing.T) {
 }
 
 func TestTransactionFilters_CacheKey(t *testing.T) {
-	f := types.TransactionFilters{}
+	f := kinds.TransactionFilters{}
 	if f.CacheKeySuffix() != "" {
 		t.Fatal("empty filters should have empty suffix")
 	}
-	f2 := types.TransactionFilters{After: "2024-01-01", Q: "Coffee"}
+	f2 := kinds.TransactionFilters{After: "2024-01-01", Q: "Coffee"}
 	if !strings.Contains(f2.CacheKeySuffix(), "after=2024-01-01") {
 		t.Fatalf("suffix = %q", f2.CacheKeySuffix())
 	}

@@ -11,8 +11,8 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Flow topology node kinds.
@@ -372,7 +372,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 					}
 				}
 			}
-			if _, ok := connector.(types.PhotoProvider); ok {
+			if _, ok := connector.(kinds.PhotoProvider); ok {
 				node.Notes = append(node.Notes, "Photo bytes stay on this service (canonical)")
 			}
 		}

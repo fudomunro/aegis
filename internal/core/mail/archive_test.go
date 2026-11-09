@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -32,7 +33,7 @@ func sampleMailRecord(id, subject, body string) Record {
 		Snippet:     body[:minInt(20, len(body))],
 		FromName:    "Ada Lovelace",
 		FromEmail:   "ada@example.com",
-		To:          []types.Contact{types.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil)},
+		To:          []kinds.Contact{kinds.NewContact(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "", "Me", []string{"me@example.com"}, nil)},
 		SentAt:      "2024-06-01T09:00:00Z",
 		ReceivedAt:  "2024-06-01T09:00:05Z",
 		Direction:   "inbound",
@@ -197,8 +198,8 @@ func TestArchiveSyncCursor(t *testing.T) {
 }
 
 func TestRecordFromMessage(t *testing.T) {
-	msg := newMessage(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "id9", types.MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")
-	msg.From = &types.Contact{Name: "Ada", Emails: []string{"Ada@Example.com"}}
+	msg := newMessage(connectors.GoogleGmailServiceID, connectors.GoogleGmailServiceName, "id9", kinds.MessageChannelEmail, "Hello", "hi", "2024-06-01T09:00:00Z")
+	msg.From = &kinds.Contact{Name: "Ada", Emails: []string{"Ada@Example.com"}}
 	msg.EntityID = "<id9@example.com>"
 	msg.Body = "body text"
 	rec := RecordFromMessage("", "", msg, []byte{1})
@@ -210,18 +211,18 @@ func TestRecordFromMessage(t *testing.T) {
 	}
 }
 
-func newMessage(service, serviceName, id, channel, subject, snippet, sentAt string) types.Message {
-	src := types.MessageSource{
+func newMessage(service, serviceName, id, channel, subject, snippet, sentAt string) kinds.Message {
+	src := kinds.MessageSource{
 		Service:     service,
 		ServiceName: serviceName,
 		ID:          id,
 		Canonical:   true,
 	}
-	return types.Message{
+	return kinds.Message{
 		Channel: channel,
 		Subject: subject,
 		Snippet: snippet,
 		SentAt:  sentAt,
-		Sources: []types.MessageSource{src},
+		Sources: []kinds.MessageSource{src},
 	}
 }

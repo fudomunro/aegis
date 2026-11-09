@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -270,15 +271,15 @@ func (c *SpotifyConnector) TransformUser(raw map[string]any) map[string]any {
 
 // ListUserSavedAlbums implements AlbumProvider. Fetches Spotify saved albums
 // and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]types.Album, bool, error) {
+func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]kinds.Album, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []types.Album
+	var all []kinds.Album
 	nextURL := upstreamBase + "/me/albums?limit=50"
 	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -321,15 +322,15 @@ func (c *SpotifyConnector) ListUserSavedAlbums(ctx context.Context) ([]types.Alb
 
 // ListUserFollowedArtists implements ArtistProvider. Fetches Spotify followed
 // artists and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]types.Artist, bool, error) {
+func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]kinds.Artist, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []types.Artist
+	var all []kinds.Artist
 	nextURL := upstreamBase + "/me/following?type=artist&limit=50"
 	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -378,13 +379,13 @@ func (c *SpotifyConnector) ListUserFollowedArtists(ctx context.Context) ([]types
 }
 
 // NeutralSpotifyAlbum maps a raw Spotify album into the neutral Album type.
-func NeutralSpotifyAlbum(album map[string]any) types.Album {
+func NeutralSpotifyAlbum(album map[string]any) kinds.Album {
 	id, _ := album["id"].(string)
 	name, _ := album["name"].(string)
 	uri, _ := album["uri"].(string)
 	upc, _ := shared.ExtractNested(album, "external_ids", "upc").(string)
 
-	var artists []types.Artist
+	var artists []kinds.Artist
 	if rawArtists, ok := album["artists"].([]any); ok {
 		for _, item := range rawArtists {
 			obj, ok := item.(map[string]any)
@@ -393,7 +394,7 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 			}
 			aName, _ := obj["name"].(string)
 			artistID, _ := obj["id"].(string)
-			a := types.NewArtist("spotify", "Spotify", artistID, aName)
+			a := kinds.NewArtist("spotify", "Spotify", artistID, aName)
 			if artistID != "" && len(a.Sources) > 0 {
 				a.Sources[0].URL = "https://open.spotify.com/artist/" + artistID
 			}
@@ -404,7 +405,7 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 	}
 	if len(artists) == 0 {
 		for _, n := range shared.ExtractNames(album, "artists") {
-			artists = append(artists, types.NewArtist("spotify", "Spotify", "", n))
+			artists = append(artists, kinds.NewArtist("spotify", "Spotify", "", n))
 		}
 	}
 
@@ -420,11 +421,11 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 		extra["upc"] = upc
 	}
 
-	return types.Album{
+	return kinds.Album{
 		Name:     name,
 		Artists:  artists,
 		EntityID: strings.ToUpper(strings.TrimSpace(upc)),
-		Sources: []types.AlbumSource{{
+		Sources: []kinds.AlbumSource{{
 			Service:     "spotify",
 			ServiceName: "Spotify",
 			ID:          id,
@@ -436,14 +437,14 @@ func NeutralSpotifyAlbum(album map[string]any) types.Album {
 }
 
 // SpotifyNeutralArtist maps a raw Spotify artist into the neutral Artist type.
-func SpotifyNeutralArtist(artist map[string]any) types.Artist {
+func SpotifyNeutralArtist(artist map[string]any) kinds.Artist {
 	id, _ := artist["id"].(string)
 	name, _ := artist["name"].(string)
 	url := ""
 	if id != "" {
 		url = "https://open.spotify.com/artist/" + id
 	}
-	a := types.NewArtist("spotify", "Spotify", id, name)
+	a := kinds.NewArtist("spotify", "Spotify", id, name)
 	if len(a.Sources) > 0 {
 		a.Sources[0].URL = url
 	}
@@ -452,15 +453,15 @@ func SpotifyNeutralArtist(artist map[string]any) types.Artist {
 
 // ListUserLikedTracks implements LikedTrackProvider. Fetches Spotify saved
 // tracks and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]types.Track, bool, error) {
+func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]kinds.Track, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []types.Track
+	var all []kinds.Track
 	nextURL := upstreamBase + "/me/tracks?limit=50"
 	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -503,15 +504,15 @@ func (c *SpotifyConnector) ListUserLikedTracks(ctx context.Context) ([]types.Tra
 
 // ListUserPlaylists implements PlaylistProvider. Fetches Spotify playlists
 // and returns them in Aegis's neutral format.
-func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]types.Playlist, bool, error) {
+func (c *SpotifyConnector) ListUserPlaylists(ctx context.Context) ([]kinds.Playlist, bool, error) {
 	token := c.host.GetValidToken("spotify", slog.Default())
 	if token == "" {
-		return nil, false, types.ErrUnauthorized
+		return nil, false, kinds.ErrUnauthorized
 	}
 
 	upstreamBase := c.host.UpstreamBaseFor("spotify", spotifyAPIBase)
 
-	var all []types.Playlist
+	var all []kinds.Playlist
 	nextURL := upstreamBase + "/me/playlists?limit=50"
 	for page := 0; page < shared.LibraryPageCap && nextURL != ""; page++ {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, nextURL, nil)
@@ -601,7 +602,7 @@ func PlaylistEntryTrack(entry map[string]any) map[string]any {
 
 // neutralPlaylist maps a raw Spotify playlist object into the neutral type.
 // Service identity (id, url, uri) lives in Sources / Extra, not top-level.
-func (c *SpotifyConnector) NeutralPlaylist(p map[string]any) types.Playlist {
+func (c *SpotifyConnector) NeutralPlaylist(p map[string]any) kinds.Playlist {
 	id, _ := p["id"].(string)
 	name, _ := p["name"].(string)
 	description, _ := p["description"].(string)
@@ -622,20 +623,20 @@ func (c *SpotifyConnector) NeutralPlaylist(p map[string]any) types.Playlist {
 		extra["snapshot_id"] = snapshot
 	}
 
-	return types.Playlist{
+	return kinds.Playlist{
 		Name:        name,
 		Description: description,
 		Owner:       owner,
 		TrackCount:  trackCount,
-		Sources: []types.PlaylistSource{
-			types.PrimaryPlaylistSource("spotify", "Spotify", id, SpotifyPlaylistURL(id), extra),
+		Sources: []kinds.PlaylistSource{
+			kinds.PrimaryPlaylistSource("spotify", "Spotify", id, SpotifyPlaylistURL(id), extra),
 		},
 	}
 }
 
-func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) types.PlaylistList {
+func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) kinds.PlaylistList {
 	items := SpotifyPagingItems(raw)
-	playlists := make([]types.Playlist, 0, len(items))
+	playlists := make([]kinds.Playlist, 0, len(items))
 	for _, item := range items {
 		p, ok := item.(map[string]any)
 		if !ok {
@@ -650,7 +651,7 @@ func (c *SpotifyConnector) TransformPlaylistList(raw map[string]any) types.Playl
 	if n, ok := shared.AsInt(raw["total_fetched"]); ok {
 		total = n
 	}
-	return types.PlaylistList{Playlists: playlists, LibraryListMeta: types.LibraryListMeta{Total: total}}
+	return kinds.PlaylistList{Playlists: playlists, LibraryListMeta: kinds.LibraryListMeta{Total: total}}
 }
 
 func (c *SpotifyConnector) TransformSavedTracks(raw map[string]any) map[string]any {
@@ -834,7 +835,7 @@ func SpotifyPagingItems(raw map[string]any) []any {
 	return items
 }
 
-func NeutralSpotifyTrack(track map[string]any) types.Track {
+func NeutralSpotifyTrack(track map[string]any) kinds.Track {
 	id, _ := track["id"].(string)
 	name, _ := track["name"].(string)
 	uri, _ := track["uri"].(string)
@@ -851,7 +852,7 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 		extra["isrc"] = isrc
 	}
 
-	var artists []types.Artist
+	var artists []kinds.Artist
 	if rawArtists, ok := track["artists"].([]any); ok {
 		for _, a := range rawArtists {
 			obj, ok := a.(map[string]any)
@@ -860,7 +861,7 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 			}
 			name, _ := obj["name"].(string)
 			artistID, _ := obj["id"].(string)
-			artist := types.NewArtist("spotify", "Spotify", artistID, name)
+			artist := kinds.NewArtist("spotify", "Spotify", artistID, name)
 			if artistID != "" && len(artist.Sources) > 0 {
 				artist.Sources[0].URL = "https://open.spotify.com/artist/" + artistID
 			}
@@ -871,23 +872,23 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 	}
 	if len(artists) == 0 {
 		for _, n := range shared.ExtractNames(track, "artists") {
-			artists = append(artists, types.NewArtist("spotify", "Spotify", "", n))
+			artists = append(artists, kinds.NewArtist("spotify", "Spotify", "", n))
 		}
 	}
-	artists = types.MergeArtists(artists...)
+	artists = kinds.MergeArtists(artists...)
 
 	url := ""
 	if id != "" {
 		url = "https://open.spotify.com/track/" + id
 	}
 
-	return types.Track{
+	return kinds.Track{
 		Name:       name,
 		Artists:    artists,
-		Album:      types.NewAlbum("spotify", "Spotify", albumID, albumName),
+		Album:      kinds.NewAlbum("spotify", "Spotify", albumID, albumName),
 		DurationMs: durationMs,
 		EntityID:   strings.ToUpper(strings.TrimSpace(isrc)),
-		Sources: []types.TrackSource{{
+		Sources: []kinds.TrackSource{{
 			Service:     "spotify",
 			ServiceName: "Spotify",
 			ID:          id,
@@ -897,10 +898,10 @@ func NeutralSpotifyTrack(track map[string]any) types.Track {
 	}
 }
 
-func (c *SpotifyConnector) TransformPlaylistDetail(raw map[string]any) types.PlaylistDetail {
+func (c *SpotifyConnector) TransformPlaylistDetail(raw map[string]any) kinds.PlaylistDetail {
 	base := c.NeutralPlaylist(raw)
 
-	var tracks []types.Track
+	var tracks []kinds.Track
 	for _, entry := range PlaylistTrackEntries(raw) {
 		e, ok := entry.(map[string]any)
 		if !ok {
@@ -912,7 +913,7 @@ func (c *SpotifyConnector) TransformPlaylistDetail(raw map[string]any) types.Pla
 		}
 		tracks = append(tracks, NeutralSpotifyTrack(track))
 	}
-	return types.PlaylistDetail{
+	return kinds.PlaylistDetail{
 		Playlist:    base,
 		Tracks:      tracks,
 		TotalTracks: base.TrackCount,

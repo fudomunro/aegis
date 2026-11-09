@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestParseQIF(t *testing.T) {
@@ -162,7 +162,7 @@ LCoffee
 	if res2.Skipped != 2 {
 		t.Fatalf("reimport = %+v", res2)
 	}
-	list, err := store.List(types.TransactionFilters{}, 100)
+	list, err := store.List(kinds.TransactionFilters{}, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ LCoffee
 		t.Fatalf("list = %d", len(list))
 	}
 	// Filter by merchant text.
-	list2, err := store.List(types.TransactionFilters{Q: "amazon"}, 100)
+	list2, err := store.List(kinds.TransactionFilters{Q: "amazon"}, 100)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestQuickenHandleProxy(t *testing.T) {
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status code %d body=%s", w2.Code, w2.Body.String())
 	}
-	var list types.TransactionList
+	var list kinds.TransactionList
 	if err := json.Unmarshal(w2.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}

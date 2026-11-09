@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func newBlueskyHost(t *testing.T, endpoint string) *testHost {
@@ -94,7 +94,7 @@ func TestBlueskySharePhoto_HappyPath(t *testing.T) {
 
 	host := newBlueskyHost(t, ts.URL)
 	conn := NewBlueskyConnector(host)
-	res, err := conn.SharePhoto(context.Background(), types.PhotoShareRequest{
+	res, err := conn.SharePhoto(context.Background(), kinds.PhotoShareRequest{
 		SourceService: "immich",
 		SourceID:      "asset-1",
 		Data:          []byte("JPEGDATA"),
@@ -123,13 +123,13 @@ func TestBlueskySharePhoto_HappyPath(t *testing.T) {
 func TestBlueskySharePhoto_SizeAndMime(t *testing.T) {
 	conn := NewBlueskyConnector(newBlueskyHost(t, "https://example.invalid"))
 	big := make([]byte, blueskyImageMaxBytes+1)
-	if _, err := conn.SharePhoto(context.Background(), types.PhotoShareRequest{Data: big, MimeType: "image/jpeg"}); err == nil {
+	if _, err := conn.SharePhoto(context.Background(), kinds.PhotoShareRequest{Data: big, MimeType: "image/jpeg"}); err == nil {
 		t.Fatal("expected size error")
 	}
-	if _, err := conn.SharePhoto(context.Background(), types.PhotoShareRequest{Data: []byte("x"), MimeType: "video/mp4"}); err == nil {
+	if _, err := conn.SharePhoto(context.Background(), kinds.PhotoShareRequest{Data: []byte("x"), MimeType: "video/mp4"}); err == nil {
 		t.Fatal("expected mime error")
 	}
-	if _, err := conn.SharePhoto(context.Background(), types.PhotoShareRequest{MimeType: "image/jpeg"}); err == nil {
+	if _, err := conn.SharePhoto(context.Background(), kinds.PhotoShareRequest{MimeType: "image/jpeg"}); err == nil {
 		t.Fatal("expected empty-bytes error")
 	}
 }
@@ -140,11 +140,11 @@ func TestBlueskySharePhoto_Unauthorized(t *testing.T) {
 	}))
 	defer ts.Close()
 	conn := NewBlueskyConnector(newBlueskyHost(t, ts.URL))
-	_, err := conn.SharePhoto(context.Background(), types.PhotoShareRequest{
+	_, err := conn.SharePhoto(context.Background(), kinds.PhotoShareRequest{
 		Data:     []byte("JPEGDATA"),
 		MimeType: "image/jpeg",
 	})
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -153,11 +153,11 @@ func TestBlueskySharePhoto_MissingCredentials(t *testing.T) {
 	host := newTestHost("https://aegis.example.com")
 	host.setService(BlueskyServiceID, "https://example.invalid")
 	conn := NewBlueskyConnector(host)
-	_, err := conn.SharePhoto(context.Background(), types.PhotoShareRequest{
+	_, err := conn.SharePhoto(context.Background(), kinds.PhotoShareRequest{
 		Data:     []byte("JPEGDATA"),
 		MimeType: "image/jpeg",
 	})
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }

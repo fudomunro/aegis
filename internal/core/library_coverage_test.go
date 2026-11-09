@@ -42,7 +42,7 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 // so a handler request can be served from cache (issue #273 format).
 func seedLibraryAggregate[T any](t *testing.T, srv *Server, kindID string, items []T) {
 	t.Helper()
-	raw, err := json.Marshal(kinds.Fetch[T]{Items: items, BySvc: map[string]types.LibraryServiceStatus{}, NTargets: 1})
+	raw, err := json.Marshal(kinds.Fetch[T]{Items: items, BySvc: map[string]kinds.LibraryServiceStatus{}, NTargets: 1})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,9 +53,9 @@ func TestLibraryTracks_CacheHit(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakeLikedTrackProvider{tracks: []types.Track{{Name: "Solo"}}},
+		"spotify": &fakeLikedTrackProvider{tracks: []kinds.Track{{Name: "Solo"}}},
 	}
-	seedLibraryAggregate(t, srv, "tracks", []types.Track{{Name: "Cached"}})
+	seedLibraryAggregate(t, srv, "tracks", []kinds.Track{{Name: "Cached"}})
 
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -85,11 +85,11 @@ func TestLibraryTracks_ErrorService(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
-	var resp types.TrackList
+	var resp kinds.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["spotify"].Status != types.LibraryStatusError {
+	if resp.ByService["spotify"].Status != kinds.LibraryStatusError {
 		t.Fatalf("status = %+v", resp.ByService["spotify"])
 	}
 	if resp.Tracks == nil || len(resp.Tracks) != 0 {
@@ -120,7 +120,7 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify":       &fakeAlbumProvider{err: types.ErrUnauthorized},
+		"spotify":       &fakeAlbumProvider{err: kinds.ErrUnauthorized},
 		"youtube-music": &fakeAlbumProvider{err: errors.New("upstream")},
 	}
 
@@ -132,14 +132,14 @@ func TestLibraryAlbums_UnauthorizedAndError(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.AlbumList
+	var resp kinds.AlbumList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["spotify"].Status != types.LibraryStatusUnauthorized {
+	if resp.ByService["spotify"].Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("spotify = %+v", resp.ByService["spotify"])
 	}
-	if resp.ByService["youtube-music"].Status != types.LibraryStatusError {
+	if resp.ByService["youtube-music"].Status != kinds.LibraryStatusError {
 		t.Fatalf("youtube = %+v", resp.ByService["youtube-music"])
 	}
 	if _, ok := srv.cache.Get("library:albums"); ok {
@@ -167,8 +167,8 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakeAlbumProvider{albums: []types.Album{{Name: "A", Sources: []types.AlbumSource{{Service: "spotify", ID: "1"}}}}},
-		"tidal":   &fakeAlbumProvider{albums: []types.Album{{Name: "Blocked", Sources: []types.AlbumSource{{Service: "tidal", ID: "2"}}}}},
+		"spotify": &fakeAlbumProvider{albums: []kinds.Album{{Name: "A", Sources: []kinds.AlbumSource{{Service: "spotify", ID: "1"}}}}},
+		"tidal":   &fakeAlbumProvider{albums: []kinds.Album{{Name: "Blocked", Sources: []kinds.AlbumSource{{Service: "tidal", ID: "2"}}}}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
@@ -176,7 +176,7 @@ func TestLibraryAlbums_SkipsBlockedService(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 
-	var resp types.AlbumList
+	var resp kinds.AlbumList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -192,7 +192,7 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakeArtistProvider{err: types.ErrUnauthorized},
+		"spotify": &fakeArtistProvider{err: kinds.ErrUnauthorized},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
@@ -202,27 +202,27 @@ func TestLibraryArtists_UnauthorizedErrorAndCache(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var resp types.ArtistList
+	var resp kinds.ArtistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["spotify"].Status != types.LibraryStatusUnauthorized {
+	if resp.ByService["spotify"].Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("status = %+v", resp.ByService["spotify"])
 	}
 
 	// Degraded aggregates must not be cached (issue #104). After the provider
 	// recovers, the next request re-fetches instead of replaying unauthorized.
-	srv.connectors["spotify"] = &fakeArtistProvider{artists: []types.Artist{types.NewArtist("spotify", "Spotify", "1", "X")}}
+	srv.connectors["spotify"] = &fakeArtistProvider{artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "1", "X")}}
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("artists"))(w2, req)
 	if w2.Header().Get("X-Aegis-Cache") != "miss" {
 		t.Fatalf("expected cache miss after recovery, got %q", w2.Header().Get("X-Aegis-Cache"))
 	}
-	var recovered types.ArtistList
+	var recovered kinds.ArtistList
 	if err := json.Unmarshal(w2.Body.Bytes(), &recovered); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if recovered.ByService["spotify"].Status != types.LibraryStatusOK {
+	if recovered.ByService["spotify"].Status != kinds.LibraryStatusOK {
 		t.Fatalf("status = %+v", recovered.ByService["spotify"])
 	}
 
@@ -246,11 +246,11 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 
-	var resp types.ArtistList
+	var resp kinds.ArtistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["spotify"].Status != types.LibraryStatusError {
+	if resp.ByService["spotify"].Status != kinds.LibraryStatusError {
 		t.Fatalf("status = %+v", resp.ByService["spotify"])
 	}
 	// Error bodies must not stick in the cache (issue #104).
@@ -268,7 +268,7 @@ func TestLibraryArtists_PermissionDenied(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakeArtistProvider{artists: []types.Artist{types.NewArtist("spotify", "Spotify", "1", "X")}},
+		"spotify": &fakeArtistProvider{artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "1", "X")}},
 	}
 
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
@@ -389,19 +389,19 @@ func TestPreRequest_ArtistsWithoutServiceName(t *testing.T) {
 }
 
 func TestMergeTracksSync_MergesAlbumAndDuration(t *testing.T) {
-	merged := types.MergeTracksSync([]types.Track{
+	merged := kinds.MergeTracksSync([]kinds.Track{
 		{
 			Name:    "Song",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "A")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "1"}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "", "A")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: "1"}},
 		},
 		{
 			Name:       "Song",
-			Artists:    []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", "A")},
-			Album:      types.NewAlbum("youtube-music", "YouTube Music", "al", "LP"),
+			Artists:    []kinds.Artist{kinds.NewArtist("youtube-music", "YouTube Music", "", "A")},
+			Album:      kinds.NewAlbum("youtube-music", "YouTube Music", "al", "LP"),
 			DurationMs: 210000,
 			Duration:   "PT3M30S",
-			Sources:    []types.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "2"}},
+			Sources:    []kinds.TrackSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "2"}},
 			Extra:      map[string]any{"kind": "video"},
 		},
 	})
@@ -424,9 +424,9 @@ func TestMergeTracksSync_MergesAlbumAndDuration(t *testing.T) {
 }
 
 func TestMergeTracksSync_EmptyNameFallsBackToSourceID(t *testing.T) {
-	merged := types.MergeTracksSync([]types.Track{
-		{Sources: []types.TrackSource{{Service: "spotify", ID: "abc"}}},
-		{Sources: []types.TrackSource{{Service: "spotify", ID: "abc"}}},
+	merged := kinds.MergeTracksSync([]kinds.Track{
+		{Sources: []kinds.TrackSource{{Service: "spotify", ID: "abc"}}},
+		{Sources: []kinds.TrackSource{{Service: "spotify", ID: "abc"}}},
 	})
 	if len(merged) != 1 {
 		t.Fatalf("got %d, want 1 merged empty-name track", len(merged))
@@ -437,47 +437,47 @@ func TestMergeTracksSync_EmptyNameFallsBackToSourceID(t *testing.T) {
 }
 
 func TestTrackIdentityKey_Variants(t *testing.T) {
-	if types.TrackIdentityKey(types.Track{Name: "  Hello  World ", Artists: []types.Artist{{Name: "The  Artist"}}}) != "hello world|the artist" {
+	if kinds.TrackIdentityKey(kinds.Track{Name: "  Hello  World ", Artists: []kinds.Artist{{Name: "The  Artist"}}}) != "hello world|the artist" {
 		t.Fatal("normalize failed")
 	}
-	if types.TrackIdentityKey(types.Track{Name: "Solo"}) != "solo" {
+	if kinds.TrackIdentityKey(kinds.Track{Name: "Solo"}) != "solo" {
 		t.Fatal("title-only key")
 	}
-	if !strings.HasPrefix(types.TrackIdentityKey(types.Track{Sources: []types.TrackSource{{Service: "spotify", ID: "x"}}}), "\x00spotify:x") {
+	if !strings.HasPrefix(kinds.TrackIdentityKey(kinds.Track{Sources: []kinds.TrackSource{{Service: "spotify", ID: "x"}}}), "\x00spotify:x") {
 		t.Fatal("empty title fallback")
 	}
-	if types.TrackIdentityKey(types.Track{}) != "\x00" {
+	if kinds.TrackIdentityKey(kinds.Track{}) != "\x00" {
 		t.Fatal("fully empty key")
 	}
 }
 
 func TestAlbumIdentityKey_Variants(t *testing.T) {
-	if types.AlbumIdentityKey(types.Album{Name: "LP", Artists: []types.Artist{{Name: "Band"}}}) != "lp|band" {
+	if kinds.AlbumIdentityKey(kinds.Album{Name: "LP", Artists: []kinds.Artist{{Name: "Band"}}}) != "lp|band" {
 		t.Fatal("title+artist")
 	}
-	if types.AlbumIdentityKey(types.Album{Name: "LP"}) != "lp" {
+	if kinds.AlbumIdentityKey(kinds.Album{Name: "LP"}) != "lp" {
 		t.Fatal("title only")
 	}
-	if !strings.HasPrefix(types.AlbumIdentityKey(types.Album{Sources: []types.AlbumSource{{Service: "spotify", ID: "z"}}}), "\x00spotify:z") {
+	if !strings.HasPrefix(kinds.AlbumIdentityKey(kinds.Album{Sources: []kinds.AlbumSource{{Service: "spotify", ID: "z"}}}), "\x00spotify:z") {
 		t.Fatal("empty fallback")
 	}
 }
 
 func TestMergeAlbumsSync_MergesSourcesAndArtists(t *testing.T) {
-	merged := types.MergeAlbumsSync([]types.Album{
+	merged := kinds.MergeAlbumsSync([]kinds.Album{
 		{
 			Name:    "LP",
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "Band")},
-			Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "1"}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "", "Band")},
+			Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "1"}},
 		},
 		{
 			Name:    "LP",
-			Artists: []types.Artist{types.NewArtist("youtube-music", "YouTube Music", "", "Band")},
-			Sources: []types.AlbumSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "2"}},
+			Artists: []kinds.Artist{kinds.NewArtist("youtube-music", "YouTube Music", "", "Band")},
+			Sources: []kinds.AlbumSource{{Service: "youtube-music", ServiceName: "YouTube Music", ID: "2"}},
 		},
 		{
 			Name:    "Other",
-			Sources: []types.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "3"}},
+			Sources: []kinds.AlbumSource{{Service: "spotify", ServiceName: "Spotify", ID: "3"}},
 		},
 	})
 	if len(merged) != 2 {
@@ -493,10 +493,10 @@ func TestMergeAlbumsSync_MergesSourcesAndArtists(t *testing.T) {
 }
 
 func TestMergeArtistLibrary_EmptyNameSkipped(t *testing.T) {
-	merged := types.MergeArtistLibrary([]types.Artist{
+	merged := kinds.MergeArtistLibrary([]kinds.Artist{
 		{Name: ""},
-		types.NewArtist("spotify", "Spotify", "1", "A"),
-		types.NewArtist("youtube-music", "YouTube Music", "2", "A"),
+		kinds.NewArtist("spotify", "Spotify", "1", "A"),
+		kinds.NewArtist("youtube-music", "YouTube Music", "2", "A"),
 	})
 	if len(merged) != 1 || merged[0].Name != "A" || len(merged[0].Sources) != 2 {
 		t.Fatalf("merged = %+v", merged)
@@ -504,23 +504,23 @@ func TestMergeArtistLibrary_EmptyNameSkipped(t *testing.T) {
 }
 
 func TestPrimaryService_Empty(t *testing.T) {
-	if (types.Playlist{}).PrimaryService() != "" {
+	if (kinds.Playlist{}).PrimaryService() != "" {
 		t.Fatal("expected empty primary service")
 	}
-	if (types.Playlist{Sources: []types.PlaylistSource{{Service: "spotify"}}}).PrimaryService() != "spotify" {
+	if (kinds.Playlist{Sources: []kinds.PlaylistSource{{Service: "spotify"}}}).PrimaryService() != "spotify" {
 		t.Fatal("expected spotify")
 	}
 }
 
 func TestNormalizeHandleList(t *testing.T) {
-	got := types.NormalizeHandleList([]string{"@Alice", "alice", "  ", "bob"})
+	got := kinds.NormalizeHandleList([]string{"@Alice", "alice", "  ", "bob"})
 	if len(got) != 2 || got[0] != "alice" || got[1] != "bob" {
 		t.Fatalf("got = %#v", got)
 	}
-	if types.NormalizeHandleList(nil) != nil {
+	if kinds.NormalizeHandleList(nil) != nil {
 		t.Fatal("nil in → nil out")
 	}
-	if types.NormalizeHandleList([]string{"  "}) != nil {
+	if kinds.NormalizeHandleList([]string{"  "}) != nil {
 		t.Fatal("all-empty → nil")
 	}
 }
@@ -605,13 +605,13 @@ func TestAdminSummary_ReportsTasteProviders(t *testing.T) {
 func TestSpotifyProviders_Unauthorized(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}, "https://aegis.example.com")
 	conn := connectors.NewSpotifyConnector(srv)
-	if _, _, err := conn.ListUserSavedAlbums(context.Background()); !errors.Is(err, types.ErrUnauthorized) {
+	if _, _, err := conn.ListUserSavedAlbums(context.Background()); !errors.Is(err, kinds.ErrUnauthorized) {
 		t.Fatalf("albums err = %v", err)
 	}
-	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, types.ErrUnauthorized) {
+	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, kinds.ErrUnauthorized) {
 		t.Fatalf("artists err = %v", err)
 	}
-	if _, _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, types.ErrUnauthorized) {
+	if _, _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, kinds.ErrUnauthorized) {
 		t.Fatalf("tracks err = %v", err)
 	}
 }
@@ -641,10 +641,10 @@ func TestSpotifyProviders_HTTPError(t *testing.T) {
 func TestYouTubeProviders_UnauthorizedAndError(t *testing.T) {
 	srv := testServerWithBase(&Config{Services: []Service{{ID: "youtube-music", Name: "YouTube Music", Action: "inject"}}}, "https://aegis.example.com")
 	conn := connectors.NewYouTubeMusicConnector(srv)
-	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, types.ErrUnauthorized) {
+	if _, _, err := conn.ListUserFollowedArtists(context.Background()); !errors.Is(err, kinds.ErrUnauthorized) {
 		t.Fatalf("artists err = %v", err)
 	}
-	if _, _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, types.ErrUnauthorized) {
+	if _, _, err := conn.ListUserLikedTracks(context.Background()); !errors.Is(err, kinds.ErrUnauthorized) {
 		t.Fatalf("tracks err = %v", err)
 	}
 
@@ -719,9 +719,9 @@ func TestLibraryAlbums_CacheHit(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakeAlbumProvider{albums: []types.Album{{Name: "Fresh"}}},
+		"spotify": &fakeAlbumProvider{albums: []kinds.Album{{Name: "Fresh"}}},
 	}
-	seedLibraryAggregate(t, srv, "albums", []types.Album{{Name: "CachedAlbum"}})
+	seedLibraryAggregate(t, srv, "albums", []kinds.Album{{Name: "CachedAlbum"}})
 
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -812,7 +812,7 @@ func (panickingArtistProvider) SystemInstructions(string) string { return "x" }
 func (panickingArtistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (panickingArtistProvider) ListUserFollowedArtists(context.Context) ([]types.Artist, bool, error) {
+func (panickingArtistProvider) ListUserFollowedArtists(context.Context) ([]kinds.Artist, bool, error) {
 	panic("boom")
 }
 
@@ -829,11 +829,11 @@ func TestHandleLibraryArtists_ProviderPanicDoesNotKillProcess(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.ArtistList
+	var resp kinds.ArtistList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["spotify"].Status != types.LibraryStatusError {
+	if resp.ByService["spotify"].Status != kinds.LibraryStatusError {
 		t.Fatalf("status = %+v, want error after panic", resp.ByService["spotify"])
 	}
 }
@@ -850,7 +850,7 @@ func TestLibraryTracks_TruncatedFlag(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
-	var resp types.TrackList
+	var resp kinds.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -879,8 +879,8 @@ func (truncatingTrackProvider) SystemInstructions(string) string { return "x" }
 func (truncatingTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (truncatingTrackProvider) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
-	return []types.Track{{Name: "Only Prefix"}}, true, nil
+func (truncatingTrackProvider) ListUserLikedTracks(context.Context) ([]kinds.Track, bool, error) {
+	return []kinds.Track{{Name: "Only Prefix"}}, true, nil
 }
 
 func TestAdminHTML_SimplePermForm(t *testing.T) {

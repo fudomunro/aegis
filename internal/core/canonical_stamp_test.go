@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
@@ -27,9 +26,9 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		t.Fatalf("photos canonical ids = %v", photos)
 	}
 
-	items := []types.Track{
-		{Name: "A", Sources: []types.TrackSource{{Service: "spotify", ID: "1"}, {Service: "youtube-music", ID: "2"}}},
-		{Name: "B", Sources: []types.TrackSource{{Service: "youtube-music", ID: "3"}}},
+	items := []kinds.Track{
+		{Name: "A", Sources: []kinds.TrackSource{{Service: "spotify", ID: "1"}, {Service: "youtube-music", ID: "2"}}},
+		{Name: "B", Sources: []kinds.TrackSource{{Service: "youtube-music", ID: "3"}}},
 	}
 	markTracks, _ := kinds.Stamps(srv, "tracks", forEachTrackSource)
 	markTracks(items, "spotify")
@@ -40,8 +39,8 @@ func TestCanonicalServiceIDs_AndStampTrackContact(t *testing.T) {
 		t.Fatalf("CanonicalService = %q", items[0].CanonicalService())
 	}
 
-	contactsIn := []types.Contact{
-		{Name: "Ada", Sources: []types.ContactSource{{Service: "google", ID: "c1"}, {Service: "immich", ID: "c2"}}},
+	contactsIn := []kinds.Contact{
+		{Name: "Ada", Sources: []kinds.ContactSource{{Service: "google", ID: "c1"}, {Service: "immich", ID: "c2"}}},
 	}
 	markContacts, _ := kinds.Stamps(srv, "contacts", forEachContactSource)
 	markContacts(contactsIn, "google")
@@ -64,11 +63,11 @@ func TestStampTransactionCanonical_OnlyWhenConfigured(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
-	items := []types.Transaction{
+	items := []kinds.Transaction{
 		{
 			Amount:      "-12.00",
 			Description: "Coffee",
-			Sources: []types.TransactionSource{
+			Sources: []kinds.TransactionSource{
 				{Service: "ynab", ID: "y1"},
 				{Service: "quicken", ID: "q1"},
 			},
@@ -94,13 +93,13 @@ func TestStampPlaceVisitCanonical_OnlyWhenConfigured(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
-	items := []types.PlaceVisit{
+	items := []kinds.PlaceVisit{
 		{
 			StartAt: "2026-01-01T10:00:00Z",
 			EndAt:   "2026-01-01T11:00:00Z",
-			Kind:    types.PlaceKindVisit,
-			Place:   types.Place{Name: "Home"},
-			Sources: []types.PlaceVisitSource{
+			Kind:    kinds.PlaceKindVisit,
+			Place:   kinds.Place{Name: "Home"},
+			Sources: []kinds.PlaceVisitSource{
 				{Service: "google-timeline", ID: "p1"},
 				{Service: "owntracks", ID: "p2"},
 			},

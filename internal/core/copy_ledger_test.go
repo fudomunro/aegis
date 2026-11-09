@@ -9,7 +9,6 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
@@ -34,9 +33,9 @@ func TestServer_RecordMirrorCopyAndStamp(t *testing.T) {
 		t.Fatal("origin should not be stamped")
 	}
 
-	items := []types.Playlist{{
+	items := []kinds.Playlist{{
 		Name: "Road Trip",
-		Sources: []types.PlaylistSource{
+		Sources: []kinds.PlaylistSource{
 			{Service: "spotify", ID: "abc"},
 			{Service: "youtube-music", ID: "xyz"},
 		},
@@ -196,35 +195,35 @@ func TestStampOtherKinds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	photos := []types.Photo{{Sources: []types.PhotoSource{{Service: "immich", ID: "img1"}}}}
+	photos := []kinds.Photo{{Sources: []kinds.PhotoSource{{Service: "immich", ID: "img1"}}}}
 	_, stampPhotos := kinds.Stamps(srv, "photos", forEachPhotoSource)
 	stampPhotos(photos)
 	if photos[0].Sources[0].Copy == nil {
 		t.Fatal("photo copy stamp missing")
 	}
 
-	msgs := []types.Message{{Sources: []types.MessageSource{{Service: "google-gmail", ID: "m1"}}}}
+	msgs := []kinds.Message{{Sources: []kinds.MessageSource{{Service: "google-gmail", ID: "m1"}}}}
 	_, stampMsgs := kinds.Stamps(srv, "messages", forEachMessageSource)
 	stampMsgs(msgs)
 	if msgs[0].Sources[0].Copy == nil {
 		t.Fatal("message copy stamp missing")
 	}
 
-	contacts := []types.Contact{{Sources: []types.ContactSource{{Service: "google-contacts", ID: "c1"}}}}
+	contacts := []kinds.Contact{{Sources: []kinds.ContactSource{{Service: "google-contacts", ID: "c1"}}}}
 	_, stampContacts := kinds.Stamps(srv, "contacts", forEachContactSource)
 	stampContacts(contacts)
 	if contacts[0].Sources[0].Copy == nil {
 		t.Fatal("contact copy stamp missing")
 	}
 
-	events := []types.CalendarEvent{{Sources: []types.CalendarEventSource{{Service: "google-calendar", ID: "e1"}}}}
+	events := []kinds.CalendarEvent{{Sources: []kinds.CalendarEventSource{{Service: "google-calendar", ID: "e1"}}}}
 	_, stampEvents := kinds.Stamps(srv, "events", forEachCalendarEventSource)
 	stampEvents(events)
 	if events[0].Sources[0].Copy == nil {
 		t.Fatal("event copy stamp missing")
 	}
 
-	tracks := []types.Track{{Sources: []types.TrackSource{{Service: "spotify", ID: "t1"}}}}
+	tracks := []kinds.Track{{Sources: []kinds.TrackSource{{Service: "spotify", ID: "t1"}}}}
 	_, stampTracks := kinds.Stamps(srv, "tracks", forEachTrackSource)
 	stampTracks(tracks)
 	if tracks[0].Sources[0].Copy == nil {

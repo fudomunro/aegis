@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGoogleContactsConnector_ListUserContacts_MockAPI(t *testing.T) {
@@ -109,8 +109,8 @@ func TestGoogleContactsConnector_ListUserContacts_Unauthorized(t *testing.T) {
 	host := newTestHostWithService(GoogleContactsServiceID, "", "https://aegis.example.com")
 	conn := NewGoogleContactsConnector(host)
 	_, _, err := conn.ListUserContacts(context.Background())
-	if !errors.Is(err, types.ErrUnauthorized) {
-		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
+	if !errors.Is(err, kinds.ErrUnauthorized) {
+		t.Fatalf("err = %v, want kinds.ErrUnauthorized", err)
 	}
 }
 
@@ -174,7 +174,7 @@ func TestGoogleContactsConnector_HandleProxy_List(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.ContactList
+	var resp kinds.ContactList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -258,6 +258,6 @@ func TestGoogleContactsConnector_SystemInstructions(t *testing.T) {
 
 func TestGoogleContactsConnector_ImplementsContactProvider(t *testing.T) {
 	host := newTestHost("https://aegis.example.com")
-	var _ types.ContactProvider = NewGoogleContactsConnector(host)
+	var _ kinds.ContactProvider = NewGoogleContactsConnector(host)
 	var _ ServiceConnector = NewGoogleContactsConnector(host)
 }

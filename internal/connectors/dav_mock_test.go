@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // davMock is a minimal CardDAV/CalDAV server for connector tests (issue #146).
@@ -264,7 +264,7 @@ func TestCardDAVConnector_ListUserContacts_REPORT(t *testing.T) {
 func TestCardDAVConnector_UnauthorizedWithoutCredentials(t *testing.T) {
 	h := newTestHostWithService(CardDAVServiceID, "https://dav.example.invalid", "https://aegis.example.com")
 	_, _, err := NewCardDAVConnector(h).ListUserContacts(context.Background())
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }
@@ -337,7 +337,7 @@ func TestCalDAVConnector_ListCalendarEvents_RRULE(t *testing.T) {
 func TestCalDAVConnector_Unauthorized(t *testing.T) {
 	h := newTestHostWithService(CalDAVServiceID, "https://dav.example.invalid", "https://aegis.example.com")
 	_, _, err := NewCalDAVConnector(h).ListCalendarEvents(context.Background())
-	if err != types.ErrUnauthorized {
+	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
 }

@@ -18,7 +18,7 @@ import (
 )
 
 type fakeCalendarEventProvider struct {
-	events    []types.CalendarEvent
+	events    []kinds.CalendarEvent
 	err       error
 	truncated bool
 }
@@ -30,7 +30,7 @@ func (f *fakeCalendarEventProvider) SystemInstructions(string) string { return "
 func (f *fakeCalendarEventProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakeCalendarEventProvider) ListCalendarEvents(context.Context) ([]types.CalendarEvent, bool, error) {
+func (f *fakeCalendarEventProvider) ListCalendarEvents(context.Context) ([]kinds.CalendarEvent, bool, error) {
 	return f.events, f.truncated, f.err
 }
 
@@ -41,12 +41,12 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			types.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
-			types.NewCalendarEvent("google-calendar", "Google Calendar", "g2", "Offsite", "2024-06-10T00:00:00Z", "2024-06-11T00:00:00Z", true),
+		"google-calendar": &fakeCalendarEventProvider{events: []kinds.CalendarEvent{
+			kinds.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
+			kinds.NewCalendarEvent("google-calendar", "Google Calendar", "g2", "Offsite", "2024-06-10T00:00:00Z", "2024-06-11T00:00:00Z", true),
 		}},
-		"outlook-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			types.NewCalendarEvent("outlook-calendar", "Outlook Calendar", "o1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
+		"outlook-calendar": &fakeCalendarEventProvider{events: []kinds.CalendarEvent{
+			kinds.NewCalendarEvent("outlook-calendar", "Outlook Calendar", "o1", "Standup", "2024-06-01T09:00:00Z", "2024-06-01T09:30:00Z", false),
 		}},
 	}
 
@@ -57,7 +57,7 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestHandleLibraryEvents_AggregatesServices(t *testing.T) {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 	// Standup should merge across services.
-	var standup *types.CalendarEvent
+	var standup *kinds.CalendarEvent
 	for i := range resp.Events {
 		if resp.Events[i].Title == "Standup" {
 			standup = &resp.Events[i]
@@ -90,8 +90,8 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			types.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
+		"google-calendar": &fakeCalendarEventProvider{events: []kinds.CalendarEvent{
+			kinds.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
 		}},
 	}
 	// Connector fixture already sets Canonical; stamp should keep it true.
@@ -102,7 +102,7 @@ func TestHandleLibraryEvents_CanonicalStamp(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -131,8 +131,8 @@ func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{events: []types.CalendarEvent{
-			types.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
+		"google-calendar": &fakeCalendarEventProvider{events: []kinds.CalendarEvent{
+			kinds.NewCalendarEvent("google-calendar", "Google Calendar", "g1", "Standup", "2024-06-01T09:00:00Z", "", false),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
@@ -148,7 +148,7 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-calendar": &fakeCalendarEventProvider{err: types.ErrUnauthorized},
+		"google-calendar": &fakeCalendarEventProvider{err: kinds.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -157,12 +157,12 @@ func TestHandleLibraryEvents_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
 	st := resp.ByService["google-calendar"]
-	if st.Status != types.LibraryStatusUnauthorized {
+	if st.Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("status = %+v", st)
 	}
 }
@@ -180,11 +180,11 @@ func TestHandleLibraryEvents_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.CalendarEventList
+	var resp kinds.CalendarEventList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if resp.ByService["google-calendar"].Status != types.LibraryStatusError {
+	if resp.ByService["google-calendar"].Status != kinds.LibraryStatusError {
 		t.Fatalf("by_service = %+v", resp.ByService)
 	}
 }
@@ -238,9 +238,9 @@ func TestStampCalendarEventCanonical_OnlyWhenConfigured(t *testing.T) {
 		{ID: "other-cal", Name: "Other", Action: "inject"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	items := []types.CalendarEvent{
-		{Sources: []types.CalendarEventSource{{Service: "google-calendar"}}},
-		{Sources: []types.CalendarEventSource{{Service: "other-cal"}}},
+	items := []kinds.CalendarEvent{
+		{Sources: []kinds.CalendarEventSource{{Service: "google-calendar"}}},
+		{Sources: []kinds.CalendarEventSource{{Service: "other-cal"}}},
 	}
 	mark, _ := kinds.Stamps(srv, "events", forEachCalendarEventSource)
 	mark(items, "google-calendar")

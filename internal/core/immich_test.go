@@ -3,13 +3,12 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Server) {
@@ -57,7 +56,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var list types.PhotoList
+	var list kinds.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -67,7 +66,7 @@ func TestImmichConnector_LibraryAggregate(t *testing.T) {
 	if !list.Photos[0].Sources[0].Canonical {
 		t.Fatal("immich source should be canonical")
 	}
-	if list.ByService[connectors.ImmichServiceID].Status != types.LibraryStatusOK {
+	if list.ByService[connectors.ImmichServiceID].Status != kinds.LibraryStatusOK {
 		t.Fatalf("by_service = %+v", list.ByService)
 	}
 }

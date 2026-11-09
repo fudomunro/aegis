@@ -3,6 +3,7 @@ package connectors
 import (
 	"context"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -60,10 +61,10 @@ type MailSink interface {
 	// HasMessage reports whether this source already stores the message —
 	// by RFC Message-ID when present, else by source id. Cross-service
 	// Message-ID matches are attachment, not duplicates (issue #139).
-	HasMessage(service string, msg types.Message) (bool, error)
+	HasMessage(service string, msg kinds.Message) (bool, error)
 	// Store upserts one message with its raw provider payload. Core
 	// compresses the payload and stamps service name, dataset, and FTS.
-	Store(service string, msg types.Message, rawPayload []byte) error
+	Store(service string, msg kinds.Message, rawPayload []byte) error
 	// LoadCursor/SaveCursor round-trip the durable ingest position under
 	// the shared cursor keys; the cursor's LastSyncAt is what overviews
 	// read.

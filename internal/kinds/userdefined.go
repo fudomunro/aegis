@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // UserDefinedDeps are the constructor args for user-defined kinds (issue
@@ -116,7 +115,7 @@ func (k *userDefinedKind) serve(w http.ResponseWriter, r *http.Request) {
 		Merge: func(in []UserDefinedItem) []UserDefinedItem {
 			return MergeUserDefinedItems(schema, in)
 		},
-		Encode: func(items []UserDefinedItem, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
+		Encode: func(items []UserDefinedItem, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			return EncodeUserDefinedList(schema, items, page, bySvc)
 		},
 	})

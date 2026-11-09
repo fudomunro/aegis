@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -93,47 +94,47 @@ func (c *SampleLibraryConnector) HandleProxy(w http.ResponseWriter, r *http.Requ
 	shared.WriteJSONError(w, http.StatusNotFound, "sample library data is only available through /v1/library")
 }
 
-func (c *SampleLibraryConnector) ListUserPlaylists(context.Context) ([]types.Playlist, bool, error) {
+func (c *SampleLibraryConnector) ListUserPlaylists(context.Context) ([]kinds.Playlist, bool, error) {
 	return c.set.Playlists, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
+func (c *SampleLibraryConnector) ListUserLikedTracks(context.Context) ([]kinds.Track, bool, error) {
 	return c.set.Tracks, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserSavedAlbums(context.Context) ([]types.Album, bool, error) {
+func (c *SampleLibraryConnector) ListUserSavedAlbums(context.Context) ([]kinds.Album, bool, error) {
 	return c.set.Albums, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserFollowedArtists(context.Context) ([]types.Artist, bool, error) {
+func (c *SampleLibraryConnector) ListUserFollowedArtists(context.Context) ([]kinds.Artist, bool, error) {
 	return c.set.Artists, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserContacts(context.Context) ([]types.Contact, bool, error) {
+func (c *SampleLibraryConnector) ListUserContacts(context.Context) ([]kinds.Contact, bool, error) {
 	return c.set.Contacts, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserPhotos(context.Context) ([]types.Photo, bool, error) {
+func (c *SampleLibraryConnector) ListUserPhotos(context.Context) ([]kinds.Photo, bool, error) {
 	return c.set.Photos, false, nil
 }
 
-func (c *SampleLibraryConnector) ListCalendarEvents(context.Context) ([]types.CalendarEvent, bool, error) {
+func (c *SampleLibraryConnector) ListCalendarEvents(context.Context) ([]kinds.CalendarEvent, bool, error) {
 	return c.set.Events, false, nil
 }
 
-func (c *SampleLibraryConnector) ListMessages(context.Context) ([]types.Message, bool, error) {
+func (c *SampleLibraryConnector) ListMessages(context.Context) ([]kinds.Message, bool, error) {
 	return c.set.Messages, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserTransactions(context.Context) ([]types.Transaction, bool, error) {
+func (c *SampleLibraryConnector) ListUserTransactions(context.Context) ([]kinds.Transaction, bool, error) {
 	return c.set.Transactions, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserPlaceVisits(context.Context) ([]types.PlaceVisit, bool, error) {
+func (c *SampleLibraryConnector) ListUserPlaceVisits(context.Context) ([]kinds.PlaceVisit, bool, error) {
 	return c.set.Places, false, nil
 }
 
-func (c *SampleLibraryConnector) ListUserDocuments(context.Context) ([]types.Document, bool, error) {
+func (c *SampleLibraryConnector) ListUserDocuments(context.Context) ([]kinds.Document, bool, error) {
 	return c.set.Documents, false, nil
 }
 
@@ -156,16 +157,16 @@ func (c *SampleLibraryConnector) FetchDocumentText(_ context.Context, id string)
 // Compile-time checks: missing provider methods silently drop the connector
 // from library fan-out (type assert fails) — catch that at build time.
 var (
-	_ types.PlaylistProvider      = (*SampleLibraryConnector)(nil)
-	_ types.LikedTrackProvider    = (*SampleLibraryConnector)(nil)
-	_ types.AlbumProvider         = (*SampleLibraryConnector)(nil)
-	_ types.ArtistProvider        = (*SampleLibraryConnector)(nil)
-	_ types.ContactProvider       = (*SampleLibraryConnector)(nil)
-	_ types.PhotoProvider         = (*SampleLibraryConnector)(nil)
-	_ types.CalendarEventProvider = (*SampleLibraryConnector)(nil)
-	_ types.MessageProvider       = (*SampleLibraryConnector)(nil)
-	_ types.TransactionProvider   = (*SampleLibraryConnector)(nil)
-	_ types.PlaceVisitProvider    = (*SampleLibraryConnector)(nil)
-	_ types.DocumentProvider      = (*SampleLibraryConnector)(nil)
+	_ kinds.PlaylistProvider      = (*SampleLibraryConnector)(nil)
+	_ kinds.LikedTrackProvider    = (*SampleLibraryConnector)(nil)
+	_ kinds.AlbumProvider         = (*SampleLibraryConnector)(nil)
+	_ kinds.ArtistProvider        = (*SampleLibraryConnector)(nil)
+	_ kinds.ContactProvider       = (*SampleLibraryConnector)(nil)
+	_ kinds.PhotoProvider         = (*SampleLibraryConnector)(nil)
+	_ kinds.CalendarEventProvider = (*SampleLibraryConnector)(nil)
+	_ kinds.MessageProvider       = (*SampleLibraryConnector)(nil)
+	_ kinds.TransactionProvider   = (*SampleLibraryConnector)(nil)
+	_ kinds.PlaceVisitProvider    = (*SampleLibraryConnector)(nil)
+	_ kinds.DocumentProvider      = (*SampleLibraryConnector)(nil)
 	_ connectors.ServiceConnector = (*SampleLibraryConnector)(nil)
 )

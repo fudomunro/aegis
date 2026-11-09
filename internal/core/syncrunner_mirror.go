@@ -7,8 +7,8 @@ import (
 	"log/slog"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Mirror and repair job runners (issue #227 phase 3). One runner serves both
@@ -119,20 +119,20 @@ func (r *mirrorRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 		pageLimit = mirrorTrackCap
 	}
 	var (
-		tracks []types.Track
+		tracks []kinds.Track
 		total  int
 		next   string
 		srcRef MirrorRef
 	)
 	switch p.Kind {
 	case MirrorKindPlaylists:
-		var ref types.Playlist
-		var page types.TrackPage
+		var ref kinds.Playlist
+		var page kinds.TrackPage
 		ref, page, err = src.ListPlaylistItems(ctx, p.SourceID, p.Cursor, pageLimit)
 		tracks, total, next = page.Tracks, page.Total, page.Next
 		srcRef = mirrorRefFromPlaylist(p.SourceService, ref, total)
 	case MirrorKindTracks:
-		var page types.TrackPage
+		var page kinds.TrackPage
 		page, err = src.ListUserLikedTracksPage(ctx, p.Cursor, pageLimit)
 		tracks, total, next = page.Tracks, page.Total, page.Next
 		srcRef = MirrorRef{Service: p.SourceService, Name: "liked/saved tracks", Count: total}
@@ -261,7 +261,7 @@ func defaultMirrorName(kind string) string {
 // against a target list from a *different* service, and placement matches
 // cross-service by name/artist in the write operation — so id keys would
 // never line up. Name + first artist is the same matching placement uses.
-func repairIdentityKey(t types.Track) string {
+func repairIdentityKey(t kinds.Track) string {
 	artist := ""
 	if len(t.Artists) > 0 {
 		artist = t.Artists[0].Name

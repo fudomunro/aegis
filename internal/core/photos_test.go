@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"bytes"
 	"context"
@@ -19,7 +20,7 @@ import (
 )
 
 type fakePhotoProvider struct {
-	photos []types.Photo
+	photos []kinds.Photo
 	err    error
 }
 
@@ -30,7 +31,7 @@ func (f *fakePhotoProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakePhotoProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *fakePhotoProvider) ListUserPhotos(context.Context) ([]types.Photo, bool, error) {
+func (f *fakePhotoProvider) ListUserPhotos(context.Context) ([]kinds.Photo, bool, error) {
 	return f.photos, false, f.err
 }
 
@@ -41,12 +42,12 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10),
-			types.NewPhoto("google-photos", "Google Photos", "2", "b.jpg", "image/jpeg", "2024-01-02T00:00:00Z", 10, 10),
+		"google-photos": &fakePhotoProvider{photos: []kinds.Photo{
+			kinds.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 10, 10),
+			kinds.NewPhoto("google-photos", "Google Photos", "2", "b.jpg", "image/jpeg", "2024-01-02T00:00:00Z", 10, 10),
 		}},
-		"icloud": &fakePhotoProvider{photos: []types.Photo{
-			types.NewPhoto("icloud", "iCloud", "9", "c.jpg", "image/jpeg", "2024-01-03T00:00:00Z", 10, 10),
+		"icloud": &fakePhotoProvider{photos: []kinds.Photo{
+			kinds.NewPhoto("icloud", "iCloud", "9", "c.jpg", "image/jpeg", "2024-01-03T00:00:00Z", 10, 10),
 		}},
 	}
 
@@ -57,7 +58,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.PhotoList
+	var resp kinds.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -93,8 +94,8 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 	}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
+		"google-photos": &fakePhotoProvider{photos: []kinds.Photo{
+			kinds.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
@@ -113,10 +114,10 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
+		"google-photos": &fakePhotoProvider{photos: []kinds.Photo{
+			kinds.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
-		"icloud": &fakePhotoProvider{err: types.ErrUnauthorized},
+		"icloud": &fakePhotoProvider{err: kinds.ErrUnauthorized},
 	}
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
@@ -125,11 +126,11 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.PhotoList
+	var resp kinds.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.ByService["icloud"].Status != types.LibraryStatusUnauthorized {
+	if resp.ByService["icloud"].Status != kinds.LibraryStatusUnauthorized {
 		t.Fatalf("icloud status = %+v", resp.ByService["icloud"])
 	}
 }
@@ -141,8 +142,8 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"google-photos": &fakePhotoProvider{photos: []types.Photo{
-			types.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
+		"google-photos": &fakePhotoProvider{photos: []kinds.Photo{
+			kinds.NewPhoto("google-photos", "Google Photos", "1", "a.jpg", "image/jpeg", "2024-01-01T00:00:00Z", 1, 1),
 		}},
 		"icloud": &fakePhotoProvider{err: errors.New("upstream boom")},
 	}
@@ -153,11 +154,11 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
-	var resp types.PhotoList
+	var resp kinds.PhotoList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.ByService["icloud"].Status != types.LibraryStatusError {
+	if resp.ByService["icloud"].Status != kinds.LibraryStatusError {
 		t.Fatalf("icloud status = %+v", resp.ByService["icloud"])
 	}
 	if resp.Total != 1 {
@@ -365,7 +366,7 @@ func TestGooglePhotosConnector_PickerFlow_ListUserPhotos(t *testing.T) {
 	if listW.Code != http.StatusOK {
 		t.Fatalf("list status = %d body=%s", listW.Code, listW.Body.String())
 	}
-	var listResp types.PhotoList
+	var listResp kinds.PhotoList
 	if err := json.Unmarshal(listW.Body.Bytes(), &listResp); err != nil {
 		t.Fatalf("decode list: %v", err)
 	}
@@ -411,8 +412,8 @@ func TestGooglePhotosConnector_ListUserPhotos_Unauthorized(t *testing.T) {
 	}}}, "https://aegis.example.com")
 	conn := connectors.NewGooglePhotosConnector(srv)
 	_, _, err := conn.ListUserPhotos(context.Background())
-	if !errors.Is(err, types.ErrUnauthorized) {
-		t.Fatalf("err = %v, want types.ErrUnauthorized", err)
+	if !errors.Is(err, kinds.ErrUnauthorized) {
+		t.Fatalf("err = %v, want kinds.ErrUnauthorized", err)
 	}
 }
 

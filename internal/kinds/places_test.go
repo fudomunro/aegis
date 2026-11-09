@@ -4,19 +4,18 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
-func testPlace(name, locality string, lat, lng float64, start string, trip bool) types.PlaceVisit {
-	kind := types.PlaceKindVisit
+func testPlace(name, locality string, lat, lng float64, start string, trip bool) PlaceVisit {
+	kind := PlaceKindVisit
 	if trip {
-		kind = types.PlaceKindTrip
+		kind = PlaceKindTrip
 	}
-	return types.PlaceVisit{
+	return PlaceVisit{
 		Kind:    kind,
 		StartAt: start,
 		EndAt:   start,
-		Place: types.Place{
+		Place: Place{
 			Name:     name,
 			Address:  name + " Street",
 			Locality: locality,
@@ -24,7 +23,7 @@ func testPlace(name, locality string, lat, lng float64, start string, trip bool)
 			Lat:      lat,
 			Lng:      lng,
 		},
-		Sources: []types.PlaceVisitSource{{
+		Sources: []PlaceVisitSource{{
 			Service:  "google-timeline",
 			ID:       name,
 			PointIDs: []string{"p1"},
@@ -33,18 +32,18 @@ func testPlace(name, locality string, lat, lng float64, start string, trip bool)
 }
 
 func TestFilterPlaceVisits(t *testing.T) {
-	visits := types.MergePlaceVisits([]types.PlaceVisit{
+	visits := MergePlaceVisits([]PlaceVisit{
 		testPlace("Home", "Halifax", 44.6, -63.6, "2024-06-01T10:00:00Z", false),
 		testPlace("Cottage", "Lunenburg", 44.3, -64.3, "2024-07-01T10:00:00Z", false),
 		testPlace("Drive", "Lunenburg", 44.3, -64.3, "2024-08-01T10:00:00Z", true),
 	})
-	if got := filterPlaceVisits(visits, types.PlaceVisitFilters{Locality: "Lunenburg"}); len(got) != 2 {
+	if got := filterPlaceVisits(visits, PlaceVisitFilters{Locality: "Lunenburg"}); len(got) != 2 {
 		t.Fatalf("locality filter = %d, want 2", len(got))
 	}
-	if got := filterPlaceVisits(visits, types.PlaceVisitFilters{After: "2024-07-15T00:00:00Z"}); len(got) != 1 {
+	if got := filterPlaceVisits(visits, PlaceVisitFilters{After: "2024-07-15T00:00:00Z"}); len(got) != 1 {
 		t.Fatalf("after filter = %d, want 1", len(got))
 	}
-	if got := filterPlaceVisits(visits, types.PlaceVisitFilters{Kind: types.PlaceKindTrip}); len(got) != 1 {
+	if got := filterPlaceVisits(visits, PlaceVisitFilters{Kind: PlaceKindTrip}); len(got) != 1 {
 		t.Fatalf("kind=trip filter = %d, want 1", len(got))
 	}
 }

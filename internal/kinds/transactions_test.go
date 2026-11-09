@@ -4,11 +4,10 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestBuildTransactionSummary(t *testing.T) {
-	items := []types.Transaction{
+	items := []Transaction{
 		{PostedAt: "2024-03-05", Amount: "-45.67", Category: []string{"Shopping"}, Currency: "USD"},
 		{PostedAt: "2024-03-06", Amount: "-12.00", Category: []string{"Coffee"}, Currency: "USD"},
 		{PostedAt: "2024-03-01", Amount: "3200.00", Category: []string{"Income"}, Currency: "USD"},
@@ -37,7 +36,7 @@ func TestBuildTransactionSummary(t *testing.T) {
 func TestBuildTransactionSummary_MultiCategorySplit(t *testing.T) {
 	// YNAB split: categories without amounts. Full total credits each category
 	// so the line item "shows up" in grocery/household views.
-	items := []types.Transaction{
+	items := []Transaction{
 		{PostedAt: "2024-03-12", Amount: "-200.00", Category: []string{"Groceries", "Household Goods"}, Currency: "USD"},
 	}
 	sum := buildTransactionSummary(items)
@@ -53,11 +52,11 @@ func TestBuildTransactionSummary_MultiCategorySplit(t *testing.T) {
 }
 
 func TestRedactTransactionRead_StripsAccount(t *testing.T) {
-	tx := types.Transaction{
+	tx := Transaction{
 		PostedAt: "2024-03-05",
 		Amount:   "-45.67",
 		Merchant: "Amazon",
-		Account:  &types.TransactionAccount{Name: "Checking", Last4: "4421"},
+		Account:  &TransactionAccount{Name: "Checking", Last4: "4421"},
 	}
 	got := redactTransactionRead(tx)
 	if got.Account != nil {
@@ -69,30 +68,30 @@ func TestRedactTransactionRead_StripsAccount(t *testing.T) {
 }
 
 func TestFilterTransactions(t *testing.T) {
-	items := []types.Transaction{
-		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: []string{"Shopping"}, Account: &types.TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
-		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: []string{"Coffee"}, Account: &types.TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
+	items := []Transaction{
+		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: []string{"Shopping"}, Account: &TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
+		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: []string{"Coffee"}, Account: &TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
 	}
-	if got := filterTransactions(items, types.TransactionFilters{After: "2024-03-06"}); len(got) != 1 {
+	if got := filterTransactions(items, TransactionFilters{After: "2024-03-06"}); len(got) != 1 {
 		t.Fatalf("after filter = %d", len(got))
 	}
-	if got := filterTransactions(items, types.TransactionFilters{Before: "2024-03-06"}); len(got) != 1 {
+	if got := filterTransactions(items, TransactionFilters{Before: "2024-03-06"}); len(got) != 1 {
 		t.Fatalf("before filter = %d", len(got))
 	}
-	if got := filterTransactions(items, types.TransactionFilters{Account: "9902"}); len(got) != 1 {
+	if got := filterTransactions(items, TransactionFilters{Account: "9902"}); len(got) != 1 {
 		t.Fatalf("account filter = %d", len(got))
 	}
-	if got := filterTransactions(items, types.TransactionFilters{Q: "coffee"}); len(got) != 1 {
+	if got := filterTransactions(items, TransactionFilters{Q: "coffee"}); len(got) != 1 {
 		t.Fatalf("q filter = %d", len(got))
 	}
-	if got := filterTransactions(items, types.TransactionFilters{Currency: "EUR"}); len(got) != 0 {
+	if got := filterTransactions(items, TransactionFilters{Currency: "EUR"}); len(got) != 0 {
 		t.Fatalf("currency filter = %d", len(got))
 	}
 }
 
 func TestRedactTransactionsForLevel(t *testing.T) {
-	items := []types.Transaction{
-		{Amount: "-1.00", Merchant: "A", Account: &types.TransactionAccount{Name: "X"}},
+	items := []Transaction{
+		{Amount: "-1.00", Merchant: "A", Account: &TransactionAccount{Name: "X"}},
 	}
 	if got := redactTransactionsForLevel(items, policy.AccessSummary); got != nil {
 		t.Fatalf("summary should drop line items, got %v", got)

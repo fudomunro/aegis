@@ -1,10 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-)
-
-import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -15,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 

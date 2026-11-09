@@ -1,9 +1,8 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/types"
-
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 
 	"bytes"
 	"encoding/json"
@@ -102,7 +101,7 @@ func TestHandlePreRequest_OldestPhotoInCollection(t *testing.T) {
 	for _, want := range []string{
 		"/v1/library/photos",
 		"/v1/services/immich",
-		types.PhotoSourceDiscipline(),
+		kinds.PhotoSourceDiscipline(),
 	} {
 		if !strings.Contains(content, want) {
 			t.Fatalf("system message missing %q:\n%s", want, content)
@@ -138,7 +137,7 @@ func TestHandlePreRequest_PhotoLibraryHintsAlongsideServiceMatch(t *testing.T) {
 
 func TestPhotoSourceDiscipline_InConnectorInstructions(t *testing.T) {
 	srv := photoTestServer()
-	discipline := types.PhotoSourceDiscipline()
+	discipline := kinds.PhotoSourceDiscipline()
 	if !strings.Contains(srv.connectors["immich"].SystemInstructions("https://aegis.example.com"), discipline) {
 		t.Fatal("Immich instructions missing photo source discipline")
 	}
@@ -148,7 +147,7 @@ func TestPhotoSourceDiscipline_InConnectorInstructions(t *testing.T) {
 }
 
 func TestPhotoSourceDiscipline_MentionsBypassPaths(t *testing.T) {
-	s := types.PhotoSourceDiscipline()
+	s := kinds.PhotoSourceDiscipline()
 	for _, want := range []string{
 		"Photos Library.photoslibrary",
 		"Photo Booth",

@@ -11,8 +11,8 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // adminHTML is the admin dashboard shell (CSS + SPA JS). Data loads via API.
@@ -205,31 +205,31 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			item.LoginPath = "/v1/auth/" + svc.ID + "/login"
 		}
 		if connector, ok := s.connectors[svc.ID]; ok {
-			if _, isProvider := connector.(types.PlaylistProvider); isProvider {
+			if _, isProvider := connector.(kinds.PlaylistProvider); isProvider {
 				item.HasPlaylist = true
 			}
-			if _, isProvider := connector.(types.LikedTrackProvider); isProvider {
+			if _, isProvider := connector.(kinds.LikedTrackProvider); isProvider {
 				item.HasLikedTrack = true
 			}
-			if _, isProvider := connector.(types.AlbumProvider); isProvider {
+			if _, isProvider := connector.(kinds.AlbumProvider); isProvider {
 				item.HasAlbum = true
 			}
-			if _, isProvider := connector.(types.ArtistProvider); isProvider {
+			if _, isProvider := connector.(kinds.ArtistProvider); isProvider {
 				item.HasArtist = true
 			}
-			if _, isProvider := connector.(types.ContactProvider); isProvider {
+			if _, isProvider := connector.(kinds.ContactProvider); isProvider {
 				item.HasContact = true
 			}
-			if _, isProvider := connector.(types.PhotoProvider); isProvider {
+			if _, isProvider := connector.(kinds.PhotoProvider); isProvider {
 				item.HasPhoto = true
 			}
-			if _, isProvider := connector.(types.CalendarEventProvider); isProvider {
+			if _, isProvider := connector.(kinds.CalendarEventProvider); isProvider {
 				item.HasEvent = true
 			}
-			if _, isProvider := connector.(types.MessageProvider); isProvider {
+			if _, isProvider := connector.(kinds.MessageProvider); isProvider {
 				item.HasMessage = true
 			}
-			if _, isProvider := connector.(types.TransactionProvider); isProvider {
+			if _, isProvider := connector.(kinds.TransactionProvider); isProvider {
 				item.HasTransaction = true
 			}
 			caps := connector.Capabilities()

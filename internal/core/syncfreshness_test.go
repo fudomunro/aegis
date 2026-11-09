@@ -16,7 +16,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // --- version comparison ---
@@ -249,7 +249,7 @@ func TestFreshnessEngine_AuthOrErrorLeavesRowAlone(t *testing.T) {
 	checker := &stubChecker{
 		services: []string{"spotify"},
 		fn: func(ctx context.Context, rec copies.Record) (copies.Version, bool, bool, error) {
-			return copies.Version{}, false, false, types.ErrUnauthorized
+			return copies.Version{}, false, false, kinds.ErrUnauthorized
 		},
 	}
 	reg := NewCheckerRegistry()

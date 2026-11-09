@@ -1,7 +1,5 @@
 package kinds
 
-import "github.com/fudomunro/aegis/internal/types"
-
 // SourceMut is one mutable item source row as generic stamping sees it.
 // Kinds supply a ForEachSource projection over their typed sources
 // (issue #312); the per-kind mark*/stamp* pairs are gone.
@@ -9,7 +7,7 @@ type SourceMut struct {
 	Service       string
 	ID            string
 	MarkCanonical func()
-	SetCopy       func(*types.CopyInfo)
+	SetCopy       func(*CopyInfo)
 }
 
 // ForEachSource projects one item's source rows for generic stamping.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestYouTubeMusicConnector_SystemInstructions(t *testing.T) {
@@ -185,7 +185,7 @@ func TestYouTubeMusicConnector_TransformPlaylistItems(t *testing.T) {
 	}
 
 	result := conn.TransformPlaylistItems(raw)
-	tracks, ok := result["tracks"].([]types.Track)
+	tracks, ok := result["tracks"].([]kinds.Track)
 	if !ok {
 		t.Fatalf("tracks type = %T", result["tracks"])
 	}

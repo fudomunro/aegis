@@ -9,13 +9,14 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
 // pagingTrackProvider returns n uniquely named tracks so merge cannot collapse
 // them; used to walk the agent page window with no duplicates or gaps.
 type pagingTrackProvider struct {
-	tracks []types.Track
+	tracks []kinds.Track
 }
 
 func (f *pagingTrackProvider) Capabilities() types.ServiceCapabilities {
@@ -25,18 +26,18 @@ func (f *pagingTrackProvider) SystemInstructions(string) string { return "fake" 
 func (f *pagingTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }
 
-func (f *pagingTrackProvider) ListUserLikedTracks(context.Context) ([]types.Track, bool, error) {
+func (f *pagingTrackProvider) ListUserLikedTracks(context.Context) ([]kinds.Track, bool, error) {
 	return f.tracks, false, nil
 }
 
-func pagingTracks(n int) []types.Track {
-	out := make([]types.Track, 0, n)
+func pagingTracks(n int) []kinds.Track {
+	out := make([]kinds.Track, 0, n)
 	for i := 0; i < n; i++ {
 		name := fmt.Sprintf("Track %03d", i)
-		out = append(out, types.Track{
+		out = append(out, kinds.Track{
 			Name:    name,
-			Artists: []types.Artist{types.NewArtist("spotify", "Spotify", "", "Artist")},
-			Sources: []types.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: fmt.Sprintf("t%03d", i)}},
+			Artists: []kinds.Artist{kinds.NewArtist("spotify", "Spotify", "", "Artist")},
+			Sources: []kinds.TrackSource{{Service: "spotify", ServiceName: "Spotify", ID: fmt.Sprintf("t%03d", i)}},
 		})
 	}
 	return out
@@ -65,7 +66,7 @@ func TestLibraryTracks_PagesWithoutDuplicatesOrGaps(t *testing.T) {
 		if w.Code != http.StatusOK {
 			t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 		}
-		var resp types.TrackList
+		var resp kinds.TrackList
 		if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("decode: %v", err)
 		}
@@ -124,7 +125,7 @@ func TestLibraryTracks_LimitClampsAndCachesPerWindow(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
-	var resp types.TrackList
+	var resp kinds.TrackList
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -142,11 +143,11 @@ func TestLibraryTracks_LimitClampsAndCachesPerWindow(t *testing.T) {
 	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w2, req2)
-	var page1 types.TrackList
+	var page1 kinds.TrackList
 	if err := json.Unmarshal(w2.Body.Bytes(), &page1); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(page1.Tracks) != types.DefaultPageLimit {
+	if len(page1.Tracks) != kinds.DefaultPageLimit {
 		t.Fatalf("default page size = %d", len(page1.Tracks))
 	}
 	if page1.NextCursor == "" {

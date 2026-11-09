@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -226,7 +227,7 @@ func (c *GoogleDriveConnector) apiGet(ctx context.Context, logger *slog.Logger, 
 	}
 	token := c.host.GetValidToken(GoogleDriveServiceID, logger)
 	if token == "" {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
@@ -244,7 +245,7 @@ func (c *GoogleDriveConnector) apiGet(ctx context.Context, logger *slog.Logger, 
 		return err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return types.ErrUnauthorized
+		return kinds.ErrUnauthorized
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("google drive returned %d", resp.StatusCode)
@@ -253,11 +254,11 @@ func (c *GoogleDriveConnector) apiGet(ctx context.Context, logger *slog.Logger, 
 }
 
 // NeutralDocument maps one Drive file to a neutral Document.
-func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) types.Document {
+func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) kinds.Document {
 	// blob_url is the Aegis content-transport URL (Immich pattern) so agents
 	// call /v1/services/google-drive/... instead of raw Drive paths.
 	proxyRoot := strings.TrimRight(c.host.BaseURL(), "/") + "/v1/services/" + GoogleDriveServiceID
-	src := types.DocumentSource{
+	src := kinds.DocumentSource{
 		Service:     GoogleDriveServiceID,
 		ServiceName: GoogleDriveServiceName,
 		ID:          f.ID,
@@ -265,7 +266,7 @@ func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) types.Document
 		Canonical:   true,
 		BlobURL:     proxyRoot + "/files/" + url.PathEscape(f.ID) + "/export?mimeType=" + url.QueryEscape(googleDriveHTMLExportMime),
 	}
-	d := types.Document{
+	d := kinds.Document{
 		Title:      strings.TrimSpace(f.Name),
 		MimeType:   f.MimeType,
 		CreatedAt:  f.CreatedTime,
@@ -274,7 +275,7 @@ func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) types.Document
 		DocumentType: "google-doc",
 		Excerpt:      strings.TrimSpace(f.Description),
 		EntityID:     f.ID,
-		Sources:      []types.DocumentSource{src},
+		Sources:      []kinds.DocumentSource{src},
 	}
 	if f.MimeType == "" {
 		d.MimeType = googleDocsMime
@@ -290,7 +291,7 @@ func (c *GoogleDriveConnector) NeutralDocument(f googleDriveFile) types.Document
 		if d.Correspondent == "" {
 			d.Correspondent = name
 		}
-		d.People = append(d.People, types.Contact{
+		d.People = append(d.People, kinds.Contact{
 			Name:   name,
 			Emails: nonEmptyString(o.Email),
 		})
@@ -309,9 +310,9 @@ func nonEmptyString(s string) []string {
 // ListUserDocuments implements DocumentProvider. It pages Drive files.list
 // for Google Docs and maps them to neutral Document values. Listing is
 // metadata-only — content is fetched only on FetchDocumentText / export.
-func (c *GoogleDriveConnector) ListUserDocuments(ctx context.Context) ([]types.Document, bool, error) {
+func (c *GoogleDriveConnector) ListUserDocuments(ctx context.Context) ([]kinds.Document, bool, error) {
 	logger := slog.Default()
-	var out []types.Document
+	var out []kinds.Document
 	truncated := false
 	pageToken := ""
 
@@ -367,7 +368,7 @@ func (c *GoogleDriveConnector) ExportFileHTML(ctx context.Context, id string) (s
 func (c *GoogleDriveConnector) exportFile(ctx context.Context, logger *slog.Logger, id, mime string) (string, error) {
 	token := c.host.GetValidToken(GoogleDriveServiceID, logger)
 	if token == "" {
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	}
 	u := c.GoogleDriveUpstreamBase() + "/files/" + url.PathEscape(id) + "/export?mimeType=" + url.QueryEscape(mime)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
@@ -385,7 +386,7 @@ func (c *GoogleDriveConnector) exportFile(ctx context.Context, logger *slog.Logg
 		return "", err
 	}
 	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return "", types.ErrUnauthorized
+		return "", kinds.ErrUnauthorized
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return "", fmt.Errorf("google drive export returned %d", resp.StatusCode)

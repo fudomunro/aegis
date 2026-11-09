@@ -1,16 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/kinds"
-)
-
-import (
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
