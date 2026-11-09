@@ -5,102 +5,9 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/types"
 )
-
-// routeHandle is a *Server handler method value, e.g.
-// (*Server).HandleLibraryTracks. kindRuntime is a package-level registry,
-// so handlers bind to a Server at registration time.
-type routeHandle func(*Server, http.ResponseWriter, *http.Request)
-
-// Route is one agent-tier GET/HEAD route owned by a library kind. The
-// declaration carries the route's exposure: the API-listener and app-token
-// allowlists derive from it. Kinds declare reads only — writes (mirror,
-// photos/share) stay admin-registered in core (issue #312). This is the
-// route-declaration shape internal/kinds will export.
-type Route struct {
-	// Pattern is the ServeMux pattern: the kind path, or a kind subroute
-	// like "/v1/library/documents/{service}/{id}/text".
-	Pattern string
-	// Handle is the route handler as a *Server method value.
-	Handle routeHandle
-	// AppReadable marks third-party app-token exposure (freebusy: yes;
-	// document text: no). The kind's list route derives this from the
-	// kind data; subroutes declare it.
-	AppReadable bool
-}
-
-// kindRuntimeEntry is core-owned visibility wiring for one library kind.
-// Predicates stay here — not on types.LibraryKind (issue #15).
-type kindRuntimeEntry struct {
-	// Provides reports whether a single connector implements this kind's
-	// provider interface. The flow map lists a service's kinds through it
-	// (issue #254).
-	Provides func(c connectors.ServiceConnector) bool
-	// HasProviders reports whether any connector can feed this kind.
-	HasProviders func(s *Server) bool
-	// Readable reports whether any non-blocked service allows reads.
-	Readable func(s *Server) bool
-	// Routes are the agent-tier GET/HEAD routes this kind owns (issue
-	// #312). The first is the kind's list route; the rest are subroutes
-	// (document text, the freebusy view).
-	Routes []Route
-}
-
-// newKindRuntime wires a kind whose live sources are exactly the connectors
-// implementing P. The kind's list route is declared from the kind data
-// (path and app exposure come from types.BuiltinKindByID); pass extra
-// subroutes after handle. Override HasProviders on the result when a local
-// store can feed the kind without a connector (mail archive, Timeline
-// import).
-func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kindRuntimeEntry {
-	provides := func(c connectors.ServiceConnector) bool {
-		_, ok := any(c).(P)
-		return ok
-	}
-	k := types.BuiltinKindByID(kind)
-	routes := append([]Route{{
-		Pattern:     k.Path,
-		Handle:      handle,
-		AppReadable: k.AppReadable,
-	}}, extra...)
-	return kindRuntimeEntry{
-		Provides: provides,
-		HasProviders: func(s *Server) bool {
-			for _, c := range s.connectors {
-				if provides(c) {
-					return true
-				}
-			}
-			return false
-		},
-		Readable: func(s *Server) bool { return s.libraryReadableFor(kind) },
-		Routes:   routes,
-	}
-}
-
-// kindRuntime maps kind ID → visibility predicates and route declarations
-// for kinds still in the hub. Keys must match types.BuiltinLibraryKinds
-// minus the kinds already moved to kinds.Builtin()
-// (TestLibraryKinds_KindRuntimeInSync, TestLibraryKinds_RoutesInSync).
-// // transitional (#312) — shrinks to empty as kinds move; delete with the
-// last move.
-var kindRuntime = map[string]kindRuntimeEntry{
-	"messages": messagesKindRuntime(),
-}
-
-// messagesKindRuntime adds the local mail archive (Gmail sync + Takeout) as a
-// collection source even without a live connector (issue #139).
-func messagesKindRuntime() kindRuntimeEntry {
-	e := newKindRuntime[types.MessageProvider]("messages", (*Server).HandleLibraryMessages)
-	live := e.HasProviders
-	e.HasProviders = func(s *Server) bool {
-		return live(s) || (s.mail != nil && s.mailReadable())
-	}
-	return e
-}
 
 // kindHasProviders reports whether any connector can feed the kind.
 func kindHasProviders(id string, s *Server) bool {
@@ -110,11 +17,7 @@ func kindHasProviders(id string, s *Server) bool {
 	if k, ok := s.builtinKind(id); ok {
 		return k.HasProviders(s)
 	}
-	rt := kindRuntime[id]
-	if rt.HasProviders == nil {
-		return false
-	}
-	return rt.HasProviders(s)
+	return false
 }
 
 // kindReadable reports whether at least one non-blocked service allows reads.
@@ -125,11 +28,7 @@ func kindReadable(id string, s *Server) bool {
 	if k, ok := s.builtinKind(id); ok {
 		return k.Readable(s)
 	}
-	rt := kindRuntime[id]
-	if rt.Readable == nil {
-		return false
-	}
-	return rt.Readable(s)
+	return false
 }
 
 // libraryKinds is the built-in kind registry (issue #183). The slice lives
@@ -223,20 +122,11 @@ func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 }
 
 // libraryRouteHandlers maps each library route to its HTTP handler so main
-// can register every dataset from the registry. Kind-owned routes come from
-// the Route declarations on kindRuntime (issue #312); user-defined kinds
+// can register every dataset from the registry: the kinds package's
+// declared routes plus the fixed cross-kind entries. User-defined kinds
 // (issue #15) are merged in when schemas are loaded.
 func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 	handlers := map[string]http.HandlerFunc{}
-	for _, rt := range kindRuntime {
-		for _, route := range rt.Routes {
-			handlers[route.Pattern] = func(w http.ResponseWriter, r *http.Request) {
-				route.Handle(s, w, r)
-			}
-		}
-	}
-	// Kinds moved into the kinds package ship bound handlers.
-	// // transitional (#312) — this loop replaces the one above.
 	for _, k := range s.builtinKinds() {
 		for _, route := range k.Routes() {
 			handlers[route.Pattern] = route.Handler

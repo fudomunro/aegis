@@ -128,16 +128,8 @@ func apiRouteAllowed(method, path string) bool {
 // agent-tier read on the API listener. The allowlist derives from the kind
 // Route declarations; the cross-kind entity-link reads and single-segment
 // user-defined kind paths (runtime-registered; packs never shadow a
-// built-in) are the only other entries. // transitional (#312): hub-side
-// declarations cover kinds not yet moved into the kinds package.
+// built-in) are the only other entries.
 func libraryAgentReadable(path string) bool {
-	for _, rt := range kindRuntime {
-		for _, route := range rt.Routes {
-			if routePatternMatches(route.Pattern, path) {
-				return true
-			}
-		}
-	}
 	for _, route := range kinds.RouteDecls() {
 		if routePatternMatches(route.Pattern, path) {
 			return true

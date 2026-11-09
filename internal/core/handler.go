@@ -116,8 +116,8 @@ type Server struct {
 	// write-behind (issue #312); built over cache and search below.
 	kindEngine     *kinds.Engine
 	kindEngineOnce sync.Once
-	// kindList holds the kinds already moved into the kinds package.
-	// // transitional (#312) — dies with the hub's kindRuntime.
+	// kindList is the kinds registry (kinds.Builtin) wired over this
+	// server (issue #312).
 	kindList         []kinds.Kind
 	builtinKindsOnce sync.Once
 	connectors       map[string]connectors.ServiceConnector
@@ -198,17 +198,8 @@ type Server struct {
 // app-readable exactly when its declaration says so. Apps are data readers
 // only — never admin, OAuth, proxy, mail, or unexposed subroutes like
 // document full text. User-defined kinds are not app-readable.
-// // transitional (#312): hub-side declarations cover kinds not yet moved
-// into the kinds package.
 func appAllowedPaths() []string {
 	out := map[string]bool{}
-	for _, rt := range kindRuntime {
-		for _, route := range rt.Routes {
-			if route.AppReadable {
-				out[route.Pattern] = true
-			}
-		}
-	}
 	for _, route := range kinds.RouteDecls() {
 		if route.AppReadable {
 			out[route.Pattern] = true

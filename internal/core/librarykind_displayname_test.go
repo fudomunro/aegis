@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // TestLibrarySourceDisplayName pins the resolution order on the Host seam:
@@ -40,11 +41,12 @@ func TestLibrarySourceDisplayName(t *testing.T) {
 	}
 
 	// The messages kind labels its local archive via its declared hooks,
-	// not the generic seam.
-	if got, ok := srv.messagesSourceLabel("mail-archive"); !ok || got != "Mail archive" {
-		t.Errorf("messagesSourceLabel(mail-archive) = %q, %v; want %q, true", got, ok, "Mail archive")
+	// not the generic seam (issue #312).
+	hooks := kinds.MessagesStatusHooks(srv, mailArchive{srv})
+	if got, ok := hooks.SourceName("mail-archive"); !ok || got != "Mail archive" {
+		t.Errorf("messages SourceName(mail-archive) = %q, %v; want %q, true", got, ok, "Mail archive")
 	}
-	if _, ok := srv.messagesSourceLabel("spotify"); ok {
-		t.Error("messagesSourceLabel must not claim sources it does not own")
+	if _, ok := hooks.SourceName("spotify"); ok {
+		t.Error("messages SourceName must not claim sources it does not own")
 	}
 }

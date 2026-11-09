@@ -364,3 +364,18 @@ func forEachTransactionSource(item *types.Transaction, f func(kinds.SourceMut)) 
 		})
 	}
 }
+
+// forEachMessageSource projects sources for generic stamping of the kind
+// already moved into the kinds package (issue #312) — its production
+// projection lives beside that kind and is unexported.
+func forEachMessageSource(item *types.Message, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
+}

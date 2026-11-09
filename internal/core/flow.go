@@ -708,12 +708,10 @@ func staticCredentialLabel(svc Service) string {
 
 // flowProvidesKind reports whether the connector feeds the named library
 // kind. Dispatch is registry-driven so a new kind cannot silently drop out
-// of the flow map (issue #254): kinds.Builtin() for moved kinds,
-// kindRuntime for the rest. // transitional (#312)
+// of the flow map (issue #254).
 func (s *Server) flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
 	if k, ok := s.builtinKind(kindID); ok {
 		return k.Provides(connector)
 	}
-	rt, ok := kindRuntime[kindID]
-	return ok && rt.Provides != nil && rt.Provides(connector)
+	return false
 }

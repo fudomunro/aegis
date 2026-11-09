@@ -54,7 +54,7 @@ func TestHandleLibraryMessages_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -97,7 +97,7 @@ func TestHandleLibraryMessages_CanonicalStamp(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -115,7 +115,7 @@ func TestHandleLibraryMessages_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -137,7 +137,7 @@ func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -152,7 +152,7 @@ func TestHandleLibraryMessages_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -174,7 +174,7 @@ func TestHandleLibraryMessages_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -192,7 +192,7 @@ func TestHandleLibraryMessages_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/messages", strings.NewReader("{}"))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryMessages)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d", w.Code)
 	}

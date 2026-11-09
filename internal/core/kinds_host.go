@@ -1,8 +1,10 @@
 package core
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
+	"sort"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -127,9 +129,8 @@ func (s *Server) CopyInfo(kind, serviceID, externalID string) *types.CopyInfo {
 
 var _ kinds.Host = (*Server)(nil)
 
-// builtinKinds returns the kinds the kinds package owns so far, wired over
-// this server. Built lazily so &Server{} fixtures fail open (issue #312);
-// the list grows as kinds move out of the hub. // transitional (#312)
+// builtinKinds returns the kinds registry wired over this server (issue
+// #312). Built lazily so &Server{} fixtures fail open.
 func (s *Server) builtinKinds() []kinds.Kind {
 	s.builtinKindsOnce.Do(func() {
 		s.kindList = kinds.Builtin(s, s.libraryEngine(), kinds.Deps{
@@ -140,12 +141,13 @@ func (s *Server) builtinKinds() []kinds.Kind {
 			PlacesLocalSource: func() bool {
 				return s.timeline != nil && s.timeline.Enabled()
 			},
+			MailArchive: mailArchive{s},
 		})
 	})
 	return s.kindList
 }
 
-// builtinKind returns the moved kind for id. // transitional (#312)
+// builtinKind returns the registered kind for id (issue #312).
 func (s *Server) builtinKind(id string) (kinds.Kind, bool) {
 	for _, k := range s.builtinKinds() {
 		if k.Def().ID == id {
@@ -191,4 +193,81 @@ func (s *Server) libraryEngine() *kinds.Engine {
 // (issue #312: the WaitGroup lives on the kinds engine now).
 func (s *Server) waitIndex() {
 	s.libraryEngine().WaitIndex()
+}
+
+// mailArchive adapts the hub's compressed mail archive onto
+// kinds.MailArchive (issue #312). Every method reads s.mail live so
+// fixtures that enable the archive after wiring still see it; nil or
+// failed stores fail open.
+type mailArchive struct{ s *Server }
+
+// Available implements kinds.MailArchive.
+func (a mailArchive) Available() bool {
+	return a.s.mail != nil && a.s.mailReadable()
+}
+
+// Readable implements kinds.MailArchive.
+func (a mailArchive) Readable(r *http.Request) bool {
+	return a.s.mail != nil && a.s.mailReadableFor(r)
+}
+
+// List implements kinds.MailArchive.
+func (a mailArchive) List(_ context.Context, dataset string, cap int) ([]types.Message, bool, error) {
+	if a.s.mail == nil {
+		return nil, false, nil
+	}
+	return a.s.mail.ListMessagesForLibrary(cap, dataset)
+}
+
+// Inventory implements kinds.MailArchive (issue #162): per-ingest-source
+// counts with last-sync cursors, falling back to the archive's own stamp.
+func (a mailArchive) Inventory() []kinds.MailSourceStatus {
+	if a.s.mail == nil {
+		return nil
+	}
+	st, err := a.s.mail.Status()
+	if err != nil {
+		return nil
+	}
+	out := make([]kinds.MailSourceStatus, 0, len(st.ByService))
+	for svc, n := range st.ByService {
+		if n <= 0 {
+			continue
+		}
+		last := ""
+		if cur, err := a.s.mail.LoadSyncCursor(svc); err == nil {
+			last = cur.LastSyncAt
+		}
+		if last == "" {
+			last = st.LastSyncAt
+		}
+		out = append(out, kinds.MailSourceStatus{ID: svc, Count: n, LastSyncedAt: last})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// SourceLastSynced implements kinds.MailArchive: the archive cursor for
+// the archive itself and its registered ingest sources only.
+func (a mailArchive) SourceLastSynced(id string) (string, bool) {
+	if a.s.mail == nil {
+		return "", false
+	}
+	if id != kinds.MailArchiveSourceID && a.s.mailIngestFor(id) == nil {
+		return "", false
+	}
+	st, err := a.s.mail.Status()
+	if err != nil {
+		return "", true
+	}
+	if cur, err := a.s.mail.LoadSyncCursor(id); err == nil && cur.LastSyncAt != "" {
+		return cur.LastSyncAt, true
+	}
+	return st.LastSyncAt, true
+}
+
+// Parent implements kinds.MailArchive: ingest grouping is declared beside
+// the ingest (issue #286).
+func (a mailArchive) Parent(id string) string {
+	return connectors.MailSourceFor(id).Parent
 }

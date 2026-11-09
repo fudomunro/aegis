@@ -69,8 +69,7 @@ func (s *Server) LibraryReadable(kind string) bool {
 	if k, ok := s.builtinKind(kind); ok {
 		return k.HasProviders(s) && k.Readable(s)
 	}
-	rt, ok := kindRuntime[kind]
-	return ok && rt.HasProviders(s) && rt.Readable(s)
+	return false
 }
 
 // CanonicalOwner returns the service id claiming kind as its home copy.
