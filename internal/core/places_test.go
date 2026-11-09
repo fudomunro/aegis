@@ -48,58 +48,6 @@ func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
 	}
 }
 
-func TestPlaceVisitFilters(t *testing.T) {
-	visits := types.MergePlaceVisits(samplePlaces())
-	f := types.PlaceVisitFilters{Locality: "Lunenburg"}
-	got := filterPlaceVisits(visits, f)
-	if len(got) != 2 { // visit + drive trip to Lunenburg
-		t.Fatalf("locality filter = %d, want 2", len(got))
-	}
-	f2 := types.PlaceVisitFilters{After: "2024-01-01T00:00:00Z"}
-	got2 := filterPlaceVisits(visits, f2)
-	if len(got2) != 1 {
-		t.Fatalf("after filter = %d, want 1", len(got2))
-	}
-	f3 := types.PlaceVisitFilters{Kind: types.PlaceKindTrip}
-	got3 := filterPlaceVisits(visits, f3)
-	if len(got3) != 1 {
-		t.Fatalf("kind=trip filter = %d, want 1", len(got3))
-	}
-}
-
-func TestRedactPlaceVisitCity(t *testing.T) {
-	v := samplePlaces()[0]
-	city := RedactPlaceVisitCity(v)
-	if city.Place.Name != "" || city.Place.Address != "" {
-		t.Fatalf("city leaked name/address: %+v", city.Place)
-	}
-	if city.Place.Lat != 0 || city.Place.Lng != 0 {
-		t.Fatalf("city leaked coordinates: %+v", city.Place)
-	}
-	if city.Place.Locality != "Halifax" || city.Place.Country != "Canada" {
-		t.Fatalf("city should keep locality/country: %+v", city.Place)
-	}
-	if city.StartAt == "" {
-		t.Fatal("city must keep the time window")
-	}
-	for _, s := range city.Sources {
-		if len(s.PointIDs) != 0 || s.ID != "" {
-			t.Fatalf("city leaked source identity: %+v", s)
-		}
-	}
-}
-
-func TestRedactPlaceVisitRead_OmitsCoordinates(t *testing.T) {
-	v := samplePlaces()[0]
-	r := RedactPlaceVisitRead(v)
-	if r.Place.Name == "" {
-		t.Fatal("read should keep place name")
-	}
-	if r.Place.Lat != 0 || r.Place.Lng != 0 {
-		t.Fatalf("read leaked coordinates: %+v", r.Place)
-	}
-}
-
 func TestPlacesLevelForResponse(t *testing.T) {
 	cases := map[string]string{
 		policy.AccessNone:    policy.AccessNone,
@@ -204,7 +152,7 @@ func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaceVisits)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -230,7 +178,7 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaceVisits)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
 	// Places is opt-in: with no permission the agent is denied (not empty 200).
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d body=%s, want 403", w.Code, w.Body.String())
@@ -251,7 +199,7 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaceVisits)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -286,7 +234,7 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaceVisits)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -321,7 +269,7 @@ func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/places", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaceVisits)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
 	var list types.PlaceVisitList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)

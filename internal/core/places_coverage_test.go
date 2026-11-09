@@ -16,24 +16,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-func TestTighterPlacesLevel(t *testing.T) {
-	cases := []struct {
-		a, b, want string
-	}{
-		{policy.AccessCity, policy.AccessPrecise, policy.AccessCity},
-		{policy.AccessPrecise, policy.AccessCity, policy.AccessCity},
-		{policy.AccessRead, policy.AccessCity, policy.AccessCity},
-		{policy.AccessPrecise, policy.AccessRead, policy.AccessRead},
-		{policy.AccessNone, policy.AccessRead, policy.AccessNone},
-		{"", policy.AccessRead, policy.AccessNone},
-	}
-	for _, c := range cases {
-		if got := tighterPlacesLevel(c.a, c.b); got != c.want {
-			t.Fatalf("tighter(%q,%q)=%q want %q", c.a, c.b, got, c.want)
-		}
-	}
-}
-
 func TestPlacesAccessLevels(t *testing.T) {
 	p := policy.Permissions{"places": policy.AccessCity, "tracks": policy.AccessRead, "events": policy.AccessNone}
 	got := p.PlacesAccessLevels()

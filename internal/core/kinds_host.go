@@ -137,6 +137,9 @@ func (s *Server) builtinKinds() []kinds.Kind {
 			ResolveTracks:   s.resolveTrackEntities,
 			ResolveAlbums:   s.resolveAlbumEntities,
 			ResolveArtists:  s.resolveArtistEntities,
+			PlacesLocalSource: func() bool {
+				return s.timeline != nil && s.timeline.Enabled()
+			},
 		})
 	})
 	return s.kindList
