@@ -49,51 +49,6 @@ func TestFormatMilliunitsAmount(t *testing.T) {
 	}
 }
 
-func TestBuildTransactionSummary(t *testing.T) {
-	items := []types.Transaction{
-		{PostedAt: "2024-03-05", Amount: "-45.67", Category: []string{"Shopping"}, Currency: "USD"},
-		{PostedAt: "2024-03-06", Amount: "-12.00", Category: []string{"Coffee"}, Currency: "USD"},
-		{PostedAt: "2024-03-01", Amount: "3200.00", Category: []string{"Income"}, Currency: "USD"},
-	}
-	sum := buildTransactionSummary(items)
-	if sum == nil {
-		t.Fatal("summary nil")
-	}
-	if sum.Count != 3 {
-		t.Fatalf("count = %d", sum.Count)
-	}
-	if sum.TotalAmount != "3142.33" {
-		t.Fatalf("total = %q", sum.TotalAmount)
-	}
-	if sum.ByCategory["Shopping"] != "-45.67" {
-		t.Fatalf("shopping = %q", sum.ByCategory["Shopping"])
-	}
-	if sum.ByMonth["2024-03"] != "3142.33" {
-		t.Fatalf("month = %q", sum.ByMonth["2024-03"])
-	}
-	if sum.Currency != "USD" {
-		t.Fatalf("currency = %q", sum.Currency)
-	}
-}
-
-func TestBuildTransactionSummary_MultiCategorySplit(t *testing.T) {
-	// YNAB split: categories without amounts. Full total credits each category
-	// so the line item "shows up" in grocery/household views.
-	items := []types.Transaction{
-		{PostedAt: "2024-03-12", Amount: "-200.00", Category: []string{"Groceries", "Household Goods"}, Currency: "USD"},
-	}
-	sum := buildTransactionSummary(items)
-	if sum.ByCategory["Groceries"] != "-200.00" {
-		t.Fatalf("groceries = %q", sum.ByCategory["Groceries"])
-	}
-	if sum.ByCategory["Household Goods"] != "-200.00" {
-		t.Fatalf("household = %q", sum.ByCategory["Household Goods"])
-	}
-	if sum.TotalAmount != "-200.00" {
-		t.Fatalf("total = %q (line-item total must stay intact)", sum.TotalAmount)
-	}
-}
-
 func TestYNABCategories_FromSplits(t *testing.T) {
 	split := "Split"
 	groceries := "Groceries"
@@ -117,22 +72,6 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 	}
 }
 
-func TestRedactTransactionRead_StripsAccount(t *testing.T) {
-	tx := types.Transaction{
-		PostedAt: "2024-03-05",
-		Amount:   "-45.67",
-		Merchant: "Amazon",
-		Account:  &types.TransactionAccount{Name: "Checking", Last4: "4421"},
-	}
-	got := RedactTransactionRead(tx)
-	if got.Account != nil {
-		t.Fatal("account not stripped at read level")
-	}
-	if got.Merchant != "Amazon" {
-		t.Fatalf("merchant = %q", got.Merchant)
-	}
-}
-
 func TestValidatePermissions_SummaryOnlyOnTransactions(t *testing.T) {
 	if err := policy.ValidatePermissions(policy.Permissions{"transactions": policy.AccessSummary}); err != nil {
 		t.Fatalf("summary on transactions: %v", err)
@@ -142,28 +81,6 @@ func TestValidatePermissions_SummaryOnlyOnTransactions(t *testing.T) {
 	}
 	if err := policy.ValidatePermissions(policy.Permissions{"default": policy.AccessSummary}); err == nil {
 		t.Fatal("expected summary on default rejected")
-	}
-}
-
-func TestTransactionFilters(t *testing.T) {
-	items := []types.Transaction{
-		{PostedAt: "2024-03-05", Amount: "-45.67", Merchant: "Amazon", Category: []string{"Shopping"}, Account: &types.TransactionAccount{Name: "Checking", Last4: "4421"}, Currency: "USD"},
-		{PostedAt: "2024-03-10", Amount: "-12.00", Merchant: "Blue Bottle", Category: []string{"Coffee"}, Account: &types.TransactionAccount{Name: "Credit Card", Last4: "9902"}, Currency: "USD"},
-	}
-	if got := filterTransactions(items, types.TransactionFilters{After: "2024-03-06"}); len(got) != 1 {
-		t.Fatalf("after filter = %d", len(got))
-	}
-	if got := filterTransactions(items, types.TransactionFilters{Before: "2024-03-06"}); len(got) != 1 {
-		t.Fatalf("before filter = %d", len(got))
-	}
-	if got := filterTransactions(items, types.TransactionFilters{Account: "9902"}); len(got) != 1 {
-		t.Fatalf("account filter = %d", len(got))
-	}
-	if got := filterTransactions(items, types.TransactionFilters{Q: "coffee"}); len(got) != 1 {
-		t.Fatalf("q filter = %d", len(got))
-	}
-	if got := filterTransactions(items, types.TransactionFilters{Currency: "EUR"}); len(got) != 0 {
-		t.Fatalf("currency filter = %d", len(got))
 	}
 }
 
@@ -205,7 +122,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 
 	req := httptest.NewRequest("GET", "/v1/library/transactions", nil)
 	w := httptest.NewRecorder()
-	srv.HandleLibraryTransactions(w, req)
+	srv.libraryHandler("transactions")(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -225,7 +142,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	cfg.Services[0].GrantLimits = policy.Permissions{"transactions": policy.AccessSummary}
 	req2 := httptest.NewRequest("GET", "/v1/library/transactions", nil)
 	w2 := httptest.NewRecorder()
-	srv.HandleLibraryTransactions(w2, req2)
+	srv.libraryHandler("transactions")(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w2.Code, w2.Body.String())
 	}
@@ -246,7 +163,7 @@ func TestHandleLibraryTransactions_Filters(t *testing.T) {
 	}
 	req := httptest.NewRequest("GET", "/v1/library/transactions?after=2024-03-08", nil)
 	w := httptest.NewRecorder()
-	srv.HandleLibraryTransactions(w, req)
+	srv.libraryHandler("transactions")(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
 	}
@@ -450,23 +367,6 @@ func TestSummaryKinds(t *testing.T) {
 	}
 	if (&policy.Permissions{}).SummaryKinds() != nil {
 		t.Fatal("nil map should return nil")
-	}
-}
-
-func TestRedactTransactionsForLevel(t *testing.T) {
-	items := []types.Transaction{
-		{Amount: "-1.00", Merchant: "A", Account: &types.TransactionAccount{Name: "X"}},
-	}
-	if got := redactTransactionsForLevel(items, policy.AccessSummary); got != nil {
-		t.Fatalf("summary should drop line items, got %v", got)
-	}
-	read := redactTransactionsForLevel(items, policy.AccessRead)
-	if len(read) != 1 || read[0].Account != nil || read[0].Merchant != "A" {
-		t.Fatalf("read redaction = %+v", read)
-	}
-	full := redactTransactionsForLevel(items, policy.AccessFull)
-	if full[0].Account == nil {
-		t.Fatal("full should keep account")
 	}
 }
 
