@@ -20,6 +20,26 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Mail retrieval unifies on the library API.** `GET /v1/library/messages`
+  is now the one agent surface for reading messages. It takes the full
+  history query set (`q`, `from`, `to`, `after`, `before`, `label`,
+  `sort=asc|desc`, `include_body`) with the semantics the archive search
+  always had — `from`/`to` are addresses, never time bounds; `sort=asc`
+  answers oldest/first questions — and any explicit filter or `sort` walks
+  the full archive with `limit`/`cursor` paging instead of the 200-row
+  overview window. Filtered results come from the same merged identity
+  space as the list endpoint: live provider rows and archive rows merge on
+  RFC Message-ID, so a message matched through one copy keeps every
+  `sources[]` entry. A fetch subroute
+  `GET /v1/library/messages/{service}/{id}` returns one message as that
+  merged entry with `body` from the archived copy; live rows the collection
+  shows are fetchable too. The agent-facing `/v1/mail/*` retrieval routes
+  (`/search`, `/status`, `/messages/…`, and the provider-shaped `/raw`)
+  retire in a clean cut — no deprecation alias; ingest and status stay
+  admin (`/v1/admin/mail/sync`, `/v1/admin/mail/import`,
+  `/v1/admin/mail/status`). List responses are metadata-only unless
+  `include_body=1`. Agent strings name one search path and one fetch path
+  (#311).
 - **“Data type” is retired in favor of “library kind”.** The phrase read as
   general development language and collided with the field-shape sense of
   `type` (`"type": "string"` in `capabilities.go` and `udt.go`) — the same

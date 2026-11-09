@@ -57,7 +57,7 @@ the configured mail archive (`mail-archive.db`), then exits:
 
 | File | Purpose |
 |------|---------|
-| `mail-archive.db` | Queryable archive for `/v1/mail/search` |
+| `mail-archive.db` | Queryable archive behind `/v1/library/messages` |
 | `sample-mail.mbox` | Same messages as a Takeout-shaped mbox (importer round-trip) |
 | `sample-library.json` | Neutral `Playlist` / `Track` / `Contact` / … fixtures for mock upstreams |
 

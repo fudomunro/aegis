@@ -50,7 +50,7 @@ func Run() {
 	syncServiceConcurrency := flag.String("sync-service-concurrency", "", "per-service sync concurrency caps, e.g. spotify=1,youtube-music=2 (default 1 for every service)")
 	dataGrantsPath := flag.String("data-grants-file", "", "path to admin data-grant overlay (default: <data-dir>/data_grants.json; admin saves write here instead of aegis.json)")
 	serviceConnsPath := flag.String("service-connections-file", "", "path to admin service-connections overlay (default: <data-dir>/service_connections.json; secrets live in the encrypted token store)")
-	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables /v1/mail)")
+	mailArchivePath := flag.String("mail-archive", "", "path to local compressed mail archive (default: <data-dir>/mail-archive.db; empty disables the local mail source)")
 	searchIndexPath := flag.String("search-index", "", "path to local library search index (default: <data-dir>/search-index.db; empty disables q= search)")
 	quickenPath := flag.String("quicken-store", "", "path to local Quicken import store (default: <data-dir>/quicken.db; empty disables)")
 	importQuicken := flag.String("import-quicken", "", "Quicken QIF/QFX file or directory to import into the local store, then exit")

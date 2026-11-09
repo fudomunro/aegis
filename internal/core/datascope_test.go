@@ -118,7 +118,7 @@ func TestAuthMiddleware_ReadOnlyScopeRejectsWrites(t *testing.T) {
 	h := srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) })
 
 	w := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/v1/mail/sync", nil)
+	req := httptest.NewRequest(http.MethodPost, "/v1/library/mirror", nil)
 	req.Header.Set("X-Api-Key", "YOUR_DEMO_KEY")
 	h(w, req)
 	if w.Code != http.StatusForbidden {
@@ -191,7 +191,9 @@ func TestMailSearch_DatasetIsolation(t *testing.T) {
 
 func TestMailMessage_CrossDatasetHidden(t *testing.T) {
 	srv := twoScopeServer(t)
-	// Find a gondor message id via search, then fetch it with the shire key.
+	// Find a gondor archive message via the collection, then fetch it with
+	// the shire key. Archive rows are namespaced "gondor:…"; live sample
+	// rows share one provider id space across datasets.
 	search := callMailSearch(t, srv, "YOUR_GONDOR_KEY")
 	var parsed struct {
 		Messages []struct {
@@ -204,21 +206,33 @@ func TestMailMessage_CrossDatasetHidden(t *testing.T) {
 	if err := json.Unmarshal([]byte(search), &parsed); err != nil {
 		t.Fatalf("parse search: %v", err)
 	}
-	if len(parsed.Messages) == 0 || len(parsed.Messages[0].Sources) == 0 {
-		t.Fatalf("no gondor messages: %s", search)
+	var src struct {
+		Service string `json:"service"`
+		ID      string `json:"id"`
 	}
-	src := parsed.Messages[0].Sources[0]
+	found := false
+	for _, m := range parsed.Messages {
+		for _, s := range m.Sources {
+			if strings.HasPrefix(s.ID, "gondor:") {
+				src.Service, src.ID = s.Service, s.ID
+				found = true
+				break
+			}
+		}
+		if found {
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("no gondor archive message: %s", search)
+	}
 
-	w := httptest.NewRecorder()
-	req := scopeRequest("YOUR_SHIRE_KEY", "/v1/mail/messages/"+src.Service+"/"+src.ID)
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, req)
+	w := callMailFetch(t, srv, "YOUR_SHIRE_KEY", src.Service, src.ID)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("cross-dataset fetch status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	w = httptest.NewRecorder()
-	req = scopeRequest("YOUR_GONDOR_KEY", "/v1/mail/messages/"+src.Service+"/"+src.ID)
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, req)
+	w = callMailFetch(t, srv, "YOUR_GONDOR_KEY", src.Service, src.ID)
 	if w.Code != http.StatusOK {
 		t.Fatalf("own-dataset fetch status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -237,11 +251,21 @@ func callLibrary(t *testing.T, srv *Server, key, path string) string {
 func callMailSearch(t *testing.T, srv *Server, key string) string {
 	t.Helper()
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, scopeRequest(key, "/v1/mail/search"))
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, scopeRequest(key, "/v1/library/messages"))
 	if w.Code != http.StatusOK {
 		t.Fatalf("mail search %s status=%d body=%s", key, w.Code, w.Body.String())
 	}
 	return w.Body.String()
+}
+
+func callMailFetch(t *testing.T, srv *Server, key, service, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := scopeRequest(key, "/v1/library/messages/"+service+"/"+id)
+	req.SetPathValue("service", service)
+	req.SetPathValue("id", id)
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/messages/{service}/{id}"))(w, req)
+	return w
 }
 
 func TestAdminMiddleware_RejectsScopeKeys(t *testing.T) {
@@ -394,9 +418,9 @@ CREATE TABLE mail_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 	}); err != nil {
 		t.Fatalf("upsert after migrate: %v", err)
 	}
-	msgs, _, err := archive.ListMessagesForLibrary(10, "shire")
-	if err != nil || len(msgs) != 1 {
-		t.Fatalf("dataset rows after migrate: %d err=%v", len(msgs), err)
+	resp, err := archive.Search(mail.SearchQuery{Limit: 10, WithBody: true, Dataset: "shire"})
+	if err != nil || len(resp.Messages) != 1 {
+		t.Fatalf("dataset rows after migrate: %d err=%v", len(resp.Messages), err)
 	}
 }
 
@@ -413,7 +437,7 @@ func TestScopeGrants_NoGrantsPrincipalSeesNothing(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/mail/search"))
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, scopeRequest("YOUR_EMPTY_KEY", "/v1/library/messages"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("mail search status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -451,7 +475,7 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 	}
 
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/mail/search"))
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, scopeRequest("YOUR_CONTACTS_KEY", "/v1/library/messages"))
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("unlisted mail status = %d body=%s", w.Code, w.Body.String())
 	}

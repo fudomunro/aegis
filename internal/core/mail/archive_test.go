@@ -226,3 +226,81 @@ func newMessage(service, serviceName, id, channel, subject, snippet, sentAt stri
 		Sources: []kinds.MessageSource{src},
 	}
 }
+
+func TestArchiveGetMergedSiblings(t *testing.T) {
+	a := openTestArchive(t)
+	gmail := sampleMailRecord("g1", "Shared message", "hello")
+	gmail.MessageID = "<shared@example.com>"
+	gmail.Dataset = "shire"
+	if err := a.Upsert(gmail); err != nil {
+		t.Fatalf("upsert gmail: %v", err)
+	}
+	takeout := sampleMailRecord("t1", "Shared message", "hello")
+	takeout.MessageID = "<shared@example.com>"
+	takeout.Service = connectors.TakeoutServiceID
+	takeout.ServiceName = connectors.TakeoutServiceName
+	takeout.Dataset = "shire"
+	if err := a.Upsert(takeout); err != nil {
+		t.Fatalf("upsert takeout: %v", err)
+	}
+
+	// Fetch by either source id returns the same merged identity entry
+	// (issue #311).
+	for _, src := range []struct{ service, id string }{
+		{connectors.GoogleGmailServiceID, "g1"},
+		{connectors.TakeoutServiceID, "t1"},
+	} {
+		msg, ok := a.GetMerged("shire", src.service, src.id)
+		if !ok {
+			t.Fatalf("GetMerged(%s, %s) missing", src.service, src.id)
+		}
+		if len(msg.Sources) != 2 || msg.Match != "message_id" {
+			t.Fatalf("merged entry = %+v", msg)
+		}
+		if msg.Body == "" {
+			t.Fatalf("fetch must carry body: %+v", msg)
+		}
+	}
+
+	// Dataset isolation: the other partition cannot fetch the row even
+	// with a direct id (docs/data-scopes.md).
+	if _, ok := a.GetMerged("gondor", connectors.GoogleGmailServiceID, "g1"); ok {
+		t.Fatal("cross-dataset fetch must miss")
+	}
+	if _, ok := a.GetMerged("shire", connectors.GoogleGmailServiceID, "missing"); ok {
+		t.Fatal("missing row must miss")
+	}
+}
+
+func TestArchiveSearchAll(t *testing.T) {
+	a := openTestArchive(t)
+	for i := 0; i < 5; i++ {
+		rec := sampleMailRecord("m"+string(rune('a'+i)), "Subject "+string(rune('a'+i)), "body")
+		rec.MessageID = "<" + rec.ID + "@example.com>"
+		if err := a.Upsert(rec); err != nil {
+			t.Fatalf("upsert: %v", err)
+		}
+	}
+	resp, err := a.Search(SearchQuery{All: true})
+	if err != nil {
+		t.Fatalf("search all: %v", err)
+	}
+	if resp.Total != 5 || len(resp.Messages) != 5 {
+		t.Fatalf("all = %d msgs=%d", resp.Total, len(resp.Messages))
+	}
+	if resp.Truncated {
+		t.Fatal("window must not report truncated")
+	}
+	// Filters apply to All queries the same way.
+	resp, err = a.Search(SearchQuery{All: true, Q: "subject-a", WithBody: true})
+	if err != nil {
+		t.Fatalf("search all q: %v", err)
+	}
+	if resp.Total != 1 {
+		t.Fatalf("filtered all = %+v", resp)
+	}
+	// WithBody fills body text on All queries (issue #311 fetch/search).
+	if resp.Messages[0].Body == "" {
+		t.Fatalf("body missing: %+v", resp.Messages[0])
+	}
+}

@@ -28,7 +28,7 @@ var adminWriteCases = []struct {
 	{"mirror", http.MethodPost, "/v1/library/mirror", `{"kind":"tracks"}`},
 	{"photos-share", http.MethodPost, "/v1/library/photos/share", `{"service":"immich","id":"p1"}`},
 	{"links-create", http.MethodPost, "/v1/library/links", `{"kind":"playlist","sources":[]}`},
-	{"mail-sync", http.MethodPost, "/v1/mail/sync", `{}`},
+	{"mail-sync", http.MethodPost, "/v1/admin/mail/sync", `{}`},
 	{"apps-authorize", http.MethodPost, "/v1/apps/authorize", `{"client_id":"x","redirect_uri":"https://example.com/cb","scopes":{"tracks":"read"}}`},
 	{"auth-revoke", http.MethodDelete, "/v1/auth/spotify", ""},
 	{"service-grant-limits", http.MethodPut, "/v1/admin/services/spotify/grant-limits", `{"tracks":"read"}`},

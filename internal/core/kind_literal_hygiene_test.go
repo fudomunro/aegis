@@ -30,7 +30,7 @@ var kindLiteralAllowances = []struct{ file, why string }{
 	{"handler.go", "pre-request payload key names chat messages, not the kind"},
 	{"hookhealth.go", "hook-health JSON shape key names hook events, not the kind"},
 	{"import_admin.go", "local-import admin counters report per-kind import stats"},
-	{"mail_archive_http.go", "the /v1/mail surface shares the messages grant key"},
+	{"mail_archive_http.go", "admin mail ingest shares the messages grant key"},
 	{"mirror.go", "mirror write adapters are kind-specific writes"},
 	{"mirror_entity.go", "mirror write adapters are kind-specific writes"},
 	{"ownership.go", "ownership derivation maps kind evidence rows"},

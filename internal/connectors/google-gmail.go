@@ -569,7 +569,7 @@ func (c *GoogleGmailConnector) HandleListAttachments(w http.ResponseWriter, r *h
 		}
 		if IsGmailQuotaError(err) {
 			shared.WriteJSONError(w, http.StatusTooManyRequests,
-				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
+				"Gmail quota exceeded — retry shortly or query the local archive at /v1/library/messages")
 			return
 		}
 		slog.Warn("gmail list attachments failed", "id", messageID, "error", err)
@@ -830,7 +830,7 @@ func (c *GoogleGmailConnector) HandleGetMessage(w http.ResponseWriter, r *http.R
 		}
 		if IsGmailQuotaError(err) {
 			shared.WriteJSONError(w, http.StatusTooManyRequests,
-				"Gmail quota exceeded — retry shortly or use /v1/mail/search (local archive)")
+				"Gmail quota exceeded — retry shortly or query the local archive at /v1/library/messages")
 			return
 		}
 		slog.Warn("gmail get message failed", "id", id, "error", err)

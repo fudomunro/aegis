@@ -59,10 +59,6 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	mux.HandleFunc("POST /v1/library/links", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
 	mux.HandleFunc("DELETE /v1/library/links/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
 
-	mux.HandleFunc("/v1/mail/", srv.AuthMiddleware(withBodyLimit(maxMailBodyBytes, srv.handleMailRoutes)))
-	// Mail sync mutates the archive — admin only (issue #181).
-	mux.HandleFunc("POST /v1/mail/sync", srv.AdminMiddleware(withBodyLimit(maxMailBodyBytes, srv.HandleMailSync)))
-
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
 
 	registerAuthRoutes(mux, srv)

@@ -340,7 +340,7 @@ func TestAppPathAllowed(t *testing.T) {
 		"/v1/library/links",
 		"/v1/services/google-calendar/me/events",
 		"/v1/pre-request",
-		"/v1/mail/messages",
+		"/v1/library/messages/google-gmail/m1",
 		"/v1/auth/status",
 	}
 	for _, p := range denied {

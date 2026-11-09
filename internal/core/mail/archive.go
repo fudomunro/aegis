@@ -29,7 +29,7 @@ import (
 //   - Metadata lives in SQLite columns; body text is FTS5-indexed; the full
 //     provider payload is gzip-compressed for cheap retention.
 //   - Path is a single file (default <data-dir>/mail-archive.db). Empty path disables the
-//     archive and the /v1/mail/* routes return a clear error.
+//     archive and the messages library source is unavailable.
 //
 // Optimized for Aegis/agent queries (search, filter, fetch by id) rather
 // than for offline mail clients.
@@ -130,6 +130,10 @@ type SearchQuery struct {
 	WithBody bool
 	// Sort is "desc" (default, newest first) or "asc" (oldest first).
 	Sort string
+	// All returns the full merged match set instead of one page (issue
+	// #311). Limit/Offset are ignored; Truncated reports that the SQL
+	// merge window filled.
+	All bool
 	// Dataset, when non-empty, restricts results to one data-scope
 	// partition (docs/data-scopes.md). Empty sees every row.
 	Dataset string
@@ -146,6 +150,9 @@ type SearchResponse struct {
 	// NextCursor continues the walk; omitted at the end (issue #185).
 	NextCursor string `json:"next_cursor,omitempty"`
 	Query      string `json:"query,omitempty"`
+	// Truncated reports the SQL merge window filled on an All query —
+	// more matches may exist (issue #311).
+	Truncated bool `json:"truncated,omitempty"`
 }
 
 // Status reports store health for agents and admin.
@@ -383,6 +390,29 @@ FROM mail_messages WHERE service=? AND service_msg_id=?`, service, id)
 	return rec, nil
 }
 
+// GetMerged returns one archived message with body and every sibling
+// source that shares its identity merged into a single collection entry
+// (issue #311): fetch-by-id sees the same merged identity space as search,
+// regardless of which source copy is named. ok=false when the row is
+// missing or outside the dataset partition.
+func (a *Archive) GetMerged(dataset, service, id string) (kinds.Message, bool) {
+	rec, err := a.Get(service, id)
+	if err != nil {
+		return kinds.Message{}, false
+	}
+	// Data-scope isolation: a partitioned principal cannot fetch rows from
+	// another dataset even with a direct id (docs/data-scopes.md).
+	if dataset != "" && rec.Dataset != dataset {
+		return kinds.Message{}, false
+	}
+	msg := rec.Message()
+	merged := kinds.MergeMessages(a.hydrateMessageSiblings([]kinds.Message{msg}, dataset))
+	if len(merged) == 0 {
+		return msg, true
+	}
+	return merged[0], true
+}
+
 // mailSearchMergeCap bounds how many matching source rows are loaded before
 // multi-source identity merge, so pagination applies to user-facing messages
 // rather than raw (service, id) copies (issue #139).
@@ -493,6 +523,18 @@ func (a *Archive) Search(q SearchQuery) (SearchResponse, error) {
 	merged := kinds.MergeMessages(a.hydrateMessageSiblings(msgs, q.Dataset))
 	sortMailMessages(merged, strings.EqualFold(strings.TrimSpace(q.Sort), "asc"))
 	total := len(merged)
+	if q.All {
+		if merged == nil {
+			merged = []kinds.Message{}
+		}
+		return SearchResponse{
+			Messages:  merged,
+			Total:     total,
+			Limit:     total,
+			Query:     fts,
+			Truncated: len(msgs) >= mailSearchMergeCap,
+		}, nil
+	}
 	if offset >= total {
 		return SearchResponse{Messages: []kinds.Message{}, Total: total, Limit: limit, Offset: offset, Query: fts}, nil
 	}
@@ -594,30 +636,8 @@ func (a *Archive) hydrateMessageSiblings(msgs []kinds.Message, dataset string) [
 	return out
 }
 
-// ListMessagesForLibrary returns merged archive messages for /v1/library/messages
-// so Takeout and Gmail archive rows join live providers as one user collection
-// (issue #139). limit bounds the page; truncated reports that more archive
-// rows exist (full history remains /v1/mail/search). dataset restricts the
-// data-scope partition when non-empty (docs/data-scopes.md).
-func (a *Archive) ListMessagesForLibrary(limit int, dataset string) (msgs []kinds.Message, truncated bool, err error) {
-	if a == nil || a.db == nil {
-		return nil, false, fmt.Errorf("mail archive disabled")
-	}
-	if limit <= 0 {
-		limit = 200
-	}
-	// Load one extra merged identity to detect truncation after merge.
-	resp, err := a.Search(SearchQuery{Limit: limit, WithBody: true, Dataset: dataset})
-	if err != nil {
-		return nil, false, err
-	}
-	if resp.Total > len(resp.Messages) {
-		truncated = true
-	}
-	return resp.Messages, truncated, nil
-}
-
-// Status summarizes the archive for /v1/mail/status.
+// Status summarizes the archive for the admin status panel and the
+// messages library source overview.
 func (a *Archive) Status() (Status, error) {
 	st := Status{
 		Enabled:       a != nil && a.db != nil,

@@ -214,7 +214,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		AllowedLevels:     nil,
 		DefaultNone:       false,
 		OptimisticCopies:  true,
-		ExtraInstructions: " Prefer /v1/mail/search (FTS + from/to/after/before) to find specific mail; library lists are capped and newest-first. Fetch one message at /v1/services/{sources[].service}/messages/{sources[].id} or /v1/mail/messages/{service}/{id}.",
+		ExtraInstructions: " Find mail on the same list endpoint: GET {root}/v1/library/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&label=…&sort=asc|desc&include_body=1 — q searches subject, snippet, and archived body text; from/to are addresses, never time bounds; use sort=asc for oldest/earliest/first message questions; include_body=1 fills body. Fetch one message with body at GET {root}/v1/library/messages/{sources[].service}/{sources[].id}.",
 		Search:            &SearchSpec{Fields: []string{"subject", "snippet"}, TitleField: "subject"},
 	},
 	{

@@ -100,7 +100,7 @@ once the hostname is stable.
 ```bash
 curl -sS https://aegis.unified-designs.com/healthz
 curl -sS -H "X-Api-Key: <shire key>" \
-  "https://aegis.unified-designs.com/v1/mail/search?sort=asc&limit=1"
+  "https://aegis.unified-designs.com/v1/library/messages?sort=asc&limit=1"
 # expect: The party will be on the twenty-second (2023-04-12)
 
 # Admin surface must be dead at the edge (404, not 401/403):

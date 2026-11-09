@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -259,12 +260,45 @@ func (a mailArchive) Readable(r *http.Request) bool {
 	return a.s.mail != nil && a.s.mailReadableFor(r)
 }
 
-// List implements kinds.MailArchive.
-func (a mailArchive) List(_ context.Context, dataset string, cap int) ([]kinds.Message, bool, error) {
+// List implements kinds.MailArchive (issue #311): the capped collection
+// overview (Cap > 0) or the full matching history for filtered queries.
+func (a mailArchive) List(_ context.Context, q kinds.MailQuery) ([]kinds.Message, bool, error) {
 	if a.s.mail == nil {
 		return nil, false, nil
 	}
-	return a.s.mail.ListMessagesForLibrary(cap, dataset)
+	sq := mail.SearchQuery{
+		Q:        q.Filters.Q,
+		From:     q.Filters.From,
+		To:       q.Filters.To,
+		After:    q.Filters.After,
+		Before:   q.Filters.Before,
+		Labels:   q.Filters.Labels,
+		WithBody: q.WithBody,
+		Dataset:  q.Dataset,
+	}
+	if q.Cap > 0 {
+		sq.Limit = q.Cap
+		resp, err := a.s.mail.Search(sq)
+		if err != nil {
+			return nil, false, err
+		}
+		return resp.Messages, resp.Total > len(resp.Messages), nil
+	}
+	sq.All = true
+	resp, err := a.s.mail.Search(sq)
+	if err != nil {
+		return nil, false, err
+	}
+	return resp.Messages, resp.Truncated, nil
+}
+
+// Get implements kinds.MailArchive: one message with body, sibling sources
+// merged into the collection identity entry (issue #311).
+func (a mailArchive) Get(dataset, service, id string) (kinds.Message, bool) {
+	if a.s.mail == nil {
+		return kinds.Message{}, false
+	}
+	return a.s.mail.GetMerged(dataset, service, id)
 }
 
 // Inventory implements kinds.MailArchive (issue #162): per-ingest-source

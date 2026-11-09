@@ -34,13 +34,13 @@
       "First command to run now (copy exactly):",
       "",
       "  curl -sS -H \"X-Api-Key: " + key + "\" \\",
-      "    \"" + base + "/v1/mail/search?sort=asc&limit=3\"",
+      "    \"" + base + "/v1/library/messages?sort=asc&limit=3\"",
       "",
       "Account: " + p.label + ". " + (p.blurb || ""),
       "Synthetic demo data. Read-only.",
       "",
       "Endpoints (send X-Api-Key on every request):",
-      "  GET /v1/mail/search?q=&from=&to=&after=&before=&sort=asc|desc&limit=",
+      "  GET /v1/library/messages?q=&from=&to=&after=&before=&sort=asc|desc&limit=",
       "  GET /v1/library/messages",
       "  GET /v1/library/contacts",
       "  GET /v1/library/events",
@@ -62,7 +62,7 @@
   }
 
   function curlSmoke() {
-    return "curl -sS -H \"X-Api-Key: " + apiKey() + "\" \\\n  \"" + baseUrl() + "/v1/mail/search?sort=asc&limit=1\"";
+    return "curl -sS -H \"X-Api-Key: " + apiKey() + "\" \\\n  \"" + baseUrl() + "/v1/library/messages?sort=asc&limit=1\"";
   }
 
   function render() {

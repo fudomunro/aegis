@@ -147,7 +147,8 @@ type Server struct {
 	// Nil in production; tests use them to stub a provider.
 	mirrorSourceFn func(serviceID, kind string) (mirrorSource, error)
 	mirrorTargetFn func(serviceID, kind string) (mirrorTarget, error)
-	// mail is the optional local compressed mail archive (/v1/mail/*).
+	// mail is the optional local compressed mail archive (the messages
+	// kind's local source).
 	mail *mail.Archive
 	// mailIngests are the archive ingest sources keyed by service id
 	// (issue #286). Wired beside connectors; see mail_ingest.go.
@@ -653,8 +654,6 @@ func auditRouteFamily(r *http.Request) string {
 		return "library"
 	case strings.HasPrefix(p, "/v1/services"):
 		return "service"
-	case strings.HasPrefix(p, "/v1/mail"):
-		return "mail"
 	case strings.HasPrefix(p, "/v1/auth"):
 		return "auth"
 	case strings.HasPrefix(p, "/v1/apps"):

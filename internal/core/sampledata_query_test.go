@@ -263,12 +263,12 @@ func TestMailQuery_PaginationStableOrder(t *testing.T) {
 	}
 }
 
-func TestMailQuery_FetchByIDAndRaw(t *testing.T) {
+func TestMailQuery_FetchByID(t *testing.T) {
 	a, set := seedQueryFixture(t)
 	srv := mailTestServer(t, a)
 
 	id := set.Records[0].ID
-	w := doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/"+id, "")
+	w := doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, id)
 	if w.Code != http.StatusOK {
 		t.Fatalf("fetch id code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -280,20 +280,19 @@ func TestMailQuery_FetchByIDAndRaw(t *testing.T) {
 		t.Fatalf("message missing subject: %+v", msg)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/"+id+"/raw", "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("raw code = %d body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "synthetic") {
-		t.Fatalf("raw payload = %s", w.Body.String())
+	// The fetch subroute is the one retrieval surface (issue #311): the
+	// provider-shaped /raw subpath is gone with /v1/mail.
+	w = doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, id+"/raw")
+	if w.Code == http.StatusOK {
+		t.Fatalf("raw subpath must be retired: %s", w.Body.String())
 	}
 
-	// HTTP search path mirrors the store API for the oldest-message question.
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/search?sort=asc&limit=1", "")
+	// The collection endpoint answers the oldest-message question.
+	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?sort=asc&limit=1", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search http code = %d body=%s", w.Code, w.Body.String())
 	}
-	var searchResp mail.SearchResponse
+	var searchResp kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &searchResp); err != nil {
 		t.Fatalf("decode search: %v", err)
 	}

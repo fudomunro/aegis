@@ -133,7 +133,7 @@ hashes on load. Admin lifecycle: `GET`/`POST /v1/admin/data-scopes`,
 For scopes A and B with datasets `a` and `b`:
 
 1. GET `/v1/library/*` with A’s key never returns rows sourced only from `b`.
-2. `/v1/mail/search` and `/v1/library/messages` with A’s key never return `b` rows.
+2. `/v1/library/messages` (list, filtered search, and fetch) with A’s key never return `b` rows.
 3. A cache fill under A is never served to B — including two principals that
    share a dataset but hold different grants.
 4. Services bound to `b` are invisible to A (no 403 oracle) — including

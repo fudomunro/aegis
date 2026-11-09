@@ -30,7 +30,7 @@ type MailIngestOptions struct {
 }
 
 // MailIngestResult reports one bounded ingest run. Callers repeat until
-// Done. JSON field names are the /v1/mail/sync response contract.
+// Done. JSON field names are the admin mail-sync response contract.
 type MailIngestResult struct {
 	Service    string `json:"service"`
 	Listed     int    `json:"listed"`

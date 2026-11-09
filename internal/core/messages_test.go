@@ -222,10 +222,19 @@ func TestLibraryMessagesInstructions_MentionEndpoint(t *testing.T) {
 		"/v1/library/messages",
 		"messages",
 		"canonical",
-		"/v1/mail/search",
+		"sort=asc",
+		"include_body",
+		"/v1/library/messages/{sources[].service}/{sources[].id}",
 	} {
 		if !strings.Contains(instr, want) {
 			t.Fatalf("missing %q in instructions:\n%s", want, instr)
+		}
+	}
+	// One search path and one fetch path (issue #311): the retired split
+	// surface must not be advertised.
+	for _, gone := range []string{"/v1/mail/", "/v1/services/"} {
+		if strings.Contains(instr, gone) {
+			t.Fatalf("instructions still name %q:\n%s", gone, instr)
 		}
 	}
 }

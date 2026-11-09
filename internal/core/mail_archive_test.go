@@ -62,61 +62,75 @@ func mustLinks(t *testing.T) *links.Store {
 	return st
 }
 
-func doMailReq(t *testing.T, srv *Server, method, path string, body string) *httptest.ResponseRecorder {
+// doAdminMailReq issues an admin mail-route request (issue #311: ingest and
+// status are admin; agent retrieval is the library surface).
+func doAdminMailReq(t *testing.T, srv *Server, method, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	var reader *strings.Reader
-	if body == "" {
-		reader = strings.NewReader("")
-	} else {
-		reader = strings.NewReader(body)
+	var handler http.HandlerFunc
+	switch {
+	case strings.HasPrefix(path, "/v1/admin/mail/status"):
+		handler = srv.HandleAdminMailStatus
+	case strings.HasPrefix(path, "/v1/admin/mail/import"):
+		handler = srv.HandleAdminMailImport
+	default:
+		handler = srv.HandleAdminMailSync
 	}
-	req := httptest.NewRequest(method, path, reader)
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, req)
+	srv.AdminMiddleware(handler)(w, req)
+	return w
+}
+
+// doMessagesReq issues an agent messages-collection request.
+func doMessagesReq(t *testing.T, srv *Server, method, path, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
+	return w
+}
+
+// doMessagesFetchReq issues the messages fetch subroute request.
+func doMessagesFetchReq(t *testing.T, srv *Server, service, id string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest("GET", "/v1/library/messages/"+service+"/"+id, nil)
+	req.SetPathValue("service", service)
+	req.SetPathValue("id", id)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/messages/{service}/{id}"))(w, req)
 	return w
 }
 
 func TestMailHTTPRequiresAuth(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	req := httptest.NewRequest(http.MethodGet, "/v1/mail/status", nil)
+	req := httptest.NewRequest("GET", "/v1/library/messages", nil)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.handleMailRoutes)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("messages"))(w, req)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("code = %d", w.Code)
 	}
 }
 
-func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
+func TestMailHTTPQueryAndFetch(t *testing.T) {
 	a := openTestMailArchive(t)
-	if err := a.Upsert(sampleMailRecord("m1", "Quarterly report", "The quarterly numbers are attached.")); err != nil {
-		t.Fatalf("upsert: %v", err)
-	}
 	gz, _ := mail.GzipPayload([]byte(`{"id":"m1"}`))
 	rec := sampleMailRecord("m1", "Quarterly report", "The quarterly numbers are attached.")
 	rec.PayloadGzip = gz
-	_ = a.Upsert(rec)
+	if err := a.Upsert(rec); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
 
 	srv := mailTestServer(t, a)
 
-	w := doMailReq(t, srv, http.MethodGet, "/v1/mail/status", "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("status code = %d body=%s", w.Code, w.Body.String())
-	}
-	var st mail.Status
-	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
-		t.Fatalf("status json: %v", err)
-	}
-	if st.MessageCount != 1 {
-		t.Fatalf("status = %+v", st)
-	}
-
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/search?q=quarterly&include_body=1", "")
+	w := doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=quarterly&include_body=1", "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("search code = %d body=%s", w.Code, w.Body.String())
 	}
-	var hits mail.SearchResponse
+	var hits kinds.MessageList
 	if err := json.Unmarshal(w.Body.Bytes(), &hits); err != nil {
 		t.Fatalf("search json: %v", err)
 	}
@@ -124,7 +138,20 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 		t.Fatalf("hits = %+v", hits)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/m1", "")
+	// Without include_body the list carries metadata only (issue #311).
+	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages?q=quarterly", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("search code = %d body=%s", w.Code, w.Body.String())
+	}
+	hits = kinds.MessageList{}
+	if err := json.Unmarshal(w.Body.Bytes(), &hits); err != nil {
+		t.Fatalf("search json: %v", err)
+	}
+	if hits.Total != 1 || hits.Messages[0].Body != "" {
+		t.Fatalf("stripped hits = %+v", hits)
+	}
+
+	w = doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, "m1")
 	if w.Code != http.StatusOK {
 		t.Fatalf("get code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -132,29 +159,16 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &msg); err != nil {
 		t.Fatalf("get json: %v", err)
 	}
-	if msg.Subject != "Quarterly report" {
+	if msg.Subject != "Quarterly report" || msg.Body == "" {
 		t.Fatalf("msg = %+v", msg)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/m1/raw", "")
-	if w.Code != http.StatusOK {
-		t.Fatalf("raw code = %d body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "m1") {
-		t.Fatalf("raw = %s", w.Body.String())
-	}
-
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/messages/"+connectors.GoogleGmailServiceID+"/missing", "")
+	w = doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, "missing")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("missing code = %d", w.Code)
 	}
 
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/nope", "")
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("unknown route code = %d", w.Code)
-	}
-
-	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/search", "")
+	w = doMessagesReq(t, srv, http.MethodPost, "/v1/library/messages", "")
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("search post code = %d", w.Code)
 	}
@@ -162,24 +176,31 @@ func TestMailHTTPSearchGetSyncStatus(t *testing.T) {
 
 func TestMailHTTPDisabledAndDenied(t *testing.T) {
 	srv := mailTestServer(t, nil)
-	w := doMailReq(t, srv, http.MethodGet, "/v1/mail/status", "")
+	w := doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, "m1")
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("disabled code = %d body=%s", w.Code, w.Body.String())
 	}
 
 	a := openTestMailArchive(t)
+	if err := a.Upsert(sampleMailRecord("m1", "Quarterly report", "hello")); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
 	srv = mailTestServer(t, a)
 	srv.config.Services[0].GrantLimits = policy.Permissions{"messages": "none"}
-	w = doMailReq(t, srv, http.MethodGet, "/v1/mail/status", "")
+	w = doMessagesFetchReq(t, srv, connectors.GoogleGmailServiceID, "m1")
 	if w.Code != http.StatusForbidden {
-		t.Fatalf("denied code = %d", w.Code)
+		t.Fatalf("denied code = %d body=%s", w.Code, w.Body.String())
+	}
+	w = doMessagesReq(t, srv, http.MethodGet, "/v1/library/messages", "")
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("list denied code = %d body=%s", w.Code, w.Body.String())
 	}
 }
 
 func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	w := doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"nope"}`)
+	w := doAdminMailReq(t, srv, http.MethodPost, "/v1/admin/mail/sync", `{"service":"nope"}`)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -191,9 +212,28 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 		Action:      "inject",
 		GrantLimits: policy.Permissions{"messages": "read"},
 	})
-	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"dummy","reset_cursor":true}`)
+	w = doAdminMailReq(t, srv, http.MethodPost, "/v1/admin/mail/sync", `{"service":"dummy","reset_cursor":true}`)
 	if w.Code != http.StatusNotImplemented {
 		t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestAdminMailStatus(t *testing.T) {
+	a := openTestMailArchive(t)
+	if err := a.Upsert(sampleMailRecord("m1", "Quarterly report", "hello")); err != nil {
+		t.Fatalf("upsert: %v", err)
+	}
+	srv := mailTestServer(t, a)
+	w := doAdminMailReq(t, srv, http.MethodGet, "/v1/admin/mail/status", "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("status code = %d body=%s", w.Code, w.Body.String())
+	}
+	var st mail.Status
+	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
+		t.Fatalf("status json: %v", err)
+	}
+	if st.MessageCount != 1 {
+		t.Fatalf("status = %+v", st)
 	}
 }
 
@@ -211,7 +251,7 @@ func (s *stubNoSyncConnector) HandleProxy(http.ResponseWriter, *http.Request, st
 func TestMailArchiveHints(t *testing.T) {
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	req := httptest.NewRequest(http.MethodGet, "/v1/mail/search", nil)
+	req := httptest.NewRequest(http.MethodGet, "/v1/library/messages", nil)
 	if hints := srv.mailArchiveHints(req, "search my email archive for invoices"); len(hints) == 0 {
 		t.Fatal("expected archive hints")
 	}
@@ -229,6 +269,15 @@ func TestMailArchiveHints(t *testing.T) {
 	} {
 		if hints := srv.mailArchiveHints(req, msg); len(hints) == 0 {
 			t.Fatalf("expected archive hints for %q", msg)
+		}
+	}
+	// The hint names the one retrieval surface (issue #311).
+	for _, hint := range srv.mailArchiveHints(req, "search my email archive") {
+		if strings.Contains(hint, "/v1/mail/") {
+			t.Fatalf("hint still names retired routes: %s", hint)
+		}
+		if !strings.Contains(hint, "/v1/library/messages") {
+			t.Fatalf("hint missing library path: %s", hint)
 		}
 	}
 	srv.mail = nil

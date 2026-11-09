@@ -58,6 +58,11 @@ type Spec[T any] struct {
 	StampCopies func(items []T)
 	// Enrich optionally resolves durable IDs before merge (issue #4).
 	Enrich func(ctx context.Context, items []T)
+	// Finalize shapes the merged items before the aggregate is cached
+	// (issue #311): the messages kind filters and strips bodies here so
+	// page walks share one fan-out without caching response detail. Nil
+	// leaves items untouched.
+	Finalize func(items []T) []T
 	// RedactSearch re-applies access-level redaction to index-hydrated
 	// items (issue #178). Fetch-time provider redaction never sees stored
 	// payloads, so level-sensitive kinds must redact again on the search
@@ -66,6 +71,11 @@ type Spec[T any] struct {
 	// CacheKey overrides kind.CacheKey() when a second endpoint shares the
 	// same dataset but a different response shape (freebusy view of events).
 	CacheKey string
+	// QAsFilter routes ?q= through the kind's filter set (Finalize) instead
+	// of the shared search index (issue #311). Messages do this: their
+	// free-text is full-history archive FTS merged with live rows, not a
+	// subject/snippet index lookup. The index is neither read nor written.
+	QAsFilter bool
 	// Status declares the kind's local-source overview hooks (issue #312).
 	Status StatusHooks
 }
@@ -159,7 +169,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	if q != "" && kind.Search == nil {
+	if q != "" && kind.Search == nil && !spec.QAsFilter {
 		shared.WriteJSONError(w, http.StatusBadRequest, fmt.Sprintf("%s does not support search", kind.ID))
 		return
 	}
@@ -206,7 +216,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	if q != "" {
+	if q != "" && !spec.QAsFilter {
 		runSearch(h, e, w, r, spec, q, pageReq, agent, appLevel, isApp)
 		return
 	}
@@ -263,8 +273,9 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		// #178), off the response path (issue #273). Fail-open: a broken
 		// index must not fail the list response. Only an owner-tier fetch
 		// may write — a reduced (app/clamped) view would store rows below
-		// the detail the owner's query expects (issue #272).
-		if kind.Search != nil && e.search.Enabled() && indexWriteable(h, r, kind.PermType) {
+		// the detail the owner's query expects (issue #272). Kinds that
+		// own their free-text (QAsFilter) never read the index and skip it.
+		if !spec.QAsFilter && kind.Search != nil && e.search.Enabled() && indexWriteable(h, r, kind.PermType) {
 			indexAsync(h, e, spec, scopes.Dataset(r), fetched)
 		}
 		return fetched, nil
@@ -427,6 +438,9 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 	merged := spec.Merge(all)
 	if merged == nil {
 		merged = []T{}
+	}
+	if spec.Finalize != nil {
+		merged = spec.Finalize(merged)
 	}
 	if spec.StampCopies != nil {
 		spec.StampCopies(merged)

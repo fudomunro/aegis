@@ -4,16 +4,19 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // MailArchiveSourceID is the collection source id for the messages kind's
 // local mail archive (Gmail sync + Google Takeout) (issue #139).
 const MailArchiveSourceID = "mail-archive"
 
-// libraryArchiveMessageCap bounds archive rows feeding /v1/library/messages.
-// Full history stays on /v1/mail/search; the library page is the merged
-// collection overview (issue #139).
+// libraryArchiveMessageCap bounds archive rows feeding the collection
+// overview on GET /v1/library/messages. Filtered queries walk the full
+// archive instead (issue #311).
 const libraryArchiveMessageCap = 200
 
 // MailSourceStatus is one ingest source's archive inventory row (issue #162).
@@ -21,6 +24,23 @@ type MailSourceStatus struct {
 	ID           string
 	Count        int
 	LastSyncedAt string
+}
+
+// MailQuery selects archive rows for the messages kind (issue #311): the
+// capped collection overview and full-history filtered retrieval share one
+// shape.
+type MailQuery struct {
+	// Dataset restricts to one data-scope partition (docs/data-scopes.md).
+	// Empty is the owner/default partition.
+	Dataset string
+	// Filters select full history (q/from/to/after/before/label). Empty
+	// lists by recency.
+	Filters MessageFilters
+	// WithBody fills Message.Body on returned rows.
+	WithBody bool
+	// Cap bounds the overview window (newest first). 0 returns every match
+	// up to the store's merge window, with truncated when it filled.
+	Cap int
 }
 
 // MailArchive is the messages kind's declared local collection source
@@ -33,8 +53,13 @@ type MailArchive interface {
 	Available() bool
 	// Readable reports whether this request may read the archive.
 	Readable(r *http.Request) bool
-	// List returns up to cap archive rows for the dataset partition.
-	List(ctx context.Context, dataset string, cap int) ([]Message, bool, error)
+	// List returns matching archive rows for the dataset partition,
+	// merged across ingest sources into one identity space.
+	List(ctx context.Context, q MailQuery) ([]Message, bool, error)
+	// Get returns one archived message with body and sibling sources
+	// merged into a single identity entry. ok=false when the row is
+	// missing or outside the dataset partition.
+	Get(dataset, service, id string) (Message, bool)
 	// Inventory reports ingest-source rows for the overview (issue #162):
 	// per-source counts and last-sync timestamps; 0-count sources omitted.
 	Inventory() []MailSourceStatus
@@ -48,7 +73,7 @@ type MailArchive interface {
 
 // messagesKind owns the messages aggregate (issue #139): live
 // message-capable connectors plus the local mail archive as a declared
-// local source (issue #312).
+// local source (issue #312), on one retrieval surface (issue #311).
 type messagesKind struct {
 	providerKind
 	h      Host
@@ -65,11 +90,13 @@ func newMessagesKind(h Host, e *Engine, d Deps) Kind {
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[MessageProvider],
-		routes: []Route{{
-			Pattern:     def.Path,
-			AppReadable: def.AppReadable,
-			Handler:     k.serve,
-		}},
+		routes: []Route{
+			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve},
+			// One message with body: the kind-owned fetch subroute (issue
+			// #311). Not app-readable — bodies are content, not list
+			// metadata.
+			{Pattern: "/v1/library/messages/{service}/{id}", Handler: k.serveOne},
+		},
 	}
 	return k
 }
@@ -84,9 +111,16 @@ func (k *messagesKind) HasProviders(h Host) bool {
 
 // serve returns the user's messages from every connected message-capable
 // service and the local mail archive (Gmail sync + Takeout), merged into
-// one collection: GET /v1/library/messages
+// one collection: GET /v1/library/messages. Query filters (q, from, to,
+// after, before, label, sort, include_body) walk the full history instead
+// of the overview window (issue #311).
 func (k *messagesKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
+	filters := ParseMessageFilters(r)
+	cap := libraryArchiveMessageCap
+	if filters.QueryMode() {
+		cap = 0
+	}
 	Aggregate(k.h, k.e, w, r, Spec[Message]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]NamedLister[Message], []string) {
@@ -104,7 +138,12 @@ func (k *messagesKind) serve(w http.ResponseWriter, r *http.Request) {
 					ID:    MailArchiveSourceID,
 					Local: true,
 					List: func(context.Context) ([]Message, bool, error) {
-						return mail.List(context.Background(), dataset, libraryArchiveMessageCap)
+						return mail.List(context.Background(), MailQuery{
+							Dataset:  dataset,
+							Filters:  filters,
+							WithBody: filters.NeedBody(),
+							Cap:      cap,
+						})
 					},
 				})
 			}
@@ -113,14 +152,135 @@ func (k *messagesKind) serve(w http.ResponseWriter, r *http.Request) {
 		ServiceOf: messageServiceName,
 		SortKey:   MessageIdentityKey,
 		Merge:     MergeMessages,
+		// Filter before the aggregate is cached so full-history bodies
+		// never sit in the cache and page walks share one fan-out.
+		Finalize: func(items []Message) []Message {
+			out := filterMessages(items, filters)
+			if !filters.IncludeBody {
+				stripMessageBodies(out)
+			}
+			return out
+		},
 		Encode: func(items []Message, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
+			sortMessages(items, filters.Ascending())
 			pageItems, pr := SlicePage(items, page)
 			return MessageList{Messages: pageItems, LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
 		},
 		MarkCanonical: k.mark,
 		StampCopies:   k.copies,
+		CacheKey:      "library:messages" + filters.CacheKeySuffix(),
 		Status:        MessagesStatusHooks(k.h, k.mail),
+		// Free-text is an archive FTS + merged live rows query (issue
+		// #311), not a subject/snippet index lookup.
+		QAsFilter: true,
 	})
+}
+
+// serveOne returns one message with body from the local mail archive,
+// sibling sources merged into the same identity entry the collection
+// endpoint serves: GET /v1/library/messages/{service}/{id}
+func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
+		return
+	}
+	kind := k.def
+	agent := k.h.Agent(r)
+
+	serviceID := r.PathValue("service")
+	id := r.PathValue("id")
+	if serviceID == "" || id == "" {
+		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/library/messages/{service}/{id}")
+		return
+	}
+
+	appLevel, isApp := k.h.AppLevel(r, kind.PermType)
+	if isApp && !appAllows(appLevel, kind.PermType, r.Method) {
+		shared.WriteJSONError(w, http.StatusForbidden,
+			"denied: app data grant for messages is "+appLevel)
+		return
+	}
+	// Data-scope grants are deny-by-default (issue #253), mirroring the
+	// collection endpoint.
+	if !scopes.Allows(r, kind.PermType, r.Method) {
+		shared.WriteJSONError(w, http.StatusForbidden, kind.DenyMsg)
+		return
+	}
+
+	level := policy.DefaultAccessType
+	svc, known := k.h.Service(serviceID)
+	if known {
+		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
+		if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
+			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
+			return
+		}
+		level = k.h.RequestLevel(r, serviceID, kind.PermType)
+		if !policy.AllowsMethod(level, http.MethodGet) {
+			k.h.RecordAccess(r, AccessEvent{
+				Agent:    agent,
+				Surface:  SurfaceLibrary,
+				Target:   kind.ID,
+				Kind:     kind.ID,
+				Decision: audit.DecisionDeny,
+				Reason:   "permission",
+				Method:   r.Method,
+				Status:   http.StatusForbidden,
+			})
+			shared.WriteJSONError(w, http.StatusForbidden, kind.DenyMsg)
+			return
+		}
+	}
+	if svc.Action == "block" {
+		shared.WriteJSONError(w, http.StatusForbidden, "denied: service is blocked")
+		return
+	}
+
+	// Archived copy first: body text and multi-source identity live there
+	// (issue #311). Then the live provider, so every row the collection
+	// endpoint shows is fetchable by its source id regardless of source.
+	if k.mail != nil && k.mail.Readable(r) {
+		if msg, ok := k.mail.Get(scopes.Dataset(r), serviceID, id); ok {
+			shared.WriteJSON(w, msg)
+			k.h.RecordAccess(r, AccessEvent{
+				Agent:   agent,
+				Surface: SurfaceLibrary,
+				Target:  kind.ID,
+				Kind:    kind.ID,
+				Cache:   CacheMiss,
+			})
+			return
+		}
+	}
+	if p, ok := k.h.Connectors()[serviceID].(MessageProvider); ok {
+		items, _, err := p.ListMessages(r.Context())
+		if err == nil {
+			for i := range items {
+				if messageHasSource(items[i], serviceID, id) {
+					shared.WriteJSON(w, items[i])
+					k.h.RecordAccess(r, AccessEvent{
+						Agent:   agent,
+						Surface: SurfaceLibrary,
+						Target:  kind.ID,
+						Kind:    kind.ID,
+						Cache:   CacheMiss,
+					})
+					return
+				}
+			}
+		}
+	}
+	shared.WriteJSONError(w, http.StatusNotFound, "message not found")
+}
+
+// messageHasSource reports whether a message carries a service-local copy.
+func messageHasSource(m Message, service, id string) bool {
+	for _, src := range m.Sources {
+		if src.Service == service && src.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // MessagesStatusHooks declares the mail archive as a local source of the

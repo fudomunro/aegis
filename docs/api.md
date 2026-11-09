@@ -156,7 +156,7 @@ Every `GET /v1/library/{kind}` (built-in and user-defined) shares one agent-faci
 | `truncated` | Upstream page-cap incompleteness (see below) — **not** “more pages in this response.” |
 | `synced` / `by_service` | Multi-source merge flag and per-service fetch status (unchanged). |
 
-Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `/v1/mail/search` accepts the same `limit` + `cursor` (and still accepts `offset` for the admin UI).
+Time filters are always **`after` / `before`** (inclusive lower / exclusive upper). Kind-specific filters stay kind-specific (`tag`, `account`, `currency`, `locality`, `kind`, …). Mail **`from` / `to` are sender/recipient addresses only** — never time bounds. `GET /v1/library/messages` takes the full mail query set (`q`, `from`, `to`, `after`, `before`, `label`, `sort=asc|desc`, `include_body`); without query parameters it returns the capped collection overview, and any explicit filter or `sort` walks the full archive with the same `limit` + `cursor` paging.
 
 Walk the full set by repeating the request with `next_cursor` until it is omitted. Do not stop at the first page and do not treat a short page as “that’s everything” when `next_cursor` is present.
 
@@ -173,7 +173,8 @@ GET /v1/library/documents?q=lease&after=2024-01-01
 - **Result shape:** the same list envelope as the bare fetch (`total`, `next_cursor`, …). Kind-specific filters (`tag`, `after`, `before`, …) combine with `q`.
 - **Freshness:** `q` reads the local search index, which is written from owner-tier library fetches. The first query for a kind materializes the index from one live fetch at full owner detail; a fetch made under a reduced view (a free/busy app, a city-level scope) never refreshes it, so those rows always carry the detail the owner would see. A complete list fetch — every source answered and none truncated — also drops rows for items a source no longer returns, so deleted items stop matching `q`. A degraded or truncated fetch only upserts and never deletes. A query may not see provider changes made since the last owner-tier write. Read-path redaction still ensures no caller gets more than its data grants allow.
 - **Enforcement:** identical to the list surface — data grants, app scopes, and data-scope dataset partitions all apply to search hits. A kind without a search spec answers `q` with `400`.
-- **Storage:** the index holds neutral item metadata (enough to return hits without a refetch) under the data directory; no media bytes. `GET /v1/mail/search` remains the full-history mail surface (body text, date/send filters).
+- **Storage:** the index holds neutral item metadata (enough to return hits without a refetch) under the data directory; no media bytes.
+- **Messages are the exception:** `q` on `GET /v1/library/messages` is a full-history query (subject, snippet, and archived body text) merged with live provider rows in the same identity space as the list endpoint — not a search-index lookup. See Messages below.
 
 ## Sync completeness
 
@@ -528,8 +529,9 @@ Message-IDs or send times stay distinct.
 **Gmail and Google Takeout are sources of one mail collection.** Live Gmail,
 Gmail archive sync, and Takeout import all feed the same identity space:
 either ingest order is safe, a Message-ID match attaches another `sources[]`
-entry instead of creating a second message, and `/v1/library/messages` plus
-`/v1/mail/search` present the merged collection.
+entry instead of creating a second message, and `GET /v1/library/messages`
+presents the merged collection — one retrieval surface for list, search, and
+fetch.
 
 ```
 GET /v1/library/messages
@@ -544,6 +546,39 @@ Permission key: `messages` (paths `/messages/*`, `/me/messages`, `/threads/*`,
 
 Participant `Contact` values use the same identity matching as
 `/v1/library/contacts` and calendar attendees (email → phone → handle → name).
+
+**Query filters** (same semantics the archive search always had):
+
+| Request | Meaning |
+|---------|---------|
+| `q` | Free-text over subject, snippet, and archived body text (case-insensitive token AND; operator characters stripped) |
+| `from` / `to` | Sender / recipient **address** substring — never time bounds |
+| `after` / `before` | `sent_at` bounds (inclusive lower / exclusive upper; date bounds open a day window) |
+| `label` | Repeatable; matches service-local labels |
+| `sort` | `asc` (oldest first — use for “oldest/first message” questions) or `desc` (default, newest first) |
+| `include_body` | `1` fills `body`; lists are metadata-only otherwise |
+
+Without query parameters the endpoint answers the capped collection
+**overview** (newest first; `truncated` admits the window). Any explicit
+filter or `sort` walks the **full history** — archive rows are not capped at
+the overview window — with the shared `limit`/`cursor` paging. Filtered
+results come from the same merged identity space as the list: a message
+matched through one copy (archived or live) keeps every `sources[]` entry.
+
+**Fetch one message** with body at the kind subroute:
+
+```
+GET /v1/library/messages/{service}/{id}
+```
+
+Returns the merged identity entry — sibling copies (Gmail archive + Takeout)
+collapse into one message with `body` and every `sources[]` row, regardless
+of which source id is named. Archived copies carry `body`; live rows the
+collection shows are fetchable too (their bodies live on the source
+service). Dataset isolation matches the collection endpoint: a partitioned
+principal cannot fetch rows from another dataset even with a direct id.
+Provider-shaped raw payloads are not part of the library surface — use the
+service content transport when bytes from the provider are needed.
 
 ## Transactions as a kind
 

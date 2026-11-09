@@ -73,7 +73,7 @@ question is answerable from the pack alone.
 
 | Prompt | Surfaces |
 |--------|----------|
-| What is the earliest message in my mail? | `/v1/mail/search?sort=asc` |
+| What is the earliest message in my mail? | `/v1/library/messages?sort=asc` |
 | Who is coming with me on the journey? | `/v1/library/contacts` (Sam, Merry, Pippin) |
 | Summarize Gandalf’s instructions before Bree. | mail search + body |
 | Where did I travel between leaving Bag End and Rivendell? | `/v1/library/places` |

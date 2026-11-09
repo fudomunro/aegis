@@ -63,7 +63,7 @@ type DataPaths struct {
 	// the sync worker. Defaults to the copy-ledger path so job completion and
 	// copy stamps can commit in one transaction.
 	SyncJobs string
-	// mail.Archive is the SQLite+FTS mail archive path. Empty disables /v1/mail.
+	// mail.Archive is the SQLite+FTS mail archive path. Empty disables the local mail source.
 	MailArchive string
 	// search.Index is the SQLite library search-index path (issue #178).
 	// Empty disables q= on /v1/library/{kind}.
@@ -88,7 +88,7 @@ type DataPaths struct {
 // StatePathOverrides holds CLI/env values before defaults are applied.
 // Empty strings mean "use the data-dir default", except MailArchiveSet,
 // which distinguishes an omitted -mail-archive (default under data dir)
-// from an explicitly empty one (disable /v1/mail).
+// from an explicitly empty one (disable the mail archive).
 type StatePathOverrides struct {
 	Dir                string
 	Config             string
