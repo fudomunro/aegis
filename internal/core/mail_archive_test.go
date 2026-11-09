@@ -10,6 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -34,7 +35,7 @@ func mailTestServer(t *testing.T, archive *mail.Archive) *Server {
 		tokens:      mustTokens(t),
 		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
-		metrics:     NewAccessMetrics(defaultMetricsCapacity),
+		metrics:     metrics.NewAccessMetrics(0),
 		links:       mustLinks(t),
 		mail:        archive,
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),

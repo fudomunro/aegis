@@ -37,6 +37,13 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/kinds",
 	},
+	// metrics consumes the sync rollup shape (SyncCounts) to render the
+	// queue-depth gauges, so it may name syncjobs; audit supplies the
+	// allow/deny decision vocabulary. Stated reasons, per the package rule.
+	"internal/core/metrics": {
+		"github.com/fudomunro/aegis/internal/core/audit",
+		"github.com/fudomunro/aegis/internal/core/syncjobs",
+	},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/core/policy",

@@ -1,9 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"context"
 	"encoding/json"
 	"net/http"
@@ -12,8 +9,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func flowTestServer() *Server {
@@ -326,23 +326,23 @@ func TestAdminFlow_RouteRequiresAuth(t *testing.T) {
 
 func TestHandleAdminFlow_StatsBlock(t *testing.T) {
 	srv := flowTestServer()
-	srv.recordAccess(AccessEvent{
+	srv.recordAccess(metrics.AccessEvent{
 		Agent:   "alice@example.com",
-		Surface: MetricSurfaceService,
+		Surface: metrics.MetricSurfaceService,
 		Target:  "spotify",
 		Kind:    "tracks",
-		Cache:   MetricCacheMiss,
+		Cache:   metrics.MetricCacheMiss,
 	})
-	srv.recordAccess(AccessEvent{
+	srv.recordAccess(metrics.AccessEvent{
 		Agent:   "alice@example.com",
-		Surface: MetricSurfaceLibrary,
+		Surface: metrics.MetricSurfaceLibrary,
 		Target:  "playlists",
 		Kind:    "playlists",
-		Cache:   MetricCacheHit,
+		Cache:   metrics.MetricCacheHit,
 	})
-	srv.recordAccess(AccessEvent{
+	srv.recordAccess(metrics.AccessEvent{
 		Agent:   "bob@example.com",
-		Surface: MetricSurfaceService,
+		Surface: metrics.MetricSurfaceService,
 		Target:  "spotify",
 		Kind:    "playlists",
 	})
@@ -474,9 +474,9 @@ func TestHandleAdminFlow_AgentDetailWithoutHits(t *testing.T) {
 
 func TestHandleAdminFlow_WindowParam(t *testing.T) {
 	srv := flowTestServer()
-	srv.recordAccess(AccessEvent{
+	srv.recordAccess(metrics.AccessEvent{
 		Agent:   "alice@example.com",
-		Surface: MetricSurfaceService,
+		Surface: metrics.MetricSurfaceService,
 		Target:  "spotify",
 		At:      time.Now().Add(-10 * time.Minute),
 	})

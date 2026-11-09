@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -246,9 +247,9 @@ func (l *rateLimiter) auditOnce(key string, window time.Duration) bool {
 // not wash real evidence out of the audit log (issue #253).
 func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Retry-After", "60")
-	ev := AccessEvent{
+	ev := metrics.AccessEvent{
 		Agent:    agentForRequest(r),
-		Surface:  MetricSurfaceAuth,
+		Surface:  metrics.MetricSurfaceAuth,
 		Target:   auditRouteFamily(r),
 		Decision: audit.DecisionDeny,
 		Reason:   "rate_limited",
@@ -259,7 +260,7 @@ func (s *Server) rateLimited(w http.ResponseWriter, r *http.Request) {
 	if s.rl == nil || s.rl.auditOnce(key, s.rateLimitPolicy().window) {
 		s.recordAccessFrom(r, ev)
 	} else if s.prom != nil {
-		s.prom.observeAccess(ev)
+		s.prom.ObserveAccess(ev)
 	}
 	shared.WriteJSONError(w, http.StatusTooManyRequests, "rate limited: too many requests")
 }

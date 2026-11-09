@@ -17,6 +17,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
@@ -123,7 +124,7 @@ type Server struct {
 	builtinKindsOnce sync.Once
 	connectors       map[string]connectors.ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
-	metrics *AccessMetrics
+	metrics *metrics.AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
 	links *links.Store
 	// ownership holds per-kind user confirmation that Aegis already manages
@@ -170,7 +171,7 @@ type Server struct {
 	// audit is the durable access audit log (issue #105). May be disabled.
 	audit *audit.Log
 	// prom holds process-lifetime counters for GET /metrics (issue #105).
-	prom *PromMetrics
+	prom *metrics.PromMetrics
 	// maintenanceIssues is the GitHub-issue ticket surface for the sync
 	// maintenance loop (issue #86). Nil disables ticketing (scan-only).
 	maintenanceIssues IssueTracker
@@ -600,9 +601,9 @@ func (s *Server) denyStatus(w http.ResponseWriter, r *http.Request, id *PeerIden
 		s.recordAuthFailure(r)
 	}
 	// Durable auth denials (issue #105). Route family only — never the full path.
-	s.recordAccess(AccessEvent{
+	s.recordAccess(metrics.AccessEvent{
 		Agent:    agent,
-		Surface:  MetricSurfaceAuth,
+		Surface:  metrics.MetricSurfaceAuth,
 		Target:   auditRouteFamily(r),
 		Decision: audit.DecisionDeny,
 		Reason:   "auth",
@@ -627,7 +628,7 @@ func (s *Server) recordHook(obs HookObservation) {
 		s.hookHealth.Record(obs)
 	}
 	if s.prom != nil {
-		s.prom.observeHook(obs.Action)
+		s.prom.ObserveHook(obs.Action)
 	}
 }
 

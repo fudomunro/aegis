@@ -19,6 +19,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
@@ -454,7 +455,7 @@ func Run() {
 		oauthStates:   shared.NewStateStore(),
 		rl:            newRateLimiter(),
 		connectors:    make(map[string]connectors.ServiceConnector),
-		metrics:       NewAccessMetrics(defaultMetricsCapacity),
+		metrics:       metrics.NewAccessMetrics(0),
 		links:         linkStore,
 		ownership:     ownership,
 		apps:          apps,
@@ -472,7 +473,7 @@ func Run() {
 		signal:        signalStore,
 		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
 		audit:         auditLog,
-		prom:          NewPromMetrics(),
+		prom:          metrics.NewPromMetrics(Version, Commit),
 		apertureURL:   *apertureURL,
 	}
 

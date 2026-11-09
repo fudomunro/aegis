@@ -5,9 +5,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 )
 
 func TestHandleHealthz(t *testing.T) {
@@ -148,7 +148,7 @@ func TestDeny_RecordsAuthAuditAndProm(t *testing.T) {
 	defer auditLog.Close()
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.audit = auditLog
-	srv.prom = NewPromMetrics()
+	srv.prom = metrics.NewPromMetrics("", "")
 
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/tracks", nil)
 	w := httptest.NewRecorder()
@@ -164,13 +164,13 @@ func TestDeny_RecordsAuthAuditAndProm(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("audit rows = %d, want 1", len(rows))
 	}
-	if rows[0].Surface != MetricSurfaceAuth || rows[0].Target != "library" {
+	if rows[0].Surface != metrics.MetricSurfaceAuth || rows[0].Target != "library" {
 		t.Fatalf("audit row = %+v, want auth/library", rows[0])
 	}
 	if rows[0].Reason != "auth" || rows[0].Method != http.MethodGet {
 		t.Fatalf("audit row = %+v", rows[0])
 	}
-	text := srv.prom.promText()
+	text := srv.prom.PromText()
 	if !strings.Contains(text, `aegis_permission_denials_total{surface="auth",target="library"} 1`) {
 		t.Fatalf("metrics missing auth denial:\n%s", text)
 	}
@@ -183,7 +183,7 @@ func TestRecordHook_IncrementsProm(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.recordHook(HookObservation{Action: "allow"})
 	srv.recordHook(HookObservation{Action: "parse_fail"})
-	text := srv.prom.promText()
+	text := srv.prom.PromText()
 	if !strings.Contains(text, `aegis_hook_outcomes_total{action="allow"} 1`) {
 		t.Fatalf("missing allow hook counter:\n%s", text)
 	}
@@ -210,56 +210,5 @@ func TestHandleMetrics_MethodAndNilProm(t *testing.T) {
 	srv.HandleMetrics(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("nil prom status = %d, want 200", w.Code)
-	}
-}
-
-func TestObserveUpstream_Histogram(t *testing.T) {
-	p := NewPromMetrics()
-	p.observeUpstream("spotify", 3*time.Millisecond, 200)
-	p.observeUpstream("spotify", 300*time.Millisecond, 200)
-	p.observeUpstream("spotify", 0, 0) // error path
-	p.observeUpstream("", 10*time.Millisecond, 200)
-	var nilP *PromMetrics
-	nilP.observeUpstream("x", time.Millisecond, 200)
-
-	text := p.promText()
-	if !strings.Contains(text, `aegis_upstream_duration_seconds_count{service="spotify"} 3`) {
-		t.Fatalf("missing spotify histogram count:\n%s", text)
-	}
-	if !strings.Contains(text, `aegis_upstream_duration_seconds_bucket{service="spotify",le="+Inf"} 3`) {
-		t.Fatalf("missing +Inf bucket:\n%s", text)
-	}
-	if !strings.Contains(text, `aegis_upstream_duration_seconds_count{service="unknown"} 1`) {
-		t.Fatalf("missing unknown service histogram:\n%s", text)
-	}
-}
-
-func TestPromText_CacheAndAccessSeries(t *testing.T) {
-	p := NewPromMetrics()
-	p.observeAccess(AccessEvent{Surface: "library", Target: "tracks", Cache: MetricCacheHit})
-	p.observeAccess(AccessEvent{Surface: "library", Target: "tracks", Cache: MetricCacheMiss})
-	p.observeAccess(AccessEvent{Surface: MetricSurfaceService, Target: "spotify", Decision: audit.DecisionDeny, Reason: "permission"})
-	p.observeAccess(AccessEvent{}) // defaults
-
-	text := p.promText()
-	for _, want := range []string{
-		`aegis_access_total{surface="library",target="tracks",decision="allow"} 2`,
-		`aegis_cache_events_total{result="hit"} 1`,
-		`aegis_cache_events_total{result="miss"} 1`,
-		`aegis_permission_denials_total{surface="service",target="spotify"} 1`,
-		`aegis_access_total{surface="unknown",target="unknown",decision="allow"} 1`,
-		`aegis_process_start_time_seconds`,
-		`aegis_process_uptime_seconds`,
-	} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("metrics missing %q:\n%s", want, text)
-		}
-	}
-	if NewPromMetrics().promText() == "" {
-		t.Fatal("empty registry should still emit process series")
-	}
-	var nilP *PromMetrics
-	if nilP.promText() != "" {
-		t.Fatal("nil registry should emit empty text")
 	}
 }

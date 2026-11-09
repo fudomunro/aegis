@@ -12,6 +12,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -27,18 +28,18 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.audit = a
 
-	srv.recordAccess(AccessEvent{
+	srv.recordAccess(metrics.AccessEvent{
 		Agent:    "alice@example.com",
-		Surface:  MetricSurfaceLibrary,
+		Surface:  metrics.MetricSurfaceLibrary,
 		Target:   "playlists",
 		Kind:     "playlists",
-		Cache:    MetricCacheHit,
+		Cache:    metrics.MetricCacheHit,
 		Decision: audit.DecisionAllow,
 		Method:   http.MethodGet,
 	})
-	srv.recordAccess(AccessEvent{
+	srv.recordAccess(metrics.AccessEvent{
 		Agent:    "alice@example.com",
-		Surface:  MetricSurfaceService,
+		Surface:  metrics.MetricSurfaceService,
 		Target:   "spotify",
 		Kind:     "player",
 		Decision: audit.DecisionDeny,
@@ -58,7 +59,7 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 	if snap.TotalHits != 2 {
 		t.Fatalf("ring hits = %d, want 2", snap.TotalHits)
 	}
-	text := srv.prom.promText()
+	text := srv.prom.PromText()
 	if !strings.Contains(text, `aegis_access_total{surface="library",target="playlists",decision="allow"} 1`) {
 		t.Fatalf("missing allow series:\n%s", text)
 	}
@@ -70,7 +71,7 @@ func TestRecordAccess_WritesAuditAndProm(t *testing.T) {
 	srv.audit = nil
 	srv.metrics = nil
 	srv.prom = nil
-	srv.recordAccess(AccessEvent{Surface: "library", Target: "tracks"})
+	srv.recordAccess(metrics.AccessEvent{Surface: "library", Target: "tracks"})
 }
 
 func TestLibraryDeny_RecordsAudit(t *testing.T) {
@@ -117,10 +118,10 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 		if row.Agent != "api-key" {
 			t.Fatalf("agent = %q, want api-key", row.Agent)
 		}
-		if row.Surface == MetricSurfaceService && row.Target == "spotify" && row.Kind == "playlists" {
+		if row.Surface == metrics.MetricSurfaceService && row.Target == "spotify" && row.Kind == "playlists" {
 			sawService = true
 		}
-		if row.Surface == MetricSurfaceLibrary && row.Target == "playlists" {
+		if row.Surface == metrics.MetricSurfaceLibrary && row.Target == "playlists" {
 			sawLibrary = true
 		}
 	}
@@ -191,7 +192,7 @@ func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 	}
 	defer a.Close()
 	srv := &Server{
-		metrics: NewAccessMetrics(8),
+		metrics: metrics.NewAccessMetrics(8),
 		audit:   a,
 		config:  &Config{TrustedProxies: []string{"127.0.0.1"}, ClientIPHeader: "x-real-ip"},
 	}
@@ -201,7 +202,7 @@ func TestRecordAccessFrom_FillsClientIP(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/contacts", nil)
 	req.RemoteAddr = "127.0.0.1:52000"
 	req.Header.Set("X-Real-IP", "203.0.113.9")
-	srv.recordAccessFrom(req, AccessEvent{Agent: "scope:family", Surface: MetricSurfaceLibrary, Target: "contacts"})
+	srv.recordAccessFrom(req, metrics.AccessEvent{Agent: "scope:family", Surface: metrics.MetricSurfaceLibrary, Target: "contacts"})
 
 	rows, err := a.List(audit.Filter{Limit: 10})
 	if err != nil {

@@ -56,7 +56,7 @@ repro capture, and the agent harness — not the signals.
 
 | Piece | Where | What the loop gets from it |
 |-------|-------|----------------------------|
-| Sync metrics | `docs/observability.md`, `internal/core/metrics_export.go` | `aegis_sync_jobs_total{job_type,state}`, `aegis_sync_retries_total{job_type,error_class}`, `aegis_sync_job_duration_seconds`, `aegis_sync_queue_depth{state}`, `aegis_sync_last_success_timestamp_seconds{kind,service}` |
+| Sync metrics | `docs/observability.md`, `internal/core/metrics/` | `aegis_sync_jobs_total{job_type,state}`, `aegis_sync_retries_total{job_type,error_class}`, `aegis_sync_job_duration_seconds`, `aegis_sync_queue_depth{state}`, `aegis_sync_last_success_timestamp_seconds{kind,service}` |
 | Upstream metrics | same | `aegis_upstream_duration_seconds{service}` — latency/status drift per connector |
 | Logs | `<data-dir>/logs/aegis.log` (`log/slog`) | Error detail behind the counters: `service`, `path`, `error` |
 | Audit log | `audit_log.db` | Redaction precedent (no tokens, bodies, query strings, full paths); access anomalies |
