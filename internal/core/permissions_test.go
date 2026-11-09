@@ -10,8 +10,6 @@ import (
 	"os"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestPermissions_ForAndAllows(t *testing.T) {
@@ -119,13 +117,13 @@ func TestCanonicalProxyPath(t *testing.T) {
 		"///a//b/":    "/a/b",
 	}
 	for in, want := range ok {
-		got, err := types.CanonicalProxyPath(in)
+		got, err := CanonicalProxyPath(in)
 		if err != nil {
-			t.Errorf("types.CanonicalProxyPath(%q) error: %v", in, err)
+			t.Errorf("CanonicalProxyPath(%q) error: %v", in, err)
 			continue
 		}
 		if got != want {
-			t.Errorf("types.CanonicalProxyPath(%q) = %q, want %q", in, got, want)
+			t.Errorf("CanonicalProxyPath(%q) = %q, want %q", in, got, want)
 		}
 	}
 
@@ -140,8 +138,8 @@ func TestCanonicalProxyPath(t *testing.T) {
 		"/me\x00player",
 	}
 	for _, in := range bad {
-		if got, err := types.CanonicalProxyPath(in); err == nil {
-			t.Errorf("types.CanonicalProxyPath(%q) = %q, want error", in, got)
+		if got, err := CanonicalProxyPath(in); err == nil {
+			t.Errorf("CanonicalProxyPath(%q) = %q, want error", in, got)
 		}
 	}
 }

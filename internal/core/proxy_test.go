@@ -12,7 +12,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // testContentConnector is a minimal connector for content-path tests.
@@ -288,10 +287,10 @@ func TestHandleServiceProxy_RecordsAccessOnReject(t *testing.T) {
 
 func TestIsAgentContentPath_EndToEndClassification(t *testing.T) {
 	// Ensure library list paths and content paths stay distinct at the HTTP edge.
-	if types.IsAgentContentPath("/me/tracks") {
+	if IsAgentContentPath("/me/tracks") {
 		t.Fatal("/me/tracks must not be content")
 	}
-	if !types.IsAgentContentPath("/playlists/pl1/items") {
+	if !IsAgentContentPath("/playlists/pl1/items") {
 		t.Fatal("/playlists/pl1/items must be content")
 	}
 	var _ = json.Marshal

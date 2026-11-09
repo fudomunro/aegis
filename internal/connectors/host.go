@@ -1,5 +1,5 @@
 // Package connectors hosts named-service adapters (issue #15). Connectors
-// depend on Host + internal/types + internal/core/policy only — never on
+// depend on Host + internal/kinds + internal/core/policy only — never on
 // package main / *Server.
 package connectors
 
