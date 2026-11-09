@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
@@ -42,7 +43,7 @@ func TestValidateDemoConfig_RejectsLiveServices(t *testing.T) {
 
 func TestValidateDemoConfig_RequiresScopes(t *testing.T) {
 	cfg := &Config{Services: []Service{
-		{ID: "sample-library-shire", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "shire"},
+		{ID: "sample-library-shire", Action: "inject", Endpoint: sampledata.SampleLibraryEndpoint, Dataset: "shire"},
 	}}
 	empty, err := scopes.NewStore(filepath.Join(t.TempDir(), "none.json"))
 	if err != nil {
@@ -55,7 +56,7 @@ func TestValidateDemoConfig_RequiresScopes(t *testing.T) {
 
 func TestValidateDemoConfig_AllowsSampleOnly(t *testing.T) {
 	cfg := &Config{Services: []Service{
-		{ID: "sample-library-shire", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "shire"},
+		{ID: "sample-library-shire", Action: "inject", Endpoint: sampledata.SampleLibraryEndpoint, Dataset: "shire"},
 		{ID: "sample-calendar", Action: "inject", Endpoint: "sample://calendar"},
 		{ID: "blocked-live", Action: "block", Endpoint: "https://api.spotify.com/v1"},
 	}}

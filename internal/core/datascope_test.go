@@ -15,6 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
@@ -31,8 +32,8 @@ func readAllGrants() policy.DataGrants {
 func scopeServer(t *testing.T, list []scopes.Scope) *Server {
 	t.Helper()
 	cfg := &Config{Services: []Service{
-		{ID: "sample-library-shire", Name: "Sample Shire", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "shire"},
-		{ID: "sample-library-gondor", Name: "Sample Gondor", Action: "inject", Endpoint: SampleLibraryEndpoint, Dataset: "gondor"},
+		{ID: "sample-library-shire", Name: "Sample Shire", Action: "inject", Endpoint: sampledata.SampleLibraryEndpoint, Dataset: "shire"},
+		{ID: "sample-library-gondor", Name: "Sample Gondor", Action: "inject", Endpoint: sampledata.SampleLibraryEndpoint, Dataset: "gondor"},
 	}}
 	loaded, err := scopes.NewStore(writeDataScopes(t, list))
 	if err != nil {
@@ -65,8 +66,8 @@ func scopeServer(t *testing.T, list []scopes.Scope) *Server {
 		links:      &links.Store{},
 		metrics:    metrics.NewAccessMetrics(32),
 	}
-	srv.connectors["sample-library-shire"] = NewSampleLibraryConnector("sample-library-shire", "shire", GenerateSampleLibraryFor("shire"))
-	srv.connectors["sample-library-gondor"] = NewSampleLibraryConnector("sample-library-gondor", "gondor", GenerateSampleLibraryFor("gondor"))
+	srv.connectors["sample-library-shire"] = sampledata.NewSampleLibraryConnector("sample-library-shire", "shire", sampledata.GenerateSampleLibraryFor("shire"))
+	srv.connectors["sample-library-gondor"] = sampledata.NewSampleLibraryConnector("sample-library-gondor", "gondor", sampledata.GenerateSampleLibraryFor("gondor"))
 	return srv
 }
 
@@ -310,7 +311,7 @@ func TestServiceProxy_HidesForeignDataset(t *testing.T) {
 func TestLibraryDocumentText_HidesForeignDataset(t *testing.T) {
 	srv := twoScopeServer(t)
 	// Own-dataset documents are reachable; foreign ids 404.
-	shireDocs := GenerateSampleLibraryFor("shire").Documents
+	shireDocs := sampledata.GenerateSampleLibraryFor("shire").Documents
 	if len(shireDocs) == 0 || len(shireDocs[0].Sources) == 0 {
 		t.Fatal("need sample documents")
 	}

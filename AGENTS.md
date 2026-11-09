@@ -114,6 +114,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
+| Sample/demo datasets + sample:// connector | `internal/core/sampledata/`, `docs/development.md`, `docs/demo-datasets.md` | Deterministic fixtures (generic + LotR/Lincoln packs), mbox/JSON writers, `SampleLibraryConnector`. Demo lockdown validation stays in the hub (`demo.go`) |
 | Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization policy is `internal/core/policy`, never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; the hub keeps the fixed cross-kind routes and admin writes |
 | Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
@@ -436,7 +437,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Unbounded cache / OAuth state / page loops | Caps, eviction, `shared.LibraryPageCap`, singleflight |
 | Re-growing `writeJSON` / page-cap / URL-trim twins in `core` or `connectors` | One owner: `internal/shared` (issue #280) |
 | Sequential multi-provider or multi-kind work when already parallelizable | Follow the aggregate pipeline's fan-out; don’t serialize merge review without cause |
-| Local variables named after `internal/` package names (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`, `kinds`, `syncjobs`, `metrics`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, `kindList`, `jobStore`, `accessMetrics`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
+| Local variables named after `internal/` package names (`mail`, `scopes`, `copies`, `links`, `tokens`, `search`, `audit`, `ownership`, `kinds`, `syncjobs`, `metrics`, `sampledata`) | Rename the local (`mailArch`, `scopeStore`, `copyLedger`, `kindList`, `jobStore`, `accessMetrics`, `sampleSet`, …). A local with the package name silently shadows `pkg.Symbol` and compiles until a real package ref is needed |
 | Concept named before its glossary entry | `docs/glossary.md` entry in the introducing PR; retire synonyms in the same change |
 | Parking kind data or seam shapes in a catch-all leaf "for now" | Kind data → `internal/kinds`, seam shapes → `internal/shared` — `internal/types` was audited back out three times, then dissolved (#325) |
 | Moving code again within weeks of its first move | Freeze the target layout for the duration of a move campaign; record layout questions in the design doc instead of another relocation |

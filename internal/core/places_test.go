@@ -1,16 +1,17 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/shared"
-
 	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 type fakePlaceProvider struct {
@@ -30,7 +31,7 @@ func (f *fakePlaceProvider) ListUserPlaceVisits(context.Context) ([]kinds.PlaceV
 }
 
 func samplePlaces() []kinds.PlaceVisit {
-	return GenerateSampleLibrary().Places
+	return sampledata.GenerateSampleLibrary().Places
 }
 
 func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
@@ -106,7 +107,7 @@ func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
 // TestPhotosPlacesJoinDemo is the issue #142 done-when: photos taken during a
 // visit work on sample data.
 func TestPhotosPlacesJoinDemo(t *testing.T) {
-	lib := GenerateSampleLibrary()
+	lib := sampledata.GenerateSampleLibrary()
 	merged := kinds.MergePlaceVisits(lib.Places)
 	var harbor, lunenburg *kinds.PlaceVisit
 	for i := range merged {

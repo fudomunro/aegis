@@ -11,6 +11,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -113,7 +114,7 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
-		"ynab": &fakeTransactionProvider{txs: GenerateSampleLibrary().Transactions[:3]},
+		"ynab": &fakeTransactionProvider{txs: sampledata.GenerateSampleLibrary().Transactions[:3]},
 		"quicken": &fakeTransactionProvider{txs: []kinds.Transaction{{
 			PostedAt: "2024-03-06", Amount: "-12.00", Merchant: "Blue Bottle Coffee",
 			Account: &kinds.TransactionAccount{Name: "Credit Card"},
@@ -313,7 +314,7 @@ func TestYNABListUserTransactions_MockAPI(t *testing.T) {
 }
 
 func TestGenerateSampleLibrary_TransactionsMerge(t *testing.T) {
-	set := GenerateSampleLibrary()
+	set := sampledata.GenerateSampleLibrary()
 	if len(set.Transactions) == 0 {
 		t.Fatal("no sample transactions")
 	}

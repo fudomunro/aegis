@@ -1,4 +1,4 @@
-package core
+package sampledata
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"

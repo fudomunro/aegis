@@ -44,6 +44,14 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/core/audit",
 		"github.com/fudomunro/aegis/internal/core/syncjobs",
 	},
+	// sample datasets are fixture generators plus the sample://library
+	// connector; they speak neutral models and the mail store only.
+	"internal/core/sampledata": {
+		"github.com/fudomunro/aegis/internal/connectors",
+		"github.com/fudomunro/aegis/internal/core/mail",
+		"github.com/fudomunro/aegis/internal/kinds",
+		"github.com/fudomunro/aegis/internal/shared",
+	},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/core/policy",

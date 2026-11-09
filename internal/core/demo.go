@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -40,7 +41,7 @@ func isDemoServiceEndpoint(svc *Service) bool {
 		return true
 	}
 	// Fixture library ids without an endpoint still map to sample://library.
-	return IsSampleLibraryService(svc) && svc.Endpoint == ""
+	return sampledata.IsSampleLibraryService(svc.ID, svc.Endpoint) && svc.Endpoint == ""
 }
 
 // validateDemoConfig enforces demo lockdown after config + scopes load.
