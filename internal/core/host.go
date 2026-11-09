@@ -66,6 +66,9 @@ func (s *Server) LibraryReadable(kind string) bool {
 	if s == nil {
 		return false
 	}
+	if k, ok := s.builtinKind(kind); ok {
+		return k.HasProviders(s) && k.Readable(s)
+	}
 	rt, ok := kindRuntime[kind]
 	return ok && rt.HasProviders(s) && rt.Readable(s)
 }

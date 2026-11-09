@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -241,8 +242,9 @@ func TestStampCalendarEventCanonical_OnlyWhenConfigured(t *testing.T) {
 		{Sources: []types.CalendarEventSource{{Service: "google-calendar"}}},
 		{Sources: []types.CalendarEventSource{{Service: "other-cal"}}},
 	}
-	srv.stampCalendarEventCanonical(items, "google-calendar")
-	srv.stampCalendarEventCanonical(items, "other-cal")
+	mark, _ := kinds.Stamps(srv, "events", forEachCalendarEventSource)
+	mark(items, "google-calendar")
+	mark(items, "other-cal")
 	if !items[0].Sources[0].Canonical {
 		t.Fatal("google-calendar should be canonical when configured")
 	}

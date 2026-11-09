@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ServiceView is the neutral service fact the pipeline needs. No
@@ -95,6 +97,9 @@ type Host interface {
 	// SourceName returns the display name for a collection source:
 	// connector registry name, else configured service name, else the id.
 	SourceName(id string) string
+	// CopyInfo returns durable copy-ledger metadata for one item source
+	// (issue #76), or nil when untracked.
+	CopyInfo(kind, serviceID, externalID string) *types.CopyInfo
 }
 
 // ownerViewKey marks an internal owner-tier fetch (issue #272). One owner

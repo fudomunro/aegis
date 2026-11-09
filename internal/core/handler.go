@@ -23,6 +23,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -116,7 +117,11 @@ type Server struct {
 	// write-behind (issue #312); built over cache and search below.
 	kindEngine     *kinds.Engine
 	kindEngineOnce sync.Once
-	connectors     map[string]connectors.ServiceConnector
+	// kindList holds the kinds already moved into the kinds package.
+	// // transitional (#312) — dies with the hub's kindRuntime.
+	kindList         []kinds.Kind
+	builtinKindsOnce sync.Once
+	connectors       map[string]connectors.ServiceConnector
 	// metrics is the in-memory access ring buffer for the admin map (issue #32).
 	metrics *AccessMetrics
 	// links holds user-confirmed cross-service entity links (issue #4).
@@ -194,17 +199,26 @@ type Server struct {
 // app-readable exactly when its declaration says so. Apps are data readers
 // only — never admin, OAuth, proxy, mail, or unexposed subroutes like
 // document full text. User-defined kinds are not app-readable.
+// // transitional (#312): hub-side declarations plus the kind-data exposure
+// cover kinds already moved into the kinds package.
 func appAllowedPaths() []string {
-	var out []string
+	out := map[string]bool{}
 	for _, rt := range kindRuntime {
 		for _, route := range rt.Routes {
 			if route.AppReadable {
-				out = append(out, route.Pattern)
+				out[route.Pattern] = true
 			}
 		}
 	}
-	sort.Strings(out)
-	return out
+	for _, p := range types.AppReadableKindPaths() {
+		out[p] = true
+	}
+	paths := make([]string, 0, len(out))
+	for p := range out {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return paths
 }
 
 // appPathAllowed reports whether a third-party app token may access path.

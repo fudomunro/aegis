@@ -142,6 +142,7 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 	if app := AppIdentityFrom(r); app != nil {
 		appLevel = app.Scopes.For(kind.PermType)
 	}
+	mark, _ := kinds.Stamps(s, "places", forEachPlaceVisitSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.PlaceVisit]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.PlaceVisit], []string) {
@@ -161,7 +162,7 @@ func (s *Server) HandleLibraryPlaceVisits(w http.ResponseWriter, r *http.Request
 		RedactSearch: func(items []types.PlaceVisit, r *http.Request) []types.PlaceVisit {
 			return s.searchRedactPlaceVisits(items, r)
 		},
-		MarkCanonical: s.stampPlaceVisitCanonical,
+		MarkCanonical: mark,
 		CacheKey:      "library:places" + filters.CacheKeySuffix(),
 	})
 }
@@ -207,4 +208,16 @@ func (s *Server) searchRedactPlaceVisits(items []types.PlaceVisit, r *http.Reque
 		out = append(out, v)
 	}
 	return out
+}
+
+func forEachPlaceVisitSource(item *types.PlaceVisit, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

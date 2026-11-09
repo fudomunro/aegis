@@ -12,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -239,8 +240,9 @@ func TestStampMessageCanonical_OnlyWhenConfigured(t *testing.T) {
 		{Sources: []types.MessageSource{{Service: "google-gmail"}}},
 		{Sources: []types.MessageSource{{Service: "other-mail"}}},
 	}
-	srv.stampMessageCanonical(items, "google-gmail")
-	srv.stampMessageCanonical(items, "other-mail")
+	mark, _ := kinds.Stamps(srv, "messages", forEachMessageSource)
+	mark(items, "google-gmail")
+	mark(items, "other-mail")
 	if !items[0].Sources[0].Canonical {
 		t.Fatal("google-gmail should be canonical when configured")
 	}

@@ -53,6 +53,13 @@ func (f *fakeHost) Agent(r *http.Request) string { return "test-agent" }
 
 func (f *fakeHost) SourceName(id string) string { return "name:" + id }
 
+func (f *fakeHost) CopyInfo(kind, serviceID, externalID string) *types.CopyInfo {
+	if externalID == "" {
+		return nil
+	}
+	return &types.CopyInfo{Note: kind + "/" + serviceID + "/" + externalID}
+}
+
 type testProvider interface {
 	List(context.Context) ([]int, bool, error)
 }

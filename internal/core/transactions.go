@@ -213,6 +213,7 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 	// If the agent surface is unrestricted but every service is summary-only
 	// after redaction, encode() still has line items only when services
 	// returned them. Force summary-only encode when the app is summary.
+	mark, _ := kinds.Stamps(s, "transactions", forEachTransactionSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Transaction]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Transaction], []string) {
@@ -241,7 +242,7 @@ func (s *Server) HandleLibraryTransactions(w http.ResponseWriter, r *http.Reques
 		RedactSearch: func(items []types.Transaction, r *http.Request) []types.Transaction {
 			return s.searchRedactTransactions(items, r)
 		},
-		MarkCanonical: s.stampTransactionCanonical,
+		MarkCanonical: mark,
 		CacheKey:      "library:transactions" + filters.CacheKeySuffix() + "|summary:" + strconv.FormatBool(summaryOnly),
 	})
 }
@@ -282,4 +283,16 @@ func (s *Server) searchRedactTransactions(items []types.Transaction, r *http.Req
 		out = append(out, t)
 	}
 	return out
+}
+
+func forEachTransactionSource(item *types.Transaction, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

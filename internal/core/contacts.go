@@ -12,6 +12,7 @@ import (
 // service: GET /v1/library/contacts
 func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 	kind := *LibraryKindByID("contacts")
+	mark, copies := kinds.Stamps(s, "contacts", forEachContactSource)
 	kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.Contact]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]kinds.NamedLister[types.Contact], []string) {
@@ -27,8 +28,8 @@ func (s *Server) HandleLibraryContacts(w http.ResponseWriter, r *http.Request) {
 			pageItems, pr := types.SlicePage(items, page)
 			return types.ContactList{Contacts: pageItems, LibraryListMeta: types.MetaForPage(pr, true, kinds.AnyServiceTruncated(bySvc), bySvc)}
 		},
-		MarkCanonical: s.stampContactCanonical,
-		StampCopies:   s.stampContactCopies,
+		MarkCanonical: mark,
+		StampCopies:   copies,
 	})
 }
 
@@ -37,4 +38,16 @@ func contactServiceName(c types.Contact) string {
 		return c.Sources[0].ServiceName
 	}
 	return ""
+}
+
+func forEachContactSource(item *types.Contact, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
 }

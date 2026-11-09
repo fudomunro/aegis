@@ -65,7 +65,7 @@ func TestHandleLibraryPlaylists_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -119,7 +119,7 @@ func TestHandleLibraryPlaylists_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -154,7 +154,7 @@ func TestHandleLibraryPlaylists_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
@@ -321,7 +321,7 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
@@ -354,7 +354,7 @@ func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPlaylists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -426,7 +426,7 @@ func TestHandleLibraryTracks_AggregatesAndMerges(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -488,7 +488,7 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d", w.Code)
@@ -524,7 +524,7 @@ func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/tracks", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryTracks)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("tracks"))(w, req)
 
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403, body = %s", w.Code, w.Body.String())
@@ -839,7 +839,7 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
@@ -870,7 +870,7 @@ func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/albums", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryAlbums)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("albums"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403", w.Code)
 	}
@@ -901,7 +901,7 @@ func TestHandleLibraryArtists_AggregatesAndMerges(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/artists", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryArtists)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("artists"))(w, req)
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
