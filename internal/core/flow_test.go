@@ -603,19 +603,16 @@ func TestFlowProvidesKind_CoversEveryProviderKind(t *testing.T) {
 	}
 }
 
-// TestFlowProvidesKind_AgreesWithKindRuntime keeps the per-connector check
-// and the any-connector check in step: a kind one connector provides must
-// report providers for a server holding it.
-func TestFlowProvidesKind_AgreesWithKindRuntime(t *testing.T) {
+// TestFlowProvidesKind_AgreesWithHasProviders keeps the per-connector
+// check and the any-connector check in step: a kind one connector provides
+// must report providers for a server holding it.
+func TestFlowProvidesKind_AgreesWithHasProviders(t *testing.T) {
 	conn := placesDocumentsConnector{}
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.connectors["stub"] = conn
-	for id, rt := range kindRuntime {
-		if rt.Provides == nil || rt.HasProviders == nil {
-			t.Fatalf("kind %q missing Provides/HasProviders", id)
-		}
-		if rt.Provides(conn) && !rt.HasProviders(srv) {
-			t.Errorf("kind %q: Provides(conn)=true but HasProviders(srv)=false", id)
+	for _, k := range srv.builtinKinds() {
+		if k.Provides(conn) && !k.HasProviders(srv) {
+			t.Errorf("kind %q: Provides(conn)=true but HasProviders(srv)=false", k.Def().ID)
 		}
 	}
 }

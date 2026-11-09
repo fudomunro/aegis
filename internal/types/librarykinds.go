@@ -11,8 +11,8 @@ import "github.com/fudomunro/aegis/internal/shared"
 // UDT ids, app-token paths, canonical_for keys, access-level allowlists —
 // are computed from this slice. Do not copy the kind list by hand.
 //
-// Runtime visibility predicates (HasProviders / Readable) live on the core
-// registration wrapper (kindRuntime), not here (issue #15).
+// Runtime visibility predicates (HasProviders / Readable) live on the
+// kinds package's Kind implementations (issue #312), not here (issue #15).
 
 var BuiltinLibraryKinds = []LibraryKind{
 	{

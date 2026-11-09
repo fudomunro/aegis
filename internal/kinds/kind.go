@@ -55,6 +55,9 @@ type Deps struct {
 	// the places kind without a live connector (issue #142) — the declared
 	// local-source shape, not a pipeline branch (issue #312).
 	PlacesLocalSource func() bool
+	// MailArchive is the messages kind's declared local collection source
+	// (issue #139). Nil disables it.
+	MailArchive MailArchive
 }
 
 // Builtin returns the built-in kinds this package owns, in registry order.
@@ -73,6 +76,7 @@ func Builtin(h Host, e *Engine, d Deps) []Kind {
 		newPlacesKind(h, e, d),
 		newDocumentsKind(h, e, d),
 		newTransactionsKind(h, e, d),
+		newMessagesKind(h, e, d),
 	}
 }
 

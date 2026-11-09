@@ -91,7 +91,7 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 		"mail-archive":                  {Status: types.LibraryStatusOK, Count: 3},
 		connectors.GoogleGmailServiceID: {Status: types.LibraryStatusOK, Count: 3},
 	}
-	kinds.EnrichStatuses(srv, "messages", srv.messagesStatusHooks(), bySvc)
+	kinds.EnrichStatuses(srv, "messages", kinds.MessagesStatusHooks(srv, mailArchive{srv}), bySvc)
 
 	to, ok := bySvc[connectors.TakeoutServiceID]
 	if !ok {
