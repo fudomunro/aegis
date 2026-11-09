@@ -25,8 +25,8 @@ func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
 		srv.libraryHandler("albums"),
 		srv.libraryHandler("artists"),
 		srv.libraryHandler("playlists"),
-		srv.HandleLibraryContacts,
-		srv.HandleLibraryPhotos,
+		srv.libraryHandler("contacts"),
+		srv.libraryHandler("photos"),
 		srv.HandleLibraryEvents,
 	} {
 		req := httptest.NewRequest("POST", "/v1/library/x", nil)

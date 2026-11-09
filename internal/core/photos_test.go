@@ -53,7 +53,7 @@ func TestHandleLibraryPhotos_AggregatesServices(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -78,7 +78,7 @@ func TestHandleLibraryPhotos_NoProviders(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("status = %d, want 404", w.Code)
 	}
@@ -100,7 +100,7 @@ func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusForbidden {
 		t.Fatalf("status = %d, want 403: %s", w.Code, w.Body.String())
 	}
@@ -121,7 +121,7 @@ func TestHandleLibraryPhotos_UnauthorizedService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -149,7 +149,7 @@ func TestHandleLibraryPhotos_ErrorService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -172,7 +172,7 @@ func TestHandleLibraryPhotos_MethodNotAllowed(t *testing.T) {
 	req := httptest.NewRequest("POST", "/v1/library/photos", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryPhotos)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("photos"))(w, req)
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status = %d, want 405", w.Code)
 	}

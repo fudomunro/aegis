@@ -63,6 +63,8 @@ func Builtin(h Host, e *Engine, d Deps) []Kind {
 		newTracksKind(h, e, d),
 		newAlbumsKind(h, e, d),
 		newArtistsKind(h, e, d),
+		newContactsKind(h, e, d),
+		newPhotosKind(h, e, d),
 	}
 }
 
