@@ -51,6 +51,10 @@ type Deps struct {
 	ResolveTracks  func(context.Context, []types.Track)
 	ResolveAlbums  func(context.Context, []types.Album)
 	ResolveArtists func(context.Context, []types.Artist)
+	// PlacesLocalSource reports whether the Timeline import store can feed
+	// the places kind without a live connector (issue #142) — the declared
+	// local-source shape, not a pipeline branch (issue #312).
+	PlacesLocalSource func() bool
 }
 
 // Builtin returns the built-in kinds this package owns, in registry order.
@@ -66,6 +70,7 @@ func Builtin(h Host, e *Engine, d Deps) []Kind {
 		newContactsKind(h, e, d),
 		newPhotosKind(h, e, d),
 		newEventsKind(h, e, d),
+		newPlacesKind(h, e, d),
 	}
 }
 

@@ -90,7 +90,6 @@ func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kind
 var kindRuntime = map[string]kindRuntimeEntry{
 	"messages":     messagesKindRuntime(),
 	"transactions": newKindRuntime[types.TransactionProvider]("transactions", (*Server).HandleLibraryTransactions),
-	"places":       placesKindRuntime(),
 	"documents": newKindRuntime[types.DocumentProvider]("documents", (*Server).HandleLibraryDocuments,
 		Route{Pattern: "/v1/library/documents/{service}/{id}/text", Handle: (*Server).HandleLibraryDocumentText}),
 }
@@ -102,17 +101,6 @@ func messagesKindRuntime() kindRuntimeEntry {
 	live := e.HasProviders
 	e.HasProviders = func(s *Server) bool {
 		return live(s) || (s.mail != nil && s.mailReadable())
-	}
-	return e
-}
-
-// placesKindRuntime adds the local Timeline import store as a collection
-// source even without a live connector (issue #142).
-func placesKindRuntime() kindRuntimeEntry {
-	e := newKindRuntime[types.PlaceVisitProvider]("places", (*Server).HandleLibraryPlaceVisits)
-	live := e.HasProviders
-	e.HasProviders = func(s *Server) bool {
-		return live(s) || (s.timeline != nil && s.timeline.Enabled())
 	}
 	return e
 }
