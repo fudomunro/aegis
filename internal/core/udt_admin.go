@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/udt"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -33,7 +34,7 @@ type udtAdminKind struct {
 	Default     string                            `json:"default_access,omitempty"`
 	Fields      map[string]kinds.UserDefinedField `json:"fields,omitempty"`
 	FileSources []udtAdminFileSource              `json:"file_sources,omitempty"`
-	ExtraFiles  []UDTExtraFile                    `json:"extra_files,omitempty"`
+	ExtraFiles  []udt.UDTExtraFile                `json:"extra_files,omitempty"`
 	SourceCount int                               `json:"source_count"`
 }
 
@@ -72,8 +73,8 @@ type udtSourceUpdateRequest struct {
 }
 
 type udtExtraRequest struct {
-	Extra *UDTExtraFile `json:"extra,omitempty"`
-	Clear bool          `json:"clear,omitempty"`
+	Extra *udt.UDTExtraFile `json:"extra,omitempty"`
+	Clear bool              `json:"clear,omitempty"`
 }
 
 // HandleAdminUDT serves /v1/admin/udt/* — local file selection for
@@ -104,11 +105,11 @@ func (s *Server) udtOverlayPath() string {
 	if s == nil || s.udts == nil {
 		return ""
 	}
-	return s.udts.overlayPath
+	return s.udts.OverlayPath()
 }
 
-func (s *Server) udtOverlay() (*UserTypesOverlay, error) {
-	return loadUserTypesOverlay(s.udtOverlayPath())
+func (s *Server) udtOverlay() (*udt.UserTypesOverlay, error) {
+	return udt.LoadOverlay(s.udtOverlayPath())
 }
 
 func (s *Server) writeUDTStatus(w http.ResponseWriter) {
@@ -122,7 +123,7 @@ func (s *Server) udtStatus() udtAdminStatus {
 		Overlay: s.udtOverlayPath(),
 	}
 	if s.udts != nil {
-		st.UserTypes = s.udts.baseDir
+		st.UserTypes = s.udts.BaseDir()
 	}
 	root := strings.TrimRight(s.baseURL, "/")
 	if st.UserTypes == "" {
@@ -132,7 +133,7 @@ func (s *Server) udtStatus() udtAdminStatus {
 	ov, err := s.udtOverlay()
 	if err != nil {
 		st.Hints = append(st.Hints, "Overlay error: "+err.Error())
-		ov = &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
+		ov = &udt.UserTypesOverlay{Kinds: map[string]udt.UDTKindOverlay{}}
 	}
 	if s.udts == nil {
 		return st
@@ -322,7 +323,7 @@ func (s *Server) handleUDTExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 	case http.MethodDelete:
 		req.Clear = true
 		if req.Extra == nil {
-			req.Extra = &UDTExtraFile{ID: extraID}
+			req.Extra = &udt.UDTExtraFile{ID: extraID}
 		}
 	default:
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -331,27 +332,27 @@ func (s *Server) handleUDTExtraUpdate(w http.ResponseWriter, r *http.Request, ki
 	s.applyUDTExtra(w, kindID, req)
 }
 
-func (s *Server) loadOrInitKindOverlay(kindID string) (*UserTypesOverlay, UDTKindOverlay, error) {
+func (s *Server) loadOrInitKindOverlay(kindID string) (*udt.UserTypesOverlay, udt.UDTKindOverlay, error) {
 	ov := s.udts.Overlay()
 	// Copy so concurrent writers do not share maps until save.
-	cp := &UserTypesOverlay{Version: ov.Version, Kinds: map[string]UDTKindOverlay{}}
+	cp := &udt.UserTypesOverlay{Version: ov.Version, Kinds: map[string]udt.UDTKindOverlay{}}
 	for k, v := range ov.Kinds {
 		cp.Kinds[k] = v
 	}
 	kindOV := cp.Kinds[kindID]
 	if kindOV.FileSources == nil {
-		kindOV.FileSources = map[string]UDTFileSourceOverlay{}
+		kindOV.FileSources = map[string]udt.UDTFileSourceOverlay{}
 	}
 	return cp, kindOV, nil
 }
 
 // saveUDTOverlayLocked writes user_types.json and refreshes the cache.
 // Caller must hold s.udts.overlayMu.
-func (s *Server) saveUDTOverlayLocked(ov *UserTypesOverlay) error {
+func (s *Server) saveUDTOverlayLocked(ov *udt.UserTypesOverlay) error {
 	if s.udts == nil {
 		return fmt.Errorf("user-defined types not loaded")
 	}
-	if err := saveUserTypesOverlay(s.udtOverlayPath(), ov); err != nil {
+	if err := udt.SaveOverlay(s.udtOverlayPath(), ov); err != nil {
 		return err
 	}
 	s.udts.SetOverlay(ov)
@@ -368,8 +369,8 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
-	s.udts.overlayMu.Lock()
-	defer s.udts.overlayMu.Unlock()
+	s.udts.LockOverlayWrite()
+	defer s.udts.UnlockOverlayWrite()
 	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -387,12 +388,12 @@ func (s *Server) applyUDTFileSource(w http.ResponseWriter, kindID, sourceID stri
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown file source for kind "+kindID)
 			return
 		}
-		paths, perr := resolveUDTFilePaths(req.Paths)
+		paths, perr := udt.ResolveFilePaths(req.Paths)
 		if perr != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, perr.Error())
 			return
 		}
-		kindOV.FileSources[sourceID] = UDTFileSourceOverlay{Paths: paths}
+		kindOV.FileSources[sourceID] = udt.UDTFileSourceOverlay{Paths: paths}
 	} else {
 		delete(kindOV.FileSources, sourceID)
 	}
@@ -416,8 +417,8 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown user-defined kind")
 		return
 	}
-	s.udts.overlayMu.Lock()
-	defer s.udts.overlayMu.Unlock()
+	s.udts.LockOverlayWrite()
+	defer s.udts.UnlockOverlayWrite()
 	ov, kindOV, err := s.loadOrInitKindOverlay(kindID)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, err.Error())
@@ -432,7 +433,7 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		id = fmt.Sprintf("extra-%d-%d", time.Now().UnixNano(), os.Getpid())
 	}
 	if req.Clear || req.Extra == nil || strings.TrimSpace(req.Extra.Path) == "" {
-		kept := make([]UDTExtraFile, 0, len(kindOV.ExtraFiles))
+		kept := make([]udt.UDTExtraFile, 0, len(kindOV.ExtraFiles))
 		for _, ef := range kindOV.ExtraFiles {
 			if ef.ID != id {
 				kept = append(kept, ef)
@@ -440,7 +441,7 @@ func (s *Server) applyUDTExtra(w http.ResponseWriter, kindID string, req udtExtr
 		}
 		kindOV.ExtraFiles = kept
 	} else {
-		paths, perr := resolveUDTFilePaths([]string{req.Extra.Path})
+		paths, perr := udt.ResolveFilePaths([]string{req.Extra.Path})
 		if perr != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, perr.Error())
 			return

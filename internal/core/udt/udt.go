@@ -1,4 +1,4 @@
-package core
+package udt
 
 import (
 	"encoding/json"
@@ -13,10 +13,10 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// userDefinedRegistry holds loaded UDT schemas (issue #15 Phase 6 PoC).
+// Registry holds loaded UDT schemas (issue #15 Phase 6 PoC).
 // Schemas are data files under a user-types directory; this package maps
 // them onto the type layer and the existing library aggregate pipeline.
-type userDefinedRegistry struct {
+type Registry struct {
 	mu        sync.RWMutex
 	byID      map[string]kinds.UserDefinedTypeSchema
 	byPath    map[string]string // path → kind id
@@ -30,8 +30,8 @@ type userDefinedRegistry struct {
 	overlayMu sync.Mutex // serializes admin read-modify-write of user_types.json
 }
 
-func newUserDefinedRegistry() *userDefinedRegistry {
-	return &userDefinedRegistry{
+func newRegistry() *Registry {
+	return &Registry{
 		byID:      map[string]kinds.UserDefinedTypeSchema{},
 		byPath:    map[string]string{},
 		schemaDir: map[string]string{},
@@ -39,14 +39,27 @@ func newUserDefinedRegistry() *userDefinedRegistry {
 }
 
 // OverlayPath returns the admin user_types.json path ("" when disabled).
-func (reg *userDefinedRegistry) OverlayPath() string {
+func (reg *Registry) OverlayPath() string {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	return reg.overlayPath
 }
 
+// BaseDir returns the user-types root directory ("" when disabled).
+func (reg *Registry) BaseDir() string {
+	reg.mu.RLock()
+	defer reg.mu.RUnlock()
+	return reg.baseDir
+}
+
+// LockOverlayWrite / UnlockOverlayWrite expose the lock that serializes
+// admin read-modify-write of user_types.json. The hub's admin handlers hold
+// it across load → mutate → save → cache.
+func (reg *Registry) LockOverlayWrite()   { reg.overlayMu.Lock() }
+func (reg *Registry) UnlockOverlayWrite() { reg.overlayMu.Unlock() }
+
 // SetOverlay caches a just-saved overlay (and clears it when nil).
-func (reg *userDefinedRegistry) SetOverlay(ov *UserTypesOverlay) {
+func (reg *Registry) SetOverlay(ov *UserTypesOverlay) {
 	if reg == nil {
 		return
 	}
@@ -56,7 +69,7 @@ func (reg *userDefinedRegistry) SetOverlay(ov *UserTypesOverlay) {
 }
 
 // Overlay returns the cached overlay, loading from disk on first use.
-func (reg *userDefinedRegistry) Overlay() *UserTypesOverlay {
+func (reg *Registry) Overlay() *UserTypesOverlay {
 	if reg == nil {
 		return &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
 	}
@@ -66,7 +79,7 @@ func (reg *userDefinedRegistry) Overlay() *UserTypesOverlay {
 	if cached != nil {
 		return cached
 	}
-	ov, err := loadUserTypesOverlay(reg.OverlayPath())
+	ov, err := LoadOverlay(reg.OverlayPath())
 	if err != nil {
 		return &UserTypesOverlay{Kinds: map[string]UDTKindOverlay{}}
 	}
@@ -77,7 +90,7 @@ func (reg *userDefinedRegistry) Overlay() *UserTypesOverlay {
 // SchemaWithOverlay returns the kind schema with admin-selected local files
 // applied (issue #15). Falls back to the bare schema when the overlay is
 // missing or unreadable. Safe on a nil registry.
-func (reg *userDefinedRegistry) SchemaWithOverlay(id string) kinds.UserDefinedTypeSchema {
+func (reg *Registry) SchemaWithOverlay(id string) kinds.UserDefinedTypeSchema {
 	if reg == nil {
 		return kinds.UserDefinedTypeSchema{}
 	}
@@ -88,7 +101,7 @@ func (reg *userDefinedRegistry) SchemaWithOverlay(id string) kinds.UserDefinedTy
 
 // DirFor returns the pack directory that holds a kind's schema and relative
 // sample files.
-func (reg *userDefinedRegistry) DirFor(id string) string {
+func (reg *Registry) DirFor(id string) string {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	return reg.schemaDir[id]
@@ -105,8 +118,8 @@ func (reg *userDefinedRegistry) DirFor(id string) string {
 //
 // Invalid schemas are skipped with a log line — fail-open for the server
 // (issue #15: a bad UDT file must not take down built-in kinds).
-func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDefinedRegistry, []kinds.UserDefinedTypeSchema) {
-	reg := newUserDefinedRegistry()
+func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*Registry, []kinds.UserDefinedTypeSchema) {
+	reg := newRegistry()
 	reg.baseDir = dir
 	reg.overlayPath = overlayPath
 	if dir == "" {
@@ -147,7 +160,7 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDe
 			}
 			continue
 		}
-		if LibraryKindByID(schema.ID) != nil {
+		if kinds.BuiltinKindByID(schema.ID) != nil {
 			if logger != nil {
 				logger.Warn("user-defined types: id collides with built-in kind", "path", path, "id", schema.ID)
 			}
@@ -197,7 +210,7 @@ func discoverSchemaFiles(dir string, logger *slog.Logger) []string {
 }
 
 // Get returns a schema by kind id.
-func (reg *userDefinedRegistry) Get(id string) (kinds.UserDefinedTypeSchema, bool) {
+func (reg *Registry) Get(id string) (kinds.UserDefinedTypeSchema, bool) {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	s, ok := reg.byID[id]
@@ -205,7 +218,7 @@ func (reg *userDefinedRegistry) Get(id string) (kinds.UserDefinedTypeSchema, boo
 }
 
 // SchemaIDForPath returns the kind id registered for an agent path.
-func (reg *userDefinedRegistry) SchemaIDForPath(path string) (string, bool) {
+func (reg *Registry) SchemaIDForPath(path string) (string, bool) {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	id, ok := reg.byPath[path]
@@ -214,7 +227,7 @@ func (reg *userDefinedRegistry) SchemaIDForPath(path string) (string, bool) {
 
 // All returns every loaded schema (stable registration order is not
 // guaranteed across map iteration; callers sort if needed).
-func (reg *userDefinedRegistry) All() []kinds.UserDefinedTypeSchema {
+func (reg *Registry) All() []kinds.UserDefinedTypeSchema {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	out := make([]kinds.UserDefinedTypeSchema, 0, len(reg.byID))

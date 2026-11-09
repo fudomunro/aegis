@@ -1,4 +1,4 @@
-package core
+package udt
 
 import (
 	"encoding/json"
@@ -14,8 +14,8 @@ import (
 // userTypesFileVersion is the on-disk schema for user_types.json.
 const userTypesFileVersion = 1
 
-// defaultUserTypesOverlayPath returns the overlay path beside aegis.json.
-func defaultUserTypesOverlayPath(configPath string) string {
+// DefaultOverlayPath returns the overlay path beside aegis.json.
+func DefaultOverlayPath(configPath string) string {
 	dir := strings.TrimSpace(configPath)
 	if dir == "" {
 		return "user_types.json"
@@ -57,7 +57,7 @@ type UserTypesOverlay struct {
 	Kinds   map[string]UDTKindOverlay `json:"kinds"`
 }
 
-func loadUserTypesOverlay(path string) (*UserTypesOverlay, error) {
+func LoadOverlay(path string) (*UserTypesOverlay, error) {
 	ov := &UserTypesOverlay{
 		Version: userTypesFileVersion,
 		Kinds:   map[string]UDTKindOverlay{},
@@ -81,7 +81,7 @@ func loadUserTypesOverlay(path string) (*UserTypesOverlay, error) {
 	return ov, nil
 }
 
-func saveUserTypesOverlay(path string, ov *UserTypesOverlay) error {
+func SaveOverlay(path string, ov *UserTypesOverlay) error {
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("user-types overlay has no path; cannot save")
 	}
@@ -165,7 +165,7 @@ func nameMatchFieldMap(fields map[string]kinds.UserDefinedField) map[string]stri
 	return out
 }
 
-func resolveUDTFilePaths(paths []string) (out []string, err error) {
+func ResolveFilePaths(paths []string) (out []string, err error) {
 	for _, p := range paths {
 		p = shared.ExpandUserPath(strings.TrimSpace(p))
 		if p == "" {

@@ -5,6 +5,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/core/udt"
 )
 
 // TestRegisterRoutes_AdminAuthPaths verifies every admin/auth path resolves
@@ -173,7 +175,7 @@ func TestRegisterRoutes_FullMuxNoPanic(t *testing.T) {
 		"sources": [{"id": "s", "kind": "file_json", "path": "widgets.json", "field_map": {"title": "t"}}]
 	}`)
 	writeSchemaFile(t, dir, "widgets.json", `{"t": "hi"}`)
-	reg, _ := LoadUserDefinedTypes(dir, "", nil)
+	reg, _ := udt.LoadUserDefinedTypes(dir, "", nil)
 
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udts = reg
