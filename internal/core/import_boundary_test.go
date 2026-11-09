@@ -14,14 +14,12 @@ import (
 //   - no package under internal/ may depend on the hub (internal/core);
 //     only main packages (repo root, cmd/*) import it;
 //   - internal/shared imports nothing from the module (stdlib-only
-//     plumbing plus seam vocabulary per AGENTS.md);
-//   - internal/types imports only stdlib + internal/shared.
+//     plumbing plus seam vocabulary per AGENTS.md).
 
 const (
 	modulePath   = "github.com/fudomunro/aegis"
 	hubPath      = modulePath + "/internal/core"
 	sharedPath   = modulePath + "/internal/shared"
-	typesPath    = modulePath + "/internal/types"
 	listPackages = "go list -json ./..."
 )
 
@@ -96,17 +94,11 @@ func TestImportBoundary_HubOnlyFromMain(t *testing.T) {
 func TestImportBoundary_Leaves(t *testing.T) {
 	var failures []string
 	for _, p := range listedPackages(t) {
-		var leaf string
-		switch {
-		case underOrIs(sharedPath, p.ImportPath):
-			leaf = "shared"
-		case underOrIs(typesPath, p.ImportPath):
-			leaf = "types"
-		default:
+		if !underOrIs(sharedPath, p.ImportPath) {
 			continue
 		}
 		for _, imp := range p.Imports {
-			if isStdlib(imp) || (leaf == "types" && underOrIs(sharedPath, imp)) {
+			if isStdlib(imp) {
 				continue
 			}
 			failures = append(failures, p.ImportPath+" imports "+imp)

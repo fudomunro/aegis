@@ -7,7 +7,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // TestBuiltinLibraryKinds_UniqueIDs keeps registry ids unique and non-empty.
@@ -164,19 +163,6 @@ func TestBuiltinLibraryKinds_DerivedLists(t *testing.T) {
 		}
 		if !k.AppReadable && app[k.Path] {
 			t.Errorf("non-AppReadable kind %q path in AppReadableKindPaths", k.ID)
-		}
-	}
-}
-
-// TestKindPathRules_UseReservedKeys keeps the proxy classifier aligned
-// with reserved kind keys (issue #183).
-func TestKindPathRules_UseReservedKeys(t *testing.T) {
-	for _, kind := range types.KindPathRuleKeys() {
-		if kind == "" {
-			t.Fatal("path rule has empty Kind")
-		}
-		if !IsReservedKindKey(kind) {
-			t.Errorf("path rule Kind %q is not a reserved kind key", kind)
 		}
 	}
 }

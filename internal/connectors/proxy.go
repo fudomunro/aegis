@@ -176,7 +176,7 @@ func RunProxy(s Host, w http.ResponseWriter, r *http.Request, remainingPath stri
 // credential and naming it in copy stays with the connector, since the tail
 // runs only after the connector's own routing and auth handling.
 //
-// The agent-facing surface is already gated by types.IsAgentContentPath, so
+// The agent-facing surface is already gated by IsAgentContentPath, so
 // this does not re-classify paths. It carries the request rules that were
 // previously copied per connector: bearer token plus the caller's
 // Content-Type, and nothing else.

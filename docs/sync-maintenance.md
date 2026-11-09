@@ -155,7 +155,7 @@ Not all fixes carry the same risk. Tiers:
 |--------------|-------------|
 | Fixtures, tests, docs | Human at first; auto-merge only after a track record exists |
 | Connector logic | **Always human** — this code holds OAuth tokens and can write |
-| `internal/core` / `internal/types` | **Always human** — the product contract |
+| `internal/core` / `internal/kinds` | **Always human** — the product contract |
 
 Reviewer checklist for fix PRs:
 
@@ -383,7 +383,7 @@ mature by implementing one complete kind out of ten. `complete` is the
 issue's bar: every offered kind served and every graded field populated.
 
 The declaration lives in code (`internal/core/maturity.go`, graded by
-`internal/types/maturity.go`) next to the connectors it describes — the
+`internal/connectors/maturity.go`) next to the connectors it describes — the
 same class of hand-maintained metadata as `Capabilities()`. Tests hold it
 honest against the connectors themselves: anything the connector serves
 (a callable operation or a library feed) must read as supported, and no

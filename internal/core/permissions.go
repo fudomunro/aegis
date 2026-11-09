@@ -10,7 +10,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // writableDataSet reports kinds the admin form may offer as Editable:
@@ -130,7 +129,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 	if svc == nil {
 		return false
 	}
-	kind := types.KindForPath(remainingPath)
+	kind := KindForPath(remainingPath)
 	level := s.requestLevel(r, svc, kind)
 	if s.connectorWriteBlocked(svc.ID, kind, r.Method) {
 		label := kind

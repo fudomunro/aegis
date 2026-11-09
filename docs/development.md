@@ -97,10 +97,10 @@ stress data locally with `-seed-sample-stress`.
 ```
 aegis/
   main.go                    Thin entry (core.Run())
-  internal/types/            Neutral models, merge/identity, LibraryKind data,
-                             DataGrant, path rules, provider interfaces
+  internal/kinds/            Neutral models, merge/identity, LibraryKind data,
+                             provider interfaces, aggregate pipeline
   internal/core/             Runtime: Server, auth, config, tokens/OAuth, proxy,
-                             permissions enforcement, library aggregate, admin,
+                             permissions enforcement, path rules, admin,
                              state stores (mail, copy ledger, Quicken, Timeline),
                              sample data, web/ embeds
   internal/connectors/       Named services (Spotify, YouTube Music, Amazon Music,

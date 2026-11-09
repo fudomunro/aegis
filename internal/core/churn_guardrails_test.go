@@ -32,11 +32,9 @@ import (
 // violation. Empty means "no fudomunro/aegis imports at all".
 var allowedImports = map[string][]string{
 	"internal/shared":      nil,
-	"internal/types":       nil,
 	"internal/core/policy": {"github.com/fudomunro/aegis/internal/shared"},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
-		"github.com/fudomunro/aegis/internal/types",
 		"github.com/fudomunro/aegis/internal/core/policy",
 		"github.com/fudomunro/aegis/internal/core/scopes",
 		"github.com/fudomunro/aegis/internal/core/audit",

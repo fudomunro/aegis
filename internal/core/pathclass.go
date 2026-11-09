@@ -1,4 +1,4 @@
-package types
+package core
 
 import (
 	"errors"
@@ -185,15 +185,3 @@ func KindForPath(path string) string {
 }
 
 var errNonCanonicalPath = errors.New("non-canonical path")
-
-// KindPathRuleKeys returns every kind key named by the proxy path classifier
-// rule table, in declaration order. Cross-package parity checks (the kind
-// registry's reserved-keys test) use it to keep the classifier aligned
-// without exposing the table itself (issue #325).
-func KindPathRuleKeys() []string {
-	out := make([]string, 0, len(kindPathRules))
-	for _, rule := range kindPathRules {
-		out = append(out, rule.Kind)
-	}
-	return out
-}

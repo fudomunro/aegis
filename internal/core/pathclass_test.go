@@ -1,6 +1,10 @@
-package types
+package core
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/fudomunro/aegis/internal/kinds"
+)
 
 // TestKindForPath_Contacts pins the contacts proxy paths (issue #254 —
 // these cases lived in core's contacts_test.go).
@@ -186,6 +190,32 @@ func TestKindForPath_ImmichAssets(t *testing.T) {
 	for path, want := range cases {
 		if got := KindForPath(path); got != want {
 			t.Errorf("KindForPath(%q) = %q, want %q", path, got, want)
+		}
+	}
+}
+
+func TestKindForPath_QueryAndSlash(t *testing.T) {
+	if KindForPath("/me/tracks?limit=1") != "tracks" {
+		t.Fatal("query strip")
+	}
+	if KindForPath("   ") != "" {
+		t.Fatal("blank")
+	}
+	if KindForPath("/me/../secret") != "" {
+		t.Fatal("dotdot must be non-canonical")
+	}
+}
+
+// TestKindPathRules_UseReservedKeys keeps the proxy classifier aligned
+// with reserved kind keys (issue #183).
+func TestKindPathRules_UseReservedKeys(t *testing.T) {
+	for _, rule := range kindPathRules {
+		kind := rule.Kind
+		if kind == "" {
+			t.Fatal("path rule has empty Kind")
+		}
+		if !kinds.IsReservedKindKey(kind) {
+			t.Errorf("path rule Kind %q is not a reserved kind key", kind)
 		}
 	}
 }

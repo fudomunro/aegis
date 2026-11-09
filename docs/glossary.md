@@ -51,7 +51,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 
 “Data type” reads as general development language (Go’s `type`, int/string) and
 collides with the **field type** axis, whose own `type` key already lives beside
-it in `internal/types/capabilities.go` and `internal/types/udt.go`. The
+it in `internal/shared/capabilities.go` and `internal/kinds/udt.go`. The
 registry axis is already shipped as `kind` in the URL and in `LibraryKind`, so
 prose follows the API. Keep the three policy nouns distinct — **data grant**
 (what the user allows), **library kind** (which slice), **access level** (how

@@ -17,7 +17,7 @@ Related product rules live in `AGENTS.md` and `README.md`. This file is about
 
 Adding a kind touches exactly four places — **no `internal/core` edits**:
 
-1. `internal/types`: neutral model, provider interface, `BuiltinLibraryKinds` entry,
+1. `internal/kinds`: neutral model, provider interface, `BuiltinLibraryKinds` entry,
 2. `internal/kinds/<kind>.go`: the `Kind` implementation,
 3. one line in `kinds.Builtin()`,
 4. tests and fixtures.
@@ -78,16 +78,16 @@ These are non-negotiable (see `AGENTS.md`). New kinds inherit them.
 
 ## Anatomy of a kind
 
-A complete kind touches these layers. Music kinds (`internal/types/merge.go`)
-and people/media kinds (`internal/types/merge_contacts.go`, `merge_photos.go`,
+A complete kind touches these layers. Music kinds (`internal/kinds/merge.go`)
+and people/media kinds (`internal/kinds/merge_contacts.go`, `merge_photos.go`,
 …) are the two templates.
 
 ```text
-internal/types/models.go        Neutral item + *Source + *List
-internal/types/merge_<kind>.go  Per-kind identity keys + Merge* (one file per kind)
-internal/types/providers.go     Provider interface (WidgetProvider) + ErrUnauthorized
-internal/types/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
-internal/types/pathclass.go     kindPathRules for the provider's proxy paths
+internal/kinds/models.go        Neutral item + *Source + *List
+internal/kinds/merge_<kind>.go  Per-kind identity keys + Merge* (one file per kind)
+internal/kinds/providers.go     Provider interface (WidgetProvider) + ErrUnauthorized
+internal/kinds/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
+internal/core/pathclass.go      kindPathRules for the provider's proxy paths
 internal/kinds/<kind>.go        Kind implementation: routes, predicates, Spec
 internal/kinds/stamps.go        Generic stamping over your source projection
 <provider>.go (connectors)      Capabilities + ListUser… + optional proxy
@@ -96,7 +96,7 @@ tests                           Merge, kind, aggregate, permissions, sample-data
 README.md                       Agent-facing semantics for the kind
 ```
 
-### 1. Neutral model (`internal/types/models.go`)
+### 1. Neutral model (`internal/kinds/models.go`)
 
 The item, its `*Source` rows, and its `*List` wrapper. Rules:
 
@@ -118,7 +118,7 @@ name-only matching; name merges need a guard (duration for tracks).
 merge tests for the fixture pattern (deliberate pairs that must and
 must not collapse).
 
-### 3. Registry entry (`internal/types/librarykinds.go`)
+### 3. Registry entry (`internal/kinds/librarykinds.go`)
 
 One `LibraryKind` literal in `BuiltinLibraryKinds` — the single source for
 policy flags (`AppReadable`, `CanonicalAllowed`, `Search`, default access),
@@ -134,7 +134,7 @@ shapes: plain provider kind, subroutes, local sources).
 
 ```go
 type Kind interface {
-    Def() types.LibraryKind      // the registry entry
+    Def() LibraryKind            // the registry entry
     Routes() []Route             // agent-tier GET/HEAD routes + exposure
     Provides(connector any) bool // provider-interface assertion
     HasProviders(h Host) bool    // connectors + declared local sources
@@ -174,7 +174,7 @@ constructor argument (`kinds.Deps` for shared ones,
 availability. Not every cross-kind need becomes a `Host` method: the Host
 budget is "needed by at least two kinds, or by the engine".
 
-### 5. Provider interface (`internal/types/providers.go`)
+### 5. Provider interface (`internal/kinds/providers.go`)
 
 `WidgetProvider` with one `ListUser…(ctx) ([]T, bool, error)` method (the
 bool is `truncated`). Connectors implement it; `kinds.Collect` type-asserts.
@@ -196,7 +196,7 @@ admin-side surface (`mirror.go`) — kinds declare reads.
 ### 8. Permissions and connector capabilities
 
 The kind key must be known to the permission map, the path classifier
-(`internal/types/pathclass.go`), and any access-level vocabulary in
+(`internal/core/pathclass.go`), and any access-level vocabulary in
 `internal/core/policy` (like `PlacesLevelForResponse`). Default access for
 new kinds should start strict (`none` where the domain is sensitive).
 
@@ -227,7 +227,7 @@ directions — a kind missing a route or a route without a kind fails CI.
 
 ## Checklist (copy into the PR)
 
-- [ ] Neutral model + `*Source` + `*List` in `internal/types/models.go`
+- [ ] Neutral model + `*Source` + `*List` in `internal/kinds/models.go`
 - [ ] Identity key + `Merge*` with deliberate fixture pairs
 - [ ] `BuiltinLibraryKinds` entry (flags, copy, keywords)
 - [ ] Provider interface + connector `Capabilities` / `ListUser…`

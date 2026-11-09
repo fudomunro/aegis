@@ -26,7 +26,7 @@ func kindReadable(id string, s *Server) bool {
 }
 
 // libraryKinds is the built-in kind registry (issue #183). The slice lives
-// in internal/types so reserved ids, app-readable paths, canonical_for keys,
+// in internal/kinds so reserved ids, app-readable paths, canonical_for keys,
 // and access-level allowlists all derive from one source.
 var libraryKinds = kinds.BuiltinLibraryKinds
 
