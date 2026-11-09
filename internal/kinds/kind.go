@@ -72,6 +72,7 @@ func Builtin(h Host, e *Engine, d Deps) []Kind {
 		newEventsKind(h, e, d),
 		newPlacesKind(h, e, d),
 		newDocumentsKind(h, e, d),
+		newTransactionsKind(h, e, d),
 	}
 }
 

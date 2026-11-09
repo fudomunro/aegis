@@ -88,8 +88,7 @@ func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kind
 // // transitional (#312) — shrinks to empty as kinds move; delete with the
 // last move.
 var kindRuntime = map[string]kindRuntimeEntry{
-	"messages":     messagesKindRuntime(),
-	"transactions": newKindRuntime[types.TransactionProvider]("transactions", (*Server).HandleLibraryTransactions),
+	"messages": messagesKindRuntime(),
 }
 
 // messagesKindRuntime adds the local mail archive (Gmail sync + Takeout) as a
