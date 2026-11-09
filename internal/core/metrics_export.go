@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -172,8 +173,8 @@ func (p *PromMetrics) observeUpstream(service string, d time.Duration, status in
 	p.mu.Unlock()
 }
 
-// observeSyncJob records one sync job step outcome (issue #227).
-func (p *PromMetrics) observeSyncJob(jobType, service, state string, d time.Duration) {
+// ObserveSyncJob records one sync job step outcome (issue #227).
+func (p *PromMetrics) ObserveSyncJob(jobType, service, state string, d time.Duration) {
 	if p == nil {
 		return
 	}
@@ -202,8 +203,8 @@ func (p *PromMetrics) observeSyncJob(jobType, service, state string, d time.Dura
 	p.mu.Unlock()
 }
 
-// observeSyncRetry records a retried or terminal sync failure.
-func (p *PromMetrics) observeSyncRetry(jobType, class string) {
+// ObserveSyncRetry records a retried or terminal sync failure.
+func (p *PromMetrics) ObserveSyncRetry(jobType, class string) {
 	if p == nil {
 		return
 	}
@@ -218,23 +219,23 @@ func (p *PromMetrics) observeSyncRetry(jobType, class string) {
 	p.mu.Unlock()
 }
 
-// setSyncQueueDepth refreshes the queue-depth gauges from the store rollup.
-func (p *PromMetrics) setSyncQueueDepth(c SyncCounts) {
+// SetSyncQueueDepth refreshes the queue-depth gauges from the store rollup.
+func (p *PromMetrics) SetSyncQueueDepth(c syncjobs.SyncCounts) {
 	if p == nil {
 		return
 	}
 	p.mu.Lock()
-	p.syncQueue[SyncJobQueued] = c.Queued
-	p.syncQueue[SyncJobRunning] = c.Running
-	p.syncQueue[SyncJobSucceeded] = c.Succeeded
-	p.syncQueue[SyncJobFailed] = c.Failed
-	p.syncQueue[SyncJobCanceled] = c.Canceled
-	p.syncQueue[SyncJobPaused] = c.Paused
+	p.syncQueue[syncjobs.SyncJobQueued] = c.Queued
+	p.syncQueue[syncjobs.SyncJobRunning] = c.Running
+	p.syncQueue[syncjobs.SyncJobSucceeded] = c.Succeeded
+	p.syncQueue[syncjobs.SyncJobFailed] = c.Failed
+	p.syncQueue[syncjobs.SyncJobCanceled] = c.Canceled
+	p.syncQueue[syncjobs.SyncJobPaused] = c.Paused
 	p.mu.Unlock()
 }
 
-// noteSyncSuccess records the last successful finish per kind|service.
-func (p *PromMetrics) noteSyncSuccess(kind, service string, at time.Time) {
+// NoteSyncSuccess records the last successful finish per kind|service.
+func (p *PromMetrics) NoteSyncSuccess(kind, service string, at time.Time) {
 	if p == nil {
 		return
 	}
@@ -420,8 +421,8 @@ func (p *PromMetrics) promText() string {
 
 	writeMeta(&b, "aegis_sync_queue_depth", "gauge",
 		"Sync jobs by state (refreshed by the sync worker).")
-	for _, state := range []string{SyncJobQueued, SyncJobRunning, SyncJobSucceeded,
-		SyncJobFailed, SyncJobCanceled, SyncJobPaused} {
+	for _, state := range []string{syncjobs.SyncJobQueued, syncjobs.SyncJobRunning, syncjobs.SyncJobSucceeded,
+		syncjobs.SyncJobFailed, syncjobs.SyncJobCanceled, syncjobs.SyncJobPaused} {
 		fmt.Fprintf(&b, "aegis_sync_queue_depth{state=%q} %d\n", state, p.syncQueue[state])
 	}
 

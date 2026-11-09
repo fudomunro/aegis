@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 func TestScrubSignalError(t *testing.T) {
@@ -59,14 +61,14 @@ func TestCollectMaintenanceSignals_SyncFailures(t *testing.T) {
 	srv := adminSplitServer(t)
 	store := testJobStore(t)
 	srv.syncJobs = store
-	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+	mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
 
 	claimed, ok, err := store.Claim("tester", time.Now())
 	if err != nil || !ok {
 		t.Fatalf("Claim = ok=%v err=%v", ok, err)
 	}
-	_, err = store.Fail(claimed, SyncStep{}, fmt.Errorf(
-		"%w: 401 from api.example.com for bob@corp.example (access_token=abc12345)", ErrSyncTerminal))
+	_, err = store.Fail(claimed, syncjobs.SyncStep{}, fmt.Errorf(
+		"%w: 401 from api.example.com for bob@corp.example (access_token=abc12345)", syncjobs.ErrSyncTerminal))
 	if err != nil {
 		t.Fatalf("Fail: %v", err)
 	}
@@ -88,8 +90,8 @@ func TestCollectMaintenanceSignals_SyncFailures(t *testing.T) {
 	if f.JobType != "ingest" || f.Service != "google-gmail" {
 		t.Fatalf("failure = %+v", f)
 	}
-	if f.ErrorClass != SyncErrorClassTerminal {
-		t.Fatalf("error class = %q, want %q", f.ErrorClass, SyncErrorClassTerminal)
+	if f.ErrorClass != syncjobs.SyncErrorClassTerminal {
+		t.Fatalf("error class = %q, want %q", f.ErrorClass, syncjobs.SyncErrorClassTerminal)
 	}
 	if strings.Contains(f.Error, "bob@corp.example") || strings.Contains(f.Error, "abc12345") {
 		t.Fatalf("failure error not scrubbed: %q", f.Error)

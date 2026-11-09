@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 // recordingRun is the gh exec seam: it records invocations and plays back
@@ -35,7 +37,7 @@ func sampleTicket() MaintenanceTicket {
 		Title:      "spotify ingest failed: spotify saved tracks returned 502",
 		Service:    "spotify",
 		JobType:    "ingest",
-		ErrorClass: SyncErrorClassTerminal,
+		ErrorClass: syncjobs.SyncErrorClassTerminal,
 		ReproState: ReproStateNeedsFixture,
 		Tier:       scanDefaultTier,
 		FirstSeen:  time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),

@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"fmt"
+
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 // Canary runner (issue #86): the scheduled-test job type that turns upstream
@@ -26,27 +28,27 @@ type canaryRunner struct {
 	srv *Server
 }
 
-// JobTypes implements SyncRunner.
-func (r *canaryRunner) JobTypes() []string { return []string{SyncJobTypeCanary} }
+// JobTypes implements syncjobs.SyncRunner.
+func (r *canaryRunner) JobTypes() []string { return []string{syncjobs.SyncJobTypeCanary} }
 
-// Kind implements SyncRunner. Liked-tracks is the canaried surface for now.
+// Kind implements syncjobs.SyncRunner. Liked-tracks is the canaried surface for now.
 func (r *canaryRunner) Kind() string { return "tracks" }
 
-// Run implements SyncRunner: fetch one page and judge it.
-func (r *canaryRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
+// Run implements syncjobs.SyncRunner: fetch one page and judge it.
+func (r *canaryRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.SyncStep, error) {
 	src, err := r.srv.mirrorSourceFor(job.Service, "tracks")
 	if err != nil {
-		return SyncStep{}, fmt.Errorf("%w: %v", ErrSyncTerminal, err)
+		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
 	page, err := src.ListUserLikedTracksPage(ctx, "", canaryPageLimit)
 	if err != nil {
-		return SyncStep{}, err
+		return syncjobs.SyncStep{}, err
 	}
 	if page.Total > 0 && len(page.Tracks) == 0 {
-		return SyncStep{}, fmt.Errorf(
-			"%w: canary got total=%d but no items — response shape drift?", ErrSyncTerminal, page.Total)
+		return syncjobs.SyncStep{}, fmt.Errorf(
+			"%w: canary got total=%d but no items — response shape drift?", syncjobs.ErrSyncTerminal, page.Total)
 	}
-	return SyncStep{
+	return syncjobs.SyncStep{
 		Done: true,
 		Progress: map[string]any{
 			"service": job.Service,
@@ -57,6 +59,6 @@ func (r *canaryRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
 }
 
 // registerCanaryRunners adds the canary runners to a registry.
-func registerCanaryRunners(reg *RunnerRegistry, srv *Server) {
+func registerCanaryRunners(reg *syncjobs.RunnerRegistry, srv *Server) {
 	reg.Register(&canaryRunner{srv: srv})
 }

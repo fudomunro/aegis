@@ -1,4 +1,4 @@
-package core
+package syncjobs
 
 import (
 	"database/sql"
@@ -161,6 +161,42 @@ type SyncStep struct {
 	RetryAfter time.Duration
 }
 
+// MergeProgress folds one step's counts onto the job's running totals so an
+// operator sees the chain's total, not the last page's counts. Keys in
+// accumulate sum across steps; boolean/identity fields reflect the latest
+// step.
+func MergeProgress(prev json.RawMessage, step map[string]any, accumulate []string) map[string]any {
+	out := make(map[string]any, len(step))
+	if len(prev) > 0 {
+		var base map[string]any
+		if err := json.Unmarshal(prev, &base); err == nil {
+			for k, v := range base {
+				out[k] = v
+			}
+		}
+	}
+	for k, v := range step {
+		out[k] = v
+	}
+	for _, k := range accumulate {
+		out[k] = progressInt(out[k]) + progressInt(step[k])
+	}
+	return out
+}
+
+// progressInt coerces a JSON-decoded number (float64) or an int to an int.
+func progressInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	case float64:
+		return int(n)
+	}
+	return 0
+}
+
 // SyncEnqueue describes work to add to the queue. Enqueue is idempotent on
 // (kind, job_type, service, entity key) — a repeat request refreshes a
 // terminal job back to queued and leaves queued/running jobs untouched.
@@ -174,6 +210,19 @@ type SyncEnqueue struct {
 	MaxAttempts int
 	// RunAt defers the first attempt. Zero means now.
 	RunAt time.Time
+}
+
+// NewSyncEnqueue builds an enqueue request from untrimmed request fields.
+// Entity keys scope idempotency: a whole-collection ingest dedupes on the
+// service, so repeat requests do not stack duplicate work.
+func NewSyncEnqueue(kind, jobType, service, entityKey string, payload map[string]any) SyncEnqueue {
+	return SyncEnqueue{
+		Kind:      strings.TrimSpace(kind),
+		JobType:   strings.TrimSpace(jobType),
+		Service:   strings.TrimSpace(service),
+		EntityKey: strings.TrimSpace(entityKey),
+		Payload:   payload,
+	}
 }
 
 // SyncFilter narrows List / admin queries.
@@ -689,7 +738,7 @@ func (s *JobStore) Fail(job SyncJob, step SyncStep, runErr error) (SyncJob, erro
 	if !s.Enabled() {
 		return job, nil
 	}
-	class, after := classifySyncError(runErr, job.Attempts, step.RetryAfter)
+	class, after := ClassifyError(runErr, job.Attempts, step.RetryAfter)
 	errText := ""
 	if runErr != nil {
 		errText = runErr.Error()
@@ -718,7 +767,7 @@ func (s *JobStore) Fail(job SyncJob, step SyncStep, runErr error) (SyncJob, erro
 	return s.finishOwnedJob(job, false, state, payload, progress, nextRun, finished, nowS, errText, class)
 }
 
-// classifySyncError buckets a step failure and resolves the backoff.
+// ClassifyError buckets a step failure and resolves the backoff.
 // Terminal: explicit marker, or no usable credentials at all — retrying
 // cannot help until the user re-authorizes, so park the job rather than burn
 // the attempt budget (providers only surface ErrUnauthorized when
@@ -728,7 +777,7 @@ func (s *JobStore) Fail(job SyncJob, step SyncStep, runErr error) (SyncJob, erro
 // long explicit backoff via SyncRetryAfter.
 // attempt is the job's post-claim attempt count (1-based); the delay grows
 // exponentially from it.
-func classifySyncError(runErr error, attempt int, retryAfter time.Duration) (class string, after time.Duration) {
+func ClassifyError(runErr error, attempt int, retryAfter time.Duration) (class string, after time.Duration) {
 	after = syncBackoff(attempt)
 	if retryAfter > 0 {
 		after = retryAfter

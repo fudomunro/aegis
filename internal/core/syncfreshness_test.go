@@ -15,6 +15,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
@@ -300,7 +301,7 @@ func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 	})
 	runner := &freshnessRunner{engine: NewFreshnessEngine(srv, reg), kind: "playlists"}
 
-	step, err := runner.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{"limit":1}`)})
+	step, err := runner.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{"limit":1}`)})
 	if err != nil {
 		t.Fatalf("first step: %v", err)
 	}
@@ -317,7 +318,7 @@ func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 	for i := 0; i < 5 && !step.Done; i++ {
 		var p freshnessJobPayload
 		_ = json.Unmarshal(step.Payload, &p)
-		step, err = runner.Run(context.Background(), SyncJob{Payload: step.Payload})
+		step, err = runner.Run(context.Background(), syncjobs.SyncJob{Payload: step.Payload})
 		if err != nil {
 			t.Fatalf("step %d: %v", i, err)
 		}
@@ -332,16 +333,16 @@ func TestFreshnessRunner_ChainsUntilDone(t *testing.T) {
 
 func TestFreshnessRunner_TerminalConditions(t *testing.T) {
 	var bad *freshnessRunner
-	if _, err := bad.Run(context.Background(), SyncJob{}); err == nil {
+	if _, err := bad.Run(context.Background(), syncjobs.SyncJob{}); err == nil {
 		t.Fatal("nil runner must fail terminal")
-	} else if !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	} else if !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("err = %v, want terminal", err)
 	}
 	r := &freshnessRunner{engine: NewFreshnessEngine(&Server{copyLedger: &copies.Ledger{}}, NewCheckerRegistry()), kind: "playlists"}
-	if _, err := r.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
+	if _, err := r.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
 		t.Fatal("bad payload must fail terminal")
 	}
-	if got := r.JobTypes(); len(got) != 1 || got[0] != SyncJobTypeFreshness {
+	if got := r.JobTypes(); len(got) != 1 || got[0] != syncjobs.SyncJobTypeFreshness {
 		t.Fatalf("JobTypes = %v", got)
 	}
 	if r.Kind() != "playlists" {
@@ -354,14 +355,14 @@ func TestNewFreshnessRunners_CoverSupportedKinds(t *testing.T) {
 	if len(runners) != len(freshnessKinds) {
 		t.Fatalf("runners = %d, want %d", len(runners), len(freshnessKinds))
 	}
-	reg := NewRunnerRegistry()
+	reg := syncjobs.NewRunnerRegistry()
 	registerFreshnessRunners(reg, &Server{copyLedger: &copies.Ledger{}})
 	for _, kind := range freshnessKinds {
-		if _, ok := reg.For(kind, SyncJobTypeFreshness); !ok {
+		if _, ok := reg.For(kind, syncjobs.SyncJobTypeFreshness); !ok {
 			t.Fatalf("kind %s has no freshness runner", kind)
 		}
 	}
-	if _, ok := reg.For("contacts", SyncJobTypeFreshness); ok {
+	if _, ok := reg.For("contacts", syncjobs.SyncJobTypeFreshness); ok {
 		t.Fatal("contacts has no checker yet and must not advertise a runner")
 	}
 }
@@ -518,175 +519,6 @@ func TestMusicMirrorChecker_YouTubeShapes(t *testing.T) {
 	}
 }
 
-// --- schedules ---
-
-func testScheduleStore(t *testing.T) *ScheduleStore {
-	t.Helper()
-	s, err := OpenScheduleStore(nil, filepath.Join(t.TempDir(), "sync_jobs.db"))
-	if err != nil {
-		t.Fatalf("OpenScheduleStore: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	return s
-}
-
-func TestScheduleStore_UpsertAndToggle(t *testing.T) {
-	s := testScheduleStore(t)
-	s.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
-
-	sc, err := s.Upsert(SyncSchedule{
-		Name: "Daily copy freshness", Kind: "playlists", JobType: SyncJobTypeFreshness,
-		EverySeconds: 3600, Enabled: true,
-	})
-	if err != nil {
-		t.Fatalf("Upsert: %v", err)
-	}
-	if sc.ID == 0 || !sc.Enabled {
-		t.Fatalf("schedule = %+v, want a saved enabled row", sc)
-	}
-	if !sc.NextRunAt.Equal(s.now()) {
-		t.Fatalf("next_run_at = %v, want due now so the first run is prompt", sc.NextRunAt)
-	}
-
-	// Re-upsert with the same interval keeps the existing cadence/next run.
-	s.now = func() time.Time { return time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC) }
-	again, err := s.Upsert(SyncSchedule{
-		Kind: "playlists", JobType: SyncJobTypeFreshness, EverySeconds: 3600, Enabled: true,
-	})
-	if err != nil {
-		t.Fatalf("re-Upsert: %v", err)
-	}
-	if again.ID != sc.ID {
-		t.Fatalf("id = %d, want %d (keyed upsert)", again.ID, sc.ID)
-	}
-	if !again.NextRunAt.Equal(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("next_run_at = %v, want the original cadence preserved", again.NextRunAt)
-	}
-
-	// A changed interval re-arms from now.
-	changed, err := s.Upsert(SyncSchedule{
-		Kind: "playlists", JobType: SyncJobTypeFreshness, EverySeconds: 7200, Enabled: true,
-	})
-	if err != nil {
-		t.Fatalf("interval change: %v", err)
-	}
-	if changed.EverySeconds != 7200 || !changed.NextRunAt.Equal(time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)) {
-		t.Fatalf("changed = %+v, want 7200s re-armed from now", changed)
-	}
-
-	// Toggle by id.
-	off, ok, err := s.SetEnabled(changed.ID, false)
-	if err != nil || !ok {
-		t.Fatalf("SetEnabled(false) = (%v,%v)", ok, err)
-	}
-	if off.Enabled {
-		t.Fatal("schedule must be disabled")
-	}
-	if got := s.Due(time.Date(2026, 1, 3, 0, 0, 0, 0, time.UTC)); len(got) != 0 {
-		t.Fatalf("Due = %v, want none for a disabled schedule", got)
-	}
-	on, ok, err := s.SetEnabled(changed.ID, true)
-	if err != nil || !ok || !on.Enabled {
-		t.Fatalf("SetEnabled(true) = (%+v,%v,%v)", on, ok, err)
-	}
-	if _, ok, err := s.SetEnabled(9999, true); ok || err != nil {
-		t.Fatalf("unknown id = (ok=%v err=%v), want (false, nil)", ok, err)
-	}
-}
-
-func TestScheduleStore_DueAndRequeue(t *testing.T) {
-	s := testScheduleStore(t)
-	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	s.now = func() time.Time { return base }
-	sc, err := s.Upsert(SyncSchedule{
-		Kind: "messages", JobType: SyncJobTypeFreshness, EverySeconds: 3600, Enabled: true,
-	})
-	if err != nil {
-		t.Fatalf("Upsert: %v", err)
-	}
-
-	due := s.Due(base.Add(time.Second))
-	if len(due) != 1 || due[0].ID != sc.ID {
-		t.Fatalf("Due = %v, want the one schedule", due)
-	}
-
-	// Requeue pushes it out a full interval.
-	s.now = func() time.Time { return base.Add(time.Second) }
-	if err := s.Requeue(sc); err != nil {
-		t.Fatalf("Requeue: %v", err)
-	}
-	if got := s.Due(base.Add(30 * time.Minute)); len(got) != 0 {
-		t.Fatalf("Due(30m) = %v, want none (re-armed an hour out)", got)
-	}
-	if got := s.Due(base.Add(2 * time.Hour)); len(got) != 1 {
-		t.Fatalf("Due(2h) = %v, want the schedule again", got)
-	}
-	after, _ := s.getByID(sc.ID)
-	if after.LastEnqueuedAt.IsZero() {
-		t.Fatal("Requeue must stamp last_enqueued_at")
-	}
-}
-
-func TestScheduleStore_SeedDefaultsIsIdempotent(t *testing.T) {
-	s := testScheduleStore(t)
-	added, err := s.SeedDefaults()
-	if err != nil {
-		t.Fatalf("SeedDefaults: %v", err)
-	}
-	if added != len(freshnessKinds) {
-		t.Fatalf("added = %d, want %d", added, len(freshnessKinds))
-	}
-	// Re-seeding must not duplicate or clobber a disabled row.
-	all := s.List()
-	if len(all) != len(freshnessKinds) {
-		t.Fatalf("List = %d, want %d", len(all), len(freshnessKinds))
-	}
-	if _, ok, _ := s.SetEnabled(all[0].ID, false); !ok {
-		t.Fatal("toggle failed")
-	}
-	added, err = s.SeedDefaults()
-	if err != nil || added != 0 {
-		t.Fatalf("re-seed = (%d,%v), want (0,nil)", added, err)
-	}
-	if !s.List()[0].Enabled && len(s.List()) != len(freshnessKinds) {
-		t.Fatal("re-seed must not change the operator's choice")
-	}
-
-	var nilStore *ScheduleStore
-	if nilStore.Enabled() {
-		t.Fatal("nil store must be disabled")
-	}
-	if _, err := nilStore.SeedDefaults(); err != nil {
-		t.Fatalf("nil SeedDefaults: %v", err)
-	}
-	if nilStore.List() != nil {
-		t.Fatal("nil List must be nil")
-	}
-}
-
-func TestScheduleStore_DisabledIsNoop(t *testing.T) {
-	s, err := OpenScheduleStore(nil, "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if s.Enabled() {
-		t.Fatal("empty path must disable the store")
-	}
-	sc, err := s.Upsert(SyncSchedule{Kind: "messages", JobType: SyncJobTypeFreshness})
-	if err != nil {
-		t.Fatalf("disabled Upsert: %v", err)
-	}
-	if sc.Kind != "messages" {
-		t.Fatalf("disabled Upsert must echo the input, got %+v", sc)
-	}
-	if _, err := s.Upsert(SyncSchedule{JobType: "x"}); err == nil {
-		t.Fatal("Upsert must require kind")
-	}
-	if got := s.Due(time.Now()); got != nil {
-		t.Fatalf("disabled Due = %v", got)
-	}
-}
-
 // --- rollup ---
 
 func TestCopyLedger_FreshnessRollup(t *testing.T) {
@@ -755,8 +587,8 @@ func TestHandleAdminSync_ReportsFreshnessAndSchedules(t *testing.T) {
 	_, _ = srv.copyLedger.Upsert(copies.Record{Kind: "playlists", EntityKey: "a", Service: "spotify", ExternalID: "1",
 		Role: copies.CopyRoleMirror, SyncMode: copies.CopySyncModeFull, Status: copies.CopyStatusStale})
 	srv.syncSchedules = testScheduleStore(t)
-	if _, err := srv.syncSchedules.Upsert(SyncSchedule{
-		Name: "Daily copy freshness", Kind: "playlists", JobType: SyncJobTypeFreshness,
+	if _, err := srv.syncSchedules.Upsert(syncjobs.SyncSchedule{
+		Name: "Daily copy freshness", Kind: "playlists", JobType: syncjobs.SyncJobTypeFreshness,
 		EverySeconds: 3600, Enabled: true,
 	}); err != nil {
 		t.Fatalf("Upsert schedule: %v", err)
@@ -775,7 +607,7 @@ func TestHandleAdminSync_ReportsFreshnessAndSchedules(t *testing.T) {
 	if len(got.Freshness) != 1 || got.Freshness[0].Kind != "playlists" || got.Freshness[0].Stale != 1 {
 		t.Fatalf("freshness = %+v, want one stale playlists row", got.Freshness)
 	}
-	if len(got.Schedules) != 1 || got.Schedules[0].JobType != SyncJobTypeFreshness {
+	if len(got.Schedules) != 1 || got.Schedules[0].JobType != syncjobs.SyncJobTypeFreshness {
 		t.Fatalf("schedules = %+v, want one freshness template", got.Schedules)
 	}
 }
@@ -784,8 +616,8 @@ func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
 	srv := syncAdminServer(t)
 	store := testScheduleStore(t)
 	srv.syncSchedules = store
-	sc, err := store.Upsert(SyncSchedule{
-		Kind: "playlists", JobType: SyncJobTypeFreshness, EverySeconds: 3600, Enabled: true,
+	sc, err := store.Upsert(syncjobs.SyncSchedule{
+		Kind: "playlists", JobType: syncjobs.SyncJobTypeFreshness, EverySeconds: 3600, Enabled: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -798,7 +630,7 @@ func TestHandleAdminSyncSchedule_Toggle(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("disable status = %d, body %s", w.Code, w.Body.String())
 	}
-	var out SyncSchedule
+	var out syncjobs.SyncSchedule
 	_ = json.Unmarshal(w.Body.Bytes(), &out)
 	if out.Enabled {
 		t.Fatal("schedule must be disabled")
@@ -844,64 +676,6 @@ func TestHandleAdminSyncSchedule_DisabledStore(t *testing.T) {
 	}
 }
 
-// --- worker schedule pump ---
-
-func TestSyncWorker_EnqueueDueSchedules(t *testing.T) {
-	store := testJobStore(t)
-	sched := testScheduleStore(t)
-	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	sched.now = func() time.Time { return base }
-	sc, err := sched.Upsert(SyncSchedule{
-		Kind: "playlists", JobType: SyncJobTypeFreshness, EverySeconds: 3600,
-		Enabled: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	w := NewSyncWorker(store, NewRunnerRegistry(), SyncWorkerOptions{Workers: 1, Schedules: sched})
-	w.now = func() time.Time { return base.Add(time.Minute) }
-	w.enqueueDueSchedules(w.now())
-
-	job := store.List(SyncFilter{})[0]
-	if job.Kind != "playlists" || job.JobType != SyncJobTypeFreshness {
-		t.Fatalf("job = %+v, want the scheduled freshness job", job)
-	}
-	after, _ := sched.getByID(sc.ID)
-	if after.NextRunAt.Equal(sc.NextRunAt) {
-		t.Fatal("firing must re-arm the schedule")
-	}
-
-	// Idempotent: firing again while the job is still queued adds nothing.
-	before := store.Counts("", "")
-	w.enqueueDueSchedules(w.now())
-	if got := store.Counts("", ""); got != before {
-		t.Fatalf("counts changed from %+v to %+v, want no duplicate jobs", before, got)
-	}
-
-	// A nil schedule store is a no-op.
-	w2 := NewSyncWorker(store, NewRunnerRegistry(), SyncWorkerOptions{Workers: 1})
-	w2.enqueueDueSchedules(time.Now())
-}
-
-func TestSyncWorker_HousekeepFeedsSchedules(t *testing.T) {
-	store := testJobStore(t)
-	sched := testScheduleStore(t)
-	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	sched.now = func() time.Time { return base }
-	if _, err := sched.Upsert(SyncSchedule{
-		Kind: "messages", JobType: SyncJobTypeFreshness, EverySeconds: 60, Enabled: true,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	w := NewSyncWorker(store, NewRunnerRegistry(), SyncWorkerOptions{Workers: 1, Schedules: sched})
-	w.now = func() time.Time { return base.Add(5 * time.Minute) }
-	w.housekeep()
-	if got := store.Counts("", ""); got.Queued != 1 {
-		t.Fatalf("counts = %+v, want one scheduled job enqueued", got)
-	}
-}
-
 // --- end to end ---
 
 func TestFreshness_EndToEndThroughQueue(t *testing.T) {
@@ -918,15 +692,15 @@ func TestFreshness_EndToEndThroughQueue(t *testing.T) {
 		},
 	})
 	store := testJobStore(t)
-	runners := NewRunnerRegistry()
+	runners := syncjobs.NewRunnerRegistry()
 	runners.Register(&freshnessRunner{engine: NewFreshnessEngine(srv, reg), kind: "playlists"})
-	w := NewSyncWorker(store, runners, SyncWorkerOptions{Workers: 1})
+	w := syncjobs.NewSyncWorker(store, runners, syncjobs.SyncWorkerOptions{Workers: 1})
 
-	mustEnqueue(t, store, SyncEnqueue{Kind: "playlists", JobType: SyncJobTypeFreshness})
+	mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: "playlists", JobType: syncjobs.SyncJobTypeFreshness})
 	for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
 	}
-	job := store.List(SyncFilter{})[0]
-	if job.State != SyncJobSucceeded {
+	job := store.List(syncjobs.SyncFilter{})[0]
+	if job.State != syncjobs.SyncJobSucceeded {
 		t.Fatalf("job state = %s, want succeeded (progress %s)", job.State, job.Progress)
 	}
 	rec, _ := ledger.Get("playlists", "spotify", "pl1")
@@ -1040,12 +814,12 @@ func TestFreshness_RealHTTPCheckStampsLedger(t *testing.T) {
 	}
 
 	store := testJobStore(t)
-	runners := NewRunnerRegistry()
+	runners := syncjobs.NewRunnerRegistry()
 	registerFreshnessRunners(runners, srv)
-	w := NewSyncWorker(store, runners, SyncWorkerOptions{Workers: 1})
+	w := syncjobs.NewSyncWorker(store, runners, syncjobs.SyncWorkerOptions{Workers: 1})
 
 	for _, kind := range []string{"playlists", "tracks"} {
-		mustEnqueue(t, store, SyncEnqueue{Kind: kind, JobType: SyncJobTypeFreshness})
+		mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: kind, JobType: syncjobs.SyncJobTypeFreshness})
 		for i := 0; i < 3 && w.RunOnce(context.Background(), "w"); i++ {
 		}
 	}

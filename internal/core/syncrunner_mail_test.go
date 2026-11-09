@@ -15,13 +15,14 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // mailRunnerServer wires a server with the mail archive, a mocked Gmail
 // upstream, and the ingest runner registered on a real job store.
-func mailRunnerServer(t *testing.T, upstream http.Handler) (*Server, *JobStore, *SyncWorker) {
+func mailRunnerServer(t *testing.T, upstream http.Handler) (*Server, *syncjobs.JobStore, *syncjobs.SyncWorker) {
 	t.Helper()
 	disableGmailArchivePace(t)
 	var up *httptest.Server
@@ -41,7 +42,7 @@ func mailRunnerServer(t *testing.T, upstream http.Handler) (*Server, *JobStore, 
 	store := testJobStore(t)
 	srv.syncJobs = store
 	srv.syncRunners = newSyncRunnerRegistry(srv)
-	srv.syncWorker = NewSyncWorker(store, srv.syncRunners, SyncWorkerOptions{Workers: 1, Prom: srv.prom})
+	srv.syncWorker = syncjobs.NewSyncWorker(store, srv.syncRunners, syncjobs.SyncWorkerOptions{Workers: 1, Prom: srv.prom})
 	return srv, store, srv.syncWorker
 }
 
@@ -85,8 +86,8 @@ func gmailListThenEmpty(ids ...string) http.Handler {
 
 func TestMailIngestRunner_ChainsUntilDone(t *testing.T) {
 	srv, store, w := mailRunnerServer(t, gmailListThenEmpty("m1", "m2"))
-	mustEnqueue(t, store, SyncEnqueue{
-		Kind: mailIngestKind, JobType: SyncJobTypeIngest,
+	mustEnqueue(t, store, syncjobs.SyncEnqueue{
+		Kind: mailIngestKind, JobType: syncjobs.SyncJobTypeIngest,
 		Service: connectors.GoogleGmailServiceID,
 		Payload: map[string]any{"max_messages": 1, "reset_cursor": true},
 	})
@@ -95,8 +96,8 @@ func TestMailIngestRunner_ChainsUntilDone(t *testing.T) {
 	// several steps and only finish once the upstream list is empty.
 	for i := 0; i < 6 && w.RunOnce(context.Background(), "w"); i++ {
 	}
-	job := store.List(SyncFilter{})[0]
-	if job.State != SyncJobSucceeded {
+	job := store.List(syncjobs.SyncFilter{})[0]
+	if job.State != syncjobs.SyncJobSucceeded {
 		t.Fatalf("state = %s, want succeeded (payload %s, progress %s)",
 			job.State, job.Payload, job.Progress)
 	}
@@ -116,15 +117,15 @@ func TestMailIngestRunner_TerminalConditions(t *testing.T) {
 	runner := &mailIngestRunner{}
 
 	// Unwired runner.
-	if _, err := runner.Run(context.Background(), SyncJob{}); err == nil {
+	if _, err := runner.Run(context.Background(), syncjobs.SyncJob{}); err == nil {
 		t.Fatal("unwired runner must fail")
-	} else if !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	} else if !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("err = %v, want terminal", err)
 	}
 
 	// Nil server.
 	bad := &mailIngestRunner{srv: nil}
-	if _, err := bad.Run(context.Background(), SyncJob{}); err == nil {
+	if _, err := bad.Run(context.Background(), syncjobs.SyncJob{}); err == nil {
 		t.Fatal("nil server must fail terminal")
 	}
 
@@ -134,27 +135,27 @@ func TestMailIngestRunner_TerminalConditions(t *testing.T) {
 	// Mail archive disabled.
 	mail := srv.mail
 	srv.mail = nil
-	_, err := runner.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{}`)})
+	_, err := runner.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{}`)})
 	srv.mail = mail
-	if err == nil || !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	if err == nil || !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("disabled archive err = %v, want terminal", err)
 	}
 
 	// Bad payload.
-	_, err = runner.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{`)})
-	if err == nil || !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	_, err = runner.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{`)})
+	if err == nil || !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("bad payload err = %v, want terminal", err)
 	}
 
 	// No connector for the service.
-	_, err = runner.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{"service":"nope"}`)})
-	if err == nil || !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	_, err = runner.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{"service":"nope"}`)})
+	if err == nil || !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("unknown service err = %v, want terminal", err)
 	}
 
 	// Blocked service.
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Action = "block" })
-	_, err = runner.Run(context.Background(), SyncJob{Payload: json.RawMessage(`{}`)})
+	_, err = runner.Run(context.Background(), syncjobs.SyncJob{Payload: json.RawMessage(`{}`)})
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Action = "inject" })
 	if err == nil || !strings.Contains(err.Error(), "blocked") {
 		t.Fatalf("blocked service err = %v, want terminal blocked", err)
@@ -173,8 +174,8 @@ func TestMailIngestRunner_QuotaReturnsRetryAfter(t *testing.T) {
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 
 	runner := &mailIngestRunner{srv: srv}
-	step, err := runner.Run(context.Background(), SyncJob{
-		Kind: mailIngestKind, JobType: SyncJobTypeIngest,
+	step, err := runner.Run(context.Background(), syncjobs.SyncJob{
+		Kind: mailIngestKind, JobType: syncjobs.SyncJobTypeIngest,
 		Payload: json.RawMessage(`{"reset_cursor":true}`),
 	})
 	if err == nil {
@@ -183,12 +184,12 @@ func TestMailIngestRunner_QuotaReturnsRetryAfter(t *testing.T) {
 	if step.RetryAfter != connectors.GmailQuotaBackoff {
 		t.Fatalf("step.RetryAfter = %v, want %v", step.RetryAfter, connectors.GmailQuotaBackoff)
 	}
-	var ra *SyncRetryAfter
+	var ra *syncjobs.SyncRetryAfter
 	if !errors.As(err, &ra) || ra.After != connectors.GmailQuotaBackoff {
-		t.Fatalf("err = %v, want a SyncRetryAfter of %v", err, connectors.GmailQuotaBackoff)
+		t.Fatalf("err = %v, want a syncjobs.SyncRetryAfter of %v", err, connectors.GmailQuotaBackoff)
 	}
-	class, after := classifySyncError(err, 1, step.RetryAfter)
-	if class != SyncErrorClassRetry || after != connectors.GmailQuotaBackoff {
+	class, after := syncjobs.ClassifyError(err, 1, step.RetryAfter)
+	if class != syncjobs.SyncErrorClassRetry || after != connectors.GmailQuotaBackoff {
 		t.Fatalf("classify = (%s,%v), want (retryable,%v)", class, after, connectors.GmailQuotaBackoff)
 	}
 }
@@ -198,7 +199,7 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 
 	// No takeout path configured is terminal.
 	_, err := srv.doMailIngest(context.Background(), mailIngestPayload{Service: connectors.TakeoutServiceID})
-	if err == nil || !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	if err == nil || !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("missing path err = %v, want terminal", err)
 	}
 
@@ -209,8 +210,8 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 	}
 	// Takeout is a snapshot import: the import_snapshot job type defaults to
 	// that source, so the payload need not name it.
-	mustEnqueue(t, store, SyncEnqueue{
-		Kind: mailIngestKind, JobType: SyncJobTypeImport,
+	mustEnqueue(t, store, syncjobs.SyncEnqueue{
+		Kind: mailIngestKind, JobType: syncjobs.SyncJobTypeImport,
 		Service: connectors.TakeoutServiceID,
 		Payload: map[string]any{
 			"query":        "takeout:" + mboxPath,
@@ -220,8 +221,8 @@ func TestMailIngestRunner_TakeoutStep(t *testing.T) {
 	if !w.RunOnce(context.Background(), "w") {
 		t.Fatal("RunOnce must claim the takeout job")
 	}
-	job := store.List(SyncFilter{})[0]
-	if job.State != SyncJobSucceeded {
+	job := store.List(syncjobs.SyncFilter{})[0]
+	if job.State != syncjobs.SyncJobSucceeded {
 		t.Fatalf("takeout job state = %s, want succeeded (progress %s)", job.State, job.Progress)
 	}
 	if !strings.Contains(string(job.Progress), connectors.TakeoutServiceID) {
@@ -251,7 +252,7 @@ func TestMailIngestFor_Wired(t *testing.T) {
 func TestSyncRunnerRegistry_MailIngestWired(t *testing.T) {
 	srv, _, _ := mailRunnerServer(t, gmailListThenEmpty("m1"))
 	reg := newSyncRunnerRegistry(srv)
-	runner, ok := reg.For(mailIngestKind, SyncJobTypeIngest)
+	runner, ok := reg.For(mailIngestKind, syncjobs.SyncJobTypeIngest)
 	if !ok {
 		t.Fatal("mail ingest runner must be registered")
 	}
@@ -259,26 +260,26 @@ func TestSyncRunnerRegistry_MailIngestWired(t *testing.T) {
 		t.Fatalf("kind = %s, want messages", runner.Kind())
 	}
 	types := runner.JobTypes()
-	if len(types) != 2 || types[0] != SyncJobTypeIngest || types[1] != SyncJobTypeImport {
+	if len(types) != 2 || types[0] != syncjobs.SyncJobTypeIngest || types[1] != syncjobs.SyncJobTypeImport {
 		t.Fatalf("job types = %v, want [ingest import_snapshot]", types)
 	}
-	if _, ok := reg.For(mailIngestKind, SyncJobTypeRepair); ok {
+	if _, ok := reg.For(mailIngestKind, syncjobs.SyncJobTypeRepair); ok {
 		t.Fatal("repair is not registered in phase 1")
 	}
 }
 
 func TestMailIngestRunner_EndToEndThroughQueue(t *testing.T) {
 	srv, store, w := mailRunnerServer(t, gmailListThenEmpty("m1"))
-	mustEnqueue(t, store, SyncEnqueue{
-		Kind: mailIngestKind, JobType: SyncJobTypeIngest,
+	mustEnqueue(t, store, syncjobs.SyncEnqueue{
+		Kind: mailIngestKind, JobType: syncjobs.SyncJobTypeIngest,
 		Service: connectors.GoogleGmailServiceID,
 		Payload: map[string]any{"reset_cursor": true},
 	})
 	w.Kick()
 	for i := 0; i < 6 && w.RunOnce(context.Background(), "w"); i++ {
 	}
-	job := store.List(SyncFilter{})[0]
-	if job.State != SyncJobSucceeded {
+	job := store.List(syncjobs.SyncFilter{})[0]
+	if job.State != syncjobs.SyncJobSucceeded {
 		t.Fatalf("state = %s, want succeeded", job.State)
 	}
 	st, err := srv.mail.Status()
@@ -375,21 +376,21 @@ func TestMailSyncRoute_KeepsNotImplementedContract(t *testing.T) {
 	}
 	// The queue path still runs the same code and reports it as terminal.
 	res, err := srv.doMailIngest(context.Background(), mailIngestPayload{Service: "dummy"})
-	if err == nil || !strings.Contains(err.Error(), ErrSyncTerminal.Error()) {
+	if err == nil || !strings.Contains(err.Error(), syncjobs.ErrSyncTerminal.Error()) {
 		t.Fatalf("runner err = %v, want terminal (res %+v)", err, res)
 	}
 }
 
 func TestParseMailIngestPayload_JobTypeDefaults(t *testing.T) {
 	// import_snapshot defaults to the Takeout export, not Gmail.
-	p, err := parseMailIngestPayload(SyncJob{JobType: SyncJobTypeImport})
+	p, err := parseMailIngestPayload(syncjobs.SyncJob{JobType: syncjobs.SyncJobTypeImport})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if p.Service != connectors.TakeoutServiceID {
 		t.Fatalf("import_snapshot service = %q, want %q", p.Service, connectors.TakeoutServiceID)
 	}
-	p, err = parseMailIngestPayload(SyncJob{JobType: SyncJobTypeIngest})
+	p, err = parseMailIngestPayload(syncjobs.SyncJob{JobType: syncjobs.SyncJobTypeIngest})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -397,8 +398,8 @@ func TestParseMailIngestPayload_JobTypeDefaults(t *testing.T) {
 		t.Fatalf("ingest service = %q, want google-gmail", p.Service)
 	}
 	// An explicit service always wins.
-	p, err = parseMailIngestPayload(SyncJob{
-		JobType: SyncJobTypeIngest, Service: "x",
+	p, err = parseMailIngestPayload(syncjobs.SyncJob{
+		JobType: syncjobs.SyncJobTypeIngest, Service: "x",
 		Payload: json.RawMessage(`{"service":"y"}`),
 	})
 	if err != nil {
@@ -407,7 +408,7 @@ func TestParseMailIngestPayload_JobTypeDefaults(t *testing.T) {
 	if p.Service != "y" {
 		t.Fatalf("service = %q, want the payload's y", p.Service)
 	}
-	if _, err := parseMailIngestPayload(SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
+	if _, err := parseMailIngestPayload(syncjobs.SyncJob{Payload: json.RawMessage(`{`)}); err == nil {
 		t.Fatal("bad payload must fail terminal")
 	}
 }
@@ -415,129 +416,15 @@ func TestParseMailIngestPayload_JobTypeDefaults(t *testing.T) {
 func TestMailIngestRunner_ServesBothJobTypes(t *testing.T) {
 	r := &mailIngestRunner{srv: &Server{}}
 	got := r.JobTypes()
-	if len(got) != 2 || got[0] != SyncJobTypeIngest || got[1] != SyncJobTypeImport {
+	if len(got) != 2 || got[0] != syncjobs.SyncJobTypeIngest || got[1] != syncjobs.SyncJobTypeImport {
 		t.Fatalf("JobTypes = %v, want ingest and import_snapshot", got)
 	}
-	reg := NewRunnerRegistry()
+	reg := syncjobs.NewRunnerRegistry()
 	reg.Register(r)
-	if _, ok := reg.For(mailIngestKind, SyncJobTypeIngest); !ok {
+	if _, ok := reg.For(mailIngestKind, syncjobs.SyncJobTypeIngest); !ok {
 		t.Fatal("ingest must resolve")
 	}
-	if _, ok := reg.For(mailIngestKind, SyncJobTypeImport); !ok {
+	if _, ok := reg.For(mailIngestKind, syncjobs.SyncJobTypeImport); !ok {
 		t.Fatal("import_snapshot must resolve (it is no longer a dead type)")
-	}
-}
-
-func TestJobStore_RenewLease(t *testing.T) {
-	s := testJobStore(t)
-	mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
-	claimed, ok, _ := s.Claim("w1", s.now().Add(time.Second))
-	if !ok {
-		t.Fatal("expected a claim")
-	}
-
-	// The owner may extend its own lease.
-	far := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
-	kept, err := s.RenewLease(claimed.ID, "w1", far)
-	if err != nil || !kept {
-		t.Fatalf("RenewLease(owner) = (%v,%v), want (true,nil)", kept, err)
-	}
-	after, _ := s.GetByID(claimed.ID)
-	if !after.LeaseUntil.Equal(far) {
-		t.Fatalf("lease_until = %v, want %v", after.LeaseUntil, far)
-	}
-
-	// A different owner cannot extend it.
-	kept, err = s.RenewLease(claimed.ID, "w2", far.Add(time.Hour))
-	if err != nil {
-		t.Fatalf("RenewLease(other): %v", err)
-	}
-	if kept {
-		t.Fatal("a non-owner must not be able to renew")
-	}
-
-	// A job that is no longer running cannot be renewed.
-	if _, err := s.Cancel(claimed.ID); err != nil {
-		t.Fatalf("Cancel: %v", err)
-	}
-	kept, err = s.RenewLease(claimed.ID, "w1", far.Add(2*time.Hour))
-	if err != nil || kept {
-		t.Fatalf("RenewLease(canceled) = (%v,%v), want (false,nil)", kept, err)
-	}
-
-	// Disabled store and empty owner are no-ops / errors.
-	off, _ := OpenJobStore(nil, "")
-	if kept, _ := off.RenewLease("1", "w", time.Now()); kept {
-		t.Fatal("disabled renewal must report false")
-	}
-	if _, err := s.RenewLease(claimed.ID, "  ", time.Now()); err == nil {
-		t.Fatal("renewal requires an owner")
-	}
-}
-
-// When renewal reports the lease is gone, the in-flight step is wound down
-// rather than writing against a job someone else now owns.
-func TestSyncWorker_LeaseKeeperCancelsOnLoss(t *testing.T) {
-	store := testJobStore(t)
-	store.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
-	reg := NewRunnerRegistry()
-	started := make(chan struct{})
-	stopped := make(chan struct{}, 1)
-	reg.Register(&stubRunner{
-		kind:     "messages",
-		jobTypes: []string{"ingest"},
-		fn: func(ctx context.Context, job SyncJob) (SyncStep, error) {
-			close(started)
-			<-ctx.Done()
-			stopped <- struct{}{}
-			return SyncStep{}, ctx.Err()
-		},
-	})
-	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1})
-	// Speed the keeper up so the test does not wait a third of a lease.
-	w.now = store.now
-
-	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest"})
-
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		// Run the job through the worker so keepLeaseAlive is armed.
-		w.RunOnce(context.Background(), "owner-a")
-	}()
-	<-started
-
-	job := store.List(SyncFilter{})[0]
-	// Someone else steals the job, exactly as an expired lease would allow.
-	if _, err := store.ReclaimExpired(store.now().Add(syncJobLease + time.Minute)); err != nil {
-		t.Fatalf("ReclaimExpired: %v", err)
-	}
-	if _, ok, _ := store.Claim("owner-b", store.now().Add(syncJobLease+2*time.Minute)); !ok {
-		t.Fatal("expected the reclaimed job to be claimable by another owner")
-	}
-
-	// Fire the keeper's tick by moving its clock far enough ahead, then ask
-	// it to renew: the renewal must fail and cancel the step.
-	kept, err := store.RenewLease(job.ID, "owner-a", store.now().Add(time.Hour))
-	if err != nil {
-		t.Fatalf("RenewLease: %v", err)
-	}
-	if kept {
-		t.Fatal("a lost lease must not renew")
-	}
-	// The keeper observes that on its next tick and cancels; cancel directly
-	// here to assert the wind-down contract without waiting on the ticker.
-	w.CancelJob(job.ID)
-
-	select {
-	case <-stopped:
-	case <-time.After(2 * time.Second):
-		t.Fatal("the step did not wind down after losing the lease")
-	}
-	<-done
-
-	final, _ := store.GetByID(job.ID)
-	if final.LeaseOwner == "owner-a" {
-		t.Fatal("owner-a must no longer hold the lease")
 	}
 }

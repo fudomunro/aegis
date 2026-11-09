@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -21,21 +22,21 @@ import (
 
 // SyncStatus is the GET /v1/admin/sync response.
 type SyncStatus struct {
-	Enabled   bool                  `json:"enabled"`
-	Workers   int                   `json:"workers"`
-	StorePath string                `json:"store_path,omitempty"`
-	Kinds     []string              `json:"kinds,omitempty"`
-	Counts    SyncCounts            `json:"counts"`
-	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
-	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
+	Enabled   bool                           `json:"enabled"`
+	Workers   int                            `json:"workers"`
+	StorePath string                         `json:"store_path,omitempty"`
+	Kinds     []string                       `json:"kinds,omitempty"`
+	Counts    syncjobs.SyncCounts            `json:"counts"`
+	ByKind    map[string]syncjobs.SyncCounts `json:"by_kind,omitempty"`
+	ByJobType map[string]syncjobs.SyncCounts `json:"by_job_type,omitempty"`
 	// Freshness is the copy ledger's per-kind status rollup (phase 2): the
 	// data an operator needs to see where their copies stand.
 	Freshness []copies.Freshness `json:"freshness,omitempty"`
 	// Schedules lists the recurring job templates feeding the queue.
-	Schedules []SyncSchedule `json:"schedules,omitempty"`
+	Schedules []syncjobs.SyncSchedule `json:"schedules,omitempty"`
 	// Paused lists active pause scopes ("global" and/or service ids).
-	Paused []string  `json:"paused,omitempty"`
-	Jobs   []SyncJob `json:"jobs"`
+	Paused []string           `json:"paused,omitempty"`
+	Jobs   []syncjobs.SyncJob `json:"jobs"`
 }
 
 // SyncPauseRequest is the body for POST /v1/admin/sync/pause|resume.
@@ -70,15 +71,15 @@ func (s *Server) writeSyncStatus(w http.ResponseWriter) {
 	store := s.syncJobs
 	status := SyncStatus{
 		Enabled: store != nil && store.Enabled(),
-		Jobs:    []SyncJob{},
+		Jobs:    []syncjobs.SyncJob{},
 	}
 	if s.syncWorker != nil {
-		status.Workers = s.syncWorker.workers
+		status.Workers = s.syncWorker.Workers()
 	}
 	if store != nil {
 		status.StorePath = store.Path()
 		status.Counts = store.Counts("", "")
-		status.Jobs = store.List(SyncFilter{Limit: 50})
+		status.Jobs = store.List(syncjobs.SyncFilter{Limit: 50})
 		// Global breakdown from the whole table, matching Counts — not the
 		// recent-job window, which would under-report quiet kinds.
 		if b := store.Breakdown(); len(b.ByKind) > 0 {
@@ -143,7 +144,7 @@ func (s *Server) handleSyncPause(w http.ResponseWriter, r *http.Request, pause b
 	}
 	scope := strings.TrimSpace(req.Service)
 	if scope == "" {
-		scope = SyncPauseScopeGlobal
+		scope = syncjobs.SyncPauseScopeGlobal
 	}
 	var err error
 	if pause {
@@ -251,7 +252,7 @@ func (s *Server) handleSyncEnqueue(w http.ResponseWriter, r *http.Request) {
 		// not stack duplicate ingest runs.
 		entityKey = strings.TrimSpace(req.Service)
 	}
-	job, err := s.syncJobs.Enqueue(syncEnqueueFromRequest(
+	job, err := s.syncJobs.Enqueue(syncjobs.NewSyncEnqueue(
 		req.Kind, req.JobType, req.Service, entityKey, req.Payload))
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to enqueue sync job")
@@ -281,7 +282,7 @@ func (s *Server) HandleAdminSyncCancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	job, err := s.syncJobs.Cancel(id)
-	if errors.Is(err, ErrSyncJobNotFound) {
+	if errors.Is(err, syncjobs.ErrSyncJobNotFound) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown sync job")
 		return
 	}
