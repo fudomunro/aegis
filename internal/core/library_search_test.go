@@ -389,7 +389,7 @@ func eventsQuery(t *testing.T, srv *Server, bearer, path string) []types.Calenda
 	req := httptest.NewRequest("GET", path, nil)
 	req.Header.Set("Authorization", "Bearer "+bearer)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("events status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -430,7 +430,7 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+appToken)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
 	}

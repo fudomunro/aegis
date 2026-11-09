@@ -319,3 +319,18 @@ func forEachPhotoSource(item *types.Photo, f func(kinds.SourceMut)) {
 		})
 	}
 }
+
+// forEachCalendarEventSource projects sources for generic stamping of the
+// kind already moved into the kinds package (issue #312) — its production
+// projection lives beside that kind and is unexported.
+func forEachCalendarEventSource(item *types.CalendarEvent, f func(kinds.SourceMut)) {
+	for i := range item.Sources {
+		src := &item.Sources[i]
+		f(kinds.SourceMut{
+			Service:       src.Service,
+			ID:            src.ID,
+			MarkCanonical: func() { src.Canonical = true },
+			SetCopy:       func(info *types.CopyInfo) { src.Copy = info },
+		})
+	}
+}

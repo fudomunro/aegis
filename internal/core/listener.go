@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	"github.com/fudomunro/aegis/internal/types"
 )
@@ -128,9 +129,7 @@ func apiRouteAllowed(method, path string) bool {
 // Route declarations; the cross-kind entity-link reads and single-segment
 // user-defined kind paths (runtime-registered; packs never shadow a
 // built-in) are the only other entries. // transitional (#312): hub-side
-// declarations (kindRuntime) plus the kind-data primary paths cover kinds
-// already moved into the kinds package; the merged table replaces both when
-// kindRuntime dies.
+// declarations cover kinds not yet moved into the kinds package.
 func libraryAgentReadable(path string) bool {
 	for _, rt := range kindRuntime {
 		for _, route := range rt.Routes {
@@ -139,8 +138,8 @@ func libraryAgentReadable(path string) bool {
 			}
 		}
 	}
-	for _, k := range types.BuiltinLibraryKinds {
-		if routePatternMatches(k.Path, path) {
+	for _, route := range kinds.RouteDecls() {
+		if routePatternMatches(route.Pattern, path) {
 			return true
 		}
 	}

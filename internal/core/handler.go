@@ -23,7 +23,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Aperture request payload for pre_request hooks.
@@ -199,8 +198,8 @@ type Server struct {
 // app-readable exactly when its declaration says so. Apps are data readers
 // only — never admin, OAuth, proxy, mail, or unexposed subroutes like
 // document full text. User-defined kinds are not app-readable.
-// // transitional (#312): hub-side declarations plus the kind-data exposure
-// cover kinds already moved into the kinds package.
+// // transitional (#312): hub-side declarations cover kinds not yet moved
+// into the kinds package.
 func appAllowedPaths() []string {
 	out := map[string]bool{}
 	for _, rt := range kindRuntime {
@@ -210,8 +209,10 @@ func appAllowedPaths() []string {
 			}
 		}
 	}
-	for _, p := range types.AppReadableKindPaths() {
-		out[p] = true
+	for _, route := range kinds.RouteDecls() {
+		if route.AppReadable {
+			out[route.Pattern] = true
+		}
 	}
 	paths := make([]string, 0, len(out))
 	for p := range out {

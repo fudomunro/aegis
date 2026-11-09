@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -33,21 +34,6 @@ func TestRedactCalendarEventFreeBusy_StripsContent(t *testing.T) {
 	}
 	if got.StartAt != e.StartAt || got.EndAt != e.EndAt {
 		t.Fatalf("timing lost: %+v", got)
-	}
-}
-
-func TestFreeBusyListFromEvents_OmitsCancelled(t *testing.T) {
-	list := freeBusyListFromEvents(freeBusyTestEvents(), types.PageRequest{Limit: types.MaxPageLimit}, nil)
-	if list.Total != 2 || len(list.Busy) != 2 {
-		t.Fatalf("total = %d busy = %+v", list.Total, list.Busy)
-	}
-	for _, b := range list.Busy {
-		if b.StartAt == "" {
-			t.Fatalf("empty block: %+v", b)
-		}
-	}
-	if !list.Busy[1].AllDay {
-		t.Fatalf("expected all-day block: %+v", list.Busy[1])
 	}
 }
 
@@ -103,7 +89,7 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryFreeBusy)(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -136,7 +122,7 @@ func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -173,7 +159,7 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -215,7 +201,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryFreeBusy)(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -237,7 +223,11 @@ func TestEventsProviderTargets_Collects(t *testing.T) {
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
-	targets, denied := eventsProviderTargets(srv, httptest.NewRequest(http.MethodGet, "/v1/library/freebusy", nil), "events")
+	targets, denied := kinds.Collect[types.CalendarEvent, types.CalendarEventProvider](srv,
+		httptest.NewRequest(http.MethodGet, "/v1/library/freebusy", nil), "events",
+		func(p types.CalendarEventProvider) func(context.Context) ([]types.CalendarEvent, bool, error) {
+			return p.ListCalendarEvents
+		})
 	if len(targets) != 1 || len(denied) != 0 {
 		t.Fatalf("targets = %d denied = %v", len(targets), denied)
 	}

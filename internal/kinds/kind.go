@@ -65,7 +65,29 @@ func Builtin(h Host, e *Engine, d Deps) []Kind {
 		newArtistsKind(h, e, d),
 		newContactsKind(h, e, d),
 		newPhotosKind(h, e, d),
+		newEventsKind(h, e, d),
 	}
+}
+
+// builtinDecls is the static route-declaration table (pattern + exposure,
+// no handlers) built from the same constructors Builtin uses. Kind
+// declarations are static data, so a nil-Host pass is safe — constructors
+// must not dereference the Host at construction (issue #312).
+var builtinDecls = func() []Route {
+	var out []Route
+	for _, k := range Builtin(nil, nil, Deps{}) {
+		for _, r := range k.Routes() {
+			out = append(out, Route{Pattern: r.Pattern, AppReadable: r.AppReadable})
+		}
+	}
+	return out
+}()
+
+// RouteDecls returns every built-in kind route declaration without
+// instance-bound handlers — the table the pure API-listener and app-token
+// perimeter checks derive from (issue #312).
+func RouteDecls() []Route {
+	return builtinDecls
 }
 
 // providerKind is the common shape for kinds fed by connectors

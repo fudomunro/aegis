@@ -139,7 +139,7 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("events status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -192,7 +192,7 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("events status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -208,7 +208,7 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryFreeBusy)(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy status = %d body = %s", w.Code, w.Body.String())
 	}
@@ -232,7 +232,7 @@ func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+roToken)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Doctor") {
 		t.Fatalf("read app: %d %s", w.Code, w.Body.String())
 	}
@@ -241,7 +241,7 @@ func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 	req = httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+fbToken)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryEvents)(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("fb app: %d %s", w.Code, w.Body.String())
 	}

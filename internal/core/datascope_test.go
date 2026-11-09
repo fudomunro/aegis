@@ -516,7 +516,7 @@ func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
 	call := func(key string) []types.CalendarEvent {
 		t.Helper()
 		w := httptest.NewRecorder()
-		srv.AuthMiddleware(srv.HandleLibraryEvents)(w, scopeRequest(key, "/v1/library/events"))
+		srv.AuthMiddleware(srv.libraryHandler("events"))(w, scopeRequest(key, "/v1/library/events"))
 		if w.Code != http.StatusOK {
 			t.Fatalf("events %s status = %d body=%s", key, w.Code, w.Body.String())
 		}
