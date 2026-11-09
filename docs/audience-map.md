@@ -79,7 +79,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 
 | Block | Source | Audience | Register notes |
 |-------|--------|----------|----------------|
-| LibraryKind instructions | `internal/types/kind.go`, `librarykind.go` | Runtime LLM agent | Imperative tool-use guide; `truncated`, `sources[].canonical`. |
+| LibraryKind instructions | `internal/types/kind.go`, `internal/kinds` | Runtime LLM agent | Imperative tool-use guide; `truncated`, `sources[].canonical`. |
 | Connector SystemInstructions | each connector (`spotify.go`, `immich.go`, …) | Runtime LLM agent | Negative constraints (“Do not call X”, “never ask for credentials”). |
 | Generic fallback | `internal/core/handler.go` | Runtime LLM agent | Library-first, not a services API. |
 | Permission notices | `core/permissions.go` | Runtime LLM agent | Denied types; freebusy-only “never request titles…”. |

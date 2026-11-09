@@ -6,8 +6,8 @@ cleanup). The note is the contract for the seam; the worked examples are
 the Gmail and Takeout ingests in `internal/connectors`.
 Scope (as designed): the Google Takeout / mail-archive pipeline that lived
 in `internal/core` (`mail_takeout.go`, `mail_archive_sync.go`,
-`syncrunner_mail.go`, and the service-ID branches in `librarykind.go` /
-`syncfreshness.go` / `mail_archive_http.go`).
+`syncrunner_mail.go`, and the service-ID branches formerly in
+`librarykind.go` / `syncfreshness.go` / `mail_archive_http.go`).
 
 Related issues: **#286** (this note), **#266** (local import stores; the
 carve-out this resolves), **#265** (onboarding seam pattern), **#264**
@@ -36,7 +36,7 @@ fit the connectors structure as-is:
 | `internal/core/mail_takeout.go` (~633 ln) | Takeout parser: mbox/zip/dir walk with durable cursor, `takeoutServiceID`/`takeoutServiceName`, `X-GM-LABELS` → mailbox/direction/read mapping, Gmail header mapping via `connectors.MapGmailAddressHeader` / `GmailHeaderDateRFC3339` |
 | `internal/core/mail_archive_sync.go` (~253 ln) | `gmailArchiveSyncer` over `*connectors.GoogleGmailConnector`; Gmail quota marker, pacing (`gmailArchiveGetInterval`), default query `in:anywhere` |
 | `internal/core/syncrunner_mail.go` | `mailArchiveSyncer` type-asserts `*connectors.GoogleGmailConnector`; `doMailIngest` branches on `takeoutServiceID`; quota backoff keyed on the Gmail quota string |
-| `internal/core/librarykind.go` | `expandMailArchiveSources` nests Takeout under Gmail; `librarySourceDisplayName` / `librarySourceLastSyncedAt` switch on `"mail-archive"` / `takeoutServiceID` / `GoogleGmailServiceID` |
+| `internal/kinds/messages.go` | `expandMailArchiveSources` nests Takeout under Gmail via the declared `MailArchive` hooks (display name, sync cursors); no service-ID branches |
 | `internal/core/syncfreshness.go` | `takeoutChecker` (export-path stat) registered in the core checker registry |
 | `internal/core/mail_archive.go` | Store is generic except `mailServiceName` and `Canonical: r.Service != takeoutServiceID` |
 | `internal/core/mail_archive_http.go` | Routes are generic except the `google-takeout` branches and source-named hint copy |
@@ -226,8 +226,8 @@ The pure semantics move first, so the seam PR is structure only.
 1. `internal/connectors/google-takeout.go` — exported label/mailbox/
    direction mapping, `Read = !UNREAD`, `msgid:`/`blob:` id scheme,
    `TakeoutServiceID` / `TakeoutServiceName`. Core delegates
-   (`mail_takeout.go`, `mail_archive.go`, `librarykind.go` call the
-   exports; no behavior change).
+   (`mail_takeout.go`, `mail_archive.go`, and the `kinds` mail-archive
+   adapter call the exports; no behavior change).
 2. Gmail quota marker / pacing / default query / `IsGmailQuotaError`
    move beside the Gmail connector; `syncrunner_mail.go` keeps calling
    them through the exports.
@@ -273,8 +273,9 @@ core holds no Takeout parser and no Gmail sync loop.
    generic core checker (`takeoutChecker` dies; registry unchanged).
 3. `mailServiceName` dies; the archive read path is provider-neutral.
 
-**Done when:** `librarykind.go` and `syncfreshness.go` contain no
-mail/takeout service-ID branching; overviews behave as before.
+**Done when:** no hub or kinds file contains mail/takeout service-ID
+branching (`mail_provider_hygiene_test.go` scans both); overviews behave
+as before.
 
 ### Phase 4 — cleanup (`docs/issue-286-mail-ingest-cleanup`) — **landed**
 
@@ -312,7 +313,7 @@ mail/takeout service-ID branching; overviews behave as before.
       as two `MailIngest` implementations; `internal/core` holds no
       `X-GM-LABELS`, quota, or Takeout-walk knowledge.
 - [ ] The mail archive is provider-neutral core state: no service-ID
-      switches in `mail_archive.go`, `librarykind.go`, `syncfreshness.go`,
+      switches in `mail_archive.go`, `internal/kinds`, `syncfreshness.go`,
       `syncrunner_mail.go`, or `mail_archive_http.go`.
 - [ ] Source grouping (Takeout under Gmail), display names, canonical-ness
       (#16), and freshness probes are declared beside the ingest and
