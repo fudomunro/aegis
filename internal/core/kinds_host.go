@@ -162,6 +162,12 @@ func (s *Server) libraryHandler(kindID string) http.HandlerFunc {
 	return s.libraryRouteHandlers()[k.Path]
 }
 
+// routeHandler resolves any registered library route pattern, including
+// kind subroutes (issue #312 reach-through for tests).
+func (s *Server) routeHandler(pattern string) http.HandlerFunc {
+	return s.libraryRouteHandlers()[pattern]
+}
+
 // libraryEngine returns the aggregate pipeline engine. Fixtures that skip
 // engine wiring get one lazily so &Server{} tests fail open instead of
 // panicking (issue #312).

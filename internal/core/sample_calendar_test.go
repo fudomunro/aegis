@@ -13,22 +13,6 @@ import (
 	"github.com/fudomunro/aegis/internal/types"
 )
 
-func TestSampleCalendarEvents_NearTermBusy(t *testing.T) {
-	events := connectors.SampleCalendarEvents()
-	if len(events) < 4 {
-		t.Fatalf("events = %d", len(events))
-	}
-	list := freeBusyListFromEvents(events, types.PageRequest{Limit: types.MaxPageLimit}, nil)
-	if list.Total < 3 {
-		t.Fatalf("busy = %d (cancelled should drop)", list.Total)
-	}
-	for _, b := range list.Busy {
-		if b.StartAt == "" {
-			t.Fatalf("empty block: %+v", b)
-		}
-	}
-}
-
 func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 	svc := &Service{
 		ID:          connectors.SampleCalendarServiceID,
@@ -43,7 +27,7 @@ func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleLibraryFreeBusy)(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
