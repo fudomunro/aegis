@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 // fakeIssueTracker records upserts for scanner tests.
@@ -73,7 +74,7 @@ func scanFailure(jobType, service, class, errText string) MaintenanceFailure {
 		JobType:    jobType,
 		Service:    service,
 		ErrorClass: class,
-		State:      SyncJobFailed,
+		State:      syncjobs.SyncJobFailed,
 		Error:      errText,
 	}
 }
@@ -91,7 +92,7 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 
 	// One bundle only: flake, must stay a metric.
 	mustWriteBundle(t, dir, scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
+		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
 
 	report, err := ScanMaintenanceDir(context.Background(), dir, tracker)
 	if err != nil {
@@ -109,7 +110,7 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 
 	// Same signature in a second bundle: now it is a ticket.
 	mustWriteBundle(t, dir, scanBundle(time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "Spotify saved tracks returned 503")))
+		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "Spotify saved tracks returned 503")))
 
 	report, err = ScanMaintenanceDir(context.Background(), dir, tracker)
 	if err != nil {
@@ -126,7 +127,7 @@ func TestScanMaintenanceDir_RecurrenceGate(t *testing.T) {
 	if tk.Count != 2 || tk.ReproState != ReproStateNeedsFixture || tk.Tier != scanDefaultTier {
 		t.Fatalf("ticket = %+v", tk)
 	}
-	if tk.Service != "spotify" || tk.JobType != "ingest" || tk.ErrorClass != SyncErrorClassTerminal {
+	if tk.Service != "spotify" || tk.JobType != "ingest" || tk.ErrorClass != syncjobs.SyncErrorClassTerminal {
 		t.Fatalf("ticket identity = %+v", tk)
 	}
 	if len(tk.Observations) != 2 {
@@ -168,7 +169,7 @@ func TestScanMaintenanceDir_NilTrackerAndTrackerError(t *testing.T) {
 	base := time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC)
 	for i := 0; i < 2; i++ {
 		mustWriteBundle(t, dir, scanBundle(base.Add(time.Duration(i)*time.Hour),
-			scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
+			scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
 	}
 
 	report, err := ScanMaintenanceDir(context.Background(), dir, nil)
@@ -206,9 +207,9 @@ func TestHandleAdminMaintenanceScan(t *testing.T) {
 	srv.maintenanceIssues = &fakeIssueTracker{}
 	bundleDir := filepath.Join(srv.dataDir, dataDirMaintenanceSubdir)
 	mustWriteBundle(t, bundleDir, scanBundle(time.Date(2026, 2, 10, 10, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
+		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
 	mustWriteBundle(t, bundleDir, scanBundle(time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
-		scanFailure("ingest", "spotify", SyncErrorClassTerminal, "spotify saved tracks returned 502")))
+		scanFailure("ingest", "spotify", syncjobs.SyncErrorClassTerminal, "spotify saved tracks returned 502")))
 
 	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/scan", "admin-key", "")
 	w := httptest.NewRecorder()

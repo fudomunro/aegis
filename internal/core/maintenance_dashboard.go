@@ -15,6 +15,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -61,8 +62,8 @@ type DashboardScores struct {
 // the cumulative queue rollup at capture time (the bundle's view of the
 // table, subject to retention pruning).
 type DashboardCapture struct {
-	CapturedAt time.Time  `json:"captured_at"`
-	Counts     SyncCounts `json:"counts"`
+	CapturedAt time.Time           `json:"captured_at"`
+	Counts     syncjobs.SyncCounts `json:"counts"`
 	// NewFailures is failed-job events dated inside (previous capture, this].
 	NewFailures int `json:"new_failures"`
 	// CounterReset notes that cumulative totals dropped since the previous
@@ -111,12 +112,12 @@ func (f DashboardFix) FailureAt() time.Time {
 
 // DashboardService is one service/connection page's model.
 type DashboardService struct {
-	ID               string          `json:"id"`
-	Name             string          `json:"name,omitempty"`
-	Connection       string          `json:"connection,omitempty"`
-	FailureInjection bool            `json:"failure_injection,omitempty"`
-	Scores           DashboardScores `json:"scores"`
-	Latest           SyncCounts      `json:"latest"`
+	ID               string              `json:"id"`
+	Name             string              `json:"name,omitempty"`
+	Connection       string              `json:"connection,omitempty"`
+	FailureInjection bool                `json:"failure_injection,omitempty"`
+	Scores           DashboardScores     `json:"scores"`
+	Latest           syncjobs.SyncCounts `json:"latest"`
 	// LastSeen is the newest capture that carried this service.
 	LastSeen time.Time          `json:"last_seen,omitempty"`
 	History  []DashboardCapture `json:"history,omitempty"`

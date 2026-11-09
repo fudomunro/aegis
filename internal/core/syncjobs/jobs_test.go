@@ -1,12 +1,10 @@
-package core
+package syncjobs
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -466,38 +464,38 @@ func TestSyncBackoff(t *testing.T) {
 }
 
 func TestClassifySyncError(t *testing.T) {
-	class, after := classifySyncError(nil, 1, 0)
+	class, after := ClassifyError(nil, 1, 0)
 	if class != SyncErrorClassRetry || after <= 0 {
 		t.Fatalf("nil error = (%s,%v), want (retryable, >0)", class, after)
 	}
 	// The backoff must be exponential in the attempt number, not fixed.
-	_, early := classifySyncError(errors.New("boom"), 1, 0)
-	_, late := classifySyncError(errors.New("boom"), 5, 0)
+	_, early := ClassifyError(errors.New("boom"), 1, 0)
+	_, late := ClassifyError(errors.New("boom"), 5, 0)
 	if late <= early {
 		t.Fatalf("attempt 5 backoff = %v, want > attempt 1 (%v)", late, early)
 	}
-	class, _ = classifySyncError(ErrSyncTerminal, 1, 0)
+	class, _ = ClassifyError(ErrSyncTerminal, 1, 0)
 	if class != SyncErrorClassTerminal {
 		t.Fatalf("terminal error class = %s", class)
 	}
-	class, _ = classifySyncError(fmt.Errorf("wrapped: %w", ErrSyncTerminal), 1, 0)
+	class, _ = ClassifyError(fmt.Errorf("wrapped: %w", ErrSyncTerminal), 1, 0)
 	if class != SyncErrorClassTerminal {
 		t.Fatalf("wrapped terminal class = %s", class)
 	}
 	// No usable token cannot be fixed by retrying — park it.
-	class, _ = classifySyncError(kinds.ErrUnauthorized, 1, 0)
+	class, _ = ClassifyError(kinds.ErrUnauthorized, 1, 0)
 	if class != SyncErrorClassTerminal {
 		t.Fatalf("unauthorized class = %s, want terminal", class)
 	}
-	class, _ = classifySyncError(fmt.Errorf("sync paused: %w", kinds.ErrUnauthorized), 1, 0)
+	class, _ = ClassifyError(fmt.Errorf("sync paused: %w", kinds.ErrUnauthorized), 1, 0)
 	if class != SyncErrorClassTerminal {
 		t.Fatalf("wrapped unauthorized class = %s, want terminal", class)
 	}
-	class, after = classifySyncError(&SyncRetryAfter{Err: errors.New("q"), After: time.Minute}, 1, 0)
+	class, after = ClassifyError(&SyncRetryAfter{Err: errors.New("q"), After: time.Minute}, 1, 0)
 	if class != SyncErrorClassRetry || after != time.Minute {
 		t.Fatalf("retry-after = (%s,%v), want (retryable, 1m)", class, after)
 	}
-	class, after = classifySyncError(&SyncRetryAfter{Err: errors.New("q")}, 1, 2*time.Second)
+	class, after = ClassifyError(&SyncRetryAfter{Err: errors.New("q")}, 1, 2*time.Second)
 	if after != 2*time.Second {
 		t.Fatalf("zero RetryAfter keeps the hint: %v", after)
 	}
@@ -652,7 +650,6 @@ func TestSyncWorker_RunsJobToSuccess(t *testing.T) {
 	var doneJobs []SyncJob
 	w := NewSyncWorker(store, reg, SyncWorkerOptions{
 		Workers: 1,
-		Prom:    NewPromMetrics(),
 		OnDone:  func(job SyncJob, ok bool) { doneJobs = append(doneJobs, job) },
 	})
 	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
@@ -725,7 +722,6 @@ func TestSyncWorker_RetriesThenFails(t *testing.T) {
 	reg.Register(runner)
 	w := NewSyncWorker(store, reg, SyncWorkerOptions{
 		Workers: 1,
-		Prom:    NewPromMetrics(),
 	})
 	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 	w.now = func() time.Time { return base }
@@ -900,273 +896,6 @@ func TestSyncWorker_DisabledStore(t *testing.T) {
 		t.Fatal("disabled store must not produce work")
 	}
 	w.recordQueueDepth() // must not panic
-}
-
-// --- admin surface ---
-
-func syncAdminServer(t *testing.T) *Server {
-	t.Helper()
-	srv := adminSplitServer(t)
-	store := testJobStore(t)
-	srv.syncJobs = store
-	// Mirror production: the registry lives on the Server so admin enqueue
-	// can validate even when the worker pool is off.
-	srv.syncRunners = newSyncRunnerRegistry(srv)
-	srv.syncWorker = NewSyncWorker(store, srv.syncRunners, SyncWorkerOptions{Workers: 1})
-	return srv
-}
-
-func TestHandleAdminSync_GetStatus(t *testing.T) {
-	srv := syncAdminServer(t)
-	mustEnqueue(t, srv.syncJobs, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
-
-	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var got SyncStatus
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !got.Enabled {
-		t.Fatal("enabled must be true")
-	}
-	if got.Counts.Queued != 1 {
-		t.Fatalf("counts = %+v, want one queued", got.Counts)
-	}
-	if len(got.Jobs) != 1 {
-		t.Fatalf("jobs = %v, want one", got.Jobs)
-	}
-	if got.ByKind["messages"].Queued != 1 {
-		t.Fatalf("by_kind = %v, want messages/queued", got.ByKind)
-	}
-	if got.ByJobType["ingest"].Queued != 1 {
-		t.Fatalf("by_job_type = %v, want ingest/queued", got.ByJobType)
-	}
-	if len(got.Kinds) == 0 || got.Kinds[0] != "messages" {
-		t.Fatalf("kinds = %v, want [messages]", got.Kinds)
-	}
-}
-
-func TestHandleAdminSync_EnqueueAndCancel(t *testing.T) {
-	srv := syncAdminServer(t)
-
-	body := `{"kind":"messages","job_type":"ingest","service":"google-gmail","payload":{"max_messages":5}}`
-	req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("enqueue status = %d, body %s", w.Code, w.Body.String())
-	}
-	var job SyncJob
-	if err := json.Unmarshal(w.Body.Bytes(), &job); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if job.ID == "" || job.State != SyncJobQueued {
-		t.Fatalf("job = %+v, want a queued job with an id", job)
-	}
-	if !strings.Contains(string(job.Payload), "5") {
-		t.Fatalf("payload = %s, want max_messages=5", job.Payload)
-	}
-
-	// Repeat enqueue dedupes on the service entity key.
-	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("second enqueue status = %d", w.Code)
-	}
-	var again SyncJob
-	_ = json.Unmarshal(w.Body.Bytes(), &again)
-	if again.ID != job.ID {
-		t.Fatalf("repeat enqueue id = %s, want %s (idempotent)", again.ID, job.ID)
-	}
-
-	// Cancel by id.
-	req = adminRequest(http.MethodPost, "/v1/admin/sync/"+job.ID+"/cancel", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("cancel status = %d, body %s", w.Code, w.Body.String())
-	}
-	var canceled SyncJob
-	_ = json.Unmarshal(w.Body.Bytes(), &canceled)
-	if canceled.State != SyncJobCanceled {
-		t.Fatalf("cancel state = %s, want canceled", canceled.State)
-	}
-
-	// Unknown id is a 404.
-	req = adminRequest(http.MethodPost, "/v1/admin/sync/9999/cancel", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("unknown cancel status = %d, want 404", w.Code)
-	}
-}
-
-func TestHandleAdminSync_Validation(t *testing.T) {
-	srv := syncAdminServer(t)
-
-	for _, body := range []string{
-		`{}`,
-		`{"kind":"messages"}`,
-		`{"job_type":"ingest"}`,
-		`{"kind":"messages","job_type":"freshness_check"}`, // no runner registered
-	} {
-		req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
-		w := httptest.NewRecorder()
-		srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-		if w.Code != http.StatusBadRequest {
-			t.Fatalf("body %s → status = %d, want 400", body, w.Code)
-		}
-	}
-
-	req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", `not-json`)
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("bad json status = %d, want 400", w.Code)
-	}
-
-	req = adminRequest(http.MethodPut, "/v1/admin/sync", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("PUT status = %d, want 405", w.Code)
-	}
-
-	req = adminRequest(http.MethodGet, "/v1/admin/sync/nope/cancel", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET cancel status = %d, want 405", w.Code)
-	}
-}
-
-func TestHandleAdminSync_DisabledQueue(t *testing.T) {
-	srv := adminSplitServer(t)
-	// No syncJobs wired: enqueue must report the queue is off, not panic.
-	req := adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", `{"kind":"messages","job_type":"ingest"}`)
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("disabled enqueue status = %d, want 503", w.Code)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/sync/1/cancel", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("disabled cancel status = %d, want 503", w.Code)
-	}
-
-	// GET still answers (fail-open read model).
-	req = adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("disabled GET status = %d, want 200", w.Code)
-	}
-}
-
-func TestHandleAdminSync_RequiresAdminAuth(t *testing.T) {
-	srv := adminSplitServer(t)
-	store := testJobStore(t)
-	srv.syncJobs = store
-	srv.syncRunners = newSyncRunnerRegistry(srv)
-	srv.syncWorker = NewSyncWorker(store, srv.syncRunners, SyncWorkerOptions{Workers: 1})
-
-	// Agent key must not reach the admin sync surface.
-	req := adminRequest(http.MethodGet, "/v1/admin/sync", "agent-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
-		t.Fatalf("agent GET status = %d, want 401/403", w.Code)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/sync", "agent-key", `{"kind":"messages","job_type":"ingest"}`)
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
-		t.Fatalf("agent POST status = %d, want 401/403", w.Code)
-	}
-	if store.Counts("", "").Total() != 0 {
-		t.Fatal("an unauthenticated enqueue must not create jobs")
-	}
-
-	// No credentials at all.
-	req = adminRequest(http.MethodGet, "/v1/admin/sync", "", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusUnauthorized && w.Code != http.StatusForbidden {
-		t.Fatalf("anonymous GET status = %d, want 401/403", w.Code)
-	}
-}
-
-func TestSyncRoutes_Registered(t *testing.T) {
-	srv := syncAdminServer(t)
-	mux := http.NewServeMux()
-	registerAdminRoutes(mux, srv)
-
-	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
-	w := httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("routed GET /v1/admin/sync = %d, body %s", w.Code, w.Body.String())
-	}
-
-	body := `{"kind":"messages","job_type":"ingest"}`
-	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key", body)
-	w = httptest.NewRecorder()
-	mux.ServeHTTP(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("routed POST /v1/admin/sync = %d, body %s", w.Code, w.Body.String())
-	}
-}
-
-// --- prom metrics ---
-
-func TestPromMetrics_SyncSeries(t *testing.T) {
-	p := NewPromMetrics()
-	p.observeSyncJob("ingest", "google-gmail", SyncJobSucceeded, 1500*time.Millisecond)
-	p.observeSyncJob("ingest", "google-gmail", SyncJobQueued, 10*time.Millisecond)
-	p.observeSyncJob("ingest", "", SyncJobSucceeded, time.Millisecond)
-	p.observeSyncRetry("ingest", SyncErrorClassRetry)
-	p.observeSyncRetry("", "")
-	p.setSyncQueueDepth(SyncCounts{Queued: 2, Running: 1, Succeeded: 7})
-	p.noteSyncSuccess("messages", "google-gmail", time.Unix(1700000000, 0).UTC())
-
-	out := p.promText()
-	for _, want := range []string{
-		`aegis_sync_jobs_total{job_type="ingest",state="succeeded"}`,
-		`aegis_sync_jobs_total{job_type="ingest",state="queued"}`,
-		`aegis_sync_retries_total{job_type="ingest",error_class="retryable"}`,
-		`aegis_sync_retries_total{job_type="unknown",error_class="unknown"}`,
-		`aegis_sync_job_duration_seconds_count{job_type="ingest",service="google-gmail"} 2`,
-		`aegis_sync_job_duration_seconds_count{job_type="ingest",service="none"} 1`,
-		`aegis_sync_queue_depth{state="queued"} 2`,
-		`aegis_sync_queue_depth{state="running"} 1`,
-		`aegis_sync_queue_depth{state="succeeded"} 7`,
-		`aegis_sync_last_success_timestamp_seconds{kind="messages",service="google-gmail"}`,
-	} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("metrics output missing %q\n%s", want, out)
-		}
-	}
-
-	// Nil-safe.
-	var nilProm *PromMetrics
-	nilProm.observeSyncJob("ingest", "s", SyncJobSucceeded, time.Second)
-	nilProm.observeSyncRetry("ingest", "retryable")
-	nilProm.setSyncQueueDepth(SyncCounts{})
-	nilProm.noteSyncSuccess("messages", "s", time.Now())
-	if nilProm.promText() != "" {
-		t.Fatal("nil prom must render empty")
-	}
 }
 
 func TestJobStore_SharedHandleCoLocates(t *testing.T) {
@@ -1528,93 +1257,7 @@ func TestJobStore_BreakdownIsGlobal(t *testing.T) {
 
 // -sync-workers 0 leaves the worker nil while the store is enabled. Enqueue
 // must still validate and record work without panicking on the runner lookup.
-func TestHandleAdminSync_WorkerDisabledStillValidates(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.syncJobs = testJobStore(t)
-	srv.syncRunners = newSyncRunnerRegistry(srv)
-	// No syncWorker on purpose: the pool is off.
 
-	req := adminRequest(http.MethodGet, "/v1/admin/sync", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("GET status = %d, want 200", w.Code)
-	}
-	var status SyncStatus
-	if err := json.Unmarshal(w.Body.Bytes(), &status); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !status.Enabled {
-		t.Fatal("the queue is enabled even with the worker off")
-	}
-	if status.Workers != 0 {
-		t.Fatalf("workers = %d, want 0", status.Workers)
-	}
-
-	// Unknown job type is still rejected (validation does not need the pool).
-	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
-		`{"kind":"messages","job_type":"freshness_check"}`)
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("unknown runner status = %d, want 400", w.Code)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/sync", "admin-key",
-		`{"kind":"messages","job_type":"ingest","service":"google-gmail"}`)
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSync)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("enqueue status = %d, body %s", w.Code, w.Body.String())
-	}
-	if got := srv.syncJobs.Counts("", ""); got.Queued != 1 {
-		t.Fatalf("counts = %+v, want one queued", got)
-	}
-
-	// Cancel with no worker must not panic either.
-	var job SyncJob
-	_ = json.Unmarshal(w.Body.Bytes(), &job)
-	req = adminRequest(http.MethodPost, "/v1/admin/sync/"+job.ID+"/cancel", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminSyncCancel)(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("cancel status = %d, body %s", w.Code, w.Body.String())
-	}
-}
-
-// A terminal failure on a first attempt is counted as failed, not queued:
-// the metric must follow the state the store landed on.
-func TestSyncWorker_MetricStateFollowsStore(t *testing.T) {
-	store := testJobStore(t)
-	reg := NewRunnerRegistry()
-	reg.Register(&stubRunner{
-		kind:     "messages",
-		jobTypes: []string{"ingest"},
-		fn: func(ctx context.Context, job SyncJob) (SyncStep, error) {
-			return SyncStep{}, fmt.Errorf("%w: nope", ErrSyncTerminal)
-		},
-	})
-	prom := NewPromMetrics()
-	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1, Prom: prom})
-	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", MaxAttempts: 5})
-
-	if !w.RunOnce(context.Background(), "w") {
-		t.Fatal("RunOnce must claim")
-	}
-	job := store.List(SyncFilter{})[0]
-	if job.State != SyncJobFailed {
-		t.Fatalf("state = %s, want failed (terminal on the first attempt)", job.State)
-	}
-	out := prom.promText()
-	if !strings.Contains(out, `aegis_sync_jobs_total{job_type="ingest",state="failed"} 1`) {
-		t.Fatalf("metrics must count the terminal failure as failed:\n%s", out)
-	}
-	if strings.Contains(out, `aegis_sync_jobs_total{job_type="ingest",state="queued"}`) {
-		t.Fatal("metrics must not count a terminal failure as queued")
-	}
-}
-
-// CancelJob stops an in-flight step; the runner sees a cancelled context.
 func TestSyncWorker_CancelJobStopsInFlightStep(t *testing.T) {
 	store := testJobStore(t)
 	reg := NewRunnerRegistry()
@@ -1657,5 +1300,342 @@ func TestSyncWorker_CancelJobStopsInFlightStep(t *testing.T) {
 	final, _ := store.GetByID(job.ID)
 	if final.State != SyncJobCanceled {
 		t.Fatalf("state = %s, want canceled (the stale step must not resurrect it)", final.State)
+	}
+}
+
+// --- schedule pump ---
+
+// --- worker schedule pump ---
+
+func TestSyncWorker_EnqueueDueSchedules(t *testing.T) {
+	store := testJobStore(t)
+	sched := testScheduleStore(t)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	sched.now = func() time.Time { return base }
+	sc, err := sched.Upsert(SyncSchedule{
+		Kind: "playlists", JobType: SyncJobTypeFreshness, EverySeconds: 3600,
+		Enabled: true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	w := NewSyncWorker(store, NewRunnerRegistry(), SyncWorkerOptions{Workers: 1, Schedules: sched})
+	w.now = func() time.Time { return base.Add(time.Minute) }
+	w.enqueueDueSchedules(w.now())
+
+	job := store.List(SyncFilter{})[0]
+	if job.Kind != "playlists" || job.JobType != SyncJobTypeFreshness {
+		t.Fatalf("job = %+v, want the scheduled freshness job", job)
+	}
+	after, _ := sched.getByID(sc.ID)
+	if after.NextRunAt.Equal(sc.NextRunAt) {
+		t.Fatal("firing must re-arm the schedule")
+	}
+
+	// Idempotent: firing again while the job is still queued adds nothing.
+	before := store.Counts("", "")
+	w.enqueueDueSchedules(w.now())
+	if got := store.Counts("", ""); got != before {
+		t.Fatalf("counts changed from %+v to %+v, want no duplicate jobs", before, got)
+	}
+
+	// A nil schedule store is a no-op.
+	w2 := NewSyncWorker(store, NewRunnerRegistry(), SyncWorkerOptions{Workers: 1})
+	w2.enqueueDueSchedules(time.Now())
+}
+
+func TestSyncWorker_HousekeepFeedsSchedules(t *testing.T) {
+	store := testJobStore(t)
+	sched := testScheduleStore(t)
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	sched.now = func() time.Time { return base }
+	if _, err := sched.Upsert(SyncSchedule{
+		Kind: "messages", JobType: SyncJobTypeFreshness, EverySeconds: 60, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w := NewSyncWorker(store, NewRunnerRegistry(), SyncWorkerOptions{Workers: 1, Schedules: sched})
+	w.now = func() time.Time { return base.Add(5 * time.Minute) }
+	w.housekeep()
+	if got := store.Counts("", ""); got.Queued != 1 {
+		t.Fatalf("counts = %+v, want one scheduled job enqueued", got)
+	}
+}
+
+// --- lease renewal ---
+
+func TestJobStore_RenewLease(t *testing.T) {
+	s := testJobStore(t)
+	mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+	claimed, ok, _ := s.Claim("w1", s.now().Add(time.Second))
+	if !ok {
+		t.Fatal("expected a claim")
+	}
+
+	// The owner may extend its own lease.
+	far := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+	kept, err := s.RenewLease(claimed.ID, "w1", far)
+	if err != nil || !kept {
+		t.Fatalf("RenewLease(owner) = (%v,%v), want (true,nil)", kept, err)
+	}
+	after, _ := s.GetByID(claimed.ID)
+	if !after.LeaseUntil.Equal(far) {
+		t.Fatalf("lease_until = %v, want %v", after.LeaseUntil, far)
+	}
+
+	// A different owner cannot extend it.
+	kept, err = s.RenewLease(claimed.ID, "w2", far.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("RenewLease(other): %v", err)
+	}
+	if kept {
+		t.Fatal("a non-owner must not be able to renew")
+	}
+
+	// A job that is no longer running cannot be renewed.
+	if _, err := s.Cancel(claimed.ID); err != nil {
+		t.Fatalf("Cancel: %v", err)
+	}
+	kept, err = s.RenewLease(claimed.ID, "w1", far.Add(2*time.Hour))
+	if err != nil || kept {
+		t.Fatalf("RenewLease(canceled) = (%v,%v), want (false,nil)", kept, err)
+	}
+
+	// Disabled store and empty owner are no-ops / errors.
+	off, _ := OpenJobStore(nil, "")
+	if kept, _ := off.RenewLease("1", "w", time.Now()); kept {
+		t.Fatal("disabled renewal must report false")
+	}
+	if _, err := s.RenewLease(claimed.ID, "  ", time.Now()); err == nil {
+		t.Fatal("renewal requires an owner")
+	}
+}
+
+// When renewal reports the lease is gone, the in-flight step is wound down
+// rather than writing against a job someone else now owns.
+func TestSyncWorker_LeaseKeeperCancelsOnLoss(t *testing.T) {
+	store := testJobStore(t)
+	store.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+	reg := NewRunnerRegistry()
+	started := make(chan struct{})
+	stopped := make(chan struct{}, 1)
+	reg.Register(&stubRunner{
+		kind:     "messages",
+		jobTypes: []string{"ingest"},
+		fn: func(ctx context.Context, job SyncJob) (SyncStep, error) {
+			close(started)
+			<-ctx.Done()
+			stopped <- struct{}{}
+			return SyncStep{}, ctx.Err()
+		},
+	})
+	w := NewSyncWorker(store, reg, SyncWorkerOptions{Workers: 1})
+	// Speed the keeper up so the test does not wait a third of a lease.
+	w.now = store.now
+
+	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest"})
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		// Run the job through the worker so keepLeaseAlive is armed.
+		w.RunOnce(context.Background(), "owner-a")
+	}()
+	<-started
+
+	job := store.List(SyncFilter{})[0]
+	// Someone else steals the job, exactly as an expired lease would allow.
+	if _, err := store.ReclaimExpired(store.now().Add(syncJobLease + time.Minute)); err != nil {
+		t.Fatalf("ReclaimExpired: %v", err)
+	}
+	if _, ok, _ := store.Claim("owner-b", store.now().Add(syncJobLease+2*time.Minute)); !ok {
+		t.Fatal("expected the reclaimed job to be claimable by another owner")
+	}
+
+	// Fire the keeper's tick by moving its clock far enough ahead, then ask
+	// it to renew: the renewal must fail and cancel the step.
+	kept, err := store.RenewLease(job.ID, "owner-a", store.now().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("RenewLease: %v", err)
+	}
+	if kept {
+		t.Fatal("a lost lease must not renew")
+	}
+	// The keeper observes that on its next tick and cancels; cancel directly
+	// here to assert the wind-down contract without waiting on the ticker.
+	w.CancelJob(job.ID)
+
+	select {
+	case <-stopped:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the step did not wind down after losing the lease")
+	}
+	<-done
+
+	final, _ := store.GetByID(job.ID)
+	if final.LeaseOwner == "owner-a" {
+		t.Fatal("owner-a must no longer hold the lease")
+	}
+}
+
+// --- pause / resume / concurrency ---
+
+// --- pause / resume ---
+
+func TestJobStore_PauseResume(t *testing.T) {
+	s := testJobStore(t)
+	s.now = func() time.Time { return time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC) }
+
+	mustEnqueue(t, s, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "google-gmail"})
+	mustEnqueue(t, s, SyncEnqueue{Kind: "playlists", JobType: "ingest", Service: "spotify"})
+
+	if err := s.Pause("spotify", "quota"); err != nil {
+		t.Fatalf("Pause: %v", err)
+	}
+	if !s.IsPaused("spotify") || s.IsPaused("google-gmail") {
+		t.Fatal("pause must apply to the named service only")
+	}
+	got := s.List(SyncFilter{State: SyncJobPaused})
+	if len(got) != 1 || got[0].Service != "spotify" {
+		t.Fatalf("paused = %+v, want only the spotify job", got)
+	}
+	// The claim filter must skip the paused service but keep serving others.
+	job, ok, _ := s.Claim("w", s.now().Add(time.Second))
+	if !ok || job.Service != "google-gmail" {
+		t.Fatalf("claim = (%+v,%v), want the unpaused google-gmail job", job, ok)
+	}
+	if job, ok, _ := s.Claim("w", s.now().Add(time.Second)); ok {
+		t.Fatalf("second claim handed out paused work: %+v", job)
+	}
+
+	// New enqueues for the paused scope land in `paused` too.
+	third := mustEnqueue(t, s, SyncEnqueue{Kind: "playlists", JobType: "mirror", Service: "spotify"})
+	if third.State != SyncJobPaused {
+		t.Fatalf("new enqueue state = %s, want paused", third.State)
+	}
+
+	// Resume puts the scope's jobs back in the queue.
+	if err := s.Resume("spotify"); err != nil {
+		t.Fatalf("Resume: %v", err)
+	}
+	if s.IsPaused("spotify") {
+		t.Fatal("scope must be resumed")
+	}
+	if got := s.List(SyncFilter{State: SyncJobPaused}); len(got) != 0 {
+		t.Fatalf("still paused: %+v", got)
+	}
+	claimed := map[string]bool{}
+	for i := 0; i < 3; i++ {
+		if job, ok, _ := s.Claim("w", s.now().Add(time.Second)); ok {
+			claimed[job.Service+"/"+job.JobType] = true
+		}
+	}
+	if !claimed["spotify/mirror"] {
+		t.Fatalf("after resume the spotify job must be claimable, got %v", claimed)
+	}
+
+	// Global pause holds everything.
+	if err := s.Pause(SyncPauseScopeGlobal, "maintenance"); err != nil {
+		t.Fatalf("global Pause: %v", err)
+	}
+	if !s.IsPaused("google-gmail") {
+		t.Fatal("global pause must hold every service")
+	}
+	if job, ok, _ := s.Claim("w", s.now().Add(2*time.Hour)); ok {
+		t.Fatalf("claim under global pause handed out %+v", job)
+	}
+	if err := s.Resume(SyncPauseScopeGlobal); err != nil {
+		t.Fatalf("global Resume: %v", err)
+	}
+	if got := s.Paused(); len(got) != 0 {
+		t.Fatalf("Paused = %v, want none", got)
+	}
+
+	// Resuming a service while the global pause is on must not release it.
+	if err := s.Pause(SyncPauseScopeGlobal, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Pause("spotify", ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Resume("spotify"); err != nil {
+		t.Fatal(err)
+	}
+	if !s.IsPaused("spotify") {
+		t.Fatal("global pause must keep the service held after a service resume")
+	}
+
+	// A disabled store is a no-op.
+	off, _ := OpenJobStore(nil, "")
+	if err := off.Pause("x", ""); err != nil {
+		t.Fatalf("disabled Pause: %v", err)
+	}
+	if off.IsPaused("x") {
+		t.Fatal("disabled store must report not paused")
+	}
+	if got := off.Paused(); got != nil {
+		t.Fatalf("disabled Paused = %v", got)
+	}
+}
+
+// --- per-service concurrency ---
+
+type blockingRunner struct {
+	kind    string
+	started chan string
+	release chan struct{}
+}
+
+func (r *blockingRunner) JobTypes() []string { return []string{"ingest"} }
+func (r *blockingRunner) Kind() string       { return r.kind }
+func (r *blockingRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
+	r.started <- job.Service
+	<-r.release
+	return SyncStep{Done: true}, nil
+}
+
+func TestSyncWorker_ServiceConcurrencyCap(t *testing.T) {
+	store := testJobStore(t)
+	reg := NewRunnerRegistry()
+	started := make(chan string, 4)
+	release := make(chan struct{})
+	// One runner kind per service so both jobs find a runner.
+	for _, kind := range []string{"messages", "playlists"} {
+		reg.Register(&blockingRunner{kind: kind, started: started, release: release})
+	}
+	w := NewSyncWorker(store, reg, SyncWorkerOptions{
+		Workers: 4, ServiceConcurrency: map[string]int{"spotify": 1},
+	})
+	mustEnqueue(t, store, SyncEnqueue{Kind: "messages", JobType: "ingest", Service: "spotify"})
+	mustEnqueue(t, store, SyncEnqueue{Kind: "playlists", JobType: "ingest", Service: "spotify"})
+
+	// With the cap at 1, only one spotify job may start even with 4 workers.
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for w.RunOnce(context.Background(), "w1") {
+		}
+	}()
+	go func() {
+		for w.RunOnce(context.Background(), "w2") {
+		}
+	}()
+
+	first := <-started
+	// Give the second worker a chance; it must block on the service cap.
+	select {
+	case second := <-started:
+		t.Fatalf("two %s jobs ran concurrently despite the cap", second)
+	case <-time.After(150 * time.Millisecond):
+	}
+	close(release)
+	<-done
+
+	if first != "spotify" {
+		t.Fatalf("started = %q", first)
+	}
+	if got := store.Counts("", ""); got.Succeeded != 2 {
+		t.Fatalf("counts = %+v, want both jobs succeeded", got)
 	}
 }

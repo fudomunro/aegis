@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 // Freshness-check runner (issue #227 phase 2). One runner per library kind,
@@ -24,23 +26,23 @@ type freshnessRunner struct {
 	kind   string
 }
 
-// JobTypes implements SyncRunner.
-func (r *freshnessRunner) JobTypes() []string { return []string{SyncJobTypeFreshness} }
+// JobTypes implements syncjobs.SyncRunner.
+func (r *freshnessRunner) JobTypes() []string { return []string{syncjobs.SyncJobTypeFreshness} }
 
-// Kind implements SyncRunner.
+// Kind implements syncjobs.SyncRunner.
 func (r *freshnessRunner) Kind() string { return r.kind }
 
 // Run checks one bounded batch of copy rows and chains until the ledger is
 // exhausted. Always succeeds as long as the store answers: an uncheckable row
 // is skipped and left alone, never failed.
-func (r *freshnessRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
+func (r *freshnessRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.SyncStep, error) {
 	if r == nil || r.engine == nil {
-		return SyncStep{}, fmt.Errorf("%w: freshness engine not wired", ErrSyncTerminal)
+		return syncjobs.SyncStep{}, fmt.Errorf("%w: freshness engine not wired", syncjobs.ErrSyncTerminal)
 	}
 	var p freshnessJobPayload
 	if len(job.Payload) > 0 {
 		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			return SyncStep{}, fmt.Errorf("%w: bad freshness payload: %v", ErrSyncTerminal, err)
+			return syncjobs.SyncStep{}, fmt.Errorf("%w: bad freshness payload: %v", syncjobs.ErrSyncTerminal, err)
 		}
 	}
 	kind := p.Kind
@@ -49,10 +51,10 @@ func (r *freshnessRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error
 	}
 	batch, err := r.engine.RunBatch(ctx, kind, p.AfterID, p.Limit)
 	if err != nil {
-		return SyncStep{}, err
+		return syncjobs.SyncStep{}, err
 	}
 
-	step := SyncStep{
+	step := syncjobs.SyncStep{
 		Done: batch.Done,
 		Progress: map[string]any{
 			"kind":       batch.Kind,
@@ -84,9 +86,9 @@ func (r *freshnessRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error
 var freshnessKinds = []string{"messages", "playlists", "tracks"}
 
 // newFreshnessRunners builds one freshness runner per supported kind.
-func newFreshnessRunners(srv *Server) []SyncRunner {
+func newFreshnessRunners(srv *Server) []syncjobs.SyncRunner {
 	engine := NewFreshnessEngine(srv, newCheckerRegistry(srv))
-	out := make([]SyncRunner, 0, len(freshnessKinds))
+	out := make([]syncjobs.SyncRunner, 0, len(freshnessKinds))
 	for _, kind := range freshnessKinds {
 		out = append(out, &freshnessRunner{engine: engine, kind: kind})
 	}
@@ -94,7 +96,7 @@ func newFreshnessRunners(srv *Server) []SyncRunner {
 }
 
 // registerFreshnessRunners adds the freshness runners to a registry.
-func registerFreshnessRunners(reg *RunnerRegistry, srv *Server) {
+func registerFreshnessRunners(reg *syncjobs.RunnerRegistry, srv *Server) {
 	for _, r := range newFreshnessRunners(srv) {
 		reg.Register(r)
 	}

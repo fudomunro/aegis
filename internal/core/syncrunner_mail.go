@@ -9,6 +9,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -47,27 +48,27 @@ type mailIngestRunner struct {
 	srv *Server
 }
 
-// JobTypes implements SyncRunner.
+// JobTypes implements syncjobs.SyncRunner.
 func (r *mailIngestRunner) JobTypes() []string {
-	return []string{SyncJobTypeIngest, SyncJobTypeImport}
+	return []string{syncjobs.SyncJobTypeIngest, syncjobs.SyncJobTypeImport}
 }
 
-// Kind implements SyncRunner.
+// Kind implements syncjobs.SyncRunner.
 func (r *mailIngestRunner) Kind() string { return mailIngestKind }
 
 // Run executes one bounded archive ingest step.
-func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, error) {
+func (r *mailIngestRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.SyncStep, error) {
 	if r == nil || r.srv == nil {
-		return SyncStep{}, fmt.Errorf("%w: mail ingest runner not wired", ErrSyncTerminal)
+		return syncjobs.SyncStep{}, fmt.Errorf("%w: mail ingest runner not wired", syncjobs.ErrSyncTerminal)
 	}
 	p, err := parseMailIngestPayload(job)
 	if err != nil {
-		return SyncStep{}, err
+		return syncjobs.SyncStep{}, err
 	}
 	result, err := r.srv.doMailIngest(ctx, p)
-	step := SyncStep{
+	step := syncjobs.SyncStep{
 		Done: result.Done,
-		Progress: mergeMailProgress(job.Progress, map[string]any{
+		Progress: syncjobs.MergeProgress(job.Progress, map[string]any{
 			"service":     result.Service,
 			"listed":      result.Listed,
 			"stored":      result.Stored,
@@ -77,7 +78,7 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 			"done":        result.Done,
 			"query":       result.Query,
 			"last_stored": result.LastStored,
-		}),
+		}, mailProgressCounters),
 	}
 	if err != nil {
 		// Leave step.Payload empty so a retry keeps the job's payload as-is,
@@ -86,7 +87,7 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 		// RetryAfter is provider knowledge the ingest reports (issue #286).
 		if result.RetryAfter > 0 {
 			step.RetryAfter = result.RetryAfter
-			return step, &SyncRetryAfter{Err: err, After: result.RetryAfter}
+			return step, &syncjobs.SyncRetryAfter{Err: err, After: result.RetryAfter}
 		}
 		return step, err
 	}
@@ -110,18 +111,18 @@ func (r *mailIngestRunner) Run(ctx context.Context, job SyncJob) (SyncStep, erro
 // from the job row so a chained step need not repeat it. The job type picks
 // the default: `import_snapshot` is a snapshot import (Takeout), `ingest` is
 // live cursor paging (Gmail).
-func parseMailIngestPayload(job SyncJob) (mailIngestPayload, error) {
+func parseMailIngestPayload(job syncjobs.SyncJob) (mailIngestPayload, error) {
 	var p mailIngestPayload
 	if len(job.Payload) > 0 {
 		if err := json.Unmarshal(job.Payload, &p); err != nil {
-			return p, fmt.Errorf("%w: bad ingest payload: %v", ErrSyncTerminal, err)
+			return p, fmt.Errorf("%w: bad ingest payload: %v", syncjobs.ErrSyncTerminal, err)
 		}
 	}
 	if p.Service == "" {
 		p.Service = strings.TrimSpace(job.Service)
 	}
 	if p.Service == "" {
-		if job.JobType == SyncJobTypeImport {
+		if job.JobType == syncjobs.SyncJobTypeImport {
 			p.Service = connectors.TakeoutServiceID
 		} else {
 			p.Service = connectors.GoogleGmailServiceID
@@ -136,12 +137,12 @@ func parseMailIngestPayload(job SyncJob) (mailIngestPayload, error) {
 func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (shared.MailIngestResult, error) {
 	if s.mail == nil {
 		return shared.MailIngestResult{Service: p.Service, Error: "mail archive disabled"},
-			fmt.Errorf("%w: mail archive disabled", ErrSyncTerminal)
+			fmt.Errorf("%w: mail archive disabled", syncjobs.ErrSyncTerminal)
 	}
 	ingest := s.mailIngestFor(p.Service)
 	if ingest == nil {
 		return shared.MailIngestResult{Service: p.Service},
-			fmt.Errorf("%w: service %s cannot sync the mail archive", ErrSyncTerminal, p.Service)
+			fmt.Errorf("%w: service %s cannot sync the mail archive", syncjobs.ErrSyncTerminal, p.Service)
 	}
 	// Live (connector-backed) sources must have a non-blocked config entry;
 	// ingest-only sync locations like the Takeout export are not services.
@@ -149,7 +150,7 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (shared.
 		svc := s.config.GetService(p.Service)
 		if svc == nil || svc.Action == "block" {
 			return shared.MailIngestResult{Service: p.Service},
-				fmt.Errorf("%w: service %s is blocked", ErrSyncTerminal, p.Service)
+				fmt.Errorf("%w: service %s is blocked", syncjobs.ErrSyncTerminal, p.Service)
 		}
 	}
 
@@ -165,7 +166,7 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (shared.
 	// An ingest whose location is missing or rejected is terminal for the
 	// queue and a client error on the HTTP surface.
 	if errors.Is(err, shared.ErrMailConfig) {
-		err = fmt.Errorf("%w: %w", ErrSyncTerminal, err)
+		err = fmt.Errorf("%w: %w", syncjobs.ErrSyncTerminal, err)
 	}
 	if err == nil && result.Snapshot != nil {
 		s.recordTakeoutSnapshot(result.Snapshot.Path, result.Snapshot.Scanned,
@@ -176,61 +177,6 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (shared.
 	return result, err
 }
 
-// newSyncRunnerRegistry wires the runners this build supports.
-func newSyncRunnerRegistry(srv *Server) *RunnerRegistry {
-	r := NewRunnerRegistry()
-	r.Register(&mailIngestRunner{srv: srv})
-	return r
-}
-
-// syncEnqueueFromRequest maps an admin enqueue request onto SyncEnqueue.
-// Entity keys scope idempotency: a whole-collection ingest dedupes on the
-// service, so repeat clicks do not stack duplicate work.
-func syncEnqueueFromRequest(kind, jobType, service, entityKey string, payload map[string]any) SyncEnqueue {
-	return SyncEnqueue{
-		Kind:      strings.TrimSpace(kind),
-		JobType:   strings.TrimSpace(jobType),
-		Service:   strings.TrimSpace(service),
-		EntityKey: strings.TrimSpace(entityKey),
-		Payload:   payload,
-	}
-}
-
 // mailProgressCounters are the per-step fields that accumulate across a chain
 // so an operator sees the running total, not the last page's counts.
 var mailProgressCounters = []string{"listed", "stored", "skipped", "failed"}
-
-// mergeMailProgress folds one step's counts onto the job's running totals.
-// Boolean/identity fields (done, truncated, service, query) reflect the
-// latest step.
-func mergeMailProgress(prev json.RawMessage, step map[string]any) map[string]any {
-	out := make(map[string]any, len(step))
-	if len(prev) > 0 {
-		var base map[string]any
-		if err := json.Unmarshal(prev, &base); err == nil {
-			for k, v := range base {
-				out[k] = v
-			}
-		}
-	}
-	for k, v := range step {
-		out[k] = v
-	}
-	for _, k := range mailProgressCounters {
-		out[k] = toInt(out[k]) + toInt(step[k])
-	}
-	return out
-}
-
-// toInt coerces a JSON-decoded number (float64) or an int to an int.
-func toInt(v any) int {
-	switch n := v.(type) {
-	case int:
-		return n
-	case int64:
-		return int(n)
-	case float64:
-		return int(n)
-	}
-	return 0
-}

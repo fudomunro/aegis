@@ -1,4 +1,4 @@
-package core
+package syncjobs
 
 import (
 	"database/sql"
@@ -309,10 +309,11 @@ WHERE id=?
 
 // defaultFreshnessSchedules are the recurring checks seeded on first start so
 // freshness data accumulates without anyone configuring anything. Operators
-// can disable them; the seed only fills in what is missing.
-func defaultFreshnessSchedules() []SyncSchedule {
-	out := make([]SyncSchedule, 0, len(freshnessKinds))
-	for _, kind := range freshnessKinds {
+// can disable them; the seed only fills in what is missing. The kinds come
+// from the runners the build registers — the store does not know them.
+func defaultFreshnessSchedules(kinds []string) []SyncSchedule {
+	out := make([]SyncSchedule, 0, len(kinds))
+	for _, kind := range kinds {
 		out = append(out, SyncSchedule{
 			Name:         "Daily copy freshness",
 			Kind:         kind,
@@ -324,14 +325,14 @@ func defaultFreshnessSchedules() []SyncSchedule {
 	return out
 }
 
-// SeedDefaults inserts any missing default schedules. Existing rows are left
-// exactly as the operator left them.
-func (s *ScheduleStore) SeedDefaults() (int, error) {
+// SeedDefaults inserts any missing default schedules for the given kinds.
+// Existing rows are left exactly as the operator left them.
+func (s *ScheduleStore) SeedDefaults(kinds []string) (int, error) {
 	if !s.Enabled() {
 		return 0, nil
 	}
 	added := 0
-	for _, sc := range defaultFreshnessSchedules() {
+	for _, sc := range defaultFreshnessSchedules(kinds) {
 		if _, err := s.getByKey(sc.Kind, sc.JobType, sc.Service, sc.EntityKey); err == nil {
 			continue
 		}

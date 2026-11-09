@@ -20,6 +20,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -133,16 +134,16 @@ type Server struct {
 	// syncJobs is the durable sync job queue (issue #227). May be disabled.
 	// Co-located with copies by default so completion and copy stamps share
 	// one transaction.
-	syncJobs *JobStore
+	syncJobs *syncjobs.JobStore
 	// syncRunners maps (kind, job_type) to a runner. Held here, not only on
 	// the worker, so admin enqueue can validate a request even when
 	// -sync-workers 0 leaves the pool off.
-	syncRunners *RunnerRegistry
+	syncRunners *syncjobs.RunnerRegistry
 	// syncWorker drains syncJobs. Nil when the queue is disabled.
-	syncWorker *SyncWorker
+	syncWorker *syncjobs.SyncWorker
 	// syncSchedules holds recurring sync job templates (issue #227 phase 2).
 	// May be disabled.
-	syncSchedules *ScheduleStore
+	syncSchedules *syncjobs.ScheduleStore
 	// mirrorSourceFn / mirrorTargetFn override the mirror adapter lookup.
 	// Nil in production; tests use them to stub a provider.
 	mirrorSourceFn func(serviceID, kind string) (mirrorSource, error)

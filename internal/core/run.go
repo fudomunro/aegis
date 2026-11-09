@@ -1,9 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"context"
 	"database/sql"
 	"flag"
@@ -17,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/links"
@@ -24,9 +22,18 @@ import (
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
+
+// newSyncRunnerRegistry wires the runners this build supports.
+func newSyncRunnerRegistry(srv *Server) *syncjobs.RunnerRegistry {
+	r := syncjobs.NewRunnerRegistry()
+	r.Register(&mailIngestRunner{srv: srv})
+	return r
+}
 
 func Run() {
 	addr := flag.String("addr", "127.0.0.1:8080", "listen address (loopback by default; with Serve identity trust — auto/tailnet auth mode — a wildcard or LAN bind is refused at startup: bind loopback behind tailscale serve, the Tailscale IP, or use -auth-mode api-key)")
@@ -323,7 +330,7 @@ func Run() {
 	if paths.SyncJobs != "" && paths.SyncJobs == paths.CopyLedger {
 		syncShared = copyLedger.DB()
 	}
-	syncStore, err := OpenJobStore(syncShared, paths.SyncJobs)
+	syncStore, err := syncjobs.OpenJobStore(syncShared, paths.SyncJobs)
 	if err != nil {
 		slog.Error("failed to open sync job store", "path", paths.SyncJobs, "error", err)
 		os.Exit(1)
@@ -335,7 +342,7 @@ func Run() {
 
 	// Recurring sync templates live beside the jobs they feed, so a schedule
 	// and its job share one handle and one backup.
-	scheduleStore, err := OpenScheduleStore(syncStore.DB(), paths.SyncJobs)
+	scheduleStore, err := syncjobs.OpenScheduleStore(syncStore.DB(), paths.SyncJobs)
 	if err != nil {
 		slog.Error("failed to open sync schedule store", "path", paths.SyncJobs, "error", err)
 		os.Exit(1)
@@ -343,7 +350,7 @@ func Run() {
 	if scheduleStore != nil {
 		defer scheduleStore.Close()
 		if scheduleStore.Enabled() {
-			if added, err := scheduleStore.SeedDefaults(); err == nil && added > 0 {
+			if added, err := scheduleStore.SeedDefaults(freshnessKinds); err == nil && added > 0 {
 				slog.Info("seeded default sync schedules", "count", added)
 			}
 			slog.Info("sync schedule store ready", "count", len(scheduleStore.List()))
@@ -568,7 +575,7 @@ func Run() {
 	registerMirrorRunners(srv.syncRunners, srv)
 	registerCanaryRunners(srv.syncRunners, srv)
 	if syncStore.Enabled() && *syncWorkers > 0 {
-		srv.syncWorker = NewSyncWorker(syncStore, srv.syncRunners, SyncWorkerOptions{
+		srv.syncWorker = syncjobs.NewSyncWorker(syncStore, srv.syncRunners, syncjobs.SyncWorkerOptions{
 			Workers:            *syncWorkers,
 			Owner:              "aegis",
 			Logger:             slog.Default(),
@@ -579,7 +586,7 @@ func Run() {
 			// Ingest changes what /v1/library/* would return; drop cached
 			// aggregates (and that service's transport entries) instead of
 			// waiting out the TTL. MBID lookups survive (issue #273).
-			OnDone: func(job SyncJob, succeeded bool) {
+			OnDone: func(job syncjobs.SyncJob, succeeded bool) {
 				if succeeded {
 					srv.invalidateService(job.Service)
 				}

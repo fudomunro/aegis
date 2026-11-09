@@ -1,4 +1,4 @@
-package core
+package syncjobs
 
 import (
 	"context"
@@ -94,7 +94,7 @@ type SyncWorker struct {
 	runners *RunnerRegistry
 	// schedules feeds the queue on a cadence (issue #227 phase 2). Optional.
 	schedules *ScheduleStore
-	prom      *PromMetrics
+	prom      SyncMetrics
 	logger    *slog.Logger
 
 	// workers is the pool size. Per-service provider limits live in the
@@ -144,7 +144,8 @@ type SyncWorkerOptions struct {
 	Poll    time.Duration
 	Owner   string
 	Logger  *slog.Logger
-	Prom    *PromMetrics
+	// Prom receives queue observations; nil records nothing.
+	Prom SyncMetrics
 	// Schedules, when set, is polled for due recurring templates.
 	Schedules *ScheduleStore
 	// ServiceConcurrency caps concurrent jobs per service id. Unlisted
@@ -575,11 +576,19 @@ func (w *SyncWorker) noteSuccess(job SyncJob) {
 	}
 	w.lastSuccessMu.Unlock()
 	if w.prom != nil {
-		w.prom.noteSyncSuccess(job.Kind, job.Service, now)
+		w.prom.NoteSyncSuccess(job.Kind, job.Service, now)
 	}
 }
 
 // LastSuccess returns the newest successful finish per "kind|service".
+// Workers reports the configured pool size (for admin status).
+func (w *SyncWorker) Workers() int {
+	if w == nil {
+		return 0
+	}
+	return w.workers
+}
+
 func (w *SyncWorker) LastSuccess() map[string]time.Time {
 	if w == nil {
 		return nil
@@ -603,10 +612,10 @@ func (w *SyncWorker) observe(job SyncJob, step SyncStep, err error, state string
 	if state == "" {
 		state = job.State
 	}
-	w.prom.observeSyncJob(job.JobType, job.Service, state, elapsed)
+	w.prom.ObserveSyncJob(job.JobType, job.Service, state, elapsed)
 	if err != nil {
-		class, _ := classifySyncError(err, job.Attempts, step.RetryAfter)
-		w.prom.observeSyncRetry(job.JobType, class)
+		class, _ := ClassifyError(err, job.Attempts, step.RetryAfter)
+		w.prom.ObserveSyncRetry(job.JobType, class)
 	}
 }
 
@@ -615,5 +624,5 @@ func (w *SyncWorker) recordQueueDepth() {
 		return
 	}
 	c := w.store.Counts("", "")
-	w.prom.setSyncQueueDepth(c)
+	w.prom.SetSyncQueueDepth(c)
 }

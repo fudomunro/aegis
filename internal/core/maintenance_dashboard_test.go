@@ -10,13 +10,15 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 func dashTime(h int) time.Time {
 	return time.Date(2026, 1, 2, h, 0, 0, 0, time.UTC)
 }
 
-func dashBundle(at time.Time, counts map[string]SyncCounts, failures []MaintenanceFailure) MaintenanceSignals {
+func dashBundle(at time.Time, counts map[string]syncjobs.SyncCounts, failures []MaintenanceFailure) MaintenanceSignals {
 	sig := MaintenanceSignals{CapturedAt: at, Version: "dev", Commit: "none"}
 	if counts != nil {
 		sig.Sync = &MaintenanceSync{Enabled: true, ByService: counts}
@@ -33,10 +35,10 @@ func dashBundle(at time.Time, counts map[string]SyncCounts, failures []Maintenan
 func TestBuildMaintenanceDashboard_RecordMarks(t *testing.T) {
 	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
 	series := []MaintenanceSignals{
-		dashBundle(dashTime(0), map[string]SyncCounts{
+		dashBundle(dashTime(0), map[string]syncjobs.SyncCounts{
 			"spotify": {Succeeded: 10},
 		}, nil),
-		dashBundle(dashTime(6), map[string]SyncCounts{
+		dashBundle(dashTime(6), map[string]syncjobs.SyncCounts{
 			"spotify": {Succeeded: 15, Failed: 1},
 		}, []MaintenanceFailure{
 			{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(3)},
@@ -111,12 +113,12 @@ func TestScoreDashboardRecord_QuietnessAndDepth(t *testing.T) {
 
 func TestBuildMaintenanceDashboard_CounterResetAndDedup(t *testing.T) {
 	series := []MaintenanceSignals{
-		dashBundle(dashTime(0), map[string]SyncCounts{
+		dashBundle(dashTime(0), map[string]syncjobs.SyncCounts{
 			"spotify": {Succeeded: 30, Failed: 2},
 		}, []MaintenanceFailure{
 			{ID: "j1", Service: "spotify", JobType: "ingest", UpdatedAt: dashTime(0), Error: "boom"},
 		}),
-		dashBundle(dashTime(6), map[string]SyncCounts{
+		dashBundle(dashTime(6), map[string]syncjobs.SyncCounts{
 			"spotify": {Succeeded: 5},
 		}, []MaintenanceFailure{
 			// Same job, later re-failure: one event, latest time wins.
@@ -310,7 +312,7 @@ func TestServicePageFile(t *testing.T) {
 func TestWriteMaintenanceDashboard(t *testing.T) {
 	data := BuildMaintenanceDashboard(
 		[]MaintenanceSignals{
-			dashBundle(dashTime(0), map[string]SyncCounts{
+			dashBundle(dashTime(0), map[string]syncjobs.SyncCounts{
 				"spotify": {Succeeded: 2, Failed: 1},
 			}, []MaintenanceFailure{
 				{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(0),
@@ -403,7 +405,7 @@ func TestHandleAdminMaintenanceDashboard_Build(t *testing.T) {
 	srv.config.EnsureService(Service{
 		ID: "spotify", Name: "Spotify", Endpoint: "http://localhost:8080" + fakeUpstreamMount,
 	})
-	mustEnqueue(t, srv.syncJobs, SyncEnqueue{Kind: "tracks", JobType: "canary", Service: "spotify"})
+	mustEnqueue(t, srv.syncJobs, syncjobs.SyncEnqueue{Kind: "tracks", JobType: "canary", Service: "spotify"})
 	srv.maintenanceIssues = &fakeIssueTracker{records: []MaintenanceIssueRecord{
 		{Number: 7, URL: "https://github.com/example/repo/issues/7", Title: "spotify canary failed",
 			State: "closed", StateReason: "completed", IsTicket: true, TicketService: "spotify",

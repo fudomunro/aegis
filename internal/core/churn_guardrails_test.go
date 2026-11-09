@@ -33,6 +33,10 @@ import (
 var allowedImports = map[string][]string{
 	"internal/shared":      nil,
 	"internal/core/policy": {"github.com/fudomunro/aegis/internal/shared"},
+	"internal/core/syncjobs": {
+		"github.com/fudomunro/aegis/internal/shared",
+		"github.com/fudomunro/aegis/internal/kinds",
+	},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/core/policy",

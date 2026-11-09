@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -46,12 +47,12 @@ type MaintenanceSignals struct {
 
 // MaintenanceSync is the sync-queue slice of a signal bundle.
 type MaintenanceSync struct {
-	Enabled   bool                  `json:"enabled"`
-	Counts    SyncCounts            `json:"counts"`
-	ByJobType map[string]SyncCounts `json:"by_job_type,omitempty"`
-	ByKind    map[string]SyncCounts `json:"by_kind,omitempty"`
-	ByService map[string]SyncCounts `json:"by_service,omitempty"`
-	Failures  []MaintenanceFailure  `json:"failures,omitempty"`
+	Enabled   bool                           `json:"enabled"`
+	Counts    syncjobs.SyncCounts            `json:"counts"`
+	ByJobType map[string]syncjobs.SyncCounts `json:"by_job_type,omitempty"`
+	ByKind    map[string]syncjobs.SyncCounts `json:"by_kind,omitempty"`
+	ByService map[string]syncjobs.SyncCounts `json:"by_service,omitempty"`
+	Failures  []MaintenanceFailure           `json:"failures,omitempty"`
 }
 
 // MaintenanceFailure is one recent failed sync job with scrubbed error text.
@@ -94,7 +95,7 @@ func (s *Server) CollectMaintenanceSignals() MaintenanceSignals {
 				sync.ByJobType = b.ByJobType
 				sync.ByService = b.ByService
 			}
-			for _, j := range s.syncJobs.List(SyncFilter{State: SyncJobFailed, Limit: signalFailureCap}) {
+			for _, j := range s.syncJobs.List(syncjobs.SyncFilter{State: syncjobs.SyncJobFailed, Limit: signalFailureCap}) {
 				sync.Failures = append(sync.Failures, MaintenanceFailure{
 					ID:         j.ID,
 					Kind:       j.Kind,

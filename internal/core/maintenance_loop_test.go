@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 
@@ -27,10 +28,10 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 	srv.tokens.Save("spotify", &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	srv.syncJobs = testJobStore(t)
-	srv.syncRunners = NewRunnerRegistry()
+	srv.syncRunners = syncjobs.NewRunnerRegistry()
 	registerCanaryRunners(srv.syncRunners, srv)
 
-	w := NewSyncWorker(srv.syncJobs, srv.syncRunners, SyncWorkerOptions{Workers: 1, Poll: 10 * time.Millisecond})
+	w := syncjobs.NewSyncWorker(srv.syncJobs, srv.syncRunners, syncjobs.SyncWorkerOptions{Workers: 1, Poll: 10 * time.Millisecond})
 	w.Start()
 	t.Cleanup(w.Stop)
 
@@ -47,7 +48,7 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 	}
 
 	// Healthy fake: the canary succeeds and the bundle is clean.
-	mustEnqueue(t, srv.syncJobs, SyncEnqueue{Kind: "tracks", JobType: SyncJobTypeCanary, Service: "spotify", MaxAttempts: 1})
+	mustEnqueue(t, srv.syncJobs, syncjobs.SyncEnqueue{Kind: "tracks", JobType: syncjobs.SyncJobTypeCanary, Service: "spotify", MaxAttempts: 1})
 	w.Kick()
 	waitFor(t, 1, func() int { return srv.syncJobs.Counts("", "").Succeeded })
 	if sig := srv.CollectMaintenanceSignals(); sig.Sync != nil && len(sig.Sync.Failures) > 0 {
@@ -59,7 +60,7 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 	if err := fu.SetMode(connectors.FakeModeDriftUnmapped); err != nil {
 		t.Fatal(err)
 	}
-	mustEnqueue(t, srv.syncJobs, SyncEnqueue{Kind: "tracks", JobType: SyncJobTypeCanary, Service: "spotify", MaxAttempts: 1})
+	mustEnqueue(t, srv.syncJobs, syncjobs.SyncEnqueue{Kind: "tracks", JobType: syncjobs.SyncJobTypeCanary, Service: "spotify", MaxAttempts: 1})
 	w.Kick()
 	waitFor(t, 1, func() int { return srv.syncJobs.Counts("", "").Failed })
 
@@ -68,7 +69,7 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 		t.Fatalf("bundle failures = %+v", sig.Sync)
 	}
 	f := sig.Sync.Failures[0]
-	if f.Service != "spotify" || f.JobType != SyncJobTypeCanary || f.ErrorClass != SyncErrorClassTerminal {
+	if f.Service != "spotify" || f.JobType != syncjobs.SyncJobTypeCanary || f.ErrorClass != syncjobs.SyncErrorClassTerminal {
 		t.Fatalf("failure = %+v", f)
 	}
 	if !strings.Contains(f.Error, "no items") {
@@ -102,7 +103,7 @@ func TestMaintenanceLoop_FakeDriftToTicket(t *testing.T) {
 	if !strings.HasPrefix(ticket.Signature, "spotify|canary|terminal|") {
 		t.Fatalf("signature = %q", ticket.Signature)
 	}
-	if ticket.Service != "spotify" || ticket.JobType != SyncJobTypeCanary ||
+	if ticket.Service != "spotify" || ticket.JobType != syncjobs.SyncJobTypeCanary ||
 		ticket.ReproState != ReproStateNeedsFixture || ticket.Count != 2 {
 		t.Fatalf("ticket = %+v", ticket)
 	}
