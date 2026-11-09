@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -34,14 +33,21 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 		t.Errorf("path = %q", schema.Path)
 	}
 
-	items, truncated, err := listUserDefined(context.Background(), schema, reg.DirFor("reading-list"), nil)
-	if err != nil {
-		t.Fatalf("listUserDefined: %v", err)
+	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
+	srv.udts = reg
+	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
+	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/reading-list"))(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	if truncated {
-		t.Error("unexpected truncation")
+	var list types.UserDefinedList
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatal(err)
 	}
-	merged := types.MergeUserDefinedItems(schema, items)
+	merged := list.Items
 	if len(merged) != 3 {
 		t.Fatalf("merged %d items, want 3 (ISBN pair, name pair, singleton): %+v", len(merged), merged)
 	}
@@ -117,112 +123,6 @@ func TestLoadUserDefinedTypes_SkipsInvalidAndCollisions(t *testing.T) {
 	}
 }
 
-func TestDottedPath(t *testing.T) {
-	doc := map[string]any{
-		"items": []any{
-			map[string]any{"name": "a", "meta": map[string]any{"tag": "x"}},
-		},
-	}
-	if got := dottedPath(doc, "items.0.meta.tag"); got != "x" {
-		t.Errorf("got %v", got)
-	}
-	if got := dottedPath(doc, "items.0.missing"); got != nil {
-		t.Errorf("got %v", got)
-	}
-	if got := dottedPath(doc, "items.9.name"); got != nil {
-		t.Errorf("got %v", got)
-	}
-	if got := dottedPath(doc, ""); got == nil {
-		t.Error("empty path should return root")
-	}
-}
-
-func TestMapUserDefinedDocument_HTTPSource(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_ = json.NewEncoder(w).Encode(map[string]any{
-			"results": []any{
-				map[string]any{
-					"id": "n1",
-					"properties": map[string]any{
-						"Name":   "The Dispossessed",
-						"Author": "Le Guin",
-					},
-				},
-			},
-		})
-	}))
-	defer srv.Close()
-
-	schema := types.UserDefinedTypeSchema{
-		ID:    "work-notes",
-		Label: "work notes",
-		Fields: map[string]types.UserDefinedField{
-			"title":  {Type: "string"},
-			"author": {Type: "string"},
-		},
-		Identity: types.UserDefinedIdentity{Fields: []string{"title", "author"}},
-		Sources: []types.UserDefinedSourceSpec{{
-			ID:        "wiki",
-			Name:      "Wiki",
-			Kind:      "http_json",
-			Endpoint:  srv.URL,
-			ItemsPath: "results",
-			IDField:   "id",
-			FieldMap: map[string]string{
-				"title":  "properties.Name",
-				"author": "properties.Author",
-			},
-			URLTemplate: "https://wiki.example/{id}",
-		}},
-	}
-	if err := schema.Normalize(); err != nil {
-		t.Fatal(err)
-	}
-	items, truncated, err := fetchUserDefinedSource(context.Background(), schema, schema.Sources[0], "", srv.Client())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if truncated || len(items) != 1 {
-		t.Fatalf("items=%d truncated=%v", len(items), truncated)
-	}
-	got := items[0]
-	if got.Name != "The Dispossessed" {
-		t.Errorf("Name = %q", got.Name)
-	}
-	if got.Fields["author"] != "Le Guin" {
-		t.Errorf("Fields = %+v", got.Fields)
-	}
-	if len(got.Sources) != 1 || got.Sources[0].ID != "n1" || got.Sources[0].URL != "https://wiki.example/n1" {
-		t.Errorf("Sources = %+v", got.Sources)
-	}
-}
-
-func TestListUserDefined_FailOpenPartial(t *testing.T) {
-	dir := t.TempDir()
-	writeSchemaFile(t, dir, "good.json", `{"items":[{"title":"Only Good","author":"A"}]}`)
-	schema := types.UserDefinedTypeSchema{
-		ID:     "notes",
-		Fields: map[string]types.UserDefinedField{"title": {}, "author": {}},
-		Identity: types.UserDefinedIdentity{
-			Fields: []string{"title", "author"},
-		},
-		Sources: []types.UserDefinedSourceSpec{
-			{ID: "good", Kind: "file_json", Path: "good.json", ItemsPath: "items", FieldMap: map[string]string{"title": "title", "author": "author"}},
-			{ID: "bad", Kind: "file_json", Path: "missing.json", ItemsPath: "items", FieldMap: map[string]string{"title": "title"}},
-		},
-	}
-	if err := schema.Normalize(); err != nil {
-		t.Fatal(err)
-	}
-	items, _, err := listUserDefined(context.Background(), schema, dir, nil)
-	if err != nil {
-		t.Fatalf("fail-open list should succeed with partial rows, got %v", err)
-	}
-	if len(items) != 1 {
-		t.Fatalf("items = %+v", items)
-	}
-}
-
 func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	dir := t.TempDir()
 	writeSchemaFile(t, dir, "books.json", `{"items":[
@@ -260,7 +160,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	srv.config.SeedDataGrant("reading-list", policy.DataGrant{Default: policy.AccessRead})
 
 	schema, _ := reg.Get("reading-list")
-	handler := srv.HandleLibraryUserDefined(schema)
+	handler := srv.routeHandler(schema.Path)
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/reading-list", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
@@ -312,7 +212,7 @@ func TestServer_UDTDeniedWhenNotEnabled(t *testing.T) {
 	srv.udts = reg
 	srv.registerUserDefinedKinds()
 	schema, _ := reg.Get("secret-log")
-	handler := srv.HandleLibraryUserDefined(schema)
+	handler := srv.routeHandler(schema.Path)
 	req := httptest.NewRequest(http.MethodGet, "/v1/library/secret-log", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()

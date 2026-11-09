@@ -66,7 +66,7 @@ func (s *Server) LibraryReadable(kind string) bool {
 	if s == nil {
 		return false
 	}
-	if k, ok := s.builtinKind(kind); ok {
+	if k, ok := s.registryKind(kind); ok {
 		return k.HasProviders(s) && k.Readable(s)
 	}
 	return false

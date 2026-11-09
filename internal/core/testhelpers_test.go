@@ -4,15 +4,10 @@ package core
 // in the binary. They were unreachable from any non-test call site.
 
 import (
-	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
@@ -135,48 +130,6 @@ func GenerateSampleMailFor(dataset string, n int) SampleMailSet {
 		set.Records[i].FromName += suffix
 	}
 	return set
-}
-
-// listUserDefined fetches every source for one schema and returns the raw
-// pre-merge rows (the aggregate pipeline owns merge + encode).
-func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, baseDir string, client *http.Client) (items []types.UserDefinedItem, truncated bool, err error) {
-	// Preserve source declaration order for stable source stamps.
-	srcs := schema.Sources
-	if len(srcs) == 0 {
-		return nil, false, fmt.Errorf("no sources configured")
-	}
-	var (
-		mu sync.Mutex
-		wg sync.WaitGroup
-	)
-	errs := make([]error, 0, len(srcs))
-	all := make([]types.UserDefinedItem, 0, len(srcs)*8)
-	for _, src := range srcs {
-		src := src
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			// A bad source must not fail the whole list (fail-open).
-			items, trunc, ferr := fetchUserDefinedSource(ctx, schema, src, baseDir, client)
-			mu.Lock()
-			defer mu.Unlock()
-			if ferr != nil {
-				errs = append(errs, fmt.Errorf("%s: %w", src.ID, ferr))
-				return
-			}
-			if trunc {
-				truncated = true
-			}
-			all = append(all, items...)
-		}()
-	}
-	wg.Wait()
-	// Fail-open: return partial rows even when some sources erred. Only
-	// return an error when every source failed and nothing was collected.
-	if len(all) == 0 && len(errs) > 0 {
-		return nil, truncated, errors.Join(errs...)
-	}
-	return all, truncated, nil
 }
 
 // newTestTokenStore opens a token store with a tiny PBKDF2 cost so the suite

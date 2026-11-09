@@ -321,7 +321,7 @@ func TestLibraryKindDocuments_Registered(t *testing.T) {
 	if !k.Mentions("find my warranty") || !k.Mentions("my receipts") {
 		t.Fatal("keywords should catch paperwork questions")
 	}
-	if _, ok := testServerWithBase(&Config{}, "https://aegis.example.com").builtinKind("documents"); !ok {
+	if _, ok := testServerWithBase(&Config{}, "https://aegis.example.com").registryKind("documents"); !ok {
 		t.Fatal("documents kind missing from kinds.Builtin()")
 	}
 }

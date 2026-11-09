@@ -107,14 +107,12 @@ func (s *Server) HandleAdminLibrary(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return
 	}
-	var handler http.HandlerFunc
-	for _, kind := range s.allLibraryKinds() {
-		if kind.ID != kindID {
-			continue
-		}
-		handler = s.libraryRouteHandlers()[kind.Path]
-		break
+	k, ok := s.registryKind(kindID)
+	if !ok {
+		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
+		return
 	}
+	handler := listHandler(k)
 	if handler == nil {
 		shared.WriteJSONError(w, http.StatusNotFound, "unknown library kind")
 		return

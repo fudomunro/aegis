@@ -1,7 +1,6 @@
 package core
 
 import (
-	"net/http"
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/types"
@@ -45,36 +44,6 @@ func TestServiceProvidedTypes_IncludesDocuments(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("serviceProvidedTypes = %v, want documents", got)
-	}
-}
-
-func TestLibraryRouteHandlers_UDTCannotShadowBuiltIn(t *testing.T) {
-	safeCalled := false
-	builtin := map[string]http.HandlerFunc{
-		"/v1/library/documents": func(http.ResponseWriter, *http.Request) {},
-	}
-	udt := map[string]http.HandlerFunc{
-		"/v1/library/documents": func(http.ResponseWriter, *http.Request) {
-			t.Error("UDT shadow handler must not be installed")
-		},
-		"/v1/library/safe-udt": func(http.ResponseWriter, *http.Request) {
-			safeCalled = true
-		},
-	}
-	skipped := mergeUDTRoutes(builtin, udt, nil)
-	if len(skipped) != 1 || skipped[0] != "/v1/library/documents" {
-		t.Fatalf("skipped = %v, want [/v1/library/documents]", skipped)
-	}
-	if builtin["/v1/library/documents"] == nil {
-		t.Fatal("built-in documents handler was dropped")
-	}
-	builtin["/v1/library/documents"](nil, nil) // must be the built-in no-op
-	if builtin["/v1/library/safe-udt"] == nil {
-		t.Fatal("non-colliding UDT route not registered")
-	}
-	builtin["/v1/library/safe-udt"](nil, nil)
-	if !safeCalled {
-		t.Fatal("safe UDT handler not invoked")
 	}
 }
 

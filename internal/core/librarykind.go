@@ -2,19 +2,15 @@ package core
 
 import (
 	"fmt"
-	"log/slog"
-	"net/http"
-
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/types"
+	"net/http"
 )
 
-// kindHasProviders reports whether any connector can feed the kind.
+// kindHasProviders reports whether any connector or declared local source
+// can feed the kind.
 func kindHasProviders(id string, s *Server) bool {
-	if schema, ok := s.udtSchemaForKind(id); ok {
-		return len(schema.Sources) > 0
-	}
-	if k, ok := s.builtinKind(id); ok {
+	if k, ok := s.registryKind(id); ok {
 		return k.HasProviders(s)
 	}
 	return false
@@ -22,10 +18,7 @@ func kindHasProviders(id string, s *Server) bool {
 
 // kindReadable reports whether at least one non-blocked service allows reads.
 func kindReadable(id string, s *Server) bool {
-	if schema, ok := s.udtSchemaForKind(id); ok {
-		return s.userDefinedReadable(schema.PermType)
-	}
-	if k, ok := s.builtinKind(id); ok {
+	if k, ok := s.registryKind(id); ok {
 		return k.Readable(s)
 	}
 	return false
@@ -41,18 +34,14 @@ func LibraryKindByID(id string) *types.LibraryKind {
 	return types.BuiltinKindByID(id)
 }
 
-// allLibraryKinds returns built-in kinds plus any loaded user-defined kinds
-// (issue #15). Prefer this over ranging libraryKinds directly so UDTs appear
-// in pre-request injection, admin listings, and flow maps.
+// allLibraryKinds returns every registered kind — built-in and
+// user-defined (issue #15). Prefer this over ranging libraryKinds directly
+// so UDTs appear in pre-request injection, admin listings, and flow maps.
 func (s *Server) allLibraryKinds() []types.LibraryKind {
-	out := make([]types.LibraryKind, 0, len(libraryKinds))
-	out = append(out, libraryKinds...)
-	if s != nil && s.udts != nil {
-		for _, schema := range s.udts.All() {
-			if LibraryKindByID(schema.ID) == nil {
-				out = append(out, schema.LibraryKind())
-			}
-		}
+	registry := s.kindRegistry()
+	out := make([]types.LibraryKind, 0, len(registry))
+	for _, k := range registry {
+		out = append(out, k.Def())
 	}
 	return out
 }
@@ -122,12 +111,12 @@ func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 }
 
 // libraryRouteHandlers maps each library route to its HTTP handler so main
-// can register every dataset from the registry: the kinds package's
-// declared routes plus the fixed cross-kind entries. User-defined kinds
-// (issue #15) are merged in when schemas are loaded.
+// can register every dataset from the registry: the composed kind registry
+// (built-ins plus user-defined, shadow-checked at composition) plus the
+// fixed cross-kind entries.
 func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 	handlers := map[string]http.HandlerFunc{}
-	for _, k := range s.builtinKinds() {
+	for _, k := range s.kindRegistry() {
 		for _, route := range k.Routes() {
 			handlers[route.Pattern] = route.Handler
 		}
@@ -139,27 +128,5 @@ func (s *Server) libraryRouteHandlers() map[string]http.HandlerFunc {
 	handlers["/v1/library/review"] = s.HandleMergeReview
 	handlers["/v1/library/links"] = s.HandleEntityLinks
 	handlers["/v1/library/links/"] = s.HandleEntityLinks
-	// User-defined packs must never shadow a built-in route (issue #183).
-	// Normalize rejects reserved ids; this is the defense-in-depth check
-	// against registry/handler drift.
-	mergeUDTRoutes(handlers, s.udtRouteHandlers(), slog.Default())
 	return handlers
-}
-
-// mergeUDTRoutes copies UDT handlers into the built-in route map, refusing
-// to overwrite an existing path. Returns the skipped colliding paths.
-func mergeUDTRoutes(handlers map[string]http.HandlerFunc, udt map[string]http.HandlerFunc, logger *slog.Logger) []string {
-	var skipped []string
-	for path, handler := range udt {
-		if _, exists := handlers[path]; exists {
-			skipped = append(skipped, path)
-			if logger != nil {
-				logger.Warn("user-defined type path collides with built-in library route; skipping",
-					"path", path)
-			}
-			continue
-		}
-		handlers[path] = handler
-	}
-	return skipped
 }

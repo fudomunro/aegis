@@ -710,7 +710,7 @@ func staticCredentialLabel(svc Service) string {
 // kind. Dispatch is registry-driven so a new kind cannot silently drop out
 // of the flow map (issue #254).
 func (s *Server) flowProvidesKind(connector connectors.ServiceConnector, kindID string) bool {
-	if k, ok := s.builtinKind(kindID); ok {
+	if k, ok := s.registryKind(kindID); ok {
 		return k.Provides(connector)
 	}
 	return false
