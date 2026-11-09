@@ -603,7 +603,7 @@ func indexDocuments[T any](e *Engine, spec Spec[T], dataset string, fetched Fetc
 	}
 	docs := make([]search.SearchDocument, 0, len(fetched.Items))
 	for _, item := range fetched.Items {
-		doc, err := search.BuildSearchDocument(spec.SortKey(item), item, *spec.Kind.Search)
+		doc, err := BuildSearchDocument(spec.SortKey(item), item, *spec.Kind.Search)
 		if err != nil {
 			return err
 		}

@@ -1,4 +1,4 @@
-package search
+package kinds
 
 import (
 	"strings"
