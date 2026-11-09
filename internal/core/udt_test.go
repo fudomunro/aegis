@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func writeSchemaFile(t *testing.T, dir, name, content string) {
@@ -43,7 +43,7 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	var list types.UserDefinedList
+	var list kinds.UserDefinedList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatal(err)
 	}
@@ -55,12 +55,12 @@ func TestLoadUserDefinedTypes_FromExamplePack(t *testing.T) {
 	var sawEntity, sawName bool
 	for _, item := range merged {
 		switch item.Match {
-		case types.UserDefinedMatchEntityID:
+		case kinds.UserDefinedMatchEntityID:
 			sawEntity = true
 			if len(item.Sources) != 2 {
 				t.Errorf("entity row sources = %d, want 2", len(item.Sources))
 			}
-		case types.UserDefinedMatchName:
+		case kinds.UserDefinedMatchName:
 			sawName = true
 			if len(item.Sources) != 2 {
 				t.Errorf("name row sources = %d, want 2", len(item.Sources))
@@ -168,7 +168,7 @@ func TestServer_UDTRouteAndAggregate(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
 	}
-	var list types.UserDefinedList
+	var list kinds.UserDefinedList
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

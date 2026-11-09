@@ -16,7 +16,7 @@ type artistsKind struct {
 
 func newArtistsKind(h Host, e *Engine, d Deps) Kind {
 	k := &artistsKind{h: h, e: e, resolve: d.ResolveArtists}
-	def := *types.BuiltinKindByID("artists")
+	def := *BuiltinKindByID("artists")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.ArtistProvider],

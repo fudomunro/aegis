@@ -3,6 +3,8 @@ package core
 import (
 	"encoding/json"
 	"errors"
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,8 +14,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func searchTestServer(t *testing.T, contacts ...types.Contact) *Server {
@@ -124,7 +124,7 @@ func TestLibrarySearch_UnsupportedKindRejectsQ(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	kinds.Aggregate(srv, srv.libraryEngine(), w, req, kinds.Spec[types.Contact]{
-		Kind:      types.LibraryKind{ID: "notes", Label: "notes"},
+		Kind:      kinds.LibraryKind{ID: "notes", Label: "notes"},
 		ServiceOf: func(types.Contact) string { return "" },
 		SortKey:   func(types.Contact) string { return "" },
 		Merge:     func(in []types.Contact) []types.Contact { return in },

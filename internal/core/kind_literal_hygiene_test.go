@@ -1,6 +1,7 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -8,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Kind literals (AGENTS.md "Non-negotiable product rules"): the hub never
@@ -54,7 +53,7 @@ func kindLiteralAllowed(file string) (string, bool) {
 
 func TestKindLiterals_HubNeverNamesAKind(t *testing.T) {
 	kindIDs := map[string]bool{}
-	for _, k := range types.BuiltinLibraryKinds {
+	for _, k := range kinds.BuiltinLibraryKinds {
 		kindIDs[k.ID] = true
 	}
 	entries, err := os.ReadDir(".")

@@ -1,6 +1,10 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+)
+
+import (
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,7 +12,6 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // userTypesFileVersion is the on-disk schema for user_types.json.
@@ -107,9 +110,9 @@ func saveUserTypesOverlay(path string, ov *UserTypesOverlay) error {
 
 // applyUserTypesOverlay returns a copy of schema with admin-selected local
 // file paths and extra files applied. Schema packs stay untouched on disk.
-func applyUserTypesOverlay(schema types.UserDefinedTypeSchema, ov UDTKindOverlay) types.UserDefinedTypeSchema {
+func applyUserTypesOverlay(schema kinds.UserDefinedTypeSchema, ov UDTKindOverlay) kinds.UserDefinedTypeSchema {
 	out := schema
-	out.Sources = append([]types.UserDefinedSourceSpec(nil), schema.Sources...)
+	out.Sources = append([]kinds.UserDefinedSourceSpec(nil), schema.Sources...)
 	for i := range out.Sources {
 		src := &out.Sources[i]
 		if src.Kind != "file_json" {
@@ -134,7 +137,7 @@ func applyUserTypesOverlay(schema types.UserDefinedTypeSchema, ov UDTKindOverlay
 		if path == "" || strings.TrimSpace(ef.ID) == "" {
 			continue
 		}
-		src := types.UserDefinedSourceSpec{
+		src := kinds.UserDefinedSourceSpec{
 			ID:          ef.ID,
 			Name:        ef.Name,
 			Kind:        "file_json",
@@ -157,7 +160,7 @@ func applyUserTypesOverlay(schema types.UserDefinedTypeSchema, ov UDTKindOverlay
 
 // nameMatchFieldMap maps each schema field to a same-named JSON key.
 // Used when an admin-added file has no explicit field_map.
-func nameMatchFieldMap(fields map[string]types.UserDefinedField) map[string]string {
+func nameMatchFieldMap(fields map[string]kinds.UserDefinedField) map[string]string {
 	out := make(map[string]string, len(fields))
 	for name := range fields {
 		out[name] = name

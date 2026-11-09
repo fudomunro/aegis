@@ -19,7 +19,7 @@ type playlistsKind struct {
 func newPlaylistsKind(h Host, e *Engine, d Deps) Kind {
 	k := &playlistsKind{h: h, e: e, linkKey: d.PlaylistLinkKey}
 	k.mark, k.copies = Stamps(h, "playlists", forEachPlaylistSource)
-	def := *types.BuiltinKindByID("playlists")
+	def := *BuiltinKindByID("playlists")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.PlaylistProvider],

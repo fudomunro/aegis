@@ -1,6 +1,11 @@
 package copies
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
+)
+
+import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -12,7 +17,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -193,7 +197,7 @@ func (c *Ledger) DB() *sql.DB {
 // declare OptimisticCopies (mail-like streams) use snapshot watermarks;
 // discrete objects use full. The mode is type data (issue #254).
 func SyncModeForKind(kind string) string {
-	if k := types.BuiltinKindByID(strings.TrimSpace(kind)); k != nil && k.OptimisticCopies {
+	if k := kinds.BuiltinKindByID(strings.TrimSpace(kind)); k != nil && k.OptimisticCopies {
 		return CopySyncModeOptimistic
 	}
 	return CopySyncModeFull

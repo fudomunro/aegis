@@ -19,7 +19,7 @@ type tracksKind struct {
 func newTracksKind(h Host, e *Engine, d Deps) Kind {
 	k := &tracksKind{h: h, e: e, resolve: d.ResolveTracks}
 	k.mark, k.copies = Stamps(h, "tracks", forEachTrackSource)
-	def := *types.BuiltinKindByID("tracks")
+	def := *BuiltinKindByID("tracks")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.LikedTrackProvider],

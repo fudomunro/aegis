@@ -18,7 +18,7 @@ type contactsKind struct {
 func newContactsKind(h Host, e *Engine, d Deps) Kind {
 	k := &contactsKind{h: h, e: e}
 	k.mark, k.copies = Stamps(h, "contacts", forEachContactSource)
-	def := *types.BuiltinKindByID("contacts")
+	def := *BuiltinKindByID("contacts")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.ContactProvider],

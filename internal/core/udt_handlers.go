@@ -2,10 +2,11 @@ package core
 
 import (
 	"fmt"
-	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
 	"sort"
+
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // userDefinedReadable reports whether data grant allows GET on a UDT kind.
@@ -32,7 +33,7 @@ func (s *Server) registerUserDefinedKinds() {
 
 // userDefinedHint returns pre-request instructions for one UDT kind,
 // including the schema-declared field list so agents know the shape.
-func (s *Server) userDefinedHint(schema types.UserDefinedTypeSchema) string {
+func (s *Server) userDefinedHint(schema kinds.UserDefinedTypeSchema) string {
 	kind := schema.LibraryKind()
 	text := kind.Instructions(s.baseURL)
 	if name := s.canonicalServiceName(kind.ID); name != "" {

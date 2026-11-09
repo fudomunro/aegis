@@ -1,15 +1,17 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+)
+
+import (
 	"context"
 	"fmt"
 	"net"
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Split listeners (docs/external-access.md): the API listener carries the
@@ -140,7 +142,7 @@ func libraryAgentReadable(path string) bool {
 	}
 	seg := strings.TrimPrefix(path, "/v1/library/")
 	if seg != "" && !strings.Contains(seg, "/") {
-		return !types.IsReservedUserDefinedID(seg)
+		return !kinds.IsReservedUserDefinedID(seg)
 	}
 	return false
 }

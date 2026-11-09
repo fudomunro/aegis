@@ -1,4 +1,4 @@
-package types
+package kinds
 
 // Test-only helpers, moved out of production sources so they stop shipping
 // in the binary. They were unreachable from any non-test call site.

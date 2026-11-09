@@ -1,14 +1,17 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
+)
+
+import (
 	"context"
 	"log/slog"
 	"net/http"
 	"sort"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // kindsHost adapts the hub onto the kinds.Host seam (issue #312). The
@@ -190,9 +193,9 @@ func listHandler(k kinds.Kind) http.HandlerFunc {
 // gate.
 func (s *Server) userDefinedDeps() kinds.UserDefinedDeps {
 	return kinds.UserDefinedDeps{
-		Schema: func(id string) types.UserDefinedTypeSchema {
+		Schema: func(id string) kinds.UserDefinedTypeSchema {
 			if s.udts == nil {
-				return types.UserDefinedTypeSchema{}
+				return kinds.UserDefinedTypeSchema{}
 			}
 			return s.udts.SchemaWithOverlay(id)
 		},

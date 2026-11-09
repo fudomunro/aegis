@@ -27,8 +27,8 @@ type Route struct {
 // entry, its declared routes, and the visibility predicates core consults.
 // Adding a kind is one file plus one line in Builtin — core does not change.
 type Kind interface {
-	// Def is the kind registry entry (internal/types holds the data).
-	Def() types.LibraryKind
+	// Def is the kind registry entry (see librarykinds.go).
+	Def() LibraryKind
 	// Routes are the agent-tier GET/HEAD routes the kind owns.
 	Routes() []Route
 	// Provides reports whether a connector instance feeds this kind.
@@ -104,12 +104,12 @@ func RouteDecls() []Route {
 // providerKind is the common shape for kinds fed by connectors
 // implementing a provider interface (the newKindRuntime[P] pattern).
 type providerKind struct {
-	def      types.LibraryKind
+	def      LibraryKind
 	routes   []Route
 	provides func(any) bool
 }
 
-func (k providerKind) Def() types.LibraryKind      { return k.def }
+func (k providerKind) Def() LibraryKind            { return k.def }
 func (k providerKind) Routes() []Route             { return k.routes }
 func (k providerKind) Provides(connector any) bool { return k.provides(connector) }
 

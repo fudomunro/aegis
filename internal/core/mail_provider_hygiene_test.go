@@ -43,6 +43,10 @@ var mailLiteralAllowances = []struct{ file, want, why string }{
 		"demo fixture labels mirror the provider's export shape (data values, not semantics)"},
 	{"sampledata.go", "X-GM-LABELS",
 		"demo fixture generation writes provider-format mbox exports"},
+	{"kinds/librarykinds.go", "Gmail",
+		"the messages kind's agent-facing summary names its declared mail sources (same class as the photos entry naming Google Photos); the scan guards implementation semantics, not product description"},
+	{"kinds/librarykinds.go", "Google Takeout",
+		"the messages kind's agent-facing summary names its declared mail sources (same class as the photos entry naming Google Photos); the scan guards implementation semantics, not product description"},
 }
 
 func mailLiteralAllowed(file, lit string) (string, bool) {
@@ -92,10 +96,8 @@ func TestMailProviderLiterals_SingleOwner(t *testing.T) {
 					if !strings.Contains(val, bad) {
 						continue
 					}
-					if dir == "." {
-						if _, ok := mailLiteralAllowed(name, val); ok {
-							continue
-						}
+					if _, ok := mailLiteralAllowed(relName, val); ok {
+						continue
 					}
 					failures = append(failures,
 						relName+": provider literal "+strconv.Quote(bad)+" in "+lit.Value)

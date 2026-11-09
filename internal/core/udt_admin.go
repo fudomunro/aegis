@@ -1,6 +1,10 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+)
+
+import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -12,7 +16,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // udtAdminStatus is the GET /v1/admin/udt/status payload (issue #15).
@@ -31,7 +34,7 @@ type udtAdminKind struct {
 	Path        string                            `json:"path"`
 	LibraryURL  string                            `json:"library_url,omitempty"`
 	Default     string                            `json:"default_access,omitempty"`
-	Fields      map[string]types.UserDefinedField `json:"fields,omitempty"`
+	Fields      map[string]kinds.UserDefinedField `json:"fields,omitempty"`
 	FileSources []udtAdminFileSource              `json:"file_sources,omitempty"`
 	ExtraFiles  []UDTExtraFile                    `json:"extra_files,omitempty"`
 	SourceCount int                               `json:"source_count"`

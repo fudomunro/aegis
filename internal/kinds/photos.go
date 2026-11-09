@@ -18,7 +18,7 @@ type photosKind struct {
 func newPhotosKind(h Host, e *Engine, d Deps) Kind {
 	k := &photosKind{h: h, e: e}
 	k.mark, k.copies = Stamps(h, "photos", forEachPhotoSource)
-	def := *types.BuiltinKindByID("photos")
+	def := *BuiltinKindByID("photos")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.PhotoProvider],

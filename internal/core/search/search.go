@@ -17,7 +17,7 @@ import (
 // archive. Rows hold neutral-item metadata (JSON payloads) so search hits
 // can hydrate without a live provider fetch — never media bytes.
 //
-// Kind participation is declared by types.SearchSpec on the library kind;
+// Kind participation is declared by kinds.SearchSpec on the library kind;
 // this store is the engine behind that declaration. A different engine can
 // replace it without changing the type surface.
 type Index struct {

@@ -3,8 +3,6 @@ package policy
 import (
 	"net/http"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestPermissions_AllowsAndClone(t *testing.T) {
@@ -114,23 +112,6 @@ func TestValidatePermissions_KindLevels(t *testing.T) {
 	}
 	if err := ValidatePermissions(Permissions{"tracks": "maybe"}); err == nil {
 		t.Fatal("unknown level")
-	}
-}
-
-// TestKindLevelSeam_AllowedLevelsArePolicyTokens pins the seam: kinds in
-// internal/types declare AllowedLevels as bare tokens; each must be a
-// canonical policy level or validation would silently reject it.
-func TestKindLevelSeam_AllowedLevelsArePolicyTokens(t *testing.T) {
-	known := map[string]bool{
-		AccessFreeBusy: true, AccessSummary: true,
-		AccessCity: true, AccessPrecise: true, AccessMetadata: true,
-	}
-	for _, k := range types.BuiltinLibraryKinds {
-		for _, l := range k.AllowedLevels {
-			if NormalizeAccess(l) != l || !known[l] {
-				t.Errorf("kind %q AllowedLevels entry %q is not a canonical policy level", k.ID, l)
-			}
-		}
 	}
 }
 

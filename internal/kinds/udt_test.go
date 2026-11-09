@@ -1,7 +1,9 @@
-package types
+package kinds
 
 import (
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 func sampleReadingListSchema(t *testing.T) UserDefinedTypeSchema {
@@ -210,11 +212,11 @@ func TestMergeUserDefinedItems_SingleSourceNoMatchLabel(t *testing.T) {
 
 func TestEncodeUserDefinedList(t *testing.T) {
 	s := sampleReadingListSchema(t)
-	by := map[string]LibraryServiceStatus{
-		"notion-reading": {Status: LibraryStatusOK, Count: 1},
-		"broken":         {Status: LibraryStatusError, Truncated: true},
+	by := map[string]types.LibraryServiceStatus{
+		"notion-reading": {Status: types.LibraryStatusOK, Count: 1},
+		"broken":         {Status: types.LibraryStatusError, Truncated: true},
 	}
-	list := EncodeUserDefinedList(s, []UserDefinedItem{{Name: "x"}}, PageRequest{Limit: MaxPageLimit}, by)
+	list := EncodeUserDefinedList(s, []UserDefinedItem{{Name: "x"}}, types.PageRequest{Limit: types.MaxPageLimit}, by)
 	if list.Total != 1 || !list.Truncated || !list.Synced || list.SchemaID != "reading-list" {
 		t.Fatalf("list = %+v", list)
 	}

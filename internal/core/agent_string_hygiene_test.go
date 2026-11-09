@@ -7,6 +7,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/types"
 )
 
@@ -69,18 +70,18 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		out = append(out, agentStringSample{name: name, text: text})
 	}
 
-	for _, k := range types.BuiltinLibraryKinds {
+	for _, k := range kinds.BuiltinLibraryKinds {
 		add("LibraryKind.Instructions/"+k.ID, k.Instructions(base))
 		add("LibraryKind.DenyMsg/"+k.ID, k.DenyMsg)
 		add("LibraryKind.EmptyMsg/"+k.ID, k.EmptyMsg)
 		add("libraryInstructionsFor/"+k.ID, srv.libraryInstructionsFor(k.ID))
 	}
 
-	schema := types.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedTypeSchema{
 		ID:    "reading-list",
 		Label: "reading list",
 		Usage: "books the user is reading",
-		Fields: map[string]types.UserDefinedField{
+		Fields: map[string]kinds.UserDefinedField{
 			"title": {Type: "string", Required: true, Description: "book title"},
 		},
 	}

@@ -1,9 +1,8 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // TestLibraryKinds_RegistryConsistency (issue #183) proves the hand-copied
@@ -14,8 +13,8 @@ func TestLibraryKinds_RegistryConsistency(t *testing.T) {
 	srv := &Server{}
 	handlers := srv.libraryRouteHandlers()
 
-	for _, k := range types.BuiltinLibraryKinds {
-		if !types.IsReservedUserDefinedID(k.ID) {
+	for _, k := range kinds.BuiltinLibraryKinds {
+		if !kinds.IsReservedUserDefinedID(k.ID) {
 			t.Errorf("kind %q not reserved for user-defined types", k.ID)
 		}
 		if _, ok := handlers[k.Path]; !ok {
@@ -27,7 +26,7 @@ func TestLibraryKinds_RegistryConsistency(t *testing.T) {
 		if !k.CanonicalAllowed && isCanonicalKindID(k.ID) {
 			t.Errorf("kind %q not CanonicalAllowed but isCanonicalKindID is true", k.ID)
 		}
-		if !types.IsReservedKindKey(k.ID) {
+		if !kinds.IsReservedKindKey(k.ID) {
 			t.Errorf("kind %q missing reserved kind key", k.ID)
 		}
 	}
@@ -48,7 +47,7 @@ func TestServiceProvidedTypes_IncludesDocuments(t *testing.T) {
 }
 
 func TestAppPathAllowed_IncludesDerivedKinds(t *testing.T) {
-	for _, k := range types.BuiltinLibraryKinds {
+	for _, k := range kinds.BuiltinLibraryKinds {
 		if !k.AppReadable {
 			continue
 		}
@@ -90,7 +89,7 @@ func TestAppPathAllowed_ExactOnly(t *testing.T) {
 }
 
 func TestIsCanonicalKindID_Derived(t *testing.T) {
-	for _, k := range types.BuiltinLibraryKinds {
+	for _, k := range kinds.BuiltinLibraryKinds {
 		if got := isCanonicalKindID(k.ID); got != k.CanonicalAllowed {
 			t.Errorf("isCanonicalKindID(%q)=%v, want %v", k.ID, got, k.CanonicalAllowed)
 		}
@@ -102,11 +101,11 @@ func TestIsCanonicalKindID_Derived(t *testing.T) {
 
 func TestUDTSchemaRejectsEveryBuiltinKindID(t *testing.T) {
 	// A pack named after any built-in (including documents) is rejected.
-	for _, k := range types.BuiltinLibraryKinds {
-		s := types.UserDefinedTypeSchema{
+	for _, k := range kinds.BuiltinLibraryKinds {
+		s := kinds.UserDefinedTypeSchema{
 			ID:     k.ID,
-			Fields: map[string]types.UserDefinedField{"name": {}},
-			Identity: types.UserDefinedIdentity{
+			Fields: map[string]kinds.UserDefinedField{"name": {}},
+			Identity: kinds.UserDefinedIdentity{
 				Fields: []string{"name"},
 			},
 		}
