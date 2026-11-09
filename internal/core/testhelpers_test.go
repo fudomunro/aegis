@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -21,7 +22,7 @@ import (
 
 // AccessEventToAudit projects a redacted access event onto the durable
 // audit row (issue #105).
-func AccessEventToAudit(ev AccessEvent) audit.Event {
+func AccessEventToAudit(ev metrics.AccessEvent) audit.Event {
 	return audit.Event{
 		At:       ev.At,
 		Agent:    ev.Agent,

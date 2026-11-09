@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -57,9 +58,9 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// pass-through are not agent API.
 	if !IsAgentContentPath(remainingPath) {
 		logger.Warn("service path rejected: not content/ingest", "path", remainingPath)
-		s.recordAccess(AccessEvent{
+		s.recordAccess(metrics.AccessEvent{
 			Agent:    agentForRequest(r),
-			Surface:  MetricSurfaceService,
+			Surface:  metrics.MetricSurfaceService,
 			Target:   serviceID,
 			Kind:     KindForPath(remainingPath),
 			Decision: audit.DecisionDeny,
@@ -78,9 +79,9 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)
-		s.recordAccess(AccessEvent{
+		s.recordAccess(metrics.AccessEvent{
 			Agent:    agentForRequest(r),
-			Surface:  MetricSurfaceService,
+			Surface:  metrics.MetricSurfaceService,
 			Target:   serviceID,
 			Kind:     kind,
 			Decision: audit.DecisionDeny,
@@ -99,9 +100,9 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 			"data_type", kind,
 			"permission", accessLevel,
 		)
-		s.recordAccess(AccessEvent{
+		s.recordAccess(metrics.AccessEvent{
 			Agent:    agentForRequest(r),
-			Surface:  MetricSurfaceService,
+			Surface:  metrics.MetricSurfaceService,
 			Target:   serviceID,
 			Kind:     kind,
 			Decision: audit.DecisionDeny,
@@ -130,15 +131,15 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) recordProxyAccess(r *http.Request, serviceID, kind, cache string) {
 	switch cache {
 	case "hit":
-		cache = MetricCacheHit
+		cache = metrics.MetricCacheHit
 	case "miss":
-		cache = MetricCacheMiss
+		cache = metrics.MetricCacheMiss
 	default:
-		cache = MetricCacheNone
+		cache = metrics.MetricCacheNone
 	}
-	s.recordAccess(AccessEvent{
+	s.recordAccess(metrics.AccessEvent{
 		Agent:    agentForRequest(r),
-		Surface:  MetricSurfaceService,
+		Surface:  metrics.MetricSurfaceService,
 		Target:   serviceID,
 		Kind:     kind,
 		Cache:    cache,

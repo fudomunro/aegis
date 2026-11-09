@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -32,7 +33,7 @@ func mailRunnerServer(t *testing.T, upstream http.Handler) (*Server, *syncjobs.J
 	}
 	a := openTestMailArchive(t)
 	srv := mailTestServer(t, a)
-	srv.prom = NewPromMetrics()
+	srv.prom = metrics.NewPromMetrics("", "")
 	if up != nil {
 		srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	}

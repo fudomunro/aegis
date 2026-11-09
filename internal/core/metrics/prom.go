@@ -1,8 +1,7 @@
-package core
+package metrics
 
 import (
 	"fmt"
-	"net/http"
 	"sort"
 	"strings"
 	"sync"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Prometheus-style metrics export (issue #105). Process-lifetime counters
@@ -19,7 +17,6 @@ import (
 // reset-safe. Labels are service/library kind ids and redacted reasons only
 // — never agent identities (cardinality + privacy).
 
-// upstreamDurationBuckets are histogram bucket upper bounds in seconds.
 var upstreamDurationBuckets = []float64{0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10}
 
 type promHist struct {
@@ -70,8 +67,11 @@ type promSyncDurKey struct {
 // PromMetrics accumulates exportable counters. Safe for concurrent use.
 // Nil-safe: every observe method is a no-op on a nil receiver.
 type PromMetrics struct {
-	mu    sync.Mutex
-	start time.Time
+	// version/commit label aegis_build_info; the hub passes them at startup.
+	version string
+	commit  string
+	mu      sync.Mutex
+	start   time.Time
 
 	hookOutcomes map[string]uint64
 	access       map[promAccessKey]uint64
@@ -89,8 +89,10 @@ type PromMetrics struct {
 }
 
 // NewPromMetrics creates an empty metrics registry.
-func NewPromMetrics() *PromMetrics {
+func NewPromMetrics(version, commit string) *PromMetrics {
 	return &PromMetrics{
+		version:      version,
+		commit:       commit,
 		start:        time.Now(),
 		hookOutcomes: make(map[string]uint64),
 		access:       make(map[promAccessKey]uint64),
@@ -106,7 +108,7 @@ func NewPromMetrics() *PromMetrics {
 	}
 }
 
-func (p *PromMetrics) observeHook(action string) {
+func (p *PromMetrics) ObserveHook(action string) {
 	if p == nil {
 		return
 	}
@@ -118,9 +120,9 @@ func (p *PromMetrics) observeHook(action string) {
 	p.mu.Unlock()
 }
 
-// observeAccess records one redacted access/denial event for export.
+// ObserveAccess records one redacted access/denial event for export.
 // Cache is optional (hit/miss/empty). Decision empty is treated as allow.
-func (p *PromMetrics) observeAccess(ev AccessEvent) {
+func (p *PromMetrics) ObserveAccess(ev AccessEvent) {
 	if p == nil {
 		return
 	}
@@ -151,8 +153,8 @@ func (p *PromMetrics) observeAccess(ev AccessEvent) {
 	p.mu.Unlock()
 }
 
-// observeUpstream records one upstream request latency sample.
-func (p *PromMetrics) observeUpstream(service string, d time.Duration, status int) {
+// ObserveUpstream records one upstream request latency sample.
+func (p *PromMetrics) ObserveUpstream(service string, d time.Duration, status int) {
 	if p == nil {
 		return
 	}
@@ -250,24 +252,7 @@ func (p *PromMetrics) NoteSyncSuccess(kind, service string, at time.Time) {
 	p.mu.Unlock()
 }
 
-// HandleMetrics renders Prometheus text exposition format.
-// Auth-scoped like admin: series include service ids and denial reasons.
-func (s *Server) HandleMetrics(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	body := s.prom.promText()
-	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	w.WriteHeader(http.StatusOK)
-	if r.Method == http.MethodHead {
-		return
-	}
-	_, _ = w.Write([]byte(body))
-}
-
-// promText renders the current registry. Exported for tests.
-func (p *PromMetrics) promText() string {
+func (p *PromMetrics) PromText() string {
 	if p == nil {
 		return ""
 	}
@@ -289,7 +274,7 @@ func (p *PromMetrics) promText() string {
 	// Help text is the /metrics surface operators read (attribution: issue #86).
 	writeMeta(&b, "aegis_build_info", "gauge",
 		"Build version and commit of the running binary.")
-	fmt.Fprintf(&b, "aegis_build_info{version=%q,commit=%q} 1\n", Version, Commit)
+	fmt.Fprintf(&b, "aegis_build_info{version=%q,commit=%q} 1\n", p.version, p.commit)
 
 	writeMeta(&b, "aegis_hook_outcomes_total", "counter",
 		"Pre-request hook outcomes by action (allow, modify, block, auth_fail, parse_fail).")

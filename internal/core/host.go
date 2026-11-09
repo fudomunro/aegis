@@ -12,7 +12,7 @@ func (s *Server) ObserveUpstream(serviceID string, elapsed time.Duration, status
 	if s == nil || s.prom == nil {
 		return
 	}
-	s.prom.observeUpstream(serviceID, elapsed, status)
+	s.prom.ObserveUpstream(serviceID, elapsed, status)
 }
 
 // ServiceConfig returns the configured service surface for id, or nil.

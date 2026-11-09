@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -591,7 +592,7 @@ func (s *Server) buildFlowStats(window time.Duration, windowLabel string) FlowSt
 	}
 }
 
-func flowAgentDetailsFromMetrics(detail []MetricsAgentDetail) []FlowAgentDetail {
+func flowAgentDetailsFromMetrics(detail []metrics.MetricsAgentDetail) []FlowAgentDetail {
 	if len(detail) == 0 {
 		return nil
 	}
@@ -602,7 +603,7 @@ func flowAgentDetailsFromMetrics(detail []MetricsAgentDetail) []FlowAgentDetail 
 	return out
 }
 
-func flowEndpointFromMetrics(st MetricsEndpointStats) FlowEndpointStats {
+func flowEndpointFromMetrics(st metrics.MetricsEndpointStats) FlowEndpointStats {
 	return FlowEndpointStats(st)
 }
 

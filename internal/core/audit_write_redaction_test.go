@@ -8,9 +8,10 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 )
 
-// TestAuditLog_WriteListAndRedaction exercises the AccessEvent → audit.Event
+// TestAuditLog_WriteListAndRedaction exercises the metrics.AccessEvent → audit.Event
 // projection plus List filtering. The projection is a hub concern, so this
 // integration test stays in core while the store tests live in core/audit.
 func TestAuditLog_WriteListAndRedaction(t *testing.T) {
@@ -28,19 +29,19 @@ func TestAuditLog_WriteListAndRedaction(t *testing.T) {
 		t.Fatalf("retention = %v", a.Retention())
 	}
 
-	a.Write(AccessEventToAudit(AccessEvent{
+	a.Write(AccessEventToAudit(metrics.AccessEvent{
 		Agent:    "alice@example.com",
-		Surface:  MetricSurfaceLibrary,
+		Surface:  metrics.MetricSurfaceLibrary,
 		Target:   "tracks",
 		Kind:     "tracks",
-		Cache:    MetricCacheMiss,
+		Cache:    metrics.MetricCacheMiss,
 		Decision: audit.DecisionAllow,
 		Method:   http.MethodGet,
 		Status:   200,
 	}))
-	a.Write(AccessEventToAudit(AccessEvent{
+	a.Write(AccessEventToAudit(metrics.AccessEvent{
 		Agent:    "bob@example.com",
-		Surface:  MetricSurfaceService,
+		Surface:  metrics.MetricSurfaceService,
 		Target:   "spotify",
 		Kind:     "player",
 		Decision: audit.DecisionDeny,

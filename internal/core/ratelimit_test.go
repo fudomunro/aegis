@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 )
 
 func TestRateLimitConfig_Effective(t *testing.T) {
@@ -306,9 +307,9 @@ func TestRateLimited_AuditCoalesced(t *testing.T) {
 	}
 	defer a.Close()
 	srv := &Server{
-		metrics: NewAccessMetrics(16),
+		metrics: metrics.NewAccessMetrics(16),
 		audit:   a,
-		prom:    NewPromMetrics(),
+		prom:    metrics.NewPromMetrics("", ""),
 		config:  &Config{},
 		rl:      newRateLimiter(),
 	}

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
@@ -294,7 +295,7 @@ func TestSyncRoutes_Registered(t *testing.T) {
 // --- prom metrics ---
 
 func TestPromMetrics_SyncSeries(t *testing.T) {
-	p := NewPromMetrics()
+	p := metrics.NewPromMetrics("", "")
 	p.ObserveSyncJob("ingest", "google-gmail", syncjobs.SyncJobSucceeded, 1500*time.Millisecond)
 	p.ObserveSyncJob("ingest", "google-gmail", syncjobs.SyncJobQueued, 10*time.Millisecond)
 	p.ObserveSyncJob("ingest", "", syncjobs.SyncJobSucceeded, time.Millisecond)
@@ -303,7 +304,7 @@ func TestPromMetrics_SyncSeries(t *testing.T) {
 	p.SetSyncQueueDepth(syncjobs.SyncCounts{Queued: 2, Running: 1, Succeeded: 7})
 	p.NoteSyncSuccess("messages", "google-gmail", time.Unix(1700000000, 0).UTC())
 
-	out := p.promText()
+	out := p.PromText()
 	for _, want := range []string{
 		`aegis_sync_jobs_total{job_type="ingest",state="succeeded"}`,
 		`aegis_sync_jobs_total{job_type="ingest",state="queued"}`,
@@ -322,12 +323,12 @@ func TestPromMetrics_SyncSeries(t *testing.T) {
 	}
 
 	// Nil-safe.
-	var nilProm *PromMetrics
+	var nilProm *metrics.PromMetrics
 	nilProm.ObserveSyncJob("ingest", "s", syncjobs.SyncJobSucceeded, time.Second)
 	nilProm.ObserveSyncRetry("ingest", "retryable")
 	nilProm.SetSyncQueueDepth(syncjobs.SyncCounts{})
 	nilProm.NoteSyncSuccess("messages", "s", time.Now())
-	if nilProm.promText() != "" {
+	if nilProm.PromText() != "" {
 		t.Fatal("nil prom must render empty")
 	}
 }
@@ -398,7 +399,7 @@ func TestSyncWorker_MetricStateFollowsStore(t *testing.T) {
 			return syncjobs.SyncStep{}, fmt.Errorf("%w: nope", syncjobs.ErrSyncTerminal)
 		},
 	})
-	prom := NewPromMetrics()
+	prom := metrics.NewPromMetrics("", "")
 	w := syncjobs.NewSyncWorker(store, reg, syncjobs.SyncWorkerOptions{Workers: 1, Prom: prom})
 	mustEnqueue(t, store, syncjobs.SyncEnqueue{Kind: "messages", JobType: "ingest", MaxAttempts: 5})
 
@@ -409,7 +410,7 @@ func TestSyncWorker_MetricStateFollowsStore(t *testing.T) {
 	if job.State != syncjobs.SyncJobFailed {
 		t.Fatalf("state = %s, want failed (terminal on the first attempt)", job.State)
 	}
-	out := prom.promText()
+	out := prom.PromText()
 	if !strings.Contains(out, `aegis_sync_jobs_total{job_type="ingest",state="failed"} 1`) {
 		t.Fatalf("metrics must count the terminal failure as failed:\n%s", out)
 	}

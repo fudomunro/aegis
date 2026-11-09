@@ -280,7 +280,7 @@ After the overlap call-outs above, the stable concepts.
 | **Body shape** | LLM wire format (`chat`, `anthropic`, `responses`) used for injection. | `handler.go`, `hookhealth.go` |
 | **Hook health** | Live diagnostics + fix strings for Aperture config. | `hookhealth.go`, `docs/configuring-aperture.md` |
 | **Cache** | GET+200 only, bounded. | `cache.go` |
-| **Metrics / health** | `/metrics` (Prometheus), `/healthz`, `/readyz`. | `metrics.go`, `metrics_export.go`, `health.go` |
+| **Metrics / health** | `/metrics` (Prometheus), `/healthz`, `/readyz`. | `core/metrics/`, `metrics.go`, `health.go` |
 | **Data directory** | One OS app-data root for all mutable state (issue #74). | `datadir.go` |
 | **Admin map / flow** | UI topology of services → types → agents. | `flow.go`, `web/admin.html` |
 | **Mail archive** | Local FTS store behind the messages library source (full-history search and fetch). | `core/mail/archive.go` |

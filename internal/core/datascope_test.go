@@ -13,6 +13,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -62,7 +63,7 @@ func scopeServer(t *testing.T, list []scopes.Scope) *Server {
 		scopes:     loaded,
 		mail:       archive,
 		links:      &links.Store{},
-		metrics:    NewAccessMetrics(32),
+		metrics:    metrics.NewAccessMetrics(32),
 	}
 	srv.connectors["sample-library-shire"] = NewSampleLibraryConnector("sample-library-shire", "shire", GenerateSampleLibraryFor("shire"))
 	srv.connectors["sample-library-gondor"] = NewSampleLibraryConnector("sample-library-gondor", "gondor", GenerateSampleLibraryFor("gondor"))

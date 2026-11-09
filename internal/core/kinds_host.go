@@ -8,6 +8,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
+	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -84,7 +85,7 @@ func (s *Server) AppLevel(r *http.Request, kind string) (string, bool) {
 
 // RecordAccess implements kinds.Host.
 func (s *Server) RecordAccess(r *http.Request, ev kinds.AccessEvent) {
-	s.recordAccessFrom(r, AccessEvent{
+	s.recordAccessFrom(r, metrics.AccessEvent{
 		At:       ev.At,
 		Agent:    ev.Agent,
 		Surface:  ev.Surface,
