@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 
@@ -601,7 +600,7 @@ func (rec Record) ToCopyInfo() *kinds.CopyInfo {
 
 // RecordTakeoutSnapshot stores/refreshes the optimistic snapshot row for a
 // Google Takeout import (issue #76). Safe on a disabled ledger.
-func (c *Ledger) RecordTakeoutSnapshot(path string, scanned, stored, skipped int, done bool) {
+func (c *Ledger) RecordTakeoutSnapshot(path string, scanned, stored, skipped int, done bool, serviceID string) {
 	if !c.Enabled() {
 		return
 	}
@@ -623,7 +622,7 @@ func (c *Ledger) RecordTakeoutSnapshot(path string, scanned, stored, skipped int
 	_, _ = c.Upsert(Record{
 		Kind:       "messages",
 		EntityKey:  "snapshot:google-takeout:" + abs,
-		Service:    connectors.TakeoutServiceID,
+		Service:    serviceID,
 		ExternalID: abs,
 		Role:       CopyRoleImport,
 		SyncMode:   CopySyncModeOptimistic,

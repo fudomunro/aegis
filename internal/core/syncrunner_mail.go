@@ -169,7 +169,8 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (shared.
 	}
 	if err == nil && result.Snapshot != nil {
 		s.recordTakeoutSnapshot(result.Snapshot.Path, result.Snapshot.Scanned,
-			result.Snapshot.Stored, result.Snapshot.Skipped, result.Snapshot.Done)
+			result.Snapshot.Stored, result.Snapshot.Skipped, result.Snapshot.Done,
+			p.Service)
 	}
 	// Fail-open: report what was stored even when the run failed mid-batch.
 	return result, err
