@@ -11,6 +11,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -328,7 +329,7 @@ func TestLibraryKindDocuments_Registered(t *testing.T) {
 }
 
 func TestSampleDocuments_MergePairs(t *testing.T) {
-	lib := GenerateSampleLibrary()
+	lib := sampledata.GenerateSampleLibrary()
 	if len(lib.Documents) == 0 {
 		t.Fatal("sample library must include documents")
 	}

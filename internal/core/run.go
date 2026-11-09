@@ -21,6 +21,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/ownership"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
@@ -73,7 +74,7 @@ func Run() {
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
 	importTakeoutBatch := flag.Int("import-takeout-batch", 20000, "max messages per import-takeout call (repeat runs continue)")
 	seedSample := flag.Bool("seed-sample", false, "write synthetic sample mail + library fixtures under the data directory, then exit")
-	seedSampleCount := flag.Int("seed-sample-count", SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
+	seedSampleCount := flag.Int("seed-sample-count", sampledata.SampleMailCount, "mail messages to generate with -seed-sample (default small CI set)")
 	seedSampleStress := flag.Bool("seed-sample-stress", false, "with -seed-sample, generate the large stress set (10k mail rows) for local perf")
 	seedLotR := flag.Bool("seed-lotr", false, "write named demo dataset packs (shire, gondor, lincoln) under the data directory, then exit")
 	seedDemoDatasets := flag.Bool("seed-demo-datasets", false, "same as -seed-lotr: write all named demo dataset packs")
@@ -548,17 +549,17 @@ func Run() {
 	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()
 	// Synthetic library fixtures per data-scope dataset (docs/data-scopes.md).
 	// A service with endpoint sample://library serves one partition's
-	// SampleLibrarySet; Service.Dataset binds it to a principal. Named LotR
+	// sampledata.SampleLibrarySet; Service.Dataset binds it to a principal. Named LotR
 	// demo packs (issue #217) win over the generic namespaced sample set.
 	for _, svc := range cfg.ServiceSnapshots() {
-		if !IsSampleLibraryService(&Service{ID: svc.ID, Endpoint: svc.Endpoint}) {
+		if !sampledata.IsSampleLibraryService(svc.ID, svc.Endpoint) {
 			continue
 		}
-		set, ok := GenerateDemoDataset(svc.Dataset)
+		set, ok := sampledata.GenerateDemoDataset(svc.Dataset)
 		if !ok {
-			set = GenerateSampleLibraryFor(svc.Dataset)
+			set = sampledata.GenerateSampleLibraryFor(svc.Dataset)
 		}
-		srv.connectors[svc.ID] = NewSampleLibraryConnector(svc.ID, svc.Dataset, set)
+		srv.connectors[svc.ID] = sampledata.NewSampleLibraryConnector(svc.ID, svc.Dataset, set)
 	}
 
 	// Mail ingest sources (issue #286) beside the connector map: the Gmail
@@ -847,12 +848,12 @@ func runCLIMode(opts cliModeOptions, paths DataPaths) (code int, handled bool) {
 func runSeedSampleCLI(dataDir, archivePath string, count int, stress bool) int {
 	count = seedSampleCountOrDefault(count, stress)
 	sampleDir := filepath.Join(dataDir, "sample")
-	mboxPath, libraryPath, _, err := WriteSampleFiles(sampleDir, count)
+	mboxPath, libraryPath, _, err := sampledata.WriteSampleFiles(sampleDir, count)
 	if err != nil {
 		slog.Error("failed to write sample files", "dir", sampleDir, "error", err)
 		return 1
 	}
-	set, err := SeedSampleArchive(archivePath, count)
+	set, err := sampledata.SeedSampleArchive(archivePath, count)
 	if err != nil {
 		slog.Error("failed to seed mail archive", "path", archivePath, "error", err)
 		return 1
@@ -892,13 +893,13 @@ func parseServiceConcurrency(raw string) map[string]int {
 
 func seedSampleCountOrDefault(count int, stress bool) int {
 	if stress {
-		if count > 0 && count != SampleMailCount {
+		if count > 0 && count != sampledata.SampleMailCount {
 			return count
 		}
-		return SampleMailStressCount
+		return sampledata.SampleMailStressCount
 	}
 	if count <= 0 {
-		return SampleMailCount
+		return sampledata.SampleMailCount
 	}
 	return count
 }
@@ -920,17 +921,17 @@ func runSeedDemoDatasetsCLI(dataDir, archivePath string) int {
 	if archive != nil {
 		defer archive.Close()
 	}
-	for _, dataset := range demoDatasetIDs() {
-		lib, ok := GenerateDemoDataset(dataset)
+	for _, dataset := range sampledata.DemoDatasetIDs() {
+		lib, ok := sampledata.GenerateDemoDataset(dataset)
 		if !ok {
 			continue
 		}
 		libPath := filepath.Join(outDir, dataset+"-library.json")
-		if err := WriteSampleLibraryJSON(libPath, lib); err != nil {
+		if err := sampledata.WriteSampleLibraryJSON(libPath, lib); err != nil {
 			slog.Error("failed to write demo library", "path", libPath, "error", err)
 			return 1
 		}
-		mail := GenerateDemoMail(dataset)
+		mail := sampledata.GenerateDemoMail(dataset)
 		if archive != nil {
 			for _, rec := range mail.Records {
 				if err := archive.Upsert(rec); err != nil {

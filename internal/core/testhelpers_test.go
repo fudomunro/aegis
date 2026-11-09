@@ -14,6 +14,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -116,8 +117,8 @@ func PhotosTakenDuring(photos []kinds.Photo, v kinds.PlaceVisit) []kinds.Photo {
 // dataset so archive queries can partition it (docs/data-scopes.md). Row ids
 // are namespaced so two datasets can share one archive without colliding on
 // UNIQUE(service, service_msg_id).
-func GenerateSampleMailFor(dataset string, n int) SampleMailSet {
-	set := GenerateSampleMail(n)
+func GenerateSampleMailFor(dataset string, n int) sampledata.SampleMailSet {
+	set := sampledata.GenerateSampleMail(n)
 	ds := strings.TrimSpace(dataset)
 	if ds == "" {
 		return set

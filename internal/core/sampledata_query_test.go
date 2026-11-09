@@ -1,10 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/shared"
-
 	"context"
 	"encoding/json"
 	"net/http"
@@ -12,20 +8,24 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/sampledata"
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Query checklist for the mail archive and library merge (issue #77).
 // These tests pin the cases that live half-imported data used to hide —
 // especially "oldest message" needing sort=asc.
 
-func seedQueryFixture(t *testing.T) (*mail.Archive, SampleMailSet) {
+func seedQueryFixture(t *testing.T) (*mail.Archive, sampledata.SampleMailSet) {
 	t.Helper()
 	a := openTestMailArchive(t)
 	// 12 normal rows + edge cases: enough for pagination and date windows.
-	set := GenerateSampleMail(12)
-	if err := SeedMailArchive(a, set.Records); err != nil {
+	set := sampledata.GenerateSampleMail(12)
+	if err := sampledata.SeedMailArchive(a, set.Records); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	return a, set
@@ -306,7 +306,7 @@ func TestMailQuery_FetchByID(t *testing.T) {
 }
 
 func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
-	lib := GenerateSampleLibrary()
+	lib := sampledata.GenerateSampleLibrary()
 
 	// Tracks: shared ISRC merges to one entity with match=isrc.
 	mergedTracks := kinds.MergeTracksSync(lib.Tracks)
@@ -416,7 +416,7 @@ func TestLibraryMerge_ISRCContactsMessages(t *testing.T) {
 }
 
 func TestLibraryAggregates_SampleProviders(t *testing.T) {
-	lib := GenerateSampleLibrary()
+	lib := sampledata.GenerateSampleLibrary()
 	cfg := &Config{Services: []Service{
 		{ID: "spotify", Name: "Spotify", Action: "inject"},
 		{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
@@ -523,7 +523,7 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 }
 
 func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
-	lib := GenerateSampleLibrary()
+	lib := sampledata.GenerateSampleLibrary()
 
 	// Permission-denied: the only tracks service forbids agent access.
 	deniedCfg := &Config{Services: []Service{

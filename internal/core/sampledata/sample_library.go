@@ -1,4 +1,4 @@
-package core
+package sampledata
 
 import (
 	"context"
@@ -45,12 +45,9 @@ func NewSampleLibraryConnector(serviceID, dataset string, set SampleLibrarySet) 
 
 // IsSampleLibraryService reports whether a service should get fixture
 // library data instead of a live provider.
-func IsSampleLibraryService(svc *Service) bool {
-	if svc == nil {
-		return false
-	}
-	return svc.Endpoint == SampleLibraryEndpoint ||
-		strings.HasPrefix(svc.ID, SampleLibraryServiceIDPrefix)
+func IsSampleLibraryService(id, endpoint string) bool {
+	return endpoint == SampleLibraryEndpoint ||
+		strings.HasPrefix(id, SampleLibraryServiceIDPrefix)
 }
 
 func (c *SampleLibraryConnector) Capabilities() shared.ServiceCapabilities {

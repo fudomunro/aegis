@@ -61,7 +61,7 @@ the configured mail archive (`mail-archive.db`), then exits:
 | `sample-mail.mbox` | Same messages as a Takeout-shaped mbox (importer round-trip) |
 | `sample-library.json` | Neutral `Playlist` / `Track` / `Contact` / … fixtures for mock upstreams |
 
-The generator lives in `sampledata.go` (`GenerateSampleMail`,
+The generator lives in `internal/core/sampledata/` (`GenerateSampleMail`,
 `GenerateSampleLibrary`). Tests load it via `SeedMailArchive` /
 `SeedSampleArchive` and run the query checklist in `sampledata_query_test.go`:
 
@@ -79,7 +79,7 @@ Dataset-namespaced variants (`GenerateSampleLibraryFor` / `GenerateSampleMailFor
 feed data-scope isolation tests (`datascope_test.go`) and `sample://library`
 fixture connectors. See [`docs/data-scopes.md`](data-scopes.md).
 
-LotR demo packs (`dataset_lotr.go`, `-seed-lotr`) provide two themed
+LotR demo packs (`core/sampledata/dataset_lotr.go`, `-seed-lotr`) provide two themed
 partitions (`shire` / `gondor`) for the public demo — see
 [`docs/demo-datasets.md`](demo-datasets.md).
 

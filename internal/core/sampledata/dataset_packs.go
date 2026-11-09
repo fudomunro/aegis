@@ -1,10 +1,10 @@
-package core
+package sampledata
 
 // Named demo dataset packs (issue #217). Each id is a data-scope partition
 // with its own SampleLibrarySet + mail rows.
 
 // demoDatasetIDs lists every named pack that `-seed-demo-datasets` writes.
-func demoDatasetIDs() []string {
+func DemoDatasetIDs() []string {
 	return []string{LotRDatasetShire, LotRDatasetGondor, LincolnDataset}
 }
 

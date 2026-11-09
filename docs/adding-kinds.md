@@ -91,7 +91,7 @@ internal/core/pathclass.go      kindPathRules for the provider's proxy paths
 internal/kinds/<kind>.go        Kind implementation: routes, predicates, Spec
 internal/kinds/stamps.go        Generic stamping over your source projection
 <provider>.go (connectors)      Capabilities + ListUser… + optional proxy
-sampledata.go                   Deterministic fixtures + deliberate merge pairs
+core/sampledata/                Deterministic fixtures + deliberate merge pairs
 tests                           Merge, kind, aggregate, permissions, sample-data checks
 README.md                       Agent-facing semantics for the kind
 ```
@@ -200,7 +200,7 @@ The kind key must be known to the permission map, the path classifier
 `internal/core/policy` (like `PlacesLevelForResponse`). Default access for
 new kinds should start strict (`none` where the domain is sensitive).
 
-### 9. Sample data (`sampledata.go`)
+### 9. Sample data (`internal/core/sampledata/`)
 
 Deterministic fixtures with deliberate merge pairs (same identity, two
 sources; near-miss names that must stay separate). Sample data feeds the
