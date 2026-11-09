@@ -1,12 +1,12 @@
 # reading-list (user-defined kind example)
 
 A portable **schema pack** for Aegis user-defined kinds (issue #15). Copy this
-directory into Aegis's `user-types/` folder (or point `AEGIS_USER_TYPES_DIR`
+directory into Aegis's `user-kinds/` folder (or point `AEGIS_USER_KINDS_DIR`
 at a tree that contains it) and restart:
 
 ```text
-<data-dir>/user-types/reading-list/schema.json
-<data-dir>/user-types/reading-list/sample/books.json
+<data-dir>/user-kinds/reading-list/schema.json
+<data-dir>/user-kinds/reading-list/sample/books.json
 ```
 
 Then enable the kind (packs cannot self-enable):
@@ -40,7 +40,7 @@ This directory is intentionally self-contained (schema + sample + README) so
 it can move to a standalone examples repo without editing Aegis:
 
 ```text
-aegis-user-types/                  # proposed standalone repo
+aegis-user-kinds/                  # proposed standalone repo
   README.md                        # how to install packs
   reading-list/
     schema.json

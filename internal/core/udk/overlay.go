@@ -11,19 +11,19 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// userKindsFileVersion is the on-disk schema for user_types.json.
+// userKindsFileVersion is the on-disk schema for user_kinds.json.
 const userKindsFileVersion = 1
 
 // DefaultOverlayPath returns the overlay path beside aegis.json.
 func DefaultOverlayPath(configPath string) string {
 	dir := strings.TrimSpace(configPath)
 	if dir == "" {
-		return "user_types.json"
+		return "user_kinds.json"
 	}
 	if i := strings.LastIndexAny(dir, `/\`); i >= 0 {
-		return dir[:i+1] + "user_types.json"
+		return dir[:i+1] + "user_kinds.json"
 	}
-	return "user_types.json"
+	return "user_kinds.json"
 }
 
 // FileSourceOverlay points a schema file_json source at local files chosen
@@ -50,7 +50,7 @@ type KindOverlay struct {
 	ExtraFiles  []ExtraFile                  `json:"extra_files,omitempty"`
 }
 
-// UserKindsOverlay is the admin-edited overlay (user_types.json). It never
+// UserKindsOverlay is the admin-edited overlay (user_kinds.json). It never
 // rewrites schema packs — only local file selection / extra feeds.
 type UserKindsOverlay struct {
 	Version int                    `json:"version"`
@@ -70,10 +70,10 @@ func LoadOverlay(path string) (*UserKindsOverlay, error) {
 		if os.IsNotExist(err) {
 			return ov, nil
 		}
-		return nil, fmt.Errorf("reading user-types overlay: %w", err)
+		return nil, fmt.Errorf("reading user-kinds overlay: %w", err)
 	}
 	if err := json.Unmarshal(data, ov); err != nil {
-		return nil, fmt.Errorf("parsing user-types overlay: %w", err)
+		return nil, fmt.Errorf("parsing user-kinds overlay: %w", err)
 	}
 	if ov.Kinds == nil {
 		ov.Kinds = map[string]KindOverlay{}
@@ -83,7 +83,7 @@ func LoadOverlay(path string) (*UserKindsOverlay, error) {
 
 func SaveOverlay(path string, ov *UserKindsOverlay) error {
 	if strings.TrimSpace(path) == "" {
-		return fmt.Errorf("user-types overlay has no path; cannot save")
+		return fmt.Errorf("user-kinds overlay has no path; cannot save")
 	}
 	out := UserKindsOverlay{
 		Version: userKindsFileVersion,

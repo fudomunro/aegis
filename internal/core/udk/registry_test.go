@@ -139,7 +139,7 @@ func TestUserKindsOverlay_ExtraFile(t *testing.T) {
 }
 
 func TestLoadSaveUserKindsOverlay(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "user_types.json")
+	path := filepath.Join(t.TempDir(), "user_kinds.json")
 	ov, err := LoadOverlay(path)
 	if err != nil || len(ov.Kinds) != 0 {
 		t.Fatalf("empty overlay: %v %+v", err, ov)

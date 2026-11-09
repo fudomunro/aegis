@@ -192,7 +192,7 @@ type Server struct {
 	grants *GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
 	csrfTokens *shared.StateStore
-	// udks holds user-defined type schemas loaded from the user-types
+	// udks holds user-defined kind schemas loaded from the user-kinds
 	// directory (issue #15). May be nil when none are configured.
 	udks *udk.Registry
 }

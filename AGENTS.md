@@ -61,7 +61,7 @@ them away.
   paths.
 - **Secrets stay out of git.** Never commit `aegis.json`, `tokens.json`,
   `entity_links.json`, `data_grants.json`, `apps.json`, `data_scopes.json`,
-  `service_connections.json`, `user_types.json`, `ownership.json`,
+  `service_connections.json`, `user_kinds.json`, `ownership.json`,
   `.aegis-token-pass`, or live
   binaries. Example config only via `aegis.example.json`. Prefer the OS data
   directory (issue #74) over the git worktree for runtime state.
@@ -115,7 +115,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
 | Sample/demo datasets + sample:// connector | `internal/core/sampledata/`, `docs/development.md`, `docs/demo-datasets.md` | Deterministic fixtures (generic + LotR/Lincoln packs), mbox/JSON writers, `SampleLibraryConnector`. Demo lockdown validation stays in the hub (`demo.go`) |
-| UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_types.json` overlay), `internal/core` hub (`udk_admin.go`, `udk_handlers.go`) | User-defined kinds (issue #15). Schema packs under `user-types/` load into the same pipeline; the hub owns the admin handlers |
+| UDK registry + admin overlay | `internal/core/udk/` (registry/loader + `user_kinds.json` overlay), `internal/core` hub (`udk_admin.go`, `udk_handlers.go`) | User-defined kinds (issue #15). Schema packs under `user-kinds/` load into the same pipeline; the hub owns the admin handlers |
 | Neutral models + kind data | `internal/kinds` | Models, merge, and kind registry metadata; authorization policy is `internal/core/policy`, never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points) | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; the hub keeps the fixed cross-kind routes and admin writes |
 | Merge / entity IDs | `internal/kinds` (merge), `internal/core/links/` (entity-link store) | ISRC/UPC/MBID preferred over name |
@@ -135,9 +135,9 @@ ordered `kinds.Builtin()` list — no `internal/core` edits. Do not clone an agg
 `docs/adding-kinds.md`.
 
 **User-defined kinds** (`docs/user-defined-kinds.md`, issue #15) are schema
-packs under `user-types/` loaded into the same pipeline. A pack can never
+packs under `user-kinds/` loaded into the same pipeline. A pack can never
 self-enable, shadow a built-in `id`/`perm_type`/`path`, or store secrets in
-`http_json` headers. Local file selection is the `user_types.json` overlay.
+`http_json` headers. Local file selection is the `user_kinds.json` overlay.
 
 **New or changed service behavior** goes through `ServiceConnector`
 (interface: `internal/connectors/host.go` — read the source; copies in docs
@@ -215,7 +215,7 @@ All mutable local state defaults under one data directory (override with
 ```
 <data-dir>/aegis.json, data_grants.json, apps.json, data_scopes.json,
 entity_links.json, ownership.json, tokens.json,
-user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-archive.db,
+user_kinds.json, user-kinds/, service_connections.json, copy_ledger.db, mail-archive.db,
 search-index.db, quicken.db, timeline.db, signal.db, audit_log.db, maintenance/, logs/aegis.log
 ```
 

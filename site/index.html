@@ -291,12 +291,12 @@ GET /v1/library/events  <span class="ok">200 · 9 events</span></div>
           column at a time.</p>
         <p>
           The budget sheet. The medication log. The SQLite file where you track every
-          houseplant. With user-defined types you'd describe your own data to Aegis and decide
+          houseplant. With user-defined kinds you'd describe your own data to Aegis and decide
           what agents get to see: some columns readable, some veiled, nothing writable unless
           you say so. Same data grants, same Map, same sting.
         </p>
         <ul class="chips">
-          <li>user-defined types</li>
+          <li>user-defined kinds</li>
           <li>column-level veils</li>
           <li>read ≠ write</li>
         </ul>
@@ -408,7 +408,7 @@ GET /v1/library/events  <span class="ok">200 · 9 events</span></div>
         <summary>What can an agent actually see, and how do I limit it?</summary>
         <p>Only what you allow with <b>data grants</b>, which you set per kind
           (playlists, contacts, places, …) on the admin page. Sensitive types start
-          off: location history defaults to <code>none</code>, and user-defined types
+          off: location history defaults to <code>none</code>, and user-defined kinds
           are always opt-in. Per-service limits can only narrow a grant, never widen
           it. Agent credentials also can't open admin pages, so an agent can't grant
           itself more access.</p>
@@ -434,7 +434,7 @@ GET /v1/library/events  <span class="ok">200 · 9 events</span></div>
         <p>Today: Spotify, YouTube Music, Amazon Music, Google (Photos, Contacts,
           Calendar, Gmail, Drive), Immich, YNAB, Paperless-ngx, OwnTracks and Bluesky,
           plus file imports from Google Takeout, Google Timeline, Signal and Quicken.
-          For your own data, a <b>user-defined type</b> (a small JSON schema pack)
+          For your own data, a <b>user-defined kind</b> (a small JSON schema pack)
           turns a local file or JSON endpoint into a library type without writing
           code. New named services are Go connectors, and that's work your agent can
           help with.</p>

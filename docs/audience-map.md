@@ -49,7 +49,7 @@ the shared word “agent”.
 | Aperture ops guide | `docs/configuring-aperture.md` | Human ops | Hooks, grants, Guardian migration. |
 | Immich runbook | `docs/immich-live-testing.md` | Human ops, QA | Live checklist; product contract callouts. |
 | CalDAV/CardDAV guide | `docs/caldav-carddav.md` | Human ops, End user | Nextcloud / iCloud app-specific passwords; mirror + freebusy. |
-| UDK design spike | `docs/user-defined-kinds.md`, `examples/user-types/` | Developer integrator, Pack author | Schema pack format. |
+| UDK design spike | `docs/user-defined-kinds.md`, `examples/user-kinds/` | Developer integrator, Pack author | Schema pack format. |
 | Architecture plan | `docs/restructure-core-types-connectors.md` | Coding agent | Historical; phases marked done. |
 | Example config | `aegis.example.json` | End user, Developer integrator | Self-describing `description` fields. |
 | Site README | `site/README.md` | Maintainer of marketing copy | Claim-sync guardrails. |
@@ -94,7 +94,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 |---------|----------|-------|
 | `slog` (JSON default) | Human ops, log pipeline, Security auditor | Fields: `service`, `login`, `identity_source`, `path`, `error`, `request_id`, … Fail-open encoded in messages. |
 | CLI flag help (`run.go`) | Human ops, Coding agent | `-data-dir`, `-import-quicken`, `-auth-mode`, `-admin-api-key`, `-admin-logins`, empty-path disables. |
-| `aegis.json` / `data_grants.json` / `user_types.json` | End user (via admin), Human ops | Data, not comments. Admin saves never rewrite `aegis.json`. |
+| `aegis.json` / `data_grants.json` / `user_kinds.json` | End user (via admin), Human ops | Data, not comments. Admin saves never rewrite `aegis.json`. |
 | Encrypted secrets (`tokens.json`, static service credentials) | Human ops | AES-256-GCM under `-token-pass`; presence flags only in admin/API. |
 | UDK `schema.json` packs | Pack author | Field descriptions; “Always opt-in”. |
 

@@ -38,7 +38,7 @@ const (
 	SyncJobPaused    = "paused"
 )
 
-// Job types. Open strings on purpose — user-defined types can register their
+// Job types. Open strings on purpose — user-defined kinds can register their
 // own ingest without core changes (issue #15).
 const (
 	SyncJobTypeIngest    = "ingest"

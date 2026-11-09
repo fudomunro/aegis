@@ -39,7 +39,7 @@ func TestHandleAdminUDK_StatusBrowseAndSelect(t *testing.T) {
 		}]
 	}`), 0o600)
 
-	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
+	overlayPath := filepath.Join(t.TempDir(), "user_kinds.json")
 	reg, loaded := udk.LoadUserDefinedKinds(pack, overlayPath, nil)
 	if len(loaded) != 1 {
 		t.Fatalf("loaded=%d", len(loaded))
@@ -149,7 +149,7 @@ func TestHandleAdminUDK_ExtraFile(t *testing.T) {
 	}`), 0o600)
 	_ = os.WriteFile(filepath.Join(pack, "notes.json"), []byte(`[{"title":"a"}]`), 0o600)
 
-	overlayPath := filepath.Join(t.TempDir(), "user_types.json")
+	overlayPath := filepath.Join(t.TempDir(), "user_kinds.json")
 	reg, _ := udk.LoadUserDefinedKinds(pack, overlayPath, nil)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.udks = reg

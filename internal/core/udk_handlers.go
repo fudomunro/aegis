@@ -39,7 +39,7 @@ func (s *Server) userDefinedHint(schema kinds.UserDefinedKindSchema) string {
 	if name := s.canonicalServiceName(kind.ID); name != "" {
 		text += fmt.Sprintf(" Configured canonical service for %s: %s — treat it as the canonical home.", kind.Label, name)
 	}
-	text += "\nSchema-declared fields for this user-defined type:"
+	text += "\nSchema-declared fields for this user-defined kind:"
 	// Sorted for prompt-cache stability (issue #15 review).
 	fieldNames := make([]string, 0, len(schema.Fields))
 	for name := range schema.Fields {

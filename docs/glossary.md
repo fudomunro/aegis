@@ -43,7 +43,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Copy ledger** | Durable record of mirrored/backup copies | |
 | **Mirror** | Explicit copy of a playlist/liked tracks to another service | Not automatic write sync |
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
-| **User-defined kind (UDK)** | Schema pack under `user-types/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
+| **User-defined kind (UDK)** | Schema pack under `user-kinds/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
 | **Free/busy** | Busy intervals only (no titles/attendees) | Also `summary` (transactions), `city`/`precise` (places) |
 
@@ -155,5 +155,5 @@ mean in prose:
 - **User-defined kind (UDK)** — the extension mechanism in plain English; it
   publishes a **library kind**, which stays the registry axis. Retired
   synonyms: “user-defined type”, “UDT”, “type pack”. Wire names follow the
-  new concept (`/v1/admin/udk`, `user_kinds_dir`); on-disk names are frozen
-  for now — `user_types.json`, `user-types/`, `AEGIS_USER_TYPES_DIR`.
+  concept (`/v1/admin/udk`, `user_kinds_dir`), as do the on-disk names —
+  `user_kinds.json`, `user-kinds/`, `AEGIS_USER_KINDS_DIR`.

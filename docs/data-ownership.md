@@ -54,7 +54,7 @@ The approach leans on three seams that did not exist when #165 was filed:
 
 `ownership.json` under the data directory stores one entry per kind —
 `confirmed`, `confirmed_at`, optional `note`. Same overlay pattern as
-`data_grants.json` and `user_types.json`. Everything else in the ownership
+`data_grants.json` and `user_kinds.json`. Everything else in the ownership
 view is derived at read time and is never persisted.
 
 ### 3.2 Evidence, not guessing
