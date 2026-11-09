@@ -192,8 +192,8 @@ provider rows into one neutral item.
 
 ### 2.9 UDK naming
 
-User-defined kinds (UDK), schema packs (`user-types/` directory),
-`user_types.json` overlay, `UserDefinedKindSchema`.
+User-defined kinds (UDK), schema packs (`user-kinds/` directory),
+`user_kinds.json` overlay, `UserDefinedKindSchema`.
 
 **Resolution (glossary):** the product concept is **user-defined kind**;
 **schema pack** is the on-disk artifact name. Retired synonyms:
@@ -201,8 +201,8 @@ User-defined kinds (UDK), schema packs (`user-types/` directory),
 
 This section previously resolved the same question toward “user-defined type
 (UDT)”. That resolution is superseded: a pack registers as a `LibraryKind`,
-so the name says kind. On-disk names (`user_types.json`, `user-types/`,
-`AEGIS_USER_TYPES_DIR`) are unchanged.
+so the name says kind. On-disk names follow: `user_kinds.json`,
+`user-kinds/`, `AEGIS_USER_KINDS_DIR`.
 
 ---
 
@@ -238,7 +238,7 @@ After the overlap call-outs above, the stable concepts.
 | **Mirror** | Deliberate copy of a playlist/liked tracks to another service (`POST /v1/library/mirror`). | `mirror.go` |
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `internal/kinds` |
 | **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
-| **User-defined kind (UDK)** | Schema pack under `user-types/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined kind”; the file/directory is a schema pack. | `internal/kinds/userdefined_schema.go`, `docs/user-defined-kinds.md` |
+| **User-defined kind (UDK)** | Schema pack under `user-kinds/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined kind”; the file/directory is a schema pack. | `internal/kinds/userdefined_schema.go`, `docs/user-defined-kinds.md` |
 | **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/core/policy/policy.go`, `internal/kinds` |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/kinds/providers.go` |
 

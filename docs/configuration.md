@@ -626,7 +626,7 @@ Schedules live in the same SQLite file as the job queue and copy ledger.
 | `AEGIS_DATA_DIR` | `-data-dir` | Data directory for local state (see [Data directory](configuration.md)) |
 | `AEGIS_MAINTENANCE_REPO` | `-maintenance-repo` | GitHub repo (`owner/name`) for sync-maintenance tickets |
 | `AEGIS_DEMO` | `-demo` | `1` enables demo mode |
-| `AEGIS_USER_TYPES_DIR` | | User-defined kind schema-pack directory (default `<data-dir>/user-types`) |
+| `AEGIS_USER_KINDS_DIR` | | User-defined kind schema-pack directory (default `<data-dir>/user-kinds`) |
 
 ### Data directory
 
@@ -649,8 +649,8 @@ on first run with mode `0700` (it holds secrets).
  apps.json # third-party app registry (0600; token hashes only)
  data_scopes.json # principal → dataset registry (0600; invite key hashes)
  service_connections.json # admin Immich/static-auth + Tailscale Admin overlay (non-secret fields; secrets in tokens.json)
- user_types.json # admin UDK local-file selection overlay (beside -config; see below)
- user-types/ # user-defined kind schema packs (or AEGIS_USER_TYPES_DIR)
+ user_kinds.json # admin UDK local-file selection overlay (beside -config; see below)
+ user-kinds/ # user-defined kind schema packs (or AEGIS_USER_KINDS_DIR)
  entity_links.json # confirmed playlist/entity links
  ownership.json # per-kind data-ownership confirmation (issue #165; see docs/data-ownership.md)
  tokens.json # encrypted OAuth tokens + static credentials (0600;)
@@ -684,12 +684,12 @@ An explicit flag always wins:
 | `-audit-log` | `audit_log.db` | Empty string (explicitly set) disables the access audit trail |
 | `-log-file` | `logs/aegis.log` | Empty string (explicitly set) logs to stderr only |
 
-**`user_types.json` has no path flag** and is always written **beside
+**`user_kinds.json` has no path flag** and is always written **beside
 `-config`** (same directory as `aegis.json`). It sits under the data directory
 only while `-config` keeps its default `<data-dir>/aegis.json`; an explicit
-`-config /elsewhere/aegis.json` moves it to `/elsewhere/user_types.json`. The
-`user-types/` schema-pack directory is a separate path: default
-`<data-dir>/user-types`, override with `AEGIS_USER_TYPES_DIR`.
+`-config /elsewhere/aegis.json` moves it to `/elsewhere/user_kinds.json`. The
+`user-kinds/` schema-pack directory is a separate path: default
+`<data-dir>/user-kinds`, override with `AEGIS_USER_KINDS_DIR`.
 
 Startup logs the resolved data directory (`data directory ready` / `data_dir`
 on `starting server`). The admin **Runtime** panel shows the same path.

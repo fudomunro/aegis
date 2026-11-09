@@ -29,7 +29,7 @@ Open product questions intentionally **not** closed by this PoC:
 | Question | PoC stance |
 |----------|------------|
 | v1 sources | `file_json` + `http_json` only. SQL / CalDAV / scrapers later. |
-| Who authors schemas | Config files on disk (`user-types/`). Admin UI later. |
+| Who authors schemas | Config files on disk (`user-kinds/`). Admin UI later. |
 | Canonical ownership | UDKs can set `canonical_for` via existing config; no new semantics. |
 | Field-level redaction | Schema marks `sensitive: true`; enforcement is future #148 work. |
 | Write-back / mirrors | Out of scope. UDKs are read-only lists in this PoC. |
@@ -38,7 +38,7 @@ Open product questions intentionally **not** closed by this PoC:
 
 ## 2. Schema format (version 1)
 
-One JSON file per kind. Example: `examples/user-types/reading-list/schema.json`.
+One JSON file per kind. Example: `examples/user-kinds/reading-list/schema.json`.
 
 ```json
 {
@@ -181,14 +181,14 @@ do not invent a second proxy path.
 | Opt-in registration | `internal/shared/kindrules.go` (`MarkKindDefaultNone`) |
 | Loader + field map + fetch | `internal/core/udk/` |
 | Aggregate handler | `internal/core/udk_handlers.go` |
-| Example pack | `examples/user-types/reading-list/` |
+| Example pack | `examples/user-kinds/reading-list/` |
 | Tests | `internal/kinds/udk_test.go`, `internal/core/udk/`, `internal/core/udk_test.go` |
 
 Try it:
 
 ```bash
-export AEGIS_USER_TYPES_DIR=$PWD/examples/user-types
-# or copy examples/user-types/reading-list into <data-dir>/user-types/
+export AEGIS_USER_KINDS_DIR=$PWD/examples/user-kinds
+# or copy examples/user-kinds/reading-list into <data-dir>/user-kinds/
 ./aegis -addr 127.0.0.1:8080 -api-key dev-key -token-pass dev-pass
 curl -s -H "Authorization: Bearer dev-key" \
   http://localhost:8080/v1/library/reading-list | jq .
@@ -215,7 +215,7 @@ sources. Operators can:
 3. **Add extra files** with name-matched fields (or an explicit field_map)
 4. Clear back to the schema default
 
-Selections persist in `user_types.json` next to `aegis.json` (never rewrites
+Selections persist in `user_kinds.json` next to `aegis.json` (never rewrites
 schema packs). Library fetches apply the overlay at request time and clear the
 aggregate cache on save.
 
@@ -226,7 +226,7 @@ aggregate cache on save.
 The example directory is a **portable pack** (`schema.json` + `sample/` +
 `README.md`). That shape is the unit we would publish.
 
-### Option A — monorepo `examples/user-types/` (this PR)
+### Option A — monorepo `examples/user-kinds/` (this PR)
 
 **Pros**
 
@@ -240,7 +240,7 @@ The example directory is a **portable pack** (`schema.json` + `sample/` +
 - Example PRs mix with product PRs in review queue.
 - Non-Go contributors still need to clone the service repo.
 
-### Option B — standalone `aegis-user-types` (or `aegis-udk-examples`) repo
+### Option B — standalone `aegis-user-kinds` (or `aegis-udk-examples`) repo
 
 **Pros**
 
@@ -261,15 +261,15 @@ The example directory is a **portable pack** (`schema.json` + `sample/` +
 
 **Start in monorepo (this PR), extract once the format stabilizes.**
 
-1. Keep `examples/user-types/reading-list/` as the reference pack and the
+1. Keep `examples/user-kinds/reading-list/` as the reference pack and the
    regression fixture (`internal/core/udk_test.go` loads it).
 2. When schema v1 is no longer expected to break, move packs to
-   `github.com/fudomunro/aegis-user-types` (git subtree split or copy), leave
-   a one-line pointer in `examples/user-types/README.md`.
+   `github.com/fudomunro/aegis-user-kinds` (git subtree split or copy), leave
+   a one-line pointer in `examples/user-kinds/README.md`.
 3. Service CI keeps a **minimal** inline fixture (tiny schema + sample) so
    the runtime is tested without depending on the content repo.
 4. Content repo CI: JSON schema lint + optional integration job against a
-   released Aegis binary (`AEGIS_USER_TYPES_DIR=…`).
+   released Aegis binary (`AEGIS_USER_KINDS_DIR=…`).
 
 That split matches the product rule: Aegis owns the **type surface and
 permissions**; users own **their types and sources**.

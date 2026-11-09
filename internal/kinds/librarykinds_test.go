@@ -45,7 +45,7 @@ func TestBuiltinLibraryKinds_Reserved(t *testing.T) {
 	}
 	// Regression for the documents hole (issue #183).
 	if !IsReservedUserDefinedID("documents") {
-		t.Error("documents must be reserved for user-defined types")
+		t.Error("documents must be reserved for user-defined kinds")
 	}
 	// Non-kind library path segments stay reserved too.
 	for _, id := range []string{"links", "review", "copies", "mirror", "freebusy"} {

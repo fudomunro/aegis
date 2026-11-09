@@ -26,7 +26,7 @@ func writeSchemaFile(t *testing.T, dir, name, content string) {
 }
 
 func TestLoadUserDefinedKinds_FromExamplePack(t *testing.T) {
-	dir := filepath.Join("..", "..", "examples", "user-types")
+	dir := filepath.Join("..", "..", "examples", "user-kinds")
 	reg, loaded := udk.LoadUserDefinedKinds(dir, "", nil)
 	if len(loaded) == 0 {
 		t.Fatal("expected the reading-list example pack to load")

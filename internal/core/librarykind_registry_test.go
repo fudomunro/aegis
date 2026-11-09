@@ -16,7 +16,7 @@ func TestLibraryKinds_RegistryConsistency(t *testing.T) {
 
 	for _, k := range kinds.BuiltinLibraryKinds {
 		if !kinds.IsReservedUserDefinedID(k.ID) {
-			t.Errorf("kind %q not reserved for user-defined types", k.ID)
+			t.Errorf("kind %q not reserved for user-defined kinds", k.ID)
 		}
 		if _, ok := handlers[k.Path]; !ok {
 			t.Errorf("kind %q has no libraryRouteHandlers entry at %s", k.ID, k.Path)

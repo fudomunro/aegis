@@ -24,7 +24,10 @@ var agentStringForbidden = []string{
 	"type pack",
 	// Issue #305: "data type" is retired in favor of "library kind".
 	"data type",
-	// "schema pack" is the allowed on-disk artifact name; prefer "user-defined type" in prose.
+	// "schema pack" is the allowed on-disk artifact name; the concept is
+	// "user-defined kind" (#339) — "user-defined type"/"UDT" are retired.
+	"user-defined type",
+	"UDT",
 }
 
 // Operator CLI flags from run.go. Agents ask the operator; they do not run flags.

@@ -78,7 +78,7 @@ type udkExtraRequest struct {
 }
 
 // HandleAdminUDK serves /v1/admin/udk/* — local file selection for
-// user-defined types (issue #15). Registered under AuthMiddleware.
+// user-defined kinds (issue #15). Registered under AuthMiddleware.
 func (s *Server) HandleAdminUDK(w http.ResponseWriter, r *http.Request) {
 	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/v1/admin/udk"), "/")
 	switch {
@@ -128,7 +128,7 @@ func (s *Server) udkStatus() udkAdminStatus {
 	root := strings.TrimRight(s.baseURL, "/")
 	if st.UserKinds == "" {
 		st.Hints = append(st.Hints,
-			"No user-types directory loaded. Copy a schema pack into <data-dir>/user-types/ (or set AEGIS_USER_TYPES_DIR) and restart.")
+			"No user-kinds directory loaded. Copy a schema pack into <data-dir>/user-kinds/ (or set AEGIS_USER_KINDS_DIR) and restart.")
 	}
 	ov, err := s.udkOverlay()
 	if err != nil {
@@ -346,11 +346,11 @@ func (s *Server) loadOrInitKindOverlay(kindID string) (*udk.UserKindsOverlay, ud
 	return cp, kindOV, nil
 }
 
-// saveUDKOverlayLocked writes user_types.json and refreshes the cache.
+// saveUDKOverlayLocked writes user_kinds.json and refreshes the cache.
 // Caller must hold s.udks.overlayMu.
 func (s *Server) saveUDKOverlayLocked(ov *udk.UserKindsOverlay) error {
 	if s.udks == nil {
-		return fmt.Errorf("user-defined types not loaded")
+		return fmt.Errorf("user-defined kinds not loaded")
 	}
 	if err := udk.SaveOverlay(s.udkOverlayPath(), ov); err != nil {
 		return err
@@ -361,7 +361,7 @@ func (s *Server) saveUDKOverlayLocked(ov *udk.UserKindsOverlay) error {
 
 func (s *Server) applyUDKFileSource(w http.ResponseWriter, kindID, sourceID string, req udkSourceUpdateRequest) {
 	if s.udks == nil {
-		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined types not loaded")
+		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined kinds not loaded")
 		return
 	}
 	schema, ok := s.udks.Get(kindID)
@@ -410,7 +410,7 @@ func (s *Server) applyUDKFileSource(w http.ResponseWriter, kindID, sourceID stri
 
 func (s *Server) applyUDKExtra(w http.ResponseWriter, kindID string, req udkExtraRequest) {
 	if s.udks == nil {
-		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined types not loaded")
+		shared.WriteJSONError(w, http.StatusBadRequest, "user-defined kinds not loaded")
 		return
 	}
 	if _, ok := s.udks.Get(kindID); !ok {

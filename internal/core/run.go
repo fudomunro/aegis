@@ -494,18 +494,18 @@ func Run() {
 		slog.Info("maintenance ticketing enabled", "repo", *maintenanceRepo)
 	}
 
-	// User-defined types (issue #15): load schema packs from the user-types
-	// directory (default <data-dir>/user-types). Fail-open — a bad schema is
+	// User-defined kinds (issue #15): load schema packs from the user-kinds
+	// directory (default <data-dir>/user-kinds). Fail-open — a bad schema is
 	// skipped and logged; built-in kinds always stay available.
-	userKindsDir := filepath.Join(paths.Dir, "user-types")
-	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_TYPES_DIR")); v != "" {
+	userKindsDir := filepath.Join(paths.Dir, "user-kinds")
+	if v := strings.TrimSpace(os.Getenv("AEGIS_USER_KINDS_DIR")); v != "" {
 		userKindsDir = shared.ExpandUserPath(v)
 	}
 	udkReg, udkLoaded := udk.LoadUserDefinedKinds(userKindsDir, udk.DefaultOverlayPath(paths.Config), slog.Default())
 	srv.udks = udkReg
 	srv.registerUserDefinedKinds()
 	if len(udkLoaded) > 0 {
-		slog.Info("user-defined types ready", "dir", userKindsDir, "count", len(udkLoaded))
+		slog.Info("user-defined kinds ready", "dir", userKindsDir, "count", len(udkLoaded))
 	}
 
 	// Register service connectors.

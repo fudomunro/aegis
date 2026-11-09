@@ -14,20 +14,20 @@ import (
 )
 
 // Registry holds loaded UDK schemas (issue #15 Phase 6 PoC).
-// Schemas are data files under a user-types directory; this package maps
+// Schemas are data files under a user-kinds directory; this package maps
 // them onto the type layer and the existing library aggregate pipeline.
 type Registry struct {
 	mu        sync.RWMutex
 	byID      map[string]kinds.UserDefinedKindSchema
 	byPath    map[string]string // path → kind id
 	schemaDir map[string]string // kind id → directory of its schema.json
-	baseDir   string            // user-types root (discovery only)
-	// overlayPath is the admin-edited user_types.json (local file selection).
+	baseDir   string            // user-kinds root (discovery only)
+	// overlayPath is the admin-edited user_kinds.json (local file selection).
 	overlayPath string
 	// overlay is the cached overlay so library GETs do not re-read disk on
 	// every request (issue #15 review). Invalidated on admin save.
 	overlay   *UserKindsOverlay
-	overlayMu sync.Mutex // serializes admin read-modify-write of user_types.json
+	overlayMu sync.Mutex // serializes admin read-modify-write of user_kinds.json
 }
 
 func newRegistry() *Registry {
@@ -38,14 +38,14 @@ func newRegistry() *Registry {
 	}
 }
 
-// OverlayPath returns the admin user_types.json path ("" when disabled).
+// OverlayPath returns the admin user_kinds.json path ("" when disabled).
 func (reg *Registry) OverlayPath() string {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	return reg.overlayPath
 }
 
-// BaseDir returns the user-types root directory ("" when disabled).
+// BaseDir returns the user-kinds root directory ("" when disabled).
 func (reg *Registry) BaseDir() string {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
@@ -53,7 +53,7 @@ func (reg *Registry) BaseDir() string {
 }
 
 // LockOverlayWrite / UnlockOverlayWrite expose the lock that serializes
-// admin read-modify-write of user_types.json. The hub's admin handlers hold
+// admin read-modify-write of user_kinds.json. The hub's admin handlers hold
 // it across load → mutate → save → cache.
 func (reg *Registry) LockOverlayWrite()   { reg.overlayMu.Lock() }
 func (reg *Registry) UnlockOverlayWrite() { reg.overlayMu.Unlock() }
@@ -108,9 +108,9 @@ func (reg *Registry) DirFor(id string) string {
 }
 
 // LoadUserDefinedKinds reads user-defined schema packs from dir.
-// overlayPath (optional) is the admin user_types.json that selects local files.
+// overlayPath (optional) is the admin user_kinds.json that selects local files.
 //
-// Layout (pack model used by examples/user-types/):
+// Layout (pack model used by examples/user-kinds/):
 //
 //	dir/reading-list/schema.json
 //	dir/reading-list/sample/books.json   # relative file_json paths
@@ -130,20 +130,20 @@ func LoadUserDefinedKinds(dir, overlayPath string, logger *slog.Logger) (*Regist
 		raw, err := os.ReadFile(path)
 		if err != nil {
 			if logger != nil {
-				logger.Warn("user-defined types: read failed", "path", path, "error", err)
+				logger.Warn("user-defined kinds: read failed", "path", path, "error", err)
 			}
 			continue
 		}
 		var schema kinds.UserDefinedKindSchema
 		if err := json.Unmarshal(raw, &schema); err != nil {
 			if logger != nil {
-				logger.Warn("user-defined types: parse failed", "path", path, "error", err)
+				logger.Warn("user-defined kinds: parse failed", "path", path, "error", err)
 			}
 			continue
 		}
 		if err := schema.Normalize(); err != nil {
 			if logger != nil {
-				logger.Warn("user-defined types: invalid schema", "path", path, "error", err)
+				logger.Warn("user-defined kinds: invalid schema", "path", path, "error", err)
 			}
 			continue
 		}
@@ -156,18 +156,18 @@ func LoadUserDefinedKinds(dir, overlayPath string, logger *slog.Logger) (*Regist
 		}
 		if _, exists := reg.byID[schema.ID]; exists {
 			if logger != nil {
-				logger.Warn("user-defined types: duplicate id", "path", path, "id", schema.ID)
+				logger.Warn("user-defined kinds: duplicate id", "path", path, "id", schema.ID)
 			}
 			continue
 		}
 		if kinds.BuiltinKindByID(schema.ID) != nil {
 			if logger != nil {
-				logger.Warn("user-defined types: id collides with built-in kind", "path", path, "id", schema.ID)
+				logger.Warn("user-defined kinds: id collides with built-in kind", "path", path, "id", schema.ID)
 			}
 			continue
 		}
 		// Relative file_json paths resolve against the schema's own directory
-		// (the pack folder), not the shared user-types root.
+		// (the pack folder), not the shared user-kinds root.
 		schemaDir := filepath.Dir(path)
 		reg.byID[schema.ID] = schema
 		reg.schemaDir[schema.ID] = schemaDir
@@ -176,7 +176,7 @@ func LoadUserDefinedKinds(dir, overlayPath string, logger *slog.Logger) (*Regist
 		shared.MarkKindDefaultNone(schema.PermType)
 		loaded = append(loaded, schema)
 		if logger != nil {
-			logger.Info("user-defined type loaded",
+			logger.Info("user-defined kind loaded",
 				"id", schema.ID, "path", schema.Path, "sources", len(schema.Sources), "dir", schemaDir)
 		}
 	}
@@ -189,7 +189,7 @@ func discoverSchemaFiles(dir string, logger *slog.Logger) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if !os.IsNotExist(err) && logger != nil {
-			logger.Warn("user-defined types: read dir failed", "dir", dir, "error", err)
+			logger.Warn("user-defined kinds: read dir failed", "dir", dir, "error", err)
 		}
 		return nil
 	}
