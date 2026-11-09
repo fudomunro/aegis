@@ -13,7 +13,8 @@ import (
 //
 //   - no package under internal/ may depend on the hub (internal/core);
 //     only main packages (repo root, cmd/*) import it;
-//   - internal/shared is stdlib-only;
+//   - internal/shared imports nothing from the module (stdlib-only
+//     plumbing plus seam vocabulary per AGENTS.md);
 //   - internal/types imports only stdlib + internal/shared.
 
 const (

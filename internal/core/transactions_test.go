@@ -12,7 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestNormalizeTransactionAmount(t *testing.T) {
@@ -97,8 +97,8 @@ func (f *fakeTransactionProvider) ListUserTransactions(ctx context.Context) ([]k
 	return f.txs, false, nil
 }
 
-func (f *fakeTransactionProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeTransactionProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeTransactionProvider) SystemInstructions(string) string { return "" }
 func (f *fakeTransactionProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

@@ -20,7 +20,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Google Takeout is a read-only ingest source for the local mail archive —
@@ -68,8 +68,8 @@ var TakeoutMailSource = MailSource{
 	ServiceID: TakeoutServiceID,
 	Parent:    GoogleGmailServiceID,
 	Canonical: false,
-	Start: &types.OwnershipAction{
-		Kind:  types.OwnershipActionImport,
+	Start: &shared.OwnershipAction{
+		Kind:  shared.OwnershipActionImport,
 		Label: "Import a mail export",
 	},
 }
@@ -104,8 +104,8 @@ func (TakeoutIngest) SnapshotProbe(location string) (bool, string, error) {
 // is a per-run location (not persisted); otherwise the stored path is used.
 // Options.MaxMessages == 0 with an explicit Path is save-path-only (the
 // admin UI contract). Repeat until Result.Done.
-func (TakeoutIngest) IngestMail(_ context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error) {
-	res := types.MailIngestResult{Service: TakeoutServiceID}
+func (TakeoutIngest) IngestMail(_ context.Context, sink MailSink, opts shared.MailIngestOptions) (shared.MailIngestResult, error) {
+	res := shared.MailIngestResult{Service: TakeoutServiceID}
 	if opts.ResetCursor {
 		_ = sink.MetaSet(TakeoutCursorMetaKey, "")
 	}
@@ -119,7 +119,7 @@ func (TakeoutIngest) IngestMail(_ context.Context, sink MailSink, opts types.Mai
 	if persist {
 		if err := setTakeoutPath(sink, path); err != nil {
 			res.Error = "failed to set takeout path: " + err.Error()
-			return res, fmt.Errorf("%w: %s", types.ErrMailConfig, res.Error)
+			return res, fmt.Errorf("%w: %s", shared.ErrMailConfig, res.Error)
 		}
 	}
 	if path == "" {
@@ -128,7 +128,7 @@ func (TakeoutIngest) IngestMail(_ context.Context, sink MailSink, opts types.Mai
 	}
 	if path == "" {
 		res.Error = "takeout path not configured — set path in this request or via the admin UI"
-		return res, fmt.Errorf("%w: takeout path not configured", types.ErrMailConfig)
+		return res, fmt.Errorf("%w: takeout path not configured", shared.ErrMailConfig)
 	}
 	res.Query = "takeout:" + path
 	// max_messages=0 with an explicit path is save-path-only (admin UI).
@@ -153,7 +153,7 @@ func (TakeoutIngest) IngestMail(_ context.Context, sink MailSink, opts types.Mai
 	cursor.Root = abs
 	if cursor.Done {
 		res.Done = true
-		res.Snapshot = &types.MailIngestSnapshot{Path: path, Done: true}
+		res.Snapshot = &shared.MailIngestSnapshot{Path: path, Done: true}
 		return res, nil
 	}
 
@@ -217,8 +217,8 @@ func (TakeoutIngest) IngestMail(_ context.Context, sink MailSink, opts types.Mai
 	return res, nil
 }
 
-func snapshotOf(path string, res types.MailIngestResult) *types.MailIngestSnapshot {
-	return &types.MailIngestSnapshot{
+func snapshotOf(path string, res shared.MailIngestResult) *shared.MailIngestSnapshot {
+	return &shared.MailIngestSnapshot{
 		Path:    path,
 		Scanned: res.Listed,
 		Stored:  res.Stored,

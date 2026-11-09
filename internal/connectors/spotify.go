@@ -13,7 +13,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 const (
@@ -37,134 +36,134 @@ func NewSpotifyConnector(host Host) *SpotifyConnector {
 }
 
 // Capabilities returns what Spotify kinds and operations are supported.
-func (c *SpotifyConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *SpotifyConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "user",
 				Description: "Current user profile",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read", Description: "Get current user's profile", Method: "GET", Path: "/me",
-						Response: types.ResponseSpec{Description: "User profile with id, display_name, uri", Fields: []string{"id", "display_name", "uri"}}},
+						Response: shared.ResponseSpec{Description: "User profile with id, display_name, uri", Fields: []string{"id", "display_name", "uri"}}},
 				},
 			},
 			{
 				Name:        "tracks",
 				Description: "Individual songs — saved tracks, top tracks, search results",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_saved", Description: "List user's saved/liked tracks (paginated, auto-fetches all pages)", Method: "GET", Path: "/me/tracks",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max tracks per page (1-50)", Default: 20},
 							{Name: "offset", In: "query", Type: "integer", Description: "Index of first track to return", Default: 0},
 						},
-						Response: types.ResponseSpec{Description: "Saved tracks with name, artists, album, id, uri", Fields: []string{"tracks", "total"}}},
+						Response: shared.ResponseSpec{Description: "Saved tracks with name, artists, album, id, uri", Fields: []string{"tracks", "total"}}},
 					{Name: "read_top", Description: "List user's top tracks by time range", Method: "GET", Path: "/me/top/tracks",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "time_range", In: "query", Type: "string", Description: "short_term (4 weeks), medium_term (6 months), or long_term (years)", Default: "medium_term"},
 							{Name: "limit", In: "query", Type: "integer", Description: "Max tracks (1-50)", Default: 20},
 						},
-						Response: types.ResponseSpec{Description: "Top tracks with name, artists, album, id", Fields: []string{"tracks"}}},
+						Response: shared.ResponseSpec{Description: "Top tracks with name, artists, album, id", Fields: []string{"tracks"}}},
 					{Name: "get_by_id", Description: "Get a track by its Spotify ID", Method: "GET", Path: "/tracks/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify track ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Track details with name, artists, album, duration, popularity", Fields: []string{"name", "artists", "album", "duration_ms", "popularity", "id", "uri"}}},
+						Response: shared.ResponseSpec{Description: "Track details with name, artists, album, duration, popularity", Fields: []string{"name", "artists", "album", "duration_ms", "popularity", "id", "uri"}}},
 				},
 			},
 			{
 				Name:        "albums",
 				Description: "Albums — saved albums, album details",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_saved", Description: "List user's saved albums (paginated)", Method: "GET", Path: "/me/albums",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max albums per page (1-50)", Default: 20},
 						},
-						Response: types.ResponseSpec{Description: "Saved albums with name, artists, id", Fields: []string{"albums", "total"}}},
+						Response: shared.ResponseSpec{Description: "Saved albums with name, artists, id", Fields: []string{"albums", "total"}}},
 					{Name: "get_by_id", Description: "Get an album by its Spotify ID", Method: "GET", Path: "/albums/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify album ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Album with tracks, artists, release date", Fields: []string{"name", "artists", "tracks", "release_date", "total_tracks"}}},
+						Response: shared.ResponseSpec{Description: "Album with tracks, artists, release date", Fields: []string{"name", "artists", "tracks", "release_date", "total_tracks"}}},
 				},
 			},
 			{
 				Name:        "artists",
 				Description: "Artists — followed artists, top tracks, related artists",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_top", Description: "List user's top artists by time range", Method: "GET", Path: "/me/top/artists",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "time_range", In: "query", Type: "string", Description: "short_term, medium_term, or long_term", Default: "medium_term"},
 						},
-						Response: types.ResponseSpec{Description: "Top artists with name, id, genres", Fields: []string{"artists"}}},
+						Response: shared.ResponseSpec{Description: "Top artists with name, id, genres", Fields: []string{"artists"}}},
 					{Name: "get_by_id", Description: "Get an artist by its Spotify ID", Method: "GET", Path: "/artists/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify artist ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Artist with name, genres, followers, popularity", Fields: []string{"name", "genres", "followers", "popularity"}}},
+						Response: shared.ResponseSpec{Description: "Artist with name, genres, followers, popularity", Fields: []string{"name", "genres", "followers", "popularity"}}},
 					{Name: "get_top_tracks", Description: "Get an artist's top tracks", Method: "GET", Path: "/artists/{id}/top-tracks",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify artist ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Artist's top tracks", Fields: []string{"tracks"}}},
+						Response: shared.ResponseSpec{Description: "Artist's top tracks", Fields: []string{"tracks"}}},
 				},
 			},
 			{
 				Name:        "playlists",
 				Description: "User playlists — list, detail with tracks",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_list", Description: "List user's playlists (paginated)", Method: "GET", Path: "/me/playlists",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Max playlists per page (1-50)", Default: 20},
 						},
-						Response: types.ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
+						Response: shared.ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID with its tracks", Method: "GET", Path: "/playlists/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Spotify playlist ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[], tracks", Fields: []string{"name", "description", "owner", "track_count", "sources", "tracks", "extra"}}},
+						Response: shared.ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[], tracks", Fields: []string{"name", "description", "owner", "track_count", "sources", "tracks", "extra"}}},
 				},
 			},
 			{
 				Name:        "search",
 				Description: "Search the Spotify catalog",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "search", Description: "Search for tracks, albums, artists, or playlists", Method: "GET", Path: "/search",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Search query", Required: true},
 							{Name: "type", In: "query", Type: "string", Description: "Comma-separated types: track, album, artist, playlist", Default: "track"},
 							{Name: "limit", In: "query", Type: "integer", Description: "Max results per type (1-50)", Default: 10},
 						},
-						Response: types.ResponseSpec{Description: "Search results grouped by type", Fields: []string{"tracks", "albums", "artists", "playlists"}}},
+						Response: shared.ResponseSpec{Description: "Search results grouped by type", Fields: []string{"tracks", "albums", "artists", "playlists"}}},
 				},
 			},
 			{
 				Name:        "player",
 				Description: "Playback state, currently playing, recently played",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_state", Description: "Get current playback state", Method: "GET", Path: "/me/player",
-						Response: types.ResponseSpec{Description: "Playback state with track, device, is_playing", Fields: []string{"is_playing", "track", "device"}}},
+						Response: shared.ResponseSpec{Description: "Playback state with track, device, is_playing", Fields: []string{"is_playing", "track", "device"}}},
 					{Name: "read_recent", Description: "Get recently played tracks", Method: "GET", Path: "/me/player/recently-played",
-						Response: types.ResponseSpec{Description: "Recently played tracks with played_at timestamps", Fields: []string{"tracks"}}},
+						Response: shared.ResponseSpec{Description: "Recently played tracks with played_at timestamps", Fields: []string{"tracks"}}},
 				},
 			},
 			{
 				Name:        "library",
 				Description: "User's saved tracks, albums, and artists",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_tracks", Description: "List saved tracks (alias for tracks.read_saved)", Method: "GET", Path: "/me/tracks",
-						Response: types.ResponseSpec{Description: "Saved tracks", Fields: []string{"tracks", "total"}}},
+						Response: shared.ResponseSpec{Description: "Saved tracks", Fields: []string{"tracks", "total"}}},
 					{Name: "read_albums", Description: "List saved albums (alias for albums.read_saved)", Method: "GET", Path: "/me/albums",
-						Response: types.ResponseSpec{Description: "Saved albums", Fields: []string{"albums", "total"}}},
+						Response: shared.ResponseSpec{Description: "Saved albums", Fields: []string{"albums", "total"}}},
 				},
 			},
 			{
 				Name:        "recommendations",
 				Description: "Personalized recommendations based on listening history",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_top_tracks", Description: "Top tracks (alias for tracks.read_top)", Method: "GET", Path: "/me/top/tracks",
-						Response: types.ResponseSpec{Description: "Top tracks", Fields: []string{"tracks"}}},
+						Response: shared.ResponseSpec{Description: "Top tracks", Fields: []string{"tracks"}}},
 					{Name: "read_top_artists", Description: "Top artists (alias for artists.read_top)", Method: "GET", Path: "/me/top/artists",
-						Response: types.ResponseSpec{Description: "Top artists", Fields: []string{"artists"}}},
+						Response: shared.ResponseSpec{Description: "Top artists", Fields: []string{"artists"}}},
 				},
 			},
 		},

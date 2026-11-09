@@ -12,7 +12,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GoogleDriveConnector lists Google Docs from Drive as neutral Document
@@ -68,24 +67,24 @@ func normalizeDriveProxyPath(remainingPath string) string {
 }
 
 // Capabilities returns Drive document operations reachable through the proxy.
-func (c *GoogleDriveConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *GoogleDriveConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "documents",
 				Description: "Google Docs via Drive — metadata + HTML/plain-text export; files stay on Drive (non-Aegis canonical)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_documents",
 						Description: "List Google Docs (permission key: documents)",
 						Method:      "GET",
 						Path:        "/files",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Drive query (default: Google Docs, not trashed)"},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Page size (default 100)", Default: googleDriveListPageSize},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Drive file list; use GET /v1/library/documents for neutral Document values",
 							Fields:      []string{"files", "nextPageToken"},
 						},
@@ -95,7 +94,7 @@ func (c *GoogleDriveConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Export Google Docs content as HTML or plain text (permission key: documents)",
 						Method:      "GET",
 						Path:        "/files/{id}/export",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Drive file ID", Required: true},
 							{Name: "mimeType", In: "query", Type: "string", Description: "text/html or text/plain", Default: googleDriveDefaultExportMime},
 						},

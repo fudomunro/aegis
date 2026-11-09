@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"net/http"
 	"net/http/httptest"
@@ -267,21 +268,21 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 }
 
 func TestClampPermissionsWithWritable(t *testing.T) {
-	caps := types.ServiceCapabilities{Kinds: []types.KindCapability{
-		{Name: "tracks", Operations: []types.Operation{{Method: "GET", Path: "/me/tracks"}}},
-		{Name: "photos", Operations: []types.Operation{
+	caps := shared.ServiceCapabilities{Kinds: []shared.KindCapability{
+		{Name: "tracks", Operations: []shared.Operation{{Method: "GET", Path: "/me/tracks"}}},
+		{Name: "photos", Operations: []shared.Operation{
 			{Method: "GET", Path: "/photos"},
 			{Method: "POST", Path: "/picker/sessions"},
 		}},
-		{Name: "player", Operations: []types.Operation{{Method: "GET", Path: "/me/player"}}},
-		{Name: "playlists", Operations: []types.Operation{{Method: "GET", Path: "/me/playlists"}}},
-		{Name: "contacts", Operations: []types.Operation{
+		{Name: "player", Operations: []shared.Operation{{Method: "GET", Path: "/me/player"}}},
+		{Name: "playlists", Operations: []shared.Operation{{Method: "GET", Path: "/me/playlists"}}},
+		{Name: "contacts", Operations: []shared.Operation{
 			{Method: "GET", Path: "/me/contacts"},
 			{Method: "POST", Path: "/people/merge"},
 		}},
 	}}
 	// Picker POST is not agent-writable; contacts POST (data write) is.
-	writable := types.WritableKindsFromCapabilities(caps)
+	writable := shared.WritableKindsFromCapabilities(caps)
 	if len(writable) != 1 || writable[0] != "contacts" {
 		t.Fatalf("writable from caps = %v, want [contacts]", writable)
 	}
@@ -346,16 +347,16 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 }
 
 func TestWritableKinds_ExcludesPickerAndSearch(t *testing.T) {
-	caps := types.ServiceCapabilities{Kinds: []types.KindCapability{
-		{Name: "photos", Operations: []types.Operation{
+	caps := shared.ServiceCapabilities{Kinds: []shared.KindCapability{
+		{Name: "photos", Operations: []shared.Operation{
 			{Method: "GET", Path: "/photos"},
 			{Method: "POST", Path: "/picker/sessions"},
 		}},
-		{Name: "photos2", Operations: []types.Operation{
+		{Name: "photos2", Operations: []shared.Operation{
 			{Method: "POST", Path: "/search/metadata"},
 		}},
 	}}
-	if got := types.WritableKindsFromCapabilities(caps); len(got) != 0 {
+	if got := shared.WritableKindsFromCapabilities(caps); len(got) != 0 {
 		t.Fatalf("picker/search POSTs must not mark types writable, got %v", got)
 	}
 }

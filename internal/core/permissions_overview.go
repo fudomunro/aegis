@@ -9,7 +9,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
@@ -279,7 +278,7 @@ func serviceProvidedTypes(conn any) []string {
 
 	// Advertised capability names, limited to library kinds (issue #160).
 	type named interface {
-		Capabilities() types.ServiceCapabilities
+		Capabilities() shared.ServiceCapabilities
 	}
 	if c, ok := conn.(named); ok {
 		for _, dt := range c.Capabilities().Kinds {

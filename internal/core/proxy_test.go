@@ -20,8 +20,8 @@ type testContentConnector struct {
 	lastPath string
 }
 
-func (c *testContentConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (c *testContentConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (c *testContentConnector) SystemInstructions(string) string { return "content" }
 func (c *testContentConnector) HandleProxy(w http.ResponseWriter, r *http.Request, remainingPath string) {

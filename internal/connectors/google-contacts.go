@@ -11,7 +11,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GoogleContactsConnector proxies the Google People API and implements
@@ -43,23 +42,23 @@ func (c *GoogleContactsConnector) GoogleContactsUpstreamBase() string {
 }
 
 // Capabilities returns what Google Contacts kinds and operations are supported.
-func (c *GoogleContactsConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *GoogleContactsConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "contacts",
 				Description: "Address book — list contacts (metadata only)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "read_list",
 						Description: "List the user's contacts as neutral Contact values (paginated). Permission key: contacts.",
 						Method:      "GET",
 						Path:        "/me/contacts",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page (1-1000)", Default: 100},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral contacts: name, emails, phones, handles, organization, sources[] (service, id, name, emails, phones)",
 							Fields:      []string{"contacts", "total"},
 						},
@@ -69,10 +68,10 @@ func (c *GoogleContactsConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Get a single contact by People API resource name (people/…) or bare ID",
 						Method:      "GET",
 						Path:        "/contacts/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "People resource name (people/c123) or bare ID", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral contact with service-local id and identifiers",
 							Fields:      []string{"name", "emails", "phones", "organization", "sources"},
 						},

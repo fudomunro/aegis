@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // vipTestHost wires a testHost against the mock Tailscale API and an offline
@@ -25,21 +25,21 @@ func vipTestHost(t *testing.T, mock *mockTailscaleAdmin) (*testHost, func()) {
 	}))
 	h.setService(ImmichServiceID, immich.URL)
 	h.services[ImmichServiceID].Headers = map[string]string{"X-API-Key": "test"}
-	h.secrets[types.SetupSecretTailscaleAPIKey] = "tskey-api-test"
-	h.settings[types.SetupFlowTailscale] = map[string]string{
+	h.secrets[shared.SetupSecretTailscaleAPIKey] = "tskey-api-test"
+	h.settings[shared.SetupFlowTailscale] = map[string]string{
 		"host_device_id": "n1",
 		"host_tag":       immichDefaultHostTag,
 	}
 	return h, immich.Close
 }
 
-func vipState(t *testing.T, h *testHost) types.OnboardingGuideState {
+func vipState(t *testing.T, h *testHost) shared.OnboardingGuideState {
 	t.Helper()
 	state := NewImmichConnector(h).immichTailnetState(context.Background())
 	return state
 }
 
-func stepByID(t *testing.T, state types.OnboardingGuideState, id string) types.OnboardingGuideStepState {
+func stepByID(t *testing.T, state shared.OnboardingGuideState, id string) shared.OnboardingGuideStepState {
 	t.Helper()
 	for _, st := range state.Steps {
 		if st.ID == id {
@@ -47,7 +47,7 @@ func stepByID(t *testing.T, state types.OnboardingGuideState, id string) types.O
 		}
 	}
 	t.Fatalf("step %q missing from %+v", id, state.Steps)
-	return types.OnboardingGuideStepState{}
+	return shared.OnboardingGuideStepState{}
 }
 
 // TestImmichTailnetGuide pins the copyable VIP walkthrough (issue #124).

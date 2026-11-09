@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
@@ -158,7 +158,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 		t.Fatalf("GET status = %d body=%s", w.Code, w.Body.String())
 	}
 	var list struct {
-		Ownership []types.OwnershipStatus `json:"ownership"`
+		Ownership []shared.OwnershipStatus `json:"ownership"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
@@ -175,7 +175,7 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("POST status = %d body=%s", w.Code, w.Body.String())
 	}
-	var st types.OwnershipStatus
+	var st shared.OwnershipStatus
 	if err := json.Unmarshal(w.Body.Bytes(), &st); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestOwnershipRoutes_ActionsMatchSeams(t *testing.T) {
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
 	byKind := ownershipByKind(t, srv.ownershipStatuses())
-	actions := map[string]types.OwnershipAction{}
+	actions := map[string]shared.OwnershipAction{}
 	for _, rt := range byKind["photos"].UnusedRoutes {
 		actions[rt.ServiceID] = rt.Action
 	}
@@ -298,16 +298,16 @@ func TestOwnershipStartDeclarationsAreReal(t *testing.T) {
 		case isOnboarder && isImportStore:
 			t.Errorf("connector %q is both Onboarder and an import store; Start.Kind cannot be honest", m.Service)
 		case isOnboarder:
-			if start.Kind != types.OwnershipActionSetup {
-				t.Errorf("connector %q implements Onboarder but Start.Kind = %q, want %q", m.Service, start.Kind, types.OwnershipActionSetup)
+			if start.Kind != shared.OwnershipActionSetup {
+				t.Errorf("connector %q implements Onboarder but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionSetup)
 			}
 		case isImportStore:
-			if start.Kind != types.OwnershipActionImport {
-				t.Errorf("connector %q is an import store but Start.Kind = %q, want %q", m.Service, start.Kind, types.OwnershipActionImport)
+			if start.Kind != shared.OwnershipActionImport {
+				t.Errorf("connector %q is an import store but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionImport)
 			}
 		default:
-			if start.Kind != types.OwnershipActionConnect {
-				t.Errorf("connector %q has no setup or import seam but Start.Kind = %q, want %q", m.Service, start.Kind, types.OwnershipActionConnect)
+			if start.Kind != shared.OwnershipActionConnect {
+				t.Errorf("connector %q has no setup or import seam but Start.Kind = %q, want %q", m.Service, start.Kind, shared.OwnershipActionConnect)
 			}
 		}
 	}
@@ -321,8 +321,8 @@ func TestOwnershipStartCoversIngestOnlySources(t *testing.T) {
 	if start == nil {
 		t.Fatal("takeout MailSource has no Start declaration")
 	}
-	if start.Kind != types.OwnershipActionImport {
-		t.Fatalf("takeout Start.Kind = %q, want %q", start.Kind, types.OwnershipActionImport)
+	if start.Kind != shared.OwnershipActionImport {
+		t.Fatalf("takeout Start.Kind = %q, want %q", start.Kind, shared.OwnershipActionImport)
 	}
 	if start.Label == "" {
 		t.Fatal("takeout Start.Label is empty")
@@ -389,9 +389,9 @@ func mustOwnershipStore(t *testing.T, path string) *ownership.Store {
 	return s
 }
 
-func ownershipByKind(t *testing.T, statuses []types.OwnershipStatus) map[string]types.OwnershipStatus {
+func ownershipByKind(t *testing.T, statuses []shared.OwnershipStatus) map[string]shared.OwnershipStatus {
 	t.Helper()
-	out := make(map[string]types.OwnershipStatus, len(statuses))
+	out := make(map[string]shared.OwnershipStatus, len(statuses))
 	for _, st := range statuses {
 		out[st.Kind] = st
 	}
@@ -403,7 +403,7 @@ func ownershipByKind(t *testing.T, statuses []types.OwnershipStatus) map[string]
 	return out
 }
 
-func assertOwnershipSource(t *testing.T, sources []types.OwnershipSource, serviceID string) {
+func assertOwnershipSource(t *testing.T, sources []shared.OwnershipSource, serviceID string) {
 	t.Helper()
 	for _, s := range sources {
 		if s.ServiceID == serviceID {
@@ -413,7 +413,7 @@ func assertOwnershipSource(t *testing.T, sources []types.OwnershipSource, servic
 	t.Fatalf("service %q not in under_management: %+v", serviceID, sources)
 }
 
-func assertOwnershipRoute(t *testing.T, routes []types.OwnershipRoute, serviceID string) {
+func assertOwnershipRoute(t *testing.T, routes []shared.OwnershipRoute, serviceID string) {
 	t.Helper()
 	for _, r := range routes {
 		if r.ServiceID == serviceID {
@@ -423,7 +423,7 @@ func assertOwnershipRoute(t *testing.T, routes []types.OwnershipRoute, serviceID
 	t.Fatalf("service %q not in unused_routes: %+v", serviceID, routes)
 }
 
-func hasRoute(routes []types.OwnershipRoute, serviceID string) bool {
+func hasRoute(routes []shared.OwnershipRoute, serviceID string) bool {
 	for _, r := range routes {
 		if r.ServiceID == serviceID {
 			return true

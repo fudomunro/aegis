@@ -3,7 +3,6 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 
 	"context"
 	"database/sql"
@@ -978,7 +977,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 	for {
 		// Path persists the export location (the CLI's -import-takeout contract).
 		res, err := ingest.IngestMail(context.Background(), sink,
-			types.MailIngestOptions{Path: takeoutPath, MaxMessages: batch})
+			shared.MailIngestOptions{Path: takeoutPath, MaxMessages: batch})
 		stored += res.Stored
 		skipped += res.Skipped
 		scanned += res.Listed

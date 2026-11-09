@@ -12,7 +12,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // mailPermType is the permission key for the local mail archive surface.
@@ -335,7 +334,7 @@ func (s *Server) handleMailSyncPayload(w http.ResponseWriter, r *http.Request, r
 		Path:        req.Path,
 		ResetCursor: req.ResetCursor,
 	})
-	if errors.Is(err, types.ErrMailConfig) {
+	if errors.Is(err, shared.ErrMailConfig) {
 		// Missing or rejected ingest location is a client error, not a
 		// fail-open result.
 		shared.WriteJSONError(w, http.StatusBadRequest, result.Error)

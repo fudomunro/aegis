@@ -14,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ImmichConnector exposes a self-hosted Immich library as neutral Photo
@@ -63,23 +62,23 @@ func (c *ImmichConnector) ApplyImmichAuth(req *http.Request, logger *slog.Logger
 }
 
 // Capabilities returns Immich photo operations reachable through the proxy.
-func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *ImmichConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "photos",
 				Description: "Self-hosted Immich library — metadata only; bytes stay on Immich (foreign/local canonical)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_assets",
 						Description: "List photo/video assets via Immich search/metadata (permission key: photos)",
 						Method:      "POST",
 						Path:        "/search/metadata",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "page", In: "body", Type: "integer", Description: "1-based page", Default: 1},
 							{Name: "size", In: "body", Type: "integer", Description: "Page size (default 250)", Default: 250},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Immich search response; use GET /v1/library/photos for neutral Photo values",
 							Fields:      []string{"assets.total", "assets.items", "assets.nextPage"},
 						},
@@ -89,7 +88,7 @@ func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Download original bytes for one asset (permission key: photos)",
 						Method:      "GET",
 						Path:        "/assets/{id}/original",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Immich asset UUID", Required: true},
 						},
 					},
@@ -98,7 +97,7 @@ func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Download a thumbnail for one asset (permission key: photos)",
 						Method:      "GET",
 						Path:        "/assets/{id}/thumbnail",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Immich asset UUID", Required: true},
 						},
 					},
@@ -107,7 +106,7 @@ func (c *ImmichConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List Immich albums",
 						Method:      "GET",
 						Path:        "/albums",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Immich album list",
 							Fields:      []string{"id", "albumName", "assetCount"},
 						},

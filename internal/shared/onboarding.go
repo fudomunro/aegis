@@ -1,4 +1,4 @@
-package types
+package shared
 
 // Connector-owned onboarding (issue #265): the contract shapes for advanced
 // setup flows — credential/config inputs, verification probes, copyable

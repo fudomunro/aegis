@@ -14,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // OwnTracks live connector (issue #142). OwnTracks Recorder is a local-first
@@ -89,25 +88,25 @@ func (c *OwnTracksConnector) OwnTracksUpstreamBase() string {
 	return strings.TrimRight(svc.Endpoint, "/")
 }
 
-func (c *OwnTracksConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *OwnTracksConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "places",
 				Description: "OwnTracks visits and trips derived from Recorder history",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_locations",
 						Description: "Recorder location samples (internal; library clusters these into visits)",
 						Method:      "GET",
 						Path:        "/api/v0/locations",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "user", In: "query", Type: "string", Description: "OwnTracks user id"},
 							{Name: "device", In: "query", Type: "string", Description: "OwnTracks device id"},
 							{Name: "from", In: "query", Type: "integer", Description: "Unix seconds"},
 							{Name: "to", In: "query", Type: "integer", Description: "Unix seconds"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "OwnTracks locations payload",
 							Fields:      []string{"data"},
 						},
@@ -117,11 +116,11 @@ func (c *OwnTracksConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Recorder-computed visits when available",
 						Method:      "GET",
 						Path:        "/api/v0/visit",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "user", In: "query", Type: "string", Description: "OwnTracks user id"},
 							{Name: "device", In: "query", Type: "string", Description: "OwnTracks device id"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "OwnTracks visits payload",
 							Fields:      []string{"data"},
 						},

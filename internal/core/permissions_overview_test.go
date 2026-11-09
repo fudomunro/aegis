@@ -11,7 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
@@ -257,7 +257,7 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 	srv.connectors["youtube-music"] = connectors.NewYouTubeMusicConnector(srv)
 	// Proxy-only capability surface must not create a playlists row.
 	srv.connectors["player-only"] = stubConnector{
-		caps: types.ServiceCapabilities{Kinds: []types.KindCapability{
+		caps: shared.ServiceCapabilities{Kinds: []shared.KindCapability{
 			{Name: "player"},
 			{Name: "search"},
 		}},
@@ -310,10 +310,10 @@ func TestPermissionsOverview_ServicePeersUnderLibraryTypes(t *testing.T) {
 }
 
 type stubConnector struct {
-	caps types.ServiceCapabilities
+	caps shared.ServiceCapabilities
 }
 
-func (s stubConnector) Capabilities() types.ServiceCapabilities { return s.caps }
-func (s stubConnector) SystemInstructions(string) string        { return "" }
+func (s stubConnector) Capabilities() shared.ServiceCapabilities { return s.caps }
+func (s stubConnector) SystemInstructions(string) string         { return "" }
 func (s stubConnector) HandleProxy(http.ResponseWriter, *http.Request, string) {
 }

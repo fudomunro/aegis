@@ -14,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // YNABConnector lists budget transactions from the YNAB API and implements
@@ -48,19 +47,19 @@ func (c *YNABConnector) YnabUpstreamBase() string {
 }
 
 // Capabilities returns YNAB transaction operations reachable through the proxy.
-func (c *YNABConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *YNABConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "transactions",
 				Description: "YNAB budget transactions — line items with amount, payee, category, account ref (no full account numbers)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_budgets",
 						Description: "List the user's budgets (permission key: transactions)",
 						Method:      "GET",
 						Path:        "/budgets",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Budget list",
 							Fields:      []string{"data.budgets"},
 						},
@@ -70,10 +69,10 @@ func (c *YNABConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List accounts for one budget (display name, type, last4 — never full numbers)",
 						Method:      "GET",
 						Path:        "/budgets/{budget_id}/accounts",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "budget_id", In: "path", Type: "string", Description: "YNAB budget UUID or last-used", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Account list",
 							Fields:      []string{"data.accounts"},
 						},
@@ -83,12 +82,12 @@ func (c *YNABConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List budget transactions (permission key: transactions)",
 						Method:      "GET",
 						Path:        "/budgets/{budget_id}/transactions",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "budget_id", In: "path", Type: "string", Description: "YNAB budget UUID or last-used", Required: true},
 							{Name: "since_date", In: "query", Type: "string", Description: "Only transactions on/after this date (YYYY-MM-DD)"},
 							{Name: "type", In: "query", Type: "string", Description: "unapproved or categorized"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Raw YNAB transaction list; prefer GET /v1/library/transactions for neutral values",
 							Fields:      []string{"data.transactions"},
 						},

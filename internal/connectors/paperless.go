@@ -14,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // PaperlessConnector lists self-hosted Paperless-ngx documents as neutral
@@ -99,23 +98,23 @@ func (c *PaperlessConnector) paperlessToken(logger *slog.Logger) string {
 }
 
 // Capabilities returns Paperless document operations reachable through the proxy.
-func (c *PaperlessConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *PaperlessConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "documents",
 				Description: "Self-hosted Paperless-ngx documents — metadata + short excerpt; files stay on Paperless (foreign/local canonical)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_documents",
 						Description: "List documents (permission key: documents)",
 						Method:      "GET",
 						Path:        "/documents",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "page", In: "query", Type: "integer", Description: "1-based page", Default: 1},
 							{Name: "page_size", In: "query", Type: "integer", Description: "Page size (default 100)", Default: 100},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Paperless document list; use GET /v1/library/documents for neutral Document values",
 							Fields:      []string{"count", "next", "results"},
 						},
@@ -125,7 +124,7 @@ func (c *PaperlessConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Fetch one document including OCR content (permission key: documents)",
 						Method:      "GET",
 						Path:        "/documents/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Paperless document id", Required: true},
 						},
 					},
@@ -134,7 +133,7 @@ func (c *PaperlessConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Download original file bytes (permission key: documents)",
 						Method:      "GET",
 						Path:        "/documents/{id}/download",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Paperless document id", Required: true},
 						},
 					},

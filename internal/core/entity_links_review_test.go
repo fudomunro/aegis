@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeFullLibraryProvider struct {
@@ -26,8 +26,8 @@ type fakeFullLibraryProvider struct {
 	err       error
 }
 
-func (f *fakeFullLibraryProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeFullLibraryProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeFullLibraryProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeFullLibraryProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

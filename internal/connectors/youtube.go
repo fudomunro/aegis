@@ -13,7 +13,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 const (
@@ -37,98 +36,98 @@ func NewYouTubeMusicConnector(host Host) *YouTubeMusicConnector {
 }
 
 // Capabilities returns what YouTube Music kinds and operations are supported.
-func (c *YouTubeMusicConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *YouTubeMusicConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "user",
 				Description: "Current user's YouTube channel",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read", Description: "Get current user's channel info", Method: "GET", Path: "/me",
-						Response: types.ResponseSpec{Description: "Channel with id, title, playlists", Fields: []string{"id", "title", "description", "playlists"}}},
+						Response: shared.ResponseSpec{Description: "Channel with id, title, playlists", Fields: []string{"id", "title", "description", "playlists"}}},
 				},
 			},
 			{
 				Name:        "tracks",
 				Description: "Music videos and tracks — liked, search results",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_liked", Description: "List liked YouTube videos as neutral tracks (paginated; music-only filtering lives on /v1/library/tracks)", Method: "GET", Path: "/me/liked",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{Description: "Neutral tracks from liked videos (unfiltered playlist)", Fields: []string{"tracks", "total"}}},
+						Response: shared.ResponseSpec{Description: "Neutral tracks from liked videos (unfiltered playlist)", Fields: []string{"tracks", "total"}}},
 					{Name: "get_by_id", Description: "Get video details by ID", Method: "GET", Path: "/videos/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube video ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Video with title, channel, duration, stats", Fields: []string{"id", "title", "channel", "duration", "view_count", "like_count"}}},
+						Response: shared.ResponseSpec{Description: "Video with title, channel, duration, stats", Fields: []string{"id", "title", "channel", "duration", "view_count", "like_count"}}},
 				},
 			},
 			{
 				Name:        "playlists",
 				Description: "User playlists — list, detail with items",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_list", Description: "List user's playlists (paginated)", Method: "GET", Path: "/me/playlists",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
+						Response: shared.ResponseSpec{Description: "Neutral playlist list: name, description, owner, track_count, sources[] (service, service_name, id, url, extra)", Fields: []string{"playlists", "total"}}},
 					{Name: "get_by_id", Description: "Get a playlist by ID", Method: "GET", Path: "/playlists/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[]", Fields: []string{"name", "description", "owner", "track_count", "sources", "extra"}}},
+						Response: shared.ResponseSpec{Description: "Neutral playlist detail: name, description, owner, track_count, sources[]", Fields: []string{"name", "description", "owner", "track_count", "sources", "extra"}}},
 					{Name: "read_items", Description: "List items in a playlist (paginated)", Method: "GET", Path: "/playlists/{id}/items",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube playlist ID", Required: true},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{Description: "Neutral tracks: name, artists[], album, sources[]", Fields: []string{"tracks", "total"}}},
+						Response: shared.ResponseSpec{Description: "Neutral tracks: name, artists[], album, sources[]", Fields: []string{"tracks", "total"}}},
 				},
 			},
 			{
 				Name:        "artists",
 				Description: "Followed artists / subscribed channels (feeds /v1/library/artists)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_followed", Description: "List followed artists via channel subscriptions (paginated). Permission key: artists.", Method: "GET", Path: "/me/subscriptions",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
+						Response: shared.ResponseSpec{Description: "Subscribed channels with title, channel_id", Fields: []string{"subscriptions", "total"}}},
 				},
 			},
 			{
 				Name:        "channels",
 				Description: "YouTube channels — lookup by id",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "get_by_id", Description: "Get channel details by ID", Method: "GET", Path: "/channels/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "YouTube channel ID", Required: true},
 						},
-						Response: types.ResponseSpec{Description: "Channel with title, description, stats", Fields: []string{"id", "title", "description"}}},
+						Response: shared.ResponseSpec{Description: "Channel with title, description, stats", Fields: []string{"id", "title", "description"}}},
 				},
 			},
 			{
 				Name:        "search",
 				Description: "Search YouTube Music catalog",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "search", Description: "Search YouTube Music (defaults to music videos)", Method: "GET", Path: "/search",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Search query", Required: true},
 							{Name: "type", In: "query", Type: "string", Description: "Resource type: video, playlist, channel", Default: "video"},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{Description: "Search results with title, channel, type", Fields: []string{"results", "total"}}},
+						Response: shared.ResponseSpec{Description: "Search results with title, channel, type", Fields: []string{"results", "total"}}},
 				},
 			},
 			{
 				Name:        "library",
 				Description: "User's liked videos and subscriptions",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{Name: "read_liked", Description: "List liked videos (alias for tracks.read_liked)", Method: "GET", Path: "/me/liked",
-						Response: types.ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
+						Response: shared.ResponseSpec{Description: "Liked videos", Fields: []string{"tracks", "total"}}},
 					{Name: "read_followed", Description: "List subscriptions (alias for artists.read_followed)", Method: "GET", Path: "/me/subscriptions",
-						Response: types.ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
+						Response: shared.ResponseSpec{Description: "Subscriptions", Fields: []string{"subscriptions", "total"}}},
 				},
 			},
 		},

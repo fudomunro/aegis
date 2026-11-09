@@ -11,7 +11,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestGenerateSampleMail_Deterministic(t *testing.T) {
@@ -173,7 +173,7 @@ func TestWriteSampleMbox_ImportRoundTrip(t *testing.T) {
 
 	a := openTestMailArchive(t)
 	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mail.Sink{A: a},
-		types.MailIngestOptions{Path: path, MaxMessages: 1000})
+		shared.MailIngestOptions{Path: path, MaxMessages: 1000})
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}

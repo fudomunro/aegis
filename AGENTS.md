@@ -110,7 +110,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Pre-request injection | `internal/core` hub | `allow` / `block` / `modify`; structured `Operation` contract |
 | ServiceConnector interface | `internal/connectors/host.go` | `Capabilities` + `SystemInstructions` + `HandleProxy`; the hub wires the registry |
 | Generic/shared content transport | `internal/connectors` (upstream transport), `internal/core` hub (token injection/cache), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
-| Shared plumbing (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table) | `internal/shared` | Stdlib-only; no domain models, `Host`, service IDs, or provider knowledge (issue #280). One owner — do not re-grow twins in `core` or `connectors` |
+| Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial constructors/accessors only (the `kindrules.go` test), no domain behavior, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
 | Neutral models + kind data | `internal/types` | Models and kind metadata; authorization policy is `internal/core/policy`, never here |
 | Library kinds + aggregate pipeline | one file per kind in `internal/kinds` (see Extension points); kind data in `internal/types` | Kinds own their routes, pipeline calls, and stamping over the `Host` seam; the hub keeps the fixed cross-kind routes and admin writes |
@@ -351,8 +351,14 @@ over the hostile-input parsers, and `go build -o aegis .`.
 
 ## Code conventions
 
-- **`internal/shared` is stdlib-only** transport/JSON/math plumbing — no
-  domain models, no `Host`, no service IDs, no provider knowledge, no policy.
+- **`internal/shared` owns stdlib-only plumbing and cross-package seam
+  vocabulary** (issue #280, amended #325) — the shapes two internal packages
+  exchange to agree on a contract (`capabilities.go`, `onboarding.go`,
+  `mail_ingest.go`, `ownership.go`, kind rules). Shapes and trivial
+  constructors/accessors only (the `kindrules.go` test); no domain behavior
+  (nothing that makes matching, merging, or policy decisions), no `Host`, no
+  service registries, no provider paths. Anything that makes decisions lives
+  with its domain owner.
   The generic **kind-rule table** (`kindrules.go`: level tokens +
   `DefaultNone` flags, `RegisterKindRule` / `KindAllowsLevel` / …) is shared
   plumbing on purpose: domain owners register rules (built-in kinds at init,

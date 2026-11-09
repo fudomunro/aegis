@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -13,7 +14,6 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeMessageProvider struct {
@@ -22,8 +22,8 @@ type fakeMessageProvider struct {
 	truncated bool
 }
 
-func (f *fakeMessageProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeMessageProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeMessageProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeMessageProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

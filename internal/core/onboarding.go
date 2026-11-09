@@ -9,7 +9,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Connector-owned onboarding (issue #265): the generic runner over
@@ -25,17 +24,17 @@ import (
 // onboardingView is GET /v1/admin/setup/{id}: the declared contract plus the
 // live view the panel renders.
 type onboardingView struct {
-	Spec   types.OnboardingSpec   `json:"spec"`
-	Status types.OnboardingStatus `json:"status"`
+	Spec   shared.OnboardingSpec   `json:"spec"`
+	Status shared.OnboardingStatus `json:"status"`
 }
 
 // onboardingActionResult is POST /v1/admin/setup/{id}/{action}: the refreshed
 // view plus the action's own diagnosis.
 type onboardingActionResult struct {
-	Spec   types.OnboardingSpec   `json:"spec"`
-	Status types.OnboardingStatus `json:"status"`
-	Probe  *types.ProbeResult     `json:"probe,omitempty"`
-	Detail string                 `json:"detail,omitempty"`
+	Spec   shared.OnboardingSpec   `json:"spec"`
+	Status shared.OnboardingStatus `json:"status"`
+	Probe  *shared.ProbeResult     `json:"probe,omitempty"`
+	Detail string                  `json:"detail,omitempty"`
 }
 
 // handleAdminOnboarding serves the generic setup routes:
@@ -94,7 +93,7 @@ func (s *Server) writeOnboardingView(w http.ResponseWriter, ctx context.Context,
 // runOnboardingAction executes one declared verb, persists whatever state
 // changes the connector asked for, then answers with the refreshed view.
 func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob connectors.Onboarder, action string) {
-	var in types.OnboardingInput
+	var in shared.OnboardingInput
 	if r.Body != nil {
 		body, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
 		if err != nil {
@@ -135,7 +134,7 @@ func (s *Server) runOnboardingAction(w http.ResponseWriter, r *http.Request, ob 
 // and it goes through the same SetServiceConnection seam the Immich/YNAB
 // admin saves used: secrets into the encrypted store first, overlay second,
 // aegis.json never rewritten.
-func (s *Server) applyOnboardingUpdates(spec types.OnboardingSpec, updates []types.StateUpdate) error {
+func (s *Server) applyOnboardingUpdates(spec shared.OnboardingSpec, updates []shared.StateUpdate) error {
 	if len(updates) == 0 {
 		return nil
 	}
@@ -190,7 +189,7 @@ func (s *Server) applyOnboardingUpdates(spec types.OnboardingSpec, updates []typ
 // onboardingStatus derives the live view and strips secret values before
 // anything is serialized. Connectors are expected to leave Secret fields
 // empty; this is the belt to that suspenders.
-func (s *Server) onboardingStatus(ctx context.Context, spec types.OnboardingSpec, ob connectors.Onboarder) types.OnboardingStatus {
+func (s *Server) onboardingStatus(ctx context.Context, spec shared.OnboardingSpec, ob connectors.Onboarder) shared.OnboardingStatus {
 	status := ob.OnboardingStatus(ctx)
 	for _, f := range spec.Fields {
 		if !f.Secret {

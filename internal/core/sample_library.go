@@ -9,7 +9,6 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // SampleLibraryServiceIDPrefix is the config service id prefix for fixture
@@ -54,23 +53,23 @@ func IsSampleLibraryService(svc *Service) bool {
 		strings.HasPrefix(svc.ID, SampleLibraryServiceIDPrefix)
 }
 
-func (c *SampleLibraryConnector) Capabilities() types.ServiceCapabilities {
+func (c *SampleLibraryConnector) Capabilities() shared.ServiceCapabilities {
 	kinds := []string{
 		"playlists", "tracks", "albums", "artists", "contacts",
 		"photos", "events", "messages", "transactions", "places", "documents",
 	}
-	dts := make([]types.KindCapability, 0, len(kinds))
+	dts := make([]shared.KindCapability, 0, len(kinds))
 	for _, k := range kinds {
-		dts = append(dts, types.KindCapability{
+		dts = append(dts, shared.KindCapability{
 			Name:        k,
 			Description: "Synthetic fixture data (no upstream provider).",
-			Operations: []types.Operation{
+			Operations: []shared.Operation{
 				{
 					Name:        "list",
 					Description: "List synthetic " + k + " as neutral library values.",
 					Method:      "GET",
 					Path:        "/me/" + k,
-					Response: types.ResponseSpec{
+					Response: shared.ResponseSpec{
 						Description: "Neutral " + k + " for the bound dataset partition.",
 						Fields:      []string{k, "total"},
 					},
@@ -78,7 +77,7 @@ func (c *SampleLibraryConnector) Capabilities() types.ServiceCapabilities {
 			},
 		})
 	}
-	return types.ServiceCapabilities{Kinds: dts}
+	return shared.ServiceCapabilities{Kinds: dts}
 }
 
 func (c *SampleLibraryConnector) SystemInstructions(baseURL string) string {

@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -12,8 +13,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestServiceIsCanonicalFor(t *testing.T) {
@@ -158,8 +157,8 @@ func TestMergeContacts_CanonicalSortsFirst(t *testing.T) {
 
 type twoSourcePlaylistProvider struct{}
 
-func (twoSourcePlaylistProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (twoSourcePlaylistProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (twoSourcePlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (twoSourcePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -174,8 +173,8 @@ func (twoSourcePlaylistProvider) ListUserPlaylists(context.Context) ([]kinds.Pla
 
 type youtubePlaylistProvider struct{}
 
-func (youtubePlaylistProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (youtubePlaylistProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (youtubePlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (youtubePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

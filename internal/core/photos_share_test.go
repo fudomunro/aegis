@@ -15,7 +15,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 type fakePhotoBytesProvider struct {
@@ -25,8 +25,8 @@ type fakePhotoBytesProvider struct {
 	fetched  string
 }
 
-func (f *fakePhotoBytesProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakePhotoBytesProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakePhotoBytesProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakePhotoBytesProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -43,8 +43,8 @@ type fakePhotoShareTarget struct {
 	req    kinds.PhotoShareRequest
 }
 
-func (f *fakePhotoShareTarget) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakePhotoShareTarget) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakePhotoShareTarget) SystemInstructions(string) string { return "fake" }
 func (f *fakePhotoShareTarget) HandleProxy(http.ResponseWriter, *http.Request, string) {

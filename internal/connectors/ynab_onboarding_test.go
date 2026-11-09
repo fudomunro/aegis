@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // TestYNABOnboarding_Spec pins YNAB's declared setup contract (issue #265):
@@ -23,7 +23,7 @@ func TestYNABOnboarding_Spec(t *testing.T) {
 		t.Fatalf("title = %q", spec.Title)
 	}
 
-	byID := map[string]types.OnboardingField{}
+	byID := map[string]shared.OnboardingField{}
 	for _, f := range spec.Fields {
 		byID[f.ID] = f
 	}
@@ -49,7 +49,7 @@ func TestYNABOnboarding_Spec(t *testing.T) {
 		}
 	}
 
-	actions := map[string]types.OnboardingAction{}
+	actions := map[string]shared.OnboardingAction{}
 	for _, a := range spec.Actions {
 		actions[a.ID] = a
 	}
@@ -69,7 +69,7 @@ func TestYNABOnboarding_Spec(t *testing.T) {
 	if actions["probe"].BusyLabel != "Testing YNAB API…" {
 		t.Fatalf("probe busy label = %q", actions["probe"].BusyLabel)
 	}
-	if actions["save"].Placement != types.ActionInHeader || actions["save_test"].Placement != types.ActionInForm {
+	if actions["save"].Placement != shared.ActionInHeader || actions["save_test"].Placement != shared.ActionInForm {
 		t.Fatalf("placements = %+v / %+v", actions["save"].Placement, actions["save_test"].Placement)
 	}
 
@@ -148,7 +148,7 @@ func TestYNABOnboarding_ProbeCodes(t *testing.T) {
 	h := newTestHost("https://aegis.example.com")
 	h.setService(YNABServiceID, "http://127.0.0.1:1")
 	h.services[YNABServiceID].Headers = map[string]string{"Authorization": "Bearer tok"}
-	res, err := NewYNABConnector(h).OnboardingRun(ctx, "probe", types.OnboardingInput{})
+	res, err := NewYNABConnector(h).OnboardingRun(ctx, "probe", shared.OnboardingInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,7 +159,7 @@ func TestYNABOnboarding_ProbeCodes(t *testing.T) {
 	// No credential at all → the distinct "not configured" diagnosis.
 	blank := newTestHost("https://aegis.example.com")
 	blank.setService(YNABServiceID, "https://api.ynab.com/v1")
-	res, err = NewYNABConnector(blank).OnboardingRun(ctx, "probe", types.OnboardingInput{})
+	res, err = NewYNABConnector(blank).OnboardingRun(ctx, "probe", shared.OnboardingInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -175,7 +175,7 @@ func TestYNABOnboarding_ProbeCodes(t *testing.T) {
 	rejected := newTestHost("https://aegis.example.com")
 	rejected.setService(YNABServiceID, upstream.URL)
 	rejected.services[YNABServiceID].Headers = map[string]string{"Authorization": "Bearer tok"}
-	res, err = NewYNABConnector(rejected).OnboardingRun(ctx, "probe", types.OnboardingInput{})
+	res, err = NewYNABConnector(rejected).OnboardingRun(ctx, "probe", shared.OnboardingInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +192,7 @@ func TestYNABOnboarding_ProbeCodes(t *testing.T) {
 	healthy := newTestHost("https://aegis.example.com")
 	healthy.setService(YNABServiceID, ok.URL)
 	healthy.services[YNABServiceID].Headers = map[string]string{"Authorization": "Bearer tok"}
-	res, err = NewYNABConnector(healthy).OnboardingRun(ctx, "probe", types.OnboardingInput{})
+	res, err = NewYNABConnector(healthy).OnboardingRun(ctx, "probe", shared.OnboardingInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestYNABOnboarding_ConnectionUpdate(t *testing.T) {
 	ctx := context.Background()
 	c := NewYNABConnector(newTestHost("https://aegis.example.com"))
 
-	res, err := c.OnboardingRun(ctx, "save", types.OnboardingInput{Values: map[string]string{
+	res, err := c.OnboardingRun(ctx, "save", shared.OnboardingInput{Values: map[string]string{
 		"endpoint": "https://api.ynab.com/v1",
 		"token":    "test-pat",
 	}})
@@ -223,7 +223,7 @@ func TestYNABOnboarding_ConnectionUpdate(t *testing.T) {
 	}
 
 	// Blank endpoint falls back to the public API base.
-	res, err = c.OnboardingRun(ctx, "save", types.OnboardingInput{})
+	res, err = c.OnboardingRun(ctx, "save", shared.OnboardingInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -236,7 +236,7 @@ func TestYNABOnboarding_ConnectionUpdate(t *testing.T) {
 	}
 
 	// "Bearer " prefix is stripped before re-wrapping.
-	res, err = c.OnboardingRun(ctx, "save", types.OnboardingInput{Values: map[string]string{"token": "bearer  tok"}})
+	res, err = c.OnboardingRun(ctx, "save", shared.OnboardingInput{Values: map[string]string{"token": "bearer  tok"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -245,13 +245,13 @@ func TestYNABOnboarding_ConnectionUpdate(t *testing.T) {
 	}
 
 	// Non-http endpoint is rejected with the pinned copy.
-	_, err = c.OnboardingRun(ctx, "save", types.OnboardingInput{Values: map[string]string{"endpoint": "not-a-url"}})
+	_, err = c.OnboardingRun(ctx, "save", shared.OnboardingInput{Values: map[string]string{"endpoint": "not-a-url"}})
 	if err == nil || err.Error() != "endpoint must be an http(s) URL" {
 		t.Fatalf("err = %v", err)
 	}
 
 	// Unknown verb is rejected rather than silently ignored.
-	if _, err := c.OnboardingRun(ctx, "nope", types.OnboardingInput{}); err == nil {
+	if _, err := c.OnboardingRun(ctx, "nope", shared.OnboardingInput{}); err == nil {
 		t.Fatal("expected error for unknown action")
 	}
 }

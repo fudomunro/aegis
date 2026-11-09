@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Mail ingest seam (issue #286; docs/mail-ingest.md): one contract, two
@@ -17,7 +17,7 @@ import (
 // MailIngest feeds the local mail archive one bounded batch at a time.
 // Callers repeat until Result.Done.
 type MailIngest interface {
-	IngestMail(ctx context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error)
+	IngestMail(ctx context.Context, sink MailSink, opts shared.MailIngestOptions) (shared.MailIngestResult, error)
 }
 
 // MailSource is how one ingest source groups beside the archive: its
@@ -37,7 +37,7 @@ type MailSource struct {
 	// connection entry of its own (issue #165). Sources that are also
 	// connections declare Start on their maturity row instead; a Start
 	// here is only for sources the maturity catalog does not carry.
-	Start *types.OwnershipAction
+	Start *shared.OwnershipAction
 }
 
 // mailSources lists the declarations beside each ingest.
@@ -68,8 +68,8 @@ type MailSink interface {
 	// LoadCursor/SaveCursor round-trip the durable ingest position under
 	// the shared cursor keys; the cursor's LastSyncAt is what overviews
 	// read.
-	LoadCursor(service string) (types.MailIngestCursor, error)
-	SaveCursor(service string, cur types.MailIngestCursor) error
+	LoadCursor(service string) (shared.MailIngestCursor, error)
+	SaveCursor(service string, cur shared.MailIngestCursor) error
 	// MetaGet/MetaSet round-trip ingest-private durable state (export
 	// location, walk cursor) under keys the ingest owns.
 	MetaGet(key string) (string, error)

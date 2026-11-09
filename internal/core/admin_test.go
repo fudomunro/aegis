@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"encoding/json"
 	"net/http"
@@ -13,7 +14,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestCache_SnapshotStatsClear(t *testing.T) {
@@ -321,7 +321,7 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync = %d body=%s", w.Code, w.Body.String())
 	}
-	var res types.MailIngestResult
+	var res shared.MailIngestResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("sync json: %v", err)
 	}

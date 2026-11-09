@@ -13,7 +13,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 const sampleMbox = `From MAILER-DAEMON Fri Jan  1 10:00:00 2024
@@ -58,7 +58,7 @@ func writeTakeoutMbox(t *testing.T, dir string) string {
 
 // ingestTakeout runs one bounded Takeout export ingest against the archive
 // sink (issue #286: the parser lives in connectors; core pins integration).
-func ingestTakeout(a *mail.Archive, opts types.MailIngestOptions) (types.MailIngestResult, error) {
+func ingestTakeout(a *mail.Archive, opts shared.MailIngestOptions) (shared.MailIngestResult, error) {
 	return connectors.NewTakeoutIngest().IngestMail(context.Background(), mail.Sink{A: a}, opts)
 }
 
@@ -66,7 +66,7 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 	a := openTestMailArchive(t)
 	path := writeTakeoutMbox(t, t.TempDir())
 	// An explicit Path persists the location (the admin save-path contract).
-	res, err := ingestTakeout(a, types.MailIngestOptions{Path: path, MaxMessages: 10})
+	res, err := ingestTakeout(a, shared.MailIngestOptions{Path: path, MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 	}
 
 	// Completed export is a cheap no-op until the cursor is reset.
-	res2, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 10})
+	res2, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("import2: %v", err)
 	}
@@ -87,7 +87,7 @@ func TestTakeoutImportMboxFile(t *testing.T) {
 	}
 
 	// After reset, re-sync skips already-present Message-IDs (read-only source).
-	res3, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 10, ResetCursor: true})
+	res3, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 10, ResetCursor: true})
 	if err != nil {
 		t.Fatalf("import3: %v", err)
 	}
@@ -127,7 +127,7 @@ func TestTakeoutImportDirectoryAndZip(t *testing.T) {
 	dir := t.TempDir()
 	writeTakeoutMbox(t, dir)
 
-	res, err := ingestTakeout(a, types.MailIngestOptions{Query: dir, MaxMessages: 10})
+	res, err := ingestTakeout(a, shared.MailIngestOptions{Query: dir, MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("dir import: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestTakeoutImportDirectoryAndZip(t *testing.T) {
 	zf.Close()
 
 	a2 := openTestMailArchive(t)
-	resZip, err := ingestTakeout(a2, types.MailIngestOptions{Query: zipPath, MaxMessages: 10})
+	resZip, err := ingestTakeout(a2, shared.MailIngestOptions{Query: zipPath, MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("zip import: %v", err)
 	}
@@ -173,7 +173,7 @@ func TestTakeoutImportBatchCapAndBadMessage(t *testing.T) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 2})
+	res, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 2})
 	if err != nil {
 		t.Fatalf("import: %v", err)
 	}
@@ -210,7 +210,7 @@ func TestAdminMailImportTakeout(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("sync = %d body=%s", w.Code, w.Body.String())
 	}
-	var res types.MailIngestResult
+	var res shared.MailIngestResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("json: %v", err)
 	}
@@ -252,7 +252,7 @@ func TestTakeoutImportResumesWithoutFullRescan(t *testing.T) {
 	path := writeTakeoutMbox(t, dir) // 3 messages
 
 	// First batch stores 2 and leaves the third for later.
-	res1, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 2})
+	res1, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 2})
 	if err != nil {
 		t.Fatalf("batch1: %v", err)
 	}
@@ -261,7 +261,7 @@ func TestTakeoutImportResumesWithoutFullRescan(t *testing.T) {
 	}
 
 	// Second batch must continue at the cursor — not re-scan the first two.
-	res2, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 10})
+	res2, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("batch2: %v", err)
 	}
@@ -273,7 +273,7 @@ func TestTakeoutImportResumesWithoutFullRescan(t *testing.T) {
 	}
 
 	// A completed export is a cheap no-op.
-	res3, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 10})
+	res3, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("batch3: %v", err)
 	}
@@ -282,7 +282,7 @@ func TestTakeoutImportResumesWithoutFullRescan(t *testing.T) {
 	}
 
 	// Explicit reset walks again and skips via identity.
-	res4, err := ingestTakeout(a, types.MailIngestOptions{Query: path, MaxMessages: 10, ResetCursor: true})
+	res4, err := ingestTakeout(a, shared.MailIngestOptions{Query: path, MaxMessages: 10, ResetCursor: true})
 	if err != nil {
 		t.Fatalf("batch4: %v", err)
 	}

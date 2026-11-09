@@ -19,7 +19,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Google Maps Timeline local import (issue #142). Timeline moved on-device in
@@ -607,25 +606,25 @@ func NewTimelineConnector(store *TimelineStore) *TimelineConnector {
 	return &TimelineConnector{store: store}
 }
 
-func (c *TimelineConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *TimelineConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "places",
 				Description: "Imported Google Maps Timeline visits and trips",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_place_visits",
 						Description: "Imported Timeline visits and trips (permission key: places)",
 						Method:      "GET",
 						Path:        "/v1/library/places",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "Visits overlapping this RFC3339 time or later"},
 							{Name: "before", In: "query", Type: "string", Description: "Visits starting before this RFC3339 time"},
 							{Name: "locality", In: "query", Type: "string", Description: "Filter by city/locality"},
 							{Name: "kind", In: "query", Type: "string", Description: "visit or trip"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral place visits with sources[]",
 							Fields:      []string{"visits", "total"},
 						},

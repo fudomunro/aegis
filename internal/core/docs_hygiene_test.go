@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // User-facing docs and admin UI copy must not cite GitHub issue numbers or
@@ -543,7 +543,7 @@ func TestAdminHTML_RestatesNoOnboardingCopy(t *testing.T) {
 	}
 	admin := string(b)
 
-	specs := []types.OnboardingSpec{
+	specs := []shared.OnboardingSpec{
 		connectors.NewImmichConnector(&Server{}).Onboarding(),
 		connectors.NewYNABConnector(&Server{}).Onboarding(),
 	}

@@ -10,7 +10,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestEnrichLibraryServiceStatuses_NameCanonicalRole(t *testing.T) {
@@ -74,13 +74,13 @@ func TestEnrichLibraryServiceStatuses_MessagesSplitsArchiveSources(t *testing.T)
 			t.Fatalf("upsert takeout: %v", err)
 		}
 	}
-	if err := mailArch.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
+	if err := mailArch.SaveSyncCursor(connectors.GoogleGmailServiceID, shared.MailIngestCursor{
 		LastSyncAt: "2026-10-11T00:00:00Z",
 		Done:       true,
 	}); err != nil {
 		t.Fatalf("save gmail cursor: %v", err)
 	}
-	if err := mailArch.SaveSyncCursor(connectors.TakeoutServiceID, types.MailIngestCursor{
+	if err := mailArch.SaveSyncCursor(connectors.TakeoutServiceID, shared.MailIngestCursor{
 		LastSyncAt: "2026-08-24T00:00:00Z",
 		Done:       true,
 	}); err != nil {

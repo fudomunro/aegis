@@ -16,7 +16,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GoogleGmailConnector proxies the Gmail API and implements MessageProvider.
@@ -69,25 +68,25 @@ func (c *GoogleGmailConnector) GoogleGmailUpstreamBase() string {
 }
 
 // Capabilities returns what Gmail kinds and operations are supported.
-func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *GoogleGmailConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "messages",
 				Description: "Messages — list mail messages/threads (metadata/snippet only by default; body stays on Gmail)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "read_list",
 						Description: "List the user's messages as neutral Message values (paginated). Permission key: messages.",
 						Method:      "GET",
 						Path:        "/me/messages",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Gmail search query (default: newer_than:30d)"},
 							{Name: "maxResults", In: "query", Type: "integer", Description: "List page size for IDs (1-500)", Default: googleGmailListPageSize},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Alias for maxResults"},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral messages: channel, subject, snippet, from/to, sent_at, direction, read, sources[]",
 							Fields:      []string{"messages", "total"},
 						},
@@ -97,11 +96,11 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Get a single message by service-local ID (metadata; format=full includes decoded body)",
 						Method:      "GET",
 						Path:        "/messages/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local message ID", Required: true},
 							{Name: "format", In: "query", Type: "string", Description: "metadata or full", Default: googleGmailMetadataFormat},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral message with service-local id and sources[]",
 							Fields:      []string{"subject", "snippet", "from", "to", "sent_at", "sources"},
 						},
@@ -111,10 +110,10 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List MIME attachments on one message (id, filename, mime_type, size)",
 						Method:      "GET",
 						Path:        "/messages/{id}/attachments",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local message ID", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Attachment summaries for the message; fetch bytes at /messages/{id}/attachments/{attachmentId}",
 							Fields:      []string{"message_id", "attachments", "total"},
 						},
@@ -124,11 +123,11 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Fetch one attachment (Gmail attachment JSON: size + base64url data)",
 						Method:      "GET",
 						Path:        "/messages/{id}/attachments/{attachmentId}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local message ID", Required: true},
 							{Name: "attachmentId", In: "path", Type: "string", Description: "Attachment id from list_attachments or message extra.attachments", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Attachment payload from Gmail",
 							Fields:      []string{"size", "data", "attachmentId"},
 						},
@@ -138,12 +137,12 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List recent threads (id + snippet)",
 						Method:      "GET",
 						Path:        "/me/threads",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "q", In: "query", Type: "string", Description: "Gmail search query"},
 							{Name: "maxResults", In: "query", Type: "integer", Description: "Max threads per page", Default: googleGmailListPageSize},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Threads: id, snippet, message_count, sources[]",
 							Fields:      []string{"threads", "total"},
 						},
@@ -153,10 +152,10 @@ func (c *GoogleGmailConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Get one thread with its messages as neutral Message values",
 						Method:      "GET",
 						Path:        "/threads/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local thread ID", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Thread messages in neutral Message shape",
 							Fields:      []string{"id", "messages", "total"},
 						},
@@ -363,8 +362,8 @@ const GmailQuotaBackoff = 5 * time.Minute
 // local mail archive (docs/mail-ingest.md). Each call lists up to
 // MaxMessages IDs (continuing the stored page token) and stores full
 // payloads. Callers repeat until Result.Done.
-func (c *GoogleGmailConnector) IngestMail(ctx context.Context, sink MailSink, opts types.MailIngestOptions) (types.MailIngestResult, error) {
-	res := types.MailIngestResult{Service: GoogleGmailServiceID}
+func (c *GoogleGmailConnector) IngestMail(ctx context.Context, sink MailSink, opts shared.MailIngestOptions) (shared.MailIngestResult, error) {
+	res := shared.MailIngestResult{Service: GoogleGmailServiceID}
 	maxMsgs := opts.MaxMessages
 	if maxMsgs <= 0 {
 		maxMsgs = 200
@@ -382,16 +381,16 @@ func (c *GoogleGmailConnector) IngestMail(ctx context.Context, sink MailSink, op
 	token := c.host.GetValidToken(GoogleGmailServiceID, logger)
 	if token == "" {
 		res.Error = "no valid Gmail token"
-		_ = sink.SaveCursor(GoogleGmailServiceID, types.MailIngestCursor{Error: res.Error})
+		_ = sink.SaveCursor(GoogleGmailServiceID, shared.MailIngestCursor{Error: res.Error})
 		return res, kinds.ErrUnauthorized
 	}
 
 	cursor, err := sink.LoadCursor(GoogleGmailServiceID)
 	if err != nil {
-		cursor = types.MailIngestCursor{}
+		cursor = shared.MailIngestCursor{}
 	}
 	if opts.ResetCursor {
-		cursor = types.MailIngestCursor{}
+		cursor = shared.MailIngestCursor{}
 	}
 	pageToken := cursor.PageToken
 
@@ -489,7 +488,7 @@ func (c *GoogleGmailConnector) IngestMail(ctx context.Context, sink MailSink, op
 	return res, nil
 }
 
-func (c *GoogleGmailConnector) finishMailSync(sink MailSink, res types.MailIngestResult, cursor types.MailIngestCursor, err error) (types.MailIngestResult, error) {
+func (c *GoogleGmailConnector) finishMailSync(sink MailSink, res shared.MailIngestResult, cursor shared.MailIngestCursor, err error) (shared.MailIngestResult, error) {
 	res.Error = err.Error()
 	if IsGmailQuotaError(err) {
 		res.RetryAfter = GmailQuotaBackoff

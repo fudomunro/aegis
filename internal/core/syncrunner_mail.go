@@ -9,7 +9,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Mail archive ingest (issue #227). doMailIngest is the single implementation
@@ -30,8 +30,8 @@ type mailIngestPayload struct {
 	ResetCursor bool   `json:"reset_cursor,omitempty"`
 }
 
-func (p mailIngestPayload) options() types.MailIngestOptions {
-	return types.MailIngestOptions{
+func (p mailIngestPayload) options() shared.MailIngestOptions {
+	return shared.MailIngestOptions{
 		MaxMessages: p.MaxMessages,
 		Query:       p.Query,
 		Path:        p.Path,
@@ -133,14 +133,14 @@ func parseMailIngestPayload(job SyncJob) (mailIngestPayload, error) {
 // doMailIngest runs one bounded ingest and reports the raw mail result. Both
 // the HTTP sync route and the queue runner go through here. The ingest is a
 // connector-owned implementation behind the MailSink (issue #286).
-func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (types.MailIngestResult, error) {
+func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (shared.MailIngestResult, error) {
 	if s.mail == nil {
-		return types.MailIngestResult{Service: p.Service, Error: "mail archive disabled"},
+		return shared.MailIngestResult{Service: p.Service, Error: "mail archive disabled"},
 			fmt.Errorf("%w: mail archive disabled", ErrSyncTerminal)
 	}
 	ingest := s.mailIngestFor(p.Service)
 	if ingest == nil {
-		return types.MailIngestResult{Service: p.Service},
+		return shared.MailIngestResult{Service: p.Service},
 			fmt.Errorf("%w: service %s cannot sync the mail archive", ErrSyncTerminal, p.Service)
 	}
 	// Live (connector-backed) sources must have a non-blocked config entry;
@@ -148,7 +148,7 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (types.M
 	if _, live := s.connectors[p.Service]; live {
 		svc := s.config.GetService(p.Service)
 		if svc == nil || svc.Action == "block" {
-			return types.MailIngestResult{Service: p.Service},
+			return shared.MailIngestResult{Service: p.Service},
 				fmt.Errorf("%w: service %s is blocked", ErrSyncTerminal, p.Service)
 		}
 	}
@@ -164,7 +164,7 @@ func (s *Server) doMailIngest(ctx context.Context, p mailIngestPayload) (types.M
 	}
 	// An ingest whose location is missing or rejected is terminal for the
 	// queue and a client error on the HTTP surface.
-	if errors.Is(err, types.ErrMailConfig) {
+	if errors.Is(err, shared.ErrMailConfig) {
 		err = fmt.Errorf("%w: %w", ErrSyncTerminal, err)
 	}
 	if err == nil && result.Snapshot != nil {

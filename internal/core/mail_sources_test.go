@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // sharedMessageID is present in both sample Takeout mbox and gmailPayloadJSON("shared").
@@ -60,15 +60,15 @@ func syncGmailShared(t *testing.T, srv *Server, a *mail.Archive) {
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 	conn := connectors.NewGoogleGmailConnector(srv)
-	if _, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
+	if _, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 10, ResetCursor: true}); err != nil {
 		t.Fatalf("gmail sync: %v", err)
 	}
 }
 
-func importTakeout(t *testing.T, a *mail.Archive, path string, reset bool) types.MailIngestResult {
+func importTakeout(t *testing.T, a *mail.Archive, path string, reset bool) shared.MailIngestResult {
 	t.Helper()
 	res, err := connectors.NewTakeoutIngest().IngestMail(context.Background(), mail.Sink{A: a},
-		types.MailIngestOptions{Query: path, MaxMessages: 50, ResetCursor: reset})
+		shared.MailIngestOptions{Query: path, MaxMessages: 50, ResetCursor: reset})
 	if err != nil {
 		t.Fatalf("takeout import: %v", err)
 	}

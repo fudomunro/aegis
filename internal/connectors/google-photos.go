@@ -14,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GooglePhotosConnector uses the Google Photos Picker API and implements
@@ -61,19 +60,19 @@ func (c *GooglePhotosConnector) GetLastSession() string {
 }
 
 // Capabilities returns what Google Photos kinds and operations are supported.
-func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *GooglePhotosConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "photos",
 				Description: "Photos via the Google Photos Picker API — user selects photos; Aegis lists only that selection (metadata only; bytes stay on Google Photos)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "create_picker_session",
 						Description: "Create a picker session and get a picker_uri for the user to open (permission key: photos)",
 						Method:      "POST",
 						Path:        "/picker/sessions",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Session with id and picker_uri (user opens picker_uri to select photos)",
 							Fields:      []string{"id", "picker_uri", "media_items_set"},
 						},
@@ -83,10 +82,10 @@ func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Poll a picker session until media_items_set is true",
 						Method:      "GET",
 						Path:        "/picker/sessions/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Picker session ID", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Session status including media_items_set and polling hints",
 							Fields:      []string{"id", "media_items_set", "picker_uri"},
 						},
@@ -96,12 +95,12 @@ func (c *GooglePhotosConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List photos from a completed picker session as neutral Photo values",
 						Method:      "GET",
 						Path:        "/picker/mediaItems",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "sessionId", In: "query", Type: "string", Description: "Picker session ID (required by Google)", Required: true},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page (1-100)", Default: 100},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral photos: taken_at, dimensions, mime_type, filename, sources[] (canonical blob_url)",
 							Fields:      []string{"photos", "total"},
 						},

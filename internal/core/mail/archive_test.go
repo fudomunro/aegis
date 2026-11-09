@@ -7,7 +7,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func openTestArchive(t *testing.T) *Archive {
@@ -175,7 +175,7 @@ func TestArchiveUpsertGetSearch(t *testing.T) {
 
 func TestArchiveSyncCursor(t *testing.T) {
 	a := openTestArchive(t)
-	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, shared.MailIngestCursor{
 		PageToken:  "tok1",
 		LastSyncAt: "2024-06-01T00:00:00Z",
 	}); err != nil {
@@ -188,7 +188,7 @@ func TestArchiveSyncCursor(t *testing.T) {
 	if cur.PageToken != "tok1" || cur.Done || cur.LastSyncAt != "2024-06-01T00:00:00Z" {
 		t.Fatalf("cursor = %+v", cur)
 	}
-	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, types.MailIngestCursor{PageToken: "tok1", Done: true}); err != nil {
+	if err := a.SaveSyncCursor(connectors.GoogleGmailServiceID, shared.MailIngestCursor{PageToken: "tok1", Done: true}); err != nil {
 		t.Fatalf("save done: %v", err)
 	}
 	cur, _ = a.LoadSyncCursor(connectors.GoogleGmailServiceID)
