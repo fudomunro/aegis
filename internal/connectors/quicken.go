@@ -18,7 +18,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -697,24 +696,24 @@ func NewQuickenConnector(store *QuickenStore) *QuickenConnector {
 }
 
 // Capabilities returns Quicken import/list operations.
-func (c *QuickenConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *QuickenConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "transactions",
 				Description: "Locally imported Quicken QIF/QFX transactions (line items only; statements/PDFs are never stored)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_transactions",
 						Description: "List imported Quicken transactions (permission key: transactions)",
 						Method:      "GET",
 						Path:        "/transactions",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "On/after posted date (YYYY-MM-DD)"},
 							{Name: "before", In: "query", Type: "string", Description: "Before posted date (YYYY-MM-DD)"},
 							{Name: "q", In: "query", Type: "string", Description: "Free-text on payee/category/memo"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral transactions with sources[]",
 							Fields:      []string{"transactions", "total"},
 						},
@@ -724,7 +723,7 @@ func (c *QuickenConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Count of imported Quicken line items",
 						Method:      "GET",
 						Path:        "/import/status",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Imported row count",
 							Fields:      []string{"count"},
 						},

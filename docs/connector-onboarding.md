@@ -82,16 +82,17 @@ read as its sibling, not as a second invention.
 
 ### The seam
 
-Shapes live in `internal/types` (pure data, like `ConnectionMaturity`).
+Shapes live in `internal/shared` (pure data, like `OnboardingSpec`).
 The optional interface lives in `internal/connectors` beside
 `ServiceConnector`. Core gets one generic runner.
 
-Shapes live in `internal/types` (pure data, like `ConnectionMaturity`).
+Connection maturity (`ConnectionMaturity`) lives in `internal/connectors`
+beside the catalog rows it describes.
 The optional interface lives in `internal/connectors` beside
 `ServiceConnector`. Core gets one generic runner.
 
 ```go
-// internal/types/onboarding.go — contract shapes, no I/O.
+// internal/shared/onboarding.go — contract shapes, no I/O.
 
 type OnboardingSpec struct {
 	ServiceID   string
@@ -261,7 +262,9 @@ No write methods join `Host`. That is the point of `StateUpdate`.
 ### Dependency shape
 
 ```text
-internal/types        onboarding shapes, ConnectionMaturity, models   (pure)
+internal/shared       onboarding shapes                              (pure)
+internal/kinds        neutral models                                 (pure)
+internal/connectors   ConnectionMaturity beside the catalog rows     (pure)
       ▲                       ▲
       └───────────┬───────────┘
                   │
@@ -301,7 +304,7 @@ Comment on #265 linking this plan. No behavior change.
 The smaller flow proves the seam before the stress case. **Lands with this
 note.**
 
-1. `internal/types/onboarding.go` — the shapes above.
+1. `internal/shared/onboarding.go` — the shapes above.
 2. `internal/connectors/host.go` — `Onboarder` + `Host.LibraryReadable`.
 3. `internal/core/onboarding.go` — generic runner on
    `GET /v1/admin/setup/{id}` and `POST /v1/admin/setup/{id}/{action}`, under

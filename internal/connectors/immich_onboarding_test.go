@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // TestImmichOnboarding_Spec pins Immich's declared setup contract (issue #265):
@@ -25,7 +25,7 @@ func TestImmichOnboarding_Spec(t *testing.T) {
 		t.Fatalf("walkthrough label = %q", spec.WalkthroughLabel)
 	}
 
-	fields := map[string]types.OnboardingField{}
+	fields := map[string]shared.OnboardingField{}
 	for _, f := range spec.Fields {
 		fields[f.ID] = f
 	}
@@ -72,7 +72,7 @@ func TestImmichOnboarding_Spec(t *testing.T) {
 		}
 	}
 
-	actions := map[string]types.OnboardingAction{}
+	actions := map[string]shared.OnboardingAction{}
 	for _, a := range spec.Actions {
 		actions[a.ID] = a
 	}
@@ -85,11 +85,11 @@ func TestImmichOnboarding_Spec(t *testing.T) {
 			t.Fatalf("action %q label = %q, want %q", id, actions[id].Label, label)
 		}
 	}
-	if actions["save"].Kind != types.ActionSave || actions["check"].Kind != types.ActionCheck {
+	if actions["save"].Kind != shared.ActionSave || actions["check"].Kind != shared.ActionCheck {
 		t.Fatalf("action kinds = %+v / %+v", actions["save"].Kind, actions["check"].Kind)
 	}
 
-	guides := map[string]types.OnboardingGuide{}
+	guides := map[string]shared.OnboardingGuide{}
 	for _, g := range spec.Guides {
 		guides[g.ID] = g
 	}
@@ -226,7 +226,7 @@ func TestImmichProbe_ActionableCodes(t *testing.T) {
 		_, _ = w.Write([]byte(`<!doctype html><html><body>Not found</body></html>`))
 	}))
 	defer mock.Close()
-	res, err := c.OnboardingRun(ctx, "probe", types.OnboardingInput{Values: map[string]string{
+	res, err := c.OnboardingRun(ctx, "probe", shared.OnboardingInput{Values: map[string]string{
 		"endpoint": mock.URL + "/photos/abc",
 	}})
 	if err != nil {
@@ -243,7 +243,7 @@ func TestImmichProbe_ActionableCodes(t *testing.T) {
 	}
 
 	// Unreachable host → unreachable + install hint.
-	res, err = c.OnboardingRun(ctx, "probe", types.OnboardingInput{Values: map[string]string{
+	res, err = c.OnboardingRun(ctx, "probe", shared.OnboardingInput{Values: map[string]string{
 		"endpoint": "http://127.0.0.1:1/api",
 	}})
 	if err != nil {
@@ -257,7 +257,7 @@ func TestImmichProbe_ActionableCodes(t *testing.T) {
 	}
 
 	// Empty endpoint gets the install hint, not a URL error.
-	res, err = c.OnboardingRun(ctx, "probe", types.OnboardingInput{})
+	res, err = c.OnboardingRun(ctx, "probe", shared.OnboardingInput{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -272,7 +272,7 @@ func TestImmichConnectionUpdate(t *testing.T) {
 	ctx := context.Background()
 	c := NewImmichConnector(newTestHost("https://aegis.example.com"))
 
-	res, err := c.OnboardingRun(ctx, "save", types.OnboardingInput{
+	res, err := c.OnboardingRun(ctx, "save", shared.OnboardingInput{
 		Values: map[string]string{"endpoint": "photos.home.ts.net:2283", "api_key": "good-key"},
 		Flags:  map[string]bool{"claim_canonical_for_photos": true},
 	})
@@ -291,7 +291,7 @@ func TestImmichConnectionUpdate(t *testing.T) {
 	}
 
 	// Unchecking must clear the claim, not leave a stale owner behind.
-	res, err = c.OnboardingRun(ctx, "save", types.OnboardingInput{
+	res, err = c.OnboardingRun(ctx, "save", shared.OnboardingInput{
 		Values: map[string]string{"endpoint": "http://localhost:2283/api"},
 		Flags:  map[string]bool{"claim_canonical_for_photos": false},
 	})
@@ -308,11 +308,11 @@ func TestImmichConnectionUpdate(t *testing.T) {
 	}
 
 	// Missing endpoint is rejected with the pinned copy.
-	if _, err := c.OnboardingRun(ctx, "save", types.OnboardingInput{}); err == nil ||
+	if _, err := c.OnboardingRun(ctx, "save", shared.OnboardingInput{}); err == nil ||
 		err.Error() != "endpoint is required — e.g. https://immich.your-tailnet.ts.net/api" {
 		t.Fatalf("err = %v", err)
 	}
-	if _, err := c.OnboardingRun(ctx, "nope", types.OnboardingInput{}); err == nil {
+	if _, err := c.OnboardingRun(ctx, "nope", shared.OnboardingInput{}); err == nil {
 		t.Fatal("expected error for unknown action")
 	}
 }
@@ -334,8 +334,8 @@ func TestImmichNextStep(t *testing.T) {
 
 	// A failed probe's hint becomes the next action.
 	got := immichNextStepFrom(
-		[]types.OnboardingStepState{{ID: immichStepInstall, Current: true}},
-		&types.ProbeResult{OK: false, Code: immichCodeUnreachable, Hint: "Start Immich with Docker."},
+		[]shared.OnboardingStepState{{ID: immichStepInstall, Current: true}},
+		&shared.ProbeResult{OK: false, Code: immichCodeUnreachable, Hint: "Start Immich with Docker."},
 		nil,
 	)
 	if got != "Start Immich with Docker." {
@@ -343,7 +343,7 @@ func TestImmichNextStep(t *testing.T) {
 	}
 
 	// Everything done → completion copy.
-	done := []types.OnboardingStepState{
+	done := []shared.OnboardingStepState{
 		{ID: immichStepInstall, OK: true}, {ID: immichStepAPIKey, OK: true},
 		{ID: immichStepConnect, OK: true}, {ID: immichStepVerify, OK: true},
 	}
@@ -352,11 +352,11 @@ func TestImmichNextStep(t *testing.T) {
 	}
 
 	// Empty library gets seed guidance rather than a bare "run checks".
-	empty := []types.OnboardingStepState{
+	empty := []shared.OnboardingStepState{
 		{ID: immichStepInstall, OK: true}, {ID: immichStepAPIKey, OK: true},
 		{ID: immichStepConnect, OK: true}, {ID: immichStepVerify, Current: true},
 	}
-	got = immichNextStepFrom(empty, nil, []types.OnboardingCheckState{
+	got = immichNextStepFrom(empty, nil, []shared.OnboardingCheckState{
 		{ID: immichCheckListing, Detail: "0 photos — Immich is empty."},
 	})
 	if !strings.Contains(got, "no photos") && !strings.Contains(got, "Takeout") {

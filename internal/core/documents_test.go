@@ -12,7 +12,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 type fakeDocumentProvider struct {
@@ -23,8 +23,8 @@ type fakeDocumentProvider struct {
 	truncated bool
 }
 
-func (f *fakeDocumentProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeDocumentProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeDocumentProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeDocumentProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

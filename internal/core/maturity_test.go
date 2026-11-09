@@ -10,7 +10,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // maturityHost is the minimal connectors.Host the connector constructors
@@ -100,7 +99,7 @@ func providerKindNames(v any) map[string]bool {
 	return out
 }
 
-func maturityByService(t *testing.T) map[string]types.ConnectionMaturity {
+func maturityByService(t *testing.T) map[string]connectors.ConnectionMaturity {
 	t.Helper()
 	out := MaturityByService()
 	if len(out) != len(ConnectionMaturityCatalog()) {
@@ -203,10 +202,10 @@ func TestMaturityCatalogFieldCoverageIsReal(t *testing.T) {
 	for _, m := range ConnectionMaturityCatalog() {
 		for _, dt := range m.Kinds {
 			want := map[string]bool{}
-			for _, f := range types.MaturityContentFields[dt.Name] {
+			for _, f := range connectors.MaturityContentFields[dt.Name] {
 				want[f] = true
 			}
-			if len(dt.Fields) > 0 && len(types.MaturityContentFields[dt.Name]) == 0 {
+			if len(dt.Fields) > 0 && len(connectors.MaturityContentFields[dt.Name]) == 0 {
 				t.Errorf("%s/%s: field coverage on a type with no neutral model", m.Service, dt.Name)
 			}
 			for _, f := range dt.Fields {
@@ -221,11 +220,11 @@ func TestMaturityCatalogFieldCoverageIsReal(t *testing.T) {
 // TestMaturityCatalogTransportsAreClassified pins the transport vocabulary
 // the dashboard badges rely on.
 func TestMaturityCatalogTransportsAreClassified(t *testing.T) {
-	valid := map[types.Transport]bool{
-		types.TransportAPI:               true,
-		types.TransportProtocol:          true,
-		types.TransportReverseEngineered: true,
-		types.TransportArchive:           true,
+	valid := map[connectors.Transport]bool{
+		connectors.TransportAPI:               true,
+		connectors.TransportProtocol:          true,
+		connectors.TransportReverseEngineered: true,
+		connectors.TransportArchive:           true,
 	}
 	for _, m := range ConnectionMaturityCatalog() {
 		if !valid[m.Transport] {

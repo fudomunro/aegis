@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // YNAB onboarding (issues #141, #265): the personal-access-token setup flow,
@@ -23,12 +23,12 @@ const ynabDefaultEndpoint = "https://api.ynab.com/v1"
 const ynabGuideID = "intro"
 
 // Onboarding returns YNAB's declared setup contract.
-func (c *YNABConnector) Onboarding() types.OnboardingSpec {
-	return types.OnboardingSpec{
+func (c *YNABConnector) Onboarding() shared.OnboardingSpec {
+	return shared.OnboardingSpec{
 		ServiceID:   YNABServiceID,
 		DisplayName: YNABServiceName,
 		Title:       "YNAB — budget transactions",
-		Connection: types.ConnectionMetadata{
+		Connection: shared.ConnectionMetadata{
 			Name:        YNABServiceName,
 			Action:      "inject",
 			CacheTTL:    "5m",
@@ -38,7 +38,7 @@ func (c *YNABConnector) Onboarding() types.OnboardingSpec {
 			// also accepts X-YNAB-Token; the save path normalizes to Bearer.
 			SecretHeaders: []string{"Authorization"},
 		},
-		Fields: []types.OnboardingField{
+		Fields: []shared.OnboardingField{
 			{
 				ID:          "endpoint",
 				Label:       "API endpoint",
@@ -53,7 +53,7 @@ func (c *YNABConnector) Onboarding() types.OnboardingSpec {
 				Secret:      true,
 			},
 		},
-		Guides: []types.OnboardingGuide{
+		Guides: []shared.OnboardingGuide{
 			{
 				ID: ynabGuideID,
 				Body: "Live budget line items for `GET /v1/library/transactions`. " +
@@ -62,28 +62,28 @@ func (c *YNABConnector) Onboarding() types.OnboardingSpec {
 					"[YNAB API docs](https://api.ynab.com/)",
 			},
 		},
-		Actions: []types.OnboardingAction{
+		Actions: []shared.OnboardingAction{
 			{
 				ID:        "probe",
 				Label:     "Test",
 				BusyLabel: "Testing YNAB API…",
-				Kind:      types.ActionProbe,
-				Placement: types.ActionInHeader,
+				Kind:      shared.ActionProbe,
+				Placement: shared.ActionInHeader,
 			},
 			{
 				ID:        "save",
 				Label:     "Save connection",
 				BusyLabel: "Saving…",
-				Kind:      types.ActionSave,
-				Placement: types.ActionInHeader,
+				Kind:      shared.ActionSave,
+				Placement: shared.ActionInHeader,
 				Fields:    []string{"endpoint", "token"},
 			},
 			{
 				ID:        "save_test",
 				Label:     "Save & test",
 				BusyLabel: "Saving…",
-				Kind:      types.ActionSave,
-				Placement: types.ActionInForm,
+				Kind:      shared.ActionSave,
+				Placement: shared.ActionInForm,
 				Fields:    []string{"endpoint", "token"},
 			},
 		},
@@ -94,13 +94,13 @@ func (c *YNABConnector) Onboarding() types.OnboardingSpec {
 // summary, next-step hints, and the connection probe when a token exists.
 // Fail-open — a broken YNAB reports through hints and the probe, never an
 // error status.
-func (c *YNABConnector) OnboardingStatus(ctx context.Context) types.OnboardingStatus {
+func (c *YNABConnector) OnboardingStatus(ctx context.Context) shared.OnboardingStatus {
 	svc := c.host.ServiceConfig(YNABServiceID)
 	configured := svc != nil
 	has, source := c.ynabTokenSource()
 
-	status := types.OnboardingStatus{
-		Fields: map[string]types.OnboardingFieldState{
+	status := shared.OnboardingStatus{
+		Fields: map[string]shared.OnboardingFieldState{
 			"endpoint": {ID: "endpoint", Value: c.YnabUpstreamBase(), Valid: true},
 			"token":    {ID: "token", Set: has, Valid: true},
 		},
@@ -136,9 +136,9 @@ func (c *YNABConnector) OnboardingStatus(ctx context.Context) types.OnboardingSt
 // OnboardingRun executes YNAB's declared verbs. Save returns a ConnectionUpdate
 // for core to persist — this connector never writes tokens or config itself.
 // Core recomputes the status after applying the update.
-func (c *YNABConnector) OnboardingRun(ctx context.Context, action string, in types.OnboardingInput) (types.OnboardingResult, error) {
+func (c *YNABConnector) OnboardingRun(ctx context.Context, action string, in shared.OnboardingInput) (shared.OnboardingResult, error) {
 	spec := c.Onboarding()
-	var kind types.ActionKind
+	var kind shared.ActionKind
 	for _, a := range spec.Actions {
 		if a.ID == action {
 			kind = a.Kind
@@ -147,29 +147,29 @@ func (c *YNABConnector) OnboardingRun(ctx context.Context, action string, in typ
 	}
 
 	switch kind {
-	case types.ActionSave:
+	case shared.ActionSave:
 		update, err := ynabConnectionUpdate(in)
 		if err != nil {
-			return types.OnboardingResult{}, err
+			return shared.OnboardingResult{}, err
 		}
-		return types.OnboardingResult{
-			Updates: []types.StateUpdate{{Connection: &update}},
+		return shared.OnboardingResult{
+			Updates: []shared.StateUpdate{{Connection: &update}},
 		}, nil
 
-	case types.ActionProbe:
+	case shared.ActionProbe:
 		// Distinct diagnosis from a rejected token: nothing was configured.
 		if has, _ := c.ynabTokenSource(); !has {
-			return types.OnboardingResult{Probe: &types.ProbeResult{
+			return shared.OnboardingResult{Probe: &shared.ProbeResult{
 				OK:      false,
 				Code:    "unauthorized",
 				Message: "no YNAB token configured",
 			}}, nil
 		}
 		res := c.ynabProbe(ctx)
-		return types.OnboardingResult{Probe: &res}, nil
+		return shared.OnboardingResult{Probe: &res}, nil
 
 	default:
-		return types.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
+		return shared.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
 	}
 }
 
@@ -195,15 +195,15 @@ func (c *YNABConnector) ynabTokenSource() (bool, string) {
 // ynabConnectionUpdate maps submitted form values to a connection save.
 // An empty endpoint falls back to the public API base; a blank token leaves
 // any stored credential untouched (core merges headers key-wise).
-func ynabConnectionUpdate(in types.OnboardingInput) (types.ConnectionUpdate, error) {
+func ynabConnectionUpdate(in shared.OnboardingInput) (shared.ConnectionUpdate, error) {
 	endpoint := strings.TrimSpace(in.Values["endpoint"])
 	if endpoint == "" {
 		endpoint = ynabDefaultEndpoint
 	}
 	if !strings.HasPrefix(endpoint, "http://") && !strings.HasPrefix(endpoint, "https://") {
-		return types.ConnectionUpdate{}, fmt.Errorf("endpoint must be an http(s) URL")
+		return shared.ConnectionUpdate{}, fmt.Errorf("endpoint must be an http(s) URL")
 	}
-	update := types.ConnectionUpdate{
+	update := shared.ConnectionUpdate{
 		Endpoint: strings.TrimRight(endpoint, "/"),
 		// Non-nil so core takes the static-credential path even when no new
 		// secret is submitted (matches the admin save semantics).
@@ -220,21 +220,21 @@ func ynabConnectionUpdate(in types.OnboardingInput) (types.ConnectionUpdate, err
 }
 
 // ynabProbe checks reachability and auth with the budgets listing.
-func (c *YNABConnector) ynabProbe(ctx context.Context) types.ProbeResult {
+func (c *YNABConnector) ynabProbe(ctx context.Context) shared.ProbeResult {
 	var out BudgetsResponse
 	err := c.APIGet(ctx, slog.With("handler", "admin_ynab"), "/budgets", nil, &out)
 	switch {
 	case err == kinds.ErrUnauthorized:
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK:      false,
 			Code:    "unauthorized",
 			Message: "YNAB rejected the token — check the Personal Access Token",
 		}
 	case err != nil:
-		return types.ProbeResult{OK: false, Code: "error", Message: err.Error()}
+		return shared.ProbeResult{OK: false, Code: "error", Message: err.Error()}
 	}
 	n := len(out.Data.Budgets)
-	return types.ProbeResult{
+	return shared.ProbeResult{
 		OK:      true,
 		Code:    "ok",
 		Message: fmt.Sprintf("YNAB API reachable — %d budget(s)", n),
@@ -254,7 +254,7 @@ func ynabTokenSummary(has bool, source string) string {
 }
 
 // ynabProbeSummary is the API half of the panel's status line.
-func ynabProbeSummary(res *types.ProbeResult) string {
+func ynabProbeSummary(res *shared.ProbeResult) string {
 	if res == nil {
 		return ""
 	}

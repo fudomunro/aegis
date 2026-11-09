@@ -2,13 +2,12 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestWithPeerLog_IncludesIdentity(t *testing.T) {
@@ -72,7 +71,7 @@ func TestConnectorInstructions_DoNotRequireAPIKey(t *testing.T) {
 
 func TestCapabilities_PlaylistFieldsUseSources(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	check := func(name string, caps types.ServiceCapabilities) {
+	check := func(name string, caps shared.ServiceCapabilities) {
 		t.Helper()
 		for _, dt := range caps.Kinds {
 			if dt.Name != "playlists" {

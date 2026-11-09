@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Immich onboarding (issues #39, #121, #265): the self-hosted photo
@@ -136,8 +136,8 @@ const (
 )
 
 // Onboarding returns Immich's declared setup contract.
-func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
-	return types.OnboardingSpec{
+func (c *ImmichConnector) Onboarding() shared.OnboardingSpec {
+	return shared.OnboardingSpec{
 		ServiceID:   ImmichServiceID,
 		DisplayName: ImmichServiceName,
 		Title:       "Immich — local canonical photos",
@@ -146,7 +146,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 		WalkthroughLabel: "Setup guide",
 		WalkthroughTitle: "Immich setup guide",
 		ChecksEmpty:      "Run checks after saving to verify the checklist.",
-		Connection: types.ConnectionMetadata{
+		Connection: shared.ConnectionMetadata{
 			Name:        "Immich",
 			Action:      "inject",
 			CacheTTL:    "5m",
@@ -157,7 +157,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 			},
 			SecretHeaders: []string{"X-API-Key"},
 		},
-		Fields: append([]types.OnboardingField{
+		Fields: append([]shared.OnboardingField{
 			{
 				ID:                     immichFieldEndpoint,
 				Label:                  "Immich endpoint",
@@ -181,13 +181,13 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 				Help:  "Saved to `service_connections.json` (not `aegis.json`). API key is stored and never shown again after save.",
 			},
 		}, immichTailnetFields()...),
-		Steps: []types.OnboardingStepDef{
+		Steps: []shared.OnboardingStepDef{
 			{ID: immichStepInstall, Label: "Immich installed and reachable"},
 			{ID: immichStepAPIKey, Label: "Immich API key created"},
 			{ID: immichStepConnect, Label: "Saved into Aegis"},
 			{ID: immichStepVerify, Label: "Verified end-to-end"},
 		},
-		Checks: []types.OnboardingCheckDef{
+		Checks: []shared.OnboardingCheckDef{
 			{ID: immichCheckConfigured, Label: "Immich service configured"},
 			{ID: immichCheckAPIKey, Label: "API key present (X-API-Key)"},
 			{ID: immichCheckCanonical, Label: "Immich is canonical_for photos"},
@@ -196,7 +196,7 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 			{ID: immichCheckStamp, Label: "Sources stamped canonical + proxy blob_url"},
 			{ID: immichCheckBytes, Label: "Photo bytes stay on Immich"},
 		},
-		Guides: append([]types.OnboardingGuide{
+		Guides: append([]shared.OnboardingGuide{
 			{
 				ID: immichGuideHelp,
 				Body: "Self-hosted photo library as the canonical home for photos. Bytes stay on Immich. " +
@@ -220,30 +220,30 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 				Collapsible: true,
 			},
 		}, immichTailnetGuides()...),
-		Actions: append([]types.OnboardingAction{
+		Actions: append([]shared.OnboardingAction{
 			{
 				ID:               "probe",
 				Label:            "Test",
 				WalkthroughLabel: "Test connection",
 				BusyLabel:        "Testing…",
-				Kind:             types.ActionProbe,
-				Placement:        types.ActionInHeader,
+				Kind:             shared.ActionProbe,
+				Placement:        shared.ActionInHeader,
 				Fields:           []string{immichFieldEndpoint, immichFieldAPIKey},
 			},
 			{
 				ID:        "save",
 				Label:     "Save to Aegis",
 				BusyLabel: "Saving…",
-				Kind:      types.ActionSave,
-				Placement: types.ActionInForm,
+				Kind:      shared.ActionSave,
+				Placement: shared.ActionInForm,
 				Fields:    []string{immichFieldEndpoint, immichFieldAPIKey, immichFieldClaim},
 			},
 			{
 				ID:        "check",
 				Label:     "Run checks",
 				BusyLabel: "Checking…",
-				Kind:      types.ActionCheck,
-				Placement: types.ActionInHeader,
+				Kind:      shared.ActionCheck,
+				Placement: shared.ActionInHeader,
 			},
 		}, immichTailnetActions()...),
 	}
@@ -253,8 +253,8 @@ func (c *ImmichConnector) Onboarding() types.OnboardingSpec {
 // copyable walkthrough, the optional Tailscale Admin API settings, and the
 // endpoint to point Aegis at afterwards. Copy is generated beside the checks
 // that enforce it.
-func immichTailnetGuides() []types.OnboardingGuide {
-	return []types.OnboardingGuide{
+func immichTailnetGuides() []shared.OnboardingGuide {
+	return []shared.OnboardingGuide{
 		immichTailnetGuide("", ""),
 		{
 			ID:          immichGuideTSAdmin,
@@ -275,8 +275,8 @@ func immichTailnetGuides() []types.OnboardingGuide {
 }
 
 // immichTailnetFields are the wizard's Tailscale Admin settings.
-func immichTailnetFields() []types.OnboardingField {
-	return []types.OnboardingField{
+func immichTailnetFields() []shared.OnboardingField {
+	return []shared.OnboardingField{
 		{
 			ID:          immichFieldTSAPIKey,
 			Label:       "Tailscale API key",
@@ -306,21 +306,21 @@ func immichTailnetFields() []types.OnboardingField {
 }
 
 // immichTailnetActions are the wizard's verbs.
-func immichTailnetActions() []types.OnboardingAction {
-	return []types.OnboardingAction{
+func immichTailnetActions() []shared.OnboardingAction {
+	return []shared.OnboardingAction{
 		{
 			ID: immichActionTSSave, Label: "Save key", BusyLabel: "Saving…",
-			Kind: types.ActionSave, Placement: types.ActionInForm, Walkthrough: true,
+			Kind: shared.ActionSave, Placement: shared.ActionInForm, Walkthrough: true,
 			Fields: []string{immichFieldTSAPIKey, immichFieldTSTailnet, immichFieldHostDev},
 		},
 		{
 			ID: immichActionTSCheck, Label: "Check steps", BusyLabel: "Checking…",
-			Kind: types.ActionCheck, Placement: types.ActionInForm, Walkthrough: true,
+			Kind: shared.ActionCheck, Placement: shared.ActionInForm, Walkthrough: true,
 			Fields: []string{immichFieldHostDev},
 		},
 		{
 			ID: immichActionTSApply, Label: "Fix needed steps", BusyLabel: "Applying…",
-			Kind: types.ActionApply, Placement: types.ActionInForm, Walkthrough: true,
+			Kind: shared.ActionApply, Placement: shared.ActionInForm, Walkthrough: true,
 			Fields: []string{immichFieldHostDev},
 		},
 	}
@@ -451,11 +451,11 @@ var immichHTTPClient = &http.Client{Timeout: 8 * time.Second}
 // guided ladder, the one-line summary, and the single next action. Fail-open
 // — a broken Immich reports through failed rows and hints, never an error
 // status (issue #39).
-func (c *ImmichConnector) OnboardingStatus(ctx context.Context) types.OnboardingStatus {
+func (c *ImmichConnector) OnboardingStatus(ctx context.Context) shared.OnboardingStatus {
 	svc := c.host.ServiceConfig(ImmichServiceID)
-	status := types.OnboardingStatus{
-		Fields:  map[string]types.OnboardingFieldState{},
-		Guides:  map[string]types.OnboardingGuideState{},
+	status := shared.OnboardingStatus{
+		Fields:  map[string]shared.OnboardingFieldState{},
+		Guides:  map[string]shared.OnboardingGuideState{},
 		Metrics: map[string]int{},
 	}
 	endpoint := ""
@@ -470,24 +470,24 @@ func (c *ImmichConnector) OnboardingStatus(ctx context.Context) types.Onboarding
 		}
 	}
 	claim := configured && immichClaimsPhotos(svc.CanonicalFor)
-	status.Fields[immichFieldEndpoint] = types.OnboardingFieldState{ID: immichFieldEndpoint, Value: endpoint, Valid: true}
-	status.Fields[immichFieldAPIKey] = types.OnboardingFieldState{ID: immichFieldAPIKey, Set: strings.TrimSpace(apiKey) != "", Valid: true}
-	status.Fields[immichFieldClaim] = types.OnboardingFieldState{ID: immichFieldClaim, Checked: claim, Valid: true}
+	status.Fields[immichFieldEndpoint] = shared.OnboardingFieldState{ID: immichFieldEndpoint, Value: endpoint, Valid: true}
+	status.Fields[immichFieldAPIKey] = shared.OnboardingFieldState{ID: immichFieldAPIKey, Set: strings.TrimSpace(apiKey) != "", Valid: true}
+	status.Fields[immichFieldClaim] = shared.OnboardingFieldState{ID: immichFieldClaim, Checked: claim, Valid: true}
 
 	// Derived copyable blocks: the checkbox set and the bootstrap snippet are
 	// generated, never hand-written.
-	status.Guides[immichGuidePerms] = types.OnboardingGuideState{Command: immichAPIKeyPermissionsBlock()}
-	status.Guides[immichGuideSnip] = types.OnboardingGuideState{
+	status.Guides[immichGuidePerms] = shared.OnboardingGuideState{Command: immichAPIKeyPermissionsBlock()}
+	status.Guides[immichGuideSnip] = shared.OnboardingGuideState{
 		Command: ImmichConfigSnippet(endpoint, c.host.BaseURL()),
 	}
 
 	// VIP-Service wizard state (issue #124): live per-step view and the host
 	// picker's candidate devices.
-	if tsKey := strings.TrimSpace(c.host.SetupSecret(types.SetupSecretTailscaleAPIKey)); tsKey != "" {
+	if tsKey := strings.TrimSpace(c.host.SetupSecret(shared.SetupSecretTailscaleAPIKey)); tsKey != "" {
 		tsState := c.immichTailnetState(ctx)
 		tsState.Command = immichTailnetGuide(c.host.BaseURL(), endpoint).Command
 		status.Guides[immichGuideIDTailnet] = tsState
-		status.Guides[immichGuideTSEndpoint] = types.OnboardingGuideState{
+		status.Guides[immichGuideTSEndpoint] = shared.OnboardingGuideState{
 			Command: ImmichSuggestedEndpoint(TailnetDNSFromBaseURL(c.host.BaseURL())),
 		}
 		if opts := c.immichTailnetDeviceOptions(ctx); len(opts) > 0 {
@@ -498,12 +498,12 @@ func (c *ImmichConnector) OnboardingStatus(ctx context.Context) types.Onboarding
 			status.Fields[immichFieldHostDev] = st
 		}
 	} else {
-		status.Guides[immichGuideIDTailnet] = types.OnboardingGuideState{
+		status.Guides[immichGuideIDTailnet] = shared.OnboardingGuideState{
 			Command: immichTailnetGuide(c.host.BaseURL(), endpoint).Command,
 			Summary: immichTailnetSummary(false, false, "", ""),
 			Error:   "Tailscale API key not configured — paste one to enable live checks and one-click fixes.",
 		}
-		status.Guides[immichGuideTSEndpoint] = types.OnboardingGuideState{
+		status.Guides[immichGuideTSEndpoint] = shared.OnboardingGuideState{
 			Command: ImmichSuggestedEndpoint(TailnetDNSFromBaseURL(c.host.BaseURL())),
 		}
 	}
@@ -522,7 +522,7 @@ func (c *ImmichConnector) OnboardingStatus(ctx context.Context) types.Onboarding
 
 // immichSummary builds the panel's one-line status: configured · credential ·
 // canonical · library.
-func immichSummary(status *types.OnboardingStatus, configured, claim bool) []string {
+func immichSummary(status *shared.OnboardingStatus, configured, claim bool) []string {
 	first, second := "not configured", "no API key"
 	if configured {
 		first = "configured"
@@ -566,7 +566,7 @@ func immichSummary(status *types.OnboardingStatus, configured, claim bool) []str
 // ConnectionUpdate for core to persist — this connector never writes tokens
 // or config itself. "check" is a no-op here: the runner recomputes the
 // status, which runs the acceptance checklist.
-func (c *ImmichConnector) OnboardingRun(ctx context.Context, action string, in types.OnboardingInput) (types.OnboardingResult, error) {
+func (c *ImmichConnector) OnboardingRun(ctx context.Context, action string, in shared.OnboardingInput) (shared.OnboardingResult, error) {
 	kind := ""
 	for _, a := range c.Onboarding().Actions {
 		if a.ID == action {
@@ -576,14 +576,14 @@ func (c *ImmichConnector) OnboardingRun(ctx context.Context, action string, in t
 	}
 
 	switch kind {
-	case string(types.ActionProbe):
+	case string(shared.ActionProbe):
 		endpoint, apiKey := c.candidateCredentials(in)
 		res := c.probeImmich(ctx, endpoint, apiKey)
-		return types.OnboardingResult{Probe: &res}, nil
+		return shared.OnboardingResult{Probe: &res}, nil
 
-	case string(types.ActionSave):
+	case string(shared.ActionSave):
 		if action == immichActionTSSave {
-			return types.OnboardingResult{Updates: []types.StateUpdate{{TailscaleAdmin: &types.TailscaleAdminUpdate{
+			return shared.OnboardingResult{Updates: []shared.StateUpdate{{TailscaleAdmin: &shared.TailscaleAdminUpdate{
 				APIKey:       strings.TrimSpace(in.Values[immichFieldTSAPIKey]),
 				Tailnet:      strings.TrimSpace(in.Values[immichFieldTSTailnet]),
 				HostDeviceID: strings.TrimSpace(in.Values[immichFieldHostDev]),
@@ -592,31 +592,31 @@ func (c *ImmichConnector) OnboardingRun(ctx context.Context, action string, in t
 		}
 		update, err := c.immichConnectionUpdate(in)
 		if err != nil {
-			return types.OnboardingResult{}, err
+			return shared.OnboardingResult{}, err
 		}
-		return types.OnboardingResult{Updates: []types.StateUpdate{{Connection: &update}}}, nil
+		return shared.OnboardingResult{Updates: []shared.StateUpdate{{Connection: &update}}}, nil
 
-	case string(types.ActionCheck):
+	case string(shared.ActionCheck):
 		// Read-only: the runner recomputes status, which carries the live
 		// checklist and the VIP wizard's per-step state.
-		return types.OnboardingResult{}, nil
+		return shared.OnboardingResult{}, nil
 
-	case string(types.ActionApply):
+	case string(shared.ActionApply):
 		if action != immichActionTSApply {
-			return types.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
+			return shared.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
 		}
 		res, updates := c.immichTailnetApply(ctx, in.Selected,
 			strings.TrimSpace(in.Values[immichFieldHostDev]), c.immichHostTag())
-		return types.OnboardingResult{Detail: res.Summary(), Updates: updates}, nil
+		return shared.OnboardingResult{Detail: res.Summary(), Updates: updates}, nil
 
 	default:
-		return types.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
+		return shared.OnboardingResult{}, fmt.Errorf("unknown onboarding action %q", action)
 	}
 }
 
 // candidateCredentials resolves submitted values, falling back to the saved
 // connection so an empty form still tests what is configured.
-func (c *ImmichConnector) candidateCredentials(in types.OnboardingInput) (endpoint, apiKey string) {
+func (c *ImmichConnector) candidateCredentials(in shared.OnboardingInput) (endpoint, apiKey string) {
 	endpoint = strings.TrimSpace(in.Values[immichFieldEndpoint])
 	apiKey = strings.TrimSpace(in.Values[immichFieldAPIKey])
 	if svc := c.host.ServiceConfig(ImmichServiceID); svc != nil {
@@ -638,17 +638,17 @@ func (c *ImmichConnector) candidateCredentials(in types.OnboardingInput) (endpoi
 // A blank API key leaves any stored credential untouched (core merges
 // headers key-wise). Unchecking the claim clears it — the single-owner rule
 // must not leave a stale claim behind.
-func (c *ImmichConnector) immichConnectionUpdate(in types.OnboardingInput) (types.ConnectionUpdate, error) {
+func (c *ImmichConnector) immichConnectionUpdate(in shared.OnboardingInput) (shared.ConnectionUpdate, error) {
 	endpoint := strings.TrimSpace(in.Values[immichFieldEndpoint])
 	if endpoint == "" {
-		return types.ConnectionUpdate{}, fmt.Errorf("endpoint is required — e.g. https://immich.your-tailnet.ts.net/api")
+		return shared.ConnectionUpdate{}, fmt.Errorf("endpoint is required — e.g. https://immich.your-tailnet.ts.net/api")
 	}
 	// Repair common first-timer URLs (scheme, /api, localhost port).
 	endpoint, _ = NormalizeImmichEndpoint(endpoint)
 	if endpoint == "" {
-		return types.ConnectionUpdate{}, fmt.Errorf("endpoint is required — e.g. https://immich.your-tailnet.ts.net/api")
+		return shared.ConnectionUpdate{}, fmt.Errorf("endpoint is required — e.g. https://immich.your-tailnet.ts.net/api")
 	}
-	update := types.ConnectionUpdate{
+	update := shared.ConnectionUpdate{
 		Endpoint:      endpoint,
 		SecretHeaders: map[string]string{},
 	}
@@ -676,14 +676,14 @@ func immichClaimsPhotos(claims []string) bool {
 // runImmichChecks executes the issue #39 acceptance checklist against the
 // live configuration. Fail-open: a broken Immich marks checks failed but
 // never errors the admin request.
-func (c *ImmichConnector) runImmichChecks(ctx context.Context, status *types.OnboardingStatus, configured bool, apiKey, endpoint string) []types.OnboardingCheckState {
-	checks := map[string]*types.OnboardingCheckState{}
+func (c *ImmichConnector) runImmichChecks(ctx context.Context, status *shared.OnboardingStatus, configured bool, apiKey, endpoint string) []shared.OnboardingCheckState {
+	checks := map[string]*shared.OnboardingCheckState{}
 	order := []string{
 		immichCheckConfigured, immichCheckAPIKey, immichCheckCanonical,
 		immichCheckReachable, immichCheckListing, immichCheckStamp, immichCheckBytes,
 	}
 	for _, id := range order {
-		checks[id] = &types.OnboardingCheckState{ID: id}
+		checks[id] = &shared.OnboardingCheckState{ID: id}
 	}
 	mark := func(id, detail string, ok bool) {
 		if c, exists := checks[id]; exists {
@@ -691,9 +691,9 @@ func (c *ImmichConnector) runImmichChecks(ctx context.Context, status *types.Onb
 			c.Detail = detail
 		}
 	}
-	fail := func() []types.OnboardingCheckState {
+	fail := func() []shared.OnboardingCheckState {
 		mark(immichCheckBytes, "Product rule: Aegis never stores photo bytes", true)
-		out := make([]types.OnboardingCheckState, 0, len(order))
+		out := make([]shared.OnboardingCheckState, 0, len(order))
 		for _, id := range order {
 			out = append(out, *checks[id])
 		}
@@ -765,7 +765,7 @@ func (c *ImmichConnector) runImmichChecks(ctx context.Context, status *types.Onb
 	// Product invariant, not a live probe.
 	mark(immichCheckBytes, "Metadata + proxy only; downloads stream from Immich", true)
 
-	out := make([]types.OnboardingCheckState, 0, len(order))
+	out := make([]shared.OnboardingCheckState, 0, len(order))
 	for _, id := range order {
 		out = append(out, *checks[id])
 	}
@@ -774,7 +774,7 @@ func (c *ImmichConnector) runImmichChecks(ctx context.Context, status *types.Onb
 
 // immichGuidedSteps builds the first-run ladder (issue #121). Steps are
 // ordered: install → key → connect → verify, fully derived per request.
-func (c *ImmichConnector) immichGuidedSteps(status *types.OnboardingStatus, configured bool, endpoint string) []types.OnboardingStepState {
+func (c *ImmichConnector) immichGuidedSteps(status *shared.OnboardingStatus, configured bool, endpoint string) []shared.OnboardingStepState {
 	reachable := status.Probe != nil && status.Probe.OK
 
 	installDetail := "Install with the starter .env (docs/immich-starter.env) + docker compose up -d, wait for healthy. Web UI: http://localhost:2283"
@@ -815,7 +815,7 @@ func (c *ImmichConnector) immichGuidedSteps(status *types.OnboardingStatus, conf
 		verifyDetail = "Run checks to finish verification."
 	}
 
-	steps := []types.OnboardingStepState{
+	steps := []shared.OnboardingStepState{
 		{ID: immichStepInstall, OK: reachable, Detail: installDetail},
 		{ID: immichStepAPIKey, OK: status.Fields[immichFieldAPIKey].Set, Detail: keyDetail},
 		{ID: immichStepConnect, OK: configured, Detail: connectDetail},
@@ -831,7 +831,7 @@ func (c *ImmichConnector) immichGuidedSteps(status *types.OnboardingStatus, conf
 }
 
 // immichNextStepFrom names the single thing to do now.
-func immichNextStepFrom(steps []types.OnboardingStepState, probe *types.ProbeResult, checks []types.OnboardingCheckState) string {
+func immichNextStepFrom(steps []shared.OnboardingStepState, probe *shared.ProbeResult, checks []shared.OnboardingCheckState) string {
 	emptyLibrary := false
 	for _, chk := range checks {
 		if chk.ID == immichCheckListing && strings.HasPrefix(chk.Detail, "0 photos") {
@@ -887,11 +887,11 @@ func immichStampSummary(photos []kinds.Photo, baseURL string) (bool, string) {
 
 // probeImmich checks endpoint reachability and API key auth with actionable
 // diagnostics (issue #121). Tries GET /users/me (auth) then GET /server/ping.
-func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey string) types.ProbeResult {
+func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey string) shared.ProbeResult {
 	raw := strings.TrimSpace(endpoint)
 	base, changed := NormalizeImmichEndpoint(raw)
 	if base == "" {
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK:      false,
 			Code:    immichCodeEmptyEndpoint,
 			Message: "No Immich endpoint yet",
@@ -904,7 +904,7 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 	}
 
 	if _, err := url.Parse(base); err != nil {
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK:      false,
 			Code:    immichCodeBadURL,
 			Message: "That does not look like a URL",
@@ -926,7 +926,7 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 			_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 512))
 			resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				return types.ProbeResult{
+				return shared.ProbeResult{
 					OK: true, Status: resp.StatusCode, Code: immichCodeOK,
 					Message:   "Immich accepted the API key",
 					Hint:      "Save the connection, then run checks.",
@@ -934,7 +934,7 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 				}
 			}
 			if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-				return types.ProbeResult{
+				return shared.ProbeResult{
 					OK: false, Status: resp.StatusCode, Code: immichCodeUnauthorized,
 					Message:   "Immich rejected the API key",
 					Hint:      "In Immich: Account → API Keys → New key. Tick the single-key set (Aegis + immich-go): " + ImmichAPIKeyPermissionsSummary() + ". Copy the secret once, paste it here.",
@@ -946,7 +946,7 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 
 	req2, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/server/ping", nil)
 	if err != nil {
-		return types.ProbeResult{OK: false, Code: immichCodeBadURL, Message: err.Error(), Hint: "Check the endpoint spelling."}
+		return shared.ProbeResult{OK: false, Code: immichCodeBadURL, Message: err.Error(), Hint: "Check the endpoint spelling."}
 	}
 	if apiKey != "" {
 		req2.Header.Set("X-API-Key", apiKey)
@@ -964,7 +964,7 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 				suggested = norm
 			}
 		}
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK: false, Code: code,
 			Message:   "Could not reach Immich: " + err.Error(),
 			Hint:      hint,
@@ -978,14 +978,14 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 
 	if resp2.StatusCode == http.StatusOK {
 		if apiKey == "" {
-			return types.ProbeResult{
+			return shared.ProbeResult{
 				OK: true, Status: resp2.StatusCode, Code: immichCodeOKNoKey,
 				Message:   "Immich is reachable (no API key set yet)",
 				Hint:      "Create one Immich API key for Aegis + immich-go (permissions: " + ImmichAPIKeyPermissionsSummary() + ") and paste it above so agents can list photos.",
 				Suggested: suggested,
 			}
 		}
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK: true, Status: resp2.StatusCode, Code: immichCodeOK,
 			Message:   "Immich is reachable",
 			Hint:      "If you have not already, paste the API key and save.",
@@ -996,28 +996,28 @@ func (c *ImmichConnector) probeImmich(ctx context.Context, endpoint, apiKey stri
 	// Classify non-200 responses for first-timers.
 	switch {
 	case resp2.StatusCode == http.StatusUnauthorized || resp2.StatusCode == http.StatusForbidden:
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeUnauthorized,
 			Message:   fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
 			Hint:      "Check the API key (Account → API Keys). If you just created Immich, finish the web-UI signup first.",
 			Suggested: suggested,
 		}
 	case resp2.StatusCode == http.StatusNotFound && strings.Contains(bodyHint, "<html"):
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeWrongPath,
 			Message:   "Got a web page, not the Immich API",
 			Hint:      "The endpoint must be the API base and end in /api — e.g. http://host:2283/api (not the album /photos page).",
 			Suggested: firstNonEmpty(suggested, mustNormalize(base+"/api")),
 		}
 	case strings.Contains(bodyHint, "<html") || strings.Contains(bodyHint, "<!doctype"):
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeNotImmich,
 			Message:   "That host answered with a web page, not Immich",
 			Hint:      "Double-check the host/port. Immich’s API answers JSON from /server/ping on port 2283 by default.",
 			Suggested: suggested,
 		}
 	default:
-		return types.ProbeResult{
+		return shared.ProbeResult{
 			OK: false, Status: resp2.StatusCode, Code: immichCodeHTTPError,
 			Message:   fmt.Sprintf("Immich returned HTTP %d", resp2.StatusCode),
 			Hint:      "Open the same URL in a browser or curl. If it is not Immich, fix the endpoint; if Immich is healthy, check reverse-proxy / TLS.",
@@ -1033,7 +1033,7 @@ func (c *ImmichConnector) immichHostTag() string {
 }
 
 // immichTailnetDeviceOptions lists host candidates for the wizard's picker.
-func (c *ImmichConnector) immichTailnetDeviceOptions(ctx context.Context) []types.OnboardingOption {
+func (c *ImmichConnector) immichTailnetDeviceOptions(ctx context.Context) []shared.OnboardingOption {
 	cl := c.immichTailnetClient()
 	if cl == nil {
 		return nil

@@ -132,11 +132,11 @@ Product rules that stay true for UDTs:
 schema.json
     │  LoadUserDefinedTypes
     ▼
-types.UserDefinedTypeSchema ──► types.LibraryKind
+kinds.UserDefinedTypeSchema ──► kinds.LibraryKind
     │                               │
     │  field_map + dottedPath       │  allLibraryKinds()
     ▼                               ▼
-types.UserDefinedItem         pre-request hints / admin / flow
+kinds.UserDefinedItem         pre-request hints / admin / flow
     │
     │  MergeUserDefinedItems
     ▼
@@ -148,7 +148,7 @@ GET /v1/library/{id}
 
 | Layer | UDT responsibility |
 |-------|-------------------|
-| `internal/types` | Schema, neutral item, identity/merge, list encode |
+| `internal/kinds` | Schema, neutral item, identity/merge, list encode |
 | `internal/shared` | Opt-in kind-rule registration (`MarkKindDefaultNone`) |
 | `internal/core` | Load dir, map source JSON, generic fetch, aggregate handler |
 | `internal/connectors` | *Not used* — UDT sources are data feeds, not OAuth connectors |
@@ -177,12 +177,12 @@ do not invent a second proxy path.
 
 | Piece | Location |
 |-------|----------|
-| Schema + item + merge | `internal/types/udt.go` |
+| Schema + item + merge | `internal/kinds/udt.go` |
 | Opt-in registration | `internal/shared/kindrules.go` (`MarkKindDefaultNone`) |
 | Loader + field map + fetch | `internal/core/udt.go` |
 | Aggregate handler | `internal/core/udt_handlers.go` |
 | Example pack | `examples/user-types/reading-list/` |
-| Tests | `internal/types/udt_test.go`, `internal/core/udt_test.go` |
+| Tests | `internal/kinds/udt_test.go`, `internal/core/udt_test.go` |
 
 Try it:
 

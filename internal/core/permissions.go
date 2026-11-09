@@ -10,22 +10,21 @@ import (
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // writableDataSet reports kinds the admin form may offer as Editable:
 // agent-meaningful proxy write ops only. Mirror adapters and picker/search
 // POSTs do not count — those are not "agents can edit this kind".
-func (s *Server) writableDataSet(serviceID string, caps types.ServiceCapabilities) map[string]bool {
+func (s *Server) writableDataSet(serviceID string, caps shared.ServiceCapabilities) map[string]bool {
 	set := map[string]bool{}
-	for _, name := range types.WritableKindsFromCapabilities(caps) {
+	for _, name := range shared.WritableKindsFromCapabilities(caps) {
 		set[name] = true
 	}
 	return set
 }
 
 // writableKindsFor returns the sorted list for admin payloads.
-func (s *Server) writableKindsFor(serviceID string, caps types.ServiceCapabilities) []string {
+func (s *Server) writableKindsFor(serviceID string, caps shared.ServiceCapabilities) []string {
 	set := s.writableDataSet(serviceID, caps)
 	out := make([]string, 0, len(set))
 	for k := range set {
@@ -40,7 +39,7 @@ func (s *Server) writableKindsFor(serviceID string, caps types.ServiceCapabiliti
 // read-only types become read, so later agent-write support does not
 // auto-open — the operator must enable it explicitly. Unknown keys and
 // "default" are preserved.
-func clampPermissionsWithWritable(p policy.Permissions, caps types.ServiceCapabilities, writable map[string]bool) policy.Permissions {
+func clampPermissionsWithWritable(p policy.Permissions, caps shared.ServiceCapabilities, writable map[string]bool) policy.Permissions {
 	if p == nil {
 		return nil
 	}
@@ -65,7 +64,7 @@ func clampPermissionsWithWritable(p policy.Permissions, caps types.ServiceCapabi
 // type. Picker/search POSTs still count here so a configured write level can
 // reach them; the admin form simply does not offer Editable for those.
 func (s *Server) connectorWriteBlocked(serviceID, kind, method string) bool {
-	if !types.IsMutatingMethod(method) || kind == "" || serviceID == "" {
+	if !shared.IsMutatingMethod(method) || kind == "" || serviceID == "" {
 		return false
 	}
 	conn, ok := s.connectors[serviceID]
@@ -73,10 +72,10 @@ func (s *Server) connectorWriteBlocked(serviceID, kind, method string) bool {
 		return false
 	}
 	caps := conn.Capabilities()
-	if !types.KindKnown(caps, kind) {
+	if !shared.KindKnown(caps, kind) {
 		return false
 	}
-	return !types.KindHasWriteOp(caps, kind)
+	return !shared.KindHasWriteOp(caps, kind)
 }
 
 // effectivePermissions resolves agent access for a service from data grants
@@ -130,7 +129,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 	if svc == nil {
 		return false
 	}
-	kind := types.KindForPath(remainingPath)
+	kind := KindForPath(remainingPath)
 	level := s.requestLevel(r, svc, kind)
 	if s.connectorWriteBlocked(svc.ID, kind, r.Method) {
 		label := kind

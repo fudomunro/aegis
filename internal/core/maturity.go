@@ -2,7 +2,6 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Connection maturity catalog (issue #247): the per-connection declaration
@@ -17,7 +16,7 @@ import (
 // connectors themselves: every callable capability and every implemented
 // library feed must be marked supported, and no entry may claim support for
 // a kind the connector does not recognize at all. Field coverage is graded
-// against types.MaturityContentFields.
+// against connectors.MaturityContentFields.
 //
 // Add a kind row when a service offers a recognizable kind of thing
 // Aegis does not serve — shows, audiobooks, photo albums, drafts, posts,
@@ -34,14 +33,14 @@ import (
 // ConnectionMaturityCatalog returns the maturity declaration for every
 // real connection. Sample fixtures and the drift-injection harness are
 // excluded: they are test surfaces, not connections to mature.
-func ConnectionMaturityCatalog() []types.ConnectionMaturity {
+func ConnectionMaturityCatalog() []connectors.ConnectionMaturity {
 	return connectors.ConnectionMaturityCatalog()
 }
 
 // MaturityByService indexes the catalog by connector ID.
-func MaturityByService() map[string]types.ConnectionMaturity {
+func MaturityByService() map[string]connectors.ConnectionMaturity {
 	cat := ConnectionMaturityCatalog()
-	out := make(map[string]types.ConnectionMaturity, len(cat))
+	out := make(map[string]connectors.ConnectionMaturity, len(cat))
 	for _, m := range cat {
 		out[m.Service] = m
 	}

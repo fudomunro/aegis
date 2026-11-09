@@ -14,7 +14,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func mailTestServer(t *testing.T, archive *mail.Archive) *Server {
@@ -200,8 +199,8 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 
 type stubNoSyncConnector struct{}
 
-func (s *stubNoSyncConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (s *stubNoSyncConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 
 func (s *stubNoSyncConnector) SystemInstructions(string) string { return "" }

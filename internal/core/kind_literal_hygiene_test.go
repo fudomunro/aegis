@@ -34,6 +34,7 @@ var kindLiteralAllowances = []struct{ file, why string }{
 	{"mirror.go", "mirror write adapters are kind-specific writes"},
 	{"mirror_entity.go", "mirror write adapters are kind-specific writes"},
 	{"ownership.go", "ownership derivation maps kind evidence rows"},
+	{"pathclass.go", "the proxy path classifier maps provider paths to kind permission keys; the table is the #312 non-goal that stayed table-driven and moved here from the retired internal/types with #325 — hub proxy/permission dispatch owns it"},
 	{"permissions_overview.go", "admin permissions overview renders per-kind grant rows"},
 	{"photos_share.go", "photo-share write adapter"},
 	{"sample_library.go", "sample fixture dataset keys"},

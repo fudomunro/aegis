@@ -10,7 +10,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // CalDAVConnector lists a CalDAV calendar as neutral CalendarEvent values
@@ -55,23 +54,23 @@ func (c *CalDAVConnector) auth() davAuth {
 }
 
 // Capabilities returns CalDAV calendar operations.
-func (c *CalDAVConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *CalDAVConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "events",
 				Description: "CalDAV calendar — iCalendar VEVENT entries (metadata only; content stays on the DAV server)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "read_list",
 						Description: "List CalDAV events as neutral CalendarEvent values (permission key: events). RRULE occurrences expand in the window.",
 						Method:      "GET",
 						Path:        "/me/events",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "timeMin", In: "query", Type: "string", Description: "RFC3339 lower bound (default: 30 days ago)"},
 							{Name: "timeMax", In: "query", Type: "string", Description: "RFC3339 upper bound (default: 90 days ahead)"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral events: title, description, start_at, end_at, all_day, location, status, organizer, attendees, sources[]",
 							Fields:      []string{"events", "total"},
 						},

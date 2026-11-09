@@ -12,7 +12,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 const (
@@ -39,17 +38,17 @@ func NewAmazonMusicConnector(host Host) *AmazonMusicConnector {
 
 // Capabilities returns what Amazon Music kinds are recognized.
 // Amazon Music has no public API, so no operations are currently supported.
-func (c *AmazonMusicConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
-			{Name: "user", Description: "Current user profile", Operations: []types.Operation{}},
-			{Name: "tracks", Description: "Individual songs", Operations: []types.Operation{}},
-			{Name: "albums", Description: "Albums", Operations: []types.Operation{}},
-			{Name: "artists", Description: "Artists", Operations: []types.Operation{}},
-			{Name: "playlists", Description: "User playlists", Operations: []types.Operation{}},
-			{Name: "search", Description: "Catalog search", Operations: []types.Operation{}},
-			{Name: "library", Description: "User's saved music", Operations: []types.Operation{}},
-			{Name: "recommendations", Description: "Personalized suggestions", Operations: []types.Operation{}},
+func (c *AmazonMusicConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
+			{Name: "user", Description: "Current user profile", Operations: []shared.Operation{}},
+			{Name: "tracks", Description: "Individual songs", Operations: []shared.Operation{}},
+			{Name: "albums", Description: "Albums", Operations: []shared.Operation{}},
+			{Name: "artists", Description: "Artists", Operations: []shared.Operation{}},
+			{Name: "playlists", Description: "User playlists", Operations: []shared.Operation{}},
+			{Name: "search", Description: "Catalog search", Operations: []shared.Operation{}},
+			{Name: "library", Description: "User's saved music", Operations: []shared.Operation{}},
+			{Name: "recommendations", Description: "Personalized suggestions", Operations: []shared.Operation{}},
 		},
 	}
 }

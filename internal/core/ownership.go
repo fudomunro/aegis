@@ -11,13 +11,12 @@ import (
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // ownershipStatuses derives the per-kind ownership view: user confirmation
 // joined with live evidence. Fail-open throughout — a store or ledger that
 // cannot be read simply drops its evidence from the derivation.
-func (s *Server) ownershipStatuses() []types.OwnershipStatus {
+func (s *Server) ownershipStatuses() []shared.OwnershipStatus {
 	kindList := s.allLibraryKinds()
 	sources, routes := s.ownershipEvidence()
 	freshness := s.ownershipFreshnessByKind()
@@ -27,9 +26,9 @@ func (s *Server) ownershipStatuses() []types.OwnershipStatus {
 		entries = s.ownership.List()
 	}
 
-	out := make([]types.OwnershipStatus, 0, len(kindList))
+	out := make([]shared.OwnershipStatus, 0, len(kindList))
 	for _, kind := range kindList {
-		st := types.OwnershipStatus{
+		st := shared.OwnershipStatus{
 			Kind:            kind.ID,
 			Label:           kind.Label,
 			UnderManagement: sources[kind.ID],
@@ -37,10 +36,10 @@ func (s *Server) ownershipStatuses() []types.OwnershipStatus {
 			Freshness:       freshness[kind.ID],
 		}
 		if st.UnderManagement == nil {
-			st.UnderManagement = []types.OwnershipSource{}
+			st.UnderManagement = []shared.OwnershipSource{}
 		}
 		if st.UnusedRoutes == nil {
-			st.UnusedRoutes = []types.OwnershipRoute{}
+			st.UnusedRoutes = []shared.OwnershipRoute{}
 		}
 		if e, ok := entries[kind.ID]; ok {
 			st.Confirmed = e.Confirmed
@@ -56,9 +55,9 @@ func (s *Server) ownershipStatuses() []types.OwnershipStatus {
 // routes that are not. "In use" means the source is actually managing data:
 // a live connection with credentials, or an archive source that holds
 // imported rows. Everything else that can feed the kind stays a route.
-func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[string][]types.OwnershipRoute) {
-	sources := map[string][]types.OwnershipSource{}
-	routes := map[string][]types.OwnershipRoute{}
+func (s *Server) ownershipEvidence() (map[string][]shared.OwnershipSource, map[string][]shared.OwnershipRoute) {
+	sources := map[string][]shared.OwnershipSource{}
+	routes := map[string][]shared.OwnershipRoute{}
 
 	maturity := MaturityByService()
 	use := s.ownershipServiceUse()
@@ -81,7 +80,7 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 				continue
 			}
 			if u.inUse {
-				src := types.OwnershipSource{
+				src := shared.OwnershipSource{
 					ServiceID:    svc.ID,
 					Name:         name,
 					Role:         ownershipRole(svc, kind.ID),
@@ -112,7 +111,7 @@ func (s *Server) ownershipEvidence() (map[string][]types.OwnershipSource, map[st
 			}
 			u := use[id]
 			if u.inUse {
-				sources[kind] = append(sources[kind], types.OwnershipSource{
+				sources[kind] = append(sources[kind], shared.OwnershipSource{
 					ServiceID: id,
 					Name:      name,
 					Count:     u.count,
@@ -211,7 +210,7 @@ func (s *Server) ownershipServiceUse() map[string]ownershipUse {
 // ownershipMailEvidence folds mail-archive ingest sources into the
 // messages view. Gmail enriches its connector row; Takeout is a source of
 // its own (issue #286, issue #139).
-func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSource, routes map[string][]types.OwnershipRoute) {
+func (s *Server) ownershipMailEvidence(sources map[string][]shared.OwnershipSource, routes map[string][]shared.OwnershipRoute) {
 	if s.mail == nil {
 		return
 	}
@@ -234,7 +233,7 @@ func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSourc
 			}
 		}
 		if !found {
-			sources["messages"] = append(sources["messages"], types.OwnershipSource{
+			sources["messages"] = append(sources["messages"], shared.OwnershipSource{
 				ServiceID: connectors.GoogleGmailServiceID,
 				Name:      connectors.GoogleGmailServiceName,
 				Count:     n,
@@ -257,7 +256,7 @@ func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSourc
 				detail = fmt.Sprintf("%d messages imported from %s", takeoutRows, st.TakeoutPath)
 			}
 		}
-		sources["messages"] = append(sources["messages"], types.OwnershipSource{
+		sources["messages"] = append(sources["messages"], shared.OwnershipSource{
 			ServiceID: connectors.TakeoutServiceID,
 			Name:      name,
 			Detail:    detail,
@@ -265,17 +264,17 @@ func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSourc
 		})
 		return
 	}
-	action := types.OwnershipAction{Kind: types.OwnershipActionImport, Target: connectors.TakeoutServiceID}
+	action := shared.OwnershipAction{Kind: shared.OwnershipActionImport, Target: connectors.TakeoutServiceID}
 	if start := connectors.MailSourceFor(connectors.TakeoutServiceID).Start; start != nil {
 		action = *start
 		if action.Target == "" {
 			action.Target = connectors.TakeoutServiceID
 		}
 	}
-	routes["messages"] = append(routes["messages"], types.OwnershipRoute{
+	routes["messages"] = append(routes["messages"], shared.OwnershipRoute{
 		ServiceID:   connectors.TakeoutServiceID,
 		Name:        name,
-		Transport:   types.TransportArchive,
+		Transport:   string(connectors.TransportArchive),
 		Description: "Historical mail export (.mbox / .zip) imported into the local mail archive",
 		Action:      action,
 	})
@@ -284,11 +283,11 @@ func (s *Server) ownershipMailEvidence(sources map[string][]types.OwnershipSourc
 // ownershipRoute builds one unused-route entry from the connector-declared
 // maturity row (issue #254): transport, per-type description, and the
 // declared call-to-action. Core never derives the action from interfaces.
-func ownershipRoute(serviceID, name string, m types.ConnectionMaturity, kind string) types.OwnershipRoute {
-	r := types.OwnershipRoute{
+func ownershipRoute(serviceID, name string, m connectors.ConnectionMaturity, kind string) shared.OwnershipRoute {
+	r := shared.OwnershipRoute{
 		ServiceID: serviceID,
 		Name:      name,
-		Transport: m.Transport,
+		Transport: string(m.Transport),
 		Action:    m.Start,
 	}
 	// A declared action may omit Target; the source's service id is the
@@ -338,14 +337,14 @@ func ownershipRole(svc Service, kind string) string {
 
 // ownershipFreshnessByKind maps the copy-ledger freshness rollup onto kind
 // ids. The ledger is optional; a disabled ledger drops the field.
-func (s *Server) ownershipFreshnessByKind() map[string]*types.OwnershipFreshness {
-	out := map[string]*types.OwnershipFreshness{}
+func (s *Server) ownershipFreshnessByKind() map[string]*shared.OwnershipFreshness {
+	out := map[string]*shared.OwnershipFreshness{}
 	if s.copyLedger == nil {
 		return out
 	}
 	for _, f := range s.copyLedger.FreshnessRollup() {
 		f := f
-		out[f.Kind] = &types.OwnershipFreshness{
+		out[f.Kind] = &shared.OwnershipFreshness{
 			InSync:      f.InSync,
 			Stale:       f.Stale,
 			Missing:     f.Missing,

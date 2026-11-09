@@ -4,7 +4,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // ObserveUpstream records upstream latency/status on the metrics ring.
@@ -95,7 +95,7 @@ func (s *Server) SetupSecret(name string) string {
 	if s == nil || s.config == nil {
 		return ""
 	}
-	if name != types.SetupSecretTailscaleAPIKey {
+	if name != shared.SetupSecretTailscaleAPIKey {
 		return ""
 	}
 	return s.config.TailscaleAdminAPIKey()
@@ -104,7 +104,7 @@ func (s *Server) SetupSecret(name string) string {
 // SetupSettings returns the non-secret settings recorded for a named setup
 // flow (issue #265).
 func (s *Server) SetupSettings(name string) map[string]string {
-	if s == nil || s.config == nil || name != types.SetupFlowTailscale {
+	if s == nil || s.config == nil || name != shared.SetupFlowTailscale {
 		return nil
 	}
 	snap := s.config.TailscaleAdminSnapshot()

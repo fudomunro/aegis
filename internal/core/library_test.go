@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -15,7 +16,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakePlaylistProvider struct {
@@ -23,8 +23,8 @@ type fakePlaylistProvider struct {
 	err       error
 }
 
-func (f *fakePlaylistProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakePlaylistProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakePlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakePlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -374,8 +374,8 @@ type fakeLikedTrackProvider struct {
 	err    error
 }
 
-func (f *fakeLikedTrackProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeLikedTrackProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeLikedTrackProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeLikedTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -791,8 +791,8 @@ type fakeAlbumProvider struct {
 	err    error
 }
 
-func (f *fakeAlbumProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeAlbumProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeAlbumProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeAlbumProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -807,8 +807,8 @@ type fakeArtistProvider struct {
 	err     error
 }
 
-func (f *fakeArtistProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeArtistProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeArtistProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeArtistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

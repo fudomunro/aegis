@@ -79,15 +79,15 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 
 | Block | Source | Audience | Register notes |
 |-------|--------|----------|----------------|
-| LibraryKind instructions | `internal/types/kind.go`, `internal/kinds` | Runtime LLM agent | Imperative tool-use guide; `truncated`, `sources[].canonical`. |
+| LibraryKind instructions | `internal/kinds/librarykind.go`, `internal/kinds` | Runtime LLM agent | Imperative tool-use guide; `truncated`, `sources[].canonical`. |
 | Connector SystemInstructions | each connector (`spotify.go`, `immich.go`, …) | Runtime LLM agent | Negative constraints (“Do not call X”, “never ask for credentials”). |
 | Generic fallback | `internal/core/handler.go` | Runtime LLM agent | Library-first, not a services API. |
 | Permission notices | `core/permissions.go` | Runtime LLM agent | Denied types; freebusy-only “never request titles…”. |
 | Write policy | `core/canonical.go` | Runtime LLM agent | Canonical home first; no auto-mirror. |
 | Mail archive hints | `core/mail_archive_http.go` | Runtime LLM agent | Endpoint cookbook + sort recipes. |
-| Photo source discipline | `internal/types/builders.go` | Runtime LLM agent (as security policy) | No Photos.app / Immich env / raw CDN. |
+| Photo source discipline | `internal/kinds/builders.go` | Runtime LLM agent (as security policy) | No Photos.app / Immich env / raw CDN. |
 | UDT hints | `core/udt_handlers.go` | Runtime LLM agent + pack author | Schema field list. |
-| Capabilities / Operation | `internal/types/capabilities.go` + `Capabilities()` | Admin metadata (not agent discovery) | Provider-shaped English; **dialect differs** from SystemInstructions. |
+| Capabilities / Operation | `internal/shared/capabilities.go` + `Capabilities()` | Admin metadata (not agent discovery) | Provider-shaped English; **dialect differs** from SystemInstructions. |
 
 ### Logs and config
 

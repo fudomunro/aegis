@@ -1,393 +1,191 @@
 package connectors
 
-import "github.com/fudomunro/aegis/internal/types"
+import "github.com/fudomunro/aegis/internal/shared"
 
-// Connection maturity catalog (issue #247): the per-connection declaration
-// of what each service offers in theory and what Aegis serves through the
-// connection. The dashboard grades it into the maturity mark; nothing here
-// is runtime data, so both the release-published build and the instance
-// build read the same coverage statement.
+// Connection maturity (issue #247): how completely one connection covers the
+// data its service offers. Distinct from the sync dashboard's operational
+// marks (success / stability / confidence), which measure maintenance
+// responsiveness — maturity is a coverage statement about the connector
+// itself and moves only when code moves.
 //
-// Entries are hand-declared next to the connectors they describe, the same
-// class of metadata as Capabilities(). core's maturity_test.go holds them
-// honest against the connectors themselves: every callable capability and
-// every implemented library feed must be marked supported, and no entry may
-// claim support for a kind the connector does not recognize at all. Field
-// coverage is graded against types.MaturityContentFields.
+// Three axes, from the issue:
 //
-// Add a kind row when a service offers a recognizable kind of thing
-// Aegis does not serve — shows, audiobooks, photo albums, drafts, posts,
-// budgets — because the unsupported gap is the point of the catalog. Do not
-// add rows for concepts a supported type already carries as populated
-// fields (Paperless tags and correspondents live on Document, so the
-// documents row grades them). A connection whose only offered type is
-// fully served and fully filled does read as "complete"; the per-type table
-// on the page is what shows how narrow that is.
+//  1. Awareness — the catalog names every kind the service offers,
+//     not only the ones Aegis implements.
+//  2. Indication — each kind is marked supported or not, so the gap is
+//     visible instead of implied.
+//  3. Field coverage — supported types that map to a neutral model declare
+//     which content fields the connector populates.
+//
+// Transport is shown alongside the grade: API-based connections read as
+// more mature than ones that reach the service through exported files or
+// reverse-engineered surfaces.
 
-// ConnectionMaturityCatalog returns the maturity declaration for every
-// connector-owned service, whether the transport is a live API or a local
-// import store. Sample fixtures and the drift-injection harness are
-// excluded: they are test surfaces, not connections to mature.
-func ConnectionMaturityCatalog() []types.ConnectionMaturity {
-	return []types.ConnectionMaturity{
-		spotifyMaturity(),
-		youtubeMusicMaturity(),
-		amazonMusicMaturity(),
-		googleGmailMaturity(),
-		googlePhotosMaturity(),
-		googleContactsMaturity(),
-		googleCalendarMaturity(),
-		googleDriveMaturity(),
-		immichMaturity(),
-		blueskyMaturity(),
-		ynabMaturity(),
-		ownTracksMaturity(),
-		calDAVMaturity(),
-		cardDAVMaturity(),
-		paperlessMaturity(),
-		signalMaturity(),
-		quickenMaturity(),
-		timelineMaturity(),
-	}
+// Transport classifies how a connection reaches its service.
+type Transport string
+
+const (
+	// TransportAPI is an HTTP API of the service — public developer API or
+	// a self-hosted service's own REST surface (Spotify Web API, Google
+	// APIs, YNAB, Paperless, Immich, OwnTracks Recorder).
+	TransportAPI Transport = "api"
+	// TransportProtocol is a documented open interoperability protocol
+	// (CalDAV, CardDAV, AT Protocol).
+	TransportProtocol Transport = "protocol"
+	// TransportReverseEngineered is an undocumented private API surface
+	// (YouTube Music InnerTube, Amazon Music).
+	TransportReverseEngineered Transport = "reverse-engineered"
+	// TransportArchive is an import of exported files or a local store
+	// (Quicken QIF, Google Timeline export, Signal Desktop database).
+	TransportArchive Transport = "archive"
+)
+
+// FieldCoverage is one neutral-model content field's coverage on a
+// connection. Service identity lives in sources[] and is never graded.
+type FieldCoverage struct {
+	Name string `json:"name"`
+	// Supported is false when the model has the field but this connection
+	// does not populate it.
+	Supported bool `json:"supported"`
 }
 
-func signalMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   SignalServiceID,
-		Transport: types.TransportArchive,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionImport,
-			Label: "Import Signal chats",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "messages", Description: "Imported chat messages", Supported: true,
-				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to",
-					"sent_at", "received_at", "direction", "read", "thread_id", "labels")},
-			{Name: "contacts", Description: "Imported contacts", Supported: true,
-				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
-			{Name: "groups", Description: "Group threads and members", Supported: false},
-			{Name: "attachments", Description: "Media and file attachments", Supported: false},
-		},
-	}
+// KindMaturity is one kind's coverage on one connection: every type
+// the service offers in theory, marked with whether Aegis makes it
+// available here.
+type KindMaturity struct {
+	// Name is the kind as Aegis names it: a library kind id
+	// (playlists, tracks, …) or connector capability name (user, search,
+	// shows, …). Names may carry provider-local meaning per connection —
+	// "albums" is music albums on Spotify and photo albums on Immich.
+	Name string `json:"name"`
+	// Description is what the service offers under this name.
+	Description string `json:"description,omitempty"`
+	// Supported is true when the connection serves the kind: a unified-
+	// library feed, a callable connector operation, or a handled proxy
+	// path. Types the service offers but the connection does not serve
+	// stay false so the gap is visible.
+	Supported bool `json:"supported"`
+	// Fields grades content-field coverage for supported types that map
+	// to a neutral model. Nil for operational types (user, search, …).
+	Fields []FieldCoverage `json:"fields,omitempty"`
 }
 
-func quickenMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   QuickenServiceID,
-		Transport: types.TransportArchive,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionImport,
-			Label: "Import Quicken exports",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "transactions", Description: "Imported QIF/QFX line items", Supported: true,
-				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
-					"merchant", "category", "memo", "account", "status", "entity_id")},
-			{Name: "accounts", Description: "Account registers and balances", Supported: false},
-			{Name: "investments", Description: "Holdings and investment activity", Supported: false},
-		},
-	}
+// ConnectionMaturity is the coverage assessment of one connection.
+type ConnectionMaturity struct {
+	// Service is the connector ID: "spotify", "google-gmail", ….
+	Service   string         `json:"service"`
+	Transport Transport      `json:"transport"`
+	Kinds     []KindMaturity `json:"data_types"`
+	// Start is how a user brings this connection's data under management
+	// (issue #165). Declared beside the connector; core never derives it
+	// from interfaces or transport class.
+	Start shared.OwnershipAction `json:"start"`
 }
 
-func timelineMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   TimelineServiceID,
-		Transport: types.TransportArchive,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionImport,
-			Label: "Import Timeline exports",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "places", Description: "Imported Timeline visits and trips", Supported: true,
-				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
-			{Name: "location_points", Description: "Raw Timeline location points", Supported: false},
-		},
-	}
+// MaturityGrade is the derived mark shown on the dashboard.
+type MaturityGrade struct {
+	// Level is complete | substantial | partial | basic.
+	Level string `json:"level"`
+	// CoveragePct is supported kinds over offered, percent 0-100.
+	CoveragePct float64 `json:"coverage_pct"`
+	// FieldPct is populated content fields over graded, percent 0-100
+	// across every supported model-backed type. Nil when no supported
+	// type maps to a neutral model.
+	FieldPct *float64 `json:"field_pct,omitempty"`
+	// Transport is carried through so the page can show it beside the level.
+	Transport Transport `json:"transport"`
+	Offered   int       `json:"offered"`
+	Supported int       `json:"supported"`
 }
 
-func spotifyMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   SpotifyServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Spotify",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "user", Description: "Current user profile", Supported: true},
-			{Name: "tracks", Description: "Saved and top tracks", Supported: true,
-				Fields: types.FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "entity_id")},
-			{Name: "albums", Description: "Saved albums", Supported: true,
-				Fields: types.FieldCoverageFor("albums", "name", "artists", "entity_id")},
-			{Name: "artists", Description: "Followed and top artists", Supported: true,
-				Fields: types.FieldCoverageFor("artists", "name")},
-			{Name: "playlists", Description: "User playlists", Supported: true,
-				Fields: types.FieldCoverageFor("playlists", "name", "description", "owner", "track_count")},
-			{Name: "search", Description: "Catalog search", Supported: true},
-			{Name: "library", Description: "Saved music collection", Supported: true},
-			{Name: "recommendations", Description: "Personalized suggestions", Supported: true},
-			{Name: "player", Description: "Playback state and devices", Supported: true},
-			{Name: "shows", Description: "Podcasts and episodes", Supported: false},
-			{Name: "audiobooks", Description: "Audiobook catalog and saved books", Supported: false},
-		},
-	}
+// MaturityContentFields maps a kind name to the neutral-model content
+// fields field coverage grades. sources[], extra, and match are structural
+// — filled by construction or merge — and are never graded. A type absent
+// from this map has no neutral model (user, search, shows, …) and takes no
+// field coverage.
+var MaturityContentFields = map[string][]string{
+	"playlists":    {"name", "description", "owner", "track_count"},
+	"tracks":       {"name", "artists", "album", "duration_ms", "duration", "entity_id"},
+	"albums":       {"name", "artists", "entity_id"},
+	"artists":      {"name", "entity_id"},
+	"contacts":     {"name", "emails", "phones", "handles", "organization"},
+	"photos":       {"taken_at", "width", "height", "mime_type", "filename", "caption", "people"},
+	"events":       {"title", "description", "start_at", "end_at", "all_day", "location", "status", "calendar_id", "calendar_name", "organizer", "attendees", "entity_id"},
+	"messages":     {"channel", "subject", "snippet", "body", "from", "to", "cc", "sent_at", "received_at", "direction", "read", "thread_id", "entity_id", "labels"},
+	"documents":    {"title", "mime_type", "created_at", "modified_at", "correspondent", "document_type", "tags", "excerpt", "people", "entity_id"},
+	"transactions": {"posted_at", "authorized_at", "amount", "currency", "description", "merchant", "category", "memo", "account", "status", "entity_id"},
+	"places":       {"start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id"},
 }
 
-func youtubeMusicMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   YouTubeMusicServiceID,
-		Transport: types.TransportReverseEngineered,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect YouTube Music",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "user", Description: "Current user profile", Supported: true},
-			{Name: "tracks", Description: "Liked songs and videos", Supported: true,
-				Fields: types.FieldCoverageFor("tracks", "name", "artists", "duration_ms", "duration")},
-			{Name: "artists", Description: "Subscribed channels as artists", Supported: true,
-				Fields: types.FieldCoverageFor("artists", "name")},
-			{Name: "playlists", Description: "User playlists", Supported: true,
-				Fields: types.FieldCoverageFor("playlists", "name", "description", "owner", "track_count")},
-			{Name: "albums", Description: "Albums in the catalog", Supported: false},
-			{Name: "search", Description: "Catalog search", Supported: true},
-			{Name: "library", Description: "Saved music collection", Supported: true},
-			{Name: "channels", Description: "Channel subscriptions", Supported: true},
-			{Name: "podcasts", Description: "Podcast shows and episodes", Supported: false},
-		},
+// FieldCoverageFor grades one kind against the content fields the
+// connector populates. Populated names outside the kind's content fields
+// are ignored; unlisted content fields grade as unsupported. Returns nil
+// for types with no neutral model.
+func FieldCoverageFor(kind string, populated ...string) []FieldCoverage {
+	want, ok := MaturityContentFields[kind]
+	if !ok {
+		return nil
 	}
+	have := make(map[string]bool, len(populated))
+	for _, f := range populated {
+		have[f] = true
+	}
+	out := make([]FieldCoverage, 0, len(want))
+	for _, f := range want {
+		out = append(out, FieldCoverage{Name: f, Supported: have[f]})
+	}
+	return out
 }
 
-func amazonMusicMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   AmazonMusicServiceID,
-		Transport: types.TransportReverseEngineered,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Amazon Music",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "user", Description: "Current user profile", Supported: true},
-			{Name: "tracks", Description: "Songs, including playlist items", Supported: true,
-				Fields: types.FieldCoverageFor("tracks", "name", "artists", "album", "duration_ms", "duration", "entity_id")},
-			{Name: "albums", Description: "Albums", Supported: true,
-				Fields: types.FieldCoverageFor("albums", "name")},
-			{Name: "artists", Description: "Artists", Supported: true,
-				Fields: types.FieldCoverageFor("artists", "name")},
-			{Name: "playlists", Description: "User playlists", Supported: true,
-				Fields: types.FieldCoverageFor("playlists", "name", "description", "owner", "track_count")},
-			{Name: "search", Description: "Catalog search", Supported: true},
-			{Name: "library", Description: "Saved music collection", Supported: true},
-			{Name: "recommendations", Description: "Personalized suggestions", Supported: true},
-			{Name: "shows", Description: "Podcasts and stations", Supported: false},
-		},
+// GradeConnectionMaturity derives the dashboard mark from the declaration.
+// Coverage and fields are graded separately; the level bands on the lower
+// of the two so a connection cannot read as mature by supporting one
+// complete type out of ten. Field coverage counts only supported types
+// that map to a neutral model.
+func GradeConnectionMaturity(m ConnectionMaturity) MaturityGrade {
+	g := MaturityGrade{Transport: m.Transport, Offered: len(m.Kinds)}
+	if len(m.Kinds) == 0 {
+		g.Level = "basic"
+		return g
 	}
+	populated, graded := 0, 0
+	for _, dt := range m.Kinds {
+		if !dt.Supported {
+			continue
+		}
+		g.Supported++
+		for _, f := range dt.Fields {
+			graded++
+			if f.Supported {
+				populated++
+			}
+		}
+	}
+	g.CoveragePct = 100 * float64(g.Supported) / float64(g.Offered)
+	combined := g.CoveragePct
+	if graded > 0 {
+		pct := 100 * float64(populated) / float64(graded)
+		g.FieldPct = &pct
+		if pct < combined {
+			combined = pct
+		}
+	}
+	g.Level = maturityLevel(combined)
+	return g
 }
 
-func googleGmailMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   GoogleGmailServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Gmail",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "messages", Description: "Mail messages and threads", Supported: true,
-				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from", "to", "cc",
-					"sent_at", "received_at", "direction", "read", "thread_id", "entity_id", "labels")},
-			{Name: "documents", Description: "Attachments surfaced as documents", Supported: true,
-				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "correspondent", "document_type", "excerpt", "people", "entity_id")},
-			{Name: "drafts", Description: "Unsent draft messages", Supported: false},
-		},
-	}
-}
-
-func googlePhotosMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   GooglePhotosServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Google Photos",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "photos", Description: "Picked library media items", Supported: true,
-				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename")},
-			{Name: "albums", Description: "Photo albums", Supported: false},
-			{Name: "people", Description: "Face groupings and people", Supported: false},
-		},
-	}
-}
-
-func googleContactsMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   GoogleContactsServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Google Contacts",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "contacts", Description: "People API contacts", Supported: true,
-				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "organization")},
-		},
-	}
-}
-
-func googleCalendarMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   GoogleCalendarServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Google Calendar",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "events", Description: "Calendar entries", Supported: true,
-				Fields: types.FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
-					"location", "status", "calendar_id", "calendar_name", "organizer", "attendees", "entity_id")},
-			{Name: "freebusy", Description: "Free/busy availability blocks", Supported: false},
-		},
-	}
-}
-
-func googleDriveMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   GoogleDriveServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Google Drive",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "documents", Description: "Drive files and exports", Supported: true,
-				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "modified_at",
-					"correspondent", "document_type", "excerpt", "people", "entity_id")},
-		},
-	}
-}
-
-func immichMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   ImmichServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionSetup,
-			Label: "Set up Immich",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "photos", Description: "Library assets", Supported: true,
-				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename", "caption")},
-			{Name: "albums", Description: "Photo albums and shared albums", Supported: false},
-			{Name: "people", Description: "Recognized people and faces", Supported: false},
-		},
-	}
-}
-
-func blueskyMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   BlueskyServiceID,
-		Transport: types.TransportProtocol,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Bluesky",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "messages", Description: "Notifications and chat messages", Supported: true,
-				Fields: types.FieldCoverageFor("messages", "channel", "subject", "snippet", "body", "from",
-					"sent_at", "received_at", "direction", "read", "thread_id", "entity_id", "labels")},
-			{Name: "photos", Description: "Post images and photo sharing", Supported: true,
-				Fields: types.FieldCoverageFor("photos", "taken_at", "width", "height", "mime_type", "filename", "caption")},
-			{Name: "contacts", Description: "Profiles and follows", Supported: true,
-				Fields: types.FieldCoverageFor("contacts", "name", "handles")},
-			{Name: "posts", Description: "Feed posts and threads", Supported: false},
-			{Name: "feeds", Description: "Custom feeds and timelines", Supported: false},
-			{Name: "likes", Description: "Likes and reposts", Supported: false},
-		},
-	}
-}
-
-func ynabMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   YNABServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionSetup,
-			Label: "Set up YNAB",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "transactions", Description: "Budget transactions", Supported: true,
-				Fields: types.FieldCoverageFor("transactions", "posted_at", "amount", "currency", "description",
-					"merchant", "category", "memo", "account", "status", "entity_id")},
-			{Name: "accounts", Description: "Budget accounts and balances", Supported: false},
-			{Name: "budgets", Description: "Budgets themselves", Supported: false},
-			{Name: "categories", Description: "Category groups and targets", Supported: false},
-		},
-	}
-}
-
-func ownTracksMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   OwnTracksServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect OwnTracks",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "places", Description: "Recorder visits and trips", Supported: true,
-				Fields: types.FieldCoverageFor("places", "start_at", "end_at", "place", "kind", "mode", "confidence", "entity_id")},
-			{Name: "location_points", Description: "Raw GPS samples", Supported: false},
-		},
-	}
-}
-
-func calDAVMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   CalDAVServiceID,
-		Transport: types.TransportProtocol,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect CalDAV",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "events", Description: "Calendar entries", Supported: true,
-				Fields: types.FieldCoverageFor("events", "title", "description", "start_at", "end_at", "all_day",
-					"location", "status", "calendar_id", "calendar_name", "organizer", "attendees", "entity_id")},
-			{Name: "todos", Description: "VTODO tasks", Supported: false},
-			{Name: "journals", Description: "VJOURNAL entries", Supported: false},
-		},
-	}
-}
-
-func cardDAVMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   CardDAVServiceID,
-		Transport: types.TransportProtocol,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect CardDAV",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "contacts", Description: "Address book contacts", Supported: true,
-				Fields: types.FieldCoverageFor("contacts", "name", "emails", "phones", "handles", "organization")},
-		},
-	}
-}
-
-func paperlessMaturity() types.ConnectionMaturity {
-	return types.ConnectionMaturity{
-		Service:   PaperlessServiceID,
-		Transport: types.TransportAPI,
-		Start: types.OwnershipAction{
-			Kind:  types.OwnershipActionConnect,
-			Label: "Connect Paperless",
-		},
-		Kinds: []types.KindMaturity{
-			{Name: "documents", Description: "Archived documents", Supported: true,
-				Fields: types.FieldCoverageFor("documents", "title", "mime_type", "created_at", "modified_at",
-					"correspondent", "document_type", "tags", "excerpt", "people", "entity_id")},
-		},
+// maturityLevel bands a 0-100 combined coverage figure. "complete" is
+// reserved for the issue's bar: every offered type supported and every
+// graded content field populated.
+func maturityLevel(pct float64) string {
+	switch {
+	case pct >= 99.999:
+		return "complete"
+	case pct >= 75:
+		return "substantial"
+	case pct >= 40:
+		return "partial"
+	default:
+		return "basic"
 	}
 }

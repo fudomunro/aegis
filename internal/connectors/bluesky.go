@@ -14,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // BlueskyConnector publishes photos to the user's Bluesky account via the
@@ -55,26 +54,26 @@ func (c *BlueskyConnector) BlueskyUpstreamBase() string {
 }
 
 // Capabilities returns Bluesky share and library operations reachable through Aegis.
-func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *BlueskyConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "photos",
 				Description: "Share photos to Bluesky as public image posts, and list the user's Bluesky image posts (ownership-claim PoC). Photo bytes stay on the PDS/CDN; Aegis does not store media.",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "share_photo",
 						Description: "Publish one photo to Bluesky and return a content-hash claim (permission key: photos write). Prefer POST /v1/library/photos/share over raw xrpc.",
 						Method:      "POST",
 						Path:        "/v1/library/photos/share",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "source_service", In: "body", Type: "string", Description: "Photo source connector ID (e.g. immich)", Required: true},
 							{Name: "source_id", In: "body", Type: "string", Description: "Service-local photo/asset ID", Required: true},
 							{Name: "caption", In: "body", Type: "string", Description: "Optional post text"},
 							{Name: "alt", In: "body", Type: "string", Description: "Optional image alt text"},
 							{Name: "dry_run", In: "body", Type: "boolean", Description: "Plan without publishing", Default: false},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Post URI/URL plus a PoC ownership claim (sha256 + public post)",
 							Fields:      []string{"target_service", "post_uri", "post_url", "claim"},
 						},
@@ -84,11 +83,11 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Download one image blob by CID (permission key: photos). Used by sources[].blob_url.",
 						Method:      "GET",
 						Path:        "/xrpc/com.atproto.sync.getBlob",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "did", In: "query", Type: "string", Description: "Repo DID that holds the blob", Required: true},
 							{Name: "cid", In: "query", Type: "string", Description: "Blob CID", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Raw image bytes",
 							Fields:      []string{"(binary)"},
 						},
@@ -98,17 +97,17 @@ func (c *BlueskyConnector) Capabilities() types.ServiceCapabilities {
 			{
 				Name:        "messages",
 				Description: "Bluesky notifications (likes, replies, mentions, follows) as neutral messages for /v1/library/messages.",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_notifications",
 						Description: "List recent notifications as neutral Message values (permission key: messages)",
 						Method:      "GET",
 						Path:        "/xrpc/app.bsky.notification.listNotifications",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "limit", In: "query", Type: "integer", Description: "Page size (default 50)", Default: 50},
 							{Name: "cursor", In: "query", Type: "string", Description: "Pagination cursor"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral messages: subject, snippet, from, sent_at, sources[]",
 							Fields:      []string{"messages", "total"},
 						},

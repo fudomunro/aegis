@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -14,7 +15,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeCalendarEventProvider struct {
@@ -23,8 +23,8 @@ type fakeCalendarEventProvider struct {
 	truncated bool
 }
 
-func (f *fakeCalendarEventProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeCalendarEventProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeCalendarEventProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeCalendarEventProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

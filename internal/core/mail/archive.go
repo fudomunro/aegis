@@ -17,7 +17,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 	_ "modernc.org/sqlite"
 )
 
@@ -677,8 +676,8 @@ func (a *Archive) Status() (Status, error) {
 }
 
 // LoadSyncCursor reads the durable ingest cursor for a service.
-func (a *Archive) LoadSyncCursor(service string) (types.MailIngestCursor, error) {
-	var cur types.MailIngestCursor
+func (a *Archive) LoadSyncCursor(service string) (shared.MailIngestCursor, error) {
+	var cur shared.MailIngestCursor
 	if a == nil || a.db == nil {
 		return cur, fmt.Errorf("mail archive disabled")
 	}
@@ -691,7 +690,7 @@ func (a *Archive) LoadSyncCursor(service string) (types.MailIngestCursor, error)
 }
 
 // SaveSyncCursor persists ingest progress (fail-open callers still record errors).
-func (a *Archive) SaveSyncCursor(service string, cur types.MailIngestCursor) error {
+func (a *Archive) SaveSyncCursor(service string, cur shared.MailIngestCursor) error {
 	if a == nil || a.db == nil {
 		return fmt.Errorf("mail archive disabled")
 	}

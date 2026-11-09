@@ -2,7 +2,7 @@ package mail
 
 import (
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Sink is core's connectors.MailSink over the local archive. Connectors
@@ -21,11 +21,11 @@ func (s Sink) Store(service string, msg kinds.Message, rawPayload []byte) error 
 	return s.A.Upsert(RecordFromMessage(service, "", msg, gz))
 }
 
-func (s Sink) LoadCursor(service string) (types.MailIngestCursor, error) {
+func (s Sink) LoadCursor(service string) (shared.MailIngestCursor, error) {
 	return s.A.LoadSyncCursor(service)
 }
 
-func (s Sink) SaveCursor(service string, cur types.MailIngestCursor) error {
+func (s Sink) SaveCursor(service string, cur shared.MailIngestCursor) error {
 	return s.A.SaveSyncCursor(service, cur)
 }
 

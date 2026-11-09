@@ -13,7 +13,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // countingTrackProvider counts ListUserLikedTracks calls and can hold them
@@ -24,8 +24,8 @@ type countingTrackProvider struct {
 	hold   chan struct{} // nil = no hold
 }
 
-func (f *countingTrackProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *countingTrackProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *countingTrackProvider) SystemInstructions(string) string { return "fake" }
 func (f *countingTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

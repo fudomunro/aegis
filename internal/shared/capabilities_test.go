@@ -1,4 +1,4 @@
-package types
+package shared
 
 import (
 	"net/http"
@@ -37,17 +37,5 @@ func TestIsAgentDataWritePath(t *testing.T) {
 	}
 	if !IsAgentDataWritePath("/me/tracks") {
 		t.Fatal("library write path should count")
-	}
-}
-
-func TestKindForPath_QueryAndSlash(t *testing.T) {
-	if KindForPath("/me/tracks?limit=1") != "tracks" {
-		t.Fatal("query strip")
-	}
-	if KindForPath("   ") != "" {
-		t.Fatal("blank")
-	}
-	if KindForPath("/me/../secret") != "" {
-		t.Fatal("dotdot must be non-canonical")
 	}
 }

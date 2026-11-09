@@ -12,7 +12,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // CardDAVConnector lists a CardDAV address book as neutral Contact values
@@ -57,19 +56,19 @@ func (c *CardDAVConnector) auth() davAuth {
 }
 
 // Capabilities returns CardDAV contact operations.
-func (c *CardDAVConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *CardDAVConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "contacts",
 				Description: "CardDAV address book — vCard 3/4 contacts (metadata only)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "read_list",
 						Description: "List CardDAV contacts as neutral Contact values (permission key: contacts)",
 						Method:      "GET",
 						Path:        "/me/contacts",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral contacts: name, emails, phones, organization, sources[] (service, id, etag)",
 							Fields:      []string{"contacts", "total"},
 						},

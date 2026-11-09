@@ -16,10 +16,13 @@ import (
 // and re-decided at least once — so the next session cannot quietly undo it.
 //
 //  1. Package import boundaries (#15 / #280 / #301 / #303 / #325):
-//     `internal/shared` is stdlib-only plumbing, `internal/kinds` holds
-//     kind data and neutral models, `internal/types` holds the connector
-//     seam shapes until their move completes (issue #325), authorization
-//     policy is `internal/core/policy` and never `internal/types`, and
+//     `internal/shared` is the single owner of stdlib-only plumbing AND
+//     cross-package seam vocabulary — the shapes two internal packages
+//     exchange to agree on a contract (capabilities, onboarding, mail
+//     ingest, ownership). Shapes and trivial constructors/accessors only
+//     (the kindrules.go test): no domain behavior, no service registries,
+//     no provider paths, no Host. `internal/kinds` holds kind data and
+//     neutral models; authorization policy is `internal/core/policy`; and
 //     connectors depend on `Host` — not the core hub.
 //  2. Outbound HTTP has one owner (`shared.HTTPClient`); `http.DefaultClient`
 //     and the `http.Get`/`http.Post`/`http.PostForm` helpers have no timeout.
@@ -29,11 +32,9 @@ import (
 // violation. Empty means "no fudomunro/aegis imports at all".
 var allowedImports = map[string][]string{
 	"internal/shared":      nil,
-	"internal/types":       {"github.com/fudomunro/aegis/internal/shared"},
 	"internal/core/policy": {"github.com/fudomunro/aegis/internal/shared"},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
-		"github.com/fudomunro/aegis/internal/types",
 		"github.com/fudomunro/aegis/internal/core/policy",
 		"github.com/fudomunro/aegis/internal/core/scopes",
 		"github.com/fudomunro/aegis/internal/core/audit",
@@ -41,7 +42,6 @@ var allowedImports = map[string][]string{
 	},
 	"internal/connectors": {
 		"github.com/fudomunro/aegis/internal/shared",
-		"github.com/fudomunro/aegis/internal/types",
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/core/policy",
 	},

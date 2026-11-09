@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Sync-maintenance dashboard (issue #239): an entirely build-time generated
@@ -125,10 +125,10 @@ type DashboardService struct {
 	// Maturity is the connection's coverage declaration (issue #247): what
 	// the service offers and what Aegis serves. Nil when the catalog has
 	// no entry — test fixtures and the drift-injection harness.
-	Maturity *types.ConnectionMaturity `json:"maturity,omitempty"`
+	Maturity *connectors.ConnectionMaturity `json:"maturity,omitempty"`
 	// MaturityGrade is the derived coverage mark, shown beside the
 	// operational scores and deliberately not mixed into them.
-	MaturityGrade *types.MaturityGrade `json:"maturity_grade,omitempty"`
+	MaturityGrade *connectors.MaturityGrade `json:"maturity_grade,omitempty"`
 }
 
 // NameOrID is the display name for a service page.
@@ -187,7 +187,7 @@ type MaintenanceDashboardResult struct {
 // onto the static dashboard model. Services carry their whole capture
 // history, failure events, scores, maturity coverage, and maintenance
 // record; records that map to no service are dropped.
-func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardServiceMeta, issues []MaintenanceIssueRecord, maturity map[string]types.ConnectionMaturity, generatedAt time.Time) DashboardData {
+func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardServiceMeta, issues []MaintenanceIssueRecord, maturity map[string]connectors.ConnectionMaturity, generatedAt time.Time) DashboardData {
 	sorted := append([]MaintenanceSignals(nil), series...)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].CapturedAt.Before(sorted[j].CapturedAt)
@@ -278,7 +278,7 @@ func BuildMaintenanceDashboard(series []MaintenanceSignals, metas []DashboardSer
 }
 
 // buildDashboardService assembles one service page model from the series.
-func buildDashboardService(id string, meta DashboardServiceMeta, series []MaintenanceSignals, fixes []DashboardFix, maturity types.ConnectionMaturity, now time.Time) DashboardService {
+func buildDashboardService(id string, meta DashboardServiceMeta, series []MaintenanceSignals, fixes []DashboardFix, maturity connectors.ConnectionMaturity, now time.Time) DashboardService {
 	svc := DashboardService{
 		ID:               id,
 		Name:             meta.Name,
@@ -288,7 +288,7 @@ func buildDashboardService(id string, meta DashboardServiceMeta, series []Mainte
 	if maturity.Service != "" {
 		m := maturity
 		svc.Maturity = &m
-		grade := types.GradeConnectionMaturity(m)
+		grade := connectors.GradeConnectionMaturity(m)
 		svc.MaturityGrade = &grade
 	}
 	for _, fix := range fixes {
@@ -512,27 +512,27 @@ var dashboardFuncs = template.FuncMap{
 		}
 		return level
 	},
-	"transportBadge": func(t types.Transport) string {
+	"transportBadge": func(t connectors.Transport) string {
 		switch t {
-		case types.TransportAPI:
+		case connectors.TransportAPI:
 			return "good"
-		case types.TransportProtocol:
+		case connectors.TransportProtocol:
 			return "info"
-		case types.TransportReverseEngineered:
+		case connectors.TransportReverseEngineered:
 			return "warn"
 		default:
 			return "plain"
 		}
 	},
-	"transportLabel": func(t types.Transport) string {
+	"transportLabel": func(t connectors.Transport) string {
 		switch t {
-		case types.TransportAPI:
+		case connectors.TransportAPI:
 			return "API"
-		case types.TransportProtocol:
+		case connectors.TransportProtocol:
 			return "protocol"
-		case types.TransportReverseEngineered:
+		case connectors.TransportReverseEngineered:
 			return "reverse-engineered"
-		case types.TransportArchive:
+		case connectors.TransportArchive:
 			return "export/archive"
 		case "":
 			return "—"
@@ -540,7 +540,7 @@ var dashboardFuncs = template.FuncMap{
 			return string(t)
 		}
 	},
-	"maturityCoverage": func(g *types.MaturityGrade) string {
+	"maturityCoverage": func(g *connectors.MaturityGrade) string {
 		if g == nil {
 			return "—"
 		}
@@ -549,7 +549,7 @@ var dashboardFuncs = template.FuncMap{
 	// maturityPct is the figure the level bands on: the lower of type
 	// coverage and field coverage. Shown beside the level so a one-type
 	// connection with thin fields does not read as a puzzle.
-	"maturityPct": func(g *types.MaturityGrade) string {
+	"maturityPct": func(g *connectors.MaturityGrade) string {
 		if g == nil {
 			return "—"
 		}
@@ -559,7 +559,7 @@ var dashboardFuncs = template.FuncMap{
 		}
 		return fmt.Sprintf("%.0f%%", pct)
 	},
-	"maturityFieldCount": func(f types.KindMaturity) string {
+	"maturityFieldCount": func(f connectors.KindMaturity) string {
 		if len(f.Fields) == 0 {
 			return "—"
 		}

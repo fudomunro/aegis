@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"bytes"
 	"context"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakePhotoProvider struct {
@@ -24,8 +24,8 @@ type fakePhotoProvider struct {
 	err    error
 }
 
-func (f *fakePhotoProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakePhotoProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakePhotoProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakePhotoProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

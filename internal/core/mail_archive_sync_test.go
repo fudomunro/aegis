@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/base64"
@@ -16,7 +17,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // gmailPayloadJSON builds a minimal format=full Gmail message body.
@@ -86,7 +86,7 @@ func TestGmailSyncMailArchive(t *testing.T) {
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
-	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 2})
+	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 2})
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -98,7 +98,7 @@ func TestGmailSyncMailArchive(t *testing.T) {
 	}
 
 	// Continue from cursor — second batch finishes the archive.
-	res2, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 10})
+	res2, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("sync2: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestGmailSyncMailArchive(t *testing.T) {
 	}
 
 	// Reset cursor re-ingests from the first page.
-	res3, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 2, ResetCursor: true})
+	res3, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 2, ResetCursor: true})
 	if err != nil {
 		t.Fatalf("sync3: %v", err)
 	}
@@ -136,7 +136,7 @@ func TestGmailSyncUnauthorized(t *testing.T) {
 	srv := mailTestServer(t, a)
 	// No token in the store.
 	conn := connectors.NewGoogleGmailConnector(srv)
-	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{})
+	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{})
 	if err != kinds.ErrUnauthorized {
 		t.Fatalf("err = %v", err)
 	}
@@ -157,7 +157,7 @@ func TestGmailSyncListErrorIsFailOpen(t *testing.T) {
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
-	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 5})
+	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 5})
 	if err == nil {
 		t.Fatal("expected list error")
 	}
@@ -198,7 +198,7 @@ func TestGmailSyncSkipsBadMessage(t *testing.T) {
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
-	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 10})
+	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("sync: %v", err)
 	}
@@ -229,7 +229,7 @@ func TestMailHTTPSyncRunsIngest(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 	}
-	var res types.MailIngestResult
+	var res shared.MailIngestResult
 	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
 		t.Fatalf("json: %v", err)
 	}
@@ -280,7 +280,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
 	conn := connectors.NewGoogleGmailConnector(srv)
-	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 10})
+	res, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 10})
 	if err == nil {
 		t.Fatal("expected quota error")
 	}
@@ -301,7 +301,7 @@ func TestGmailSyncQuotaPausesWithoutSkippingPage(t *testing.T) {
 	// Next call resumes the same page and stores the rest once quota clears.
 	quotaMode = false
 	getCalls = 0
-	res2, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, types.MailIngestOptions{MaxMessages: 10})
+	res2, err := conn.IngestMail(context.Background(), mail.Sink{A: a}, shared.MailIngestOptions{MaxMessages: 10})
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}

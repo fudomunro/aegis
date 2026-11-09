@@ -3,6 +3,7 @@ package core
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -13,7 +14,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Query checklist for the mail archive and library merge (issue #77).
@@ -591,8 +591,8 @@ type sampleContactProvider struct {
 	err       error
 }
 
-func (f *sampleContactProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *sampleContactProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *sampleContactProvider) SystemInstructions(string) string { return "fake" }
 func (f *sampleContactProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -607,8 +607,8 @@ type sampleMessageProvider struct {
 	err       error
 }
 
-func (f *sampleMessageProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *sampleMessageProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *sampleMessageProvider) SystemInstructions(string) string { return "fake" }
 func (f *sampleMessageProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -623,8 +623,8 @@ type sampleTrackPlaylistProvider struct {
 	err       error
 }
 
-func (f *sampleTrackPlaylistProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *sampleTrackPlaylistProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *sampleTrackPlaylistProvider) SystemInstructions(string) string { return "fake" }
 func (f *sampleTrackPlaylistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

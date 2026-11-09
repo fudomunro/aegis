@@ -4,6 +4,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -12,8 +13,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 type fakeContactProvider struct {
@@ -21,8 +20,8 @@ type fakeContactProvider struct {
 	err      error
 }
 
-func (f *fakeContactProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (f *fakeContactProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (f *fakeContactProvider) SystemInstructions(string) string { return "fake" }
 func (f *fakeContactProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

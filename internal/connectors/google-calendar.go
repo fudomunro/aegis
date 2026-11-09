@@ -14,7 +14,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // GoogleCalendarConnector proxies the Google Calendar API and implements
@@ -53,25 +52,25 @@ func (c *GoogleCalendarConnector) GoogleCalendarUpstreamBase() string {
 }
 
 // Capabilities returns what Google Calendar kinds and operations are supported.
-func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *GoogleCalendarConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "events",
 				Description: "Calendar events — list calendars and events (metadata only; event content stays on Google Calendar)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "read_list",
 						Description: "List the user's calendar events as neutral CalendarEvent values (paginated). Permission key: events.",
 						Method:      "GET",
 						Path:        "/me/events",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "timeMin", In: "query", Type: "string", Description: "RFC3339 lower bound (default: 30 days ago)"},
 							{Name: "timeMax", In: "query", Type: "string", Description: "RFC3339 upper bound (default: 90 days ahead)"},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page (1-2500)", Default: 250},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral events: title, description, start_at, end_at, all_day, location, status, organizer, attendees, sources[]",
 							Fields:      []string{"events", "total"},
 						},
@@ -81,11 +80,11 @@ func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List the user's calendars (id, summary, access role, primary)",
 						Method:      "GET",
 						Path:        "/me/calendars",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max calendars per page (1-250)", Default: 250},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Calendars: id, summary, primary, access_role",
 							Fields:      []string{"calendars", "total"},
 						},
@@ -95,14 +94,14 @@ func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
 						Description: "List events for one calendar as neutral CalendarEvent values",
 						Method:      "GET",
 						Path:        "/calendars/{calendarId}/events",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "calendarId", In: "path", Type: "string", Description: "Calendar ID or 'primary'", Required: true},
 							{Name: "timeMin", In: "query", Type: "string", Description: "RFC3339 lower bound"},
 							{Name: "timeMax", In: "query", Type: "string", Description: "RFC3339 upper bound"},
 							{Name: "pageSize", In: "query", Type: "integer", Description: "Max items per page", Default: 250},
 							{Name: "pageToken", In: "query", Type: "string", Description: "Page token for pagination"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral events for the calendar",
 							Fields:      []string{"events", "total"},
 						},
@@ -112,10 +111,10 @@ func (c *GoogleCalendarConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Get a single calendar event by service-local ID",
 						Method:      "GET",
 						Path:        "/events/{id}",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "id", In: "path", Type: "string", Description: "Service-local event ID", Required: true},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral calendar event with service-local id and sources[]",
 							Fields:      []string{"title", "start_at", "end_at", "location", "sources"},
 						},

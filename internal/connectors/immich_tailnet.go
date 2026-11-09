@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Immich VIP-Service wizard (issue #124, folded into the onboarding seam by
@@ -29,7 +29,7 @@ const (
 // immichTailnetGuide is the copyable VIP walkthrough. Its steps, details and
 // commands are the operator contract; the admin panel renders them and must
 // not restate them.
-func immichTailnetGuide(baseURL, configuredEndpoint string) types.OnboardingGuide {
+func immichTailnetGuide(baseURL, configuredEndpoint string) shared.OnboardingGuide {
 	suffix := TailnetDNSFromBaseURL(baseURL)
 	suggested := ImmichSuggestedEndpoint(suffix)
 	if ep := strings.TrimSpace(configuredEndpoint); ep != "" {
@@ -43,7 +43,7 @@ func immichTailnetGuide(baseURL, configuredEndpoint string) types.OnboardingGuid
 	api := TailscaleAdminAPIBase
 	tailnetPath := "your-tailnet" // or "-" for the default tailnet in newer API versions
 
-	g := types.OnboardingGuide{
+	g := shared.OnboardingGuide{
 		ID:          immichGuideIDTailnet,
 		Title:       "Friendly tailnet URL (VIP Service)",
 		Short:       "Tailnet URL",
@@ -60,7 +60,7 @@ func immichTailnetGuide(baseURL, configuredEndpoint string) types.OnboardingGuid
 			"Tailscale OAuth client scopes: services, devices:core (or an owner API token).",
 			"ACL must declare the tag before the device can be tagged.",
 		},
-		Steps: []types.OnboardingGuideStep{
+		Steps: []shared.OnboardingGuideStep{
 			{
 				ID:     "acl_tag",
 				Title:  "Declare a host tag in the tailnet policy file",
@@ -161,7 +161,7 @@ func (r ImmichTailnetApplyResult) Summary() string {
 
 // immichTailnetSettings reads the operator's VIP-wizard settings.
 func (c *ImmichConnector) immichTailnetSettings() (tailnet, hostDeviceID, hostTag string) {
-	s := c.host.SetupSettings(types.SetupFlowTailscale)
+	s := c.host.SetupSettings(shared.SetupFlowTailscale)
 	tailnet = strings.TrimSpace(s["tailnet"])
 	hostDeviceID = strings.TrimSpace(s["host_device_id"])
 	hostTag = strings.TrimSpace(s["host_tag"])
@@ -174,7 +174,7 @@ func (c *ImmichConnector) immichTailnetSettings() (tailnet, hostDeviceID, hostTa
 // immichTailnetClient builds the Admin API client, or nil when the operator
 // has not pasted a key yet.
 func (c *ImmichConnector) immichTailnetClient() *TailscaleAdminClient {
-	key := strings.TrimSpace(c.host.SetupSecret(types.SetupSecretTailscaleAPIKey))
+	key := strings.TrimSpace(c.host.SetupSecret(shared.SetupSecretTailscaleAPIKey))
 	if key == "" {
 		return nil
 	}
@@ -198,13 +198,13 @@ func pickImmichHostDevice(devices []TailscaleDevice) string {
 // immichTailnetState runs the live per-step verification (issue #124).
 // Fail-open: API errors surface as state.Error and unchecked steps, never an
 // error status.
-func (c *ImmichConnector) immichTailnetState(ctx context.Context) types.OnboardingGuideState {
+func (c *ImmichConnector) immichTailnetState(ctx context.Context) shared.OnboardingGuideState {
 	guide := immichTailnetGuide(c.host.BaseURL(), c.immichConfiguredEndpoint())
-	state := types.OnboardingGuideState{
-		Steps: make([]types.OnboardingGuideStepState, 0, len(guide.Steps)),
+	state := shared.OnboardingGuideState{
+		Steps: make([]shared.OnboardingGuideStepState, 0, len(guide.Steps)),
 	}
 	for _, st := range guide.Steps {
-		state.Steps = append(state.Steps, types.OnboardingGuideStepState{
+		state.Steps = append(state.Steps, shared.OnboardingGuideStepState{
 			ID: st.ID, Title: st.Title, Command: st.Command,
 		})
 	}
@@ -224,7 +224,7 @@ func (c *ImmichConnector) immichTailnetState(ctx context.Context) types.Onboardi
 		hostID = pickImmichHostDevice(devices)
 	}
 
-	byID := map[string]*types.OnboardingGuideStepState{}
+	byID := map[string]*shared.OnboardingGuideStepState{}
 	for i := range state.Steps {
 		byID[state.Steps[i].ID] = &state.Steps[i]
 	}
@@ -238,7 +238,7 @@ func (c *ImmichConnector) immichTailnetState(ctx context.Context) types.Onboardi
 	c.tsCheckConnect(byID["connect"])
 
 	state.Checked = true
-	state.Summary = immichTailnetSummary(c.host.SetupSecret(types.SetupSecretTailscaleAPIKey) != "", state.Checked, hostTag, hostID)
+	state.Summary = immichTailnetSummary(c.host.SetupSecret(shared.SetupSecretTailscaleAPIKey) != "", state.Checked, hostTag, hostID)
 	if devErr != nil {
 		state.Error = "device list: " + devErr.Error()
 	}
@@ -264,14 +264,14 @@ func immichTailnetSummary(hasKey, checked bool, hostTag, hostID string) []string
 }
 
 // immichDeviceOptions is the host picker's live choice list.
-func immichDeviceOptions(devices []TailscaleDevice) []types.OnboardingOption {
-	out := make([]types.OnboardingOption, 0, len(devices))
+func immichDeviceOptions(devices []TailscaleDevice) []shared.OnboardingOption {
+	out := make([]shared.OnboardingOption, 0, len(devices))
 	for _, d := range devices {
 		label := d.Label()
 		if len(d.Tags) > 0 {
 			label += " — " + strings.Join(d.Tags, ", ")
 		}
-		out = append(out, types.OnboardingOption{ID: d.ID, Label: label})
+		out = append(out, shared.OnboardingOption{ID: d.ID, Label: label})
 	}
 	return out
 }
@@ -286,7 +286,7 @@ func (c *ImmichConnector) immichConfiguredEndpoint() string {
 
 // --- live checks (fail-open: an unreadable surface marks the step unchecked) ---
 
-func (c *ImmichConnector) tsCheckACLTag(ctx context.Context, cl *TailscaleAdminClient, st *types.OnboardingGuideStepState, tag string) {
+func (c *ImmichConnector) tsCheckACLTag(ctx context.Context, cl *TailscaleAdminClient, st *shared.OnboardingGuideStepState, tag string) {
 	if st == nil {
 		return
 	}
@@ -309,7 +309,7 @@ func (c *ImmichConnector) tsCheckACLTag(ctx context.Context, cl *TailscaleAdminC
 	st.Detail = fmt.Sprintf("%s missing from tagOwners — create/tag/approve all reject undeclared tags", tag)
 }
 
-func (c *ImmichConnector) tsCheckCreateService(ctx context.Context, cl *TailscaleAdminClient, st *types.OnboardingGuideStepState) {
+func (c *ImmichConnector) tsCheckCreateService(ctx context.Context, cl *TailscaleAdminClient, st *shared.OnboardingGuideStepState) {
 	if st == nil {
 		return
 	}
@@ -334,7 +334,7 @@ func (c *ImmichConnector) tsCheckCreateService(ctx context.Context, cl *Tailscal
 	st.Detail = fmt.Sprintf("service exists (ports %s)", strings.Join(svc.Ports, ", "))
 }
 
-func (c *ImmichConnector) tsCheckTagHost(ctx context.Context, cl *TailscaleAdminClient, devices []TailscaleDevice, st *types.OnboardingGuideStepState, hostID, tag string) {
+func (c *ImmichConnector) tsCheckTagHost(ctx context.Context, cl *TailscaleAdminClient, devices []TailscaleDevice, st *shared.OnboardingGuideStepState, hostID, tag string) {
 	if st == nil {
 		return
 	}
@@ -366,7 +366,7 @@ func (c *ImmichConnector) tsCheckTagHost(ctx context.Context, cl *TailscaleAdmin
 	st.Detail = "host device not found in tailnet device list"
 }
 
-func (c *ImmichConnector) tsCheckApprove(ctx context.Context, cl *TailscaleAdminClient, st *types.OnboardingGuideStepState, hostID string) {
+func (c *ImmichConnector) tsCheckApprove(ctx context.Context, cl *TailscaleAdminClient, st *shared.OnboardingGuideStepState, hostID string) {
 	if st == nil {
 		return
 	}
@@ -408,7 +408,7 @@ func (c *ImmichConnector) tsCheckApprove(ctx context.Context, cl *TailscaleAdmin
 // tsCheckServe probes whether the VIP name (or configured endpoint) is
 // actually serving Immich. The mapping is host-local, but a live
 // /api/server/ping is the acceptance signal that tailscale serve is up.
-func (c *ImmichConnector) tsCheckServe(ctx context.Context, st *types.OnboardingGuideStepState) {
+func (c *ImmichConnector) tsCheckServe(ctx context.Context, st *shared.OnboardingGuideStepState) {
 	if st == nil {
 		return
 	}
@@ -460,7 +460,7 @@ func (c *ImmichConnector) tsCheckServe(ctx context.Context, st *types.Onboarding
 	st.Detail = "VIP/Immich not answering yet — run tailscale serve on the Immich host. " + lastErr
 }
 
-func (c *ImmichConnector) tsCheckConnect(st *types.OnboardingGuideStepState) {
+func (c *ImmichConnector) tsCheckConnect(st *shared.OnboardingGuideStepState) {
 	if st == nil {
 		return
 	}
@@ -561,12 +561,12 @@ func (c *ImmichConnector) tsFixApprove(ctx context.Context, cl *TailscaleAdminCl
 // tsFixConnect is the Aegis-side half of the wizard: it returns the VIP
 // endpoint as a connection save so core — never this connector — writes it.
 // The existing API key and canonical claim are preserved.
-func (c *ImmichConnector) tsFixConnect() (types.ConnectionUpdate, error) {
+func (c *ImmichConnector) tsFixConnect() (shared.ConnectionUpdate, error) {
 	suffix := TailnetDNSFromBaseURL(c.host.BaseURL())
 	if suffix == "" {
-		return types.ConnectionUpdate{}, fmt.Errorf("cannot derive tailnet DNS name from -base-url")
+		return shared.ConnectionUpdate{}, fmt.Errorf("cannot derive tailnet DNS name from -base-url")
 	}
-	update := types.ConnectionUpdate{
+	update := shared.ConnectionUpdate{
 		Endpoint:      ImmichSuggestedEndpoint(suffix),
 		SecretHeaders: map[string]string{},
 	}
@@ -591,9 +591,9 @@ func (c *ImmichConnector) tsFixConnect() (types.ConnectionUpdate, error) {
 // Already-OK steps are skipped; unknown IDs fail that step only. Order
 // matters: the tag must be declared before create/tag/approve, because
 // Tailscale rejects undeclared tags on all three.
-func (c *ImmichConnector) immichTailnetApply(ctx context.Context, stepIDs []string, hostDeviceID, hostTag string) (ImmichTailnetApplyResult, []types.StateUpdate) {
+func (c *ImmichConnector) immichTailnetApply(ctx context.Context, stepIDs []string, hostDeviceID, hostTag string) (ImmichTailnetApplyResult, []shared.StateUpdate) {
 	res := ImmichTailnetApplyResult{}
-	var updates []types.StateUpdate
+	var updates []shared.StateUpdate
 
 	cl := c.immichTailnetClient()
 	if cl == nil {
@@ -611,7 +611,7 @@ func (c *ImmichConnector) immichTailnetApply(ctx context.Context, stepIDs []stri
 		hostTag = savedTag
 	}
 	if hostDeviceID != savedHost || hostTag != savedTag {
-		updates = append(updates, types.StateUpdate{TailscaleAdmin: &types.TailscaleAdminUpdate{
+		updates = append(updates, shared.StateUpdate{TailscaleAdmin: &shared.TailscaleAdminUpdate{
 			HostDeviceID: hostDeviceID,
 			HostTag:      hostTag,
 			Tailnet:      tailnet,
@@ -619,7 +619,7 @@ func (c *ImmichConnector) immichTailnetApply(ctx context.Context, stepIDs []stri
 	}
 
 	live := c.immichTailnetState(ctx)
-	byID := map[string]types.OnboardingGuideStepState{}
+	byID := map[string]shared.OnboardingGuideStepState{}
 	for _, st := range live.Steps {
 		byID[st.ID] = st
 	}
@@ -677,10 +677,10 @@ func (c *ImmichConnector) immichTailnetApply(ctx context.Context, stepIDs []stri
 		case "approve":
 			err = c.tsFixApprove(ctx, cl, hostDeviceID)
 		case "connect":
-			var up types.ConnectionUpdate
+			var up shared.ConnectionUpdate
 			up, err = c.tsFixConnect()
 			if err == nil {
-				updates = append(updates, types.StateUpdate{Connection: &up})
+				updates = append(updates, shared.StateUpdate{Connection: &up})
 			}
 		default:
 			err = fmt.Errorf("step %s is not auto-fixable", id)

@@ -10,7 +10,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // HandleServiceProxy is the /v1/services/{id}/{path} transport. After issue
@@ -30,7 +29,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 
 	// Canonicalize once so permission classification, connector routing, and
 	// the upstream URL cannot diverge (issue #94). Non-canonical paths 400.
-	canonical, err := types.CanonicalProxyPath(remainingPath)
+	canonical, err := CanonicalProxyPath(remainingPath)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, "invalid request path")
 		return
@@ -56,13 +55,13 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	// Issue #119: /v1/services is content/ingest transport only. Library is
 	// the data surface; provider-shaped lists, playback, search, and generic
 	// pass-through are not agent API.
-	if !types.IsAgentContentPath(remainingPath) {
+	if !IsAgentContentPath(remainingPath) {
 		logger.Warn("service path rejected: not content/ingest", "path", remainingPath)
 		s.recordAccess(AccessEvent{
 			Agent:    agentForRequest(r),
 			Surface:  MetricSurfaceService,
 			Target:   serviceID,
-			Kind:     types.KindForPath(remainingPath),
+			Kind:     KindForPath(remainingPath),
 			Decision: audit.DecisionDeny,
 			Reason:   "not_content_path",
 			Method:   r.Method,
@@ -74,7 +73,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	kind := types.KindForPath(remainingPath)
+	kind := KindForPath(remainingPath)
 	accessLevel := s.requestLevel(r, svc, kind)
 
 	if svc.Action == "block" {

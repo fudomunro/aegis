@@ -1,4 +1,4 @@
-package types
+package shared
 
 // Data-ownership confirmation (issue #165): the user's statement that Aegis
 // already holds all the data of one library kind they care about. Until a
@@ -53,7 +53,7 @@ const (
 type OwnershipRoute struct {
 	ServiceID   string          `json:"service_id"`
 	Name        string          `json:"name"`
-	Transport   Transport       `json:"transport"`
+	Transport   string          `json:"transport"`
 	Description string          `json:"description,omitempty"`
 	Action      OwnershipAction `json:"action"`
 }

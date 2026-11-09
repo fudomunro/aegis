@@ -18,7 +18,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Signal local import (issue #168). Signal has no public message API, so
@@ -1092,19 +1091,19 @@ func NewSignalConnector(store *SignalStore) *SignalConnector {
 	return &SignalConnector{store: store}
 }
 
-func (c *SignalConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *SignalConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "contacts",
 				Description: "Imported Signal contacts (names and phones from a local export)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_contacts",
 						Description: "Imported Signal contacts (permission key: contacts)",
 						Method:      "GET",
 						Path:        "/v1/library/contacts",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral contacts with sources[]",
 							Fields:      []string{"contacts", "total"},
 						},
@@ -1114,17 +1113,17 @@ func (c *SignalConnector) Capabilities() types.ServiceCapabilities {
 			{
 				Name:        "messages",
 				Description: "Imported Signal chat messages (text metadata only; attachments are never stored)",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_messages",
 						Description: "Imported Signal messages (permission key: messages)",
 						Method:      "GET",
 						Path:        "/v1/library/messages",
-						Parameters: []types.Parameter{
+						Parameters: []shared.Parameter{
 							{Name: "after", In: "query", Type: "string", Description: "On/after sent time (RFC3339 or YYYY-MM-DD)"},
 							{Name: "before", In: "query", Type: "string", Description: "Before sent time"},
 						},
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral messages with sources[]",
 							Fields:      []string{"messages", "total"},
 						},
@@ -1134,7 +1133,7 @@ func (c *SignalConnector) Capabilities() types.ServiceCapabilities {
 						Description: "Count of imported Signal contacts and messages",
 						Method:      "GET",
 						Path:        "/import/status",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Imported row counts",
 							Fields:      []string{"contacts", "messages"},
 						},

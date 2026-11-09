@@ -2,6 +2,7 @@ package core
 
 import (
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 
 	"context"
 	"encoding/json"
@@ -15,7 +16,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {
@@ -805,8 +805,8 @@ func TestNeutralYouTubeTrack_DeletedItemNoPanic(t *testing.T) {
 
 type panickingArtistProvider struct{}
 
-func (panickingArtistProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (panickingArtistProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (panickingArtistProvider) SystemInstructions(string) string { return "x" }
 func (panickingArtistProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {
@@ -872,8 +872,8 @@ func TestLibrarySystemInstructions_MentionTruncated(t *testing.T) {
 
 type truncatingTrackProvider struct{}
 
-func (truncatingTrackProvider) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{}
+func (truncatingTrackProvider) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{}
 }
 func (truncatingTrackProvider) SystemInstructions(string) string { return "x" }
 func (truncatingTrackProvider) HandleProxy(http.ResponseWriter, *http.Request, string) {

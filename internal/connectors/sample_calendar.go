@@ -7,7 +7,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // SampleCalendarConnector serves synthetic calendar events for demos and
@@ -28,19 +27,19 @@ func NewSampleCalendarConnector() *SampleCalendarConnector {
 	return &SampleCalendarConnector{}
 }
 
-func (c *SampleCalendarConnector) Capabilities() types.ServiceCapabilities {
-	return types.ServiceCapabilities{
-		Kinds: []types.KindCapability{
+func (c *SampleCalendarConnector) Capabilities() shared.ServiceCapabilities {
+	return shared.ServiceCapabilities{
+		Kinds: []shared.KindCapability{
 			{
 				Name:        "events",
 				Description: "Synthetic calendar events for demos (no upstream provider).",
-				Operations: []types.Operation{
+				Operations: []shared.Operation{
 					{
 						Name:        "list_events",
 						Description: "List synthetic events as neutral CalendarEvent values. Permission key: events.",
 						Method:      "GET",
 						Path:        "/me/events",
-						Response: types.ResponseSpec{
+						Response: shared.ResponseSpec{
 							Description: "Neutral events with near-term busy blocks for free/busy demos.",
 							Fields:      []string{"events", "total"},
 						},

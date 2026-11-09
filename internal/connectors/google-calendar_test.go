@@ -13,7 +13,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
@@ -429,14 +428,14 @@ func TestGoogleCalendarConnector_Capabilities_ReadOnlyEvents(t *testing.T) {
 	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "events" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if types.KindHasAgentWriteOp(caps, "events") {
+	if shared.KindHasAgentWriteOp(caps, "events") {
 		t.Fatal("calendar events must not advertise agent write ops in this phase")
 	}
-	if !types.KindHasWriteOp(caps, "events") {
+	if !shared.KindHasWriteOp(caps, "events") {
 		// Still no mutating ops at all — proxy write is blocked by connector capability.
 	}
 	for _, op := range caps.Kinds[0].Operations {
-		if types.IsMutatingMethod(op.Method) {
+		if shared.IsMutatingMethod(op.Method) {
 			t.Fatalf("unexpected mutating op: %+v", op)
 		}
 	}

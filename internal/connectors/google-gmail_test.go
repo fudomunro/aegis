@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestGoogleGmailConnector_ListMessages_MockAPI(t *testing.T) {
@@ -395,11 +395,11 @@ func TestGoogleGmailConnector_Capabilities_ReadOnlyMessages(t *testing.T) {
 	if len(caps.Kinds) != 1 || caps.Kinds[0].Name != "messages" {
 		t.Fatalf("caps = %+v", caps)
 	}
-	if types.KindHasAgentWriteOp(caps, "messages") {
+	if shared.KindHasAgentWriteOp(caps, "messages") {
 		t.Fatal("messages must not advertise agent write ops in this phase")
 	}
 	for _, op := range caps.Kinds[0].Operations {
-		if types.IsMutatingMethod(op.Method) {
+		if shared.IsMutatingMethod(op.Method) {
 			t.Fatalf("unexpected mutating op: %+v", op)
 		}
 	}

@@ -16,7 +16,7 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // mailRunnerServer wires a server with the mail archive, a mocked Gmail
@@ -321,7 +321,7 @@ func TestMailSyncRouteAndRunnerShareOnePath(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("route status = %d body=%s", w.Code, w.Body.String())
 	}
-	var routeResult types.MailIngestResult
+	var routeResult shared.MailIngestResult
 	if err := json.Unmarshal(w.Body.Bytes(), &routeResult); err != nil {
 		t.Fatalf("decode: %v", err)
 	}

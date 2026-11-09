@@ -1,5 +1,5 @@
 // Package connectors hosts named-service adapters (issue #15). Connectors
-// depend on Host + internal/types + internal/core/policy only — never on
+// depend on Host + internal/kinds + internal/core/policy only — never on
 // package main / *Server.
 package connectors
 
@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/types"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // ServiceInfo is the configured surface a connector may read. Narrower than
@@ -59,11 +59,11 @@ type Host interface {
 	// single-owner conflict copy.
 	CanonicalOwner(kind string) string
 	// SetupSecret returns a setup-time secret by name (e.g.
-	// types.SetupSecretTailscaleAPIKey), or "" when unset. Values reach only
+	// shared.SetupSecretTailscaleAPIKey), or "" when unset. Values reach only
 	// connector verify/apply actions and are never included in responses.
 	SetupSecret(name string) string
 	// SetupSettings returns the non-secret settings recorded for a named
-	// setup flow (e.g. types.SetupFlowTailscale → tailnet, host device,
+	// setup flow (e.g. shared.SetupFlowTailscale → tailnet, host device,
 	// host tag). Empty when the flow has none.
 	SetupSettings(name string) map[string]string
 }
@@ -72,7 +72,7 @@ type Host interface {
 // intelligent proxying beyond simple request forwarding.
 type ServiceConnector interface {
 	// Capabilities returns what kinds and operations this connector supports.
-	Capabilities() types.ServiceCapabilities
+	Capabilities() shared.ServiceCapabilities
 	// SystemInstructions returns the system message for agents referencing this service.
 	SystemInstructions(baseURL string) string
 	// HandleProxy handles a proxied request for this service.
@@ -88,16 +88,16 @@ type ServiceConnector interface {
 //
 // The split is the maturity catalog's (#247): declare, don't render. A
 // connector never ships HTML or JS, and never writes Aegis tokens or config —
-// save/apply verbs return types.StateUpdate values that core alone persists.
+// save/apply verbs return shared.StateUpdate values that core alone persists.
 type Onboarder interface {
 	// Onboarding returns the declared contract: fields, copyable guidance,
 	// and the verbs this flow runs.
-	Onboarding() types.OnboardingSpec
+	Onboarding() shared.OnboardingSpec
 	// OnboardingStatus derives the live view. Read-only and fail-open: a
 	// broken provider reports failed rows and hints, never an error page.
-	OnboardingStatus(ctx context.Context) types.OnboardingStatus
+	OnboardingStatus(ctx context.Context) shared.OnboardingStatus
 	// OnboardingRun executes one declared verb. Probe verbs are read-only;
 	// save/apply verbs return StateUpdates for core to persist and may mutate
 	// external systems.
-	OnboardingRun(ctx context.Context, action string, in types.OnboardingInput) (types.OnboardingResult, error)
+	OnboardingRun(ctx context.Context, action string, in shared.OnboardingInput) (shared.OnboardingResult, error)
 }
