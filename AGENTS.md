@@ -188,8 +188,8 @@ Takeout export walk are the worked examples.
 
 - The source writes through core's `MailSink` (store, cursor round-trip,
   ingest-private meta) and never sees the archive type or its SQL. Core
-  owns the archive store and `/v1/mail`; the ingest owns the walk and the
-  provider semantics.
+  owns the archive store and the library/admin mail surfaces; the ingest
+  owns the walk and the provider semantics.
 - Source grouping and canonical-ness are **declared, never branched on**:
   `MailSource{ServiceID, Parent, Canonical}` beside the ingest, display
   names in the `serviceNames` registry, freshness through
@@ -215,7 +215,7 @@ user_types.json, user-types/, service_connections.json, copy_ledger.db, mail-arc
 search-index.db, quicken.db, timeline.db, signal.db, audit_log.db, maintenance/, logs/aegis.log
 ```
 
-Path flags stay explicit overrides. Empty `-mail-archive` disables `/v1/mail`;
+Path flags stay explicit overrides. Empty `-mail-archive` disables the mail archive;
 empty `-copy-ledger` disables the copy ledger; empty `-log-file` disables file
 logging. Startup logs the resolved directory and `/v1/admin/summary` exposes
 `runtime.data_dir`. Do not reintroduce cwd defaults for these files.

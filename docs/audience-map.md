@@ -63,7 +63,6 @@ the shared word “agent”.
 | `POST /v1/pre-request` | Aperture (machine) | Runtime LLM agent (via injected text), Human ops (hook-health) | `allow`/`block`/`modify` + `message`. Fail-open on parse errors. |
 | `/v1/library/{kind}` | Runtime LLM agent | Third-party apps (scoped), admin Library tab | Neutral fields (`sources[]`, `canonical`, `truncated`, `entity_id`, `match`). Actionable `EmptyMsg`/`DenyMsg`/`FailMsg`. |
 | `/v1/services/{id}/…` | Runtime LLM agent (content/ingest) | Human ops (imports) | Boundary errors: “content/ingest only”. |
-| `/v1/mail/*` | Runtime LLM agent (search) | Human ops (sync, Takeout) | Archive disabled / not found / sync messages. |
 | `/v1/auth/*`, `/v1/apps/*` | End user (browser), Third-party app | Human ops | Short OAuth machine strings; human success pages. |
 | `/v1/admin/*` | Admin UI | Human ops curl, Security auditor | Diagnostic + prescriptive `fix` strings (hook-health is best-in-class). |
 | `/healthz`, `/readyz`, `/metrics` | Supervisors, Ops/Prometheus | — | Deliberately free of config detail; metrics never label agent identities. |

@@ -509,9 +509,10 @@ Job types today:
 | `repair` | Re-places a copy that freshness marked stale or missing |
 
 Enqueue is idempotent on `(kind, job_type, service, entity_key)`, so a
-repeated request does not stack duplicate work. `POST /v1/mail/sync` and the
-admin mail-sync routes run the same ingest implementation as the queue and
-return the same bounded result, so the two surfaces cannot drift apart.
+repeated request does not stack duplicate work. `POST /v1/admin/mail/sync`
+and `POST /v1/admin/mail/import` run the same ingest implementation as the
+queue and return the same bounded result, so the two surfaces cannot drift
+apart.
 
 ### Mirror and repair jobs
 
@@ -675,7 +676,7 @@ An explicit flag always wins:
 | `-link-file` | `entity_links.json` | User-confirmed entity links |
 | `-copy-ledger` | `copy_ledger.db` | Empty string (explicitly set) disables the copy ledger |
 | `-sync-jobs` | the copy-ledger path | Sync job queue; empty (explicitly set) disables the sync worker |
-| `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables `/v1/mail` |
+| `-mail-archive` | `mail-archive.db` | Empty string (explicitly set) disables the local mail archive source |
 | `-search-index` | `search-index.db` | Empty string (explicitly set) disables `q=` search on `/v1/library/{kind}` |
 | `-quicken-store` | `quicken.db` | Empty string (explicitly set) disables the Quicken import source |
 | `-timeline-store` | `timeline.db` | Empty string (explicitly set) disables the Google Timeline import source |
@@ -722,7 +723,7 @@ directory or keep passing the explicit path flags.
 | `-sync-jobs` | the `-copy-ledger` path | Sync job queue path (co-located with the copy ledger by default); empty disables |
 | `-sync-workers` | `2` | Sync worker pool size; `0` disables the worker |
 | `-sync-service-concurrency` | `1` per service | Per-service sync concurrency caps, e.g. `spotify=1,youtube-music=2` |
-| `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables `/v1/mail` |
+| `-mail-archive` | `<data-dir>/mail-archive.db` | Mail archive path; empty disables the local mail archive source |
 | `-import-takeout` | | Read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit |
 | `-import-takeout-batch` | `20000` | Max messages per `-import-takeout` call (repeat runs continue) |
 | `-search-index` | `<data-dir>/search-index.db` | Library search index path; empty disables `q=` search |

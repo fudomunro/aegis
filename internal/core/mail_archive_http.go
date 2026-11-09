@@ -4,41 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // mailPermType is the permission key for the local mail archive surface.
 // It shares the messages kind so admin already has a control for it.
 const mailPermType = "messages"
-
-// handleMailRoutes dispatches /v1/mail/* under AuthMiddleware (registered in main).
-func (s *Server) handleMailRoutes(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/v1/mail")
-	if path == "" {
-		path = "/"
-	}
-	switch {
-	case path == "/" || path == "":
-		shared.WriteJSONError(w, http.StatusNotFound, "unknown mail archive route")
-	case path == "/search" || path == "/search/":
-		s.HandleMailSearch(w, r)
-	case path == "/status" || path == "/status/":
-		s.HandleMailStatus(w, r)
-	case path == "/sync" || path == "/sync/":
-		s.HandleMailSync(w, r)
-	case strings.HasPrefix(path, "/messages/"):
-		s.HandleMailMessage(w, r, strings.TrimPrefix(path, "/messages/"))
-	default:
-		shared.WriteJSONError(w, http.StatusNotFound, "unknown mail archive route")
-	}
-}
 
 func (s *Server) requireMailArchive(w http.ResponseWriter) *mail.Archive {
 	if s.mail == nil {
@@ -65,141 +41,8 @@ func (s *Server) mailReadableFor(r *http.Request) bool {
 	return s.mailReadable()
 }
 
-// HandleMailStatus reports archive health: GET /v1/mail/status
-func (s *Server) HandleMailStatus(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if !s.mailReadableFor(r) {
-		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-		return
-	}
-	a := s.requireMailArchive(w)
-	if a == nil {
-		return
-	}
-	st, err := a.Status()
-	if err != nil {
-		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to read mail archive status")
-		return
-	}
-	writeMailJSON(w, st)
-}
-
-// HandleMailSearch runs FTS + filters: GET /v1/mail/search
-//
-// Query params: q, from, to (addresses), after, before (time bounds),
-// label (repeatable), limit, cursor (preferred) or offset (admin UI),
-// sort (asc|desc, default desc), include_body (1 to fill Message.body).
-// from/to are sender/recipient addresses only — not time filters (issue #185).
-func (s *Server) HandleMailSearch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if !s.mailReadableFor(r) {
-		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-		return
-	}
-	a := s.requireMailArchive(w)
-	if a == nil {
-		return
-	}
-	q := r.URL.Query()
-	limit := 0
-	offset := 0
-	if v := strings.TrimSpace(q.Get("limit")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			limit = n
-		}
-	}
-	// Prefer opaque cursor (library contract); keep offset for admin UI.
-	if v := strings.TrimSpace(q.Get("cursor")); v != "" {
-		n, err := kinds.DecodeCursor(v)
-		if err != nil {
-			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		offset = n
-	} else if v := strings.TrimSpace(q.Get("offset")); v != "" {
-		if n, err := strconv.Atoi(v); err == nil {
-			offset = n
-		}
-	}
-	withBody := q.Get("include_body") == "1" || strings.EqualFold(q.Get("include_body"), "true")
-	search := mail.SearchQuery{
-		Q:        q.Get("q"),
-		From:     q.Get("from"),
-		To:       q.Get("to"),
-		After:    q.Get("after"),
-		Before:   q.Get("before"),
-		Labels:   q["label"],
-		Limit:    limit,
-		Offset:   offset,
-		WithBody: withBody,
-		Sort:     q.Get("sort"),
-		Dataset:  scopes.Dataset(r),
-	}
-	resp, err := a.Search(search)
-	if err != nil {
-		shared.WriteJSONError(w, http.StatusInternalServerError, "mail archive search failed")
-		return
-	}
-	writeMailJSON(w, resp)
-}
-
-// HandleMailMessage fetches one archived message:
-//
-//	GET /v1/mail/messages/{service}/{id}           — neutral Message (body included)
-//	GET /v1/mail/messages/{service}/{id}/raw       — gzip-decoded provider payload JSON
-func (s *Server) HandleMailMessage(w http.ResponseWriter, r *http.Request, rest string) {
-	if r.Method != http.MethodGet {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if !s.mailReadableFor(r) {
-		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-		return
-	}
-	a := s.requireMailArchive(w)
-	if a == nil {
-		return
-	}
-	rest = strings.Trim(rest, "/")
-	parts := strings.Split(rest, "/")
-	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
-		shared.WriteJSONError(w, http.StatusNotFound, "expected /v1/mail/messages/{service}/{id}")
-		return
-	}
-	service, id := parts[0], parts[1]
-	wantRaw := len(parts) >= 3 && parts[2] == "raw"
-
-	rec, err := a.Get(service, id)
-	if err != nil {
-		shared.WriteJSONError(w, http.StatusNotFound, "message not found in mail archive")
-		return
-	}
-	// Data-scope isolation: a partitioned principal cannot fetch rows from
-	// another dataset even with a direct id (docs/data-scopes.md).
-	if ds := scopes.Dataset(r); ds != "" && rec.Dataset != ds {
-		shared.WriteJSONError(w, http.StatusNotFound, "message not found in mail archive")
-		return
-	}
-	if wantRaw {
-		payload, err := rec.Payload()
-		if err != nil {
-			shared.WriteJSONError(w, http.StatusInternalServerError, "failed to decompress archived payload")
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(payload)
-		return
-	}
-	writeMailJSON(w, rec.Message())
-}
-
-// MailSyncRequest is the body for POST /v1/mail/sync.
+// MailSyncRequest is the body for admin mail ingest (issue #311: agent
+// retrieval lives on /v1/library/messages; ingest stays admin).
 type MailSyncRequest struct {
 	// Service to ingest. Empty defaults to google-gmail when configured.
 	// "google-takeout" syncs the read-only Takeout export path.
@@ -215,23 +58,8 @@ type MailSyncRequest struct {
 	ResetCursor bool `json:"reset_cursor,omitempty"`
 }
 
-// HandleMailSync ingests a bounded batch into the archive: POST /v1/mail/sync
-//
-// Resumable: the page cursor is stored in the archive. Repeat until done=true.
-func (s *Server) HandleMailSync(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if !s.mailReadableFor(r) {
-		shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-		return
-	}
-	s.handleMailSyncRequest(w, r, true)
-}
-
 // HandleAdminMailStatus is the admin UI status panel: GET /v1/admin/mail/status
-// Skips the agent messages permission gate — the operator owns the archive.
+// The operator owns the archive; agent-facing status retired with /v1/mail.
 func (s *Server) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
@@ -250,16 +78,16 @@ func (s *Server) HandleAdminMailStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // HandleAdminMailSync is the admin UI ingest control: POST /v1/admin/mail/sync
-// Same body and resumable semantics as /v1/mail/sync, without the agent gate.
+// Resumable: the page cursor is stored in the archive. Repeat until done=true.
 func (s *Server) HandleAdminMailSync(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
 		return
 	}
-	s.handleMailSyncRequest(w, r, false)
+	s.handleMailSyncRequest(w, r)
 }
 
-func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, requireAgentMessagesRead bool) {
+func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request) {
 	var req MailSyncRequest
 	if r.Body != nil {
 		dec := json.NewDecoder(r.Body)
@@ -280,13 +108,13 @@ func (s *Server) handleMailSyncRequest(w http.ResponseWriter, r *http.Request, r
 	if req.Service == "" {
 		req.Service = connectors.GoogleGmailServiceID
 	}
-	s.handleMailSyncPayload(w, r, req, requireAgentMessagesRead)
+	s.handleMailSyncPayload(w, r, req)
 }
 
 // handleMailSyncPayload runs one already-decoded sync request so callers
 // that own their decode (the admin import route) cannot drift from the
 // shared route mechanics (issue #227).
-func (s *Server) handleMailSyncPayload(w http.ResponseWriter, r *http.Request, req MailSyncRequest, requireAgentMessagesRead bool) {
+func (s *Server) handleMailSyncPayload(w http.ResponseWriter, r *http.Request, req MailSyncRequest) {
 	if s.requireMailArchive(w) == nil {
 		return
 	}
@@ -301,20 +129,6 @@ func (s *Server) handleMailSyncPayload(w http.ResponseWriter, r *http.Request, r
 	if _, live := s.connectors[req.Service]; live {
 		if svc == nil || svc.Action == "block" {
 			shared.WriteJSONError(w, http.StatusForbidden, "service blocked")
-			return
-		}
-	}
-	// Admin sync is operator-owned; only the agent surface honors messages=read.
-	// Ingest-only sync locations (the Takeout export) have no config entry —
-	// agent reads then need messages read on some message-capable service.
-	if requireAgentMessagesRead {
-		if svc != nil {
-			if !s.requestPermissions(r, svc).AllowsRead(mailPermType) {
-				shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
-				return
-			}
-		} else if !s.mailReadableFor(r) {
-			shared.WriteJSONError(w, http.StatusForbidden, "denied: data grant for agent access to messages is not allowed")
 			return
 		}
 	}
@@ -368,7 +182,7 @@ func (s *Server) HandleAdminMailImport(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	req.Service = connectors.TakeoutServiceID
-	s.handleMailSyncPayload(w, r, req, false)
+	s.handleMailSyncPayload(w, r, req)
 }
 
 func writeMailJSON(w http.ResponseWriter, v any) {
@@ -379,7 +193,8 @@ func writeMailJSON(w http.ResponseWriter, v any) {
 }
 
 // mailArchiveHints returns pre-request instruction text when the user wants
-// local archive search rather than a live provider listing.
+// local archive search rather than a live provider listing (issue #311: one
+// retrieval surface, the library API).
 func (s *Server) mailArchiveHints(r *http.Request, msg string) []string {
 	if s.mail == nil || !s.mailReadableFor(r) {
 		return nil
@@ -389,14 +204,11 @@ func (s *Server) mailArchiveHints(r *http.Request, msg string) []string {
 	}
 	root := strings.TrimRight(s.baseURL, "/")
 	return []string{`The user wants the local mail archive (full history search). Prefer:
-GET ` + root + `/v1/mail/search?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&limit=50&sort=desc
-GET ` + root + `/v1/mail/search?sort=asc&limit=1 — oldest archived message(s); use sort=asc for earliest/first/oldest questions
-GET ` + root + `/v1/mail/messages/{service}/{id} — one archived message with body
-GET ` + root + `/v1/mail/messages/{service}/{id}/raw — provider payload JSON
-GET ` + root + `/v1/mail/status — archive size and sync cursor
-POST ` + root + `/v1/mail/sync — ingest more mail (body: {"max_messages":200})
+GET ` + root + `/v1/library/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&limit=50&sort=desc
+GET ` + root + `/v1/library/messages?sort=asc&limit=1 — oldest archived message(s); use sort=asc for earliest/first/oldest questions
+GET ` + root + `/v1/library/messages/{service}/{id} — one archived message with body
 Default sort is newest-first (desc). For "oldest", "earliest", or "first" message questions use sort=asc (and limit=1 when only one answer is needed).
-All ingested sources form one mail collection: search results merge on RFC Message-ID into multi-source entries. The same collection overview is at ` + root + `/v1/library/messages; use /v1/mail/search for full-history queries. Live provider listing is only needed for brand-new mail that is not yet synced.`}
+All ingested sources form one mail collection: results merge on RFC Message-ID into multi-source entries. Live provider rows and archive rows are the same collection — the local archive is a source of ` + root + `/v1/library/messages alongside live services, and full-history queries cover both.`}
 }
 
 // mentionsMailArchive detects archive/history-oriented phrasing.

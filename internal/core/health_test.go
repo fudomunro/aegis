@@ -123,7 +123,6 @@ func TestAuditRouteFamily(t *testing.T) {
 		{"/v1/admin/summary", "admin"},
 		{"/v1/library/tracks", "library"},
 		{"/v1/services/spotify/me", "service"},
-		{"/v1/mail/search", "mail"},
 		{"/v1/auth/spotify/login", "auth"},
 		{"/v1/apps/token", "apps"},
 		{"/healthz", "observability"},

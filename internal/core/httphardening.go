@@ -21,8 +21,6 @@ const (
 	maxProxyBodyBytes = 16 << 20 // 16 MiB
 	// maxAdminBodyBytes covers admin JSON (permissions, hook-health paste, mirror).
 	maxAdminBodyBytes = 4 << 20 // 4 MiB
-	// maxMailBodyBytes covers mail import / sync control bodies.
-	maxMailBodyBytes = 1 << 20 // 1 MiB
 )
 
 // withBodyLimit wraps r.Body with http.MaxBytesReader so oversized inbound

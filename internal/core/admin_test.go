@@ -328,15 +328,6 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 	if res.Stored != 1 {
 		t.Fatalf("res = %+v", res)
 	}
-
-	// Agent /v1/mail/sync still enforces messages read.
-	req = httptest.NewRequest("POST", "/v1/mail/sync", strings.NewReader(`{"max_messages":1}`))
-	req.Header.Set("X-Api-Key", "test-key")
-	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleMailSync)(w, req)
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("agent sync with messages=none = %d", w.Code)
-	}
 }
 
 func TestHandleAdminMailDisabled(t *testing.T) {

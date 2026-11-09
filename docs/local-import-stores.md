@@ -105,7 +105,7 @@ already have.
 The mail archive is the clearest service+store pair (Gmail is canonical;
 the mbox archive is the companion input path and search mirror), which is
 exactly why it is not a simple third import store: it has a different
-lifecycle (continuous mirror + FTS + `/v1/mail`), not a one-shot import.
+lifecycle (continuous mirror + FTS + the messages library source), not a one-shot import.
 That carve-out is resolved by `docs/mail-ingest.md` (issue #286, landed):
 the archive stays core-owned — sibling to `copy_ledger.db`, not to the
 Quicken importer — while the Gmail+Takeout pair moved into

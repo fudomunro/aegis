@@ -317,7 +317,7 @@ func TestMailSyncRouteAndRunnerShareOnePath(t *testing.T) {
 	srv1 := mailTestServer(t, a1)
 	srv1.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	srv1.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "tok", Expiry: time.Now().Add(time.Hour)})
-	w := doMailReq(t, srv1, http.MethodPost, "/v1/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
+	w := doAdminMailReq(t, srv1, http.MethodPost, "/v1/admin/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("route status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -369,7 +369,7 @@ func TestMailSyncRoute_KeepsNotImplementedContract(t *testing.T) {
 		ID: "dummy", Name: "Dummy", Action: "inject",
 		GrantLimits: policy.Permissions{"messages": "read"},
 	})
-	w := doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"service":"dummy"}`)
+	w := doAdminMailReq(t, srv, http.MethodPost, "/v1/admin/mail/sync", `{"service":"dummy"}`)
 	if w.Code != http.StatusNotImplemented {
 		t.Fatalf("code = %d, want 501 (the runner's terminal error must not become a 200)", w.Code)
 	}

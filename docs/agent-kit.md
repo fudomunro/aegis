@@ -29,14 +29,13 @@ knowledge of the story — only from what the API returns.
 First command to run now (copy exactly):
 
   curl -sS -H "X-Api-Key: <persona key>" \
-    "<demo base URL>/v1/mail/search?sort=asc&limit=3"
+    "<demo base URL>/v1/library/messages?sort=asc&limit=3"
 
 Account: <persona label>. <blurb>
 Synthetic demo data. Read-only.
 
 Endpoints (send X-Api-Key on every request):
-  GET /v1/mail/search?q=&from=&to=&after=&before=&sort=asc|desc&limit=
-  GET /v1/library/messages
+  GET /v1/library/messages?q=&from=&to=&after=&before=&sort=asc|desc&limit=
   GET /v1/library/contacts
   GET /v1/library/events
   GET /v1/library/places

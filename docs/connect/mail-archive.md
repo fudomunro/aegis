@@ -1,12 +1,18 @@
-# Local mail archive (`/v1/mail`)
+# Local mail archive
 
 For full-history agent queries, Aegis can keep a **local compressed
 archive** (SQLite FTS5 + gzip provider payloads). This is a query mirror, not
 a new home copy — Gmail remains canonical for the mailbox. The
 archive is another **source of the user mail collection**: Gmail archive sync
 and Google Takeout import both land here, merge on RFC Message-ID into
-multi-source `sources[]`, and feed `/v1/library/messages`.
+multi-source `sources[]`, and feed `GET /v1/library/messages`.
 Optimize for Aegis/agents: search and fetch by id without paging Gmail every turn.
+
+Mail retrieval is **one surface — the library API**. The archive is a
+collection source beside live providers, not a separate agent API: filtered
+queries walk the full archive, results merge with live rows into the same
+identity space the list endpoint serves, and fetch-by-id returns that merged
+entry with `body`.
 
 ```bash
 ./aegis... -mail-archive mail-archive.db # default under <data-dir>; empty disables
@@ -14,11 +20,19 @@ Optimize for Aegis/agents: search and fetch by id without paging Gmail every tur
 
 | Endpoint | Purpose |
 |----------|---------|
-| `GET /v1/mail/search` | FTS + filters: `q`, `from`/`to` (addresses), `after`/`before`, `label`, `limit`, `cursor` (or `offset`), `sort=asc\|desc`, `include_body` |
-| `GET /v1/mail/messages/{service}/{id}` | Neutral `Message` with `body` from the archive |
-| `GET /v1/mail/messages/{service}/{id}/raw` | Decompressed provider payload JSON |
-| `GET /v1/mail/status` | Message counts, last sync time/error, page cursors |
-| `POST /v1/mail/sync` | Ingest a bounded batch; body `{"service","max_messages","query","reset_cursor"}` |
+| `GET /v1/library/messages` | Merged collection: live providers + archive rows. Query filters: `q`, `from`/`to` (addresses), `after`/`before`, `label`, `sort=asc\|desc`, `include_body`, `limit`, `cursor` |
+| `GET /v1/library/messages/{service}/{id}` | One message as the merged identity entry, `body` included (archived copy); live rows the collection shows are fetchable too |
+| `GET /v1/admin/mail/status` | Message counts, last sync time/error, page cursors (admin) |
+| `POST /v1/admin/mail/sync` | Ingest a bounded batch; body `{"service","max_messages","query","reset_cursor"}` (admin) |
+
+Full-history filters behave like the archive always has: `from`/`to` match
+sender/recipient **addresses** (never time bounds), `after`/`before` bound
+`sent_at` (inclusive lower / exclusive upper; date bounds open a day window),
+`label` is repeatable, `sort=asc` answers oldest/first questions, and
+`include_body=1` fills `body` (lists are metadata-only otherwise). Without
+query parameters the endpoint returns the capped collection **overview**;
+any explicit filter or `sort` walks the full history with `limit`/`cursor`
+paging.
 
 Sync is **resumable**: each call stores up to `max_messages` (default 200) and
 persists the Gmail page token. Repeat until `"done": true`. Default query is
@@ -29,16 +43,20 @@ per-service page cursors, **Sync mail** (runs batches until complete or the
 client batch cap), and **Restart sync**. Admin routes
 `GET /v1/admin/mail/status` and `POST /v1/admin/mail/sync` skip the agent
 messages gate so the operator can maintain the archive even when agents are
-restricted.
+restricted. Agent-facing ingest and status retired with `/v1/mail` — ingest
+and status are operator surfaces.
 
 ```bash
 ## First fill (continue until done) — admin credential
-curl -X POST "$AEGIS/v1/mail/sync" -H "Authorization: Bearer $ADMIN_KEY" \
+curl -X POST "$AEGIS/v1/admin/mail/sync" -H "Authorization: Bearer $ADMIN_KEY" \
  -d '{"max_messages":200}'
 
 ## Search history — agent or admin
-curl "$AEGIS/v1/mail/search?q=invoice%20from:ada&after=2024-01-01&include_body=1" \
+curl "$AEGIS/v1/library/messages?q=invoice&from=ada&after=2024-01-01&include_body=1" \
  -H "Authorization: Bearer $KEY"
+
+## Oldest message
+curl "$AEGIS/v1/library/messages?sort=asc&limit=1" -H "Authorization: Bearer $KEY"
 ```
 
 `mail-archive.db` is local state (like `tokens.json`) and lives under the
@@ -78,4 +96,3 @@ but no connector is registered for them yet. Personal SMS history has no
 simple OAuth surface; WhatsApp consumer history is not available through a
 Aegis-compatible named API. Follow-ups can plug in connectors that
 implement `MessageProvider` without changing the library contract.
-

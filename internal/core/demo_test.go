@@ -101,7 +101,7 @@ func TestDemoLockdown_BlocksMutationsAndOAuth(t *testing.T) {
 	}{
 		{http.MethodGet, "/v1/library/contacts", http.StatusOK},
 		{http.MethodGet, "/v1/admin/summary", http.StatusOK},
-		{http.MethodPost, "/v1/mail/sync", http.StatusForbidden},
+		{http.MethodPost, "/v1/admin/mail/sync", http.StatusForbidden},
 		{http.MethodPost, "/v1/library/mirror", http.StatusForbidden},
 		{http.MethodPost, "/v1/admin/data-grants", http.StatusForbidden},
 		{http.MethodGet, "/v1/auth/spotify/login", http.StatusForbidden},

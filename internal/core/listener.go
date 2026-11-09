@@ -79,9 +79,10 @@ func apiAllowlistGate(next http.Handler) http.Handler {
 
 // apiRouteAllowed is the API listener allowlist (docs/external-access.md
 // "Model"). Everything else answers 404 there and is served only by the
-// admin listener. Library and mail entries are read-only: writes (mirror,
-// photo share, entity-link mutations, mail sync) stay admin-side even
-// though they share the /v1/library and /v1/mail prefixes.
+// admin listener. Library entries are read-only: writes (mirror, photo
+// share, entity-link mutations) stay admin-side even though they share the
+// /v1/library prefix. Mail retrieval is part of the library surface (issue
+// #311); mail ingest stays admin-side.
 func apiRouteAllowed(method, path string) bool {
 	switch {
 	case path == "/healthz" || path == "/readyz":
@@ -98,11 +99,6 @@ func apiRouteAllowed(method, path string) bool {
 		// inside the proxy.
 		return method == http.MethodGet || method == http.MethodHead ||
 			method == http.MethodPost
-	case strings.HasPrefix(path, "/v1/mail/"):
-		// Agent mail routes only; /v1/mail/sync mutates the archive and
-		// stays admin-side.
-		return !strings.HasPrefix(path, "/v1/mail/sync") &&
-			(method == http.MethodGet || method == http.MethodHead)
 	case strings.HasPrefix(path, "/v1/library/"):
 		// Library reads. Writes (mirror, photo share, entity-link
 		// mutations) are admin-side by method. Merge review and the copy

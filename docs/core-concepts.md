@@ -283,7 +283,7 @@ After the overlap call-outs above, the stable concepts.
 | **Metrics / health** | `/metrics` (Prometheus), `/healthz`, `/readyz`. | `metrics.go`, `metrics_export.go`, `health.go` |
 | **Data directory** | One OS app-data root for all mutable state (issue #74). | `datadir.go` |
 | **Admin map / flow** | UI topology of services → types → agents. | `flow.go`, `web/admin.html` |
-| **Mail archive** | Local FTS store for `/v1/mail/*` history. | `mail_archive.go` |
+| **Mail archive** | Local FTS store behind the messages library source (full-history search and fetch). | `core/mail/archive.go` |
 | **Places / visits / trips** | Location history model with city/read/precise redaction (issue #142). | `internal/kinds/places.go`, `internal/connectors/{timeline,owntracks}.go` |
 | **PhotoSourceDiscipline** | Injected rule: photo bytes only via Aegis blob URLs, never local Photos/Immich env. | `internal/kinds/builders.go` |
 | **Write policy notice** | Injected rule: mutations go to the canonical home first; no auto-mirror. | `canonical.go` |

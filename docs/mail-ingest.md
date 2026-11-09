@@ -15,8 +15,15 @@ carve-out this resolves), **#265** (onboarding seam pattern), **#264**
 gap — first follow-up consumer, not in scope), **#16** / **#139** (canonical
 home, multi-source mail).
 Related product rules: fail-open; canonical home stays the live provider
-(#16); `/v1/mail` agent surface unchanged; Aegis does not store media
-beyond the compressed mirror; coverage floor 80%.
+(#16); mail retrieval is the library surface (`/v1/library/messages`);
+Aegis does not store media beyond the compressed mirror; coverage floor 80%.
+
+> **Update (#311):** agent mail retrieval is now one surface —
+> `GET /v1/library/messages` with full-history filters and a fetch
+> subroute. The `/v1/mail/*` retrieval routes described below retired;
+> ingest and status stayed admin (`/v1/admin/mail/*`). References to
+> `/v1/mail` in this note record the surface as it existed during the #286
+> campaign.
 
 ---
 
@@ -200,7 +207,7 @@ type MailSource struct {
 | | `internal/connectors` | `internal/core` |
 |---|---|---|
 | **Moves** | Takeout mbox/zip walk + label/header semantics + id scheme; Gmail archive paging, quota/pacing classification; `takeoutServiceID`/name; `MailIngest` implementations and `MailSource` declarations; the Takeout freshness probe | |
-| **Stays** | | `MailArchive` (FTS, search, cursors, meta KV, merge hydration, dataset), `/v1/mail` + admin mail routes, `doMailIngest` queue chaining (`mailSyncMu`, `mergeMailProgress`), `MailSink` implementation, copy-ledger snapshot stamping, checker registry, data grants |
+| **Stays** | | `MailArchive` (FTS, search, cursors, meta KV, merge hydration, dataset), admin mail routes (agent retrieval later folded into the library surface, #311), `doMailIngest` queue chaining (`mailSyncMu`, `mergeMailProgress`), `MailSink` implementation, copy-ledger snapshot stamping, checker registry, data grants |
 | **Stays** | | `run.go` flag parsing (`-mail-archive`, `-import-takeout`), `datadir.go` paths, `AuthMiddleware` perimeter |
 
 Copy-ledger stamping stays core-owned on purpose: the connector ingests,
@@ -318,10 +325,10 @@ as before.
 - [ ] Source grouping (Takeout under Gmail), display names, canonical-ness
       (#16), and freshness probes are declared beside the ingest and
       rendered/registered generically by core.
-- [ ] `/v1/mail` and `/v1/library/messages` behavior is unchanged:
-      cursors resume mid-export, fail-open holds, Gmail quota pauses
-      without skipping a page, multi-source merge on RFC Message-ID
-      intact.
+- [ ] Mail retrieval behavior is unchanged (surface: `/v1/mail` at the
+      time, `/v1/library/messages` since #311): cursors resume mid-export,
+      fail-open holds, Gmail quota pauses without skipping a page,
+      multi-source merge on RFC Message-ID intact.
 - [ ] `go vet ./...`, `go test ./... -count=1 -race`, coverage ≥ 80%,
       staticcheck clean, `go build -o aegis .`
 - [ ] AGENTS.md documents the `MailIngest` extension point; the #266

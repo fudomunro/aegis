@@ -344,7 +344,7 @@ func (w *SyncWorker) enqueueDueSchedules(now time.Time) {
 
 // RunOnce claims and executes at most one due job. Returns false when the
 // queue is empty or the store is disabled. Exposed for tests and for a
-// future synchronous façade over POST /v1/mail/sync.
+// future synchronous façade over POST /v1/admin/mail/sync.
 func (w *SyncWorker) RunOnce(ctx context.Context, owner string) bool {
 	if w == nil || w.store == nil || !w.store.Enabled() {
 		return false

@@ -120,7 +120,8 @@ func TestAPIAllowlist_AgentRoutesAllowed(t *testing.T) {
 		{"GET", "/v1/library/playlists"},
 		{"GET", "/v1/library/tracks"},
 		{"GET", "/v1/library/photos"},
-		{"GET", "/v1/mail/inbox"},
+		{"GET", "/v1/library/messages"},
+		{"GET", "/v1/library/messages/google-gmail/m1"},
 		{"GET", "/v1/services/spotify/v1/me"},
 	}
 	for _, p := range probes {

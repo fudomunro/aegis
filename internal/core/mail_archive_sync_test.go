@@ -225,7 +225,7 @@ func TestMailHTTPSyncRunsIngest(t *testing.T) {
 	srv.config.updateService(connectors.GoogleGmailServiceID, func(svc *Service) { svc.Endpoint = up.URL })
 	srv.tokens.Save(connectors.GoogleGmailServiceID, &tokens.OAuthToken{AccessToken: "access-token", Expiry: time.Now().Add(time.Hour)})
 
-	w := doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
+	w := doAdminMailReq(t, srv, http.MethodPost, "/v1/admin/mail/sync", `{"max_messages":5,"reset_cursor":true}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("code = %d body=%s", w.Code, w.Body.String())
 	}
@@ -238,7 +238,7 @@ func TestMailHTTPSyncRunsIngest(t *testing.T) {
 	}
 
 	// Invalid JSON body is a client error.
-	w = doMailReq(t, srv, http.MethodPost, "/v1/mail/sync", `{`)
+	w = doAdminMailReq(t, srv, http.MethodPost, "/v1/admin/mail/sync", `{`)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("bad json code = %d", w.Code)
 	}

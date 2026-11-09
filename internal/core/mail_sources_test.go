@@ -214,12 +214,12 @@ func TestMailSources_HasProvidersArchiveOnly(t *testing.T) {
 	if err := a.Upsert(sampleMailRecord("a1", "Archive only", "hello")); err != nil {
 		t.Fatalf("upsert: %v", err)
 	}
-	msgs, truncated, err := a.ListMessagesForLibrary(2, "")
+	resp, err := a.Search(mail.SearchQuery{Limit: 2, WithBody: true})
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
-	if len(msgs) != 1 || truncated {
-		t.Fatalf("msgs=%d truncated=%v", len(msgs), truncated)
+	if len(resp.Messages) != 1 || resp.Total != 1 {
+		t.Fatalf("msgs=%d total=%d", len(resp.Messages), resp.Total)
 	}
 }
 

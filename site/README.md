@@ -66,7 +66,7 @@ to deep:
 |------|----------|--------|-----------------|
 | Sunlight | Anniversary "Wrapped" with photos from the same weeks | Works today | `/v1/library/tracks`, `/v1/library/photos`, player data grant `none` |
 | Twilight | Free/busy calendar for a scheduling app | Works today | app data grant `events:freebusy` (#128, #131), `/v1/library/freebusy` |
-| Midnight | Timeline across inboxes and calendar | Works today | `/v1/mail/search` archive, `/v1/library/events` |
+| Midnight | Timeline across inboxes and calendar | Works today | `/v1/library/messages` archive, `/v1/library/events` |
 | Abyss | Spreadsheet / database opened column by column | Exploring (#15) | Concept only, labelled as such on the page |
 
 The **F.A.Q.** section carries the candid product Q&A (from issue #177):

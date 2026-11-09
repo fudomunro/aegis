@@ -76,8 +76,8 @@ Tailnet ──────────► │  Admin listener                   
 
 | Listener | Serves | Auth | Exposure |
 |----------|--------|------|----------|
-| **API** | **Allowlist only**: `POST /v1/pre-request`, `/v1/library/*`, `/v1/services/*`, `/v1/mail/*` (agent routes), `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | **Invite token, app token only** under external access. No ambient identity, no agent key | May be public behind TLS |
-| **Admin** | Admin tier: `/v1/admin` and `/v1/admin/*` (API + SPA shell), the admin SPA routes (`/`, `/home`, `/library`, `/services`, `/advanced`), `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, `POST /v1/mail/sync`, mirror / photo-share / entity-link writes. **Plus the agent-tier routes above**, for tailnet callers | Tailnet identity (existing admin rules) or admin API key for admin tier; tailnet identity or agent key for agent tier | Tailnet or loopback only |
+| **API** | **Allowlist only**: `POST /v1/pre-request`, `/v1/library/*`, `/v1/services/*`, `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | **Invite token, app token only** under external access. No ambient identity, no agent key | May be public behind TLS |
+| **Admin** | Admin tier: `/v1/admin` and `/v1/admin/*` (API + SPA shell), the admin SPA routes (`/`, `/home`, `/library`, `/services`, `/advanced`), `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, mail ingest (`/v1/admin/mail/*`), mirror / photo-share / entity-link writes. **Plus the agent-tier routes above**, for tailnet callers | Tailnet identity (existing admin rules) or admin API key for admin tier; tailnet identity or agent key for agent tier | Tailnet or loopback only |
 
 **The API listener route set is an allowlist, not a blocklist.** A route that
 is not listed answers **404** there and is served only by the admin listener.
@@ -271,7 +271,6 @@ server {
     location /v1/pre-request   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/library/      { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/services/     { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
-    location /v1/mail/         { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/auth/status   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/apps/token    { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
     location /v1/apps/revoke   { proxy_pass http://127.0.0.1:8080; include aegis-proxy.conf; }
