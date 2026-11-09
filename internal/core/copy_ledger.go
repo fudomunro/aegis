@@ -94,9 +94,9 @@ func (s *Server) recordPhotoShareCopy(sourceService, sourceID, targetService, po
 
 // recordTakeoutSnapshot stores/refreshes the optimistic snapshot row for a
 // Google Takeout import into the mail archive (issue #76).
-func (s *Server) recordTakeoutSnapshot(path string, scanned, stored, skipped int, done bool) {
+func (s *Server) recordTakeoutSnapshot(path string, scanned, stored, skipped int, done bool, serviceID string) {
 	if s == nil || s.copyLedger == nil {
 		return
 	}
-	s.copyLedger.RecordTakeoutSnapshot(path, scanned, stored, skipped, done)
+	s.copyLedger.RecordTakeoutSnapshot(path, scanned, stored, skipped, done, serviceID)
 }

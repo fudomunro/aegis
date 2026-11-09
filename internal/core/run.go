@@ -1002,7 +1002,7 @@ func runImportTakeoutCLI(archivePath, copyLedgerPath, takeoutPath string, batch 
 			break
 		}
 	}
-	copyLedger.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done)
+	copyLedger.RecordTakeoutSnapshot(takeoutPath, scanned, stored, skipped, done, connectors.TakeoutServiceID)
 	slog.Info("takeout import finished",
 		"path", takeoutPath,
 		"scanned", scanned,
