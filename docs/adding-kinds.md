@@ -2,8 +2,8 @@
 
 This guide is the checklist for defining a new **library kind** in
 Aegis. It extracts the patterns that already work for playlists, tracks,
-albums, artists, contacts, photos, events, and messages — so the next kind
-does not rediscover them.
+albums, artists, contacts, photos, events, messages, transactions, places,
+and documents — so the next kind does not rediscover them.
 
 Use it when you are:
 
@@ -15,12 +15,12 @@ Use it when you are:
 Related product rules live in `AGENTS.md` and `README.md`. This file is about
 **how a kind is structured**, not the full API surface.
 
-> **In transition (#312).** This checklist describes the current in-hub
-> shape (per-kind handler shims in `internal/core`). The target shape —
-> `internal/kinds/<kind>.go` plus one line in `kinds.Builtin()` — is
-> specified in AGENTS.md ("Refactor in progress (#312)"). This file gets a
-> full rewrite in the closing phase of that campaign; until then, follow it
-> for *what* to build and the refactor block for *where* it may live.
+Adding a kind touches exactly four places — **no `internal/core` edits**:
+
+1. `internal/types`: neutral model, provider interface, `BuiltinLibraryKinds` entry,
+2. `internal/kinds/<kind>.go`: the `Kind` implementation,
+3. one line in `kinds.Builtin()`,
+4. tests and fixtures.
 
 ---
 
@@ -67,7 +67,11 @@ These are non-negotiable (see `AGENTS.md`). New kinds inherit them.
    URIs, or deep links on the top-level user-facing object.
 5. **Permissions are data.** A kind is not agent-visible until the permission
    map and path classifier know its key.
-6. **Coverage floor stays.** New write paths need tests before merge
+6. **Core never names a built-in kind.** Kind-specific behavior lives in the
+   kind's file — routes, filters, redaction, stamping. The hub's
+   `kind_literal_hygiene_test.go` enforces this (its per-file allowlist may
+   only shrink).
+7. **Coverage floor stays.** New write paths need tests before merge
    (`go test` + 80% floor).
 
 ---
@@ -79,508 +83,193 @@ and people/media kinds (`internal/types/merge_contacts.go`, `merge_photos.go`,
 …) are the two templates.
 
 ```text
-internal/types/models.go     Neutral item + *Source + *List
-internal/types/merge.go      Music identity keys + Merge* algorithms
+internal/types/models.go        Neutral item + *Source + *List
 internal/types/merge_<kind>.go  Per-kind identity keys + Merge* (one file per kind)
-internal/types/providers.go  Provider interface (WidgetProvider) + ErrUnauthorized
-internal/types/kind.go       LibraryKind data helpers (already generic)
+internal/types/providers.go     Provider interface (WidgetProvider) + ErrUnauthorized
 internal/types/librarykinds.go  BuiltinLibraryKinds registry (policy flags live here)
-internal/types/pathclass.go  kindPathRules for the provider's proxy paths
-<kind>.go                    Thin handler + filters/redaction glue
-librarykind.go               kindRuntime predicates + libraryRouteHandlers
-<provider>.go                Connector: Capabilities + ListUser… + optional proxy
-canonical.go                 stamp*Canonical (if sources can be home)
-copy_ledger_stamp.go         stamp*Copies (if sources can hold tracked copies)
-sampledata.go                Deterministic fixtures + deliberate merge pairs
-tests                        Merge, aggregate, permissions, sample-data query checks
-README.md                    Agent-facing semantics for the kind
+internal/types/pathclass.go     kindPathRules for the provider's proxy paths
+internal/kinds/<kind>.go        Kind implementation: routes, predicates, Spec
+internal/kinds/stamps.go        Generic stamping over your source projection
+<provider>.go (connectors)      Capabilities + ListUser… + optional proxy
+sampledata.go                   Deterministic fixtures + deliberate merge pairs
+tests                           Merge, kind, aggregate, permissions, sample-data checks
+README.md                       Agent-facing semantics for the kind
 ```
-
-### Target package map (issue #15)
-
-The logical layers above are moving into packages. While `package main` is
-still flat, write new code so the move is a `git mv` + package rename:
-
-| Target package | Contents | Status |
-|----------------|----------|--------|
-| `internal/types` | Neutral models, identity/merge, `LibraryKind` **data**, capability shapes, path rules | **landed** |
-| `internal/core/policy` | Access levels, `DataGrant` / `Permissions` maps, effective + scope grant resolution, permissions-editor models | **landed** |
-| `internal/core` | Auth, config, tokens/OAuth, proxy/cache, permission **enforcement**, `handleLibraryAggregate`, admin, state stores | **landed** |
-| `internal/connectors` | Named services implementing `ServiceConnector` + `*Provider`, using `Host` (not `*Server`) | **landed** |
-
-Connectors take `Host` (`host.go`). Classification lives in
-`internal/types/pathclass.go`. Policy shape
-(`internal/core/policy`) is the #148 home — service `permissions` remain
-a migration override, not the primary model.
-
-You do **not** need every optional hook on day one. Ship the spine first
-(model + provider + kind + handler + tests), then add locations (#76), durable
-IDs (#4), and sample edge cases (#89) as the kind matures.
-
----
 
 ### 1. Neutral model (`internal/types/models.go`)
 
-Define three structs: the user-facing item, its per-service source, and the list
-wrapper.
+The item, its `*Source` rows, and its `*List` wrapper. Rules:
+
+- Top-level fields are provider-neutral (`Name`, `EntityID`, `Sources`).
+  Service-local identifiers live in `sources[]` (`Service`, `ID`, `URL`).
+- `*Source` carries `Canonical bool` and `Copy *CopyInfo` when the kind can
+  have a home service or tracked copies. Kinds without those concepts
+  (albums, artists) omit the fields — the generic stamping only projects
+  what exists.
+- The `*List` embeds `LibraryListMeta` (`types.MetaForPage`) so paging,
+  `truncated`, and `by_service[]` are uniform across kinds (issue #185).
+
+### 2. Identity and merge
+
+Identity keys prefer durable IDs (ISRC/UPC/MBID, `EntityID`) over
+name-only matching; name merges need a guard (duration for tracks).
+`Merge*(items)` returns merged rows with `Match` labels and combined
+`Sources`. Never name-merge without a discriminator — see the music
+merge tests for the fixture pattern (deliberate pairs that must and
+must not collapse).
+
+### 3. Registry entry (`internal/types/librarykinds.go`)
+
+One `LibraryKind` literal in `BuiltinLibraryKinds` — the single source for
+policy flags (`AppReadable`, `CanonicalAllowed`, `Search`, default access),
+agent copy (`Instructions`, `DenyMsg`, `EmptyMsg`, `FailMsg`), and keywords.
+Reserved IDs, app-readable paths, canonical keys, and access-level
+allowlists all derive from this slice; nothing copies it by hand.
+
+### 4. Kind implementation (`internal/kinds/<kind>.go`)
+
+One file per kind implementing `kinds.Kind` — see the existing files for
+templates (`tracks.go`, `events.go`, and `messages.go` show the three
+shapes: plain provider kind, subroutes, local sources).
 
 ```go
-// Widget is the user-facing widget. Service identity lives in Sources.
-type Widget struct {
-    Name     string         `json:"name"`
-    // EntityID is a durable catalog ID when a provider supplies one.
-    // Preferred cross-service identity over display-name matching (#4).
-    EntityID string         `json:"entity_id,omitempty"`
-    // Match records how multi-source identity was established.
-    // Empty on single-source items.
-    Match    string         `json:"match,omitempty"`
-    Sources  []WidgetSource `json:"sources,omitempty"`
-    Extra    map[string]any `json:"extra,omitempty"`
-}
-
-type WidgetSource struct {
-    Service     string `json:"service"`       // connector ID
-    ServiceName string `json:"service_name,omitempty"`
-    ID          string `json:"id,omitempty"`  // service-local ID
-    URL         string `json:"url,omitempty"` // deep link when available
-    // Canonical is true when this service holds the authoritative copy (#16).
-    Canonical bool `json:"canonical,omitempty"`
-    // Copy is copy-ledger metadata when this location is tracked (#76).
-    Copy  *CopyInfo      `json:"copy,omitempty"`
-    Extra map[string]any `json:"extra,omitempty"`
-}
-
-type WidgetList struct {
-    Widgets []Widget `json:"widgets"`
-    // Shared paging/status envelope (issue #185): total, synced, truncated,
-    // next_cursor, by_service.
-    LibraryListMeta
-}
-```
-
-**Conventions that matter:**
-
-| Rule | Why |
-|------|-----|
-| Top-level fields are user-facing identity only | One logical item can exist on many services |
-| `sources[]` carries service IDs, names, URLs | Agents need a way back to the real copy |
-| `EntityID` + `Match` record durable vs name matches | Merge review and agents can trust `isrc` more than `name` |
-| `Extra map[string]any` for provider quirks | Keeps the neutral shape stable |
-| List wrapper embeds `LibraryListMeta` | Shared aggregate + paging contract (`handleLibraryAggregate`, issue #185) |
-| `Truncated` is a **first-class** honesty flag | Agents must not claim a list is complete when a page cap hit |
-
-People-shaped fields (photo `people[]`, event attendees, message from/to)
-reuse `Contact` and the contact identity order — do not invent a second person
-schema.
-
----
-
-### 2. Provider interface (`internal/types/providers.go`)
-
-One method, neutral models, explicit truncation. Put the interface next to the
-other `*Provider` contracts in `internal/types/providers.go` (not in the kind
-handler file).
-
-```go
-// WidgetProvider is implemented by connectors that can return the user's
-// widgets in Aegis's neutral format.
-type WidgetProvider interface {
-    // ListUserWidgets returns neutral widgets (one WidgetSource each).
-    // Return ErrUnauthorized when no valid token is available.
-    // truncated is true when the page cap was hit with more items still upstream.
-    ListUserWidgets(ctx context.Context) (widgets []Widget, truncated bool, err error)
+type Kind interface {
+    Def() types.LibraryKind      // the registry entry
+    Routes() []Route             // agent-tier GET/HEAD routes + exposure
+    Provides(connector any) bool // provider-interface assertion
+    HasProviders(h Host) bool    // connectors + declared local sources
+    Readable(h Host) bool        // owner-tier read visibility
 }
 ```
 
-**Conventions:**
+**Routes.** Declare every agent-tier GET/HEAD route the kind owns — the
+list route at `Def().Path` and any subroutes (document text, freebusy).
+`AppReadable` on the declaration is the app-token exposure: the API-listener
+and app-token allowlists derive from these rows, so an undeclared route is
+not agent-visible and a subroute never leaks to app tokens. Writes
+(mirror, photo share) stay admin-registered in core.
 
-- Return **already-mapped** neutral values. Provider quirks stay in the connector.
-- Each item gets **one** `*Source` for the calling service.
-- `ErrUnauthorized` is the only sentinel error the aggregate pipeline special-cases
-  (it becomes `by_service[].status = "unauthorized"`).
-- `truncated=true` is success-with-partial-data, not an error. Connectors must
-  set it whenever `libraryPageCap` (or an upstream cap) left items unfetched.
-- Do not download media. Metadata + URLs only.
+**Serving.** The handler builds a `kinds.Spec[T]` and calls
+`kinds.Aggregate(host, engine, w, r, spec)` — the shared pipeline (cache,
+permission-aware fan-out, merge, paging, search-index write-behind). The
+spec wires:
 
----
+- `Targets` — `kinds.Collect` (generic over the item and provider types)
+  builds permission-filtered fetch targets; append kind-owned local sources
+  as `NamedLister{ID, Local: true, List}` (see `messages.go`).
+- `ServiceOf` / `SortKey` / `Merge` — stable pre-sort, identity key, merge.
+- `Encode` — build the `*List` from the merged items + `types.SlicePage`.
+- `MarkCanonical` / `StampCopies` — bind `kinds.Stamps(h, kind, forEach)`
+  over your source projection (`forEach*Source`, ~8 lines).
+- `Enrich` / `RedactSearch` — optional pre-merge resolution (MusicBrainz)
+  and search-path re-redaction (access-level kinds).
+- `CacheKey` — only when a second endpoint shares the dataset with a
+  different response shape (freebusy) or request filters scope the cache.
+- `Status` — `kinds.StatusHooks` for kinds with local sources: source
+  naming, sync cursors, and source-overview expansion (see `messages.go`).
 
-### 3. Registry entry (`internal/types/librarykinds.go` + `librarykind.go`)
+**Constructor deps.** Anything the kind needs beyond `Host`/`Engine` is a
+constructor argument (`kinds.Deps` for shared ones,
+`kinds.UserDefinedDeps` for packs) — store handles, resolvers, local-source
+availability. Not every cross-kind need becomes a `Host` method: the Host
+budget is "needed by at least two kinds, or by the engine".
 
-Append a **data** entry to `types.BuiltinLibraryKinds` and a matching
-**runtime** entry to `kindRuntime`. Both are required: a kind with no
-`kindRuntime` row never appears in pre-request hints (and
-`TestLibraryKinds_KindRuntimeInSync` fails).
+### 5. Provider interface (`internal/types/providers.go`)
 
-The registry is the **single source** for per-kind policy (issue #183).
-Derived lists — reserved UDT ids, app-token paths, `canonical_for` keys,
-access-level allowlists — are computed from it. Do **not** copy the kind
-list into `ReservedKindKeys`, `canonicalKindIDs`, `appAllowedPrefixes`,
-or `serviceProvidedTypes`.
+`WidgetProvider` with one `ListUser…(ctx) ([]T, bool, error)` method (the
+bool is `truncated`). Connectors implement it; `kinds.Collect` type-asserts.
+`ErrUnauthorized` is the only sentinel the aggregate pipeline special-cases.
 
-```go
-// types.BuiltinLibraryKinds (data + policy flags — no runtime predicates):
-{
-    ID:              "widgets",
-    Path:            "/v1/library/widgets",
-    PermType:        "widgets",
-    Label:           "widgets",
-    Usage:           "widgets or their widget library",
-    Summary:         "all user widgets from every connected service in one neutral list (name, entity_id, sources[])",
-    SyncRule:        "Widgets merge on durable entity_id when present; otherwise same normalized name (match=name).",
-    ExampleQuestion: "what widgets do I have?",
-    Keywords:        []string{"my widgets", "widget library", "widgets do i have"},
-    EmptyMsg:        "no widget-capable services configured",
-    DenyMsg:         "denied: data grant for agent access to widgets is not allowed",
-    FailMsg:         "failed to fetch widgets",
-    AppReadable:      true,  // third-party app tokens may GET the list
-    CanonicalAllowed: true,  // may appear in canonical_for
-    AllowedLevels:    nil,   // optional: []string{types.AccessSummary, …}
-    DefaultNone:      false, // true = opt-in like places (issue #142)
-    OptimisticCopies:  false, // true = copy ledger uses snapshot watermarks (mail-like streams, issue #76)
-    ExtraInstructions: "",    // kind-specific agent copy; "{root}" expands to the instance base URL (issue #254)
-    Search:           &types.SearchSpec{Fields: []string{"name"}, TitleField: "name"}, // nil = no q= support
-},
+### 6. Connector surface (`internal/connectors/<provider>.go`)
 
-// kindRuntime (core-owned visibility predicates):
-"widgets": newKindRuntime[WidgetProvider]("widgets"),
-// Override HasProviders only when a local store can feed the kind with no
-// connector (mail archive / Timeline pattern); keep Provides as built.
-```
+`Capabilities()` must list the kind in `Kinds` with real `Operations`
+(empty `[]Operation{}` means "recognized, not implemented"). Read the
+configured `GetService(id).Endpoint` — never hardcode upstream base URLs.
 
-Field guidance:
+### 7. Locations, copies, and canonical homes
 
-| Field | Best practice |
-|-------|----------------|
-| `ID` | Plural noun matching the path segment and permission key |
-| `Summary` | Field list agents can rely on; mention `sources[]` always |
-| `SyncRule` | Name the **match keys** and the `match=` values you will emit |
-| `Keywords` | Service-less questions that should inject this endpoint; include common misspellings and the service brand only if users say it as the data ("gmail inbox", "google calendar") |
-| `EmptyMsg` / `DenyMsg` / `FailMsg` | Short, agent-safe; no secrets, no stack traces |
-| `AppReadable` | `true` for built-in list kinds (apps are data readers). Document full-text and admin routes stay out of app scope. User-defined kinds are never app-readable by default. |
-| `CanonicalAllowed` | `true` when services can be the home copy for this kind |
-| `AllowedLevels` | Kind-scoped redaction levels this kind can enforce (`AccessFreeBusy`, `AccessSummary`, `AccessCity`, `AccessPrecise`, `AccessMetadata`). Leave empty for none/read/write/read-write only. |
-| `DefaultNone` | `true` when the kind stays hidden until a data grant names it (places pattern) |
-| `OptimisticCopies` | `true` for mail-like streams whose copy ledger tracks snapshot watermarks rather than per-object sync (issue #76) |
-| `ExtraInstructions` | Kind-specific agent copy appended to the system-message hint (issue #254). Carries its own leading separator (space or newline); `{root}` expands to the instance base URL. Keep per-kind copy here — core's `libraryInstructionsFor` does not branch on kind IDs. |
-| `Search` | `&types.SearchSpec` naming the neutral JSON fields `q=` full-text indexes (issue #178). Declare user-visible text only — identity/transport keys (`id`, `sources`, `entity_id`, …) are never indexed. Kinds with `AllowedLevels` must also set `libraryKindSpec.redactSearch` so index-hydrated hits re-apply fetch-time redaction. Nil means `q` is rejected. |
-| `kindRuntime` row | Use the generic `newKindRuntime` constructor, passing the provider interface as its type parameter and the kind ID as its argument. It wires `Provides` (the per-connector provider-interface check the flow map uses) together with `HasProviders` and `Readable`. Do not hand-roll; keep IDs in sync with `types.BuiltinLibraryKinds`. |
+If sources can be a home or hold tracked copies: `CanonicalFor` in config
+(`canonical_for`), `CopyInfo` stamping via the generic `Stamps`, and
+`CanonicalAllowed` on the kind entry. Mirror writes are a separate,
+admin-side surface (`mirror.go`) — kinds declare reads.
 
-`LibraryKind.Instructions` automatically adds truncated-flag wording,
-`ExtraInstructions`, and the canonical-source hint. `libraryInstructionsFor`
-appends the multi-source mutation rule. Do not duplicate those strings per
-kind.
+### 8. Permissions and connector capabilities
 
-Register the handler in `libraryRouteHandlers()`:
+The kind key must be known to the permission map, the path classifier
+(`internal/types/pathclass.go`), and any access-level vocabulary in
+`internal/core/policy` (like `PlacesLevelForResponse`). Default access for
+new kinds should start strict (`none` where the domain is sensitive).
 
-```go
-"/v1/library/widgets": s.HandleLibraryWidgets,
-```
+### 9. Sample data (`sampledata.go`)
 
----
+Deterministic fixtures with deliberate merge pairs (same identity, two
+sources; near-miss names that must stay separate). Sample data feeds the
+demo and the query tests.
 
-### 4. Aggregate handler (thin)
+### 10. Agent-facing behavior
 
-Do **not** copy an aggregate pipeline. Call `handleLibraryAggregate` with a
-`libraryKindSpec`:
-
-```go
-func (s *Server) HandleLibraryWidgets(w http.ResponseWriter, r *http.Request) {
-    kind := *LibraryKindByID("widgets")
-    handleLibraryAggregate(s, w, r, libraryKindSpec[Widget]{
-        kind: kind,
-        targets: func(s *Server) ([]namedLister[Widget], []string) {
-            return collectProviders[Widget, WidgetProvider](s, kind.PermType,
-                func(p WidgetProvider) func(context.Context) ([]Widget, bool, error) {
-                    return p.ListUserWidgets
-                })
-        },
-        serviceOf: widgetServiceName,
-        sortKey:   types.WidgetIdentityKey,
-        merge:     types.MergeWidgets,
-        encode: func(merged []Widget, bySvc map[string]LibraryServiceStatus) any {
-            return WidgetList{Widgets: merged, Total: len(merged), Synced: true,
-                Truncated: anyServiceTruncated(bySvc), ByService: bySvc}
-        },
-        markCanonical: s.stampWidgetCanonical, // if sources can be home
-        stampCopies:   s.stampWidgetCopies,    // if sources can hold copies
-        enrich:        nil,                    // optional: resolveEntityIDs
-    })
-}
-```
-
-The shared pipeline already handles: method check, cache (one merged
-aggregate per kind under `library:{id}|agg`, pages sliced per request),
-permission-aware fan-out, panic isolation per provider, unauthorized vs error
-status, stable sort, merge, canonical/copy stamping, JSON encode, metrics.
-
-**You own only:** provider collection, identity sort key, merge, encode shape,
-and optional enrich/stamps.
-
----
-
-### 5. Identity and merge
-
-Cross-service identity is the hardest part of a new kind. Follow the ladder
-already used by music and contacts:
-
-**Prefer durable IDs over names.**
-
-| Kind | Preferred `EntityID` | `Match` values | Fallback |
-|------|----------------------|----------------|----------|
-| tracks | ISRC / MBID | `isrc`, `mbid`, `name` | title + primary artist, **duration-guarded** |
-| albums | UPC / MBID | `upc`, `mbid`, `name` | title + primary artist |
-| artists | MusicBrainz MBID | `mbid`, `name` | normalized name |
-| playlists | explicit link | `link`, `name` | same title |
-| contacts | (identity keys) | — | email → phone → handle → name |
-| photos | content hash | — | `taken_at` + dimensions (never filename alone) |
-| events | iCalUID | `ical_uid`, `title_start` | title + start + all-day |
-| messages | Message-ID | `message_id`, `subject_from_time` | subject + from + sent_at |
-
-Rules that keep merges honest:
-
-1. **Record `Match`** whenever you join multi-source items. Empty means single-source.
-2. **Name-only joins are weaker.** They still happen (and should appear in
-   `/v1/library/review`), but durable IDs win when both sides have them.
-3. **Duration guards** for music: same title/artist with wildly different
-   lengths must not merge.
-4. **Never merge on filename or free text alone** when a collision would be
-   harmful (photos).
-5. **Union-find** when identities chain (contact A~email, B~phone, C~handle →
-   one person). See `MergeContacts`.
-6. **Canonical sources sort first** after merge (`sortContactSourcesCanonicalFirst`
-   and friends).
-7. Fold fields with "fill empty, union lists, keep first extra" — see
-   `mergeContactInto` / `mergePhotoInto` / `mergeMessageInto`.
-
-When a kind has no good durable ID yet, leave `EntityID` empty and use a
-narrow name key — then add enrichment later (`enrich` / MusicBrainz / etc.)
-rather than inventing a fake stable ID.
-
----
-
-### 6. Locations, copies, and canonical homes
-
-Issue #91 (copy ledger) and #16 (canonical sources) are how Aegis answers
-"where does this live?" without storing the bytes.
-
-Every source that can be a **home** or a **tracked copy** should support:
-
-| Field | Meaning | Set by |
-|-------|---------|--------|
-| `sources[].canonical` | Authoritative non-Aegis location | Connector (inherent) and/or config `canonical_for` |
-| `sources[].copy` | Durable copy-ledger row (role, sync mode, version) | `stamp*Copies` after fetch |
-
-Checklist when adding a kind that participates:
-
-1. Set `CanonicalAllowed: true` on the registry entry (config validation
-   derives `canonical_for` from it).
-2. Implement `stampWidgetCanonical` next to the other stamps.
-3. Implement `stampWidgetCopies` in `copy_ledger_stamp.go` using
-   `s.copyInfoFor(kindID, service, id)` — missing rows stay nil (fail-open).
-4. Wire both into the `libraryKindSpec`.
-5. If the kind can be mirrored, teach the mirror path to write ledger rows
-   (`copy_ledger.go`) and document full vs optimistic fidelity in the README.
-
-Kinds that are pure references (albums/artists today) may omit `Canonical` /
-`Copy` on their source structs. Prefer including them if the kind has a
-"home service" story.
-
-Agents are already instructed to prefer `sources[].canonical` for writes and
-to use `POST /v1/library/mirror` for deliberate copies — do not invent
-auto-mirroring.
-
----
-
-### 7. Permissions and connector capabilities
-
-A kind is invisible until permissions and path classification know it.
-
-**Permission key** (`PermType` / `KindCapability.Name`) must match what
-`KindForPath` returns for that provider's proxy paths.
-
-1. **`internal/types/pathclass.go` → `kindPathRules`**  
-   Map provider paths (`/me/widgets`, `/widgets/...`, …) to `"widgets"` via
-   `KindForPath`.  
-   Unknown paths fall through to `default` — that is fail-open for access, not
-   a substitute for classification.
-
-2. **Connector `Capabilities()`**  
-   Advertise `KindCapability{Name: "widgets", ...}` with real
-   `Operations[]`:
-   - `Operations` is `[]Operation` (method, path, parameters, response spec),
-     not `[]string`.
-   - Empty `[]Operation{}` means "kind recognized, not implemented" — Amazon
-     Music does this. That is valid.
-   - Do not advertise methods the connector cannot serve.
-   - Capabilities are admin/connector metadata for available/writable kinds
-     and path classification (issue #119). They are **not** an agent
-     discovery API — permissions further constrain what agents may call via
-     the content/ingest proxy and library; they never **add** capability.
-
-3. **Service proxy**  
-   Prefer `connectors.RunProxy` / `connectors.DoUpstreamRequest` / `connectors.HTTPClient`. Read
-   the configured `GetService(id).Endpoint` — never hardcode provider base URLs.
-
-4. **Admin surface**  
-   Available/writable kinds come from capabilities; writable excludes
-   session/search-style side effects (picker, search POSTs). Do not special-case
-   the UI when the capability model can express it.
-
----
-
-### 8. Sample data (#89)
-
-Synthetic fixtures are how APIs mature without OAuth or real personal data.
-Extend `sampledata.go` whenever a kind gains identity rules.
-
-**Requirements:**
-
-- **Deterministic** — stable timestamps, IDs, and order so tests can assert
-  extremes (oldest/newest) and merge outcomes.
-- **Fictional** — `example.com` addresses, invented titles. Never real mail.
-- **Deliberate merge pairs** — at least one shared durable ID pair, one
-  name-only pair, and one near-miss that must **not** merge.
-- **Edge cases** — unicode/RTL names, missing timestamps, empty identity,
-  truncated-page simulation when the kind has paging.
-- **Every kind** in `SampleLibrarySet` — a new registry kind without fixtures
-  is incomplete (see #89 / #77).
-
-Then cover them in `sampledata_query_test.go` (or a kind-specific test):
-
-- merge identity (`sources[]`, `entity_id`, `match=…`)
-- sort / filter / agent paging (`limit`/`cursor`/`next_cursor`, issue #185) if the kind is queryable
-- permission-denied service still appears in `by_service` as denied
-- `truncated` when a provider hits the upstream page cap (independent of `next_cursor`)
-
----
-
-### 9. Agent-facing behavior (#78)
-
-Types exist so agents use Aegis instead of scraping providers. After the
-spine works, make the kind **easy to use correctly**:
-
-| Surface | What to get right |
-|---------|-------------------|
-| `Keywords` | Catch service-less questions; inject the unified endpoint |
-| `Summary` / `SyncRule` | Field names and merge behavior agents can quote |
-| `truncated` | Always populated; instructions already tell agents to check it |
-| `sources[].canonical` | Home copy for writes |
-| `sources[].copy` | Freshness / location when tracked |
-| Error messages | Actionable (`connect at /v1/auth/{id}/login`), never raw upstream dumps |
-| Logging | `slog` with `service`, `path`, `kind` fields for inefficient-use tracing |
-
-Do not require agents to call three provider APIs when one library endpoint
-can answer the question. Prefer expanding the unified kind over teaching
-agents more upstream shapes.
+`Instructions`, `EmptyMsg`, `DenyMsg`, `FailMsg`, and `Keywords` live on
+the `LibraryKind` entry — that copy is the contract agents see. Keep it
+accurate in the same PR as the behavior.
 
 ---
 
 ## What derives from the registry (issue #183)
 
-Adding one `BuiltinLibraryKinds` entry updates all of these automatically:
+You do not hand-write any of these: reserved user-defined IDs, app-readable
+paths (`Route.AppReadable` + `LibraryKind.AppReadable`), canonical-kind
+checks, access-level allowlists, the API-listener allowlist, and the
+pre-request hint set. The sync tests (`TestLibraryKinds_BuiltinInSync`,
+`TestLibraryKinds_RoutesInSync`) pin the registry ↔ routes equality in both
+directions — a kind missing a route or a route without a kind fails CI.
 
-| Derived | Source field(s) |
-|---------|-----------------|
-| UDT id reservation (`IsReservedUserDefinedID`) | kind `ID` |
-| App-token list paths (`appPathAllowed`) | `AppReadable` + `Path` (+ `appExtraPaths` for freebusy) |
-| `canonical_for` validation | `CanonicalAllowed` + `ID` |
-| Access-level allowlists (`ValidatePermissions`) | `AllowedLevels` |
-| Opt-in / default-none policy | `DefaultNone` |
-| Permissions overview library set | kind `ID` |
-
-A user-defined pack named after any built-in id is rejected at `Normalize`
-and again at route merge (`mergeUDTRoutes` refuses to shadow a built-in).
-
-App tokens may read built-in library lists (including `documents`) but not
-document full-text subpaths and not user-defined kinds (issue #183 / #131).
+---
 
 ## Checklist (copy into the PR)
 
-**Spine**
-
-- [ ] Neutral `Widget` / `WidgetSource` / `WidgetList` in `internal/types/models.go` (sources[], Match, Extra)
-- [ ] `WidgetProvider` in `internal/types/providers.go` with `ListUser…(ctx) ([]Widget, bool, error)` + `ErrUnauthorized`
-- [ ] `types.BuiltinLibraryKinds` entry (ID/Path/PermType/Label/Usage/Summary/SyncRule/keywords/messages + `AppReadable` / `CanonicalAllowed` / `AllowedLevels` / `DefaultNone` / `OptimisticCopies` / `ExtraInstructions` / `Search`) **and** a `kindRuntime` row (`newKindRuntime[P]`)
-- [ ] Route in `libraryRouteHandlers()`
-- [ ] `KindForPath` rules use the same permission key (reserved automatically via the registry)
-- [ ] Thin `HandleLibraryWidgets` via `handleLibraryAggregate`
-- [ ] `redactSearch` on the `libraryKindSpec` when the kind has `AllowedLevels` (search hits hydrate from the index and skip fetch-time redaction)
-- [ ] Identity key + `MergeWidgets` in `internal/types/merge_widgets.go` (durable ID first; record `Match`) — merge logic does not live in core
-- [ ] Connector implements `WidgetProvider` + `Capabilities()` kind
-- [ ] `KindForPath` cases for the provider's paths
-- [ ] Tests: merge cases, aggregate happy path + unauthorized/error/truncated, permission deny
-
-**Locations (when applicable)**
-
-- [ ] `CanonicalAllowed: true` on the registry entry
-- [ ] `stamp*Canonical` + `markCanonical` wired
-- [ ] `stamp*Copies` + `stampCopies` wired (fail-open on missing ledger)
-- [ ] README copy fidelity (full vs optimistic) if the kind can be mirrored
-
-**Maturation (#89 / #4 / #78)**
-
-- [ ] `GenerateSampleLibrary` fixtures + non-merge near-miss
-- [ ] Sample query/merge tests
-- [ ] Optional `enrich` for durable ID resolution
-- [ ] README section ("X as a kind") with example JSON
-- [ ] Pre-request keywords smoke-tested with a service-less question
-
-**Definition of done**
-
-- [ ] `go vet ./...` clean
-- [ ] `go test ./... -count=1 -race` passing
-- [ ] Coverage ≥ 80%
-- [ ] README + example config updated for user-visible fields
-- [ ] No secrets or live tokens
+- [ ] Neutral model + `*Source` + `*List` in `internal/types/models.go`
+- [ ] Identity key + `Merge*` with deliberate fixture pairs
+- [ ] `BuiltinLibraryKinds` entry (flags, copy, keywords)
+- [ ] Provider interface + connector `Capabilities` / `ListUser…`
+- [ ] `internal/kinds/<kind>.go`: `Kind` impl, declared routes + exposure,
+      `Spec` wiring, `forEach*Source` stamping projection
+- [ ] One line in `kinds.Builtin()`
+- [ ] Kind-specific filters/redaction/hooks in the kind file (never in core)
+- [ ] Path-classification rules for the provider's proxy paths
+- [ ] Sample fixtures + sample-data query test
+- [ ] Tests: merge pairs, aggregate (hit/miss/permission), search if
+      `Search` is declared, stamps
+- [ ] README / `docs/api.md` agent-facing semantics
+- [ ] `go vet ./...`, `go test ./... -count=1 -race`, coverage ≥ 80%,
+      staticcheck clean
 
 ---
 
 ## Worked references
 
-| Look at | When you need |
-|---------|----------------|
-| `library.go` + `internal/types/merge.go` | Music-shaped kinds: durable IDs, duration guard, playlist links |
-| `internal/types/merge_contacts.go` | Chained identity (email/phone/handle), union-find merge |
-| `internal/types/merge_photos.go` | Non-name identity (hash/time+dim), "bytes stay upstream" sources |
-| `internal/types/merge_events.go` | Time-windowed items, iCalUID vs title+start matching |
-| `internal/types/merge_messages.go` | Snippet-only lists, Message-ID identity, bodies stay upstream |
-| `internal/types/librarykinds.go` + `librarykind.go` | Registry (`BuiltinLibraryKinds`) + shared aggregate pipeline contract |
-| `sampledata.go` | Fixture style and merge-pair seeding |
-| `copy_ledger_stamp.go` | How location stamps stay fail-open |
-| `canonical.go` | Home-service stamping + agent write policy text |
-| `spotify.go` / `google-gmail.go` | Capability + provider implementation style |
+| Shape | Read first |
+|-------|-----------|
+| Plain provider kind | `internal/kinds/playlists.go` (stamps + merge deps) |
+| Access-level redaction | `internal/kinds/places.go`, `documents.go` |
+| Subroute + shared dataset | `internal/kinds/events.go` (freebusy) |
+| Subroute with its own gate | `internal/kinds/documents.go` (full text) |
+| Local source + status hooks | `internal/kinds/messages.go` (mail archive) |
+| Query filters + summary | `internal/kinds/transactions.go` |
 
 ---
 
-## User-defined kinds (#15 PoC)
+## User-defined kinds (#15)
 
-A **user-defined type** is a schema pack (JSON) loaded at startup from the
-`user-types/` directory. It becomes a real `LibraryKind` and rides the same
-aggregate pipeline — it is not a parallel API.
-
-| Piece | Home |
-|-------|------|
-| Schema, neutral item, merge | `internal/types/udt.go` |
-| Loader, field map, `file_json` / `http_json` fetch | `internal/core/udt.go` |
-| Aggregate handler | `internal/core/udt_handlers.go` |
-| Reference pack | `examples/user-types/reading-list/` |
-| Design + own-repo recommendation | `docs/user-defined-types.md` |
-
-Rules that still apply: fail-open per source; identity in `sources[]`; opt-in
-permissions (`default_access`, else none); no media storage. Named OAuth
-providers stay named connectors — UDT sources are user-supplied feeds.
+Schema packs under `user-types/` load through `kinds.UserDefined(schema)`
+into the same pipeline and registry (`kinds.MergeUserDefined` refuses any
+pack that shadows a built-in). See `docs/user-defined-types.md`. Packs
+declare sources and fields as data; they never self-enable (an admin data
+grant names the kind) and never store secrets in `http_json` headers.
 
 ---
 
 ## Out of scope (still open)
 
-Do not assume these are solved when designing a kind:
-
-- Full UDT product surface (admin UI, hot-reload, sensitive-field redaction) —
-  PoC only, see `docs/user-defined-types.md`
+- Admin authoring and hot-reload of user-defined packs (#15 follow-ups)
 - Photo ownership / provenance proofs (#20)
-- Live Immich canonical photos (#39)
-- Generic auto-detected kind expansion (not the default; named services first)
-
-If a design needs those, link the issue in the PR rather than half-shipping a
-parallel concept.
+- Obtaining data from other sources / photo storage (#34, #21)

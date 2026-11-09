@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
@@ -54,45 +55,57 @@ func mailLiteralAllowed(file, lit string) (string, bool) {
 }
 
 func TestMailProviderLiterals_SingleOwner(t *testing.T) {
-	entries, err := os.ReadDir(".")
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Kinds are provider-neutral too (issue #312): scan the hub and
+	// internal/kinds.
+	dirs := []string{".", filepath.Join("..", "kinds")}
 	fset := token.NewFileSet()
 	var failures []string
-	for _, e := range entries {
-		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
-			continue
-		}
-		f, err := parser.ParseFile(fset, name, nil, 0)
+	for _, dir := range dirs {
+		entries, err := os.ReadDir(dir)
 		if err != nil {
-			t.Fatalf("parse %s: %v", name, err)
+			t.Fatal(err)
 		}
-		ast.Inspect(f, func(n ast.Node) bool {
-			lit, ok := n.(*ast.BasicLit)
-			if !ok || lit.Kind != token.STRING {
-				return true
+		for _, e := range entries {
+			name := e.Name()
+			if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
+				continue
 			}
-			val, err := strconv.Unquote(lit.Value)
+			src := filepath.Join(dir, name)
+			f, err := parser.ParseFile(fset, src, nil, 0)
 			if err != nil {
+				t.Fatalf("parse %s: %v", src, err)
+			}
+			relName := name
+			if dir != "." {
+				relName = filepath.Join("kinds", name)
+			}
+			ast.Inspect(f, func(n ast.Node) bool {
+				lit, ok := n.(*ast.BasicLit)
+				if !ok || lit.Kind != token.STRING {
+					return true
+				}
+				val, err := strconv.Unquote(lit.Value)
+				if err != nil {
+					return true
+				}
+				for _, bad := range mailProviderLiterals {
+					if !strings.Contains(val, bad) {
+						continue
+					}
+					if dir == "." {
+						if _, ok := mailLiteralAllowed(name, val); ok {
+							continue
+						}
+					}
+					failures = append(failures,
+						relName+": provider literal "+strconv.Quote(bad)+" in "+lit.Value)
+				}
 				return true
-			}
-			for _, bad := range mailProviderLiterals {
-				if !strings.Contains(val, bad) {
-					continue
-				}
-				if _, ok := mailLiteralAllowed(name, val); ok {
-					continue
-				}
-				failures = append(failures,
-					name+": provider literal "+strconv.Quote(bad)+" in "+lit.Value)
-			}
-			return true
-		})
+			})
+		}
 	}
 	if len(failures) > 0 {
-		t.Fatalf("core must not re-state provider strings (issue #286) — "+
+		t.Fatalf("core and kinds must not re-state provider strings (issue #286) — "+
 			"reference the connectors constants or extend mailLiteralAllowances "+
 			"with a reason:\n%s", strings.Join(failures, "\n"))
 	}

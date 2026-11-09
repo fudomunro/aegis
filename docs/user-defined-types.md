@@ -140,7 +140,7 @@ types.UserDefinedItem         pre-request hints / admin / flow
     │
     │  MergeUserDefinedItems
     ▼
-handleLibraryAggregate  (same pipeline as playlists/tracks/…)
+kinds.Aggregate  (same pipeline as playlists/tracks/…)
     │
     ▼
 GET /v1/library/{id}

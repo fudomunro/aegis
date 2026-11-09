@@ -57,7 +57,7 @@ Rules:
 
 ## Endpoints vs library kinds
 
-The list above matches the registered library routes (`librarykind.go`).
+The list above matches the registered library routes (`internal/kinds` route declarations).
 When a kind is added, update:
 
 1. `site/demo.js` (`briefText`)
