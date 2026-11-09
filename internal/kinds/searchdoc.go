@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/search"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // BuildSearchDocument flattens one neutral item into a search index row.
@@ -17,7 +16,7 @@ import (
 // This is kind-domain knowledge — it understands neutral item JSON and the
 // user-defined "fields" map — producing an engine-internal row, so it lives
 // here rather than in the core/search FTS engine (issue #325).
-func BuildSearchDocument(itemID string, item any, spec types.SearchSpec) (search.SearchDocument, error) {
+func BuildSearchDocument(itemID string, item any, spec SearchSpec) (search.SearchDocument, error) {
 	payload, err := json.Marshal(item)
 	if err != nil {
 		return search.SearchDocument{}, err

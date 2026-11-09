@@ -11,8 +11,6 @@ import (
 	"path/filepath"
 	"sync"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // stubKind is a minimal Kind for registry-construction tests.
@@ -20,7 +18,7 @@ type stubKind struct {
 	id, pattern string
 }
 
-func (s stubKind) Def() types.LibraryKind { return types.LibraryKind{ID: s.id, Path: s.pattern} }
+func (s stubKind) Def() LibraryKind { return LibraryKind{ID: s.id, Path: s.pattern} }
 
 func (s stubKind) Routes() []Route {
 	return []Route{{Pattern: s.pattern, Handler: func(http.ResponseWriter, *http.Request) {}}}
@@ -77,7 +75,7 @@ func TestMergeUserDefined_RejectsReservedIDs(t *testing.T) {
 
 // listUserDefined fetches every source for one schema and returns the raw
 // pre-merge rows (the aggregate pipeline owns merge + encode).
-func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, baseDir string) (items []types.UserDefinedItem, truncated bool, err error) {
+func listUserDefined(ctx context.Context, schema UserDefinedTypeSchema, baseDir string) (items []UserDefinedItem, truncated bool, err error) {
 	srcs := schema.Sources
 	if len(srcs) == 0 {
 		return nil, false, fmt.Errorf("no sources configured")
@@ -87,7 +85,7 @@ func listUserDefined(ctx context.Context, schema types.UserDefinedTypeSchema, ba
 		wg sync.WaitGroup
 	)
 	errs := make([]error, 0, len(srcs))
-	all := make([]types.UserDefinedItem, 0, len(srcs)*8)
+	all := make([]UserDefinedItem, 0, len(srcs)*8)
 	for _, src := range srcs {
 		src := src
 		wg.Add(1)
@@ -151,15 +149,15 @@ func TestMapUserDefinedDocument_HTTPSource(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	schema := types.UserDefinedTypeSchema{
+	schema := UserDefinedTypeSchema{
 		ID:   "books",
 		Path: "/v1/library/books",
-		Fields: map[string]types.UserDefinedField{
+		Fields: map[string]UserDefinedField{
 			"title":  {Type: "string"},
 			"author": {Type: "string"},
 		},
-		Identity: types.UserDefinedIdentity{Fields: []string{"title", "author"}},
-		Sources: []types.UserDefinedSourceSpec{{
+		Identity: UserDefinedIdentity{Fields: []string{"title", "author"}},
+		Sources: []UserDefinedSourceSpec{{
 			ID:        "wiki",
 			Name:      "Wiki",
 			Kind:      "http_json",
@@ -200,13 +198,13 @@ func TestListUserDefined_FailOpenPartial(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "good.json"), []byte(`{"items":[{"title":"Only Good","author":"A"}]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	schema := types.UserDefinedTypeSchema{
+	schema := UserDefinedTypeSchema{
 		ID:     "notes",
-		Fields: map[string]types.UserDefinedField{"title": {}, "author": {}},
-		Identity: types.UserDefinedIdentity{
+		Fields: map[string]UserDefinedField{"title": {}, "author": {}},
+		Identity: UserDefinedIdentity{
 			Fields: []string{"title", "author"},
 		},
-		Sources: []types.UserDefinedSourceSpec{
+		Sources: []UserDefinedSourceSpec{
 			{ID: "good", Kind: "file_json", Path: "good.json", ItemsPath: "items", FieldMap: map[string]string{"title": "title", "author": "author"}},
 			{ID: "bad", Kind: "file_json", Path: "missing.json", ItemsPath: "items", FieldMap: map[string]string{"title": "title"}},
 		},

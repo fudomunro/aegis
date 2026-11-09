@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -13,7 +15,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/ownership"
 	"github.com/fudomunro/aegis/internal/core/tokens"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestOwnershipStatuses_ConnectedServiceIsUnderManagement(t *testing.T) {
@@ -161,8 +162,8 @@ func TestHandleAdminOwnership_ConfirmReopen(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(list.Ownership) != len(types.BuiltinLibraryKinds) {
-		t.Fatalf("got %d kinds, want %d", len(list.Ownership), len(types.BuiltinLibraryKinds))
+	if len(list.Ownership) != len(kinds.BuiltinLibraryKinds) {
+		t.Fatalf("got %d kinds, want %d", len(list.Ownership), len(kinds.BuiltinLibraryKinds))
 	}
 
 	// POST confirms one kind.
@@ -393,7 +394,7 @@ func ownershipByKind(t *testing.T, statuses []types.OwnershipStatus) map[string]
 	for _, st := range statuses {
 		out[st.Kind] = st
 	}
-	for _, want := range types.BuiltinLibraryKinds {
+	for _, want := range kinds.BuiltinLibraryKinds {
 		if _, ok := out[want.ID]; !ok {
 			t.Fatalf("missing kind %q in ownership status", want.ID)
 		}

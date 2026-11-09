@@ -62,7 +62,7 @@ type messagesKind struct {
 func newMessagesKind(h Host, e *Engine, d Deps) Kind {
 	k := &messagesKind{h: h, e: e, mail: d.MailArchive}
 	k.mark, k.copies = Stamps(h, "messages", forEachMessageSource)
-	def := *types.BuiltinKindByID("messages")
+	def := *BuiltinKindByID("messages")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.MessageProvider],

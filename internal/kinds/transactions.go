@@ -24,7 +24,7 @@ type transactionsKind struct {
 func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
 	k := &transactionsKind{h: h, e: e}
 	k.mark, _ = Stamps(h, "transactions", forEachTransactionSource)
-	def := *types.BuiltinKindByID("transactions")
+	def := *BuiltinKindByID("transactions")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.TransactionProvider],

@@ -27,7 +27,7 @@ type documentsKind struct {
 func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
 	k := &documentsKind{h: h, e: e}
 	k.mark, k.copies = Stamps(h, "documents", forEachDocumentSource)
-	def := *types.BuiltinKindByID("documents")
+	def := *BuiltinKindByID("documents")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.DocumentProvider],

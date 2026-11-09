@@ -22,7 +22,7 @@ type placesKind struct {
 func newPlacesKind(h Host, e *Engine, d Deps) Kind {
 	k := &placesKind{h: h, e: e, localSource: d.PlacesLocalSource}
 	k.mark, _ = Stamps(h, "places", forEachPlaceVisitSource)
-	def := *types.BuiltinKindByID("places")
+	def := *BuiltinKindByID("places")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.PlaceVisitProvider],

@@ -1,10 +1,9 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
@@ -13,7 +12,7 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 
-	schema := types.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedTypeSchema{
 		ID:              "reading-list",
 		Label:           "reading list",
 		Path:            "/v1/library/reading-list",
@@ -21,7 +20,7 @@ func TestUserDefinedHint_ListsSortedFieldsAndCanonical(t *testing.T) {
 		Summary:         "entries with title and author",
 		SyncRule:        "match on title+author",
 		ExampleQuestion: "what books am I reading?",
-		Fields: map[string]types.UserDefinedField{
+		Fields: map[string]kinds.UserDefinedField{
 			"title":  {Type: "string", Required: true, Description: "book title"},
 			"author": {Type: "string"},
 			"pages":  {Type: "number", Description: "page count"},

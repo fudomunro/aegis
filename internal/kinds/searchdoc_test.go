@@ -3,8 +3,6 @@ package kinds
 import (
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestBuildSearchDocument_FlattensDeclaredFields(t *testing.T) {
@@ -17,7 +15,7 @@ func TestBuildSearchDocument_FlattensDeclaredFields(t *testing.T) {
 			{"service": "drive", "id": "9"},
 		},
 	}
-	spec := types.SearchSpec{Fields: []string{"name", "tags", "people"}, TitleField: "name"}
+	spec := SearchSpec{Fields: []string{"name", "tags", "people"}, TitleField: "name"}
 	doc, err := BuildSearchDocument("lease-2024", item, spec)
 	if err != nil {
 		t.Fatalf("build: %v", err)
@@ -48,7 +46,7 @@ func TestBuildSearchDocument_FlattensDeclaredFields(t *testing.T) {
 
 func TestBuildSearchDocument_TitleDefaultsToFirstField(t *testing.T) {
 	item := map[string]any{"subject": "Quarterly taxes", "snippet": "due april"}
-	doc, err := BuildSearchDocument("m1", item, types.SearchSpec{Fields: []string{"subject", "snippet"}})
+	doc, err := BuildSearchDocument("m1", item, SearchSpec{Fields: []string{"subject", "snippet"}})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}
@@ -66,7 +64,7 @@ func TestBuildSearchDocument_UserDefinedFieldsMap(t *testing.T) {
 			"status": "reading",
 		},
 	}
-	spec := types.SearchSpec{Fields: []string{"name", "author", "status"}, TitleField: "name"}
+	spec := SearchSpec{Fields: []string{"name", "author", "status"}, TitleField: "name"}
 	doc, err := BuildSearchDocument("b1", item, spec)
 	if err != nil {
 		t.Fatalf("build: %v", err)
@@ -90,7 +88,7 @@ func TestBuildSearchDocument_NestedSkipKeys(t *testing.T) {
 			"id":       "place-9",
 		},
 	}
-	doc, err := BuildSearchDocument("v1", item, types.SearchSpec{Fields: []string{"name", "place"}, TitleField: "place"})
+	doc, err := BuildSearchDocument("v1", item, SearchSpec{Fields: []string{"name", "place"}, TitleField: "place"})
 	if err != nil {
 		t.Fatalf("build: %v", err)
 	}

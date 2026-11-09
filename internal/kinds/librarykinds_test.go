@@ -1,10 +1,13 @@
-package types
+package kinds
 
 import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
+
 	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/types"
 )
 
 // TestBuiltinLibraryKinds_UniqueIDs keeps registry ids unique and non-empty.
@@ -168,12 +171,28 @@ func TestBuiltinLibraryKinds_DerivedLists(t *testing.T) {
 // TestKindPathRules_UseReservedKeys keeps the proxy classifier aligned
 // with reserved kind keys (issue #183).
 func TestKindPathRules_UseReservedKeys(t *testing.T) {
-	for _, rule := range kindPathRules {
-		if rule.Kind == "" {
-			t.Fatalf("path rule %+v has empty Kind", rule)
+	for _, kind := range types.KindPathRuleKeys() {
+		if kind == "" {
+			t.Fatal("path rule has empty Kind")
 		}
-		if !IsReservedKindKey(rule.Kind) {
-			t.Errorf("path rule Kind %q is not a reserved kind key", rule.Kind)
+		if !IsReservedKindKey(kind) {
+			t.Errorf("path rule Kind %q is not a reserved kind key", kind)
+		}
+	}
+}
+
+// TestKindLevelSeam_AllowedLevelsArePolicyTokens pins the seam: kinds declare AllowedLevels as bare tokens; each must be a
+// canonical policy level or validation would silently reject it.
+func TestKindLevelSeam_AllowedLevelsArePolicyTokens(t *testing.T) {
+	known := map[string]bool{
+		policy.AccessFreeBusy: true, policy.AccessSummary: true,
+		policy.AccessCity: true, policy.AccessPrecise: true, policy.AccessMetadata: true,
+	}
+	for _, k := range BuiltinLibraryKinds {
+		for _, l := range k.AllowedLevels {
+			if policy.NormalizeAccess(l) != l || !known[l] {
+				t.Errorf("kind %q AllowedLevels entry %q is not a canonical policy level", k.ID, l)
+			}
 		}
 	}
 }

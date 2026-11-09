@@ -2,14 +2,15 @@ package core
 
 import (
 	"encoding/json"
-	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // userDefinedRegistry holds loaded UDT schemas (issue #15 Phase 6 PoC).
@@ -17,7 +18,7 @@ import (
 // them onto the type layer and the existing library aggregate pipeline.
 type userDefinedRegistry struct {
 	mu        sync.RWMutex
-	byID      map[string]types.UserDefinedTypeSchema
+	byID      map[string]kinds.UserDefinedTypeSchema
 	byPath    map[string]string // path → kind id
 	schemaDir map[string]string // kind id → directory of its schema.json
 	baseDir   string            // user-types root (discovery only)
@@ -31,7 +32,7 @@ type userDefinedRegistry struct {
 
 func newUserDefinedRegistry() *userDefinedRegistry {
 	return &userDefinedRegistry{
-		byID:      map[string]types.UserDefinedTypeSchema{},
+		byID:      map[string]kinds.UserDefinedTypeSchema{},
 		byPath:    map[string]string{},
 		schemaDir: map[string]string{},
 	}
@@ -76,9 +77,9 @@ func (reg *userDefinedRegistry) Overlay() *UserTypesOverlay {
 // SchemaWithOverlay returns the kind schema with admin-selected local files
 // applied (issue #15). Falls back to the bare schema when the overlay is
 // missing or unreadable. Safe on a nil registry.
-func (reg *userDefinedRegistry) SchemaWithOverlay(id string) types.UserDefinedTypeSchema {
+func (reg *userDefinedRegistry) SchemaWithOverlay(id string) kinds.UserDefinedTypeSchema {
 	if reg == nil {
-		return types.UserDefinedTypeSchema{}
+		return kinds.UserDefinedTypeSchema{}
 	}
 	schema, _ := reg.Get(id)
 	ov := reg.Overlay()
@@ -104,14 +105,14 @@ func (reg *userDefinedRegistry) DirFor(id string) string {
 //
 // Invalid schemas are skipped with a log line — fail-open for the server
 // (issue #15: a bad UDT file must not take down built-in kinds).
-func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDefinedRegistry, []types.UserDefinedTypeSchema) {
+func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDefinedRegistry, []kinds.UserDefinedTypeSchema) {
 	reg := newUserDefinedRegistry()
 	reg.baseDir = dir
 	reg.overlayPath = overlayPath
 	if dir == "" {
 		return reg, nil
 	}
-	var loaded []types.UserDefinedTypeSchema
+	var loaded []kinds.UserDefinedTypeSchema
 	for _, path := range discoverSchemaFiles(dir, logger) {
 		raw, err := os.ReadFile(path)
 		if err != nil {
@@ -120,7 +121,7 @@ func LoadUserDefinedTypes(dir, overlayPath string, logger *slog.Logger) (*userDe
 			}
 			continue
 		}
-		var schema types.UserDefinedTypeSchema
+		var schema kinds.UserDefinedTypeSchema
 		if err := json.Unmarshal(raw, &schema); err != nil {
 			if logger != nil {
 				logger.Warn("user-defined types: parse failed", "path", path, "error", err)
@@ -196,7 +197,7 @@ func discoverSchemaFiles(dir string, logger *slog.Logger) []string {
 }
 
 // Get returns a schema by kind id.
-func (reg *userDefinedRegistry) Get(id string) (types.UserDefinedTypeSchema, bool) {
+func (reg *userDefinedRegistry) Get(id string) (kinds.UserDefinedTypeSchema, bool) {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
 	s, ok := reg.byID[id]
@@ -213,10 +214,10 @@ func (reg *userDefinedRegistry) SchemaIDForPath(path string) (string, bool) {
 
 // All returns every loaded schema (stable registration order is not
 // guaranteed across map iteration; callers sort if needed).
-func (reg *userDefinedRegistry) All() []types.UserDefinedTypeSchema {
+func (reg *userDefinedRegistry) All() []kinds.UserDefinedTypeSchema {
 	reg.mu.RLock()
 	defer reg.mu.RUnlock()
-	out := make([]types.UserDefinedTypeSchema, 0, len(reg.byID))
+	out := make([]kinds.UserDefinedTypeSchema, 0, len(reg.byID))
 	for _, s := range reg.byID {
 		out = append(out, s)
 	}

@@ -39,7 +39,7 @@ type StatusHooks struct {
 
 // Spec wires one kind's dataset into the shared aggregate pipeline.
 type Spec[T any] struct {
-	Kind types.LibraryKind
+	Kind LibraryKind
 	// Targets returns the fetch targets that pass the permission check
 	// plus the denied service ids.
 	Targets func(r *http.Request) (targets []NamedLister[T], denied []string)

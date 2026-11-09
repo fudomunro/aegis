@@ -23,7 +23,7 @@ type eventsKind struct {
 func newEventsKind(h Host, e *Engine, d Deps) Kind {
 	k := &eventsKind{h: h, e: e}
 	k.mark, k.copies = Stamps(h, "events", forEachCalendarEventSource)
-	def := *types.BuiltinKindByID("events")
+	def := *BuiltinKindByID("events")
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[types.CalendarEventProvider],

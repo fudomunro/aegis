@@ -2,9 +2,10 @@ package core
 
 import (
 	"fmt"
-	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
+
+	"github.com/fudomunro/aegis/internal/core/scopes"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 // kindHasProviders reports whether any connector or declared local source
@@ -27,19 +28,19 @@ func kindReadable(id string, s *Server) bool {
 // libraryKinds is the built-in kind registry (issue #183). The slice lives
 // in internal/types so reserved ids, app-readable paths, canonical_for keys,
 // and access-level allowlists all derive from one source.
-var libraryKinds = types.BuiltinLibraryKinds
+var libraryKinds = kinds.BuiltinLibraryKinds
 
 // LibraryKindByID returns the registered built-in kind, or nil.
-func LibraryKindByID(id string) *types.LibraryKind {
-	return types.BuiltinKindByID(id)
+func LibraryKindByID(id string) *kinds.LibraryKind {
+	return kinds.BuiltinKindByID(id)
 }
 
 // allLibraryKinds returns every registered kind — built-in and
 // user-defined (issue #15). Prefer this over ranging libraryKinds directly
 // so UDTs appear in pre-request injection, admin listings, and flow maps.
-func (s *Server) allLibraryKinds() []types.LibraryKind {
+func (s *Server) allLibraryKinds() []kinds.LibraryKind {
 	registry := s.kindRegistry()
-	out := make([]types.LibraryKind, 0, len(registry))
+	out := make([]kinds.LibraryKind, 0, len(registry))
 	for _, k := range registry {
 		out = append(out, k.Def())
 	}
@@ -47,9 +48,9 @@ func (s *Server) allLibraryKinds() []types.LibraryKind {
 }
 
 // udtSchemaForKind returns the user-defined schema backing a kind id, if any.
-func (s *Server) udtSchemaForKind(id string) (types.UserDefinedTypeSchema, bool) {
+func (s *Server) udtSchemaForKind(id string) (kinds.UserDefinedTypeSchema, bool) {
 	if s == nil || s.udts == nil {
-		return types.UserDefinedTypeSchema{}, false
+		return kinds.UserDefinedTypeSchema{}, false
 	}
 	return s.udts.Get(id)
 }

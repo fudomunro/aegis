@@ -1,6 +1,11 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/types"
+)
+
+import (
 	"net/http"
 	"sort"
 	"strings"
@@ -8,7 +13,6 @@ import (
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // Sync accessor IDs in the holistic permissions view (issue #160).
@@ -228,7 +232,7 @@ func serviceProvidedTypes(conn any) []string {
 	// Library kinds Aegis merges across services (permission keys).
 	// Derived from the registry (issue #183).
 	libraryTypes := map[string]bool{}
-	for _, id := range types.BuiltinKindIDs() {
+	for _, id := range kinds.BuiltinKindIDs() {
 		libraryTypes[id] = true
 	}
 	seen := map[string]bool{}

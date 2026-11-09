@@ -1,6 +1,9 @@
-package types
+package kinds
 
-import "github.com/fudomunro/aegis/internal/shared"
+import (
+	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/types"
+)
 
 // BuiltinLibraryKinds is the registry for every unified library dataset
 // (issue #183). Order is stable and used for route registration and
@@ -158,7 +161,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		CanonicalAllowed:  true,
 		AllowedLevels:     nil,
 		DefaultNone:       false,
-		ExtraInstructions: "\n" + PhotoSourceDiscipline(),
+		ExtraInstructions: "\n" + types.PhotoSourceDiscipline(),
 		Search:            &SearchSpec{Fields: []string{"filename", "caption", "people"}, TitleField: "filename"},
 	},
 	{

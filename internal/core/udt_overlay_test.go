@@ -3,6 +3,7 @@ package core
 import (
 	"bytes"
 	"encoding/json"
+	"github.com/fudomunro/aegis/internal/kinds"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
@@ -21,10 +21,10 @@ func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
 	_ = os.WriteFile(a, []byte(`{}`), 0o600)
 	_ = os.WriteFile(b, []byte(`{}`), 0o600)
 
-	schema := types.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedTypeSchema{
 		ID:     "reading-list",
-		Fields: map[string]types.UserDefinedField{"title": {}},
-		Sources: []types.UserDefinedSourceSpec{{
+		Fields: map[string]kinds.UserDefinedField{"title": {}},
+		Sources: []kinds.UserDefinedSourceSpec{{
 			ID:       "sample-export",
 			Kind:     "file_json",
 			Path:     "sample/books.json",
@@ -49,13 +49,13 @@ func TestUserTypesOverlay_ApplyFileSourcePaths(t *testing.T) {
 }
 
 func TestUserTypesOverlay_ExtraFile(t *testing.T) {
-	schema := types.UserDefinedTypeSchema{
+	schema := kinds.UserDefinedTypeSchema{
 		ID: "notes",
-		Fields: map[string]types.UserDefinedField{
+		Fields: map[string]kinds.UserDefinedField{
 			"title":  {},
 			"author": {},
 		},
-		Sources: []types.UserDefinedSourceSpec{{
+		Sources: []kinds.UserDefinedSourceSpec{{
 			ID:       "s",
 			Kind:     "file_json",
 			Path:     "x.json",

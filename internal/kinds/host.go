@@ -1,6 +1,7 @@
 // Package kinds owns the library aggregate pipeline over a narrow Host
-// seam that the core hub implements (issue #312). Kind data stays in
-// internal/types; authorization vocabulary comes from core/policy; the
+// seam that the core hub implements (issue #312) and the kind registry
+// data (issue #325). Neutral models still come from internal/types until
+// their move lands; authorization vocabulary comes from core/policy; the
 // package never imports the hub.
 package kinds
 

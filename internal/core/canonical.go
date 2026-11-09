@@ -1,20 +1,22 @@
 package core
 
 import (
+	"github.com/fudomunro/aegis/internal/kinds"
+)
+
+import (
 	"fmt"
 	"strings"
-
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // canonicalKindIDs returns kinds allowed in a service's canonical_for list
-// (issue #183: derived from types.BuiltinLibraryKinds CanonicalAllowed).
+// (issue #183: derived from kinds.BuiltinLibraryKinds CanonicalAllowed).
 func canonicalKindIDs() []string {
-	return types.CanonicalKindIDs()
+	return kinds.CanonicalKindIDs()
 }
 
 func isCanonicalKindID(id string) bool {
-	return types.IsCanonicalKindID(id)
+	return kinds.IsCanonicalKindID(id)
 }
 
 // IsCanonicalFor reports whether this service is the configured authoritative
