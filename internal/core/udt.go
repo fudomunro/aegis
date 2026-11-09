@@ -1,20 +1,15 @@
 package core
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
-	"io"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/shared"
+	"github.com/fudomunro/aegis/internal/types"
 	"log/slog"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
 
 // userDefinedRegistry holds loaded UDT schemas (issue #15 Phase 6 PoC).
@@ -226,164 +221,4 @@ func (reg *userDefinedRegistry) All() []types.UserDefinedTypeSchema {
 		out = append(out, s)
 	}
 	return out
-}
-
-// dottedPath reads a value from a decoded JSON object using a dotted path.
-// Array indexes are numeric segments: "items.0.name". Empty path returns v.
-func dottedPath(v any, path string) any {
-	if path == "" {
-		return v
-	}
-	cur := v
-	for _, seg := range strings.Split(path, ".") {
-		if cur == nil {
-			return nil
-		}
-		switch node := cur.(type) {
-		case map[string]any:
-			cur = node[seg]
-		case []any:
-			idx := 0
-			if _, err := fmt.Sscanf(seg, "%d", &idx); err != nil || idx < 0 || idx >= len(node) {
-				return nil
-			}
-			cur = node[idx]
-		default:
-			return nil
-		}
-	}
-	return cur
-}
-
-// mapUserDefinedItem turns one source JSON object into a neutral item using
-// the schema field map. Missing paths leave fields unset; required-field
-// validation is intentionally deferred (fail-open listing).
-func mapUserDefinedItem(schema types.UserDefinedTypeSchema, src types.UserDefinedSourceSpec, raw any) types.UserDefinedItem {
-	fields := map[string]any{}
-	for name, path := range src.FieldMap {
-		if v := dottedPath(raw, path); v != nil {
-			fields[name] = v
-		}
-	}
-	item := types.UserDefinedItem{Fields: fields}
-	if src.IDField != "" {
-		if v := dottedPath(raw, src.IDField); v != nil {
-			item.Sources = append(item.Sources, types.UserDefinedSource{})
-			item.Sources[0].ID = fmt.Sprint(v)
-		}
-	}
-	// Ensure one source entry even when IDField is absent.
-	if len(item.Sources) == 0 {
-		item.Sources = []types.UserDefinedSource{{}}
-	}
-	svc := &item.Sources[0]
-	svc.Service = src.ID
-	svc.ServiceName = src.Name
-	if svc.ID == "" {
-		if v := dottedPath(raw, "id"); v != nil {
-			svc.ID = fmt.Sprint(v)
-		}
-	}
-	if src.URLTemplate != "" && svc.ID != "" {
-		svc.URL = strings.ReplaceAll(src.URLTemplate, "{id}", svc.ID)
-	}
-	item.Name = schema.UserDefinedItemName(item)
-	if entity := schema.UserDefinedEntityID(item); entity != "" {
-		item.EntityID = entity
-	}
-	return item
-}
-
-// mapUserDefinedDocument maps a decoded source document into neutral items.
-func mapUserDefinedDocument(schema types.UserDefinedTypeSchema, src types.UserDefinedSourceSpec, doc any) []types.UserDefinedItem {
-	rows := any(doc)
-	if src.ItemsPath != "" {
-		rows = dottedPath(doc, src.ItemsPath)
-	}
-	var list []any
-	switch node := rows.(type) {
-	case []any:
-		list = node
-	case nil:
-		return nil
-	default:
-		list = []any{node}
-	}
-	out := make([]types.UserDefinedItem, 0, len(list))
-	for _, raw := range list {
-		out = append(out, mapUserDefinedItem(schema, src, raw))
-	}
-	return out
-}
-
-// maxUserDefinedItems caps one source page so a hostile or huge feed cannot
-// pin memory (same spirit as shared.LibraryPageCap on named providers).
-const maxUserDefinedItems = 500
-
-// maxUserDefinedBytes caps file_json and http_json payloads before decode.
-const maxUserDefinedBytes = 4 << 20
-
-// fetchUserDefinedSource loads and maps one schema source. file_json paths
-// are resolved relative to the schema directory when not absolute.
-func fetchUserDefinedSource(ctx context.Context, schema types.UserDefinedTypeSchema, src types.UserDefinedSourceSpec, baseDir string, client *http.Client) ([]types.UserDefinedItem, bool, error) {
-	var body []byte
-	var err error
-	switch src.Kind {
-	case "file_json":
-		path := src.Path
-		if !filepath.IsAbs(path) && baseDir != "" {
-			path = filepath.Join(baseDir, path)
-		}
-		f, oerr := os.Open(path)
-		if oerr != nil {
-			return nil, false, oerr
-		}
-		defer f.Close()
-		body, err = io.ReadAll(io.LimitReader(f, maxUserDefinedBytes+1))
-		if err != nil {
-			return nil, false, err
-		}
-		if len(body) > maxUserDefinedBytes {
-			return nil, false, fmt.Errorf("file_json %s: payload exceeds %d bytes", src.ID, maxUserDefinedBytes)
-		}
-	case "http_json":
-		req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, src.Endpoint, nil)
-		if reqErr != nil {
-			return nil, false, reqErr
-		}
-		for k, v := range src.Headers {
-			req.Header.Set(k, v)
-		}
-		if client == nil {
-			client = shared.HTTPClient
-		}
-		resp, doErr := client.Do(req)
-		if doErr != nil {
-			return nil, false, doErr
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode < 200 || resp.StatusCode > 299 {
-			return nil, false, fmt.Errorf("http_json %s: status %d", src.ID, resp.StatusCode)
-		}
-		body, err = io.ReadAll(io.LimitReader(resp.Body, maxUserDefinedBytes+1))
-		if err != nil {
-			return nil, false, err
-		}
-		if len(body) > maxUserDefinedBytes {
-			return nil, false, fmt.Errorf("http_json %s: payload exceeds %d bytes", src.ID, maxUserDefinedBytes)
-		}
-	default:
-		return nil, false, fmt.Errorf("unsupported source kind %q", src.Kind)
-	}
-	var doc any
-	if err := json.Unmarshal(body, &doc); err != nil {
-		return nil, false, err
-	}
-	items := mapUserDefinedDocument(schema, src, doc)
-	truncated := false
-	if len(items) > maxUserDefinedItems {
-		items = items[:maxUserDefinedItems]
-		truncated = true
-	}
-	return items, truncated, nil
 }

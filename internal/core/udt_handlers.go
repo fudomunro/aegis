@@ -1,74 +1,12 @@
 package core
 
 import (
-	"context"
 	"fmt"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/types"
 	"net/http"
 	"sort"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/shared"
-	"github.com/fudomunro/aegis/internal/types"
 )
-
-// HandleLibraryUserDefined serves GET /v1/library/{udt-id} for one loaded
-// user-defined kind through the shared aggregate pipeline (cache, type
-// policy, fan-out, merge, JSON) — issue #15 Phase 6 PoC.
-// Schema is resolved with the admin file-selection overlay at request time
-// so /v1/admin/udt picks apply without a restart.
-func (s *Server) HandleLibraryUserDefined(schema types.UserDefinedTypeSchema) http.HandlerFunc {
-	kindID := schema.ID
-	kind := schema.LibraryKind()
-	return func(w http.ResponseWriter, r *http.Request) {
-		schema := schema
-		kind := kind
-		if s.udts != nil {
-			schema = s.udts.SchemaWithOverlay(kindID)
-			kind = schema.LibraryKind()
-		}
-		kinds.Aggregate(s, s.libraryEngine(), w, r, kinds.Spec[types.UserDefinedItem]{
-			Kind: kind,
-			Targets: func(r *http.Request) (targets []kinds.NamedLister[types.UserDefinedItem], denied []string) {
-				// Type-owned policy decides agent visibility (issue #148).
-				// UDTs are opt-in: without an enabling policy entry this denies.
-				if !s.userDefinedReadable(kind.PermType) {
-					denied = append(denied, schema.ID)
-					return targets, denied
-				}
-				baseDir := ""
-				if s.udts != nil {
-					baseDir = s.udts.DirFor(schema.ID)
-				}
-				for _, src := range schema.Sources {
-					src := src
-					targets = append(targets, kinds.NamedLister[types.UserDefinedItem]{
-						ID: src.ID,
-						List: func(ctx context.Context) ([]types.UserDefinedItem, bool, error) {
-							// Fail-open per source: fetch errors surface as
-							// by_service status, never a hard 500 for the list.
-							return fetchUserDefinedSource(ctx, schema, src, baseDir, shared.HTTPClient)
-						},
-					})
-				}
-				return targets, nil
-			},
-			ServiceOf: types.UserDefinedServiceName,
-			SortKey: func(item types.UserDefinedItem) string {
-				if item.EntityID != "" {
-					return "e:" + item.EntityID
-				}
-				return "n:" + schema.UserDefinedIdentityKey(item)
-			},
-			Merge: func(in []types.UserDefinedItem) []types.UserDefinedItem {
-				return types.MergeUserDefinedItems(schema, in)
-			},
-			Encode: func(items []types.UserDefinedItem, page types.PageRequest, bySvc map[string]types.LibraryServiceStatus) any {
-				return types.EncodeUserDefinedList(schema, items, page, bySvc)
-			},
-		})
-	}
-}
 
 // userDefinedReadable reports whether data grant allows GET on a UDT kind.
 func (s *Server) userDefinedReadable(permType string) bool {
@@ -90,19 +28,6 @@ func (s *Server) registerUserDefinedKinds() {
 	}
 	// Intentionally no SeedDataGrant: default_access cannot grant access.
 	// Re-applying after Config.Reload is unnecessary because nothing is seeded.
-}
-
-// udtRouteHandlers maps user-defined kind paths to their HTTP handlers.
-func (s *Server) udtRouteHandlers() map[string]http.HandlerFunc {
-	out := map[string]http.HandlerFunc{}
-	if s == nil || s.udts == nil {
-		return out
-	}
-	for _, schema := range s.udts.All() {
-		schema := schema
-		out[schema.Path] = s.HandleLibraryUserDefined(schema)
-	}
-	return out
 }
 
 // userDefinedHint returns pre-request instructions for one UDT kind,

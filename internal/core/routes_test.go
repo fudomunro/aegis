@@ -161,8 +161,8 @@ func TestRegisterRoutes_UnknownAuthPath(t *testing.T) {
 // TestRegisterRoutes_FullMuxNoPanic builds the complete mux — built-ins
 // plus a user-defined kind fixture — and asserts ServeMux registration
 // does not panic. Go's mux panics on conflicting patterns at registration,
-// which is the real shadow check behind mergeUDTRoutes' exact-string
-// comparison (issue #312).
+// which is the real shadow check behind registry composition
+// (kinds.MergeUserDefined; issue #312).
 func TestRegisterRoutes_FullMuxNoPanic(t *testing.T) {
 	dir := t.TempDir()
 	writeSchemaFile(t, dir, "schema.json", `{

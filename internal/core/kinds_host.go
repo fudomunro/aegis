@@ -129,8 +129,8 @@ func (s *Server) CopyInfo(kind, serviceID, externalID string) *types.CopyInfo {
 
 var _ kinds.Host = (*Server)(nil)
 
-// builtinKinds returns the kinds registry wired over this server (issue
-// #312). Built lazily so &Server{} fixtures fail open.
+// builtinKinds returns the wired built-in kinds (issue #312). Built lazily
+// so &Server{} fixtures fail open.
 func (s *Server) builtinKinds() []kinds.Kind {
 	s.builtinKindsOnce.Do(func() {
 		s.kindList = kinds.Builtin(s, s.libraryEngine(), kinds.Deps{
@@ -147,14 +147,63 @@ func (s *Server) builtinKinds() []kinds.Kind {
 	return s.kindList
 }
 
-// builtinKind returns the registered kind for id (issue #312).
-func (s *Server) builtinKind(id string) (kinds.Kind, bool) {
-	for _, k := range s.builtinKinds() {
+// kindRegistry returns the composed kind registry: the wired built-ins
+// plus any loaded user-defined kinds, with the shadow check applied
+// (issue #312). UDT kinds are composed per call so fixtures that load
+// packs late still see them, matching the old per-request route merge.
+func (s *Server) kindRegistry() []kinds.Kind {
+	builtin := s.builtinKinds()
+	if s == nil || s.udts == nil {
+		return builtin
+	}
+	schemas := s.udts.All()
+	udts := make([]kinds.Kind, 0, len(schemas))
+	for _, schema := range schemas {
+		udts = append(udts, kinds.UserDefined(s, s.libraryEngine(), schema, s.userDefinedDeps()))
+	}
+	merged, _ := kinds.MergeUserDefined(builtin, udts)
+	return merged
+}
+
+// registryKind returns the registered kind for id (issue #312).
+func (s *Server) registryKind(id string) (kinds.Kind, bool) {
+	for _, k := range s.kindRegistry() {
 		if k.Def().ID == id {
 			return k, true
 		}
 	}
 	return nil, false
+}
+
+// listHandler resolves a kind's list-route handler (its Def().Path route).
+func listHandler(k kinds.Kind) http.HandlerFunc {
+	for _, route := range k.Routes() {
+		if route.Pattern == k.Def().Path {
+			return route.Handler
+		}
+	}
+	return nil
+}
+
+// userDefinedDeps wires the user-defined kind constructor args (issue
+// #15): overlay-resolved schemas, pack directories, and the data-grant
+// gate.
+func (s *Server) userDefinedDeps() kinds.UserDefinedDeps {
+	return kinds.UserDefinedDeps{
+		Schema: func(id string) types.UserDefinedTypeSchema {
+			if s.udts == nil {
+				return types.UserDefinedTypeSchema{}
+			}
+			return s.udts.SchemaWithOverlay(id)
+		},
+		BaseDir: func(id string) string {
+			if s.udts == nil {
+				return ""
+			}
+			return s.udts.DirFor(id)
+		},
+		Readable: s.userDefinedReadable,
+	}
 }
 
 // libraryHandler resolves a kind's list handler through the route
