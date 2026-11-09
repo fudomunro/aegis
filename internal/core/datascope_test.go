@@ -295,7 +295,7 @@ func TestLibraryDocumentText_HidesForeignDataset(t *testing.T) {
 	srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		r.SetPathValue("service", "sample-library-shire")
 		r.SetPathValue("id", ownID)
-		srv.HandleLibraryDocumentText(w, r)
+		srv.routeHandler("/v1/library/documents/{service}/{id}/text")(w, r)
 	})(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("own document text status = %d body=%s", w.Code, w.Body.String())
@@ -306,7 +306,7 @@ func TestLibraryDocumentText_HidesForeignDataset(t *testing.T) {
 	srv.AuthMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		r.SetPathValue("service", "sample-library-gondor")
 		r.SetPathValue("id", ownID)
-		srv.HandleLibraryDocumentText(w, r)
+		srv.routeHandler("/v1/library/documents/{service}/{id}/text")(w, r)
 	})(w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("foreign document text status = %d body=%s", w.Code, w.Body.String())

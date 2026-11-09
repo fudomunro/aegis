@@ -494,12 +494,3 @@ func AppIdentityFrom(r *http.Request) *AppIdentity {
 	id, _ := r.Context().Value(appIdentityKey{}).(*AppIdentity)
 	return id
 }
-
-// appAllowsLibrary reports whether the app may call the given library
-// endpoint for permType under its scopes.
-func appAllowsLibrary(app *AppIdentity, permType, method string) bool {
-	if app == nil {
-		return true
-	}
-	return policy.AllowsMethod(policy.NormalizeAccess(app.Scopes.For(permType)), method)
-}

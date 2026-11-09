@@ -90,8 +90,6 @@ func newKindRuntime[P any](kind string, handle routeHandle, extra ...Route) kind
 var kindRuntime = map[string]kindRuntimeEntry{
 	"messages":     messagesKindRuntime(),
 	"transactions": newKindRuntime[types.TransactionProvider]("transactions", (*Server).HandleLibraryTransactions),
-	"documents": newKindRuntime[types.DocumentProvider]("documents", (*Server).HandleLibraryDocuments,
-		Route{Pattern: "/v1/library/documents/{service}/{id}/text", Handle: (*Server).HandleLibraryDocumentText}),
 }
 
 // messagesKindRuntime adds the local mail archive (Gmail sync + Takeout) as a
