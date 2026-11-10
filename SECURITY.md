@@ -312,18 +312,12 @@ Agent data grants live in `data_grants` (aegis.json or `data_grants.json`).
 Denials are enforced on the
 content/ingest proxy and library endpoints with 403. Agent discovery is via
 pre-request instructions and connector `SystemInstructions` (issue #119) — not
-a capabilities listing API. Omitting a data grant (or `permissions`) preserves
-unrestricted access for authorized callers unless a kind defaults closed
-(places default to `none`).
-
-**External principals (invite tokens) are deny-by-default** — the owner-tier
-“omit = unrestricted” rule does not apply to them. Their data scope's
-`grants` map is the complete allow list: an unlisted kind resolves to
-`none` (a reserved `default` entry can set the level for unlisted kinds;
-opt-in kinds still require an explicit name). Sharing is opt-in per kind.
-Scope grants also never exceed what agent data grants allow (AND of
-both layers). This is the deliberate split from owner-tier semantics — see
-`docs/external-access.md` “Deny-by-default”.
+a capabilities listing API. **Every key is deny-by-default**: an unlisted
+kind resolves to `none` (a reserved `default` entry sets the level for
+unlisted kinds; opt-in kinds like `places` still require an explicit name).
+The owner key ships prefilled with a permissive `default` entry when no
+grants are configured, so fresh installs stay unrestricted out of the box —
+that prefill is the only remnant of the old “omit = unrestricted” rule.
 
 ### Third-party app tokens (issue #131)
 
@@ -332,7 +326,7 @@ admin API. App tokens:
 
 - Are scope-limited to library **read** endpoints (not admin, proxy, OAuth, or mail).
 - Carry **app data grants** (`scopes`) using the same access levels, including `freebusy` for events.
-- Never grant more than agent data grants / service permissions allow (AND of both layers).
+- Their `scopes` map is their policy, resolved by the same deny-by-default lookup as every other key.
 - Are stored as SHA-256 hashes in `apps.json` (0600); plaintext is shown once.
 
 An app token is an authorization layer; reachability comes from the

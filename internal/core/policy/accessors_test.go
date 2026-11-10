@@ -56,11 +56,11 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 		}
 	}
 
-	levels, explicit = AppOverviewLevels(Permissions{
-		PermissionDefaultKey: AccessNone,
-		"events":             AccessFreeBusy,
-		"places":             AccessPrecise,
-		"tracks":             AccessRead,
+	levels, explicit = AppOverviewLevels(GrantMap{
+		DefaultKey: AccessNone,
+		"events":   AccessFreeBusy,
+		"places":   AccessPrecise,
+		"tracks":   AccessRead,
 	}, kinds)
 	if levels["events"] != AccessFreeBusy {
 		t.Fatalf("events = %q, want freebusy", levels["events"])
@@ -72,8 +72,8 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 		t.Fatalf("explicit = %v", explicit)
 	}
 
-	levels, _ = AppOverviewLevels(Permissions{
-		PermissionDefaultKey: AccessRead,
+	levels, _ = AppOverviewLevels(GrantMap{
+		DefaultKey: AccessRead,
 	}, kinds)
 	if levels["tracks"] != AccessRead {
 		t.Fatalf("tracks via default = %q, want read", levels["tracks"])

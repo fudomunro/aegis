@@ -138,7 +138,7 @@ func TestAdminMiddleware_AppTokenNeverAdmin(t *testing.T) {
 	_, token, err := srv.apps.Create(apps.AppCreateRequest{
 		ID:     "evil-app",
 		Name:   "evil-app",
-		Scopes: policy.Permissions{"tracks": policy.AccessRead},
+		Scopes: policy.GrantMap{"tracks": policy.AccessRead},
 	})
 	if err != nil {
 		t.Fatalf("create app: %v", err)

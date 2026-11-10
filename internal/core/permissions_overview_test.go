@@ -39,7 +39,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if _, _, err := appStore.Create(apps.AppCreateRequest{
 		ID:   "eco-demo",
 		Name: "Event Coordinator",
-		Scopes: policy.Permissions{
+		Scopes: policy.GrantMap{
 			"events": policy.AccessFreeBusy,
 			// Explicit none still counts as relevant for the editor.
 			"tracks": policy.AccessNone,
@@ -50,7 +50,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if _, _, err := appStore.Create(apps.AppCreateRequest{
 		ID:     "disabled-app",
 		Name:   "Disabled App",
-		Scopes: policy.Permissions{"photos": policy.AccessRead},
+		Scopes: policy.GrantMap{"photos": policy.AccessRead},
 	}); err != nil {
 		t.Fatal(err)
 	}

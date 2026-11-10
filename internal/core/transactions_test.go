@@ -74,14 +74,14 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 	}
 }
 
-func TestValidatePermissions_SummaryOnlyOnTransactions(t *testing.T) {
-	if err := policy.ValidatePermissions(policy.Permissions{"transactions": policy.AccessSummary}); err != nil {
+func TestValidateGrantMap_SummaryOnlyOnTransactions(t *testing.T) {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"transactions": policy.AccessSummary}); err != nil {
 		t.Fatalf("summary on transactions: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessSummary}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessSummary}); err == nil {
 		t.Fatal("expected summary on tracks rejected")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"default": policy.AccessSummary}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"default": policy.AccessSummary}); err == nil {
 		t.Fatal("expected summary on default rejected")
 	}
 }
@@ -361,12 +361,12 @@ func TestLibraryKindTransactions_Registered(t *testing.T) {
 }
 
 func TestSummaryKinds(t *testing.T) {
-	p := policy.Permissions{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
+	p := policy.GrantMap{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
 	got := p.SummaryKinds()
 	if len(got) != 1 || got[0] != "transactions" {
 		t.Fatalf("SummaryKinds = %v", got)
 	}
-	if (&policy.Permissions{}).SummaryKinds() != nil {
+	if (&policy.GrantMap{}).SummaryKinds() != nil {
 		t.Fatal("nil map should return nil")
 	}
 }

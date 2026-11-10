@@ -12,7 +12,7 @@ import (
 )
 
 func TestPermissions_LevelAndAllows(t *testing.T) {
-	var nilPerms policy.Permissions
+	var nilPerms policy.GrantMap
 	if nilPerms.Level("tracks") != policy.AccessNone {
 		t.Fatalf("nil permissions Level(tracks) = %q, want %q", nilPerms.Level("tracks"), policy.AccessNone)
 	}
@@ -20,11 +20,11 @@ func TestPermissions_LevelAndAllows(t *testing.T) {
 		t.Fatal("nil permissions deny all methods")
 	}
 
-	p := policy.Permissions{
-		policy.PermissionDefaultKey: policy.AccessRead,
-		"playlists":                 policy.AccessFull,
-		"player":                    policy.AccessNone,
-		"contacts":                  policy.AccessWrite,
+	p := policy.GrantMap{
+		policy.DefaultKey: policy.AccessRead,
+		"playlists":       policy.AccessFull,
+		"player":          policy.AccessNone,
+		"contacts":        policy.AccessWrite,
 	}
 
 	if p.Level("tracks") != policy.AccessRead {
@@ -64,7 +64,7 @@ func TestPermissions_LevelAndAllows(t *testing.T) {
 }
 
 func TestPermissions_NormalizeAliases(t *testing.T) {
-	p := policy.Permissions{"a": "READ", "b": "deny", "c": "read_write"}
+	p := policy.GrantMap{"a": "READ", "b": "deny", "c": "read_write"}
 	if p.Level("a") != policy.AccessRead {
 		t.Fatalf("a = %q", p.Level("a"))
 	}
@@ -77,11 +77,11 @@ func TestPermissions_NormalizeAliases(t *testing.T) {
 }
 
 func TestPermissions_DeniedKinds(t *testing.T) {
-	p := policy.Permissions{
-		policy.PermissionDefaultKey: policy.AccessNone,
-		"player":                    "none",
-		"albums":                    policy.AccessRead,
-		"tracks":                    "deny",
+	p := policy.GrantMap{
+		policy.DefaultKey: policy.AccessNone,
+		"player":          "none",
+		"albums":          policy.AccessRead,
+		"tracks":          "deny",
 	}
 	denied := p.DeniedKinds()
 	if len(denied) != 2 || denied[0] != "player" || denied[1] != "tracks" {
@@ -89,17 +89,17 @@ func TestPermissions_DeniedKinds(t *testing.T) {
 	}
 }
 
-func TestValidatePermissions(t *testing.T) {
-	if err := policy.ValidatePermissions(nil); err != nil {
+func TestValidateGrantMap(t *testing.T) {
+	if err := policy.ValidateGrantMap(nil); err != nil {
 		t.Fatalf("nil should be valid: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "tracks": "nope"}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{policy.DefaultKey: policy.AccessRead, "tracks": "nope"}); err == nil {
 		t.Fatal("expected error for unknown level")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"": policy.AccessRead}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"": policy.AccessRead}); err == nil {
 		t.Fatal("expected error for empty key")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessFull}); err != nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessFull}); err != nil {
 		t.Fatalf("valid map rejected: %v", err)
 	}
 }
@@ -147,8 +147,8 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}},
 		typePolicies: policy.DataGrants{
-			policy.PermissionDefaultKey: {Default: policy.AccessRead},
-			"playlists":                 {Default: policy.AccessFull},
+			policy.DefaultKey: {Default: policy.AccessRead},
+			"playlists":       {Default: policy.AccessFull},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -177,10 +177,10 @@ func TestAllDataDenied(t *testing.T) {
 	if !allDataDenied(nil) {
 		t.Fatal("nil grants deny everything")
 	}
-	if allDataDenied(policy.Permissions{"default": policy.AccessRead, "player": policy.AccessNone}) {
+	if allDataDenied(policy.GrantMap{"default": policy.AccessRead, "player": policy.AccessNone}) {
 		t.Fatal("default read should not be all-denied")
 	}
-	if !allDataDenied(policy.Permissions{"default": policy.AccessNone, "player": policy.AccessNone, "tracks": "deny"}) {
+	if !allDataDenied(policy.GrantMap{"default": policy.AccessNone, "player": policy.AccessNone, "tracks": "deny"}) {
 		t.Fatal("all none should be all-denied")
 	}
 }
@@ -220,4 +220,43 @@ func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
 
 func writeFile(path, content string) error {
 	return os.WriteFile(path, []byte(content), 0o644)
+}
+
+func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
+	// Permissive default: explicit denials are what the agent must avoid.
+	open := policy.GrantMap{
+		policy.DefaultKey: policy.AccessRead,
+		"player":          policy.AccessNone,
+		"events":          policy.AccessFreeBusy,
+	}
+	notice := permissionNotice(open)
+	if !strings.Contains(notice, "player") || !strings.Contains(notice, "not available") {
+		t.Fatalf("negative mode should list denials: %s", notice)
+	}
+	if !strings.Contains(notice, "free/busy only") {
+		t.Fatalf("freebusy limit missing: %s", notice)
+	}
+
+	// Deny-by-default: the map is a complete allow list.
+	closed := policy.GrantMap{
+		"contacts":     policy.AccessRead,
+		"playlists":    policy.AccessFull,
+		"transactions": policy.AccessSummary,
+	}
+	notice = permissionNotice(closed)
+	if !strings.Contains(notice, "only these kinds are available") {
+		t.Fatalf("positive mode missing: %s", notice)
+	}
+	for _, k := range []string{"contacts", "playlists", "transactions"} {
+		if !strings.Contains(notice, k) {
+			t.Fatalf("allow list missing %q: %s", k, notice)
+		}
+	}
+	if !strings.Contains(notice, "totals-only") {
+		t.Fatalf("summary limit missing: %s", notice)
+	}
+
+	if permissionNotice(nil) != "" {
+		t.Fatal("nil map should produce no notice")
+	}
 }

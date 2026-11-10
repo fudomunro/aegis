@@ -67,6 +67,7 @@ axis it is keyed by.
 | **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **library kind** at an **access level** | Hero term for product English (`docs/configuration.md` “Data grants”, admin UI, injection). Never “kind grant” |
 | **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
+| **Grant map** | The kind → access-level rule map a recognized key carries at request time (materialized from its `DataGrants`) | `GrantMap` in code. Uniformly deny-by-default: explicit entry → `default` → `none` |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
 | **Accessor** | Principal-level data grant per library kind (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |

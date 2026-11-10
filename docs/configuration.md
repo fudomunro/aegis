@@ -846,7 +846,7 @@ events-only.
 - Not document full-text (`…/{service}/{id}/text`) and not user-defined kinds. Built-in list paths are derived from `LibraryKind.AppReadable`.
 
 When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
-availability fields even if service permissions would allow full events ( + #131). Cache entries are isolated per app scope level so a freebusy app
+availability fields even if the grant would allow full events ( + #131). Cache entries are isolated per app scope level so a freebusy app
 never reads a full-events cache.
 
 **Reachability.** App tokens are an authorization layer, not a public ingress.

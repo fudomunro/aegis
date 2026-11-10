@@ -206,7 +206,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	}
 
 	// App token must not call authorize (cannot mint more grants).
-	_, token := createTestApp(t, store, "other", policy.Permissions{"events": policy.AccessRead})
+	_, token := createTestApp(t, store, "other", policy.GrantMap{"events": policy.AccessRead})
 	req = httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+token)

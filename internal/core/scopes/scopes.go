@@ -49,9 +49,9 @@ type Scope struct {
 	APIKeyHint string `json:"api_key_hint,omitempty"`
 	// ReadOnly rejects mutating agent methods for this principal (demo).
 	ReadOnly bool `json:"read_only,omitempty"`
-	// Grants are this principal's deny-by-default allow list (issue #253).
-	// Scope grants only tighten owner-tier policy (AND of both layers) and an
-	// unlisted type resolves to none. See docs/external-access.md.
+	// Grants are this principal's data grants (issue #253): the complete
+	// deny-by-default allow list, resolved by the same GrantMap.Level lookup
+	// as every other key. See docs/external-access.md.
 	Grants policy.DataGrants `json:"grants,omitempty"`
 	// Disabled blocks authentication without deleting the record.
 	Disabled bool `json:"disabled,omitempty"`

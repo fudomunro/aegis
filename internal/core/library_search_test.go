@@ -414,7 +414,7 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 	}
 	store := testAppStore(t)
 	srv.apps = store
-	_, appToken := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessFreeBusy})
+	_, appToken := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessFreeBusy})
 
 	// A first query materializes the index at owner tier.
 	before := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
@@ -469,7 +469,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	}
 	store := testAppStore(t)
 	srv.apps = store
-	_, appToken := createTestApp(t, store, "reader", policy.Permissions{"documents": policy.AccessMetadata})
+	_, appToken := createTestApp(t, store, "reader", policy.GrantMap{"documents": policy.AccessMetadata})
 
 	before := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
 	if len(before) != 1 || before[0].Excerpt != "sensitive excerpt" {

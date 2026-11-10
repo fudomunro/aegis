@@ -102,13 +102,13 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 		add("writePolicyNotice", notice)
 	}
 
-	add("permissionNotice/denied", permissionNotice(policy.Permissions{
-		policy.PermissionDefaultKey: policy.AccessNone,
-		"photos":                    policy.AccessNone,
+	add("permissionNotice/denied", permissionNotice(policy.GrantMap{
+		policy.DefaultKey: policy.AccessNone,
+		"photos":          policy.AccessNone,
 	}))
-	add("permissionNotice/freebusy", permissionNotice(policy.Permissions{
-		policy.PermissionDefaultKey: policy.AccessRead,
-		"events":                    policy.AccessFreeBusy,
+	add("permissionNotice/freebusy", permissionNotice(policy.GrantMap{
+		policy.DefaultKey: policy.AccessRead,
+		"events":          policy.AccessFreeBusy,
 	}))
 
 	out = append(out, connectorAgentSamples(t, srv)...)

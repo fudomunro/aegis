@@ -281,7 +281,7 @@ func errorsIsUnauthorized(err error) bool {
 
 // requireMirrorWritable checks the target allows writes for the kind under
 // the caller's grant map.
-func (s *Server) requireMirrorWritable(grants policy.Permissions, serviceID, kind string) error {
+func (s *Server) requireMirrorWritable(grants policy.GrantMap, serviceID, kind string) error {
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
 		return fmt.Errorf("service %q not configured", serviceID)
@@ -298,7 +298,7 @@ func (s *Server) requireMirrorWritable(grants policy.Permissions, serviceID, kin
 
 // requireMirrorReadable checks the source allows reads for the kind under
 // the caller's grant map.
-func (s *Server) requireMirrorReadable(grants policy.Permissions, serviceID, kind string) error {
+func (s *Server) requireMirrorReadable(grants policy.GrantMap, serviceID, kind string) error {
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
 		return fmt.Errorf("service %q not configured", serviceID)

@@ -126,12 +126,12 @@ edits the repo. Same word, two audiences (see audience map §F).
 
 ### 2.3 Permissions vocabulary cluster
 
-`DataGrant`, `Permissions`, `EffectiveAccess`, `Accessor`, `KindAccess`,
+`DataGrant`, `GrantMap`, `Accessor`, `KindAccess`,
 `PermissionsOverview`, access-level tokens, service `permissions` maps,
 `data_grants` config, and admin “Data grants by kind”.
 
 **Overlap:** five Go types and two config keys all answer “who can see what”.
-Data grant is primary; service maps only tighten; Accessor is a third principal
+One grant map per key (deny-by-default); Accessor is a third principal
 axis. The words “permission”, “access”, and “policy” are used interchangeably
 in English.
 

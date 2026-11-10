@@ -115,7 +115,7 @@ func AnyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
 // rule map fingerprint plus the dataset partition, so one key never reads
 // another's cached response (keys with different grants see different
 // responses even inside one dataset).
-func grantsCacheSuffix(r *http.Request, g policy.Permissions) string {
+func grantsCacheSuffix(r *http.Request, g policy.GrantMap) string {
 	suffix := "|g:" + g.Fingerprint()
 	if ds := scopes.Dataset(r); ds != "" {
 		suffix += "|ds:" + ds

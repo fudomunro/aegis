@@ -5,7 +5,7 @@ import (
 )
 
 // AccessorKind identifies who or what is accessing data through Aegis
-// (issue #160). Permissions editing must show every accessor class, not
+// (issue #160). GrantMap editing must show every accessor class, not
 // only agents. Multi-user principals (issue #149) will add AccessorUser.
 type AccessorKind string
 
@@ -66,7 +66,7 @@ func (a Accessor) AccessorLevel(kind string) string {
 // when they name the type or their effective level is not "none". Sync
 // pipelines appear only for the types they actually store.
 func (a Accessor) RelevantTo(kind string) bool {
-	if kind == "" || kind == PermissionDefaultKey {
+	if kind == "" || kind == DefaultKey {
 		return false
 	}
 	switch a.Kind {
@@ -127,7 +127,7 @@ type PermissionsOverview struct {
 func BuildKindAccess(kinds []string, accessors []Accessor) []KindAccess {
 	out := make([]KindAccess, 0, len(kinds))
 	for _, kind := range kinds {
-		if kind == "" || kind == PermissionDefaultKey {
+		if kind == "" || kind == DefaultKey {
 			continue
 		}
 		row := KindAccess{ID: kind}
@@ -179,7 +179,7 @@ func OverviewKinds(preferred, extra []string) []string {
 	seen := map[string]bool{}
 	out := make([]string, 0, len(preferred)+len(extra))
 	for _, id := range preferred {
-		if id == "" || id == PermissionDefaultKey || seen[id] {
+		if id == "" || id == DefaultKey || seen[id] {
 			continue
 		}
 		seen[id] = true
@@ -188,7 +188,7 @@ func OverviewKinds(preferred, extra []string) []string {
 	extraCopy := append([]string(nil), extra...)
 	sort.Strings(extraCopy)
 	for _, id := range extraCopy {
-		if id == "" || id == PermissionDefaultKey || seen[id] {
+		if id == "" || id == DefaultKey || seen[id] {
 			continue
 		}
 		seen[id] = true
@@ -202,7 +202,7 @@ func ExtraPermissionKeys(maps ...map[string]string) []string {
 	var out []string
 	for _, m := range maps {
 		for k := range m {
-			if k == "" || k == PermissionDefaultKey {
+			if k == "" || k == DefaultKey {
 				continue
 			}
 			out = append(out, k)
@@ -218,7 +218,7 @@ func ExtraPolicyKeys(policies DataGrants) []string {
 	}
 	out := make([]string, 0, len(policies))
 	for k := range policies {
-		if k == "" || k == PermissionDefaultKey {
+		if k == "" || k == DefaultKey {
 			continue
 		}
 		out = append(out, k)
@@ -242,11 +242,11 @@ func AgentOverviewLevels(policies DataGrants, kinds []string) map[string]string 
 // types are none, matching Create's default=none rule. Opt-in types
 // (places) stay none unless the scope map names them. Explicit keys are
 // reported so the editor can treat a deliberate "none" as relevant.
-func AppOverviewLevels(appScopes Permissions, kinds []string) (levels map[string]string, explicit map[string]bool) {
+func AppOverviewLevels(appScopes GrantMap, kinds []string) (levels map[string]string, explicit map[string]bool) {
 	levels = make(map[string]string, len(kinds))
 	explicit = make(map[string]bool, len(appScopes))
 	for k := range appScopes {
-		if k == "" || k == PermissionDefaultKey {
+		if k == "" || k == DefaultKey {
 			continue
 		}
 		explicit[k] = true

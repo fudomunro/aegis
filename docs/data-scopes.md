@@ -102,18 +102,16 @@ regardless of levels.
 | Type absent, no `default` key | `none` |
 | Type absent, `default` key present | the `default` key's level |
 | `{"music": {}}` (listed, empty) | `none` — a listed kind must state its own level |
-| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides only tighten; they never open a closed kind. Set the kind's `default` field to grant, provider entries to narrow |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider entries are legacy and ignored; a listed kind must state its own `default` level |
 | `{"default": {"default": "read"}, "music": {}}` | `none` for `music` — the `default` key covers unlisted kinds only |
 
-This runs in a **dedicated scope-grants resolver**, never in
-`policy.DataGrants.Access` (owner-tier "unset = unrestricted" semantics must
-not move). Each resolution row is a test case.
+This is the single `GrantMap.Level` rule every key resolves through —
+there is no separate scope resolver. Each resolution row is a test case.
 
-**Owner-tier split.** The shared agent key and tailnet agents keep today's
-"omit = unrestricted" agent-data-grant semantics (places opt-in `none`).
-Scope grants for invite tokens deliberately diverge: sharing is opt-in per
-kind. Scope grants also never exceed what agent data grants allow (AND
-of both layers, same as app tokens).
+**Uniform with every other key.** A data scope's `grants` map is that
+principal's data grants — the same deny-by-default lookup the agent key and
+app tokens use. The owner key merely ships prefilled with a permissive
+`default` entry when unconfigured.
 
 **Migration.** Scopes that relied on "empty grants = full read" must set
 `"grants": {"default": {"default": "read"}}` (or list types) — enforcement
