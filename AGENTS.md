@@ -334,7 +334,7 @@ go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s ./intern
 go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s ./internal/core
 go test -run='^$' -fuzz='^FuzzParseTakeoutMessage$' -fuzztime=30s ./internal/connectors
 go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/connectors
-# Other targets (CI fuzzes every one; list them all in ci.yml):
+# Other targets (CI fuzzes every one in scope; keep the lists complete):
 # FuzzDetectBodyShape, FuzzIsMboxFromLine, FuzzTakeoutMessageID,
 # FuzzNormalizeIdentityKey, FuzzCleanYouTubeTitle,
 # FuzzTrackIdentityKey, FuzzMergePlaylistsSync, FuzzPlaylistLinkKey, FuzzMergeAlbumsSync
@@ -352,9 +352,14 @@ go build -o aegis .
   -log-format text
 ```
 
-CI (`.github/workflows/ci.yml`) runs `go vet`, race tests + coverage, an
-**80% floor**, **staticcheck** (findings are blocking), a **30s fuzz pass**
-over the hostile-input parsers, and `go build -o aegis .`.
+CI (`.github/workflows/ci.yml`) is scope-aware: a first job classifies the
+diff, and each heavy job runs only when the change can reach it — the Test
+job skips structurally inert diffs, Lint/Build run on Go changes, and each
+fuzz group runs when the code its targets exercise changed. Whenever it
+runs, the Test job is the full suite: `go vet`, race tests + coverage, an
+**80% floor**, plus **staticcheck** (findings are blocking), a **30s fuzz
+pass** over the hostile-input parsers, and `go build -o aegis .`. Unknown
+scope runs everything.
 
 ## Code conventions
 
