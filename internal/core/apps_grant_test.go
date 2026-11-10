@@ -20,7 +20,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 
 	// GET consent page is public.
 	req := httptest.NewRequest("GET",
-		"/v1/apps/authorize?client_id=eco-demo&name=Event%20Coordinator&scopes=events:freebusy&redirect_uri=/demo/third-party&state=abc",
+		"/v1/apps/authorize?client_id=eco-demo&name=Event%20Coordinator&scopes=freebusy:read&redirect_uri=/demo/third-party&state=abc",
 		nil)
 	w := httptest.NewRecorder()
 	srv.HandleAppAuthorize(w, req)
@@ -40,7 +40,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	form := url.Values{
 		"client_id":    {"eco-demo"},
 		"name":         {"Event Coordinator"},
-		"scopes":       {"events:freebusy"},
+		"scopes":       {"freebusy:read"},
 		"redirect_uri": {"/demo/third-party"},
 		"state":        {"abc"},
 	}
@@ -87,9 +87,9 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 		t.Fatal("missing code")
 	}
 
-	// App exists with freebusy scope.
+	// App exists with the freebusy route grant.
 	view, ok := store.Get("eco-demo")
-	if !ok || view.Scopes["events"] != policy.AccessFreeBusy {
+	if !ok || view.Scopes["freebusy"] != policy.AccessRead {
 		t.Fatalf("app = %+v ok=%v", view, ok)
 	}
 
@@ -150,7 +150,7 @@ func TestAppAuthorize_RejectsBadRedirect(t *testing.T) {
 	srv.grants = apps.NewGrantStore()
 
 	req := httptest.NewRequest("GET",
-		"/v1/apps/authorize?client_id=eco&scopes=events:freebusy&redirect_uri=https://evil.example.com/",
+		"/v1/apps/authorize?client_id=eco&scopes=freebusy:read&redirect_uri=https://evil.example.com/",
 		nil)
 	w := httptest.NewRecorder()
 	srv.HandleAppAuthorize(w, req)
@@ -179,7 +179,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	srv.apps = store
 	srv.grants = apps.NewGrantStore()
 
-	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"events:freebusy","redirect_uri":"/demo/third-party","state":"s1"}`
+	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"freebusy:read","redirect_uri":"/demo/third-party","state":"s1"}`
 	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
@@ -261,7 +261,7 @@ func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	srv.apps = store
 	srv.grants = apps.NewGrantStore()
 
-	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"events:freebusy","redirect_uri":"/demo/third-party"}`
+	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"freebusy:read","redirect_uri":"/demo/third-party"}`
 	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")

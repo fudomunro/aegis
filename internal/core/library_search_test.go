@@ -399,9 +399,14 @@ func eventsQuery(t *testing.T, srv *Server, bearer, path string) []kinds.Calenda
 	return resp.Events
 }
 
-func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
+func TestLibrarySearch_FreeBusyRouteKeepsOwnerRows(t *testing.T) {
+	// The freebusy route narrows only its response (issue #348): search
+	// index rows stay at owner-tier detail.
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"events": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{
+			"events":   {Default: policy.AccessRead},
+			"freebusy": {Default: policy.AccessRead},
+		},
 		Services: []Service{{
 			ID:     "google-calendar",
 			Name:   "Google Calendar",
@@ -412,9 +417,6 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: freeBusyTestEvents()},
 	}
-	store := testAppStore(t)
-	srv.apps = store
-	_, appToken := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessFreeBusy})
 
 	// A first query materializes the index at owner tier.
 	before := eventsQuery(t, srv, "test-key", "/v1/library/events?q=appointment")
@@ -426,16 +428,16 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// A free/busy-scoped app listing events must not rewrite those rows.
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
-	req.Header.Set("Authorization", "Bearer "+appToken)
+	// A freebusy-route listing must not rewrite those rows.
+	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("freebusy list status = %d body=%s", w.Code, w.Body.String())
 	}
 	if strings.Contains(w.Body.String(), "Doctor") {
-		t.Fatalf("freebusy app leaked title: %s", w.Body.String())
+		t.Fatalf("freebusy route leaked title: %s", w.Body.String())
 	}
 
 	srv.cache.Clear()
@@ -448,7 +450,7 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	if afterDocs != beforeDocs {
-		t.Fatalf("index rows changed on a reduced fetch: %d -> %d", beforeDocs, afterDocs)
+		t.Fatalf("index rows changed: before=%d after=%d", beforeDocs, afterDocs)
 	}
 }
 

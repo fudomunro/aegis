@@ -325,7 +325,7 @@ Non-agent clients use a **separate app token** (`aeg_app_…`) registered in the
 admin API. App tokens:
 
 - Are scope-limited to library **read** endpoints (not admin, proxy, OAuth, or mail).
-- Carry **app data grants** (`scopes`) using the same access levels, including `freebusy` for events.
+- Carry **app data grants** (`scopes`) on the same route keys and access levels, including the `freebusy` route for availability-only scheduling.
 - Their `scopes` map is their policy, resolved by the same deny-by-default lookup as every other key.
 - Are stored as SHA-256 hashes in `apps.json` (0600); plaintext is shown once.
 

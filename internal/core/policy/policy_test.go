@@ -34,22 +34,15 @@ func TestPermissions_AllowsAndClone(t *testing.T) {
 
 func TestPermissions_RedactionLists(t *testing.T) {
 	p := GrantMap{
-		"events":       AccessFreeBusy,
 		"transactions": AccessSummary,
 		"places":       AccessCity,
 		"tracks":       AccessRead,
-	}
-	if got := p.FreeBusyKinds(); len(got) != 1 || got[0] != "events" {
-		t.Fatalf("FreeBusyKinds = %v", got)
 	}
 	if got := p.SummaryKinds(); len(got) != 1 || got[0] != "transactions" {
 		t.Fatalf("SummaryKinds = %v", got)
 	}
 	if got := p.PlacesAccessLevels(); got["places"] != AccessCity {
 		t.Fatalf("PlacesAccessLevels = %v", got)
-	}
-	if !IsFreeBusyAccess(AccessFreeBusy) || IsFreeBusyAccess(AccessRead) {
-		t.Fatal("IsFreeBusyAccess")
 	}
 	if !IsSummaryAccess(AccessSummary) || IsSummaryAccess(AccessRead) {
 		t.Fatal("IsSummaryAccess")
@@ -60,20 +53,19 @@ func TestPermissions_RedactionLists(t *testing.T) {
 }
 
 func TestValidateGrantMap_RedactionScoping(t *testing.T) {
-	if err := ValidateGrantMap(GrantMap{"events": AccessFreeBusy}); err != nil {
-		t.Fatalf("events freebusy: %v", err)
+	// The freebusy level is retired — availability access is the freebusy
+	// route (issue #348). The token rejects everywhere.
+	if err := ValidateGrantMap(GrantMap{"events": "freebusy"}); err == nil {
+		t.Fatal("retired freebusy token must reject")
 	}
-	if err := ValidateGrantMap(GrantMap{"tracks": AccessFreeBusy}); err == nil {
-		t.Fatal("freebusy must reject non-events")
+	if err := ValidateGrantMap(GrantMap{"tracks": "freebusy"}); err == nil {
+		t.Fatal("retired freebusy token must reject")
 	}
 	if err := ValidateGrantMap(GrantMap{"places": AccessCity}); err != nil {
 		t.Fatalf("places city: %v", err)
 	}
 	if err := ValidateGrantMap(GrantMap{"tracks": AccessCity}); err == nil {
 		t.Fatal("city must reject non-places")
-	}
-	if err := ValidateGrantMap(GrantMap{"default": AccessFreeBusy}); err == nil {
-		t.Fatal("default freebusy must reject")
 	}
 }
 

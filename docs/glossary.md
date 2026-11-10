@@ -45,7 +45,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
-| **Free/busy** | Busy intervals only (no titles/attendees) | Also `summary` (transactions), `city`/`precise` (places) |
+| **Free/busy** | The `freebusy` route: busy intervals only (no titles/attendees) | Its own grant key (`freebusy`), not a level on `events` (issue #348). Sibling views: `summary` (transactions), `city`/`precise` (places) |
 
 ### Why not “data type”
 
@@ -65,10 +65,10 @@ axis it is keyed by.
 | Prefer | Means | Notes |
 |--------|-------|-------|
 | **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **library kind** at an **access level** | Hero term for product English (`docs/configuration.md` “Data grants”, admin UI, injection). Never “kind grant” |
-| **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
+| **Access level** | Strength of a data grant: `none` / `summary` / `city` / `precise` / `metadata` / `read` / `write` / `read-write` | The value inside a data grant. The former `freebusy` level is retired — grant the `freebusy` route |
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **Grant map** | The kind → access-level rule map a recognized key carries at request time (materialized from its `DataGrants`) | `GrantMap` in code. Uniformly deny-by-default: explicit entry → `default` → `none` |
-| **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
+| **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `freebusy:read` | Do not call the one-time `aeg_grant_…` code just “a grant” |
 | **Accessor** | Principal-level data grant per library kind (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
 | **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDK file selection); agent credentials are never admin (issue #181) |
@@ -90,7 +90,7 @@ like this:
 |-----------|-------|
 | Grant (policy rule) | **Data grant** (product); data-grant / app scope in config |
 | Network capability (`ip`) | Tailnet grant/ACL for reaching Aegis |
-| Application capability (`app`) | **Access level** on a **library kind** (`freebusy`, `read`, …) |
+| Application capability (`app`) | **Data grant** on a **library route** (`freebusy:read`, `events:read`, …) |
 | `ro` / `rw` (e.g. Taildrive) | `read` / `read-write` |
 | Deny-by-default | Every key: an unlisted kind is `none` (the owner key ships with a permissive `default` entry). Opt-in kinds (places) need an explicit entry |
 

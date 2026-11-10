@@ -92,3 +92,19 @@ func TestLevels_EmptyIsDenyAll(t *testing.T) {
 		}
 	}
 }
+
+func TestPrefillDefault_OnlyWhenUnconfigured(t *testing.T) {
+	empty := (GrantMap{}).PrefillDefault()
+	if empty.Level("tracks") != AccessFull {
+		t.Fatalf("empty map must prefill a permissive default, got %q", empty.Level("tracks"))
+	}
+	// A map with any entry is the operator's explicit allow list — an
+	// unlisted kind stays none (the freebusy-only key premise, issue #348).
+	partial := GrantMap{"freebusy": AccessRead}.PrefillDefault()
+	if partial.Level("events") != AccessNone {
+		t.Fatalf("partial map must not prefill, got %q", partial.Level("events"))
+	}
+	if partial.Level("freebusy") != AccessRead {
+		t.Fatalf("listed entry must survive, got %q", partial.Level("freebusy"))
+	}
+}

@@ -68,6 +68,10 @@ type Spec[T any] struct {
 	// payloads, so level-sensitive kinds must redact again on the search
 	// path. Nil skips (kinds without access levels).
 	RedactSearch func(items []T, r *http.Request) []T
+	// GrantKey names this route in a data grant (issue #348): the
+	// library-relative route path, e.g. "freebusy". Empty means the kind's
+	// PermType.
+	GrantKey string
 	// CacheKey overrides kind.CacheKey() when a second endpoint shares the
 	// same dataset but a different response shape (freebusy view of events).
 	CacheKey string
@@ -78,6 +82,16 @@ type Spec[T any] struct {
 	QAsFilter bool
 	// Status declares the kind's local-source overview hooks (issue #312).
 	Status StatusHooks
+}
+
+// grantKey names this route in a data grant (issue #348): the
+// library-relative route path when the spec declares one, else the kind's
+// PermType. Grant map keys are routes.
+func (s Spec[T]) grantKey() string {
+	if s.GrantKey != "" {
+		return s.GrantKey
+	}
+	return s.Kind.PermType
 }
 
 // Fetch is the shared provider fan-out result (issue #178): list responses
@@ -158,11 +172,12 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 
 	// One authorization lookup: the rule map carried by the request's key
 	// decides this call — app scopes, data-scope grants, and the owner map
-	// all resolve to the same check.
+	// all resolve to the same check. The key is the route (issue #348).
 	grants, _ := h.Grants(r)
-	level := grants.Level(kind.PermType)
-	if !grants.AllowsKindMethod(kind.PermType, r.Method) {
-		logger.Info("library "+kind.ID+" denied by data grant", "grant", level)
+	grantKey := spec.grantKey()
+	level := grants.Level(grantKey)
+	if !grants.AllowsKindMethod(grantKey, r.Method) {
+		logger.Info("library "+kind.ID+" denied by data grant", "grant", level, "route", grantKey)
 		h.RecordAccess(r, AccessEvent{
 			Agent:    agent,
 			Surface:  SurfaceLibrary,
@@ -175,7 +190,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 			Status:   http.StatusForbidden,
 		})
 		shared.WriteJSONError(w, http.StatusForbidden,
-			fmt.Sprintf("denied: data grant for %s is %q", kind.ID, level))
+			fmt.Sprintf("denied: data grant for %s is %q", grantKey, level))
 		return
 	}
 
@@ -461,7 +476,11 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		configured[svc.ID] = true
 	}
 
-	cacheKey := kind.CacheKey() + "|q=" + q
+	base := kind.CacheKey()
+	if spec.CacheKey != "" {
+		base = spec.CacheKey
+	}
+	cacheKey := base + "|q=" + q
 	grants, _ := h.Grants(r)
 	cacheKey += grantsCacheSuffix(r, grants)
 	cacheKey += pageReq.CacheSuffix()

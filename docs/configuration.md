@@ -139,7 +139,7 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 ### Data grants
 
 What you do to let an LLM agent or app use your data is a **data grant**: an
-allow rule on a **kind** at an **access level** (`none`, `freebusy`,
+allow rule on a **kind** at an **access level** (`none`,
 `summary`, `city`, `precise`, `metadata`, `read`, `write`, `read-write`). This is the
 application-layer side of Tailscale-style access — you already use a tailnet
 grant so callers can *reach* Aegis; data grants say what they may *use*.
@@ -184,7 +184,7 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 | Level | Allowed methods |
 |-------|-----------------|
 | `none` | none — 403 for that kind |
-| `freebusy` | `GET`, `HEAD` on `events`, but responses reduced to availability only |
+| ~~`freebusy`~~ | Retired as a level — availability access is the `freebusy` route (grant key `freebusy`, `GET /v1/library/freebusy`) |
 | `summary` | `GET`, `HEAD` on `transactions`, but responses reduced to totals by category/month only — no line items |
 | `city` | `GET`, `HEAD` on `places`, reduced to locality, country, and the visit/trip time window |
 | `precise` | `GET`, `HEAD` on `places` with coordinates |
@@ -202,12 +202,11 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 
 Per-provider entries inside a `DataGrant` (`providers`) are legacy
 migration data and are ignored at request time.
-- **`freebusy` is events-only**. Scheduling apps can see when you
- are busy without reading titles, attendees, locations, or descriptions.
- Responses keep only `start_at`, `end_at`, `all_day`, and `status`. Prefer
- `GET /v1/library/freebusy` for availability; `/v1/library/events` and the
- calendar proxy apply the same redaction when events access is `freebusy`.
- The level is rejected on other kinds and on `default`.
+- **`freebusy` is its own route**, not a level on `events`.
+ Scheduling apps see when you are busy without reading titles, attendees,
+ locations, or descriptions: a key granted `freebusy: read` may call
+ `GET /v1/library/freebusy` (responses keep only `start_at`, `end_at`,
+ `all_day`, `status`) and is denied `/v1/library/events`.
 - **`summary` is transactions-only**. Apps can see how much was
  spent by category or month without reading line items or account names.
  Responses keep only `summary` totals (`count`, `total_amount`, `by_category`,
@@ -820,7 +819,7 @@ registered in the admin API; the plaintext token is shown once.
 
 ```
 POST /v1/admin/apps
-{"id":"eco","name":"Event Coordinator","scopes":{"events":"freebusy","default":"none"}}
+{"id":"eco","name":"Event Coordinator","scopes":{"freebusy":"read","default":"none"}}
 → {"app":{...},"token":"aeg_app_…"}
 
 GET /v1/library/freebusy
@@ -835,9 +834,8 @@ Authorization: Bearer aeg_app_…
 | `POST /v1/admin/apps/{id}/rotate` | Admin | New token; old one dies |
 
 **Scopes** use the same access levels as [Data grants](configuration.md)
-(`none`, `freebusy`, `read`, `write`, `read-write`). Unlisted types fall back to
-`default`, which is forced to `none` when omitted (fail closed). `freebusy` is
-events-only.
+(`none`, `read`, `write`, `read-write`). Unlisted types fall back to
+`default`, which is forced to `none` when omitted (fail closed).
 
 **What an app token can call:**
 
@@ -845,8 +843,9 @@ events-only.
 - Not admin, OAuth, service proxy, mail, pre-request, mirror, review, or links
 - Not document full-text (`…/{service}/{id}/text`) and not user-defined kinds. Built-in list paths are derived from `LibraryKind.AppReadable`.
 
-When an app’s `events` scope is `freebusy`, `/v1/library/events` is redacted to
-availability fields even if the grant would allow full events ( + #131). Cache entries are isolated per app scope level so a freebusy app
+When an app holds only the `freebusy` route grant, `/v1/library/events` is
+denied and `/v1/library/freebusy` serves availability only.
+Cache entries are isolated per grant map so a freebusy app
 never reads a full-events cache.
 
 **Reachability.** App tokens are an authorization layer, not a public ingress.
@@ -1005,7 +1004,7 @@ Demo flow:
 
 1. Open `http://<aegis>/demo/third-party` and toggle **Aegis** on.
 2. Consent page lists what the app may read (this demo asks for
- `events:freebusy` only). Allow the grant.
+ `freebusy:read` only). Allow the grant.
 3. The browser returns with `?code=` and exchanges it for an app token.
 4. The page calls `GET /v1/library/freebusy` and shows busy intervals.
 5. Toggle Aegis **off** to clear the page token and `POST /v1/apps/revoke`.

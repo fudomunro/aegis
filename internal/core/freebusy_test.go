@@ -36,37 +36,19 @@ func TestRedactCalendarEventFreeBusy_StripsContent(t *testing.T) {
 	}
 }
 
-func TestValidateGrantMap_FreeBusyEventsOnly(t *testing.T) {
-	if err := policy.ValidateGrantMap(policy.GrantMap{"events": policy.AccessFreeBusy}); err != nil {
-		t.Fatalf("events freebusy: %v", err)
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"events": "free-busy"}); err != nil {
-		t.Fatalf("alias free-busy: %v", err)
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessFreeBusy}); err == nil {
-		t.Fatal("expected freebusy rejected on tracks")
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{policy.DefaultKey: policy.AccessFreeBusy}); err == nil {
-		t.Fatal("expected freebusy rejected on default")
-	}
-}
-
-func TestPermissions_FreeBusyAllowsReadNotWrite(t *testing.T) {
-	p := policy.GrantMap{"events": policy.AccessFreeBusy}
-	if !p.AllowsRead("events") {
-		t.Fatal("expected GET allowed")
-	}
-	if p.AllowsWrite("events") {
-		t.Fatal("expected write denied")
-	}
-	if policy.IsFreeBusyAccess(p.Level("events")) != true {
-		t.Fatal("expected freebusy level")
+func TestValidateGrantMap_FreeBusyTokenRetired(t *testing.T) {
+	// Availability access is the freebusy route (issue #348) — the level
+	// token and its aliases reject everywhere.
+	for _, token := range []string{"freebusy", "free-busy", "fb", "busy"} {
+		if err := policy.ValidateGrantMap(policy.GrantMap{"events": token}); err == nil {
+			t.Fatalf("retired token %q must reject", token)
+		}
 	}
 }
 
 func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}},
+		typePolicies: policy.DataGrants{"freebusy": {Default: policy.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -95,9 +77,11 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 	}
 }
 
-func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
+func TestHandleLibraryEvents_FreeBusyKeyDenied(t *testing.T) {
+	// Grant map keys are routes (issue #348): a freebusy-only key cannot
+	// reach /v1/library/events at all.
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}},
+		typePolicies: policy.DataGrants{"freebusy": {Default: policy.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -107,26 +91,11 @@ func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d body=%s, want 403", w.Code, w.Body.String())
 	}
-	body := w.Body.String()
-	for _, leak := range []string{"Doctor", "appointment", "Clinic", "Ada", "Offsite"} {
-		if strings.Contains(body, leak) {
-			t.Fatalf("leaked %q in %s", leak, body)
-		}
-	}
-	var resp kinds.CalendarEventList
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(resp.Events) == 0 {
-		t.Fatal("expected redacted events, got none")
-	}
-	for _, e := range resp.Events {
-		if e.Title != "" || e.Location != "" || len(e.Attendees) != 0 {
-			t.Fatalf("event not redacted: %+v", e)
-		}
+	if !strings.Contains(w.Body.String(), "denied: data grant for events") {
+		t.Fatalf("body = %s", w.Body.String())
 	}
 }
 
@@ -152,11 +121,11 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 }
 
 func TestPermissionNotice_FreeBusy(t *testing.T) {
-	p := policy.GrantMap{"events": policy.AccessFreeBusy, "player": policy.AccessNone}
+	p := policy.GrantMap{"freebusy": policy.AccessRead, "player": policy.AccessNone}
 	notice := permissionNotice(p)
 	// Deny-by-default map: the notice is an allow list (player is simply
-	// outside it), with the freebusy caveat attached.
-	for _, want := range []string{"only these kinds are available", "events", "free/busy only", "/v1/library/freebusy"} {
+	// outside it), with the freebusy route caveat attached.
+	for _, want := range []string{"only these library routes are available", "freebusy", "availability only", "/v1/library/freebusy"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("notice missing %q: %s", want, notice)
 		}
@@ -200,7 +169,7 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 
 func TestEventsProviderTargets_Collects(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}},
+		typePolicies: policy.DataGrants{"events": {Default: policy.AccessRead}},
 		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

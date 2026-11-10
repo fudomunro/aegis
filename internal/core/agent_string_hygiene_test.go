@@ -108,7 +108,7 @@ func collectAgentStrings(t *testing.T) []agentStringSample {
 	}))
 	add("permissionNotice/freebusy", permissionNotice(policy.GrantMap{
 		policy.DefaultKey: policy.AccessRead,
-		"events":          policy.AccessFreeBusy,
+		"events":          policy.AccessRead,
 	}))
 
 	out = append(out, connectorAgentSamples(t, srv)...)

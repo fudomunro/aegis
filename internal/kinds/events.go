@@ -4,13 +4,11 @@ import (
 	"context"
 	"net/http"
 	"strings"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 // eventsKind owns the calendar-events aggregate and its freebusy view
-// (issue #128): two routes over one dataset — the freebusy encode shares
-// the events cache key via Spec.CacheKey.
+// (issue #128): two routes over one dataset. Each route is its own grant
+// key (issue #348) — the freebusy encode narrows what that route serves.
 type eventsKind struct {
 	providerKind
 	h      Host
@@ -18,6 +16,12 @@ type eventsKind struct {
 	mark   func([]CalendarEvent, string)
 	copies func([]CalendarEvent)
 }
+
+// Grant keys are routes: the library-relative path (issue #348).
+const (
+	eventsRouteKey   = "events"
+	freebusyRouteKey = "freebusy"
+)
 
 func newEventsKind(h Host, e *Engine, d Deps) Kind {
 	k := &eventsKind{h: h, e: e}
@@ -27,39 +31,27 @@ func newEventsKind(h Host, e *Engine, d Deps) Kind {
 		def:      def,
 		provides: providerProvides[CalendarEventProvider],
 		routes: []Route{
-			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve},
+			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: eventsRouteKey},
 			// Freebusy is the events availability view, not a LibraryKind —
 			// declared as an events subroute so its exposure is declaration
 			// data (issue #312).
-			{Pattern: "/v1/library/freebusy", AppReadable: true, Handler: k.serveFreeBusy},
+			{Pattern: "/v1/library/freebusy", AppReadable: true, Handler: k.serveFreeBusy, GrantKey: freebusyRouteKey},
 		},
 	}
 	return k
 }
 
 // serve returns the user's calendar events from every connected
-// calendar-capable service: GET /v1/library/events. When a service's
-// events permission is freebusy, that service's events are redacted to
-// availability only (issue #128). Third-party apps whose events scope is
-// freebusy get the same redaction across all services (issue #131).
+// calendar-capable service: GET /v1/library/events. The route serves full
+// events — availability-only access is the separate freebusy route
+// (issue #348).
 func (k *eventsKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
 	Aggregate(k.h, k.e, w, r, Spec[CalendarEvent]{
-		Kind: kind,
+		Kind:     kind,
+		GrantKey: eventsRouteKey,
 		Targets: func(r *http.Request) ([]NamedLister[CalendarEvent], []string) {
-			targets, denied := eventsProviderTargets(k.h, r, kind.PermType)
-			grants, _ := k.h.Grants(r)
-			if !policy.IsFreeBusyAccess(grants.Level(kind.PermType)) {
-				return targets, denied
-			}
-			for i := range targets {
-				inner := targets[i].List
-				targets[i].List = func(ctx context.Context) ([]CalendarEvent, bool, error) {
-					events, truncated, err := inner(ctx)
-					return RedactCalendarEventsFreeBusy(events), truncated, err
-				}
-			}
-			return targets, denied
+			return eventsProviderTargets(k.h, r, eventsRouteKey)
 		},
 		ServiceOf: calendarEventServiceName,
 		SortKey:   CalendarEventIdentityKey,
@@ -67,9 +59,6 @@ func (k *eventsKind) serve(w http.ResponseWriter, r *http.Request) {
 		Encode: func(items []CalendarEvent, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			pageItems, pr := SlicePage(items, page)
 			return CalendarEventList{Events: pageItems, LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc)}
-		},
-		RedactSearch: func(items []CalendarEvent, r *http.Request) []CalendarEvent {
-			return searchRedactEvents(k.h, items, r)
 		},
 		MarkCanonical: k.mark,
 		StampCopies:   k.copies,
@@ -81,9 +70,10 @@ func (k *eventsKind) serve(w http.ResponseWriter, r *http.Request) {
 func (k *eventsKind) serveFreeBusy(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
 	Aggregate(k.h, k.e, w, r, Spec[CalendarEvent]{
-		Kind: kind,
+		Kind:     kind,
+		GrantKey: freebusyRouteKey,
 		Targets: func(r *http.Request) ([]NamedLister[CalendarEvent], []string) {
-			return eventsProviderTargets(k.h, r, kind.PermType)
+			return eventsProviderTargets(k.h, r, freebusyRouteKey)
 		},
 		ServiceOf: calendarEventServiceName,
 		SortKey:   CalendarEventIdentityKey,
@@ -103,17 +93,6 @@ func eventsProviderTargets(h Host, r *http.Request, permType string) ([]NamedLis
 		func(p CalendarEventProvider) func(context.Context) ([]CalendarEvent, bool, error) {
 			return p.ListCalendarEvents
 		})
-}
-
-// searchRedactEvents re-applies freebusy redaction to index-hydrated
-// events (issue #178): a freebusy-only surface must never see titles or
-// descriptions from a stored payload.
-func searchRedactEvents(h Host, items []CalendarEvent, r *http.Request) []CalendarEvent {
-	grants, _ := h.Grants(r)
-	if !policy.IsFreeBusyAccess(grants.Level("events")) {
-		return items
-	}
-	return RedactCalendarEventsFreeBusy(items)
 }
 
 // calendarEventServiceName returns the first source service name for

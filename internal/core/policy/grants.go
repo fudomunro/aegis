@@ -55,7 +55,7 @@ func (p GrantMap) Level(kind string) string {
 // knownAccess reports whether level is one of the access-vocabulary values.
 func knownAccess(level string) bool {
 	switch level {
-	case AccessNone, AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise,
+	case AccessNone, AccessSummary, AccessCity, AccessPrecise,
 		AccessMetadata, AccessRead, AccessWrite, AccessFull:
 		return true
 	}
@@ -68,11 +68,12 @@ func (p GrantMap) AllowsKindMethod(kind, method string) bool {
 }
 
 // PrefillDefault returns the rule map with a permissive "default" entry
-// when it has none. The owner key comes prefilled this way so a fresh
-// install is unrestricted out of the box; resolution stays uniformly
-// deny-by-default. Opt-in kinds remain closed regardless.
+// when the map is entirely unconfigured. The owner key comes prefilled this
+// way so a fresh install is unrestricted out of the box; a map with any
+// entry is the operator's explicit allow list and is left alone. Resolution
+// stays uniformly deny-by-default. Opt-in kinds remain closed regardless.
 func (p GrantMap) PrefillDefault() GrantMap {
-	if _, ok := p[DefaultKey]; ok {
+	if len(p) != 0 {
 		return p
 	}
 	out := make(GrantMap, len(p)+1)

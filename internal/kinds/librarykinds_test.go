@@ -99,7 +99,7 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 		levels []string
 		none   bool
 	}{
-		{"events", []string{"freebusy"}, false},
+		{"events", nil, false},
 		{"transactions", []string{"summary"}, false},
 		{"places", []string{"city", "precise"}, true},
 		{"documents", []string{"metadata"}, false},
@@ -119,8 +119,9 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 	}
 
 	// Derived allowlists match AllowedLevels.
-	if !shared.KindAllowsLevel("events", "freebusy") {
-		t.Error("events should allow freebusy")
+	// The freebusy level is retired — availability is the freebusy route.
+	if shared.KindAllowsLevel("events", "freebusy") {
+		t.Error("events must not declare the retired freebusy level")
 	}
 	if shared.KindAllowsLevel("tracks", "summary") {
 		t.Error("tracks must not allow summary")
@@ -171,8 +172,8 @@ func TestBuiltinLibraryKinds_DerivedLists(t *testing.T) {
 // canonical policy level or validation would silently reject it.
 func TestKindLevelSeam_AllowedLevelsArePolicyTokens(t *testing.T) {
 	known := map[string]bool{
-		policy.AccessFreeBusy: true, policy.AccessSummary: true,
-		policy.AccessCity: true, policy.AccessPrecise: true, policy.AccessMetadata: true,
+		policy.AccessSummary: true,
+		policy.AccessCity:    true, policy.AccessPrecise: true, policy.AccessMetadata: true,
 	}
 	for _, k := range BuiltinLibraryKinds {
 		for _, l := range k.AllowedLevels {

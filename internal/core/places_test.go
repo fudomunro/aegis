@@ -96,7 +96,7 @@ func TestValidateGrantMap_CityPreciseOnlyForPlaces(t *testing.T) {
 	if err := policy.ValidateGrantMap(policy.GrantMap{"events": policy.AccessCity}); err == nil {
 		t.Fatal("city on events should be rejected")
 	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessFreeBusy}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"places": "freebusy"}); err == nil {
 		t.Fatal("freebusy on places should be rejected")
 	}
 	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessSummary}); err == nil {

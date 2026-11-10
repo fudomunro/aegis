@@ -7,15 +7,15 @@ import (
 )
 
 func TestParseScopeList(t *testing.T) {
-	entries, err := parseScopeList("events:freebusy, contacts:read")
+	entries, err := parseScopeList("freebusy:read, contacts:read")
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(entries) != 2 || entries[0].Type != "events" || entries[0].Level != policy.AccessFreeBusy {
+	if len(entries) != 2 || entries[0].Type != "freebusy" || entries[0].Level != policy.AccessRead {
 		t.Fatalf("entries = %+v", entries)
 	}
 	if _, err := parseScopeList("tracks:freebusy"); err == nil {
-		t.Fatal("expected freebusy-on-tracks rejected")
+		t.Fatal("expected retired freebusy level rejected")
 	}
 	if _, err := parseScopeList(""); err == nil {
 		t.Fatal("expected empty scopes rejected")
