@@ -486,46 +486,50 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 // TestScopeGrants_ProviderOverrideTightens proves provider entries only narrow
 // a stated type level: the overridden connector disappears from the aggregate
 // while the other still answers.
-// TestScopeGrants_RedactionLevelAndCache: two principals on one dataset with
-// different event levels must see differently redacted responses — and the
-// cache must not hand the full-read page to the freebusy-only principal.
-func TestScopeGrants_RedactionLevelAndCache(t *testing.T) {
+// TestScopeGrants_RouteKeys: a grant map key is a route (issue #348). A
+// freebusy-only scope reaches /v1/library/freebusy but never
+// /v1/library/events, and the full-read scope's cached events page is not
+// served to it.
+func TestScopeGrants_RouteKeys(t *testing.T) {
 	srv := scopeServer(t, []scopes.Scope{
 		{ID: "shire", Dataset: "shire", APIKey: "YOUR_SHIRE_KEY", Grants: readAllGrants()},
 		{ID: "shire-busy", Dataset: "shire", APIKey: "YOUR_BUSY_KEY",
-			Grants: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}}},
+			Grants: policy.DataGrants{"freebusy": {Default: policy.AccessRead}}},
 	})
 
-	call := func(key string) []kinds.CalendarEvent {
-		t.Helper()
-		w := httptest.NewRecorder()
-		srv.AuthMiddleware(srv.libraryHandler("events"))(w, scopeRequest(key, "/v1/library/events"))
-		if w.Code != http.StatusOK {
-			t.Fatalf("events %s status = %d body=%s", key, w.Code, w.Body.String())
-		}
-		var list kinds.CalendarEventList
-		if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
-			t.Fatalf("parse events %s: %v", key, err)
-		}
-		if len(list.Events) == 0 {
-			t.Fatalf("events %s returned none: %s", key, w.Body.String())
-		}
-		return list.Events
+	// Full-read scope first so its events page is cached.
+	w := httptest.NewRecorder()
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, scopeRequest("YOUR_SHIRE_KEY", "/v1/library/events"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("events shire status = %d body=%s", w.Code, w.Body.String())
+	}
+	var list kinds.CalendarEventList
+	if err := json.Unmarshal(w.Body.Bytes(), &list); err != nil {
+		t.Fatalf("parse events: %v", err)
+	}
+	if len(list.Events) == 0 || list.Events[0].Title == "" {
+		t.Fatalf("full-read events must keep titles: %+v", list.Events)
 	}
 
-	// Full-read scope first so its page is cached before the freebusy read.
-	for _, e := range call("YOUR_SHIRE_KEY") {
-		if e.Title == "" {
-			t.Fatalf("full-read events must keep titles: %+v", e)
-		}
+	// The freebusy-only scope is denied the events route entirely.
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.libraryHandler("events"))(w, scopeRequest("YOUR_BUSY_KEY", "/v1/library/events"))
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("events busy status = %d body=%s, want 403", w.Code, w.Body.String())
 	}
-	for _, e := range call("YOUR_BUSY_KEY") {
-		if e.Title != "" {
-			t.Fatalf("freebusy-only events leaked a title: %+v", e)
-		}
-		if e.StartAt == "" {
-			t.Fatalf("freebusy events must keep times: %+v", e)
-		}
+
+	// …and gets availability from its own route.
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/freebusy"))(w, scopeRequest("YOUR_BUSY_KEY", "/v1/library/freebusy"))
+	if w.Code != http.StatusOK {
+		t.Fatalf("freebusy busy status = %d body=%s", w.Code, w.Body.String())
+	}
+	var busy kinds.FreeBusyList
+	if err := json.Unmarshal(w.Body.Bytes(), &busy); err != nil {
+		t.Fatalf("parse freebusy: %v", err)
+	}
+	if len(busy.Busy) == 0 {
+		t.Fatalf("expected busy intervals: %s", w.Body.String())
 	}
 }
 

@@ -26,7 +26,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: policy.AccessRead})
-	cfg.SeedDataGrant("events", policy.DataGrant{Default: policy.AccessFreeBusy})
+	cfg.SeedDataGrant("events", policy.DataGrant{Default: policy.AccessRead})
 	cfg.SeedDataGrant("places", policy.DataGrant{Default: policy.AccessCity})
 
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -40,7 +40,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		ID:   "eco-demo",
 		Name: "Event Coordinator",
 		Scopes: policy.GrantMap{
-			"events": policy.AccessFreeBusy,
+			"events": policy.AccessRead,
 			// Explicit none still counts as relevant for the editor.
 			"tracks": policy.AccessNone,
 		},
@@ -123,13 +123,13 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatal("missing events row")
 	}
-	if events.AgentLevel != policy.AccessFreeBusy {
+	if events.AgentLevel != policy.AccessRead {
 		t.Fatalf("events agent = %q", events.AgentLevel)
 	}
 	if len(events.Accessors) != 1 || events.Accessors[0].ID != "app:eco-demo" {
 		t.Fatalf("events accessors = %+v", events.Accessors)
 	}
-	if events.Accessors[0].Level != policy.AccessFreeBusy {
+	if events.Accessors[0].Level != policy.AccessRead {
 		t.Fatalf("eco events = %q", events.Accessors[0].Level)
 	}
 

@@ -10,6 +10,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func testAppStore(t *testing.T) *apps.Store {
@@ -85,9 +86,9 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 	}
 }
 
-func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
+func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessFreeBusy})
+	_, token := createTestApp(t, store, "eco", policy.GrantMap{"freebusy": policy.AccessRead})
 	svc := &Service{
 		ID:     "google-calendar",
 		Name:   "Google Calendar",
@@ -97,23 +98,17 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	srv.apps = store
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
-	// events endpoint must be redacted when app scope is freebusy.
+	// The events route is a different grant key — denied for this app
+	// (issue #348).
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("events status = %d body = %s", w.Code, w.Body.String())
-	}
-	body := w.Body.String()
-	if strings.Contains(body, "Doctor") || strings.Contains(body, "appointment") || strings.Contains(body, "Ada") {
-		t.Fatalf("freebusy app leaked content: %s", body)
-	}
-	if !strings.Contains(body, "start_at") {
-		t.Fatalf("expected timing fields: %s", body)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("events status = %d body = %s, want 403", w.Code, w.Body.String())
 	}
 
-	// freebusy endpoint allowed.
+	// The freebusy route serves availability only.
 	req = httptest.NewRequest("GET", "/v1/library/freebusy", nil)
 	req.Header.Set("Authorization", "Bearer "+token)
 	w = httptest.NewRecorder()
@@ -121,40 +116,51 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("freebusy status = %d body = %s", w.Code, w.Body.String())
 	}
+	body := w.Body.String()
+	if strings.Contains(body, "Doctor") || strings.Contains(body, "appointment") || strings.Contains(body, "Ada") {
+		t.Fatalf("freebusy route leaked content: %s", body)
+	}
+	if !strings.Contains(body, "start_at") {
+		t.Fatalf("expected timing fields: %s", body)
+	}
 }
 
 func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 	store := testAppStore(t)
-	_, fbToken := createTestApp(t, store, "eco-fb", policy.GrantMap{"events": policy.AccessFreeBusy})
-	_, roToken := createTestApp(t, store, "eco-ro", policy.GrantMap{"events": policy.AccessRead})
+	_, metaToken := createTestApp(t, store, "eco-meta", policy.GrantMap{"documents": policy.AccessMetadata})
+	_, roToken := createTestApp(t, store, "eco-ro", policy.GrantMap{"documents": policy.AccessRead})
 	svc := &Service{
-		ID:     "google-calendar",
-		Name:   "Google Calendar",
+		ID:     "paperless",
+		Name:   "Paperless-ngx",
 		Action: "inject",
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
-	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
+	srv.connectors["paperless"] = &fakeDocumentProvider{documents: []kinds.Document{{
+		Title:   "Lease",
+		Excerpt: "full lease text",
+		Sources: []kinds.DocumentSource{{Service: "paperless", ID: "d1"}},
+	}}}
 
-	// Prime cache with a full-read app response.
-	req := httptest.NewRequest("GET", "/v1/library/events", nil)
+	// Prime cache with a full-read app response (excerpt present).
+	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
 	req.Header.Set("Authorization", "Bearer "+roToken)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "Doctor") {
+	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "full lease text") {
 		t.Fatalf("read app: %d %s", w.Code, w.Body.String())
 	}
 
-	// Freebusy app must not receive the cached full response.
-	req = httptest.NewRequest("GET", "/v1/library/events", nil)
-	req.Header.Set("Authorization", "Bearer "+fbToken)
+	// Metadata app must not receive the cached full response.
+	req = httptest.NewRequest("GET", "/v1/library/documents", nil)
+	req.Header.Set("Authorization", "Bearer "+metaToken)
 	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("events"))(w, req)
+	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
 	if w.Code != http.StatusOK {
-		t.Fatalf("fb app: %d %s", w.Code, w.Body.String())
+		t.Fatalf("meta app: %d %s", w.Code, w.Body.String())
 	}
-	if strings.Contains(w.Body.String(), "Doctor") {
-		t.Fatalf("cache leaked full events to freebusy app: %s", w.Body.String())
+	if strings.Contains(w.Body.String(), "full lease text") {
+		t.Fatalf("cache leaked full documents to metadata app: %s", w.Body.String())
 	}
 }
 
@@ -164,7 +170,7 @@ func TestAdminApps_CRUD(t *testing.T) {
 	srv.apps = store
 
 	// Create
-	body := `{"id":"eco","name":"Event Coordinator","scopes":{"events":"freebusy"}}`
+	body := `{"id":"eco","name":"Event Coordinator","scopes":{"freebusy":"read"}}`
 	req := httptest.NewRequest("POST", "/v1/admin/apps", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()

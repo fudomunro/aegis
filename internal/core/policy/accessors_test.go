@@ -21,7 +21,7 @@ func TestOverviewKinds_PrefersLibraryOrderThenExtras(t *testing.T) {
 func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	kinds := []string{"tracks", "places", "events"}
 	got := AgentOverviewLevels(DataGrants{
-		"events": {Default: AccessFreeBusy},
+		"events": {Default: AccessRead},
 		"places": {Default: AccessCity},
 		"tracks": {Default: AccessRead},
 	}, kinds)
@@ -31,7 +31,7 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	if got["places"] != AccessCity {
 		t.Fatalf("places = %q, want city", got["places"])
 	}
-	if got["events"] != AccessFreeBusy {
+	if got["events"] != AccessRead {
 		t.Fatalf("events = %q, want freebusy", got["events"])
 	}
 
@@ -58,11 +58,11 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 
 	levels, explicit = AppOverviewLevels(GrantMap{
 		DefaultKey: AccessNone,
-		"events":   AccessFreeBusy,
+		"events":   AccessRead,
 		"places":   AccessPrecise,
 		"tracks":   AccessRead,
 	}, kinds)
-	if levels["events"] != AccessFreeBusy {
+	if levels["events"] != AccessRead {
 		t.Fatalf("events = %q, want freebusy", levels["events"])
 	}
 	if levels["places"] != AccessPrecise {
@@ -94,7 +94,7 @@ func TestAccessorRelevantTo(t *testing.T) {
 
 	app := Accessor{
 		Kind:     AccessorApp,
-		Levels:   map[string]string{"tracks": AccessNone, "events": AccessFreeBusy, "photos": AccessNone},
+		Levels:   map[string]string{"tracks": AccessNone, "events": AccessRead, "photos": AccessNone},
 		Explicit: map[string]bool{"tracks": true, "events": true},
 	}
 	// Explicit none is still relevant (operator named the type).

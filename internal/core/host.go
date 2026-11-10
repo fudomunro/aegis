@@ -1,7 +1,6 @@
 package core
 
 import (
-	"net/http"
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
@@ -33,12 +32,6 @@ func (s *Server) ServiceConfig(serviceID string) *connectors.ServiceInfo {
 		CacheTTL:     svc.CacheTTL.Duration,
 		CanonicalFor: append([]string(nil), svc.CanonicalFor...),
 	}
-}
-
-// RequestLevel returns the access level the request's key grants for kind.
-// Implements connectors.Host for content-transport response narrowing.
-func (s *Server) RequestLevel(r *http.Request, kind string) string {
-	return s.requestLevel(r, kind)
 }
 
 // BaseURL returns the public base URL of this Aegis instance.

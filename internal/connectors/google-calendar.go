@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -247,16 +246,6 @@ func BareEventIDFromProxyPath(remainingPath string) (string, bool) {
 	return "", false
 }
 
-// EventsFreeBusyOnly reports whether the request's data grant limits events
-// to the free/busy share (issue #128). Proxy responses must drop
-// titles/attendees.
-func (c *GoogleCalendarConnector) EventsFreeBusyOnly(r *http.Request) bool {
-	if c.host == nil {
-		return false
-	}
-	return policy.IsFreeBusyAccess(c.host.RequestLevel(r, "events"))
-}
-
 func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {
 	events, truncated, err := c.ListEventsWithWindow(r.Context(), r.URL.Query())
 	if err != nil {
@@ -271,9 +260,6 @@ func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *htt
 	}
 	if events == nil {
 		events = []kinds.CalendarEvent{}
-	}
-	if c.EventsFreeBusyOnly(r) {
-		events = kinds.RedactCalendarEventsFreeBusy(events)
 	}
 	result := kinds.CalendarEventList{
 		Events:    events,
@@ -312,9 +298,6 @@ func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter
 	}
 	if events == nil {
 		events = []kinds.CalendarEvent{}
-	}
-	if c.EventsFreeBusyOnly(r) {
-		events = kinds.RedactCalendarEventsFreeBusy(events)
 	}
 	result := kinds.CalendarEventList{
 		Events: events,
@@ -404,9 +387,6 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 		return
 	}
 	ev := MapGoogleCalendarEvent(raw, calendarID, GoogleCalendarServiceName)
-	if c.EventsFreeBusyOnly(r) {
-		ev = kinds.RedactCalendarEventFreeBusy(ev)
-	}
 	out, err := json.Marshal(ev)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusInternalServerError, "failed to encode event")

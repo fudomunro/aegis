@@ -18,10 +18,6 @@ import (
 const (
 	// AccessNone denies all operations on the kind.
 	AccessNone = "none"
-	// AccessFreeBusy allows safe methods on events, but responses are
-	// reduced to availability only (start/end/all_day/status) — no titles,
-	// attendees, locations, or descriptions (issue #128). Events-only.
-	AccessFreeBusy = "freebusy"
 	// AccessSummary allows safe methods on transactions, but responses are
 	// reduced to totals by category/month only — no line items and no
 	// account identifiers (issue #141). Transactions-only.
@@ -112,26 +108,6 @@ func (p GrantMap) DeniedKinds() []string {
 	return denied
 }
 
-// FreeBusyKinds returns sorted kind names limited to free/busy
-// (issue #128). Used in pre-request injection so agents know they only get
-// availability, not event content.
-func (p GrantMap) FreeBusyKinds() []string {
-	if p == nil {
-		return nil
-	}
-	var limited []string
-	for k, v := range p {
-		if k == DefaultKey {
-			continue
-		}
-		if NormalizeAccess(v) == AccessFreeBusy {
-			limited = append(limited, k)
-		}
-	}
-	sort.Strings(limited)
-	return limited
-}
-
 // SummaryKinds returns sorted kind names limited to totals-only
 // summary (issue #141). Used in pre-request injection so agents know they
 // only get category/month totals, not line items.
@@ -196,8 +172,6 @@ func NormalizeAccess(level string) string {
 	switch strings.ToLower(strings.TrimSpace(level)) {
 	case AccessNone, "deny", "off", "false":
 		return AccessNone
-	case AccessFreeBusy, "fb", "busy", "busy-only", "free-busy":
-		return AccessFreeBusy
 	case AccessSummary, "totals", "totals-only", "sum":
 		return AccessSummary
 	case AccessCity, "locality", "city-only", "metro":
@@ -223,7 +197,7 @@ func AllowsMethod(level, method string) bool {
 	switch method {
 	case http.MethodGet, http.MethodHead:
 		switch level {
-		case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessFull:
+		case AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessFull:
 			return true
 		}
 		return false
@@ -281,24 +255,19 @@ func ValidateDataGrants(policies DataGrants) error {
 }
 
 // ValidateGrantMap checks that every level is a known access type.
-// freebusy is events-only, summary is transactions-only, city/precise are
-// places-only, and metadata is documents-only: other types cannot honor
-// those redactions.
+// summary is transactions-only, city/precise are places-only, and metadata
+// is documents-only: other types cannot honor those redactions. The former
+// freebusy level is retired — availability access is the freebusy route
+// (issue #348).
 func ValidateGrantMap(p GrantMap) error {
 	for k, v := range p {
 		if k == "" {
 			return fmt.Errorf("permissions: empty kind key")
 		}
 		switch NormalizeAccess(v) {
-		case AccessNone, AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessWrite, AccessFull:
+		case AccessNone, AccessSummary, AccessCity, AccessPrecise, AccessMetadata, AccessRead, AccessWrite, AccessFull:
 		default:
-			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, metadata, read, write, or read-write)", k, v)
-		}
-		if NormalizeAccess(v) == AccessFreeBusy && k != DefaultKey && !shared.KindAllowsLevel(k, AccessFreeBusy) {
-			return fmt.Errorf("permissions[%s]: freebusy is only supported for %s", k, joinKindsAllowing(AccessFreeBusy))
-		}
-		if NormalizeAccess(v) == AccessFreeBusy && k == DefaultKey {
-			return fmt.Errorf("permissions[default]: freebusy is only supported for events")
+			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, summary, city, precise, metadata, read, write, or read-write — or grant the freebusy route)", k, v)
 		}
 		if NormalizeAccess(v) == AccessSummary && k != DefaultKey && !shared.KindAllowsLevel(k, AccessSummary) {
 			return fmt.Errorf("permissions[%s]: summary is only supported for %s", k, joinKindsAllowing(AccessSummary))
@@ -336,11 +305,6 @@ func joinKindsAllowing(level string) string {
 		return "no built-in type"
 	}
 	return strings.Join(ids, ", ")
-}
-
-// IsFreeBusyAccess reports whether the level is the events free/busy view.
-func IsFreeBusyAccess(level string) bool {
-	return NormalizeAccess(level) == AccessFreeBusy
 }
 
 // IsSummaryAccess reports whether the level is the transactions totals-only

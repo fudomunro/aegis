@@ -184,7 +184,7 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:           "failed to fetch calendar events",
 		AppReadable:       true,
 		CanonicalAllowed:  true,
-		AllowedLevels:     []string{"freebusy"},
+		AllowedLevels:     nil,
 		DefaultNone:       false,
 		ExtraInstructions: " For scheduling or availability-only questions use GET {root}/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.",
 		Search:            &SearchSpec{Fields: []string{"title", "description", "location", "calendar_name"}, TitleField: "title"},

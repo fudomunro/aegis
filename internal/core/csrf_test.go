@@ -226,7 +226,7 @@ func TestWriteRoutes_CrossOriginFormAndTextPlain(t *testing.T) {
 	}
 	routes := []writeRoute{
 		{http.MethodPost, "/v1/apps/authorize", "application/x-www-form-urlencoded",
-			"client_id=eco&scopes=events:freebusy", true},
+			"client_id=eco&scopes=freebusy:read", true},
 		{http.MethodPost, "/v1/admin/apps", "text/plain", `{"id":"eco","name":"eco"}`, true},
 		{http.MethodPost, "/v1/admin/cache/clear", "text/plain", `{}`, true},
 		{http.MethodPost, "/v1/admin/mail/sync", "text/plain", `{"max_messages":1}`, true},
@@ -275,7 +275,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 
 	// Render consent page and capture the per-render token.
 	req := httptest.NewRequest("GET",
-		"/v1/apps/authorize?client_id=eco&scopes=events:freebusy&redirect_uri=/demo/third-party",
+		"/v1/apps/authorize?client_id=eco&scopes=freebusy:read&redirect_uri=/demo/third-party",
 		nil)
 	w := httptest.NewRecorder()
 	srv.HandleAppAuthorize(w, req)
@@ -289,7 +289,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 
 	form := url.Values{
 		"client_id":    {"eco"},
-		"scopes":       {"events:freebusy"},
+		"scopes":       {"freebusy:read"},
 		"redirect_uri": {"/demo/third-party"},
 	}
 
@@ -347,7 +347,7 @@ func TestAppAuthorize_JSONGrantStillWorksWithAPIKey(t *testing.T) {
 	srv.apps = store
 	srv.grants = apps.NewGrantStore()
 
-	body := `{"client_id":"eco","name":"eco","scopes":"events:freebusy","redirect_uri":"/demo/third-party"}`
+	body := `{"client_id":"eco","name":"eco","scopes":"freebusy:read","redirect_uri":"/demo/third-party"}`
 	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", "test-key")
@@ -367,7 +367,7 @@ func TestAppAuthorize_TailnetSameOriginFormWithCSRF(t *testing.T) {
 	srv.identity = fakeIdentity{login: "user@example.com"}
 
 	req := httptest.NewRequest("GET",
-		"/v1/apps/authorize?client_id=eco&scopes=events:freebusy&redirect_uri=/demo/third-party",
+		"/v1/apps/authorize?client_id=eco&scopes=freebusy:read&redirect_uri=/demo/third-party",
 		nil)
 	w := httptest.NewRecorder()
 	srv.HandleAppAuthorize(w, req)
@@ -378,7 +378,7 @@ func TestAppAuthorize_TailnetSameOriginFormWithCSRF(t *testing.T) {
 
 	form := url.Values{
 		"client_id":    {"eco"},
-		"scopes":       {"events:freebusy"},
+		"scopes":       {"freebusy:read"},
 		"redirect_uri": {"/demo/third-party"},
 		"csrf_token":   {token},
 	}

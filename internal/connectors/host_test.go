@@ -2,7 +2,6 @@ package connectors
 
 import (
 	"log/slog"
-	"net/http"
 	"time"
 
 	"github.com/fudomunro/aegis/internal/shared"
@@ -19,7 +18,6 @@ type testHost struct {
 	libraryOK map[string]bool
 	secrets   map[string]string
 	settings  map[string]map[string]string
-	levels    map[string]string
 }
 
 func newTestHost(baseURL string) *testHost {
@@ -33,7 +31,6 @@ func newTestHost(baseURL string) *testHost {
 		libraryOK: map[string]bool{},
 		secrets:   map[string]string{},
 		settings:  map[string]map[string]string{},
-		levels:    map[string]string{},
 	}
 }
 
@@ -58,8 +55,6 @@ func (h *testHost) UpstreamBaseFor(serviceID, fallback string) string {
 func (h *testHost) ServiceConfig(serviceID string) *ServiceInfo {
 	return h.services[serviceID]
 }
-
-func (h *testHost) RequestLevel(r *http.Request, kind string) string { return h.levels[kind] }
 
 func (h *testHost) BaseURL() string { return h.baseURL }
 

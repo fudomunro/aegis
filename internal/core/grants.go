@@ -98,16 +98,17 @@ func permissionNotice(p policy.GrantMap) string {
 	var parts []string
 	if p.Level("") == policy.AccessNone {
 		if allowed := p.AllowedKinds(); len(allowed) > 0 {
-			parts = append(parts, "only these kinds are available and all others must not be requested: "+
+			parts = append(parts, "only these library routes are available and all others must not be requested: "+
 				strings.Join(allowed, ", "))
 		}
 	} else if denied := p.DeniedKinds(); len(denied) > 0 {
-		parts = append(parts, "the following kinds are not available and must not be requested: "+
+		parts = append(parts, "the following library routes are not available and must not be requested: "+
 			strings.Join(denied, ", "))
 	}
-	if limited := p.FreeBusyKinds(); len(limited) > 0 {
-		parts = append(parts, strings.Join(limited, ", ")+
-			" is free/busy only — responses include start_at, end_at, all_day, and status; never request titles, attendees, locations, or descriptions. Prefer GET /v1/library/freebusy for scheduling.")
+	if p.AllowsKindMethod("freebusy", http.MethodGet) {
+		parts = append(parts, "the freebusy route (/v1/library/freebusy) returns availability only "+
+			"(start_at, end_at, all_day, status) — prefer it for scheduling; never request titles, "+
+			"attendees, locations, or descriptions")
 	}
 	if limited := p.SummaryKinds(); len(limited) > 0 {
 		parts = append(parts, strings.Join(limited, ", ")+

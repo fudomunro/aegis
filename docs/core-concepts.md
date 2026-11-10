@@ -46,7 +46,7 @@ the most weight in product language.
 | Mirror / backup sync | product + code |
 | Truncated / sync completeness | product + code |
 | User-defined kinds (UDK) / schema packs | product + code |
-| Free/busy, summary, city, precise redaction | product + code |
+| Freebusy route; summary, city, precise, metadata levels | product + code |
 
 ### Access and identity
 
@@ -54,7 +54,7 @@ the most weight in product language.
 |---------|----------------|
 | **Data grant** (user allows agent/app to use a library kind at an access level) | product |
 | **DataGrant** (where agent data grants live) | product + code |
-| Access levels (`none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write`) | product + code |
+| Access levels (`none` / `summary` / `city` / `precise` / `metadata` / `read` / `write` / `read-write`) | product + code |
 | Accessor / AccessorKind (issue #160) | code + admin |
 | PermissionsOverview / KindAccess | admin |
 | PeerIdentity / auth modes (`auto` / `tailnet` / `api-key`) | product + code |

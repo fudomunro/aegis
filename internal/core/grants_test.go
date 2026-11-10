@@ -227,14 +227,14 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 	open := policy.GrantMap{
 		policy.DefaultKey: policy.AccessRead,
 		"player":          policy.AccessNone,
-		"events":          policy.AccessFreeBusy,
+		"freebusy":        policy.AccessRead,
 	}
 	notice := permissionNotice(open)
 	if !strings.Contains(notice, "player") || !strings.Contains(notice, "not available") {
 		t.Fatalf("negative mode should list denials: %s", notice)
 	}
-	if !strings.Contains(notice, "free/busy only") {
-		t.Fatalf("freebusy limit missing: %s", notice)
+	if !strings.Contains(notice, "availability only") {
+		t.Fatalf("freebusy note missing: %s", notice)
 	}
 
 	// Deny-by-default: the map is a complete allow list.
@@ -244,7 +244,7 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 		"transactions": policy.AccessSummary,
 	}
 	notice = permissionNotice(closed)
-	if !strings.Contains(notice, "only these kinds are available") {
+	if !strings.Contains(notice, "only these library routes are available") {
 		t.Fatalf("positive mode missing: %s", notice)
 	}
 	for _, k := range []string{"contacts", "playlists", "transactions"} {

@@ -20,6 +20,10 @@ type Route struct {
 	// AppReadable marks third-party app-token exposure (freebusy: yes;
 	// document text: no).
 	AppReadable bool
+	// GrantKey names the route in a data grant: the library-relative route
+	// path (issue #348), e.g. "freebusy" for /v1/library/freebusy. A grant
+	// map key is a route — empty means the kind's PermType.
+	GrantKey string
 }
 
 // Kind is one library kind owned by this package (issue #312): its data
@@ -87,7 +91,7 @@ var builtinDecls = func() []Route {
 	var out []Route
 	for _, k := range Builtin(nil, nil, Deps{}) {
 		for _, r := range k.Routes() {
-			out = append(out, Route{Pattern: r.Pattern, AppReadable: r.AppReadable})
+			out = append(out, Route{Pattern: r.Pattern, AppReadable: r.AppReadable, GrantKey: r.GrantKey})
 		}
 	}
 	return out

@@ -10,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -118,9 +117,11 @@ func TestGoogleCalendarConnector_ListCalendarEvents_MockAPI(t *testing.T) {
 	}
 }
 
-func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
+func TestGoogleCalendarConnector_ProxyServesFullEvents(t *testing.T) {
+	// Narrowed disclosure lives at the freebusy route (issue #348): the
+	// content transport serves full events under the kind's grant key.
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Authorization") != "Bearer test-token" {
+		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
@@ -136,14 +137,10 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 			json.NewEncoder(w).Encode(map[string]any{
 				"items": []map[string]any{
 					{
-						"id":       "ev1",
-						"summary":  "Therapy",
-						"location": "Office",
-						"start":    map[string]any{"dateTime": "2024-06-01T09:00:00Z"},
-						"end":      map[string]any{"dateTime": "2024-06-01T09:30:00Z"},
-						"attendees": []map[string]any{
-							{"email": "doc@example.com", "displayName": "Doc"},
-						},
+						"id":      "ev1",
+						"summary": "Therapy",
+						"start":   map[string]any{"dateTime": "2024-06-01T09:00:00Z"},
+						"end":     map[string]any{"dateTime": "2024-06-01T09:30:00Z"},
 					},
 				},
 			})
@@ -154,26 +151,16 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 	defer upstream.Close()
 
 	host := newTestHostWithService(GoogleCalendarServiceID, upstream.URL, "https://aegis.example.com")
-	host.levels["events"] = policy.AccessFreeBusy
 	host.setToken(GoogleCalendarServiceID, "test-token")
 	conn := NewGoogleCalendarConnector(host)
 	req := httptest.NewRequest("GET", "/v1/services/google-calendar/me/events", nil)
-	if !conn.EventsFreeBusyOnly(req) {
-		t.Fatal("expected freebusy-only")
-	}
 	w := httptest.NewRecorder()
 	conn.HandleListEvents(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", w.Code, w.Body.String())
 	}
-	body := w.Body.String()
-	for _, leak := range []string{"Therapy", "Office", "Doc", "doc@example.com"} {
-		if strings.Contains(body, leak) {
-			t.Fatalf("leaked %q: %s", leak, body)
-		}
-	}
-	if !strings.Contains(body, "2024-06-01T09:00:00Z") {
-		t.Fatalf("missing busy start: %s", body)
+	if !strings.Contains(w.Body.String(), "Therapy") {
+		t.Fatalf("proxy must serve full events: %s", w.Body.String())
 	}
 }
 

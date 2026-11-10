@@ -38,10 +38,6 @@ type Host interface {
 	UpstreamBaseFor(serviceID, fallback string) string
 	// ServiceConfig returns the configured service surface, or nil.
 	ServiceConfig(serviceID string) *ServiceInfo
-	// RequestLevel returns the access level the request's key grants for
-	// kind (deny-by-default). Connectors use it only to narrow
-	// content-transport responses (e.g. freebusy shaping).
-	RequestLevel(r *http.Request, kind string) string
 	// BaseURL is the public base URL of this Aegis instance.
 	BaseURL() string
 	// CacheGet returns a cached value when present and live.

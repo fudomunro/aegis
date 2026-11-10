@@ -31,7 +31,7 @@ func TestStore_CreateReturnsTokenOnce(t *testing.T) {
 	view, token, err := store.Create(AppCreateRequest{
 		ID:     "eco",
 		Name:   "Event Coordinator",
-		Scopes: policy.GrantMap{"events": policy.AccessFreeBusy},
+		Scopes: policy.GrantMap{"freebusy": policy.AccessRead},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -54,7 +54,7 @@ func TestStore_CreateReturnsTokenOnce(t *testing.T) {
 		t.Fatalf("list hint mismatch")
 	}
 	got, ok := store.Get("eco")
-	if !ok || got.Scopes["events"] != policy.AccessFreeBusy {
+	if !ok || got.Scopes["freebusy"] != policy.AccessRead {
 		t.Fatalf("get = %+v ok=%v", got, ok)
 	}
 	// Scopes default to deny-all when not listed.
@@ -108,7 +108,7 @@ func TestStore_CreateRejectsBadIDAndScopes(t *testing.T) {
 	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: policy.GrantMap{"events": policy.AccessRead}}); err == nil {
 		t.Fatal("expected bad id rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"tracks": policy.AccessFreeBusy}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"tracks": "freebusy"}}); err == nil {
 		t.Fatal("expected freebusy on tracks rejected")
 	}
 	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"events": "write-only-oops"}}); err == nil {
