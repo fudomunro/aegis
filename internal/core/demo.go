@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/sampledata"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -75,7 +76,7 @@ func (s *Server) demoLockdown(next http.Handler) http.Handler {
 			switch r.Method {
 			case http.MethodGet, http.MethodHead, http.MethodOptions:
 			default:
-				if p := r.URL.Path; p == hookPath || strings.HasPrefix(p, "/v1/pre-request") {
+				if p := r.URL.Path; p == hookhealth.HookPath || strings.HasPrefix(p, "/v1/pre-request") {
 					next.ServeHTTP(w, r)
 					return
 				}

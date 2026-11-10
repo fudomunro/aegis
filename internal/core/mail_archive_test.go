@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
@@ -37,7 +38,7 @@ func mailTestServer(t *testing.T, archive *mail.Archive) *Server {
 		metrics:     metrics.NewAccessMetrics(0),
 		links:       mustLinks(t),
 		mail:        archive,
-		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
+		hookHealth:  hookhealth.NewHookHealth(hookhealth.DefaultObservationCapacity),
 	}
 	srv.connectors[connectors.GoogleGmailServiceID] = connectors.NewGoogleGmailConnector(srv)
 	srv.wireMailIngests()

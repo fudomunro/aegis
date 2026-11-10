@@ -66,6 +66,17 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/shared",
 	},
+	// the hook-health engine records hook traffic and validates pasted
+	// Aperture config; request body-shape tokens come from shared seam
+	// vocabulary (the inject engine produces the same tokens).
+	"internal/core/hookhealth": {
+		"github.com/fudomunro/aegis/internal/shared",
+	},
+	// the injection engine is pure JSON surgery over LLM request bodies;
+	// request body-shape tokens come from shared seam vocabulary.
+	"internal/core/inject": {
+		"github.com/fudomunro/aegis/internal/shared",
+	},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/core/policy",

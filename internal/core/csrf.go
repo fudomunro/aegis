@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -170,7 +171,7 @@ func isHookPath(r *http.Request) bool {
 		return false
 	}
 	p := r.URL.Path
-	return p == hookPath || strings.HasPrefix(p, hookPath+"/")
+	return p == hookhealth.HookPath || strings.HasPrefix(p, hookhealth.HookPath+"/")
 }
 
 // issueCSRFToken mints a single-use token for the consent page render.

@@ -18,6 +18,7 @@ import (
 	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/links"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
@@ -470,7 +471,7 @@ func Run() {
 		quicken:       quickenStore,
 		timeline:      timelineStore,
 		signal:        signalStore,
-		hookHealth:    NewHookHealth(defaultHookObservationCapacity),
+		hookHealth:    hookhealth.NewHookHealth(hookhealth.DefaultObservationCapacity),
 		audit:         auditLog,
 		prom:          metrics.NewPromMetrics(Version, Commit),
 		apertureURL:   *apertureURL,

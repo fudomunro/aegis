@@ -1,8 +1,10 @@
-package core
+package inject
 
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // Fuzz targets for the Aperture hook payload decode + injection path
@@ -24,7 +26,7 @@ func FuzzInjectRequestInstructions(f *testing.F) {
 	f.Add([]byte(`{"instructions":"old","input":"hi"}`), "NEW", "", "")
 	f.Add([]byte("\x00\xff{\"messages\":[]}"), "SYS", "", "")
 	f.Fuzz(func(t *testing.T, original []byte, content, provider, model string) {
-		res, err := injectRequestInstructions(original, content, provider, model)
+		res, err := RequestInstructions(original, content, provider, model)
 		if err != nil {
 			return
 		}
@@ -34,7 +36,7 @@ func FuzzInjectRequestInstructions(f *testing.F) {
 			if jsonErr := json.Unmarshal(res.Body, &check); jsonErr != nil {
 				// injectSystemMessage path returns the marshaled map; if shape
 				// was recognized, body should be a JSON object.
-				if res.Shape != bodyShapeUnknown {
+				if res.Shape != shared.BodyShapeUnknown {
 					t.Fatalf("successful inject returned non-object JSON: %v", jsonErr)
 				}
 			}
@@ -51,7 +53,7 @@ func FuzzInjectRequestInstructions(f *testing.F) {
 		} else {
 			base = original
 		}
-		second, err2 := injectRequestInstructions(base, content, provider, model)
+		second, err2 := RequestInstructions(base, content, provider, model)
 		if err2 != nil {
 			return
 		}
@@ -76,7 +78,7 @@ func FuzzDetectBodyShape(f *testing.F) {
 		}
 		shape := detectBodyShape(full, provider, model)
 		switch shape {
-		case bodyShapeChat, bodyShapeAnthropic, bodyShapeResponses, bodyShapeUnknown:
+		case shared.BodyShapeChat, shared.BodyShapeAnthropic, shared.BodyShapeResponses, shared.BodyShapeUnknown:
 		default:
 			t.Fatalf("unexpected shape %q", shape)
 		}
