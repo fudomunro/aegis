@@ -7,8 +7,6 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/core/scopes"
-	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -78,45 +76,26 @@ func (s *Server) connectorWriteBlocked(serviceID, kind, method string) bool {
 	return !shared.KindHasWriteOp(caps, kind)
 }
 
-// effectivePermissions resolves agent access for a service from data grants
-// plus legacy service permissions (tighten-only). Data grant is primary
-// (issue #148); the service map remains a migration override.
-func (s *Server) effectivePermissions(svc *Service) policy.Permissions {
-	if svc == nil || s == nil || s.config == nil {
+// ownerGrants is the owner-tier rule map: the configured data grants
+// materialized as kind → level, with the permissive default prefill. The
+// legacy "omit = unrestricted" semantics live in that prefill, not in the
+// resolution rule, which stays deny-by-default.
+func (s *Server) ownerGrants() policy.Permissions {
+	if s == nil || s.config == nil {
 		return nil
 	}
-	return s.config.EffectivePermissions(svc.ID)
+	return s.config.DataGrants().Levels().PrefillDefault()
 }
 
-// requestLevel returns the effective access level for a kind on a
-// service for this request: owner-tier effective permissions tightened by
-// the principal's scope grants (issue #253). Scope grants never open what
-// owner policy closed — the level is the stricter of both layers. Internal
-// owner-tier fetches (search-index writes) skip the tightening so the index
-// stores the partition's fullest rows (issue #272).
-func (s *Server) requestLevel(r *http.Request, svc *Service, kind string) string {
-	level := s.effectivePermissions(svc).AccessForKind(kind)
-	sc := scopes.From(r)
-	if sc == nil || kinds.OwnerView(r) {
-		return level
-	}
-	provider := ""
-	if svc != nil {
-		provider = svc.ID
-	}
-	return policy.ScopeTighten(sc.Grants, level, kind, provider)
+// requestGrants returns the rule map for the request's key (see Grants).
+func (s *Server) requestGrants(r *http.Request) policy.Permissions {
+	g, _ := s.Grants(r)
+	return g
 }
 
-// requestPermissions is requestLevel's map view: owner-tier effective
-// permissions AND scope grants, key by key. Used where a permission map
-// feeds notices and all-denied checks.
-func (s *Server) requestPermissions(r *http.Request, svc *Service) policy.Permissions {
-	owner := s.effectivePermissions(svc)
-	sc := scopes.From(r)
-	if sc == nil {
-		return owner
-	}
-	return policy.ScopeTightenPermissions(sc.Grants, owner)
+// requestLevel returns the level the request's key grants for kind.
+func (s *Server) requestLevel(r *http.Request, kind string) string {
+	return s.requestGrants(r).Level(kind)
 }
 
 // AllowDataPermission enforces the service's permission for a proxy request.
@@ -130,7 +109,7 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 		return false
 	}
 	kind := KindForPath(remainingPath)
-	level := s.requestLevel(r, svc, kind)
+	level := s.requestLevel(r, kind)
 	if s.connectorWriteBlocked(svc.ID, kind, r.Method) {
 		label := kind
 		if label == "" {
@@ -175,21 +154,21 @@ func permissionNotice(p policy.Permissions) string {
 	return "Data grants: " + strings.Join(parts, ". ") + "."
 }
 
-// allDataDenied reports whether every listed kind (and the default)
-// is "none", so there is nothing useful to inject for the service.
+// allDataDenied reports whether the rule map grants nothing to any kind,
+// so there is nothing useful to inject for the service.
 func allDataDenied(p policy.Permissions) bool {
 	if p == nil {
+		return true
+	}
+	if p.Level("") != policy.AccessNone {
+		// Unlisted kinds are not fully denied.
 		return false
 	}
-	if p.For("") != policy.AccessNone {
-		// Unlisted types are not fully denied.
-		return false
-	}
-	for k, v := range p {
+	for k := range p {
 		if k == policy.PermissionDefaultKey {
 			continue
 		}
-		if policy.NormalizeAccess(v) != policy.AccessNone {
+		if p.Level(k) != policy.AccessNone {
 			return false
 		}
 	}

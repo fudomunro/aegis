@@ -10,6 +10,8 @@ import (
 	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -55,33 +57,26 @@ func serviceViewOf(svc Service) kinds.ServiceView {
 	}
 }
 
-// RequestLevel implements kinds.Host.
-func (s *Server) RequestLevel(r *http.Request, serviceID, kind string) string {
-	svc := s.config.GetService(serviceID)
-	if svc == nil {
-		return ""
+// Grants implements kinds.Host: the rule map carried by the request's key.
+// Internal owner-tier fetches always see the owner map; app tokens carry
+// their scopes; data scopes carry their grants; everything else is the
+// owner map (agent key, tailnet peers).
+func (s *Server) Grants(r *http.Request) (policy.Permissions, kinds.Principal) {
+	if kinds.OwnerView(r) {
+		return s.ownerGrants(), kinds.PrincipalOwner
 	}
-	return s.requestLevel(r, svc, kind)
+	if app := apps.AppIdentityFrom(r); app != nil {
+		return app.Scopes, kinds.PrincipalApp
+	}
+	if sc := scopes.From(r); sc != nil {
+		return sc.Grants.Levels(), kinds.PrincipalScope
+	}
+	return s.ownerGrants(), kinds.PrincipalOwner
 }
 
-// OwnerLevel implements kinds.Host.
-func (s *Server) OwnerLevel(serviceID, kind string) string {
-	svc := s.config.GetService(serviceID)
-	if svc == nil {
-		return ""
-	}
-	return s.effectivePermissions(svc).AccessForKind(kind)
-}
-
-// AppLevel implements kinds.Host. The app's raw scope level for kind is
-// what crosses the seam; allowance and cache partitioning derive from it
-// in the kinds package.
-func (s *Server) AppLevel(r *http.Request, kind string) (string, bool) {
-	app := apps.AppIdentityFrom(r)
-	if app == nil {
-		return "", false
-	}
-	return app.Scopes.For(kind), true
+// OwnerGrants implements kinds.Host.
+func (s *Server) OwnerGrants() policy.Permissions {
+	return s.ownerGrants()
 }
 
 // RecordAccess implements kinds.Host.

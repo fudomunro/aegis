@@ -850,10 +850,11 @@ func TestWriteGuardrailResponse_Block(t *testing.T) {
 
 func TestHandlePreRequest_IncludesPermissionNotice(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"default": {Default: policy.AccessRead}, "player": {Default: policy.AccessNone}, "recommendations": {Default: policy.AccessNone}},
+
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: policy.Permissions{"default": policy.AccessRead, "player": policy.AccessNone, "recommendations": policy.AccessNone},
 			},
 		},
 	}

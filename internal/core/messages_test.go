@@ -121,12 +121,13 @@ func TestHandleLibraryMessages_NoProviders(t *testing.T) {
 }
 
 func TestHandleLibraryMessages_DeniedByPermission(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "google-gmail",
-		Name:        "Gmail",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"messages": policy.AccessNone},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"messages": {Default: policy.AccessNone}},
+		Services: []Service{{
+			ID:     "google-gmail",
+			Name:   "Gmail",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-gmail": &fakeMessageProvider{messages: []kinds.Message{

@@ -59,136 +59,19 @@ const PermissionDefaultKey = "default"
 // "default" applies to types not listed. A nil map means unrestricted access.
 type Permissions map[string]string
 
-// For returns the access level for a kind.
-// Unknown/empty kinds fall through to "default" (or DefaultAccessType),
-// except opt-in types (places) which stay "none" unless named explicitly —
-// the "default" key never enables them (issue #142).
-// Proxy callers with an unclassified path must use Strictest instead so
-// unknown surface cannot outrank a tighter type (issue #94).
-func (p Permissions) For(kind string) string {
-	if shared.KindDefaultsNone(kind) {
-		if p != nil {
-			if level, ok := p[kind]; ok {
-				return NormalizeAccess(level)
-			}
-		}
-		return AccessNone
-	}
-	if p == nil {
-		return DefaultAccessType
-	}
-	level, ok := p[kind]
-	if ok {
-		return NormalizeAccess(level)
-	}
-	if level, ok := p[PermissionDefaultKey]; ok {
-		return NormalizeAccess(level)
-	}
-	return DefaultAccessType
-}
-
-// Strictest returns the most restrictive access level configured on the map.
-// Used when a proxy path does not map to a known kind: unknown endpoints
-// must not inherit "default" if any type is tighter (issue #94). A nil or empty
-// map is unrestricted. If reads and writes both appear, no single level is
-// tighter than every known type for an unknown method class — deny.
-func (p Permissions) Strictest() string {
-	if len(p) == 0 {
-		return DefaultAccessType
-	}
-	hasNone, hasFreeBusy, hasSummary, hasCity, hasPrecise, hasMetadata, hasRead, hasWrite, hasFull := false, false, false, false, false, false, false, false, false
-	for _, v := range p {
-		switch NormalizeAccess(v) {
-		case AccessNone:
-			hasNone = true
-		case AccessFreeBusy:
-			hasFreeBusy = true
-		case AccessSummary:
-			hasSummary = true
-		case AccessCity:
-			hasCity = true
-		case AccessPrecise:
-			hasPrecise = true
-		case AccessMetadata:
-			hasMetadata = true
-		case AccessRead:
-			hasRead = true
-		case AccessWrite:
-			hasWrite = true
-		case AccessFull:
-			hasFull = true
-		}
-	}
-	if hasNone || (hasRead && hasWrite) {
-		return AccessNone
-	}
-	// freebusy/summary/city/precise/metadata redactions are type-specific.
-	// When one is the tightest level, unknown paths cannot be redacted — deny
-	// them rather than leak detail (issue #94, #128, #141, #142, #143).
-	if hasFreeBusy && !hasRead && !hasWrite && !hasFull {
-		return AccessNone
-	}
-	if hasSummary && !hasRead && !hasWrite && !hasFull {
-		return AccessNone
-	}
-	if hasCity && !hasRead && !hasWrite && !hasFull {
-		return AccessNone
-	}
-	if hasPrecise && !hasRead && !hasWrite && !hasFull {
-		return AccessNone
-	}
-	if hasMetadata && !hasRead && !hasWrite && !hasFull {
-		return AccessNone
-	}
-	if hasRead {
-		return AccessRead
-	}
-	if hasWrite {
-		return AccessWrite
-	}
-	if hasFull {
-		return AccessFull
-	}
-	if hasFreeBusy {
-		return AccessFreeBusy
-	}
-	if hasSummary {
-		return AccessSummary
-	}
-	if hasCity {
-		return AccessCity
-	}
-	if hasPrecise {
-		return AccessPrecise
-	}
-	if hasMetadata {
-		return AccessMetadata
-	}
-	return DefaultAccessType
-}
-
-// AccessForKind resolves the effective level for a classified path.
-// Unclassified paths use Strictest, never the default key (issue #94).
-func (p Permissions) AccessForKind(kind string) string {
-	if kind == "" {
-		return p.Strictest()
-	}
-	return p.For(kind)
-}
-
 // Allows reports whether the given HTTP method is permitted for the kind.
 func (p Permissions) Allows(kind, method string) bool {
-	return AllowsMethod(p.For(kind), method)
+	return AllowsMethod(p.Level(kind), method)
 }
 
 // AllowsRead reports whether read (GET/HEAD) is permitted for the kind.
 func (p Permissions) AllowsRead(kind string) bool {
-	return AllowsMethod(p.For(kind), http.MethodGet)
+	return AllowsMethod(p.Level(kind), http.MethodGet)
 }
 
 // AllowsWrite reports whether any mutating method is permitted for the kind.
 func (p Permissions) AllowsWrite(kind string) bool {
-	return AllowsMethod(p.For(kind), http.MethodPost)
+	return AllowsMethod(p.Level(kind), http.MethodPost)
 }
 
 // DeniedKinds returns sorted kind names explicitly set to "none".
@@ -333,114 +216,25 @@ func AllowsMethod(level, method string) bool {
 	}
 }
 
-// DataGrant is an agent data grant owned by a kind (issue #148).
-// Service-level Permissions remain a minority override during migration;
-// the type default is the primary model. Enforcement applies on the
-// content/ingest proxy, library, and pre-request injection. Capabilities
-// are admin/connector metadata (issue #119) — not an agent discovery API.
+// DataGrant is the stored form of one kind's agent data grant (issue #148).
+// At request time it materializes to a single level via DataGrants.Levels;
+// authorization never reads this struct directly. Per-provider overrides
+// are legacy migration data — Levels ignores them.
 //
 // Redaction levels (freebusy, summary, city, precise) stay type-scoped:
 // ValidatePermissions rejects them on kinds that cannot enforce the
 // reduction (see LibraryKind.AllowedLevels).
 type DataGrant struct {
-	// Default is the access level for agents when no provider override applies.
-	// Empty means DefaultAccessType (preserves pre-permission behavior).
+	// Default is the access level for the kind. Empty means unrestricted
+	// for legacy entries (opt-in kinds stay none until named).
 	Default string `json:"default,omitempty"`
-	// Providers optionally further restrict (never grant) access for a single
-	// connector id. Missing entry means the type default applies.
+	// Providers are legacy per-connector tighten-only overrides. Kept for
+	// on-disk compat; ignored by the collapsed model.
 	Providers map[string]string `json:"providers,omitempty"`
 }
 
-// For returns the effective access level for a provider (or the type default
-// when provider is empty / has no override). Provider overrides can only
-// tighten the type default. Opt-in types (places) stay none when Default is
-// empty — call DataGrants.Access when the kind key is known so opt-in
-// rules apply.
-func (tp DataGrant) For(provider string) string {
-	level := NormalizeAccess(tp.Default)
-	if level == "" {
-		level = DefaultAccessType
-	}
-	if provider == "" || len(tp.Providers) == 0 {
-		return level
-	}
-	ov, ok := tp.Providers[provider]
-	if !ok {
-		return level
-	}
-	ovLevel := NormalizeAccess(ov)
-	if ovLevel == "" {
-		return level
-	}
-	return stricterAccess(level, ovLevel)
-}
-
-// DataGrants maps kind / permission keys to their agent policy.
+// DataGrants maps kind / permission keys to their stored agent policy.
 type DataGrants map[string]DataGrant
-
-// For returns the policy for a kind key (zero value when unset).
-func (tp DataGrants) For(kind string) DataGrant {
-	if tp == nil {
-		return DataGrant{}
-	}
-	return tp[kind]
-}
-
-// Access returns the effective agent access for a kind from a provider.
-// Type default applies first; the provider override can only tighten it
-// (issue #148). Opt-in types stay none unless named explicitly — either the
-// type default or that provider's override (the Permissions "default" key
-// never enables them).
-func (tp DataGrants) Access(kind, provider string) string {
-	policy := tp.For(kind)
-	typeLevel := NormalizeAccess(policy.Default)
-	if typeLevel == "" {
-		typeLevel = AccessNone
-	}
-	explicitProvider := ""
-	if provider != "" {
-		if v, ok := policy.Providers[provider]; ok {
-			explicitProvider = NormalizeAccess(v)
-		}
-	}
-	if shared.KindDefaultsNone(kind) {
-		if explicitProvider == "" {
-			if typeLevel == AccessNone {
-				return AccessNone
-			}
-			return typeLevel
-		}
-		// Type default never enables opt-in types. An explicit provider name
-		// does (it is the "named explicitly" opt-in). Otherwise tighten only.
-		if typeLevel == AccessNone {
-			return explicitProvider
-		}
-		return stricterAccess(typeLevel, explicitProvider)
-	}
-	level := typeLevel
-	if level == AccessNone && policy.Default == "" {
-		// Unset default preserves pre-permission behavior for normal types.
-		level = DefaultAccessType
-	}
-	if explicitProvider == "" {
-		return level
-	}
-	return stricterAccess(level, explicitProvider)
-}
-
-// PermissionsFor materializes a service-scoped Permissions map for one
-// provider from data grants. Used so permissionNotice and legacy helpers
-// can keep their map shape while ownership stays type-level.
-func (tp DataGrants) PermissionsFor(provider string) Permissions {
-	out := Permissions{}
-	for kind := range tp {
-		out[kind] = tp.Access(kind, provider)
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
 
 // ValidateDataGrants checks every data grant entry (default + provider
 // overrides) against the access vocabulary and type-scoped redaction rules.
@@ -465,138 +259,6 @@ func ValidateDataGrants(policies DataGrants) error {
 		}
 	}
 	return nil
-}
-
-// legacyOverride returns the legacy service-map opinion for a kind.
-// The second result is false when the map has no opinion (so data grant is
-// not tightened). Opt-in types only take an explicit key, never "default".
-func legacyOverride(p Permissions, kind string) (string, bool) {
-	if len(p) == 0 {
-		return "", false
-	}
-	if v, ok := p[kind]; ok {
-		return NormalizeAccess(v), true
-	}
-	if shared.KindDefaultsNone(kind) {
-		return "", false
-	}
-	if v, ok := p[PermissionDefaultKey]; ok {
-		return NormalizeAccess(v), true
-	}
-	return "", false
-}
-
-// EffectiveAccess resolves agent access for a kind from a provider
-// (issue #148):
-//
-//  1. data grant is primary when present (default + provider tighten-only)
-//  2. service grant_limits only tighten a data grant
-//  3. when no data grant exists for the type, service grant_limits
-//     remain the authority (compat window; they can still opt in places)
-//
-// Unclassified paths must pass kind == "" and use the Strictest view so
-// unknown surface cannot inherit a wide default (issue #94).
-func EffectiveAccess(policies DataGrants, legacy Permissions, kind, provider string) string {
-	if kind == "" {
-		level := policies.PermissionsFor(provider).Strictest()
-		if legacy != nil {
-			level = stricterAccess(level, legacy.Strictest())
-		}
-		return level
-	}
-	_, hasDataGrant := policies[kind]
-	if hasDataGrant {
-		level := policies.Access(kind, provider)
-		if ov, ok := legacyOverride(legacy, kind); ok {
-			level = stricterAccess(level, ov)
-		}
-		return level
-	}
-	// No type-owned policy for this key: service grant_limits still decide
-	// during the migration window (they can name opt-in types explicitly).
-	if legacy != nil {
-		return legacy.For(kind)
-	}
-	if shared.KindDefaultsNone(kind) {
-		return AccessNone
-	}
-	return DefaultAccessType
-}
-
-// EffectivePermissions materializes the service-scoped map for a provider:
-// data grant first, service grant_limits tightened on top. Callers that
-// still take Permissions (permissionNotice, host ServiceInfo) should use this
-// rather than the raw service block.
-func EffectivePermissions(policies DataGrants, legacy Permissions, provider string) Permissions {
-	// Collect every type the policies name plus every type the legacy map
-	// names (except "default"), so service-only keys still resolve.
-	keys := map[string]bool{}
-	for kind := range policies {
-		keys[kind] = true
-	}
-	for k := range legacy {
-		if k == PermissionDefaultKey {
-			continue
-		}
-		keys[k] = true
-	}
-	if len(keys) == 0 {
-		if legacy == nil {
-			return nil
-		}
-		return legacy.Clone()
-	}
-	out := Permissions{}
-	for kind := range keys {
-		out[kind] = EffectiveAccess(policies, legacy, kind, provider)
-	}
-	// Preserve a legacy "default" key only as a documentation of unlisted
-	// types; enforcement for unlisted types uses EffectiveAccess/Strictest.
-	if v, ok := legacy[PermissionDefaultKey]; ok {
-		out[PermissionDefaultKey] = NormalizeAccess(v)
-	}
-	return out
-}
-
-// stricterAccess returns the more restrictive of two access levels.
-// Used so provider overrides can only tighten a type default (issue #148).
-// Within the places ladder, city is tighter than precise.
-func stricterAccess(a, b string) string {
-	a, b = NormalizeAccess(a), NormalizeAccess(b)
-	if isPlacesLevel(a) && isPlacesLevel(b) {
-		if a == AccessCity || b == AccessCity {
-			return AccessCity
-		}
-		return AccessPrecise
-	}
-	if accessRank(a) <= accessRank(b) {
-		return a
-	}
-	return b
-}
-
-func isPlacesLevel(level string) bool {
-	return level == AccessCity || level == AccessPrecise
-}
-
-// accessRank orders levels from most to least restrictive for clamping.
-// Redaction levels sit between none and read because they allow a narrowed
-// read but never a write.
-func accessRank(level string) int {
-	switch NormalizeAccess(level) {
-	case AccessNone:
-		return 0
-	case AccessFreeBusy, AccessSummary, AccessCity, AccessPrecise, AccessMetadata:
-		return 1
-	case AccessRead:
-		return 2
-	case AccessWrite:
-		return 3
-	case AccessFull:
-		return 4
-	default:
-		return 0
-	}
 }
 
 // ValidatePermissions checks that every level is a known access type.

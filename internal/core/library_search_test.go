@@ -199,8 +199,7 @@ func TestLibrarySearch_DatasetPartitionIsolated(t *testing.T) {
 func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 	cfg := &Config{Services: []Service{
 		{ID: "google", Name: "Google", Action: "inject"},
-		{ID: "outlook", Name: "Outlook", Action: "inject",
-			GrantLimits: policy.Permissions{"contacts": policy.AccessNone}},
+		{ID: "outlook", Name: "Outlook", Action: "block"},
 	}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
@@ -249,12 +248,13 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 }
 
 func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "paperless",
-		Name:        "Paperless-ngx",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"documents": policy.AccessMetadata},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessMetadata}},
+		Services: []Service{{
+			ID:     "paperless",
+			Name:   "Paperless-ngx",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
@@ -400,12 +400,13 @@ func eventsQuery(t *testing.T, srv *Server, bearer, path string) []kinds.Calenda
 }
 
 func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"events": {Default: policy.AccessRead}},
+		Services: []Service{{
+			ID:     "google-calendar",
+			Name:   "Google Calendar",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{
@@ -452,12 +453,13 @@ func TestLibrarySearch_FreeBusyAppFetchKeepsOwnerRows(t *testing.T) {
 }
 
 func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "paperless",
-		Name:        "Paperless-ngx",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"documents": policy.AccessRead},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessRead}},
+		Services: []Service{{
+			ID:     "paperless",
+			Name:   "Paperless-ngx",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.search = newTestSearchIndex(t)
 	srv.connectors = map[string]connectors.ServiceConnector{

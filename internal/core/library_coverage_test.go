@@ -45,7 +45,9 @@ func seedLibraryAggregate[T any](t *testing.T, srv *Server, kindID string, items
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv.cache.Set("library:"+kindID+"|agg", string(raw), time.Minute)
+	req := httptest.NewRequest(http.MethodGet, "/v1/library/"+kindID, nil)
+	g, _ := srv.Grants(req)
+	srv.cache.Set("library:"+kindID+"|g:"+g.Fingerprint()+"|agg", string(raw), time.Minute)
 }
 
 func TestLibraryTracks_CacheHit(t *testing.T) {
@@ -260,9 +262,9 @@ func TestLibraryArtists_ErrorService(t *testing.T) {
 
 func TestLibraryArtists_PermissionDenied(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"artists": {Default: policy.AccessNone}},
 		Services: []Service{{
 			ID: "spotify", Name: "Spotify", Action: "inject",
-			GrantLimits: policy.Permissions{"artists": policy.AccessNone},
 		}},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -295,10 +297,6 @@ func TestLibraryReadableHelpers(t *testing.T) {
 		Services: []Service{
 			{ID: "a", Name: "A", Action: "inject"},
 			{ID: "b", Name: "B", Action: "block"},
-			{ID: "c", Name: "C", Action: "inject", GrantLimits: policy.Permissions{
-				"tracks": policy.AccessNone, "albums": policy.AccessNone, "artists": policy.AccessNone,
-				"playlists": policy.AccessNone, "contacts": policy.AccessNone, "photos": policy.AccessNone,
-			}},
 		},
 	}, "https://aegis.example.com")
 
@@ -310,11 +308,12 @@ func TestLibraryReadableHelpers(t *testing.T) {
 		t.Fatal("service a should allow all library reads")
 	}
 
-	// Only the blocked + denied services remain → nothing readable.
+	// Denied owner grant + only a blocked service remains → nothing readable.
 	srv2 := testServerWithBase(&Config{
+		typePolicies: policy.DataGrants{policy.PermissionDefaultKey: {Default: policy.AccessNone}},
 		Services: []Service{
 			{ID: "b", Name: "B", Action: "block"},
-			{ID: "c", Name: "C", Action: "inject", GrantLimits: policy.Permissions{"default": policy.AccessNone}},
+			{ID: "c", Name: "C", Action: "inject"},
 		},
 	}, "https://aegis.example.com")
 	if kindReadable("tracks", srv2) || kindReadable("albums", srv2) || kindReadable("artists", srv2) ||
@@ -766,11 +765,14 @@ func TestMentionsAlbumsAndArtists_Keywords(t *testing.T) {
 }
 
 func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
-	svc := &Service{
-		ID: "spotify", Name: "Spotify",
-		GrantLimits: policy.Permissions{"default": policy.AccessRead, "artists": policy.AccessNone},
-	}
-	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
+	svc := &Service{ID: "spotify", Name: "Spotify"}
+	srv := testServerWithBase(&Config{
+		typePolicies: policy.DataGrants{
+			policy.PermissionDefaultKey: {Default: policy.AccessRead},
+			"artists":                   {Default: policy.AccessNone},
+		},
+		Services: []Service{*svc},
+	}, "https://aegis.example.com")
 
 	req := httptest.NewRequest("GET", "/v1/services/spotify/me/following?type=artist", nil)
 	w := httptest.NewRecorder()

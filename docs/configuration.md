@@ -802,7 +802,7 @@ Aegis authenticates callers in two tiers:
 
 1. **Tailscale identity** (recommended for agents) — via [Serve identity headers](https://tailscale.com/kb/1312/serve) or WhoIs against local `tailscaled`. Same trust model Aperture uses: identity is cryptographic, not a shared secret agents might paste into a chat. Trusted only on listeners that are not externally reachable.
 2. **Agent API key** — `Authorization: Bearer <key>` or `X-Api-Key`, for bridges and non-tailnet tools. Never opens admin surfaces.
-3. **Admin API key** (`-admin-api-key`) — for curl/scripts that manage data grants, apps, mirror, and other admin writes. Admin surfaces live on the in-tailnet admin listener.
+3. **Admin API key** (`-admin-api-key`) — for curl/scripts that manage data grants, apps, and other admin writes. Admin surfaces live on the in-tailnet admin listener.
 4. **Invite token** — `Authorization: Bearer <key>` or `X-Api-Key`, one per external principal (a data-scope key). Deny-by-default grants; never admin. See [external access](external-access.md).
 5. **Third-party app token** — `Authorization: Bearer aeg_app_…` for registered non-agent clients. See [Third-party app tokens](#third-party-app-tokens). Never admin.
 

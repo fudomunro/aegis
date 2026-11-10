@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 // fakeHost implements Host over plain test state — the seam must be usable
@@ -13,10 +15,9 @@ import (
 type fakeHost struct {
 	connectors map[string]any
 	services   []ServiceView
-	levels     map[string]string // serviceID → request level
-	owner      map[string]string // serviceID → owner level
-	appLevel   string
-	isApp      bool
+	grants     policy.Permissions // request key's rule map
+	owner      policy.Permissions
+	principal  Principal
 	events     []AccessEvent
 }
 
@@ -33,15 +34,14 @@ func (f *fakeHost) Service(id string) (ServiceView, bool) {
 
 func (f *fakeHost) Services() []ServiceView { return f.services }
 
-func (f *fakeHost) RequestLevel(r *http.Request, serviceID, kind string) string {
-	return f.levels[serviceID]
+func (f *fakeHost) Grants(r *http.Request) (policy.Permissions, Principal) {
+	if OwnerView(r) {
+		return f.owner, PrincipalOwner
+	}
+	return f.grants, f.principal
 }
 
-func (f *fakeHost) OwnerLevel(serviceID, kind string) string { return f.owner[serviceID] }
-
-func (f *fakeHost) AppLevel(r *http.Request, kind string) (string, bool) {
-	return f.appLevel, f.isApp
-}
+func (f *fakeHost) OwnerGrants() policy.Permissions { return f.owner }
 
 func (f *fakeHost) RecordAccess(r *http.Request, ev AccessEvent) { f.events = append(f.events, ev) }
 
@@ -84,26 +84,36 @@ func TestCollect_PermissionsAndProviders(t *testing.T) {
 		connectors: map[string]any{
 			"good":    goodProvider{},
 			"blocked": goodProvider{},
-			"denied":  goodProvider{},
 			"notprov": struct{}{},
 		},
 		services: []ServiceView{
 			{ID: "good", Action: "inject"},
 			{ID: "blocked", Action: "block"},
-			{ID: "denied", Action: "inject"},
 			{ID: "notprov", Action: "inject"},
 		},
-		levels: map[string]string{"good": "read", "denied": "none"},
+		grants: policy.Permissions{"widgets": policy.AccessRead},
 	}
-	targets, denied := Collect[int, testProvider](h,
-		httptest.NewRequest(http.MethodGet, "/v1/library/x", nil), "widgets",
-		func(p testProvider) func(context.Context) ([]int, bool, error) { return p.List })
-
+	collect := func() ([]NamedLister[int], []string) {
+		return Collect[int, testProvider](h,
+			httptest.NewRequest(http.MethodGet, "/v1/library/x", nil), "widgets",
+			func(p testProvider) func(context.Context) ([]int, bool, error) { return p.List })
+	}
+	targets, denied := collect()
 	if len(targets) != 1 || targets[0].ID != "good" {
 		t.Fatalf("targets = %+v, want only good", targets)
 	}
-	if len(denied) != 1 || denied[0] != "denied" {
-		t.Fatalf("denied = %v, want [denied]", denied)
+	if len(denied) != 0 {
+		t.Fatalf("denied = %v, want empty", denied)
+	}
+
+	// Deny-by-default: an unlisted kind denies every provider.
+	h.grants = policy.Permissions{}
+	targets, denied = collect()
+	if len(targets) != 0 {
+		t.Fatalf("targets = %+v, want none", targets)
+	}
+	if len(denied) != 1 || denied[0] != "good" {
+		t.Fatalf("denied = %v, want [good] (blocked and non-providers are skipped)", denied)
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -133,7 +134,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 	logger := withPeerLog(slog.With("handler", "library_mirror",
 		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun), r)
 
-	if err := s.requireMirrorWritable(req.TargetService, req.Kind); err != nil {
+	if err := s.requireMirrorWritable(s.requestGrants(r), req.TargetService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -150,7 +151,7 @@ func (s *Server) HandleLibraryMirror(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
-	if err := s.requireMirrorReadable(sourceService, req.Kind); err != nil {
+	if err := s.requireMirrorReadable(s.requestGrants(r), sourceService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -278,8 +279,9 @@ func errorsIsUnauthorized(err error) bool {
 	return err != nil && (err == kinds.ErrUnauthorized || strings.Contains(err.Error(), "unauthorized"))
 }
 
-// requireMirrorWritable checks the target allows writes for the kind.
-func (s *Server) requireMirrorWritable(serviceID, kind string) error {
+// requireMirrorWritable checks the target allows writes for the kind under
+// the caller's grant map.
+func (s *Server) requireMirrorWritable(grants policy.Permissions, serviceID, kind string) error {
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
 		return fmt.Errorf("service %q not configured", serviceID)
@@ -287,15 +289,16 @@ func (s *Server) requireMirrorWritable(serviceID, kind string) error {
 	if strings.EqualFold(svc.Action, "block") {
 		return fmt.Errorf("service %q is blocked", serviceID)
 	}
-	if !s.effectivePermissions(svc).AllowsWrite(kind) {
+	if !grants.AllowsWrite(kind) {
 		return fmt.Errorf("denied: data grant for agent write access to %s on %s is %q",
-			kind, serviceID, s.effectivePermissions(svc).For(kind))
+			kind, serviceID, grants.Level(kind))
 	}
 	return nil
 }
 
-// requireMirrorReadable checks the source allows reads for the kind.
-func (s *Server) requireMirrorReadable(serviceID, kind string) error {
+// requireMirrorReadable checks the source allows reads for the kind under
+// the caller's grant map.
+func (s *Server) requireMirrorReadable(grants policy.Permissions, serviceID, kind string) error {
 	svc := s.config.GetService(serviceID)
 	if svc == nil {
 		return fmt.Errorf("service %q not configured", serviceID)
@@ -303,9 +306,9 @@ func (s *Server) requireMirrorReadable(serviceID, kind string) error {
 	if strings.EqualFold(svc.Action, "block") {
 		return fmt.Errorf("service %q is blocked", serviceID)
 	}
-	if !s.effectivePermissions(svc).AllowsRead(kind) {
+	if !grants.AllowsRead(kind) {
 		return fmt.Errorf("denied: data grant for agent read access to %s on %s is %q",
-			kind, serviceID, s.effectivePermissions(svc).For(kind))
+			kind, serviceID, grants.Level(kind))
 	}
 	return nil
 }

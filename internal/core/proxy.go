@@ -75,7 +75,7 @@ func (s *Server) HandleServiceProxy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	kind := KindForPath(remainingPath)
-	accessLevel := s.requestLevel(r, svc, kind)
+	accessLevel := s.requestLevel(r, kind)
 
 	if svc.Action == "block" {
 		logger.Warn("service blocked", "reason", svc.Description)

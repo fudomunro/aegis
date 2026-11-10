@@ -4,10 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func writeDataScopes(t *testing.T, scopes []Scope) string {
@@ -84,34 +81,4 @@ func TestServiceVisible(t *testing.T) {
 	if !ServiceVisible("", shire) {
 		t.Fatal("empty dataset is shared")
 	}
-}
-
-func TestCacheSuffix(t *testing.T) {
-	if CacheSuffix(nil) != "" {
-		t.Fatal("default principal must not change cache keys")
-	}
-	// Every scoped principal is namespaced — grants change response content
-	// even on the owner dataset (issue #253).
-	plain := CacheSuffix(&Scope{ID: "x"})
-	if !strings.Contains(plain, "|sg:") {
-		t.Fatalf("scope without dataset = %q, want grants fingerprint", plain)
-	}
-	shire := CacheSuffix(&Scope{Dataset: "shire"})
-	if !strings.HasPrefix(shire, "|ds:shire|sg:") {
-		t.Fatalf("suffix = %q", shire)
-	}
-	read := CacheSuffix(&Scope{Dataset: "shire", Grants: readAllGrants()})
-	if read == shire {
-		t.Fatal("different grants must not share a cache suffix")
-	}
-	if again := CacheSuffix(&Scope{Dataset: "shire", Grants: readAllGrants()}); again != read {
-		t.Fatalf("identical grants must fingerprint identically: %q vs %q", again, read)
-	}
-	if got := CacheSuffix(&Scope{Dataset: "gondor", Grants: readAllGrants()}); got == read {
-		t.Fatal("different datasets must not share a cache suffix")
-	}
-}
-
-func readAllGrants() policy.DataGrants {
-	return policy.DataGrants{policy.PermissionDefaultKey: {Default: policy.AccessRead}}
 }

@@ -5,16 +5,16 @@ import (
 	"net/http"
 	"sort"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
-// userDefinedReadable reports whether data grant allows GET on a UDK kind.
+// userDefinedReadable reports whether the owner data grant allows GET on a
+// UDK kind.
 func (s *Server) userDefinedReadable(permType string) bool {
 	if s == nil || s.config == nil {
 		return false
 	}
-	return policy.AllowsMethod(s.config.EffectiveAccess("", permType), http.MethodGet)
+	return s.ownerGrants().AllowsKindMethod(permType, http.MethodGet)
 }
 
 // registerUserDefinedKinds prepares loaded UDK kinds for serving.

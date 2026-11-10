@@ -79,11 +79,11 @@ func (s *Server) HandlePhotoShare(w http.ResponseWriter, r *http.Request) {
 		"target", req.TargetService,
 		"dry_run", req.DryRun), r)
 
-	if err := s.requireMirrorReadable(req.SourceService, "photos"); err != nil {
+	if err := s.requireMirrorReadable(s.requestGrants(r), req.SourceService, "photos"); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
-	if err := s.requireMirrorWritable(req.TargetService, "photos"); err != nil {
+	if err := s.requireMirrorWritable(s.requestGrants(r), req.TargetService, "photos"); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}

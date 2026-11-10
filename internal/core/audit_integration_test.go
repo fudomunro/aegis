@@ -83,10 +83,11 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	defer a.Close()
 
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessNone}},
+
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: policy.Permissions{"playlists": policy.AccessNone},
 			},
 		},
 	}
@@ -113,20 +114,19 @@ func TestLibraryDeny_RecordsAudit(t *testing.T) {
 	if len(rows) == 0 {
 		t.Fatal("expected deny audit rows for permission-denied library access")
 	}
-	var sawService, sawLibrary bool
+	// One authorization lookup, one denial: the library deny row is the
+	// audit trail (the old per-service grant row is gone with the AND).
+	var sawLibrary bool
 	for _, row := range rows {
 		if row.Agent != "api-key" {
 			t.Fatalf("agent = %q, want api-key", row.Agent)
-		}
-		if row.Surface == metrics.MetricSurfaceService && row.Target == "spotify" && row.Kind == "playlists" {
-			sawService = true
 		}
 		if row.Surface == metrics.MetricSurfaceLibrary && row.Target == "playlists" {
 			sawLibrary = true
 		}
 	}
-	if !sawService || !sawLibrary {
-		t.Fatalf("missing deny rows service=%v library=%v rows=%+v", sawService, sawLibrary, rows)
+	if !sawLibrary {
+		t.Fatalf("missing library deny row rows=%+v", rows)
 	}
 }
 

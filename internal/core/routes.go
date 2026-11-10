@@ -52,12 +52,14 @@ func registerRoutes(mux *http.ServeMux, srv *Server, fakeUpstream *connectors.Fa
 	for path, handler := range srv.libraryRouteHandlers() {
 		mux.HandleFunc(path, srv.AuthMiddleware(handler))
 	}
-	// Library writes are admin (issue #181); GET stays on AuthMiddleware above.
-	mux.HandleFunc("POST /v1/library/mirror", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
+	// Library writes are authorized by the request key's data grant (a
+	// write level unlocks them); the admin credential stays reserved for
+	// policy edits, OAuth, and app registration.
+	mux.HandleFunc("POST /v1/library/mirror", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleLibraryMirror)))
 	// Photo share / ownership-claim PoC (issue #20).
-	mux.HandleFunc("POST /v1/library/photos/share", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
-	mux.HandleFunc("POST /v1/library/links", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
-	mux.HandleFunc("DELETE /v1/library/links/", srv.AdminMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
+	mux.HandleFunc("POST /v1/library/photos/share", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandlePhotoShare)))
+	mux.HandleFunc("POST /v1/library/links", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
+	mux.HandleFunc("DELETE /v1/library/links/", srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleEntityLinks)))
 
 	mux.HandleFunc("/v1/services/", srv.AuthMiddleware(withBodyLimit(maxProxyBodyBytes, srv.HandleServiceProxy)))
 

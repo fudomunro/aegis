@@ -52,7 +52,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 	logger := withPeerLog(slog.With("handler", "library_mirror",
 		"kind", req.Kind, "target", req.TargetService, "dry_run", req.DryRun), r)
 
-	if err := s.requireMirrorWritable(req.TargetService, req.Kind); err != nil {
+	if err := s.requireMirrorWritable(s.requestGrants(r), req.TargetService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}
@@ -68,7 +68,7 @@ func (s *Server) handleEntityMirror(w http.ResponseWriter, r *http.Request, req 
 		shared.WriteJSONError(w, http.StatusBadRequest, "source_service and target_service must differ")
 		return
 	}
-	if err := s.requireMirrorReadable(sourceService, req.Kind); err != nil {
+	if err := s.requireMirrorReadable(s.requestGrants(r), sourceService, req.Kind); err != nil {
 		shared.WriteJSONError(w, http.StatusForbidden, err.Error())
 		return
 	}

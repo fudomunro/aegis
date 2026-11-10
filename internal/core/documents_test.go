@@ -93,12 +93,13 @@ func TestHandleLibraryDocuments_AggregatesAndFilters(t *testing.T) {
 }
 
 func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "paperless",
-		Name:        "Paperless-ngx",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"documents": policy.AccessMetadata},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessMetadata}},
+		Services: []Service{{
+			ID:     "paperless",
+			Name:   "Paperless-ngx",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
@@ -129,12 +130,13 @@ func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
 }
 
 func TestHandleLibraryDocuments_DeniedByPermission(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "paperless",
-		Name:        "Paperless-ngx",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"documents": policy.AccessNone},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessNone}},
+		Services: []Service{{
+			ID:     "paperless",
+			Name:   "Paperless-ngx",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{documents: []kinds.Document{
@@ -208,12 +210,13 @@ func TestHandleLibraryDocuments_MethodNotAllowed(t *testing.T) {
 }
 
 func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "paperless",
-		Name:        "Paperless-ngx",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"documents": policy.AccessMetadata},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessMetadata}},
+		Services: []Service{{
+			ID:     "paperless",
+			Name:   "Paperless-ngx",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{text: "full lease text"},
@@ -229,7 +232,7 @@ func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
 		t.Fatalf("metadata access must not read text: status = %d body=%s", w.Code, w.Body.String())
 	}
 
-	cfg.Services[0].GrantLimits = policy.Permissions{"documents": policy.AccessRead}
+	cfg.typePolicies = policy.DataGrants{"documents": {Default: policy.AccessRead}}
 	srv2 := testServerWithBase(cfg, "https://aegis.example.com")
 	srv2.connectors = map[string]connectors.ServiceConnector{
 		"paperless": &fakeDocumentProvider{text: "full lease text"},

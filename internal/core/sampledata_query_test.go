@@ -525,10 +525,13 @@ func TestLibraryAggregates_SampleProviders(t *testing.T) {
 func TestLibraryAggregates_TruncatedAndPermissionDenied(t *testing.T) {
 	lib := sampledata.GenerateSampleLibrary()
 
-	// Permission-denied: the only tracks service forbids agent access.
-	deniedCfg := &Config{Services: []Service{
-		{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: policy.Permissions{"tracks": policy.AccessNone}},
-	}}
+	// Permission-denied: the agent data grant forbids tracks.
+	deniedCfg := &Config{
+		typePolicies: policy.DataGrants{"tracks": {Default: policy.AccessNone}},
+		Services: []Service{
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+		},
+	}
 	srv := testServerWithBase(deniedCfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"spotify": &sampleTrackPlaylistProvider{tracks: filterTracks(lib.Tracks, "spotify")},

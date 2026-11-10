@@ -447,17 +447,6 @@ func TestYNABHandleProxy_Mock(t *testing.T) {
 	}
 }
 
-func TestStrictest_Summary(t *testing.T) {
-	p := policy.Permissions{"transactions": policy.AccessSummary}
-	if got := p.Strictest(); got != policy.AccessNone {
-		t.Fatalf("Strictest = %q, want none when summary is tightest", got)
-	}
-	p2 := policy.Permissions{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
-	if got := p2.Strictest(); got != policy.AccessRead {
-		t.Fatalf("Strictest = %q", got)
-	}
-}
-
 func TestTransactionFilters_CacheKey(t *testing.T) {
 	f := kinds.TransactionFilters{}
 	if f.CacheKeySuffix() != "" {

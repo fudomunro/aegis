@@ -12,13 +12,13 @@ import (
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
-func TestPermissions_ForAndAllows(t *testing.T) {
+func TestPermissions_LevelAndAllows(t *testing.T) {
 	var nilPerms policy.Permissions
-	if nilPerms.For("tracks") != policy.AccessFull {
-		t.Fatalf("nil permissions For(tracks) = %q, want %q", nilPerms.For("tracks"), policy.AccessFull)
+	if nilPerms.Level("tracks") != policy.AccessNone {
+		t.Fatalf("nil permissions Level(tracks) = %q, want %q", nilPerms.Level("tracks"), policy.AccessNone)
 	}
-	if !nilPerms.Allows("tracks", http.MethodGet) || !nilPerms.Allows("tracks", http.MethodPost) {
-		t.Fatal("nil permissions should allow all methods")
+	if nilPerms.Allows("tracks", http.MethodGet) || nilPerms.Allows("tracks", http.MethodPost) {
+		t.Fatal("nil permissions deny all methods")
 	}
 
 	p := policy.Permissions{
@@ -28,14 +28,14 @@ func TestPermissions_ForAndAllows(t *testing.T) {
 		"contacts":                  policy.AccessWrite,
 	}
 
-	if p.For("tracks") != policy.AccessRead {
-		t.Fatalf("default For(tracks) = %q, want read", p.For("tracks"))
+	if p.Level("tracks") != policy.AccessRead {
+		t.Fatalf("default Level(tracks) = %q, want read", p.Level("tracks"))
 	}
-	if p.For("playlists") != policy.AccessFull {
-		t.Fatalf("For(playlists) = %q, want read-write", p.For("playlists"))
+	if p.Level("playlists") != policy.AccessFull {
+		t.Fatalf("Level(playlists) = %q, want read-write", p.Level("playlists"))
 	}
-	if p.For("player") != policy.AccessNone {
-		t.Fatalf("For(player) = %q, want none", p.For("player"))
+	if p.Level("player") != policy.AccessNone {
+		t.Fatalf("Level(player) = %q, want none", p.Level("player"))
 	}
 
 	if !p.Allows("tracks", http.MethodGet) {
@@ -66,14 +66,14 @@ func TestPermissions_ForAndAllows(t *testing.T) {
 
 func TestPermissions_NormalizeAliases(t *testing.T) {
 	p := policy.Permissions{"a": "READ", "b": "deny", "c": "read_write"}
-	if p.For("a") != policy.AccessRead {
-		t.Fatalf("a = %q", p.For("a"))
+	if p.Level("a") != policy.AccessRead {
+		t.Fatalf("a = %q", p.Level("a"))
 	}
-	if p.For("b") != policy.AccessNone {
-		t.Fatalf("b = %q", p.For("b"))
+	if p.Level("b") != policy.AccessNone {
+		t.Fatalf("b = %q", p.Level("b"))
 	}
-	if p.For("c") != policy.AccessFull {
-		t.Fatalf("c = %q", p.For("c"))
+	if p.Level("c") != policy.AccessFull {
+		t.Fatalf("c = %q", p.Level("c"))
 	}
 }
 
@@ -144,49 +144,12 @@ func TestCanonicalProxyPath(t *testing.T) {
 	}
 }
 
-func TestPermissions_Strictest(t *testing.T) {
-	cases := []struct {
-		p    policy.Permissions
-		want string
-	}{
-		{nil, policy.DefaultAccessType},
-		{policy.Permissions{}, policy.DefaultAccessType},
-		{policy.Permissions{"player": policy.AccessNone}, policy.AccessNone},
-		{policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone}, policy.AccessNone},
-		{policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessRead}, policy.AccessRead},
-		{policy.Permissions{"tracks": policy.AccessRead, "playlists": policy.AccessFull}, policy.AccessRead},
-		{policy.Permissions{"tracks": policy.AccessWrite, "playlists": policy.AccessFull}, policy.AccessWrite},
-		{policy.Permissions{"tracks": policy.AccessRead, "playlists": policy.AccessWrite}, policy.AccessNone},
-		{policy.Permissions{"tracks": policy.AccessFull, "playlists": policy.AccessFull}, policy.AccessFull},
-	}
-	for _, tc := range cases {
-		if got := tc.p.Strictest(); got != tc.want {
-			t.Errorf("Strictest(%v) = %q, want %q", map[string]string(tc.p), got, tc.want)
-		}
-	}
-}
-
-func TestAccessForKind(t *testing.T) {
-	p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone, "playlists": policy.AccessFull}
-	if got := p.AccessForKind("player"); got != policy.AccessNone {
-		t.Fatalf("player = %q", got)
-	}
-	if got := p.AccessForKind("playlists"); got != policy.AccessFull {
-		t.Fatalf("playlists = %q", got)
-	}
-	// Unclassified must not inherit default=read while player is none.
-	if got := p.AccessForKind(""); got != policy.AccessNone {
-		t.Fatalf("unclassified = %q, want none", got)
-	}
-}
-
 func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 	cfg := &Config{
-		Services: []Service{
-			{
-				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: policy.Permissions{"default": policy.AccessRead, "playlists": policy.AccessFull},
-			},
+		Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}},
+		typePolicies: policy.DataGrants{
+			policy.PermissionDefaultKey: {Default: policy.AccessRead},
+			"playlists":                 {Default: policy.AccessFull},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -212,8 +175,8 @@ func TestAllowDataPermission_DeniesWrite(t *testing.T) {
 }
 
 func TestAllDataDenied(t *testing.T) {
-	if allDataDenied(nil) {
-		t.Fatal("nil should not be all-denied")
+	if !allDataDenied(nil) {
+		t.Fatal("nil grants deny everything")
 	}
 	if allDataDenied(policy.Permissions{"default": policy.AccessRead, "player": policy.AccessNone}) {
 		t.Fatal("default read should not be all-denied")
@@ -257,11 +220,11 @@ func TestLoadConfig_ValidatesPermissions(t *testing.T) {
 		t.Fatalf("valid permissions failed: %v", err)
 	}
 	svc := cfg.GetService("spotify")
-	if svc.GrantLimits.For("playlists") != policy.AccessFull {
-		t.Fatalf("playlists = %q", svc.GrantLimits.For("playlists"))
+	if svc.GrantLimits.Level("playlists") != policy.AccessFull {
+		t.Fatalf("playlists = %q", svc.GrantLimits.Level("playlists"))
 	}
-	if svc.GrantLimits.For("tracks") != policy.AccessRead {
-		t.Fatalf("tracks default = %q", svc.GrantLimits.For("tracks"))
+	if svc.GrantLimits.Level("tracks") != policy.AccessRead {
+		t.Fatalf("tracks default = %q", svc.GrantLimits.Level("tracks"))
 	}
 }
 
@@ -308,13 +271,15 @@ func TestClampPermissionsWithWritable(t *testing.T) {
 }
 
 func TestAllowDataPermission_DeniesWriteWhenConnectorReadOnly(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:   "spotify",
-		Name: "Spotify",
-		// Legacy write grant — must not unlock proxy writes the connector
-		// does not implement (mirror write is a separate path).
-		GrantLimits: policy.Permissions{"tracks": policy.AccessFull, "playlists": policy.AccessFull},
-	}}}
+	cfg := &Config{
+		Services: []Service{{ID: "spotify", Name: "Spotify"}},
+		// A write grant must not unlock proxy writes the connector does
+		// not implement (mirror write is a separate path).
+		typePolicies: policy.DataGrants{
+			"tracks":    {Default: policy.AccessFull},
+			"playlists": {Default: policy.AccessFull},
+		},
+	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 	svc := cfg.GetService("spotify")

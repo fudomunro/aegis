@@ -304,10 +304,11 @@ func TestSpotifyConnector_ListUserPlaylists_Unauthorized(t *testing.T) {
 
 func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessNone}},
+
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: policy.Permissions{"playlists": policy.AccessNone},
 			},
 		},
 	}
@@ -328,43 +329,6 @@ func TestHandleLibraryPlaylists_PermissionDenied(t *testing.T) {
 	}
 	if !strings.Contains(w.Body.String(), "denied: data grant") {
 		t.Fatalf("body = %s", w.Body.String())
-	}
-}
-
-func TestHandleLibraryPlaylists_SkipsDeniedService(t *testing.T) {
-	cfg := &Config{
-		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject"},
-			{
-				ID: "youtube-music", Name: "YouTube Music", Action: "inject",
-				GrantLimits: policy.Permissions{"playlists": policy.AccessNone},
-			},
-		},
-	}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors = map[string]connectors.ServiceConnector{
-		"spotify": &fakePlaylistProvider{
-			playlists: []kinds.Playlist{{Name: "Jazz", Sources: []kinds.PlaylistSource{{Service: "spotify", ID: "sp1"}}}},
-		},
-		"youtube-music": &fakePlaylistProvider{
-			playlists: []kinds.Playlist{{Name: "Focus", Sources: []kinds.PlaylistSource{{Service: "youtube-music", ID: "yt1"}}}},
-		},
-	}
-
-	req := httptest.NewRequest("GET", "/v1/library/playlists", nil)
-	req.Header.Set("Authorization", "Bearer test-key")
-	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("playlists"))(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
-	}
-	var resp kinds.PlaylistList
-	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.Total != 1 || resp.Playlists[0].Name != "Jazz" {
-		t.Fatalf("resp = %+v, want only Jazz", resp)
 	}
 }
 
@@ -507,10 +471,11 @@ func TestHandleLibraryTracks_UnauthorizedService(t *testing.T) {
 
 func TestHandleLibraryTracks_PermissionDenied(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"tracks": {Default: policy.AccessNone}},
+
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: policy.Permissions{"tracks": policy.AccessNone},
 			},
 		},
 	}
@@ -858,8 +823,9 @@ func TestHandleLibraryAlbums_AggregatesAndMerges(t *testing.T) {
 
 func TestHandleLibraryAlbums_PermissionDenied(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"albums": {Default: policy.AccessNone}},
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: policy.Permissions{"albums": policy.AccessNone}},
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

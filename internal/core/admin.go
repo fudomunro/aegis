@@ -414,7 +414,7 @@ func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Re
 		if perms == nil {
 			perms = map[string]string{}
 		}
-		effective := s.effectivePermissions(svc)
+		effective := s.ownerGrants()
 		var effectiveOut map[string]string
 		if effective != nil {
 			effectiveOut = effective.Clone()

@@ -147,10 +147,11 @@ func TestHandleServiceProxy_BlockedService(t *testing.T) {
 
 func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessNone}, "default": {Default: policy.AccessRead}},
+
 		Services: []Service{
 			{
 				ID: "spotify", Name: "Spotify", Action: "inject",
-				GrantLimits: policy.Permissions{"playlists": policy.AccessNone, "default": policy.AccessRead},
 			},
 		},
 	}
@@ -172,10 +173,11 @@ func TestHandleServiceProxy_PermissionDenied(t *testing.T) {
 func TestHandleServiceProxy_ContentPathAllowedByPermission(t *testing.T) {
 	conn := &testContentConnector{}
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"messages": {Default: policy.AccessRead}},
+
 		Services: []Service{
 			{
 				ID: "gmail", Name: "Gmail", Action: "inject",
-				GrantLimits: policy.Permissions{"messages": policy.AccessRead},
 			},
 		},
 	}

@@ -22,14 +22,21 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 	ts := httptest.NewServer(upstream)
 	t.Cleanup(ts.Close)
 
-	perms := policy.Permissions{"default": policy.AccessRead}
+	grants := policy.DataGrants{
+		policy.PermissionDefaultKey: {Default: policy.AccessRead},
+	}
 	if targetWrite {
-		perms = policy.Permissions{"default": policy.AccessRead, "playlists": policy.AccessFull, "tracks": policy.AccessFull}
+		grants = policy.DataGrants{
+			policy.PermissionDefaultKey: {Default: policy.AccessRead},
+			"playlists":                 {Default: policy.AccessFull},
+			"tracks":                    {Default: policy.AccessFull},
+		}
 	}
 	cfg := &Config{
+		typePolicies: grants,
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: ts.URL, CanonicalFor: []string{"playlists"}, GrantLimits: perms},
-			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: ts.URL, GrantLimits: perms},
+			{ID: "spotify", Name: "Spotify", Action: "inject", Endpoint: ts.URL, CanonicalFor: []string{"playlists"}},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", Endpoint: ts.URL},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

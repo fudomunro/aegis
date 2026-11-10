@@ -131,11 +131,12 @@ func (k providerKind) Readable(h Host) bool {
 // readableFor reports whether at least one non-blocked service allows
 // GET at owner tier for kind.
 func readableFor(h Host, kind string) bool {
+	level := h.OwnerGrants().Level(kind)
 	for _, svc := range h.Services() {
 		if svc.Action == "block" {
 			continue
 		}
-		if policy.AllowsMethod(policy.NormalizeAccess(h.OwnerLevel(svc.ID, kind)), http.MethodGet) {
+		if policy.AllowsMethod(level, http.MethodGet) {
 			return true
 		}
 	}

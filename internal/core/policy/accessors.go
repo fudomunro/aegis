@@ -2,8 +2,6 @@ package policy
 
 import (
 	"sort"
-
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // AccessorKind identifies who or what is accessing data through Aegis
@@ -228,14 +226,14 @@ func ExtraPolicyKeys(policies DataGrants) []string {
 	return out
 }
 
-// AgentOverviewLevels materializes the type-owned agent policy into a
-// flat kind → level map. Opt-in types (places) stay "none" unless
-// the policy names them explicitly.
+// AgentOverviewLevels materializes the agent data grants into a flat
+// kind → level map under the collapsed deny-by-default rule, with the
+// owner prefill so the view matches what the runtime enforces.
 func AgentOverviewLevels(policies DataGrants, kinds []string) map[string]string {
+	rules := policies.Levels().PrefillDefault()
 	out := make(map[string]string, len(kinds))
 	for _, kind := range kinds {
-		level := policies.Access(kind, "")
-		out[kind] = NormalizeAccess(level)
+		out[kind] = rules.Level(kind)
 	}
 	return out
 }
@@ -254,20 +252,7 @@ func AppOverviewLevels(appScopes Permissions, kinds []string) (levels map[string
 		explicit[k] = true
 	}
 	for _, kind := range kinds {
-		level := AccessNone
-		if appScopes != nil {
-			if v, ok := appScopes[kind]; ok {
-				level = NormalizeAccess(v)
-			} else if !shared.KindDefaultsNone(kind) {
-				if v, ok := appScopes[PermissionDefaultKey]; ok {
-					level = NormalizeAccess(v)
-				}
-			}
-		}
-		if level == "" {
-			level = AccessNone
-		}
-		levels[kind] = level
+		levels[kind] = appScopes.Level(kind)
 	}
 	return levels, explicit
 }

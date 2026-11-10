@@ -119,7 +119,7 @@ func (s *Server) writePolicyNotice(svc Service) string {
 	}
 	var lines []string
 	for _, kindID := range canonicalKindIDs() {
-		if !s.effectivePermissions(&svc).AllowsWrite(kindID) {
+		if !s.ownerGrants().AllowsWrite(kindID) {
 			continue
 		}
 		homeName := s.canonicalServiceName(kindID)

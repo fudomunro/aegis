@@ -122,12 +122,13 @@ func TestHandleLibraryEvents_NoProviders(t *testing.T) {
 }
 
 func TestHandleLibraryEvents_DeniedByPermission(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessNone},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"events": {Default: policy.AccessNone}},
+		Services: []Service{{
+			ID:     "google-calendar",
+			Name:   "Google Calendar",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-calendar": &fakeCalendarEventProvider{events: []kinds.CalendarEvent{
