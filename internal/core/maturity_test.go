@@ -3,6 +3,7 @@ package core
 import (
 	"encoding/json"
 	"log/slog"
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
@@ -19,6 +20,7 @@ type maturityHost struct{}
 func (maturityHost) GetValidToken(string, *slog.Logger) string    { return "" }
 func (maturityHost) UpstreamBaseFor(_, fallback string) string    { return fallback }
 func (maturityHost) ServiceConfig(string) *connectors.ServiceInfo { return nil }
+func (maturityHost) RequestLevel(*http.Request, string) string    { return "" }
 func (maturityHost) BaseURL() string                              { return "https://aegis.example.com" }
 func (maturityHost) CacheGet(string) (string, bool)               { return "", false }
 func (maturityHost) CacheSet(string, string, time.Duration)       {}

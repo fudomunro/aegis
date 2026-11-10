@@ -104,7 +104,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Entry, flags, routes, connector registration | `internal/core` hub (`main.go` is thin) | Wrap nearly every route in `AuthMiddleware` |
 | Data directory + state path layout | `internal/core` hub | Defaults under OS app data dir; explicit path flags override (issue #74) |
 | Config + matching | `internal/core` hub (`Config`) | Flat `services[]` + top-level `connections`; loads bootstrap + default overlay path |
-| Admin permissions overlay | `internal/core` hub | `data_grants.json` v3: `data_grants` (primary DataGrant) + `service_limits` (tighten-only overrides); admin saves never rewrite aegis.json |
+| Admin permissions overlay | `internal/core` hub | `data_grants.json` v3: `data_grants` (primary DataGrant); admin saves never rewrite aegis.json |
 | Data scopes (principal → dataset) | `internal/core/scopes/`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
 | External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
 | Pre-request injection | `internal/core` hub | `allow` / `block` / `modify`; structured `Operation` contract |

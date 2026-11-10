@@ -95,44 +95,6 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	}
 }
 
-func TestDataGrantsOverlay_ServiceLimitsIgnoredByResolution(t *testing.T) {
-	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "aegis.json")
-	permsPath := filepath.Join(dir, "data_grants.json")
-	mustWriteFile(t, cfgPath, `{
-		"services": [
-			{"id": "spotify", "name": "Spotify", "action": "inject", "endpoint": "https://api.spotify.com/v1"}
-		]
-	}`)
-	cfg, err := LoadConfig(cfgPath)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
-		t.Fatalf("InitDataGrantsStore: %v", err)
-	}
-	if err := cfg.SetDataGrants(policy.DataGrants{
-		"tracks": {Default: policy.AccessRead},
-	}); err != nil {
-		t.Fatalf("SetDataGrants: %v", err)
-	}
-
-	// Service maps are legacy migration data with no runtime effect: only
-	// the data grant decides.
-	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": policy.AccessFull}); err != nil {
-		t.Fatalf("SetServicePermissions: %v", err)
-	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
-		t.Fatalf("service map must not grant: %q", got)
-	}
-	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": policy.AccessNone}); err != nil {
-		t.Fatalf("SetServicePermissions: %v", err)
-	}
-	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
-		t.Fatalf("service map must not tighten either: %q", got)
-	}
-}
-
 func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")

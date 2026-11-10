@@ -148,10 +148,6 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				GrantLimits: policy.Permissions{
-					"default": policy.AccessRead,
-					"player":  policy.AccessNone,
-				},
 			},
 			{ID: "tidal", Name: "Tidal", Action: "block"},
 		},
@@ -196,9 +192,6 @@ func TestHandleAdminSummary_RedactsSecrets(t *testing.T) {
 	spotify := summary.Services[0]
 	if !spotify.HasOAuth || !spotify.HasSecret || !spotify.HasClientID {
 		t.Fatal("expected oauth flags set without exposing values")
-	}
-	if spotify.GrantLimits["player"] != policy.AccessNone || spotify.GrantLimits["default"] != policy.AccessRead {
-		t.Fatalf("permissions = %+v", spotify.GrantLimits)
 	}
 	if spotify.Token == nil || !spotify.Token.HasToken {
 		t.Fatal("expected token status attached")
@@ -272,8 +265,8 @@ func TestHandleAdminMailStatusAndSync(t *testing.T) {
 		t.Fatalf("upsert: %v", err)
 	}
 	srv := mailTestServer(t, a)
-	// Agent messages=none must not block the operator admin panel.
-	srv.config.Services[0].GrantLimits = policy.Permissions{"messages": "none"}
+	// A messages=none data grant must not block the operator admin panel.
+	srv.config.typePolicies = policy.DataGrants{"messages": {Default: policy.AccessNone}}
 
 	req := httptest.NewRequest("GET", "/v1/admin/mail/status", nil)
 	req.Header.Set("X-Api-Key", "test-key")
@@ -344,202 +337,6 @@ func TestHandleAdminMailDisabled(t *testing.T) {
 	dispatchAdmin(srv, w, req)
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("disabled sync = %d", w.Code)
-	}
-}
-
-func TestConfig_SetServicePermissions_Persists(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/aegis.json"
-	initial := `{
-		"services": [
-			{
-				"id": "spotify",
-				"name": "Spotify",
-				"action": "inject",
-				"endpoint": "https://api.spotify.com/v1",
-				"cache_ttl": "10m"
-			}
-		]
-	}`
-	if err := writeFile(path, initial); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("LoadConfig: %v", err)
-	}
-
-	if err := cfg.SetServicePermissions("spotify", policy.Permissions{
-		"default": policy.AccessRead,
-		"player":  policy.AccessNone,
-	}); err != nil {
-		t.Fatalf("SetServicePermissions: %v", err)
-	}
-
-	// In-memory updated.
-	if cfg.GetService("spotify").GrantLimits.Level("player") != policy.AccessNone {
-		t.Fatal("in-memory player permission not applied")
-	}
-
-	// Reloaded: overlay applied on top of bootstrap aegis.json.
-	fresh, err := LoadConfig(path)
-	if err != nil {
-		t.Fatalf("reload: %v", err)
-	}
-	svc := fresh.GetService("spotify")
-	if svc == nil || svc.GrantLimits.Level("player") != policy.AccessNone || svc.GrantLimits.Level("tracks") != policy.AccessRead {
-		t.Fatalf("disk permissions = %+v", svc)
-	}
-
-	// Clear restores unrestricted (overlay null; bootstrap must not resurface).
-	if err := cfg.SetServicePermissions("spotify", nil); err != nil {
-		t.Fatalf("clear: %v", err)
-	}
-	if cfg.GetService("spotify").GrantLimits != nil {
-		t.Fatal("expected nil permissions after clear")
-	}
-	fresh, err = LoadConfig(path)
-	if err != nil {
-		t.Fatalf("reload after clear: %v", err)
-	}
-	if fresh.GetService("spotify").GrantLimits != nil {
-		t.Fatal("expected nil permissions on disk after clear")
-	}
-
-	// Unknown service / invalid level.
-	if err := cfg.SetServicePermissions("nope", policy.Permissions{"default": policy.AccessRead}); err == nil {
-		t.Fatal("expected error for unknown service")
-	}
-	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": "maybe"}); err == nil {
-		t.Fatal("expected error for invalid level")
-	}
-}
-
-func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
-	dir := t.TempDir()
-	path := dir + "/aegis.json"
-	initial := `{"services":[{"id":"spotify","name":"Spotify","action":"inject"}]}`
-	if err := writeFile(path, initial); err != nil {
-		t.Fatal(err)
-	}
-	cfg, err := LoadConfig(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
-	srv.cache.Set("library:tracks", `{"tracks":[{"name":"stale"}]}`, time.Minute)
-	srv.cache.Set("spotify:/me", "stale", time.Minute)
-	srv.cache.Set("tidal:/me", "keep", time.Minute)
-	srv.mbCache.Set("mbid:artist:x", "keep", time.Minute)
-
-	body := `{"grant_limits":{"default":"read","player":"none","playlists":"read-write"}}`
-	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
-	req.Header.Set("X-Api-Key", "test-key")
-	w := httptest.NewRecorder()
-	dispatchAdmin(srv, w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
-	}
-	if cfg.GetService("spotify").GrantLimits.Level("player") != policy.AccessNone {
-		t.Fatal("permissions not applied via admin route")
-	}
-	// Mirror adapters are not agent "Editable" — playlists write is clamped on save.
-	if got := cfg.GetService("spotify").GrantLimits.Level("playlists"); got != policy.AccessRead {
-		t.Fatalf("playlists permission = %q, want read (clamped; not agent-writable)", got)
-	}
-	// Search is read-only on the connector — write levels are clamped to read.
-	body = `{"grant_limits":{"search":"read-write","player":"none"}}`
-	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(body))
-	req.Header.Set("X-Api-Key", "test-key")
-	w = httptest.NewRecorder()
-	dispatchAdmin(srv, w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("clamp put status = %d, body=%s", w.Code, w.Body.String())
-	}
-	if got := cfg.GetService("spotify").GrantLimits.Level("search"); got != policy.AccessRead {
-		t.Fatalf("search permission = %q, want read (clamped; no agent write path)", got)
-	}
-	if _, ok := srv.cache.Get("library:tracks"); ok {
-		t.Fatal("library aggregate must not survive a permission save")
-	}
-	if _, ok := srv.cache.Get("spotify:/me"); ok {
-		t.Fatal("service transport cache must not survive its own permission save")
-	}
-	if v, ok := srv.cache.Get("tidal:/me"); !ok || v != "keep" {
-		t.Fatal("unrelated service transport cache must survive")
-	}
-	if v, ok := srv.mbCache.Get("mbid:artist:x"); !ok || v != "keep" {
-		t.Fatal("MBID lookups must survive permission saves")
-	}
-
-	// GET returns current map + available/writable types.
-	req = httptest.NewRequest("GET", "/v1/admin/services/spotify/grant-limits", nil)
-	req.Header.Set("X-Api-Key", "test-key")
-	w = httptest.NewRecorder()
-	dispatchAdmin(srv, w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("get status = %d", w.Code)
-	}
-	var got struct {
-		ServiceID      string            `json:"service_id"`
-		GrantLimits    map[string]string `json:"grant_limits"`
-		AvailableKinds []string          `json:"available_data_types"`
-		WritableKinds  []string          `json:"writable_data_types"`
-	}
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.ServiceID != "spotify" || got.GrantLimits["player"] != "none" {
-		t.Fatalf("get = %+v", got)
-	}
-	if !stringSliceContains(got.AvailableKinds, "playlists") {
-		t.Fatalf("available types = %v", got.AvailableKinds)
-	}
-	// Spotify has no agent-meaningful write ops — form must not offer Editable.
-	if len(got.WritableKinds) != 0 {
-		t.Fatalf("spotify writable types should be empty (mirror is not Editable), got %v", got.WritableKinds)
-	}
-
-	// Invalid level rejected.
-	req = httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", strings.NewReader(`{"grant_limits":{"tracks":"maybe"}}`))
-	req.Header.Set("X-Api-Key", "test-key")
-	w = httptest.NewRecorder()
-	dispatchAdmin(srv, w, req)
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("invalid level status = %d, want 400", w.Code)
-	}
-
-	// Unknown service.
-	req = httptest.NewRequest("PUT", "/v1/admin/services/nope/grant-limits", strings.NewReader(`{"grant_limits":{}}`))
-	req.Header.Set("X-Api-Key", "test-key")
-	w = httptest.NewRecorder()
-	dispatchAdmin(srv, w, req)
-	if w.Code != http.StatusNotFound {
-		t.Fatalf("unknown service status = %d, want 404", w.Code)
-	}
-}
-
-func TestAdminSummary_IncludesAvailableKinds(t *testing.T) {
-	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
-	srv := testServerWithBase(cfg, "https://aegis.example.com")
-	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
-
-	req := httptest.NewRequest("GET", "/v1/admin/summary", nil)
-	req.Header.Set("X-Api-Key", "test-key")
-	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.HandleAdminSummary)(w, req)
-
-	var summary AdminSummary
-	if err := json.Unmarshal(w.Body.Bytes(), &summary); err != nil {
-		t.Fatal(err)
-	}
-	if len(summary.Services) != 1 {
-		t.Fatalf("services = %d", len(summary.Services))
-	}
-	if !stringSliceContains(summary.Services[0].AvailableKinds, "player") {
-		t.Fatalf("available types = %v", summary.Services[0].AvailableKinds)
 	}
 }
 
@@ -617,8 +414,6 @@ func TestHandleAdminHTML_ServiceCardHierarchy(t *testing.T) {
 		"type-access-row",
 		"/v1/admin/permissions",
 		"Saves to",
-		"Service limits",
-		"renderPermEditor(svc)",
 		"serviceConnectionInline",
 		"serviceFlowRows",
 		"Pick photos",

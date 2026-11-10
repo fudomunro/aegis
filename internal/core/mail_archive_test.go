@@ -20,10 +20,9 @@ import (
 func mailTestServer(t *testing.T, archive *mail.Archive) *Server {
 	t.Helper()
 	cfg := &Config{Services: []Service{{
-		ID:          connectors.GoogleGmailServiceID,
-		Name:        connectors.GoogleGmailServiceName,
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"messages": "read"},
+		ID:     connectors.GoogleGmailServiceID,
+		Name:   connectors.GoogleGmailServiceName,
+		Action: "inject",
 	}}}
 	srv := &Server{
 		apiKey:      "test-key",
@@ -208,10 +207,9 @@ func TestMailHTTPSyncRequiresConnector(t *testing.T) {
 
 	srv.connectors["dummy"] = &stubNoSyncConnector{}
 	srv.config.Services = append(srv.config.Services, Service{
-		ID:          "dummy",
-		Name:        "Dummy",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"messages": "read"},
+		ID:     "dummy",
+		Name:   "Dummy",
+		Action: "inject",
 	})
 	w = doAdminMailReq(t, srv, http.MethodPost, "/v1/admin/mail/sync", `{"service":"dummy","reset_cursor":true}`)
 	if w.Code != http.StatusNotImplemented {

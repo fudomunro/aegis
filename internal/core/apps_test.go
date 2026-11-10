@@ -37,10 +37,9 @@ func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
 		"contacts": policy.AccessNone,
 	})
 	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:     "google-calendar",
+		Name:   "Google Calendar",
+		Action: "inject",
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -90,10 +89,9 @@ func TestAuthMiddleware_AppTokenFreeBusyRedactsEvents(t *testing.T) {
 	store := testAppStore(t)
 	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessFreeBusy})
 	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:     "google-calendar",
+		Name:   "Google Calendar",
+		Action: "inject",
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store
@@ -130,10 +128,9 @@ func TestLibraryCache_AppScopeIsolated(t *testing.T) {
 	_, fbToken := createTestApp(t, store, "eco-fb", policy.Permissions{"events": policy.AccessFreeBusy})
 	_, roToken := createTestApp(t, store, "eco-ro", policy.Permissions{"events": policy.AccessRead})
 	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:     "google-calendar",
+		Name:   "Google Calendar",
+		Action: "inject",
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.apps = store

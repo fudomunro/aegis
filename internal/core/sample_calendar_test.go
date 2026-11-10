@@ -8,17 +8,15 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestSampleCalendarConnector_LibraryFreeBusy(t *testing.T) {
 	svc := &Service{
-		ID:          connectors.SampleCalendarServiceID,
-		Name:        connectors.SampleCalendarServiceName,
-		Action:      "inject",
-		Endpoint:    connectors.SampleCalendarEndpoint,
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:       connectors.SampleCalendarServiceID,
+		Name:     connectors.SampleCalendarServiceName,
+		Action:   "inject",
+		Endpoint: connectors.SampleCalendarEndpoint,
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors[connectors.SampleCalendarServiceID] = connectors.NewSampleCalendarConnector()

@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
@@ -96,10 +95,9 @@ func TestHandleLibraryPlaylists_RecordsServiceAndLibraryHits(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{
-				ID:          "spotify",
-				Name:        "Spotify",
-				Action:      "inject",
-				GrantLimits: policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead},
+				ID:     "spotify",
+				Name:   "Spotify",
+				Action: "inject",
 			},
 		},
 	}
@@ -129,10 +127,9 @@ func TestHandleAdminLibrary_DoesNotRecordMapAccess(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
 			{
-				ID:          "spotify",
-				Name:        "Spotify",
-				Action:      "inject",
-				GrantLimits: policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead},
+				ID:     "spotify",
+				Name:   "Spotify",
+				Action: "inject",
 			},
 		},
 	}

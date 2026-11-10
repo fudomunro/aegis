@@ -49,10 +49,6 @@ type Config struct {
 	// materializes to the owner key's rule map via DataGrants.Levels;
 	// request authorization is one lookup over that map.
 	typePolicies policy.DataGrants
-	// serviceLimits is the loaded overlay map (service id → permissions;
-	// present key with nil value means explicitly cleared). Service maps are
-	// migration overrides that can only tighten data grant.
-	serviceLimits map[string]*policy.Permissions
 	// svcConnPath is the admin service-connections overlay
 	// (service_connections.json). Immich/local-store setup writes here so
 	// aegis.json is never rewritten from the admin UI.
@@ -101,10 +97,6 @@ type Service struct {
 	Headers     map[string]string `json:"headers,omitempty"`
 	CacheTTL    Duration          `json:"cache_ttl"`
 	Description string            `json:"description,omitempty"`
-	// GrantLimits are tighten-only data-grant limits for this service
-	// (issue #174). Nil means the agent data grant applies unchanged.
-	// See permissions.go for levels and the "default" key.
-	GrantLimits policy.Permissions `json:"grant_limits,omitempty"`
 	// CanonicalFor lists library kinds where this service is the authoritative
 	// non-Aegis location (issue #16). At most one non-blocked service may
 	// claim each kind. Example: ["playlists"] means Spotify is home for playlists.
@@ -242,9 +234,6 @@ func validateConfig(cfg *Config) error {
 	}
 	cfg.clientIPHeaderKey = headerKey
 	for _, svc := range services {
-		if err := policy.ValidatePermissions(svc.GrantLimits); err != nil {
-			return fmt.Errorf("service %q: %w", svc.ID, err)
-		}
 		if svc.Connection == "" {
 			continue
 		}
@@ -257,7 +246,7 @@ func validateConfig(cfg *Config) error {
 
 // clone returns a copy of the service whose maps and slices are independent
 // of the config's live state, so callers can read outside the config lock
-// while Reload / SetServicePermissions mutate the store (issue #95).
+// while Reload mutates the store (issue #95).
 func (s Service) clone() Service {
 	cp := s
 	if s.Aliases != nil {
@@ -268,9 +257,6 @@ func (s Service) clone() Service {
 		for k, v := range s.Headers {
 			cp.Headers[k] = v
 		}
-	}
-	if s.GrantLimits != nil {
-		cp.GrantLimits = policy.Permissions(s.GrantLimits.Clone())
 	}
 	if s.CanonicalFor != nil {
 		cp.CanonicalFor = append([]string(nil), s.CanonicalFor...)
@@ -385,38 +371,6 @@ func (c *Config) GetConnection(id string) *Connection {
 	return &cp
 }
 
-// SetServicePermissions validates and persists agent permissions for a service.
-// An empty/nil map clears the permissions block (unrestricted access).
-// Always writes the data-grant overlay (data_grants.json) — never aegis.json.
-// The map is a migration override: it can only tighten data grant, never
-// grant more than the type default (issue #148).
-func (c *Config) SetServicePermissions(id string, p policy.Permissions) error {
-	if err := policy.ValidatePermissions(p); err != nil {
-		return err
-	}
-
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	idx := -1
-	for i := range c.Services {
-		if c.Services[i].ID == id {
-			idx = i
-			break
-		}
-	}
-	if idx < 0 {
-		return fmt.Errorf("service %q not found", id)
-	}
-
-	if len(p) == 0 {
-		c.Services[idx].GrantLimits = nil
-	} else {
-		c.Services[idx].GrantLimits = policy.Permissions(p.Clone())
-	}
-	return c.setServiceLimitsEntryLocked(id, p)
-}
-
 // trustedNets returns the compiled trusted-proxy list (issue #253).
 func (c *Config) trustedNets() []net.IPNet {
 	c.mu.RLock()
@@ -446,8 +400,7 @@ func (c *Config) DataGrants() policy.DataGrants {
 }
 
 // SetDataGrants replaces the agent data-grant map and persists the overlay.
-// An empty map clears data grants (service grant_limits remain tighten-only).
-// Provider entries can only tighten the type default.
+// An empty map is stored explicitly so it clears bootstrap grants on reload.
 func (c *Config) SetDataGrants(policies policy.DataGrants) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()

@@ -98,13 +98,16 @@ func (s *stubMirrorSource) ListUserLikedTracksPage(ctx context.Context, cursor s
 }
 
 // mirrorStubServer builds a Server whose mirror adapters are stubs and whose
-// services carry read-write grants, so the real permission checks pass.
+// whose owner data grants are read-write, so the real permission checks pass.
 func mirrorStubServer(t *testing.T, src mirrorSource, dst mirrorTarget) *Server {
 	t.Helper()
-	grants := policy.Permissions{"playlists": policy.AccessFull, "tracks": policy.AccessFull}
-	srv := testServerWithBase(&Config{Services: []Service{
-		{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: grants},
-		{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: grants},
+	grants := policy.DataGrants{
+		"playlists": {Default: policy.AccessFull},
+		"tracks":    {Default: policy.AccessFull},
+	}
+	srv := testServerWithBase(&Config{typePolicies: grants, Services: []Service{
+		{ID: "spotify", Name: "Spotify", Action: "inject"},
+		{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 	}}, "https://aegis.example.com")
 	ledger, err := copies.Open(t.TempDir() + "/copy_ledger.db")
 	if err != nil {

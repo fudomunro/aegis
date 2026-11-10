@@ -16,7 +16,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -40,7 +39,6 @@ func TimelineService() LocalStoreService {
 		Name:        TimelineServiceName,
 		Action:      "inject",
 		Description: "Locally imported Google Maps Timeline exports (Advanced → Timeline import).",
-		GrantLimits: policy.Permissions{"places": policy.AccessRead},
 	}
 }
 

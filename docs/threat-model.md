@@ -138,7 +138,7 @@ caller may do with each kind*. Admin is never the agent key.
 
 | Threat | Mitigation |
 |--------|------------|
-| Agent reads kinds the user meant to hide | Kind-owned **data grants** + tighten-only **service grant limits**; 403 on deny |
+| Agent reads kinds the user meant to hide | Kind-owned **data grants**; 403 on deny |
 | Redacted views leak raw content | Kind-scoped levels: `freebusy`, `summary`, `city`/`precise`, `metadata` |
 | Places exposed by default | Places default **none**; opt-in |
 | Third-party app exceeds intent | App scopes AND data grants; library read only |

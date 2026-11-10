@@ -125,10 +125,9 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 
 	// Token works on freebusy library route.
 	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:     "google-calendar",
+		Name:   "Google Calendar",
+		Action: "inject",
 	}
 	srv.config = &Config{Services: []Service{*svc}}
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}

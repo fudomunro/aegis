@@ -793,8 +793,6 @@ PUT /v1/admin/data-grants — replace data grants {"types":{"tracks":{"default":
 GET /v1/admin/ownership — per-kind data-ownership status (confirmed state, sources under management, unused routes, copy freshness)
 POST /v1/admin/ownership/{kind} — confirm the kind is complete {"note":"…"}; answers with the refreshed status
 DELETE /v1/admin/ownership/{kind} — reopen the kind (clear the confirmation; the note is kept)
-GET /v1/admin/services/{id}/grant-limits — service override map + effective_permissions + available/writable types
-PUT /v1/admin/services/{id}/grant-limits — replace the service grant_limits (tighten-only vs data grants; writes data_grants.json overlay, not aegis.json)
 GET /v1/admin/setup/{id} — connector-declared setup spec + live status (fields, ladder, checklist, guides, probes)
 POST /v1/admin/setup/{id}/{action} — run one declared verb ({"values":…,"flags":…,"selected":[…]})
   verbs include probe (diagnose a candidate connection), save (persist it: service_connections.json + encrypted token store),

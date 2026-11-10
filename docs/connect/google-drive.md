@@ -12,7 +12,6 @@ conversion is deferred. Files stay on Drive (non-Aegis canonical).
   "endpoint": "https://www.googleapis.com/drive/v3",
   "connection": "google",
   "oauth_scopes": ["https://www.googleapis.com/auth/drive.readonly"],
-  "grant_limits": {"documents": "read"}
 }
 ```
 

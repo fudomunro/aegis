@@ -94,7 +94,7 @@ unchanged so `admin.html` keeps working. `Server` fields for the three
 stores stay (permissions overview and kind presence read them) but are
 typed as the connectors' store types.
 
-Service IDs/names, maturity rows, grant limits, and admin copy live
+Service IDs/names, maturity rows, and admin copy live
 beside their store as one declaration per store, consumed by
 `services.go`, `maturity.go`, `run.go`, and the generic admin handler — the
 same "express themselves through the same surfaces" contract services

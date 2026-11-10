@@ -30,15 +30,7 @@ type AdminService struct {
 	Aliases     []string `json:"aliases,omitempty"`
 	CacheTTL    string   `json:"cache_ttl"`
 	Description string   `json:"description,omitempty"`
-	// GrantLimits is the tighten-only service map by kind (nil = unrestricted).
-	GrantLimits map[string]string `json:"grant_limits,omitempty"`
-	// AvailableKinds lists connector-known types the UI can edit.
-	AvailableKinds []string `json:"available_data_types,omitempty"`
-	// WritableKinds lists connector types that currently expose at least
-	// one mutating operation. The admin form only offers Editable for these;
-	// saved write levels are clamped so permissions cannot exceed the connector.
-	WritableKinds []string `json:"writable_data_types,omitempty"`
-	HasOAuth      bool     `json:"has_oauth"`
+	HasOAuth    bool     `json:"has_oauth"`
 	// HasAPIKey is true when static API-key headers are present (presence only).
 	HasAPIKey bool `json:"has_api_key,omitempty"`
 	// ConnectionID is the shared provider connection this surface uses (issue #26).
@@ -186,7 +178,6 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 			Aliases:      svc.Aliases,
 			CacheTTL:     svc.CacheTTL.String(),
 			Description:  svc.Description,
-			GrantLimits:  svc.GrantLimits.Clone(),
 			CanonicalFor: svc.CanonicalFor,
 			HasOAuth:     svc.Connection != "",
 			HasAPIKey:    svc.HasStaticAPIKey(),
@@ -233,17 +224,13 @@ func (s *Server) HandleAdminSummary(w http.ResponseWriter, r *http.Request) {
 				item.HasTransaction = true
 			}
 			caps := connector.Capabilities()
-			types := make([]string, 0, len(caps.Kinds))
 			for _, dt := range caps.Kinds {
-				types = append(types, dt.Name)
 				for _, op := range dt.Operations {
 					if strings.Contains(op.Path, "/picker/sessions") && strings.EqualFold(op.Method, http.MethodPost) {
 						item.SupportsPhotoPicker = true
 					}
 				}
 			}
-			item.AvailableKinds = types
-			item.WritableKinds = s.writableKindsFor(item.ID, caps)
 		}
 		// Token store keys are provider connection IDs only.
 		if st, ok := tokens[item.ConnectionID]; ok {
@@ -317,12 +304,6 @@ func (s *Server) HandleAdminCacheClear(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"status": "cleared"})
 }
 
-// adminServiceLimitsRequest is the body for PUT service grant_limits.
-type adminServiceLimitsRequest struct {
-	// GrantLimits is the new map. Empty/null clears the block (unrestricted).
-	GrantLimits policy.Permissions `json:"grant_limits"`
-}
-
 // adminDataGrantsRequest is the body for PUT data grants.
 type adminDataGrantsRequest struct {
 	// DataGrants maps kind keys to DataGrant (issue #174).
@@ -333,9 +314,6 @@ type adminDataGrantsRequest struct {
 //
 //	GET /v1/admin/data-grants
 //	PUT /v1/admin/data-grants   {"data_grants":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
-//
-// Data grants are primary: default plus optional per-provider overrides that
-// can only tighten. Service grant_limits remain tighten-only overrides.
 func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -381,106 +359,6 @@ func (s *Server) HandleAdminDataGrants(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]any{
 			"version":     dataGrantsFileVersion,
 			"data_grants": saved,
-			"status":      "saved",
-		})
-	default:
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-	}
-}
-
-// HandleAdminServiceGrantLimits reads or writes a service's grant_limits map.
-//
-//	GET /v1/admin/services/{id}/grant-limits
-//	PUT /v1/admin/services/{id}/grant-limits  {"permissions": {"default":"read","player":"none"}}
-func (s *Server) HandleAdminServiceGrantLimits(w http.ResponseWriter, r *http.Request) {
-	trimmed := strings.TrimPrefix(r.URL.Path, "/v1/admin/services/")
-	trimmed = strings.Trim(trimmed, "/")
-	id := strings.TrimSuffix(trimmed, "/grant-limits")
-	id = strings.Trim(id, "/")
-	if id == "" || strings.Contains(id, "/") {
-		shared.WriteJSONError(w, http.StatusNotFound, "unknown admin endpoint")
-		return
-	}
-
-	svc := s.config.GetService(id)
-	if svc == nil {
-		shared.WriteJSONError(w, http.StatusNotFound, fmt.Sprintf("service %q not configured", id))
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		perms := svc.GrantLimits.Clone()
-		if perms == nil {
-			perms = map[string]string{}
-		}
-		effective := s.ownerGrants()
-		var effectiveOut map[string]string
-		if effective != nil {
-			effectiveOut = effective.Clone()
-		}
-		if effectiveOut == nil {
-			effectiveOut = map[string]string{}
-		}
-		var types []string
-		var writable []string
-		if connector, ok := s.connectors[id]; ok {
-			caps := connector.Capabilities()
-			for _, dt := range caps.Kinds {
-				types = append(types, dt.Name)
-			}
-			writable = s.writableKindsFor(id, caps)
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"service_id":             id,
-			"grant_limits":           perms,
-			"effective_grant_limits": effectiveOut,
-			"available_data_types":   types,
-			"writable_data_types":    writable,
-		})
-	case http.MethodPut:
-		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
-		if !ok {
-			return
-		}
-		var req adminServiceLimitsRequest
-		if len(body) > 0 {
-			if err := json.Unmarshal(body, &req); err != nil {
-				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
-				return
-			}
-		}
-		// Permissions may only further constrain Aegis — never grant write
-		// where neither proxy ops nor mirror adapters can write that kind.
-		saved := req.GrantLimits
-		if connector, ok := s.connectors[id]; ok && len(saved) > 0 {
-			caps := connector.Capabilities()
-			saved = clampPermissionsWithWritable(saved, caps, s.writableDataSet(id, caps))
-		}
-		if err := s.config.SetServicePermissions(id, saved); err != nil {
-			withPeerLog(slog.With("handler", "admin_permissions"), r).
-				Warn("failed to save permissions", "service", id, "error", err)
-			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		// Cache may hold responses that are now denied.
-		s.invalidateService(id)
-		withPeerLog(slog.With("handler", "admin_permissions"), r).
-			Info("service grant limits updated", "service", id, "keys", len(req.GrantLimits))
-
-		updated := s.config.GetService(id)
-		perms := map[string]string{}
-		if updated != nil {
-			perms = updated.GrantLimits.Clone()
-			if perms == nil {
-				perms = map[string]string{}
-			}
-		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
-			"service_id":  id,
-			"permissions": perms,
 			"status":      "saved",
 		})
 	default:

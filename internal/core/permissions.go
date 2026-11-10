@@ -3,59 +3,11 @@ package core
 import (
 	"fmt"
 	"net/http"
-	"sort"
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 )
-
-// writableDataSet reports kinds the admin form may offer as Editable:
-// agent-meaningful proxy write ops only. Mirror adapters and picker/search
-// POSTs do not count — those are not "agents can edit this kind".
-func (s *Server) writableDataSet(serviceID string, caps shared.ServiceCapabilities) map[string]bool {
-	set := map[string]bool{}
-	for _, name := range shared.WritableKindsFromCapabilities(caps) {
-		set[name] = true
-	}
-	return set
-}
-
-// writableKindsFor returns the sorted list for admin payloads.
-func (s *Server) writableKindsFor(serviceID string, caps shared.ServiceCapabilities) []string {
-	set := s.writableDataSet(serviceID, caps)
-	out := make([]string, 0, len(set))
-	for k := range set {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// clampPermissionsWithWritable further constrains write levels so a saved
-// permission never exceeds types the form may offer as Editable. Known
-// read-only types become read, so later agent-write support does not
-// auto-open — the operator must enable it explicitly. Unknown keys and
-// "default" are preserved.
-func clampPermissionsWithWritable(p policy.Permissions, caps shared.ServiceCapabilities, writable map[string]bool) policy.Permissions {
-	if p == nil {
-		return nil
-	}
-	known := map[string]bool{}
-	for _, dt := range caps.Kinds {
-		known[dt.Name] = true
-	}
-	out := make(policy.Permissions, len(p))
-	for k, v := range p {
-		level := policy.NormalizeAccess(v)
-		if k != policy.PermissionDefaultKey && known[k] && !writable[k] &&
-			(level == policy.AccessWrite || level == policy.AccessFull) {
-			level = policy.AccessRead
-		}
-		out[k] = level
-	}
-	return out
-}
 
 // connectorWriteBlocked reports whether a mutating proxy call is blocked
 // because the connector does not implement any mutating op for that data
