@@ -32,7 +32,7 @@ func (s *Server) connectorWriteBlocked(serviceID, kind, method string) bool {
 // materialized as kind → level, with the permissive default prefill. The
 // legacy "omit = unrestricted" semantics live in that prefill, not in the
 // resolution rule, which stays deny-by-default.
-func (s *Server) ownerGrants() policy.Permissions {
+func (s *Server) ownerGrants() policy.GrantMap {
 	if s == nil || s.config == nil {
 		return nil
 	}
@@ -40,7 +40,7 @@ func (s *Server) ownerGrants() policy.Permissions {
 }
 
 // requestGrants returns the rule map for the request's key (see Grants).
-func (s *Server) requestGrants(r *http.Request) policy.Permissions {
+func (s *Server) requestGrants(r *http.Request) policy.GrantMap {
 	g, _ := s.Grants(r)
 	return g
 }
@@ -90,15 +90,28 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 // permissionNotice returns a short system-instruction suffix listing denied
 // kinds so agents do not waste turns on blocked endpoints. Also warns
 // when a type is free/busy only (issue #128).
-func permissionNotice(p policy.Permissions) string {
+// permissionNotice derives the agent-facing data-grant notice from the
+// request key's grant map. Deny-by-default maps (unlisted kinds closed) are
+// announced as an allow list; maps with a permissive default announce their
+// explicit denials. Redaction-limited kinds get their explanation either way.
+func permissionNotice(p policy.GrantMap) string {
 	var parts []string
-	if denied := p.DeniedKinds(); len(denied) > 0 {
+	if p.Level("") == policy.AccessNone {
+		if allowed := p.AllowedKinds(); len(allowed) > 0 {
+			parts = append(parts, "only these kinds are available and all others must not be requested: "+
+				strings.Join(allowed, ", "))
+		}
+	} else if denied := p.DeniedKinds(); len(denied) > 0 {
 		parts = append(parts, "the following kinds are not available and must not be requested: "+
 			strings.Join(denied, ", "))
 	}
 	if limited := p.FreeBusyKinds(); len(limited) > 0 {
 		parts = append(parts, strings.Join(limited, ", ")+
 			" is free/busy only — responses include start_at, end_at, all_day, and status; never request titles, attendees, locations, or descriptions. Prefer GET /v1/library/freebusy for scheduling.")
+	}
+	if limited := p.SummaryKinds(); len(limited) > 0 {
+		parts = append(parts, strings.Join(limited, ", ")+
+			" is totals-only — responses include count, total_amount, by_category, and by_month; never request line items, merchants, or account identifiers.")
 	}
 	if len(parts) == 0 {
 		return ""
@@ -108,7 +121,7 @@ func permissionNotice(p policy.Permissions) string {
 
 // allDataDenied reports whether the rule map grants nothing to any kind,
 // so there is nothing useful to inject for the service.
-func allDataDenied(p policy.Permissions) bool {
+func allDataDenied(p policy.GrantMap) bool {
 	if p == nil {
 		return true
 	}
@@ -117,7 +130,7 @@ func allDataDenied(p policy.Permissions) bool {
 		return false
 	}
 	for k := range p {
-		if k == policy.PermissionDefaultKey {
+		if k == policy.DefaultKey {
 			continue
 		}
 		if p.Level(k) != policy.AccessNone {

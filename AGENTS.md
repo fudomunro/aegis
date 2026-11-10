@@ -378,15 +378,14 @@ over the hostile-input parsers, and `go build -o aegis .`.
   `identity_source`, `path`, `error`). Default JSON in prod.
 - **Neutral models at the library boundary.** Provider quirks stay inside
   connectors; `/v1/library/*` speaks `Playlist` / `Track` / `Contact` / `Photo`.
-- **Permissions are data, not comments.** **Data grants** (what the user allows
-  an LLM agent or app to use) are owned by `DataGrant` in
-  `internal/core/policy` (keyed by kind) plus optional provider/attribute
-  filters and must stay
-  enforced on the content/ingest proxy, library, capabilities output, and
-  pre-request injection. Service `permissions` maps are migration overrides
-  that can only tighten the kind default (issue #148). Prefer **data grant** in
-  product English (`docs/glossary.md`). Aegis authorization policy (grants,
-  permission maps, access levels) is `internal/core/policy` — never
+- **Grants are data, not comments.** **Data grants** (what the user allows
+  an LLM agent or app to use) live in `internal/core/policy`: the stored
+  `DataGrant` map materializes to a `GrantMap` (kind → access level) per
+  recognized key, and authorization is one lookup over it — uniformly
+  deny-by-default (`GrantMap.Level`). Enforced on the content/ingest proxy,
+  library (reads and writes), and pre-request injection. Prefer **data
+  grant** in product English (`docs/glossary.md`). Aegis authorization
+  policy (grants, access levels) is `internal/core/policy` — never
   `internal/kinds`, which holds models and kind metadata only.
 - **Cache policy.** Cache **GET + HTTP 200** only. Do not cache error bodies.
 - **Outbound HTTP.** Use `shared.HTTPClient` and
@@ -431,7 +430,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Caching 401/404/502 bodies | Cache 200 GET only |
 | Token encrypt/persist under exclusive map lock | Mutate under lock; persist outside; ordered `persistMu` |
 | Per-service OAuth config resurrected | Top-level `connections` only |
-| Service permissions dual-path treated as equal owners | Data grant is primary; service maps only tighten until the compat window ends |
+| Resurrecting per-service grant limits or provider tighten overrides | One grant map per key is the only policy; keep authorization a single lookup |
 | Large admin HTML pasted back into `admin.go` | Keep `internal/core/web/admin.html` embed |
 | Kind route without declared exposure | Declare exposure on the route (`AppReadable`); API-listener and app-token allowlists derive from declarations — prefix allows must not grow (#312) |
 | Coverage floor lowered to green a PR | Add tests, or split untested work out |
@@ -457,7 +456,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | OAuth / connections / refresh | `internal/core` hub (flows), `internal/core/tokens/` (store) |
 | Unified library + merge | `internal/kinds` (models/merge/kind data + aggregate pipeline) |
 | Mail ingest / local mail archive | `docs/mail-ingest.md`, `internal/connectors` (ingests), `internal/core` hub (`MailSink` wiring) |
-| Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `EffectiveAccess`) + hub enforcement | DataGrant map + provider tighten-only overrides; product English: **data grant** |
+| Data grants / agent visibility | `internal/core/policy` (`DataGrant` / `GrantMap`) + hub enforcement | One grant map per key, deny-by-default; product English: **data grant** |
 | Data ownership / completeness feedback | `docs/data-ownership.md`, `internal/core/ownership` (store), `internal/shared` (shapes), hub (derivation) | Per-kind user confirmation + derived evidence; distinct from connection maturity |
 | Admin map / flow | `internal/core` hub, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core` hub (identity) |

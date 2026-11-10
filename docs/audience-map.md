@@ -81,7 +81,7 @@ Built in `HandlePreRequest` and delivered as system/developer instructions.
 | LibraryKind instructions | `internal/kinds/librarykind.go`, `internal/kinds` | Runtime LLM agent | Imperative tool-use guide; `truncated`, `sources[].canonical`. |
 | Connector SystemInstructions | each connector (`spotify.go`, `immich.go`, …) | Runtime LLM agent | Negative constraints (“Do not call X”, “never ask for credentials”). |
 | Generic fallback | `internal/core/handler.go` | Runtime LLM agent | Library-first, not a services API. |
-| Permission notices | `core/permissions.go` | Runtime LLM agent | Denied types; freebusy-only “never request titles…”. |
+| Permission notices | `core/grants.go` | Runtime LLM agent | Allowed kinds (deny-by-default) or denied types; freebusy/totals-only caveats. |
 | Write policy | `core/canonical.go` | Runtime LLM agent | Canonical home first; no auto-mirror. |
 | Mail archive hints | `core/mail_archive_http.go` | Runtime LLM agent | Endpoint cookbook + sort recipes. |
 | Photo source discipline | `internal/kinds/builders.go` | Runtime LLM agent (as security policy) | No Photos.app / Immich env / raw CDN. |

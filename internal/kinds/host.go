@@ -99,10 +99,10 @@ type Host interface {
 	// AllowsKindMethod and redaction follows Level. App scopes, data-scope
 	// grants, and the owner map all resolve here — there is no second
 	// policy layer to merge at request time.
-	Grants(r *http.Request) (policy.Permissions, Principal)
+	Grants(r *http.Request) (policy.GrantMap, Principal)
 	// OwnerGrants is the owner-tier rule map: the view used for internal
 	// fetches and for what a reduced principal is being narrowed from.
-	OwnerGrants() policy.Permissions
+	OwnerGrants() policy.GrantMap
 	// RecordAccess records one redacted access event.
 	RecordAccess(r *http.Request, ev AccessEvent)
 	// Logger returns the request-scoped logger for a named handler.

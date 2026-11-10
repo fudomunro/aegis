@@ -310,7 +310,7 @@ func TestLibraryReadableHelpers(t *testing.T) {
 
 	// Denied owner grant + only a blocked service remains → nothing readable.
 	srv2 := testServerWithBase(&Config{
-		typePolicies: policy.DataGrants{policy.PermissionDefaultKey: {Default: policy.AccessNone}},
+		typePolicies: policy.DataGrants{policy.DefaultKey: {Default: policy.AccessNone}},
 		Services: []Service{
 			{ID: "b", Name: "B", Action: "block"},
 			{ID: "c", Name: "C", Action: "inject"},
@@ -768,8 +768,8 @@ func TestAllowDataPermission_FollowingUsesArtists(t *testing.T) {
 	svc := &Service{ID: "spotify", Name: "Spotify"}
 	srv := testServerWithBase(&Config{
 		typePolicies: policy.DataGrants{
-			policy.PermissionDefaultKey: {Default: policy.AccessRead},
-			"artists":                   {Default: policy.AccessNone},
+			policy.DefaultKey: {Default: policy.AccessRead},
+			"artists":         {Default: policy.AccessNone},
 		},
 		Services: []Service{*svc},
 	}, "https://aegis.example.com")

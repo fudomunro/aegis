@@ -294,14 +294,14 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 	}
 }
 
-func TestValidatePermissions_MetadataDocumentsOnly(t *testing.T) {
-	if err := policy.ValidatePermissions(policy.Permissions{"documents": policy.AccessMetadata}); err != nil {
+func TestValidateGrantMap_MetadataDocumentsOnly(t *testing.T) {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"documents": policy.AccessMetadata}); err != nil {
 		t.Fatalf("documents metadata should validate: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessMetadata}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessMetadata}); err == nil {
 		t.Fatal("metadata must be rejected on tracks")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"default": policy.AccessMetadata}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"default": policy.AccessMetadata}); err == nil {
 		t.Fatal("metadata must be rejected on default")
 	}
 	if !policy.IsMetadataAccess(policy.AccessMetadata) || policy.IsMetadataAccess(policy.AccessRead) {

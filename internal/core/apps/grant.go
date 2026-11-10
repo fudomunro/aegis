@@ -23,7 +23,7 @@ type GrantCode struct {
 	Code       string
 	AppID      string
 	AppName    string
-	Scopes     policy.Permissions
+	Scopes     policy.GrantMap
 	RedirectTo string
 	State      string
 	Expires    time.Time
@@ -138,18 +138,18 @@ func parseScopeList(s string) ([]PermissionEntry, error) {
 	if len(out) == 0 {
 		return nil, fmt.Errorf("scopes is required (e.g. events:freebusy)")
 	}
-	perms := policy.Permissions{}
+	perms := policy.GrantMap{}
 	for _, e := range out {
 		perms[e.Type] = e.Level
 	}
-	if err := policy.ValidatePermissions(perms); err != nil {
+	if err := policy.ValidateGrantMap(perms); err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func ScopesFromEntries(entries []PermissionEntry) policy.Permissions {
-	p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessNone}
+func ScopesFromEntries(entries []PermissionEntry) policy.GrantMap {
+	p := policy.GrantMap{policy.DefaultKey: policy.AccessNone}
 	for _, e := range entries {
 		p[e.Type] = policy.NormalizeAccess(e.Level)
 	}

@@ -16,7 +16,7 @@ import (
 )
 
 func TestPlacesAccessLevels(t *testing.T) {
-	p := policy.Permissions{"places": policy.AccessCity, "tracks": policy.AccessRead, "events": policy.AccessNone}
+	p := policy.GrantMap{"places": policy.AccessCity, "tracks": policy.AccessRead, "events": policy.AccessNone}
 	got := p.PlacesAccessLevels()
 	if got == nil || got["places"] != policy.AccessCity {
 		t.Fatalf("got = %v", got)
@@ -24,7 +24,7 @@ func TestPlacesAccessLevels(t *testing.T) {
 	if _, ok := got["tracks"]; ok {
 		t.Fatal("tracks must not appear")
 	}
-	if (policy.Permissions{}).PlacesAccessLevels() != nil {
+	if (policy.GrantMap{}).PlacesAccessLevels() != nil {
 		t.Fatal("empty map should be nil")
 	}
 }

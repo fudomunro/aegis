@@ -66,18 +66,18 @@ func TestPlacesLevelForResponse(t *testing.T) {
 }
 
 func TestPermissions_PlacesDefaultNone(t *testing.T) {
-	var nilPerm policy.Permissions
+	var nilPerm policy.GrantMap
 	if got := nilPerm.Level("places"); got != policy.AccessNone {
 		t.Fatalf("nil map places = %q, want none", got)
 	}
-	p := policy.Permissions{"default": policy.AccessFull, "tracks": policy.AccessRead}
+	p := policy.GrantMap{"default": policy.AccessFull, "tracks": policy.AccessRead}
 	if got := p.Level("places"); got != policy.AccessNone {
 		t.Fatalf("default key must not enable places: %q", got)
 	}
 	if p.AllowsRead("places") {
 		t.Fatal("places must not be readable by default")
 	}
-	enabled := policy.Permissions{"places": policy.AccessCity}
+	enabled := policy.GrantMap{"places": policy.AccessCity}
 	if got := enabled.Level("places"); got != policy.AccessCity {
 		t.Fatalf("explicit places = %q, want city", got)
 	}
@@ -86,20 +86,20 @@ func TestPermissions_PlacesDefaultNone(t *testing.T) {
 	}
 }
 
-func TestValidatePermissions_CityPreciseOnlyForPlaces(t *testing.T) {
-	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessCity}); err != nil {
+func TestValidateGrantMap_CityPreciseOnlyForPlaces(t *testing.T) {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessCity}); err != nil {
 		t.Fatalf("places city: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessPrecise}); err != nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessPrecise}); err != nil {
 		t.Fatalf("places precise: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"events": policy.AccessCity}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"events": policy.AccessCity}); err == nil {
 		t.Fatal("city on events should be rejected")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessFreeBusy}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessFreeBusy}); err == nil {
 		t.Fatal("freebusy on places should be rejected")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"places": policy.AccessSummary}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessSummary}); err == nil {
 		t.Fatal("summary on places should be rejected")
 	}
 }

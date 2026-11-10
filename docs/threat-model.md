@@ -64,7 +64,7 @@ of full message bodies outside the optional local mail archive.
 | Tailnet owner / admin principal | Highest on the service | Admin API key or user login (`-admin-logins`), on the admin listener | Policy writes, OAuth, app minting, `/v1/admin/*`, `/metrics` |
 | LLM agent (runtime) | Constrained by data grants | Agent API key, tagged device, allowed tailnet login | Library reads, hook, content transport, mail search |
 | External principal (invite token) | Constrained by scope grants, **deny-by-default** | Invite token (data-scope key) | Granted kinds of the owner's data, in its dataset; never admin |
-| Third-party app | Least privilege | App token `aeg_app_…` | Library **read** only, AND of app scopes × data grants |
+| Third-party app | Least privilege | App token `aeg_app_…` | Library **read** only, bounded by the app's own scope map (deny-by-default) |
 | Human operator (SSH/host) | Host root | OS account | Full data directory — out of Aegis’s auth |
 | Public internet (API listener) | Untrusted | — | Reaches the API listener only, and only with a valid token; admin listener has **no** public path |
 | Public internet (admin listener) | Untrusted | — | Must have **no** path |

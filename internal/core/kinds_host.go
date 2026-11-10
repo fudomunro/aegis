@@ -61,7 +61,7 @@ func serviceViewOf(svc Service) kinds.ServiceView {
 // Internal owner-tier fetches always see the owner map; app tokens carry
 // their scopes; data scopes carry their grants; everything else is the
 // owner map (agent key, tailnet peers).
-func (s *Server) Grants(r *http.Request) (policy.Permissions, kinds.Principal) {
+func (s *Server) Grants(r *http.Request) (policy.GrantMap, kinds.Principal) {
 	if kinds.OwnerView(r) {
 		return s.ownerGrants(), kinds.PrincipalOwner
 	}
@@ -75,7 +75,7 @@ func (s *Server) Grants(r *http.Request) (policy.Permissions, kinds.Principal) {
 }
 
 // OwnerGrants implements kinds.Host.
-func (s *Server) OwnerGrants() policy.Permissions {
+func (s *Server) OwnerGrants() policy.GrantMap {
 	return s.ownerGrants()
 }
 

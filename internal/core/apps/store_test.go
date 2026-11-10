@@ -17,7 +17,7 @@ func testStore(t *testing.T) *Store {
 	return store
 }
 
-func createTestApp(t *testing.T, store *Store, id string, scopes policy.Permissions) (view AppView, token string) {
+func createTestApp(t *testing.T, store *Store, id string, scopes policy.GrantMap) (view AppView, token string) {
 	t.Helper()
 	view, token, err := store.Create(AppCreateRequest{ID: id, Name: id, Scopes: scopes})
 	if err != nil {
@@ -31,7 +31,7 @@ func TestStore_CreateReturnsTokenOnce(t *testing.T) {
 	view, token, err := store.Create(AppCreateRequest{
 		ID:     "eco",
 		Name:   "Event Coordinator",
-		Scopes: policy.Permissions{"events": policy.AccessFreeBusy},
+		Scopes: policy.GrantMap{"events": policy.AccessFreeBusy},
 	})
 	if err != nil {
 		t.Fatalf("Create: %v", err)
@@ -58,14 +58,14 @@ func TestStore_CreateReturnsTokenOnce(t *testing.T) {
 		t.Fatalf("get = %+v ok=%v", got, ok)
 	}
 	// Scopes default to deny-all when not listed.
-	if got.Scopes[policy.PermissionDefaultKey] != policy.AccessNone {
-		t.Fatalf("default scope = %q, want none", got.Scopes[policy.PermissionDefaultKey])
+	if got.Scopes[policy.DefaultKey] != policy.AccessNone {
+		t.Fatalf("default scope = %q, want none", got.Scopes[policy.DefaultKey])
 	}
 }
 
 func TestStore_FindByTokenAndRotate(t *testing.T) {
 	store := testStore(t)
-	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessRead})
+	_, token := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessRead})
 	if store.FindByToken(token) == nil {
 		t.Fatal("expected token to resolve")
 	}
@@ -87,7 +87,7 @@ func TestStore_FindByTokenAndRotate(t *testing.T) {
 
 func TestStore_DeleteAndDisable(t *testing.T) {
 	store := testStore(t)
-	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessRead})
+	_, token := createTestApp(t, store, "eco", policy.GrantMap{"events": policy.AccessRead})
 	disabled := true
 	if _, err := store.Update("eco", AppUpdateRequest{Disabled: &disabled}); err != nil {
 		t.Fatalf("Update disabled: %v", err)
@@ -105,13 +105,13 @@ func TestStore_DeleteAndDisable(t *testing.T) {
 
 func TestStore_CreateRejectsBadIDAndScopes(t *testing.T) {
 	store := testStore(t)
-	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: policy.Permissions{"events": policy.AccessRead}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: policy.GrantMap{"events": policy.AccessRead}}); err == nil {
 		t.Fatal("expected bad id rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.Permissions{"tracks": policy.AccessFreeBusy}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"tracks": policy.AccessFreeBusy}}); err == nil {
 		t.Fatal("expected freebusy on tracks rejected")
 	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.Permissions{"events": "write-only-oops"}}); err == nil {
+	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.GrantMap{"events": "write-only-oops"}}); err == nil {
 		t.Fatal("expected unknown level rejected")
 	}
 }

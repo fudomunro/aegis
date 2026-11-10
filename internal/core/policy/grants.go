@@ -9,7 +9,7 @@ import (
 )
 
 // The collapsed authorization model: a recognized key carries one rule map
-// (a Permissions from kind to access level) and every request is decided by
+// (a GrantMap from kind to access level) and every request is decided by
 // a single lookup — Allow iff AllowsMethod(Level(kind), method).
 // Resolution is uniformly deny-by-default; there is no second policy layer
 // to AND or tighten at request time.
@@ -24,7 +24,7 @@ import (
 // A malformed level token resolves to AccessNone: a bad grant denies rather
 // than allows (save-time validation rejects the token anyway). An empty kind
 // name resolves like any unlisted kind.
-func (p Permissions) Level(kind string) string {
+func (p GrantMap) Level(kind string) string {
 	if shared.KindDefaultsNone(kind) {
 		if p != nil {
 			if level, ok := p[kind]; ok {
@@ -44,7 +44,7 @@ func (p Permissions) Level(kind string) string {
 		}
 		return AccessNone
 	}
-	if level, ok := p[PermissionDefaultKey]; ok {
+	if level, ok := p[DefaultKey]; ok {
 		if level = NormalizeAccess(level); knownAccess(level) {
 			return level
 		}
@@ -63,7 +63,7 @@ func knownAccess(level string) bool {
 }
 
 // AllowsKindMethod reports whether the data grant for kind permits method.
-func (p Permissions) AllowsKindMethod(kind, method string) bool {
+func (p GrantMap) AllowsKindMethod(kind, method string) bool {
 	return AllowsMethod(p.Level(kind), method)
 }
 
@@ -71,22 +71,22 @@ func (p Permissions) AllowsKindMethod(kind, method string) bool {
 // when it has none. The owner key comes prefilled this way so a fresh
 // install is unrestricted out of the box; resolution stays uniformly
 // deny-by-default. Opt-in kinds remain closed regardless.
-func (p Permissions) PrefillDefault() Permissions {
-	if _, ok := p[PermissionDefaultKey]; ok {
+func (p GrantMap) PrefillDefault() GrantMap {
+	if _, ok := p[DefaultKey]; ok {
 		return p
 	}
-	out := make(Permissions, len(p)+1)
+	out := make(GrantMap, len(p)+1)
 	for k, v := range p {
 		out[k] = v
 	}
-	out[PermissionDefaultKey] = DefaultAccessType
+	out[DefaultKey] = DefaultAccessType
 	return out
 }
 
 // Fingerprint is a stable short digest of the rule map (json.Marshal sorts
 // map keys), for partitioning caches per request key. Distinct maps must
 // not share cached responses. Empty maps share the reserved "none" mark.
-func (p Permissions) Fingerprint() string {
+func (p GrantMap) Fingerprint() string {
 	if len(p) == 0 {
 		return "none"
 	}
@@ -100,28 +100,21 @@ func (p Permissions) Fingerprint() string {
 
 // Levels materializes a kind-keyed DataGrants map as the rule map a key
 // carries at request time. Each entry's default level is taken; per-provider
-// overrides are not part of the collapsed model and are ignored (legacy
-// provider limits fold into the map at save time). An entry with an empty
-// level keeps its legacy meaning of unrestricted — except opt-in kinds,
-// which stay unlisted (and therefore none) until named with a real level.
-// An empty result is nil, which Level treats as deny-all.
-func (tp DataGrants) Levels() Permissions {
+// overrides are not part of the collapsed model and are ignored. A listed
+// kind must state its own level: empty or malformed levels resolve to
+// none, like everything else under the deny-by-default rule. An empty
+// result is nil, which Level treats as deny-all.
+func (tp DataGrants) Levels() GrantMap {
 	if len(tp) == 0 {
 		return nil
 	}
-	out := make(Permissions, len(tp))
+	out := make(GrantMap, len(tp))
 	for kind, grant := range tp {
 		level := NormalizeAccess(grant.Default)
-		if level == "" {
-			if shared.KindDefaultsNone(kind) {
-				continue
-			}
-			level = DefaultAccessType
+		if !knownAccess(level) {
+			level = AccessNone
 		}
 		out[kind] = level
-	}
-	if len(out) == 0 {
-		return nil
 	}
 	return out
 }

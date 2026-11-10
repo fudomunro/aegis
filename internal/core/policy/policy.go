@@ -1,5 +1,5 @@
 // Package policy holds Aegis's internal access policy: the access-level
-// vocabulary, legacy service Permissions maps, type-owned DataGrants,
+// vocabulary, legacy service GrantMap maps, type-owned DataGrants,
 // effective/scope grant resolution, and the permissions-editor view models.
 // This is Aegis authorization state and rules — not the `internal/types` layer
 // (neutral models, merge, and library kinds stay in internal/types).
@@ -51,38 +51,57 @@ const (
 // a kind is not listed and no "default" key is set.
 const DefaultAccessType = AccessFull
 
-// PermissionDefaultKey is the reserved permissions map key that sets the level
+// DefaultKey is the reserved permissions map key that sets the level
 // for kinds not listed explicitly.
-const PermissionDefaultKey = "default"
+const DefaultKey = "default"
 
-// Permissions maps kind names to access levels. The reserved key
+// GrantMap maps kind names to access levels. The reserved key
 // "default" applies to types not listed. A nil map means unrestricted access.
-type Permissions map[string]string
+type GrantMap map[string]string
 
 // Allows reports whether the given HTTP method is permitted for the kind.
-func (p Permissions) Allows(kind, method string) bool {
+func (p GrantMap) Allows(kind, method string) bool {
 	return AllowsMethod(p.Level(kind), method)
 }
 
 // AllowsRead reports whether read (GET/HEAD) is permitted for the kind.
-func (p Permissions) AllowsRead(kind string) bool {
+func (p GrantMap) AllowsRead(kind string) bool {
 	return AllowsMethod(p.Level(kind), http.MethodGet)
 }
 
 // AllowsWrite reports whether any mutating method is permitted for the kind.
-func (p Permissions) AllowsWrite(kind string) bool {
+func (p GrantMap) AllowsWrite(kind string) bool {
 	return AllowsMethod(p.Level(kind), http.MethodPost)
+}
+
+// AllowedKinds returns sorted kind names whose granted level is not
+// "none". The reserved "default" key is omitted.
+func (p GrantMap) AllowedKinds() []string {
+	if p == nil {
+		return nil
+	}
+	var allowed []string
+	for k := range p {
+		if k == DefaultKey {
+			continue
+		}
+		if NormalizeAccess(p[k]) != AccessNone {
+			allowed = append(allowed, k)
+		}
+	}
+	sort.Strings(allowed)
+	return allowed
 }
 
 // DeniedKinds returns sorted kind names explicitly set to "none".
 // The reserved "default" key is omitted.
-func (p Permissions) DeniedKinds() []string {
+func (p GrantMap) DeniedKinds() []string {
 	if p == nil {
 		return nil
 	}
 	var denied []string
 	for k, v := range p {
-		if k == PermissionDefaultKey {
+		if k == DefaultKey {
 			continue
 		}
 		if NormalizeAccess(v) == AccessNone {
@@ -96,13 +115,13 @@ func (p Permissions) DeniedKinds() []string {
 // FreeBusyKinds returns sorted kind names limited to free/busy
 // (issue #128). Used in pre-request injection so agents know they only get
 // availability, not event content.
-func (p Permissions) FreeBusyKinds() []string {
+func (p GrantMap) FreeBusyKinds() []string {
 	if p == nil {
 		return nil
 	}
 	var limited []string
 	for k, v := range p {
-		if k == PermissionDefaultKey {
+		if k == DefaultKey {
 			continue
 		}
 		if NormalizeAccess(v) == AccessFreeBusy {
@@ -116,13 +135,13 @@ func (p Permissions) FreeBusyKinds() []string {
 // SummaryKinds returns sorted kind names limited to totals-only
 // summary (issue #141). Used in pre-request injection so agents know they
 // only get category/month totals, not line items.
-func (p Permissions) SummaryKinds() []string {
+func (p GrantMap) SummaryKinds() []string {
 	if p == nil {
 		return nil
 	}
 	var limited []string
 	for k, v := range p {
-		if k == PermissionDefaultKey {
+		if k == DefaultKey {
 			continue
 		}
 		if NormalizeAccess(v) == AccessSummary {
@@ -136,13 +155,13 @@ func (p Permissions) SummaryKinds() []string {
 // PlacesAccessLevels returns the effective places access level per service key
 // that explicitly enables places (issue #142). Opt-in: keys not listed are
 // omitted (they mean none).
-func (p Permissions) PlacesAccessLevels() map[string]string {
+func (p GrantMap) PlacesAccessLevels() map[string]string {
 	if p == nil {
 		return nil
 	}
 	out := map[string]string{}
 	for k, v := range p {
-		if k == PermissionDefaultKey {
+		if k == DefaultKey {
 			continue
 		}
 		if NormalizeAccess(v) == AccessNone {
@@ -159,7 +178,7 @@ func (p Permissions) PlacesAccessLevels() map[string]string {
 }
 
 // Clone returns a shallow copy suitable for admin/API responses.
-func (p Permissions) Clone() map[string]string {
+func (p GrantMap) Clone() map[string]string {
 	if p == nil {
 		return nil
 	}
@@ -222,7 +241,7 @@ func AllowsMethod(level, method string) bool {
 // are legacy migration data — Levels ignores them.
 //
 // Redaction levels (freebusy, summary, city, precise) stay type-scoped:
-// ValidatePermissions rejects them on kinds that cannot enforce the
+// ValidateGrantMap rejects them on kinds that cannot enforce the
 // reduction (see LibraryKind.AllowedLevels).
 type DataGrant struct {
 	// Default is the access level for the kind. Empty means unrestricted
@@ -245,7 +264,7 @@ func ValidateDataGrants(policies DataGrants) error {
 		}
 		// Empty default is allowed (DefaultAccessType / opt-in none).
 		if policy.Default != "" {
-			if err := ValidatePermissions(Permissions{kind: policy.Default}); err != nil {
+			if err := ValidateGrantMap(GrantMap{kind: policy.Default}); err != nil {
 				return fmt.Errorf("data grant %q: %w", kind, err)
 			}
 		}
@@ -253,7 +272,7 @@ func ValidateDataGrants(policies DataGrants) error {
 			if provider == "" {
 				return fmt.Errorf("data grant %q: empty provider key", kind)
 			}
-			if err := ValidatePermissions(Permissions{kind: level}); err != nil {
+			if err := ValidateGrantMap(GrantMap{kind: level}); err != nil {
 				return fmt.Errorf("data grant %q provider %q: %w", kind, provider, err)
 			}
 		}
@@ -261,11 +280,11 @@ func ValidateDataGrants(policies DataGrants) error {
 	return nil
 }
 
-// ValidatePermissions checks that every level is a known access type.
+// ValidateGrantMap checks that every level is a known access type.
 // freebusy is events-only, summary is transactions-only, city/precise are
 // places-only, and metadata is documents-only: other types cannot honor
 // those redactions.
-func ValidatePermissions(p Permissions) error {
+func ValidateGrantMap(p GrantMap) error {
 	for k, v := range p {
 		if k == "" {
 			return fmt.Errorf("permissions: empty kind key")
@@ -275,34 +294,34 @@ func ValidatePermissions(p Permissions) error {
 		default:
 			return fmt.Errorf("permissions[%s]: unknown access level %q (use none, freebusy, summary, city, precise, metadata, read, write, or read-write)", k, v)
 		}
-		if NormalizeAccess(v) == AccessFreeBusy && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessFreeBusy) {
+		if NormalizeAccess(v) == AccessFreeBusy && k != DefaultKey && !shared.KindAllowsLevel(k, AccessFreeBusy) {
 			return fmt.Errorf("permissions[%s]: freebusy is only supported for %s", k, joinKindsAllowing(AccessFreeBusy))
 		}
-		if NormalizeAccess(v) == AccessFreeBusy && k == PermissionDefaultKey {
+		if NormalizeAccess(v) == AccessFreeBusy && k == DefaultKey {
 			return fmt.Errorf("permissions[default]: freebusy is only supported for events")
 		}
-		if NormalizeAccess(v) == AccessSummary && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessSummary) {
+		if NormalizeAccess(v) == AccessSummary && k != DefaultKey && !shared.KindAllowsLevel(k, AccessSummary) {
 			return fmt.Errorf("permissions[%s]: summary is only supported for %s", k, joinKindsAllowing(AccessSummary))
 		}
-		if NormalizeAccess(v) == AccessSummary && k == PermissionDefaultKey {
+		if NormalizeAccess(v) == AccessSummary && k == DefaultKey {
 			return fmt.Errorf("permissions[default]: summary is only supported for transactions")
 		}
-		if NormalizeAccess(v) == AccessCity && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessCity) {
+		if NormalizeAccess(v) == AccessCity && k != DefaultKey && !shared.KindAllowsLevel(k, AccessCity) {
 			return fmt.Errorf("permissions[%s]: city is only supported for %s", k, joinKindsAllowing(AccessCity))
 		}
-		if NormalizeAccess(v) == AccessCity && k == PermissionDefaultKey {
+		if NormalizeAccess(v) == AccessCity && k == DefaultKey {
 			return fmt.Errorf("permissions[default]: city is only supported for places")
 		}
-		if NormalizeAccess(v) == AccessPrecise && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessPrecise) {
+		if NormalizeAccess(v) == AccessPrecise && k != DefaultKey && !shared.KindAllowsLevel(k, AccessPrecise) {
 			return fmt.Errorf("permissions[%s]: precise is only supported for %s", k, joinKindsAllowing(AccessPrecise))
 		}
-		if NormalizeAccess(v) == AccessPrecise && k == PermissionDefaultKey {
+		if NormalizeAccess(v) == AccessPrecise && k == DefaultKey {
 			return fmt.Errorf("permissions[default]: precise is only supported for places")
 		}
-		if NormalizeAccess(v) == AccessMetadata && k != PermissionDefaultKey && !shared.KindAllowsLevel(k, AccessMetadata) {
+		if NormalizeAccess(v) == AccessMetadata && k != DefaultKey && !shared.KindAllowsLevel(k, AccessMetadata) {
 			return fmt.Errorf("permissions[%s]: metadata is only supported for %s", k, joinKindsAllowing(AccessMetadata))
 		}
-		if NormalizeAccess(v) == AccessMetadata && k == PermissionDefaultKey {
+		if NormalizeAccess(v) == AccessMetadata && k == DefaultKey {
 			return fmt.Errorf("permissions[default]: metadata is only supported for documents")
 		}
 	}

@@ -55,7 +55,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 		ID:     agentAccessorID,
 		Kind:   policy.AccessorAgent,
 		Label:  "LLM agents",
-		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. Data grants are primary; per-service forms only tighten.",
+		Detail: "Agents reaching Aegis through Aperture or direct proxy/library calls. One grant map per key, deny-by-default.",
 		Levels: policy.AgentOverviewLevels(policies, kinds),
 		// Edited via the data-grant form in the data grants editor.
 		Editable: true,
@@ -71,7 +71,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			return apps[i].ID < apps[j].ID
 		})
 		for _, app := range apps {
-			scopes := make(policy.Permissions, len(app.Scopes))
+			scopes := make(policy.GrantMap, len(app.Scopes))
 			for k, v := range app.Scopes {
 				scopes[k] = v
 			}
@@ -232,7 +232,7 @@ func serviceProvidedTypes(conn any) []string {
 	var out []string
 	add := func(name string) {
 		name = strings.TrimSpace(name)
-		if name == "" || name == policy.PermissionDefaultKey || seen[name] {
+		if name == "" || name == policy.DefaultKey || seen[name] {
 			return
 		}
 		seen[name] = true

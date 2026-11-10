@@ -109,16 +109,16 @@ Owner-tier credentials are unchanged and are *not* external principals:
 |------------|------|-----------------|-------------|
 | Tailnet identity (admin rules) | Admin | Owner policy; admin surfaces | Admin listener |
 | Admin API key | Admin | Owner policy; admin surfaces | Admin listener |
-| Agent API key (`-api-key`) | Agent (owner) | Agent **data grants**; omit = unrestricted (places opt-in `none`) | Admin listener only under external access (never the published bind) |
-| Invite token (scope key) | Agent (external) | **Scope grants, deny-by-default** | Both listeners |
-| App token (`aeg_app_…`) | App | App scopes AND agent data grants (unchanged) | Both listeners |
+| Agent API key (`-api-key`) | Agent (owner) | The owner key's **data grants** (prefilled permissive `default` when unconfigured; places opt-in `none`) | Admin listener only under external access (never the published bind) |
+| Invite token (scope key) | Agent (external) | The scope's **data grants**, deny-by-default | Both listeners |
+| App token (`aeg_app_…`) | App | The app's `scopes` data grants (deny-by-default) | Both listeners |
 
-### Deny-by-default (external principals)
+### Deny-by-default (every key)
 
-For an invite token, the scope's `grants` map is the **complete allow list**:
+Every recognized key carries one `grants` map (kind → level), and every key
+resolves through the same `GrantMap.Level` rule:
 
-1. A kind not listed resolves to **`none`** for that principal —
-   unlike agent data grants, where omit means unrestricted.
+1. A kind not listed resolves to **`none`** for that principal.
 2. A reserved `default` entry sets the level for **unlisted** kinds only, so
    "share everything read-only" stays expressible
    (`"grants": {"default": {"default": "read"}}`) without listing every
@@ -137,27 +137,19 @@ For an invite token, the scope's `grants` map is the **complete allow list**:
 | Type absent, no `default` key | `none` |
 | Type absent, `default` key present | the `default` key's level |
 | `{"music": {}}` (listed, empty) | `none` — a listed kind must state its own level |
-| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider overrides can only **tighten** a level, never open a closed kind. To grant, set the kind's `default` field and use provider entries to narrow |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider entries are legacy and ignored; grant via the kind's `default` level |
 | `{"default": {"default": "read"}, "music": {...}}` with `music.default` empty | `none` for `music` — the `default` key covers **unlisted** kinds only; listing a kind is an explicit act |
 
-This resolution runs in a **dedicated scope-grants resolver**, not in
-`policy.DataGrants.Access`. `DataGrants.Access` keeps owner-tier semantics
-("unset default preserves pre-permission behavior"); the two must not be
-merged, or a scope fix silently changes owner behavior and vice versa. The
-scope resolver is its own function with its own tests (every row of the
-table above is a case).
-
-This is a deliberate **split** from owner-tier semantics, not a silent
-behavior change: the shared agent key and tailnet agents keep the current
-"omit = unrestricted" contract (tightened only by data grants / service
-limits). Migration note: demo and sample packs that rely on "empty grants =
-full read of my dataset" must add an explicit `default` entry when
-enforcement lands.
+The owner key is the single exception to "starts empty": when no grants are
+configured it materializes with a permissive `default` entry, so a fresh
+install is unrestricted out of the box. Migration note: scopes and demo
+packs that relied on "empty grants = full read of my dataset" must add an
+explicit `default` entry — enforcement is deny-by-default, so an empty
+`grants` map denies everything.
 
 Enforcement points are the existing seams — library aggregation, content
-transport, mail routes, pre-request injection, and cache keys per scope —
-plus the new rule that a scope grant can never exceed what the agent data
-grants already allow (AND of both layers, same as app tokens).
+transport, mail routes, pre-request injection, and cache keys per key —
+each doing one lookup over the request key's map.
 
 ## The landmine (must fix before any public bind)
 

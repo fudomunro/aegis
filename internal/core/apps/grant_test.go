@@ -29,7 +29,7 @@ func TestParseScopeList(t *testing.T) {
 
 func TestGrantStore_Expires(t *testing.T) {
 	g := NewGrantStore()
-	code, err := g.Issue(GrantCode{AppID: "eco", Scopes: policy.Permissions{"events": policy.AccessRead}})
+	code, err := g.Issue(GrantCode{AppID: "eco", Scopes: policy.GrantMap{"events": policy.AccessRead}})
 	if err != nil {
 		t.Fatalf("issue: %v", err)
 	}

@@ -6,7 +6,7 @@ import (
 )
 
 func TestPermissions_AllowsAndClone(t *testing.T) {
-	p := Permissions{"tracks": AccessRead, "playlists": AccessNone, "default": AccessWrite}
+	p := GrantMap{"tracks": AccessRead, "playlists": AccessNone, "default": AccessWrite}
 	if !p.AllowsRead("tracks") || p.AllowsWrite("tracks") {
 		t.Fatalf("tracks read-only: %+v", p)
 	}
@@ -33,7 +33,7 @@ func TestPermissions_AllowsAndClone(t *testing.T) {
 }
 
 func TestPermissions_RedactionLists(t *testing.T) {
-	p := Permissions{
+	p := GrantMap{
 		"events":       AccessFreeBusy,
 		"transactions": AccessSummary,
 		"places":       AccessCity,
@@ -59,47 +59,47 @@ func TestPermissions_RedactionLists(t *testing.T) {
 	}
 }
 
-func TestValidatePermissions_RedactionScoping(t *testing.T) {
-	if err := ValidatePermissions(Permissions{"events": AccessFreeBusy}); err != nil {
+func TestValidateGrantMap_RedactionScoping(t *testing.T) {
+	if err := ValidateGrantMap(GrantMap{"events": AccessFreeBusy}); err != nil {
 		t.Fatalf("events freebusy: %v", err)
 	}
-	if err := ValidatePermissions(Permissions{"tracks": AccessFreeBusy}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"tracks": AccessFreeBusy}); err == nil {
 		t.Fatal("freebusy must reject non-events")
 	}
-	if err := ValidatePermissions(Permissions{"places": AccessCity}); err != nil {
+	if err := ValidateGrantMap(GrantMap{"places": AccessCity}); err != nil {
 		t.Fatalf("places city: %v", err)
 	}
-	if err := ValidatePermissions(Permissions{"tracks": AccessCity}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"tracks": AccessCity}); err == nil {
 		t.Fatal("city must reject non-places")
 	}
-	if err := ValidatePermissions(Permissions{"default": AccessFreeBusy}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"default": AccessFreeBusy}); err == nil {
 		t.Fatal("default freebusy must reject")
 	}
 }
 
-func TestValidatePermissions_KindLevels(t *testing.T) {
-	if err := ValidatePermissions(Permissions{"places": AccessPrecise}); err != nil {
+func TestValidateGrantMap_KindLevels(t *testing.T) {
+	if err := ValidateGrantMap(GrantMap{"places": AccessPrecise}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidatePermissions(Permissions{"places": AccessSummary}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"places": AccessSummary}); err == nil {
 		t.Fatal("summary on places")
 	}
-	if err := ValidatePermissions(Permissions{"transactions": AccessSummary}); err != nil {
+	if err := ValidateGrantMap(GrantMap{"transactions": AccessSummary}); err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidatePermissions(Permissions{"transactions": AccessCity}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"transactions": AccessCity}); err == nil {
 		t.Fatal("city on transactions")
 	}
-	if err := ValidatePermissions(Permissions{"documents": AccessMetadata}); err != nil {
+	if err := ValidateGrantMap(GrantMap{"documents": AccessMetadata}); err != nil {
 		t.Errorf("metadata on documents should pass: %v", err)
 	}
-	if err := ValidatePermissions(Permissions{"tracks": AccessSummary}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"tracks": AccessSummary}); err == nil {
 		t.Error("summary on tracks should fail validation")
 	}
-	if err := ValidatePermissions(Permissions{"": AccessRead}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"": AccessRead}); err == nil {
 		t.Fatal("empty key")
 	}
-	if err := ValidatePermissions(Permissions{"tracks": "maybe"}); err == nil {
+	if err := ValidateGrantMap(GrantMap{"tracks": "maybe"}); err == nil {
 		t.Fatal("unknown level")
 	}
 }

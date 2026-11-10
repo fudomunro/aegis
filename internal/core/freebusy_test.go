@@ -36,23 +36,23 @@ func TestRedactCalendarEventFreeBusy_StripsContent(t *testing.T) {
 	}
 }
 
-func TestValidatePermissions_FreeBusyEventsOnly(t *testing.T) {
-	if err := policy.ValidatePermissions(policy.Permissions{"events": policy.AccessFreeBusy}); err != nil {
+func TestValidateGrantMap_FreeBusyEventsOnly(t *testing.T) {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"events": policy.AccessFreeBusy}); err != nil {
 		t.Fatalf("events freebusy: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"events": "free-busy"}); err != nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"events": "free-busy"}); err != nil {
 		t.Fatalf("alias free-busy: %v", err)
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{"tracks": policy.AccessFreeBusy}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessFreeBusy}); err == nil {
 		t.Fatal("expected freebusy rejected on tracks")
 	}
-	if err := policy.ValidatePermissions(policy.Permissions{policy.PermissionDefaultKey: policy.AccessFreeBusy}); err == nil {
+	if err := policy.ValidateGrantMap(policy.GrantMap{policy.DefaultKey: policy.AccessFreeBusy}); err == nil {
 		t.Fatal("expected freebusy rejected on default")
 	}
 }
 
 func TestPermissions_FreeBusyAllowsReadNotWrite(t *testing.T) {
-	p := policy.Permissions{"events": policy.AccessFreeBusy}
+	p := policy.GrantMap{"events": policy.AccessFreeBusy}
 	if !p.AllowsRead("events") {
 		t.Fatal("expected GET allowed")
 	}
@@ -152,9 +152,11 @@ func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 }
 
 func TestPermissionNotice_FreeBusy(t *testing.T) {
-	p := policy.Permissions{"events": policy.AccessFreeBusy, "player": policy.AccessNone}
+	p := policy.GrantMap{"events": policy.AccessFreeBusy, "player": policy.AccessNone}
 	notice := permissionNotice(p)
-	for _, want := range []string{"player", "free/busy only", "/v1/library/freebusy"} {
+	// Deny-by-default map: the notice is an allow list (player is simply
+	// outside it), with the freebusy caveat attached.
+	for _, want := range []string{"only these kinds are available", "events", "free/busy only", "/v1/library/freebusy"} {
 		if !strings.Contains(notice, want) {
 			t.Fatalf("notice missing %q: %s", want, notice)
 		}

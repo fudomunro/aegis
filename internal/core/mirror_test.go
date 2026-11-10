@@ -23,13 +23,13 @@ func testMirrorServer(t *testing.T, upstream http.Handler, targetWrite bool) (*S
 	t.Cleanup(ts.Close)
 
 	grants := policy.DataGrants{
-		policy.PermissionDefaultKey: {Default: policy.AccessRead},
+		policy.DefaultKey: {Default: policy.AccessRead},
 	}
 	if targetWrite {
 		grants = policy.DataGrants{
-			policy.PermissionDefaultKey: {Default: policy.AccessRead},
-			"playlists":                 {Default: policy.AccessFull},
-			"tracks":                    {Default: policy.AccessFull},
+			policy.DefaultKey: {Default: policy.AccessRead},
+			"playlists":       {Default: policy.AccessFull},
+			"tracks":          {Default: policy.AccessFull},
 		}
 	}
 	cfg := &Config{

@@ -24,7 +24,7 @@ import (
 // (docs/external-access.md): packs that relied on "empty grants = full read"
 // state it explicitly now that scope resolution is deny-by-default.
 func readAllGrants() policy.DataGrants {
-	return policy.DataGrants{policy.PermissionDefaultKey: {Default: policy.AccessRead}}
+	return policy.DataGrants{policy.DefaultKey: {Default: policy.AccessRead}}
 }
 
 // scopeServer builds a server with two dataset-partitioned sample library

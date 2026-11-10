@@ -65,7 +65,7 @@ func rewriteConfig(t *testing.T, path string, i int) {
 // racing a read was a data race. It now copies under the lock and the
 // materialized rule map is derived from the copy. Run under -race: this is
 // the regression test.
-func TestEffectiveAccessors_SafeUnderReload(t *testing.T) {
+func TestDataGrantsCopy_SafeUnderReload(t *testing.T) {
 	cfg, path := hygieneConfig(t)
 	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: "read"})
 
