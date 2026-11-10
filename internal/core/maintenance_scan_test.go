@@ -20,9 +20,6 @@ type fakeIssueTracker struct {
 	// action/error returned per upsert; defaults "opened".
 	action string
 	err    error
-	// records/listErr feed ListIssues for the dashboard's fix history.
-	records []MaintenanceIssueRecord
-	listErr error
 }
 
 func (f *fakeIssueTracker) UpsertTicket(_ context.Context, t MaintenanceTicket) (IssueRef, string, error) {
@@ -35,13 +32,6 @@ func (f *fakeIssueTracker) UpsertTicket(_ context.Context, t MaintenanceTicket) 
 		action = "opened"
 	}
 	return IssueRef{Number: len(f.calls), URL: "https://github.com/example/repo/issues/1"}, action, nil
-}
-
-func (f *fakeIssueTracker) ListIssues(_ context.Context) ([]MaintenanceIssueRecord, error) {
-	if f.listErr != nil {
-		return nil, f.listErr
-	}
-	return f.records, nil
 }
 
 func TestNormalizeErrorShape(t *testing.T) {

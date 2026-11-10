@@ -45,11 +45,11 @@ type IssueRef struct {
 
 // IssueTracker is the ticket surface. UpsertTicket creates, updates, or
 // reopens exactly one issue per ticket and reports what it did
-// ("opened" | "updated" | "reopened"). ListIssues scrapes the repo's issue
-// history for the dashboard's maintenance record (issue #239).
+// ("opened" | "updated" | "reopened"). The dashboard tool scrapes the
+// repo's issue history for its own record (issue #335) — this interface
+// only writes tickets.
 type IssueTracker interface {
 	UpsertTicket(ctx context.Context, t MaintenanceTicket) (IssueRef, string, error)
-	ListIssues(ctx context.Context) ([]MaintenanceIssueRecord, error)
 }
 
 // ghIssueTracker opens and updates tickets via the gh CLI against an

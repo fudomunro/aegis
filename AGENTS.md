@@ -125,7 +125,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
 | Onboarding runner | `internal/core` hub (host), `internal/shared` (shapes), impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
-| Maintenance dashboard generator | `cmd/aegis-dashboard` | Static sync-maintenance dashboard build for `pages.yml`; instance-level captures stay on the admin surface |
+| Maintenance dashboard generator | `cmd/aegis-dashboard` | Separate tool (issue #335): builds the static sync-maintenance dashboard from the repo's issue record, the services manifest, captured signal bundles (`-bundles`), and the connector metadata catalog. Instance-level captures stay on the admin surface; the application code contains no dashboard |
 
 ### Extension points agents must use
 

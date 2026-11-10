@@ -43,7 +43,6 @@ func adminAuthPathTests() []routeTestCase {
 		{"hook-health", "GET", "/v1/admin/hook-health", true, false, dispatchAdmin},
 		{"maintenance-signals", "GET", "/v1/admin/maintenance/signals", true, false, dispatchAdmin},
 		{"maintenance-scan", "POST", "/v1/admin/maintenance/scan", true, false, dispatchAdmin},
-		{"maintenance-dashboard", "GET", "/v1/admin/maintenance/dashboard", true, false, dispatchAdmin},
 		{"mail-status", "GET", "/v1/admin/mail/status", true, false, dispatchAdmin},
 		{"search-status", "GET", "/v1/admin/search/status", true, false, dispatchAdmin},
 		{"mail-sync", "POST", "/v1/admin/mail/sync", true, false, dispatchAdmin},

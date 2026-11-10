@@ -6,9 +6,9 @@ import (
 
 // Connection maturity catalog (issue #247): the per-connection declaration
 // of what each service offers in theory and what Aegis serves through the
-// connection. The dashboard grades it into the maturity mark; nothing here
-// is runtime data, so both the release-published build and the instance
-// build read the same coverage statement.
+// connection. The dashboard tool grades it into the maturity mark; nothing
+// here is runtime data, so every build reads the same coverage statement.
+// Ownership evidence reads the same catalog.
 //
 // Connector-owned entries live in internal/connectors/maturity.go beside the
 // connectors they describe. The entries below cover the core-local import
