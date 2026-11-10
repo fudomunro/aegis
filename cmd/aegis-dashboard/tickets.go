@@ -1,10 +1,9 @@
-package core
+package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -15,11 +14,11 @@ import (
 // signature, deduped by a body marker; the structured ticket contract lives
 // in an evidence block the scanner rewrites on every scan (idempotent, no
 // comment spam), while triage — labels and prose around the block — belongs
-// to humans and fix agents and is never clobbered.
+// to humans and fix agents and is never clobbered. The contract has one
+// home here: the scanner writes it, the record scrape reads it, and both
+// run outside the application (issue #344).
 //
-// Production transport is the gh CLI (same tool the project already uses),
-// so the service needs no GitHub token of its own. The run seam keeps the
-// tracker testable without exec.
+// Production transport is the gh CLI via ghClient.
 
 const (
 	// syncFailureLabel tags every maintenance ticket issue.
@@ -29,6 +28,10 @@ const (
 	// promotes a ticket into the phase-3 pickup queue.
 	needsFixtureLabel = "needs-fixture"
 	readyLabel        = "ready"
+
+	// Repro-state values on a ticket (docs/sync-maintenance.md).
+	reproStateNeedsFixture = "needs-fixture"
+	reproStateReady        = "ready"
 
 	signatureMarkerPrefix = "<!-- aegis-signature: "
 	evidenceStartMarker   = "<!-- aegis-evidence:start -->"
@@ -43,35 +46,102 @@ type IssueRef struct {
 	Labels []string `json:"labels,omitempty"`
 }
 
-// IssueTracker is the ticket surface. UpsertTicket creates, updates, or
-// reopens exactly one issue per ticket and reports what it did
-// ("opened" | "updated" | "reopened"). The dashboard tool scrapes the
-// repo's issue history for its own record (issue #335) — this interface
-// only writes tickets.
-type IssueTracker interface {
+// ticketTracker is the ticket surface the scanner drives. A nil tracker
+// scans only, marking ticketable clusters "disabled".
+type ticketTracker interface {
 	UpsertTicket(ctx context.Context, t MaintenanceTicket) (IssueRef, string, error)
 }
 
-// ghIssueTracker opens and updates tickets via the gh CLI against an
-// explicit repo (owner/name). run is the exec seam for tests; it receives gh
-// arguments without the binary name and returns stdout.
-type ghIssueTracker struct {
-	repo string
-	run  func(ctx context.Context, args ...string) (string, error)
+// MaintenanceTicket is the structured ticket contract (issue body evidence
+// block), not prose — see docs/sync-maintenance.md.
+type MaintenanceTicket struct {
+	Signature  string `json:"signature"`
+	Title      string `json:"title"`
+	Service    string `json:"service,omitempty"`
+	Kind       string `json:"kind,omitempty"`
+	JobType    string `json:"job_type,omitempty"`
+	ErrorClass string `json:"error_class,omitempty"`
+	// ReproState gates phase-3 pickup: needs-fixture until the repro bundle
+	// (fixture + red test) is attached, then ready.
+	ReproState string    `json:"repro_state"`
+	Fixture    string    `json:"fixture,omitempty"`
+	ReproTest  string    `json:"repro_test,omitempty"`
+	Expected   string    `json:"expected,omitempty"`
+	Actual     string    `json:"actual,omitempty"`
+	Tier       string    `json:"tier"`
+	FirstSeen  time.Time `json:"first_seen"`
+	LastSeen   time.Time `json:"last_seen"`
+	Count      int       `json:"count"`
+	// Observations is the most recent bundle evidence, newest last.
+	Observations []MaintenanceObservation `json:"observations,omitempty"`
 }
 
-// NewGhIssueTracker builds a tracker for the given owner/name repo.
-func NewGhIssueTracker(repo string) *ghIssueTracker {
-	return &ghIssueTracker{
-		repo: repo,
-		run: func(ctx context.Context, args ...string) (string, error) {
-			out, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
-			if err != nil {
-				return "", fmt.Errorf("gh %s: %w: %s", strings.Join(args[:2], " "), err, strings.TrimSpace(string(out)))
-			}
-			return string(out), nil
-		},
+// MaintenanceObservation is one bundle's evidence for a ticket. Error is the
+// already-scrubbed excerpt from the bundle.
+type MaintenanceObservation struct {
+	Bundle     string    `json:"bundle"`
+	CapturedAt time.Time `json:"captured_at"`
+	Version    string    `json:"version,omitempty"`
+	Commit     string    `json:"commit,omitempty"`
+	Error      string    `json:"error,omitempty"`
+}
+
+// UpsertTicket creates, updates, or reopens exactly one issue per ticket
+// and reports what it did ("opened" | "updated" | "reopened").
+func (g *ghClient) UpsertTicket(ctx context.Context, t MaintenanceTicket) (IssueRef, string, error) {
+	existing, err := g.findIssue(ctx, t.Signature)
+	if err != nil {
+		return IssueRef{}, "", err
 	}
+	if existing == nil {
+		out, err := g.run(ctx, "issue", "create", "-R", g.repo,
+			"--title", t.Title,
+			"--body", renderIssueBody(t),
+			"--label", syncFailureLabel,
+			"--label", needsFixtureLabel)
+		if err != nil {
+			return IssueRef{}, "", err
+		}
+		url := strings.TrimSpace(out)
+		return IssueRef{Number: issueNumberFromURL(url), URL: url, State: "open",
+			Labels: []string{syncFailureLabel, needsFixtureLabel}}, "opened", nil
+	}
+
+	// refreshIssueBody carries triage fields from the old evidence block
+	// onto t; the issue labels decide repro_state.
+	labelNames := existing.labelNames()
+	t.ReproState = reproStateFromLabels(labelNames, t.ReproState)
+
+	if _, err := g.run(ctx, "issue", "edit", strconv.Itoa(existing.Number), "-R", g.repo,
+		"--body", refreshIssueBody(existing.Body, t)); err != nil {
+		return IssueRef{}, "", err
+	}
+
+	want, drop := needsFixtureLabel, readyLabel
+	if t.ReproState == reproStateReady {
+		want, drop = readyLabel, needsFixtureLabel
+	}
+	if !hasLabel(labelNames, want) || hasLabel(labelNames, drop) {
+		args := []string{"issue", "edit", strconv.Itoa(existing.Number), "-R", g.repo, "--add-label", want}
+		if hasLabel(labelNames, drop) {
+			args = append(args, "--remove-label", drop)
+		}
+		if _, err := g.run(ctx, args...); err != nil {
+			return IssueRef{}, "", err
+		}
+	}
+
+	action := "updated"
+	// gh emits state uppercase ("OPEN"/"CLOSED"); a closed ticket must
+	// reopen when the scanner finds fresh evidence for its signature.
+	if strings.EqualFold(existing.State, "closed") {
+		if _, err := g.run(ctx, "issue", "reopen", strconv.Itoa(existing.Number), "-R", g.repo); err != nil {
+			return IssueRef{}, "", err
+		}
+		action = "reopened"
+	}
+	return IssueRef{Number: existing.Number, URL: existing.URL, State: "open",
+		Labels: append([]string{syncFailureLabel}, want)}, action, nil
 }
 
 // ghLabel is one label object on an issue. gh emits labels as objects
@@ -102,65 +172,8 @@ func (i *ghListIssue) labelNames() []string {
 	return out
 }
 
-// UpsertTicket implements IssueTracker.
-func (g *ghIssueTracker) UpsertTicket(ctx context.Context, t MaintenanceTicket) (IssueRef, string, error) {
-	existing, err := g.findIssue(ctx, t.Signature)
-	if err != nil {
-		return IssueRef{}, "", err
-	}
-	if existing == nil {
-		out, err := g.run(ctx, "issue", "create", "-R", g.repo,
-			"--title", t.Title,
-			"--body", renderIssueBody(t),
-			"--label", syncFailureLabel,
-			"--label", needsFixtureLabel)
-		if err != nil {
-			return IssueRef{}, "", err
-		}
-		url := strings.TrimSpace(out)
-		return IssueRef{Number: issueNumberFromURL(url), URL: url, State: "open",
-			Labels: []string{syncFailureLabel, needsFixtureLabel}}, "opened", nil
-	}
-
-	// refreshIssueBody carries triage fields from the old evidence block
-	// onto t; the issue labels decide repro_state.
-	labelNames := existing.labelNames()
-	t.ReproState = reproStateFromLabels(labelNames, t.ReproState)
-
-	if _, err := g.run(ctx, "issue", "edit", strconv.Itoa(existing.Number), "-R", g.repo,
-		"--body", refreshIssueBody(existing.Body, t)); err != nil {
-		return IssueRef{}, "", err
-	}
-
-	want, drop := needsFixtureLabel, readyLabel
-	if t.ReproState == ReproStateReady {
-		want, drop = readyLabel, needsFixtureLabel
-	}
-	if !hasLabel(labelNames, want) || hasLabel(labelNames, drop) {
-		args := []string{"issue", "edit", strconv.Itoa(existing.Number), "-R", g.repo, "--add-label", want}
-		if hasLabel(labelNames, drop) {
-			args = append(args, "--remove-label", drop)
-		}
-		if _, err := g.run(ctx, args...); err != nil {
-			return IssueRef{}, "", err
-		}
-	}
-
-	action := "updated"
-	// gh emits state uppercase ("OPEN"/"CLOSED"); a closed ticket must
-	// reopen when the scanner finds fresh evidence for its signature.
-	if strings.EqualFold(existing.State, "closed") {
-		if _, err := g.run(ctx, "issue", "reopen", strconv.Itoa(existing.Number), "-R", g.repo); err != nil {
-			return IssueRef{}, "", err
-		}
-		action = "reopened"
-	}
-	return IssueRef{Number: existing.Number, URL: existing.URL, State: "open",
-		Labels: append([]string{syncFailureLabel}, want)}, action, nil
-}
-
 // findIssue returns the issue carrying this signature marker, if any.
-func (g *ghIssueTracker) findIssue(ctx context.Context, signature string) (*ghListIssue, error) {
+func (g *ghClient) findIssue(ctx context.Context, signature string) (*ghListIssue, error) {
 	out, err := g.run(ctx, "issue", "list", "-R", g.repo,
 		"--state", "all", "--label", syncFailureLabel, "--limit", "500",
 		"--json", "number,state,url,labels,body")
@@ -271,13 +284,13 @@ func parseTicketBody(body string) *MaintenanceTicket {
 // without either label the previous state stands.
 func reproStateFromLabels(labels []string, fallback string) string {
 	if hasLabel(labels, readyLabel) {
-		return ReproStateReady
+		return reproStateReady
 	}
 	if hasLabel(labels, needsFixtureLabel) {
-		return ReproStateNeedsFixture
+		return reproStateNeedsFixture
 	}
 	if fallback == "" {
-		return ReproStateNeedsFixture
+		return reproStateNeedsFixture
 	}
 	return fallback
 }

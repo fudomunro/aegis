@@ -38,7 +38,7 @@ func TestMatchServiceInTitle_RealManifest(t *testing.T) {
 	}
 }
 
-func TestIssueScraper_ListIssues(t *testing.T) {
+func TestGHClient_ListIssues(t *testing.T) {
 	evidenceBody := "<!-- aegis-signature: spotify|canary|terminal|shape -->\n\n" +
 		"### Evidence\n\n<!-- aegis-evidence:start -->\n" +
 		"```json\n{\"signature\":\"spotify|canary|terminal|shape\",\"service\":\"spotify\",\"repro_state\":\"ready\",\"first_seen\":\"2026-11-03T13:00:00Z\"}\n```\n" +
@@ -67,7 +67,7 @@ func TestIssueScraper_ListIssues(t *testing.T) {
 		}
 		return "", errors.New("unexpected: " + strings.Join(args, " "))
 	}}
-	g := &issueScraper{repo: "example/repo", run: rec.run}
+	g := &ghClient{repo: "example/repo", run: rec.run}
 
 	got, err := g.ListIssues(context.Background())
 	if err != nil {
@@ -113,11 +113,11 @@ func TestIsFixPR(t *testing.T) {
 	}
 }
 
-func TestIssueScraper_ListIssuesErrors(t *testing.T) {
+func TestGHClient_ListIssuesErrors(t *testing.T) {
 	rec := &recordingRun{respond: func([]string) (string, error) {
 		return "", errors.New("gh: auth required")
 	}}
-	g := &issueScraper{repo: "example/repo", run: rec.run}
+	g := &ghClient{repo: "example/repo", run: rec.run}
 	if _, err := g.ListIssues(context.Background()); err == nil {
 		t.Fatal("want transport error")
 	}
@@ -125,7 +125,7 @@ func TestIssueScraper_ListIssuesErrors(t *testing.T) {
 	rec = &recordingRun{respond: func([]string) (string, error) {
 		return "not json", nil
 	}}
-	g = &issueScraper{repo: "example/repo", run: rec.run}
+	g = &ghClient{repo: "example/repo", run: rec.run}
 	if _, err := g.ListIssues(context.Background()); err == nil {
 		t.Fatal("want parse error")
 	}

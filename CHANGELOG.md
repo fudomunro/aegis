@@ -20,6 +20,18 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **The maintenance scanner and ticket surface join the tool.** Following
+  the dashboard out of the application code (issue #335), the rest of the
+  loop's outside-the-application phases now live in `cmd/aegis-dashboard`:
+  `aegis-dashboard scan -repo owner/name -bundles <dir>` replaces
+  `POST /v1/admin/maintenance/scan`, clustering bundle failures by
+  signature and ticketing recurrent evidence as GitHub issues. The ticket
+  contract (evidence block) and the gh CLI transport have one home — the
+  scanner writes the contract, the record scrape reads it — and
+  `-maintenance-repo` / `AEGIS_MAINTENANCE_REPO` retire with the route.
+  Signal collection stays in the application: `GET`/`POST
+  /v1/admin/maintenance/signals` keeps writing the self-contained bundles
+  the tool reads. Issue #344.
 - **The maintenance dashboard is a separate tool, not application code.**
   `cmd/aegis-dashboard` now owns the whole static-site build — model,
   scoring, rendering, the gh issue-record scrape, and signal-bundle reading

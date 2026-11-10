@@ -70,7 +70,6 @@ func Run() {
 	signalPath := flag.String("signal-store", "", "path to local Signal import store (default: <data-dir>/signal.db; empty disables)")
 	importSignal := flag.String("import-signal", "", "Signal export file or directory (JSONL/JSON or plaintext SQLite) to import into the local store, then exit")
 	auditLogPath := flag.String("audit-log", "", "path to durable access audit log (default: <data-dir>/audit_log.db; empty disables)")
-	maintenanceRepo := flag.String("maintenance-repo", "", "GitHub repo (owner/name) where sync-maintenance tickets are opened as issues (reads AEGIS_MAINTENANCE_REPO if empty; empty disables ticketing)")
 	fakeUpstream := flag.Bool("fake-upstream", false, "dev/test only: serve an injectable fake provider at /demo/fake-upstream and seed placeholder tokens for services pointed at it (never enable on a real instance)")
 	auditRetentionDays := flag.Int("audit-retention-days", audit.DefaultRetentionDays, "how many days of audit events to retain before pruning")
 	importTakeout := flag.String("import-takeout", "", "read-only Google Takeout path (mbox/zip/dir) to sync into the mail archive, then exit")
@@ -201,9 +200,6 @@ func Run() {
 	}
 	if *adminLogins == "" {
 		*adminLogins = os.Getenv("AEGIS_ADMIN_LOGINS")
-	}
-	if *maintenanceRepo == "" {
-		*maintenanceRepo = os.Getenv("AEGIS_MAINTENANCE_REPO")
 	}
 	if err := validateAuthCredentials(*authMode, *apiKey, *adminAPIKey); err != nil {
 		slog.Error(err.Error())
@@ -487,13 +483,6 @@ func Run() {
 	// Drain async search-index write-behind before searchIndex.Close (its
 	// defer runs later) — registered after the store's defer on purpose.
 	defer srv.waitIndex()
-
-	// Sync-maintenance tickets are GitHub issues (issue #86). An empty repo
-	// disables ticketing: scans still cluster and report, nothing external.
-	if *maintenanceRepo != "" {
-		srv.maintenanceIssues = NewGhIssueTracker(*maintenanceRepo)
-		slog.Info("maintenance ticketing enabled", "repo", *maintenanceRepo)
-	}
 
 	// User-defined kinds (issue #15): load schema packs from the user-kinds
 	// directory (default <data-dir>/user-kinds). Fail-open — a bad schema is

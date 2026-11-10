@@ -775,7 +775,6 @@ GET /v1/admin/hook-health — Aperture hook health + expected config snippet
 POST /v1/admin/hook-health/check — validate a pasted Aperture policy/hooks JSON
 GET /v1/admin/maintenance/signals — sync-maintenance signal bundle: build stamp, sync-queue rollups, recent failures (scrubbed), copy freshness
 POST /v1/admin/maintenance/signals — capture the bundle as <data-dir>/maintenance/signals-<UTC>.json (0600) and return its path
-POST /v1/admin/maintenance/scan — scan captured bundles; ticket recurrent failures as GitHub issues (label sync-failure; body carries the structured contract)
 GET /v1/admin/cache — in-memory cache inventory (response cache and MusicBrainz lookups)
 POST /v1/admin/cache/clear — clear the response cache and MusicBrainz lookups
 GET /v1/admin/sync — sync job queue rollup + recent jobs (state, attempts, progress, next run), copy freshness per kind, and recurring schedules

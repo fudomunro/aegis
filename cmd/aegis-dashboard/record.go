@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 	"time"
@@ -12,11 +11,11 @@ import (
 	"github.com/fudomunro/aegis/internal/connectors"
 )
 
-// GitHub issue history for the sync-maintenance dashboard (issue #239,
-// issue #335). The tool scrapes the repo's issue record with the gh CLI —
-// the same transport as the ticket surface — so each service page can show
-// historical fixes alongside the signal history. A scrape failure fails the
-// build by default (an empty record must not overwrite a good previous
+// GitHub issue history for the sync-maintenance dashboard (issue #239). The
+// same gh-CLI transport as the ticket surface scrapes the repo's issue
+// record so each service page can show historical fixes alongside the signal
+// history — the maintenance loop's work made visible. A scrape failure fails
+// the build by default (an empty record must not overwrite a good previous
 // dashboard); -allow-scrape-failure degrades to a noted gap instead.
 //
 // Two kinds of record material exist:
@@ -27,24 +26,6 @@ import (
 //     open problems stay visible and count against the fix rate, completed
 //     ones read as historical fixes. Anything else is dropped — the page is
 //     a maintenance record, not an issue mirror.
-//
-// The tool reads the ticket contract (evidence block and signature marker,
-// documented in docs/sync-maintenance.md) as external format: the
-// application code writes it, this package only consumes it.
-
-// Ticket contract vocabulary the record scrape reads. Mirrors the
-// scanner-side writers in internal/core — the format is the contract.
-const (
-	syncFailureLabel      = "sync-failure"
-	needsFixtureLabel     = "needs-fixture"
-	readyLabel            = "ready"
-	reproStateNeedsFixture = "needs-fixture"
-	reproStateReady        = "ready"
-
-	signatureMarkerPrefix = "<!-- aegis-signature: "
-	evidenceStartMarker   = "<!-- aegis-evidence:start -->"
-	evidenceEndMarker     = "<!-- aegis-evidence:end -->"
-)
 
 // MaintenanceIssueRecord is one repo issue scraped for the dashboard's
 // maintenance record. Raw bodies are parsed and dropped at scrape time so
@@ -77,60 +58,10 @@ type MaintenanceIssueRecord struct {
 // fails instead of publishing a partial view.
 const scrapeIssueLimit = 2000
 
-// issueScraper reads the repo's issue history via the gh CLI. run is the
-// exec seam for tests; it receives gh arguments without the binary name and
-// returns stdout.
-type issueScraper struct {
-	repo string
-	run  func(ctx context.Context, args ...string) (string, error)
-}
-
-// newIssueScraper builds a scraper for the given owner/name repo.
-func newIssueScraper(repo string) *issueScraper {
-	return &issueScraper{
-		repo: repo,
-		run: func(ctx context.Context, args ...string) (string, error) {
-			out, err := exec.CommandContext(ctx, "gh", args...).CombinedOutput()
-			if err != nil {
-				return "", fmt.Errorf("gh %s: %w: %s", strings.Join(args[:2], " "), err, strings.TrimSpace(string(out)))
-			}
-			return string(out), nil
-		},
-	}
-}
-
-// ghLabel is one label object on an issue. gh emits labels as objects
-// ({"name": …}), not bare name strings.
-type ghLabel struct {
-	Name string `json:"name"`
-}
-
-// ghListIssue is the subset of `gh issue list --json` we rely on.
-type ghListIssue struct {
-	Number      int       `json:"number"`
-	State       string    `json:"state"`
-	StateReason string    `json:"stateReason"`
-	URL         string    `json:"url"`
-	Title       string    `json:"title"`
-	Labels      []ghLabel `json:"labels"`
-	Body        string    `json:"body"`
-	CreatedAt   time.Time `json:"createdAt"`
-	ClosedAt    time.Time `json:"closedAt"`
-}
-
-// labelNames extracts the label names for matching and repro-state lookup.
-func (i *ghListIssue) labelNames() []string {
-	out := make([]string, 0, len(i.Labels))
-	for _, l := range i.Labels {
-		out = append(out, l.Name)
-	}
-	return out
-}
-
 // ListIssues scrapes the repo's issue history via the gh CLI. A second call
 // reads merged PRs so non-ticket record items can prove they were fixed
 // (closed by a fix-convention PR).
-func (g *issueScraper) ListIssues(ctx context.Context) ([]MaintenanceIssueRecord, error) {
+func (g *ghClient) ListIssues(ctx context.Context) ([]MaintenanceIssueRecord, error) {
 	out, err := g.run(ctx, "issue", "list", "-R", g.repo,
 		"--state", "all", "--limit", strconv.Itoa(scrapeIssueLimit),
 		"--json", "number,title,url,state,stateReason,labels,createdAt,closedAt,body")
@@ -168,7 +99,7 @@ type ghListPR struct {
 
 // listFixClosedIssues returns the issue numbers a merged fix-convention PR
 // closes (fix: title or fix/ branch).
-func (g *issueScraper) listFixClosedIssues(ctx context.Context) (map[int]bool, error) {
+func (g *ghClient) listFixClosedIssues(ctx context.Context) (map[int]bool, error) {
 	out, err := g.run(ctx, "pr", "list", "-R", g.repo,
 		"--state", "merged", "--limit", strconv.Itoa(scrapeIssueLimit),
 		"--json", "title,headRefName,closingIssuesReferences")
@@ -217,55 +148,21 @@ func issueRecord(i *ghListIssue) MaintenanceIssueRecord {
 		rec.IsTicket = true
 		rec.ReproState = reproStateFromLabels(rec.Labels, "")
 	}
-	if ev := parseTicketEvidence(i.Body); ev != nil {
+	if ticket := parseTicketBody(i.Body); ticket != nil {
 		rec.IsTicket = true
-		rec.TicketService = ev.Service
+		rec.TicketService = ticket.Service
 		if rec.TicketService == "" {
-			rec.TicketService = signatureService(ev.Signature)
+			rec.TicketService = signatureService(ticket.Signature)
 		}
-		rec.FirstSeen = ev.FirstSeen
+		rec.FirstSeen = ticket.FirstSeen
 		if rec.ReproState == "" {
-			rec.ReproState = reproStateFromLabels(rec.Labels, ev.ReproState)
+			rec.ReproState = reproStateFromLabels(rec.Labels, ticket.ReproState)
 		}
 	}
 	if rec.TicketService == "" {
 		rec.TicketService = signatureService(signatureFromBody(i.Body))
 	}
 	return rec
-}
-
-// ticketEvidence is the read-only view of the ticket contract's evidence
-// block — the fields the record needs. The scanner owns the full contract;
-// this is a consumer-side projection.
-type ticketEvidence struct {
-	Signature  string    `json:"signature"`
-	Service    string    `json:"service"`
-	ReproState string    `json:"repro_state"`
-	FirstSeen  time.Time `json:"first_seen"`
-}
-
-// parseTicketEvidence extracts the ticket contract from an evidence block.
-// Returns nil when the block is missing or unparseable.
-func parseTicketEvidence(body string) *ticketEvidence {
-	start := strings.Index(body, evidenceStartMarker)
-	end := strings.Index(body, evidenceEndMarker)
-	if start < 0 || end < 0 || end < start {
-		return nil
-	}
-	block := body[start+len(evidenceStartMarker) : end]
-	block = strings.TrimSpace(block)
-	block = strings.TrimPrefix(block, "```json")
-	block = strings.TrimSuffix(strings.TrimSpace(block), "```")
-	var ev ticketEvidence
-	if err := json.Unmarshal([]byte(strings.TrimSpace(block)), &ev); err != nil {
-		return nil
-	}
-	return &ev
-}
-
-// signatureMarker is the dedup key embedded in every ticket body.
-func signatureMarker(signature string) string {
-	return signatureMarkerPrefix + signature + " -->"
 }
 
 // signatureService returns the service prefix of a failure signature
@@ -290,30 +187,6 @@ func signatureFromBody(body string) string {
 		return ""
 	}
 	return rest[:j]
-}
-
-// reproStateFromLabels lets the issue labels decide repro_state; without
-// either label the fallback stands.
-func reproStateFromLabels(labels []string, fallback string) string {
-	if hasLabel(labels, readyLabel) {
-		return reproStateReady
-	}
-	if hasLabel(labels, needsFixtureLabel) {
-		return reproStateNeedsFixture
-	}
-	if fallback == "" {
-		return reproStateNeedsFixture
-	}
-	return fallback
-}
-
-func hasLabel(labels []string, want string) bool {
-	for _, l := range labels {
-		if strings.EqualFold(l, want) {
-			return true
-		}
-	}
-	return false
 }
 
 // matchServiceInTitle attributes an issue title to a known service. Every

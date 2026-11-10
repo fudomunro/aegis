@@ -1,27 +1,20 @@
-package core
+package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"net/http"
-	"os"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"time"
-
-	"github.com/fudomunro/aegis/internal/shared"
 )
 
-// Maintenance scanner (issue #86, phase 2): reads the signal bundles a
-// capture leaves under <data-dir>/maintenance/, clusters failures by
-// normalized signature, and tickets recurrent evidence as GitHub issues via
-// an IssueTracker — there is no local defect store. A local scheduled job
-// triggers it (POST /v1/admin/maintenance/scan); the scanner itself only
-// reads paths, so it can move to cloud compute later without touching
-// instance IPC.
+// Maintenance scanner (issue #86, phase 2; issue #344): reads the signal
+// bundles a capture leaves under <data-dir>/maintenance/, clusters failures
+// by normalized signature, and tickets recurrent evidence as GitHub issues
+// via a ticketTracker — there is no local defect store. A local scheduled
+// job triggers it outside the application (`aegis-dashboard scan`); the
+// scanner only reads paths, so it can move to cloud compute later without
+// touching instance IPC.
 //
 // Two reproducibility gates, one per signal nature:
 //   - Failure clusters are event-like: ticketed only when the same signature
@@ -43,51 +36,10 @@ const (
 	scanErrorShapeCap = 120
 	// scanTitleErrorCap bounds the error excerpt in a ticket title.
 	scanTitleErrorCap = 80
+	// scanDefaultTier is the review tier scanner output lands in: triaged
+	// for connector-logic fixes until a human reclassifies it.
+	scanDefaultTier = "connector-logic"
 )
-
-// Repro-state values on a ticket (docs/sync-maintenance.md).
-const (
-	ReproStateNeedsFixture = "needs-fixture"
-	ReproStateReady        = "ready"
-)
-
-// Review tier default: scanner output is triaged for connector-logic fixes
-// until a human reclassifies it.
-const scanDefaultTier = "connector-logic"
-
-// MaintenanceTicket is the structured ticket contract (issue body evidence
-// block), not prose — see docs/sync-maintenance.md.
-type MaintenanceTicket struct {
-	Signature  string `json:"signature"`
-	Title      string `json:"title"`
-	Service    string `json:"service,omitempty"`
-	Kind       string `json:"kind,omitempty"`
-	JobType    string `json:"job_type,omitempty"`
-	ErrorClass string `json:"error_class,omitempty"`
-	// ReproState gates phase-3 pickup: needs-fixture until the repro bundle
-	// (fixture + red test) is attached, then ready.
-	ReproState string    `json:"repro_state"`
-	Fixture    string    `json:"fixture,omitempty"`
-	ReproTest  string    `json:"repro_test,omitempty"`
-	Expected   string    `json:"expected,omitempty"`
-	Actual     string    `json:"actual,omitempty"`
-	Tier       string    `json:"tier"`
-	FirstSeen  time.Time `json:"first_seen"`
-	LastSeen   time.Time `json:"last_seen"`
-	Count      int       `json:"count"`
-	// Observations is the most recent bundle evidence, newest last.
-	Observations []MaintenanceObservation `json:"observations,omitempty"`
-}
-
-// MaintenanceObservation is one bundle's evidence for a ticket. Error is the
-// already-scrubbed excerpt from the bundle.
-type MaintenanceObservation struct {
-	Bundle     string    `json:"bundle"`
-	CapturedAt time.Time `json:"captured_at"`
-	Version    string    `json:"version,omitempty"`
-	Commit     string    `json:"commit,omitempty"`
-	Error      string    `json:"error,omitempty"`
-}
 
 // MaintenanceScanReport summarizes one scan pass.
 type MaintenanceScanReport struct {
@@ -138,7 +90,7 @@ func normalizeErrorShape(s string) string {
 }
 
 // failureSignature is the stable cluster key for a failed sync job.
-func failureSignature(f MaintenanceFailure) string {
+func failureSignature(f BundleFailure) string {
 	svc := f.Service
 	if svc == "" {
 		svc = "-"
@@ -163,12 +115,12 @@ func freshnessSignature(kind string) string {
 	return kind + "|freshness|degraded|stale-or-missing"
 }
 
-// ScanMaintenanceDir runs one scan pass over the signal bundles in dir and
-// upserts GitHub issues for ticketable clusters. Rescans are idempotent:
-// counts and observation history are recomputed from the bundles on disk,
-// and the tracker preserves triage (labels, fixture/test slots) on updates.
-// A nil tracker scans only, marking ticketable clusters "disabled".
-func ScanMaintenanceDir(ctx context.Context, dir string, tracker IssueTracker) (*MaintenanceScanReport, error) {
+// scanBundles runs one scan pass over the signal bundles in dir and upserts
+// GitHub issues for ticketable clusters. Rescans are idempotent: counts and
+// observation history are recomputed from the bundles on disk, and the
+// tracker preserves triage (labels, fixture/test slots) on updates. A nil
+// tracker scans only, marking ticketable clusters "disabled".
+func scanBundles(ctx context.Context, dir string, tracker ticketTracker) (*MaintenanceScanReport, error) {
 	report := &MaintenanceScanReport{Tickets: []MaintenanceScanTicketRef{}}
 	bundles, err := loadSignalBundles(dir)
 	if err != nil {
@@ -265,40 +217,9 @@ func ScanMaintenanceDir(ctx context.Context, dir string, tracker IssueTracker) (
 	return report, nil
 }
 
-// loadSignalBundles reads signals-*.json under dir, oldest first.
-func loadSignalBundles(dir string) ([]*signalBundle, error) {
-	paths, err := filepath.Glob(filepath.Join(dir, "signals-*.json"))
-	if err != nil {
-		return nil, err
-	}
-	sort.Strings(paths)
-	out := make([]*signalBundle, 0, len(paths))
-	for _, p := range paths {
-		raw, err := os.ReadFile(p)
-		if err != nil {
-			return nil, err
-		}
-		var sig MaintenanceSignals
-		if err := json.Unmarshal(raw, &sig); err != nil {
-			return nil, fmt.Errorf("parse signal bundle %s: %w", p, err)
-		}
-		out = append(out, &signalBundle{MaintenanceSignals: sig, sourceName: filepath.Base(p)})
-	}
-	sort.Slice(out, func(i, j int) bool {
-		return out[i].CapturedAt.Before(out[j].CapturedAt)
-	})
-	return out, nil
-}
-
-// signalBundle is a bundle plus the file it came from.
-type signalBundle struct {
-	MaintenanceSignals
-	sourceName string
-}
-
 // clusterTicket builds the ticket contract for one cluster: scanner-generated
 // fields recomputed from the bundles on disk. Triage fields arrive empty and
-// are preserved by the IssueTracker on updates.
+// are preserved by the tracker on updates.
 func clusterTicket(c *scanCluster) MaintenanceTicket {
 	obs := c.obs
 	if len(obs) > scanObservationCap {
@@ -311,7 +232,7 @@ func clusterTicket(c *scanCluster) MaintenanceTicket {
 		Kind:         c.kind,
 		JobType:      c.jobType,
 		ErrorClass:   c.errorClass,
-		ReproState:   ReproStateNeedsFixture,
+		ReproState:   reproStateNeedsFixture,
 		Tier:         scanDefaultTier,
 		FirstSeen:    obs[0].CapturedAt,
 		LastSeen:     obs[len(obs)-1].CapturedAt,
@@ -342,24 +263,4 @@ func clusterTitle(c *scanCluster) string {
 		return fmt.Sprintf("%s %s failed (%s)", label, c.jobType, c.errorClass)
 	}
 	return fmt.Sprintf("%s %s failed: %s", label, c.jobType, excerpt)
-}
-
-// HandleAdminMaintenanceScan runs one scan pass over the signal bundles on
-// disk and upserts GitHub-issue tickets (POST). Admin-scoped like the rest of
-// /v1/admin — tickets name services and failure modes (issue #181).
-func (s *Server) HandleAdminMaintenanceScan(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")
-		return
-	}
-	if s.dataDir == "" {
-		shared.WriteJSONError(w, http.StatusInternalServerError, "data directory not configured")
-		return
-	}
-	report, err := ScanMaintenanceDir(r.Context(), filepath.Join(s.dataDir, dataDirMaintenanceSubdir), s.maintenanceIssues)
-	if err != nil {
-		shared.WriteJSONError(w, http.StatusInternalServerError, "scan failed: "+err.Error())
-		return
-	}
-	shared.WriteJSON(w, report)
 }

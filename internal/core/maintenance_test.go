@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
@@ -105,8 +106,20 @@ func TestWriteMaintenanceSignals(t *testing.T) {
 	dir := t.TempDir()
 	sig := MaintenanceSignals{
 		CapturedAt: time.Date(2026, 2, 10, 12, 0, 0, 0, time.UTC),
+		Hostname:   "box",
 		Version:    "dev",
 		Commit:     "none",
+		Sync: &MaintenanceSync{
+			Enabled:   true,
+			Counts:    syncjobs.SyncCounts{Succeeded: 3, Failed: 1},
+			ByService: map[string]syncjobs.SyncCounts{"spotify": {Succeeded: 3, Failed: 1}},
+			Failures: []MaintenanceFailure{{
+				ID: "j1", Kind: "tracks", JobType: "canary", Service: "spotify",
+				State: "failed", ErrorClass: "terminal", Error: "boom", Attempts: 1,
+				UpdatedAt: time.Date(2026, 2, 10, 11, 0, 0, 0, time.UTC),
+			}},
+		},
+		Freshness: []copies.Freshness{{Kind: "tracks", InSync: 2, Stale: 1}},
 	}
 	path, err := WriteMaintenanceSignals(dir, sig)
 	if err != nil {
@@ -134,8 +147,59 @@ func TestWriteMaintenanceSignals(t *testing.T) {
 	if got.Version != "dev" || got.Commit != "none" {
 		t.Fatalf("round-trip = %+v", got)
 	}
+	// Pin the file format: the maintenance tool reads these bundles as
+	// plain JSON (cmd/aegis-dashboard/bundles.go mirrors these names), so a
+	// rename here must fail loudly rather than silently empty its pages.
+	var shape map[string]any
+	if err := json.Unmarshal(raw, &shape); err != nil {
+		t.Fatalf("decode raw: %v", err)
+	}
+	for _, k := range []string{"captured_at", "hostname", "version", "commit", "sync", "freshness"} {
+		if _, ok := shape[k]; !ok {
+			t.Fatalf("bundle JSON missing %q: %s", k, raw)
+		}
+	}
+	syncObj, ok := shape["sync"].(map[string]any)
+	if !ok {
+		t.Fatalf("bundle JSON missing sync object: %s", raw)
+	}
+	for _, k := range []string{"enabled", "counts", "by_service", "failures"} {
+		if _, ok := syncObj[k]; !ok {
+			t.Fatalf("bundle sync JSON missing %q: %s", k, raw)
+		}
+	}
+	requireJSONKeys(t, raw, syncObj["counts"], "queue rollup", "queued", "running", "succeeded", "failed", "canceled", "paused")
+	if svc, ok := syncObj["by_service"].(map[string]any)["spotify"]; ok {
+		requireJSONKeys(t, raw, svc, "by_service row", "succeeded", "failed")
+	} else {
+		t.Fatalf("bundle sync JSON missing by_service.spotify: %s", raw)
+	}
+	if fails, ok := syncObj["failures"].([]any); ok && len(fails) > 0 {
+		requireJSONKeys(t, raw, fails[0], "failure row", "id", "kind", "job_type", "service", "state", "error_class", "error", "attempts", "updated_at")
+	} else {
+		t.Fatalf("bundle sync JSON missing failure rows: %s", raw)
+	}
+	if fresh, ok := shape["freshness"].([]any); ok && len(fresh) > 0 {
+		requireJSONKeys(t, raw, fresh[0], "freshness row", "kind", "in_sync", "stale", "missing", "unknown", "unchecked", "checked", "total")
+	} else {
+		t.Fatalf("bundle JSON missing freshness rows: %s", raw)
+	}
 	if _, err := WriteMaintenanceSignals("", sig); err == nil {
 		t.Fatal("empty dir must error")
+	}
+}
+
+// requireJSONKeys asserts an object carries the named keys.
+func requireJSONKeys(t *testing.T, raw []byte, v any, what string, keys ...string) {
+	t.Helper()
+	m, ok := v.(map[string]any)
+	if !ok {
+		t.Fatalf("%s is not an object: %s", what, raw)
+	}
+	for _, k := range keys {
+		if _, ok := m[k]; !ok {
+			t.Fatalf("%s missing %q: %s", what, k, raw)
+		}
 	}
 }
 

@@ -1,40 +1,62 @@
-// Command aegis-dashboard generates the sync-maintenance dashboard as a
-// static site from the repo's GitHub-issue maintenance record (issue #239).
-// It is a separate tool that analyzes the progress of the project (issue
-// #335), not part of the application code: it collects data from the gh
-// CLI, the committed services manifest, captured signal bundle files, and
-// the connector metadata catalog. The instance keeps only signal captures
-// (POST /v1/admin/maintenance/signals) on the admin surface.
+// Command aegis-dashboard is the sync-maintenance tool (issue #239, issue
+// #335, issue #344): it analyzes the progress of the project and runs the
+// loop's outside-the-application phases. It is not part of the application
+// code — data collection is file- and CLI-shaped, so the service owes the
+// tool nothing beyond artifacts it already produces (signal captures, the
+// ticket contract, the connector metadata catalog).
 //
-// Release build (the pages.yml entry point):
+// Two subcommands; bare flags mean build, so existing invocations keep
+// working:
 //
-//	go run ./cmd/aegis-dashboard -repo owner/name -out site/maintenance \
+//	build  — generate the static dashboard from the repo's GitHub-issue
+//	         maintenance record (the pages.yml entry point):
+//
+//	go run ./cmd/aegis-dashboard build -repo owner/name -out site/maintenance \
 //	  -manifest site/maintenance/services.json
 //
-// Instance build from captured bundles:
+//	scan   — run the maintenance scanner over captured signal bundles
+//	         (POST /v1/admin/maintenance/signals used to do this in-app),
+//	         ticketing recurrent failures as GitHub issues:
 //
-//	go run ./cmd/aegis-dashboard -repo owner/name \
-//	  -bundles "$DATA/maintenance" -out "$DATA/maintenance/dashboard" -private
+//	go run ./cmd/aegis-dashboard scan -repo owner/name \
+//	  -bundles "$DATA/maintenance"
 package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 	"time"
 )
 
 func main() {
-	repo := flag.String("repo", os.Getenv("GITHUB_REPOSITORY"), "GitHub repo (owner/name) to scrape for the maintenance record")
-	out := flag.String("out", "site/maintenance", "output directory for the static dashboard")
-	manifest := flag.String("manifest", "", "optional services manifest (JSON) naming the pages to show")
-	bundles := flag.String("bundles", "", "optional directory of captured signal bundles (signals-*.json) to build capture history from")
-	version := flag.String("version", "dev", "build version stamp for record-only builds (captures carry their own stamps)")
-	commit := flag.String("commit", "none", "build commit stamp for record-only builds (captures carry their own stamps)")
-	private := flag.Bool("private", false, "write the private posture (0600/0700) for instance builds under a data directory")
-	allowScrapeFailure := flag.Bool("allow-scrape-failure", false, "build without the maintenance record on a scrape error (notes the gap instead of failing)")
-	flag.Parse()
+	args := os.Args[1:]
+	if len(args) > 0 && args[0] == "scan" {
+		runScan(args[1:])
+		return
+	}
+	if len(args) > 0 && args[0] == "build" {
+		args = args[1:]
+	} else if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		fail("unknown command " + args[0] + " (want build or scan)")
+	}
+	runBuild(args)
+}
+
+func runBuild(args []string) {
+	fs := flag.NewFlagSet("build", flag.ExitOnError)
+	repo := fs.String("repo", os.Getenv("GITHUB_REPOSITORY"), "GitHub repo (owner/name) to scrape for the maintenance record")
+	out := fs.String("out", "site/maintenance", "output directory for the static dashboard")
+	manifest := fs.String("manifest", "", "optional services manifest (JSON) naming the pages to show")
+	bundles := fs.String("bundles", "", "optional directory of captured signal bundles (signals-*.json) to build capture history from")
+	version := fs.String("version", "dev", "build version stamp for record-only builds (captures carry their own stamps)")
+	commit := fs.String("commit", "none", "build commit stamp for record-only builds (captures carry their own stamps)")
+	private := fs.Bool("private", false, "write the private posture (0600/0700) for instance builds under a data directory")
+	allowScrapeFailure := fs.Bool("allow-scrape-failure", false, "build without the maintenance record on a scrape error (notes the gap instead of failing)")
+	fs.Parse(args)
 
 	if *repo == "" {
 		fail("the -repo flag (or GITHUB_REPOSITORY) is required")
@@ -52,12 +74,17 @@ func main() {
 		if series, err = loadSignalBundles(*bundles); err != nil {
 			fail("load signal bundles: " + err.Error())
 		}
+		// An explicit -bundles with nothing behind it is a wrong path; a
+		// record-only build must drop the flag instead.
+		if len(series) == 0 {
+			fail("no signal bundles in " + *bundles)
+		}
 	}
 
 	// A scrape failure fails the build by default: the release publishes
 	// evidence, and an empty record must not overwrite a good previous
 	// dashboard. -allow-scrape-failure degrades to a noted gap instead.
-	records, scrapeErr := newIssueScraper(*repo).ListIssues(context.Background())
+	records, scrapeErr := newGHClient(*repo).ListIssues(context.Background())
 	if scrapeErr != nil {
 		if !*allowScrapeFailure {
 			fail("scrape maintenance record: " + scrapeErr.Error())
@@ -87,6 +114,33 @@ func main() {
 		fail("build dashboard: " + err.Error())
 	}
 	fmt.Println(index)
+}
+
+// runScan runs the maintenance scanner over captured bundles and prints the
+// scan report as JSON. Ticketing needs a repo (the gh CLI); without one the
+// pass scans only, marking ticketable clusters "disabled".
+func runScan(args []string) {
+	fs := flag.NewFlagSet("scan", flag.ExitOnError)
+	repo := fs.String("repo", os.Getenv("GITHUB_REPOSITORY"), "GitHub repo (owner/name) to open tickets in; empty scans without ticketing")
+	bundles := fs.String("bundles", "", "directory of captured signal bundles (signals-*.json) to scan")
+	fs.Parse(args)
+
+	if *bundles == "" {
+		fail("the -bundles flag is required")
+	}
+	var tracker ticketTracker
+	if *repo != "" {
+		tracker = newGHClient(*repo)
+	}
+	report, err := scanBundles(context.Background(), *bundles, tracker)
+	if err != nil {
+		fail("scan: " + err.Error())
+	}
+	out, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		fail("encode report: " + err.Error())
+	}
+	fmt.Println(string(out))
 }
 
 func fail(msg string) {

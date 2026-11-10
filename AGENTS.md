@@ -125,7 +125,7 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Admin UI | `internal/core/web/admin.html` via `//go:embed` | Keep SPA markup out of Go handlers; setup panels render connector-declared specs (issue #265) |
 | Onboarding runner | `internal/core` hub (host), `internal/shared` (shapes), impls beside each connector | Generic `/v1/admin/setup/{id}` host over `connectors.Onboarder` (design: `docs/connector-onboarding.md`) |
 | Docs walkthrough | `experiments/index.html` | Experimental walkthrough under `experiments/` (not CI-gated); stamp with current commit when regenerated |
-| Maintenance dashboard generator | `cmd/aegis-dashboard` | Separate tool (issue #335): builds the static sync-maintenance dashboard from the repo's issue record, the services manifest, captured signal bundles (`-bundles`), and the connector metadata catalog. Instance-level captures stay on the admin surface; the application code contains no dashboard |
+| Maintenance tooling (dashboard, scanner, tickets) | `cmd/aegis-dashboard` | Separate tool (issues #335, #344): builds the static sync-maintenance dashboard from the repo's issue record, the services manifest, captured signal bundles (`build -bundles`), and the connector metadata catalog; `scan` runs the maintenance scanner that opens sync-failure tickets. Instance-level captures stay on the admin surface (`/v1/admin/maintenance/signals`); the application code contains no dashboard, scanner, or ticket surface |
 
 ### Extension points agents must use
 
@@ -462,7 +462,7 @@ over the hostile-input parsers, and `go build -o aegis .`.
 | Admin map / flow | `internal/core` hub, `internal/core/web/admin.html` |
 | Auth model / ACLs | `SECURITY.md`, `internal/core` hub (identity) |
 | Product/API docs | `README.md` (entry), `docs/api.md`, `docs/configuration.md`, `docs/connect/` |
-| Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); signals surface in `docs/observability.md` |
+| Sync maintenance / self-repair loop | `docs/sync-maintenance.md` (#86); capture surface in `docs/observability.md`, scanner and ticket surface in `cmd/aegis-dashboard` |
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go`); design under issue #227 |
 | Access stats / Prometheus export | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers); `docs/observability.md` |
 | Past hard-won facts | Project/global memory + session checkpoints under `~/.local/share/mimocode/memory/` |
