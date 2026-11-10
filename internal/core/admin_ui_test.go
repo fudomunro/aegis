@@ -100,10 +100,6 @@ func TestAdminHTML_UICleanup(t *testing.T) {
 		"typeOtherAccessorsHTML",
 		"type-access-row",
 		"Saves to",
-		"Service limits",
-		"renderPermEditor(svc)",
-		"perm-live",
-		"applyPermissionsLocally",
 		// Kind icons on permission form labels
 		"dataTypeIconHTML",
 		"perm-type-icon",

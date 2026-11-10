@@ -25,10 +25,6 @@ func TestCapabilityHelpers(t *testing.T) {
 	if !IsMutatingMethod(http.MethodPost) || IsMutatingMethod(http.MethodGet) {
 		t.Fatal("IsMutatingMethod")
 	}
-	writable := WritableKindsFromCapabilities(caps)
-	if len(writable) != 1 || writable[0] != "tracks" {
-		t.Fatalf("writable = %v", writable)
-	}
 }
 
 func TestIsAgentDataWritePath(t *testing.T) {

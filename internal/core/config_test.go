@@ -221,7 +221,7 @@ func TestDuration_MarshalJSON(t *testing.T) {
 func TestGetService_ReturnsSnapshot(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", GrantLimits: policy.Permissions{"player": policy.AccessNone}},
+			{ID: "spotify", Name: "Spotify", Headers: map[string]string{"X-Api-Key": "k"}},
 		},
 	}
 
@@ -231,14 +231,14 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 	}
 	// Mutating the snapshot must not touch the live store.
 	svc.Endpoint = "https://mutated.example"
-	svc.GrantLimits["player"] = policy.AccessFull
+	svc.Headers["X-Test"] = "mutated"
 
 	live := cfg.GetService("spotify")
 	if live.Endpoint != "" {
 		t.Fatalf("Endpoint leaked to store: %q", live.Endpoint)
 	}
-	if live.GrantLimits.Level("player") != policy.AccessNone {
-		t.Fatalf("Permissions mutated via snapshot: %q", live.GrantLimits.Level("player"))
+	if _, ok := live.Headers["X-Test"]; ok {
+		t.Fatalf("Headers mutated via snapshot: %v", live.Headers)
 	}
 
 	if !cfg.updateService("spotify", func(s *Service) { s.Endpoint = "https://mock.example" }) {
@@ -252,13 +252,13 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 	}
 }
 
-// Issue #95: concurrent admin permission writes must not race proxy/library
-// readers that snapshot services.
-func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
+// Issue #95: concurrent admin data-grant writes must not race
+// proxy/library readers that snapshot services.
+func TestConfig_ConcurrentSetDataGrantsAndReads(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone}},
-			{ID: "youtube-music", Name: "YouTube Music", Action: "inject", GrantLimits: policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead}},
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
+			{ID: "youtube-music", Name: "YouTube Music", Action: "inject"},
 		},
 	}
 	permsPath := filepath.Join(t.TempDir(), "data_grants.json")
@@ -274,12 +274,15 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
-			p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessRead, "player": policy.AccessNone, "tracks": policy.AccessNone}
-			if i%2 == 0 {
-				p = policy.Permissions{"player": policy.AccessNone, "default": policy.AccessRead, "playlists": policy.AccessRead}
+			grants := policy.DataGrants{
+				"tracks": {Default: policy.AccessRead},
+				"player": {Default: policy.AccessNone},
 			}
-			if err := cfg.SetServicePermissions("spotify", p); err != nil {
-				t.Errorf("SetServicePermissions: %v", err)
+			if i%2 == 0 {
+				grants = policy.DataGrants{"playlists": {Default: policy.AccessRead}}
+			}
+			if err := cfg.SetDataGrants(grants); err != nil {
+				t.Errorf("SetDataGrants: %v", err)
 				return
 			}
 		}
@@ -293,8 +296,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 				t.Error("GetService returned nil")
 				return
 			}
-			_ = svc.GrantLimits.AllowsRead("tracks")
-			_ = svc.GrantLimits.Level("")
+			_ = cfg.DataGrants().Levels().Level("tracks")
 			_ = svc.Endpoint
 		}
 	}()
@@ -303,7 +305,6 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
 			for _, svc := range cfg.ServiceSnapshots() {
-				_ = svc.GrantLimits.AllowsRead("tracks")
 				_ = svc.IsCanonicalFor("playlists")
 			}
 			_ = srv.libraryReadableFor("tracks")
@@ -316,9 +317,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 		defer wg.Done()
 		for i := 0; i < iterations; i++ {
 			matched := cfg.FindMatchingServices("play something on spotify")
-			for _, svc := range matched {
-				_ = svc.GrantLimits.Level("player")
-			}
+			_ = len(matched)
 			_ = cfg.ServiceCount()
 		}
 	}()

@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
@@ -19,13 +17,11 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 				Name:         "Spotify",
 				Action:       "inject",
 				CanonicalFor: []string{"playlists"},
-				GrantLimits:  policy.Permissions{"playlists": policy.AccessWrite, "tracks": policy.AccessWrite},
 			},
 			{
-				ID:          "youtube-music",
-				Name:        "YouTube Music",
-				Action:      "inject",
-				GrantLimits: policy.Permissions{"playlists": policy.AccessWrite, "tracks": policy.AccessRead},
+				ID:     "youtube-music",
+				Name:   "YouTube Music",
+				Action: "inject",
 			},
 		},
 	}
@@ -64,7 +60,7 @@ func TestWritePolicyNotice_HomeAndSecondary(t *testing.T) {
 func TestWritePolicyNotice_EmptyWithoutWriteOrHome(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", GrantLimits: policy.Permissions{"default": policy.AccessRead}},
+			{ID: "spotify", Name: "Spotify", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -93,7 +89,6 @@ func TestPreRequest_InjectsWritePolicy(t *testing.T) {
 				Aliases:      []string{"spotify music"},
 				Action:       "inject",
 				CanonicalFor: []string{"playlists"},
-				GrantLimits:  policy.Permissions{"playlists": policy.AccessWrite},
 				Endpoint:     "https://api.spotify.com/v1",
 			},
 		},
@@ -145,14 +140,13 @@ func TestWritePolicyNotices_DedupesIdentical(t *testing.T) {
 	// Two services with the same write relationship produce the same notice
 	// text only when they share name/home — build one service twice via matched slice.
 	svc := Service{
-		ID:          "spotify",
-		Name:        "Spotify",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"playlists": policy.AccessWrite},
+		ID:     "spotify",
+		Name:   "Spotify",
+		Action: "inject",
 	}
 	cfg := &Config{
 		Services: []Service{
-			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}, GrantLimits: policy.Permissions{"playlists": policy.AccessWrite}},
+			{ID: "spotify", Name: "Spotify", Action: "inject", CanonicalFor: []string{"playlists"}},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

@@ -132,10 +132,9 @@ func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
 
 func TestHandleLibraryEvents_FullReadKeepsTitles(t *testing.T) {
 	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:     "google-calendar",
+		Name:   "Google Calendar",
+		Action: "inject",
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
@@ -172,10 +171,9 @@ func TestLibraryRouteHandlers_IncludesFreeBusy(t *testing.T) {
 // Ensure freebusy lister still fans out when one provider errors (fail-open).
 func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessRead},
+		ID:     "google-calendar",
+		Name:   "Google Calendar",
+		Action: "inject",
 	}
 	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: []kinds.CalendarEvent{

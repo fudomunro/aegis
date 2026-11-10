@@ -2,7 +2,6 @@ package shared
 
 import (
 	"net/http"
-	"sort"
 	"strings"
 )
 
@@ -113,19 +112,6 @@ func KindHasAgentWriteOp(caps ServiceCapabilities, kind string) bool {
 		}
 	}
 	return false
-}
-
-// WritableKindsFromCapabilities lists kinds with at least one
-// agent-meaningful mutating connector operation.
-func WritableKindsFromCapabilities(caps ServiceCapabilities) []string {
-	var out []string
-	for _, dt := range caps.Kinds {
-		if KindHasAgentWriteOp(caps, dt.Name) {
-			out = append(out, dt.Name)
-		}
-	}
-	sort.Strings(out)
-	return out
 }
 
 // IsAgentDataWritePath filters mutating ops that are not "agents may change

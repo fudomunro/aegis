@@ -128,11 +128,11 @@ func TestHandleAdminPermissions_OversizedBodyReturns413(t *testing.T) {
 	cfg := &Config{Services: []Service{{ID: "spotify", Name: "Spotify", Action: "inject"}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	payload := bytes.Repeat([]byte("p"), maxAdminBodyBytes+1024)
-	req := httptest.NewRequest("PUT", "/v1/admin/services/spotify/grant-limits", bytes.NewReader(payload))
+	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", bytes.NewReader(payload))
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 
-	srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdminServiceGrantLimits))(w, req)
+	srv.AuthMiddleware(withBodyLimit(maxAdminBodyBytes, srv.HandleAdminDataGrants))(w, req)
 
 	if w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("status = %d, want 413, body = %s", w.Code, w.Body.String())

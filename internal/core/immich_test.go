@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -24,7 +23,6 @@ func testImmichServer(t *testing.T, handler http.Handler) (*Server, *httptest.Se
 				Endpoint:     ts.URL,
 				Headers:      map[string]string{"X-API-Key": "test-immich-key"},
 				CanonicalFor: []string{"photos"},
-				GrantLimits:  policy.Permissions{"default": policy.AccessRead, "photos": policy.AccessRead},
 			},
 		},
 	}

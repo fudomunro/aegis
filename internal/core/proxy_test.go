@@ -325,12 +325,3 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 	// srv.search after construction.
 	return srv
 }
-
-func stringSliceContains(ss []string, v string) bool {
-	for _, s := range ss {
-		if s == v {
-			return true
-		}
-	}
-	return false
-}

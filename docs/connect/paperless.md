@@ -11,10 +11,9 @@ API base (`…/api`) and a token:
   "endpoint": "http://192.168.1.10:8000/api",
   "headers": {"Authorization": "Token …"},
   "canonical_for": ["documents"],
-  "grant_limits": {"documents": "read"}
 }
 ```
 
-Use `documents: "metadata"` in a data grant (or `grant_limits`) to let agents
+Use `documents: "metadata"` in a data grant to let agents
 browse titles/tags without excerpts or full text.
 

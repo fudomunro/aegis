@@ -247,17 +247,14 @@ func BareEventIDFromProxyPath(remainingPath string) (string, bool) {
 	return "", false
 }
 
-// EventsFreeBusyOnly reports whether this service's events permission is the
-// free/busy share (issue #128). Proxy responses must drop titles/attendees.
-func (c *GoogleCalendarConnector) EventsFreeBusyOnly() bool {
+// EventsFreeBusyOnly reports whether the request's data grant limits events
+// to the free/busy share (issue #128). Proxy responses must drop
+// titles/attendees.
+func (c *GoogleCalendarConnector) EventsFreeBusyOnly(r *http.Request) bool {
 	if c.host == nil {
 		return false
 	}
-	svc := c.host.ServiceConfig(GoogleCalendarServiceID)
-	if svc == nil {
-		return false
-	}
-	return policy.IsFreeBusyAccess(svc.GrantLimits.Level("events"))
+	return policy.IsFreeBusyAccess(c.host.RequestLevel(r, "events"))
 }
 
 func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *http.Request) {
@@ -275,7 +272,7 @@ func (c *GoogleCalendarConnector) HandleListEvents(w http.ResponseWriter, r *htt
 	if events == nil {
 		events = []kinds.CalendarEvent{}
 	}
-	if c.EventsFreeBusyOnly() {
+	if c.EventsFreeBusyOnly(r) {
 		events = kinds.RedactCalendarEventsFreeBusy(events)
 	}
 	result := kinds.CalendarEventList{
@@ -316,7 +313,7 @@ func (c *GoogleCalendarConnector) HandleListCalendarEvents(w http.ResponseWriter
 	if events == nil {
 		events = []kinds.CalendarEvent{}
 	}
-	if c.EventsFreeBusyOnly() {
+	if c.EventsFreeBusyOnly(r) {
 		events = kinds.RedactCalendarEventsFreeBusy(events)
 	}
 	result := kinds.CalendarEventList{
@@ -407,7 +404,7 @@ func (c *GoogleCalendarConnector) HandleGetEvent(w http.ResponseWriter, r *http.
 		return
 	}
 	ev := MapGoogleCalendarEvent(raw, calendarID, GoogleCalendarServiceName)
-	if c.EventsFreeBusyOnly() {
+	if c.EventsFreeBusyOnly(r) {
 		ev = kinds.RedactCalendarEventFreeBusy(ev)
 	}
 	out, err := json.Marshal(ev)

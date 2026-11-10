@@ -9,19 +9,17 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // ServiceInfo is the configured surface a connector may read. Narrower than
 // core config.Service so this package does not own OAuth/config file types.
 type ServiceInfo struct {
-	ID          string
-	Action      string
-	Endpoint    string
-	Headers     map[string]string
-	CacheTTL    time.Duration
-	GrantLimits policy.Permissions
+	ID       string
+	Action   string
+	Endpoint string
+	Headers  map[string]string
+	CacheTTL time.Duration
 	// CanonicalFor names the library kinds this service is the home copy
 	// for. Aegis stores metadata only; canonical content stays on the
 	// source service.
@@ -40,6 +38,10 @@ type Host interface {
 	UpstreamBaseFor(serviceID, fallback string) string
 	// ServiceConfig returns the configured service surface, or nil.
 	ServiceConfig(serviceID string) *ServiceInfo
+	// RequestLevel returns the access level the request's key grants for
+	// kind (deny-by-default). Connectors use it only to narrow
+	// content-transport responses (e.g. freebusy shaping).
+	RequestLevel(r *http.Request, kind string) string
 	// BaseURL is the public base URL of this Aegis instance.
 	BaseURL() string
 	// CacheGet returns a cached value when present and live.

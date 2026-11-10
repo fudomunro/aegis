@@ -27,7 +27,6 @@ Aegis is configured via a JSON file. See [`aegis.example.json`](../aegis.example
 | `endpoint` | Upstream API base URL |
 | `headers` | Static headers to add to upstream requests (optional) |
 | `cache_ttl` | How long to cache GET responses (e.g. `5m`, `1h`) |
-| `grant_limits` | Optional map of kind → access level for agents (migration override; can only tighten data grant — see [Data grants](configuration.md)) |
 | `canonical_for` | Optional list of library kinds where this service is the authoritative non-Aegis home (see [Canonical sources](configuration.md)) |
 | `connection` | Name of a shared OAuth provider connection (required for OAuth-enabled surfaces) |
 | `oauth_scopes` | Scopes this surface requires from its connection; missing scopes degrade that surface to `unauthorized` |
@@ -146,16 +145,14 @@ application-layer side of Tailscale-style access — you already use a tailnet
 grant so callers can *reach* Aegis; data grants say what they may *use*.
 
 Prefer the glossary terms here ([`docs/glossary.md`](glossary.md)):
-**data grant** is the product idea; **data grants map** is where **agent** data
-grants live; **Service limits** can only tighten that default;
-**app data grants** scope third-party tokens. JSON/config keys stay
-`data_grants`, `grant_limits`, `data_grants.json`.
+**data grant** is the product idea; **data grants map** is where the grants
+live; **app data grants** scope third-party tokens. JSON/config keys stay
+`data_grants` / `data_grants.json`.
 
-Data grants live with **kinds**, not service providers. The
-primary model is a per-data grant: a kind-level default plus optional
-per-provider overrides that can only **tighten** that default. Service
-`permissions` maps remain as migration overrides and can only further
-restrict what a data grant allows.
+Data grants live with **kinds**, not service providers. Each recognized
+key (agent key, invite token, app token) carries one kind → access-level
+map, and authorization is a single lookup over it: an explicit kind entry
+wins, else the reserved `default` entry, else `none`.
 
 **Accessors.** Data is not only reached by LLM agents. Aegis also
 runs sync pipelines (mail archive, copy ledger, timeline/quicken import) and
@@ -176,33 +173,11 @@ appear as additional accessor rows.
 Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin “Data grants”):
 
 ```json
-"types": {
-  "tracks": {
-    "default": "read-write",
-    "providers": {
-      "spotify": "read"
-    }
-  },
+"data_grants": {
+  "tracks": { "default": "read-write" },
   "player": { "default": "none" },
-  "places": {
-    "default": "none",
-    "providers": {
-      "google-timeline": "city"
-    }
-  }
-}
-```
-
-Service limits (still accepted; tighten-only once a data grant
-exists for that key):
-
-```json
-"grant_limits": {
-  "default": "read",
-  "playlists": "read",
-  "tracks": "read",
-  "player": "none",
-  "recommendations": "none"
+  "places": { "default": "city" },
+  "default": { "default": "read" }
 }
 ```
 
@@ -218,20 +193,15 @@ exists for that key):
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
 
-**Resolution order**:
+**Resolution** (uniform deny-by-default):
 
-1. **Kind default** — `types[type].default`. Empty default keeps previous
- unrestricted behavior (`read-write`) except for opt-in kinds.
-2. **Provider override** — `types[type].providers[service_id]`, which can
- only tighten the kind default (e.g. `read` → `none`, `precise` → `city`).
-3. **Legacy service `permissions`** — during the migration window these are
- provider overrides and can only tighten. When **no data grant exists** for
- a key, the service map remains authoritative (so existing configs and
- places opt-in keep working).
+1. **Explicit kind entry** — `data_grants[kind].default`, normalized.
+2. **Reserved `default` key** — the level for kinds not listed, except
+ opt-in kinds (below), which never open through `default`.
+3. Otherwise **`none`**. Malformed level tokens deny.
 
-- The reserved key `default` in a service map applies to kinds not listed —
- **except `places`**, which is opt-in (see below). Data grant has no cross-type
- `default` key: each kind owns its own default.
+Per-provider entries inside a `DataGrant` (`providers`) are legacy
+migration data and are ignored at request time.
 - **`freebusy` is events-only**. Scheduling apps can see when you
  are busy without reading titles, attendees, locations, or descriptions.
  Responses keep only `start_at`, `end_at`, `all_day`, and `status`. Prefer
@@ -247,10 +217,9 @@ exists for that key):
  `default`.
 - **`places` is opt-in and uses a city / read / precise ladder**.
  Location history is the most sensitive kind we ship: **default is
- `none`**, and neither a kind-level empty default nor a service `default` key
- enables it. Name it explicitly — kind default, kind `providers[id]`, or a
- service `permissions.places` entry. Pre-request injection never advertises
- `places` until it is named. Granularity:
+ `none`**, and the reserved `default` key never enables it. Name it
+ explicitly. Pre-request injection never advertises `places` until it is
+ named. Granularity:
  - `city` — locality, country, and the visit/trip window only (enough for
  "was I out of town?"). No names, addresses, coordinates, or raw point IDs.
  - `read` — full place names and addresses, still no coordinates.
@@ -268,36 +237,26 @@ exists for that key):
  metadata access is list-only and cannot fetch text. The level is rejected
  on other kinds and on `default`. Per-tag allow/deny (e.g. hide
  `medical`) is a design spike, not implemented.
-- **Unknown proxy paths** (not a mapped kind) use the **strictest**
- configured level, not a kind default, so a tight kind cannot be bypassed by an
- unmapped endpoint.
+- **Unknown proxy paths** (not a mapped kind) resolve like any unlisted
+ kind: the reserved `default` key, else `none`.
 - Proxy paths are **canonicalized before classification**. Duplicate slashes
  (including `%2f`) collapse to the real kind; `.` / `..` segments are rejected
  with `400`. Classification and upstream routing always see the same path.
-- If neither data grant nor service `permissions` is set, agents keep
- unrestricted access (previous behavior).
-- **Bootstrap vs overlay.** `aegis.json` may set bootstrap
- `permissions` per service. Admin UI saves write a separate
- `data_grants.json` overlay (flag `-data-grants-file`) schema **version 3**:
- `data_grants` (primary DataGrant map) and `service_limits` (tighten-only migration
- overrides). A service present in the overlay uses those permissions; a
- present key set to `null` means unrestricted; services absent from the
- overlay keep the bootstrap map from `aegis.json`. Version 1 files
- (`services` only) still load. The overlay holds no secrets — admin
- permission edits never rewrite OAuth client credentials.
-- Permissions **further constrain** the connector; they never add capabilities.
- The admin form only offers **Editable** for kinds with a true agent data-write
- operation on the connector. Mirror backup writes and photo-picker session
- creates are not Editable. Write / read-write on a kind the form cannot offer
- is treated as read when saved from the admin UI (proxy still allows mutating
- methods the connector implements if the config already has write and you do
- not re-save). Enable write explicitly when a real agent write op appears.
+- The owner key is materialized with a permissive `default` entry when no
+ grants are configured, so fresh installs stay unrestricted out of the box.
+- **Bootstrap vs overlay.** `aegis.json` may set bootstrap `data_grants`.
+ Admin UI saves write a separate `data_grants.json` overlay (flag
+ `-data-grants-file`) schema **version 3**: a `data_grants` map. A present
+ map (including empty) replaces the bootstrap map; a missing map leaves it
+ in place. Legacy `service_limits` keys in old files are ignored. The
+ overlay holds no secrets — admin grant edits never rewrite OAuth client
+ credentials.
+- Grants **further constrain** the connector; they never add capabilities.
+ A write level never unlocks mutating calls the connector does not
+ implement (picker/session POSTs are not agent data writes).
 - Enforcement is on the content/ingest transport, the unified library endpoint, and connector metadata (denied types/operations are hidden from agents).
 - Pre-request injection also lists denied types so agents do not try them.
-- Admin API: `GET/PUT /v1/admin/data-grants` is the primary editor;
- `GET/PUT /v1/admin/services/{id}/grant-limits` remains the secondary
- per-service override (and still reports `effective_permissions` after
- data-grant resolution).
+- Admin API: `GET/PUT /v1/admin/data-grants` is the editor.
 
 Known kinds: `user`, `tracks`, `albums`, `artists`, `playlists`, `search`,
 `player`, `channels`, `library`, `recommendations`, `contacts`, `photos`,

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	_ "modernc.org/sqlite"
 )
 
@@ -165,13 +164,12 @@ type ImportStoreStatus struct {
 
 // LocalStoreService is the service card a local import store injects into
 // config so /v1/library fan-in sees it as a source (issue #266). Declared
-// beside the store so registration, naming, and grants read one table.
+// beside the store so registration and naming read one table.
 type LocalStoreService struct {
 	ID          string
 	Name        string
 	Action      string
 	Description string
-	GrantLimits policy.Permissions
 }
 
 // ImportStats counts one import run. Store-specific result DTOs wrap these.

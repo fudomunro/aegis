@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -40,10 +39,6 @@ func SignalService() LocalStoreService {
 		Name:        SignalServiceName,
 		Action:      "inject",
 		Description: "Locally imported Signal contacts and messages (Advanced → Signal import).",
-		GrantLimits: policy.Permissions{
-			"contacts": policy.AccessRead,
-			"messages": policy.AccessRead,
-		},
 	}
 }
 

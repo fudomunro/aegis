@@ -308,8 +308,8 @@ an authorized LLM agent or app do with each kind” — for example deny
 alongside Tailscale **grants** (who can reach Aegis); see
 [`docs/glossary.md`](docs/glossary.md).
 
-Agent data grants live in `data_grants` (aegis.json or `data_grants.json`);
-service `grant_limits` only tighten. Denials are enforced on the
+Agent data grants live in `data_grants` (aegis.json or `data_grants.json`).
+Denials are enforced on the
 content/ingest proxy and library endpoints with 403. Agent discovery is via
 pre-request instructions and connector `SystemInstructions` (issue #119) — not
 a capabilities listing API. Omitting a data grant (or `permissions`) preserves

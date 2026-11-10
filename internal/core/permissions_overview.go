@@ -41,9 +41,6 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 	policies := s.config.DataGrants()
 	var extra []string
 	extra = append(extra, policy.ExtraPolicyKeys(policies)...)
-	for _, svc := range s.config.ServiceSnapshots() {
-		extra = append(extra, policy.ExtraPermissionKeys(svc.GrantLimits)...)
-	}
 	if s.apps != nil {
 		for _, app := range s.apps.List() {
 			extra = append(extra, policy.ExtraPermissionKeys(app.Scopes)...)
@@ -193,7 +190,7 @@ func (s *Server) permissionsOverview() policy.PermissionsOverview {
 			Detail:   "Service Aegis syncs with for this kind (read-only here).",
 			Levels:   levels,
 			Explicit: explicit,
-			// Service grant_limits are edited on the service card.
+			// Informational only — data grants own access.
 			Editable: false,
 		})
 	}

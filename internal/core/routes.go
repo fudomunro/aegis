@@ -150,7 +150,6 @@ func registerAdminRoutes(mux *http.ServeMux, srv *Server) {
 	mux.HandleFunc("/v1/admin/ownership/{path...}", admin(srv.HandleAdminOwnership))
 	mux.HandleFunc("/v1/admin/data-scopes", admin(srv.HandleAdminDataScopes))
 	mux.HandleFunc("/v1/admin/data-scopes/{path...}", admin(srv.HandleAdminDataScopes))
-	mux.HandleFunc("/v1/admin/services/{id}/grant-limits", admin(srv.HandleAdminServiceGrantLimits))
 	mux.HandleFunc("/v1/admin/apps", admin(srv.HandleAdminApps))
 	mux.HandleFunc("/v1/admin/apps/{path...}", admin(srv.HandleAdminApps))
 	mux.HandleFunc("/v1/admin/setup/{path...}", admin(srv.handleAdminOnboarding))

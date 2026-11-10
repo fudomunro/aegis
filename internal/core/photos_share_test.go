@@ -268,8 +268,8 @@ func TestHandlePhotoShare_UpstreamErrors(t *testing.T) {
 func TestHandlePhotoShare_UnsupportedSourceWithoutBytes(t *testing.T) {
 	cfg := &Config{
 		Services: []Service{
-			{ID: "google-photos", Name: "Google Photos", Action: "inject", GrantLimits: policy.Permissions{"photos": policy.AccessRead}},
-			{ID: "bluesky", Name: "Bluesky", Action: "inject", GrantLimits: policy.Permissions{"photos": policy.AccessFull}},
+			{ID: "google-photos", Name: "Google Photos", Action: "inject"},
+			{ID: "bluesky", Name: "Bluesky", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -325,9 +325,8 @@ func TestBlueskySharePhoto_IntegrationMock(t *testing.T) {
 		Services: []Service{
 			{
 				ID: "immich", Name: "Immich", Action: "inject",
-				Endpoint:    immich.URL,
-				Headers:     map[string]string{"X-API-Key": "ik"},
-				GrantLimits: policy.Permissions{"photos": policy.AccessRead},
+				Endpoint: immich.URL,
+				Headers:  map[string]string{"X-API-Key": "ik"},
 			},
 			{
 				ID: "bluesky", Name: "Bluesky", Action: "inject",
@@ -336,7 +335,6 @@ func TestBlueskySharePhoto_IntegrationMock(t *testing.T) {
 					"X-Bluesky-Handle":       "alice.bsky.social",
 					"X-Bluesky-App-Password": "app-pass",
 				},
-				GrantLimits: policy.Permissions{"photos": policy.AccessFull},
 			},
 		},
 	}

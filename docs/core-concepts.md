@@ -54,8 +54,6 @@ the most weight in product language.
 |---------|----------------|
 | **Data grant** (user allows agent/app to use a library kind at an access level) | product |
 | **DataGrant** (where agent data grants live) | product + code |
-| Service grant limits (tighten-only) | product + code |
-| **EffectiveAccess** | code |
 | Access levels (`none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write`) | product + code |
 | Accessor / AccessorKind (issue #160) | code + admin |
 | PermissionsOverview / KindAccess | admin |
@@ -247,10 +245,8 @@ After the overlap call-outs above, the stable concepts.
 | Concept | Definition | Key files |
 |---------|------------|-----------|
 | **Data grant** | What the user does to allow an LLM agent or app to use a library kind at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
-| **DataGrant** | Kind-owned store of agent data grants: `Default` level + optional per-provider tighten. | `internal/core/policy/policy.go` |
-| **Service grant limits** | Service-scoped `map[dataType]level` that can only tighten a data grant. | `internal/core/policy/policy.go`, `permissions_overlay.go` |
-| **EffectiveAccess** | Resolved level for (type, provider) combining data grant + service tighten. | `internal/core/policy/policy.go`, `config.go` |
-| **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Default `read-write`. | `internal/core/policy/policy.go` |
+| **DataGrant** | Stored agent data grant per kind: `Default` level (per-provider entries are legacy and ignored). | `internal/core/policy/policy.go` |
+| **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Resolution is deny-by-default (explicit → `default` → `none`). | `internal/core/policy/grants.go` |
 | **Accessor** | Principal-level allowed access per library kind (issue #160) — distinct from data grant. | `internal/core/policy/accessors.go` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |

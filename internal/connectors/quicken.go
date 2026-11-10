@@ -15,7 +15,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 	_ "modernc.org/sqlite"
@@ -39,7 +38,6 @@ func QuickenService() LocalStoreService {
 		Name:        QuickenServiceName,
 		Action:      "inject",
 		Description: "Locally imported Quicken QIF/QFX files (Advanced → Quicken import).",
-		GrantLimits: policy.Permissions{"transactions": policy.AccessRead},
 	}
 }
 

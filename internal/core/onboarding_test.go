@@ -219,9 +219,6 @@ func TestAdminSummary_YNABOnlyTransactionsType(t *testing.T) {
 	if ynab == nil {
 		t.Fatal("ynab missing from summary")
 	}
-	if len(ynab.AvailableKinds) != 1 || ynab.AvailableKinds[0] != "transactions" {
-		t.Fatalf("available_data_types = %v, want [transactions]", ynab.AvailableKinds)
-	}
 	if !ynab.HasTransaction {
 		t.Fatal("has_transaction_provider not set")
 	}

@@ -154,13 +154,13 @@ func TestGoogleCalendarConnector_FreeBusyRedactsProxyList(t *testing.T) {
 	defer upstream.Close()
 
 	host := newTestHostWithService(GoogleCalendarServiceID, upstream.URL, "https://aegis.example.com")
-	host.services[GoogleCalendarServiceID].GrantLimits = policy.Permissions{"events": policy.AccessFreeBusy}
+	host.levels["events"] = policy.AccessFreeBusy
 	host.setToken(GoogleCalendarServiceID, "test-token")
 	conn := NewGoogleCalendarConnector(host)
-	if !conn.EventsFreeBusyOnly() {
+	req := httptest.NewRequest("GET", "/v1/services/google-calendar/me/events", nil)
+	if !conn.EventsFreeBusyOnly(req) {
 		t.Fatal("expected freebusy-only")
 	}
-	req := httptest.NewRequest("GET", "/v1/services/google-calendar/me/events", nil)
 	w := httptest.NewRecorder()
 	conn.HandleListEvents(w, req)
 	if w.Code != http.StatusOK {

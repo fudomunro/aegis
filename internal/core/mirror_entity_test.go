@@ -9,7 +9,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/copies"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
@@ -119,12 +118,12 @@ func TestHandleEntityMirror_ContactsDryRun(t *testing.T) {
 
 	srv := testServerWithBase(&Config{Services: []Service{
 		{ID: connectors.CardDAVServiceID, Name: "DAV Contacts", Action: "inject",
-			Endpoint:    ts.URL + "/remote.php/dav/addressbooks/alice/default/",
-			Headers:     map[string]string{"X-DAV-Username": "u", "X-DAV-Password": "p"},
-			GrantLimits: policy.Permissions{"contacts": policy.AccessRead}},
+			Endpoint: ts.URL + "/remote.php/dav/addressbooks/alice/default/",
+			Headers:  map[string]string{"X-DAV-Username": "u", "X-DAV-Password": "p"},
+		},
 		{ID: "google", Name: "Google Contacts", Action: "inject",
-			Endpoint:    people.URL,
-			GrantLimits: policy.Permissions{"contacts": policy.AccessWrite}},
+			Endpoint: people.URL,
+		},
 	}}, "https://aegis.example.com")
 	srv.connectors[connectors.CardDAVServiceID] = connectors.NewCardDAVConnector(srv)
 	srv.connectors["google"] = connectors.NewGoogleContactsConnector(srv)

@@ -68,8 +68,6 @@ axis it is keyed by.
 | **Access level** | Strength of a data grant: `none` / `freebusy` / `summary` / `city` / `precise` / `read` / `write` / `read-write` | The value inside a data grant |
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `events:freebusy` | Do not call the one-time `aeg_grant_…` code just “a grant” |
-| **Service limits** | Per-service map that can only **tighten** a data grant (`grant_limits`) | Admin UI label; also “service limits” in prose |
-| **Effective access** | Resolved level after data grant + service tighten | |
 | **Accessor** | Principal-level data grant per library kind (issue #160) | Distinct axis from data grant |
 | **Auth mode** | `auto` / `tailnet` / `api-key` | Who may call Aegis at all (not a data grant) |
 | **Admin principal** | Admin API key or allowed tailnet user login, on the **admin listener** | Who may change policy (data grants, apps, UDK file selection); agent credentials are never admin (issue #181) |
@@ -77,10 +75,10 @@ axis it is keyed by.
 | **Invite token** | The credential issued to an external principal | Data-scope key, **hashed at rest** (`api_key_hash`, 0600) like app tokens. Minted/rotated by the admin (`/v1/admin/data-scopes`), plaintext shown once; legacy plaintext entries migrate on load |
 | **Tailnet grant** | Tailscale policy rule that allows who can reach Aegis | Tailscale’s `grants` in the policy file — network layer |
 
-One-line shape (also in `docs/configuration.md` “Data grants”): **data grants** are the product
-idea; `data_grants` owns agent data grants (default + per-provider floor);
-**Service limits** (`grant_limits`) only tighten; app data grants scope
-third-party tokens; accessors are the principal axis.
+One-line shape (also in `docs/configuration.md` “Data grants”): **data grants**
+are the product idea; each recognized key carries its own kind → level map,
+resolved deny-by-default (explicit entry → `default` → `none`); app data
+grants scope third-party tokens; accessors are the principal axis.
 
 ### Tailscale alignment
 
@@ -93,7 +91,7 @@ like this:
 | Network capability (`ip`) | Tailnet grant/ACL for reaching Aegis |
 | Application capability (`app`) | **Access level** on a **library kind** (`freebusy`, `read`, …) |
 | `ro` / `rw` (e.g. Taildrive) | `read` / `read-write` |
-| Deny-by-default | Owner tier: unset data grant; places default `none`. **External principals**: any unlisted kind is `none` |
+| Deny-by-default | Every key: an unlisted kind is `none` (the owner key ships with a permissive `default` entry). Opt-in kinds (places) need an explicit entry |
 
 Say “data grant” for what the user allows; reserve bare **grant** for Tailscale
 policy or the third-party one-time **grant code** (`aeg_grant_…`).
@@ -130,7 +128,7 @@ policy or the third-party one-time **grant code** (`aeg_grant_…`).
 
 ## Deliberate non-renames
 
-JSON uses `data_grants` / `grant_limits` / `data_grants.json`. Other identifiers
+JSON uses `data_grants` / `data_grants.json`. Other identifiers
 stay stable (`canonical_for`, `sources[].canonical`, `perm_type`,
 `IsAgentContentPath`, `LibraryKind`). Product rules in `AGENTS.md` are
 unchanged by this glossary.

@@ -18,7 +18,6 @@ stores address-book or calendar content.
     "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
   },
   "canonical_for": ["contacts"],
-  "grant_limits": {"contacts": "read"}
 }
 ```
 
@@ -32,7 +31,6 @@ stores address-book or calendar content.
     "X-DAV-Password": "$ENV:DAV_APP_PASSWORD"
   },
   "canonical_for": ["events"],
-  "grant_limits": {"events": "read"}
 }
 ```
 

@@ -97,14 +97,7 @@
         "playlists",
         "tracks"
       ],
-      "connection": "spotify",
-      "grant_limits": {
-        "default": "read",
-        "playlists": "read",
-        "tracks": "read",
-        "player": "none",
-        "recommendations": "none"
-      }
+      "connection": "spotify"
     },
     {
       "id": "youtube-music",
@@ -120,9 +113,6 @@
       "oauth_scopes": [
         "https://www.googleapis.com/auth/youtube.readonly"
       ],
-      "grant_limits": {
-        "default": "read"
-      },
       "description": "Lists YouTube Music playlists and liked videos into /v1/library/*. Playlist items via content transport. Shares the Google connection."
     },
     {
@@ -163,11 +153,7 @@
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/photospicker.mediaitems.readonly"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "photos": "read"
-      }
+      ]
     },
     {
       "id": "immich",
@@ -188,11 +174,7 @@
         "X-API-Key": "$ENV:IMMICH_API_KEY"
       },
       "cache_ttl": "5m",
-      "description": "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical). Set canonical_for: [\"photos\"] here if Immich is your home copy (and remove it from google-photos).",
-      "grant_limits": {
-        "default": "read",
-        "photos": "read"
-      }
+      "description": "Self-hosted Immich photo library. Photo bytes stay on Immich (foreign/local canonical). Set canonical_for: [\"photos\"] here if Immich is your home copy (and remove it from google-photos)."
     },
     {
       "id": "google",
@@ -212,11 +194,7 @@
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/contacts.readonly"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "contacts": "read"
-      }
+      ]
     },
     {
       "id": "google-calendar",
@@ -236,11 +214,7 @@
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/calendar.readonly"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "events": "read"
-      }
+      ]
     },
     {
       "id": "google-gmail",
@@ -261,11 +235,7 @@
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/gmail.readonly"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "messages": "read"
-      }
+      ]
     },
     {
       "id": "ynab",
@@ -281,11 +251,7 @@
         "Authorization": "Bearer $ENV:YNAB_PERSONAL_ACCESS_TOKEN"
       },
       "cache_ttl": "5m",
-      "description": "Live YNAB budget transactions for /v1/library/transactions. Prefer a Personal Access Token in headers (Aegis owns the secret). Amounts map from milliunits to signed decimal strings.",
-      "grant_limits": {
-        "default": "read",
-        "transactions": "read"
-      }
+      "description": "Live YNAB budget transactions for /v1/library/transactions. Prefer a Personal Access Token in headers (Aegis owns the secret). Amounts map from milliunits to signed decimal strings."
     },
     {
       "id": "quicken",
@@ -298,11 +264,7 @@
         "bank export"
       ],
       "action": "inject",
-      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only — statements/PDFs are never stored.",
-      "grant_limits": {
-        "default": "read",
-        "transactions": "read"
-      }
+      "description": "Locally imported Quicken QIF/QFX files. Import with -import-quicken or POST /v1/services/quicken/import. Line-item metadata only — statements/PDFs are never stored."
     },
     {
       "id": "bluesky",
@@ -320,11 +282,7 @@
         "X-Bluesky-App-Password": "$ENV:BLUESKY_APP_PASSWORD"
       },
       "cache_ttl": "5m",
-      "description": "Share photos to Bluesky as public image posts (ownership-claim PoC, issue #20). Aegis stores no photo bytes; it fetches from the canonical photo service, posts a copy, and returns a sha256 + post_uri claim. Image embeds cap at 1MB. Use an app password, not your main password.",
-      "grant_limits": {
-        "default": "read",
-        "photos": "write"
-      }
+      "description": "Share photos to Bluesky as public image posts (ownership-claim PoC, issue #20). Aegis stores no photo bytes; it fetches from the canonical photo service, posts a copy, and returns a sha256 + post_uri claim. Image embeds cap at 1MB. Use an app password, not your main password."
     },
     {
       "id": "paperless",
@@ -347,11 +305,7 @@
       "description": "Self-hosted Paperless-ngx documents (receipts, warranties, leases, letters). File bytes stay on Paperless (foreign/local canonical). Set canonical_for: [\"documents\"] here if Paperless is your home copy. Use documents=metadata to list titles/tags without text.",
       "canonical_for": [
         "documents"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "documents": "read"
-      }
+      ]
     },
     {
       "id": "google-drive",
@@ -370,11 +324,7 @@
       "connection": "google",
       "oauth_scopes": [
         "https://www.googleapis.com/auth/drive.readonly"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "documents": "read"
-      }
+      ]
     },
     {
       "id": "dav-contacts",
@@ -397,11 +347,7 @@
       "description": "CardDAV address book (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists contacts as neutral Contact values. Credentials are username + app-specific password (never echoed by admin/API). Set canonical_for: [\"contacts\"] if this DAV server is your home copy (and remove it from Google Contacts).",
       "canonical_for": [
         "contacts"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "contacts": "read"
-      }
+      ]
     },
     {
       "id": "dav-calendar",
@@ -424,11 +370,7 @@
       "description": "CalDAV calendar (Nextcloud, iCloud, Fastmail, Radicale, Baïkal). Lists events as neutral CalendarEvent values with RRULE expansion in the requested window. Credentials are username + app-specific password. Set canonical_for: [\"events\"] if this DAV server is your home copy (and remove it from Google Calendar). Events also feed /v1/library/freebusy.",
       "canonical_for": [
         "events"
-      ],
-      "grant_limits": {
-        "default": "read",
-        "events": "read"
-      }
+      ]
     }
   ]
 }

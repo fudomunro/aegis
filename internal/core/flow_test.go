@@ -11,7 +11,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/metrics"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
@@ -45,10 +44,6 @@ func flowTestServer() *Server {
 				CacheTTL:    Duration{Duration: 10 * time.Minute},
 				Connection:  "spotify",
 				OAuthScopes: []string{"user-library-read"},
-				GrantLimits: policy.Permissions{
-					policy.PermissionDefaultKey: policy.AccessRead,
-					"player":                    policy.AccessNone,
-				},
 			},
 			{
 				ID:         "youtube-music",

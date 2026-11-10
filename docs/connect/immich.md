@@ -18,7 +18,6 @@ enough.
   "headers": { "X-API-Key": "$ENV:IMMICH_API_KEY" },
   "cache_ttl": "5m",
   "canonical_for": ["photos"],
-  "grant_limits": { "default": "read", "photos": "read" }
 }
 ```
 

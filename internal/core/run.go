@@ -1021,7 +1021,6 @@ func ensureLocalStoreService(cfg *Config, d connectors.LocalStoreService) {
 		Name:        d.Name,
 		Action:      d.Action,
 		Description: d.Description,
-		GrantLimits: d.GrantLimits,
 	})
 }
 

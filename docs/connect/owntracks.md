@@ -10,7 +10,6 @@ Recorder:
   "name": "OwnTracks",
   "endpoint": "https://recorder.example:8083",
   "headers": {"X-API-Key": "…"},
-  "grant_limits": {"places": "read"}
 }
 ```
 
