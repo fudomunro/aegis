@@ -46,7 +46,7 @@ the most weight in product language.
 | Mirror / backup sync | product + code |
 | Truncated / sync completeness | product + code |
 | User-defined kinds (UDK) / schema packs | product + code |
-| Freebusy route; summary, city, precise, metadata levels | product + code |
+| Disclosure routes (freebusy, transactions/totals, places/city, documents/metadata, …) | product + code |
 
 ### Access and identity
 
@@ -54,7 +54,7 @@ the most weight in product language.
 |---------|----------------|
 | **Data grant** (user allows agent/app to use a library kind at an access level) | product |
 | **DataGrant** (where agent data grants live) | product + code |
-| Access levels (`none` / `summary` / `city` / `precise` / `metadata` / `read` / `write` / `read-write`) | product + code |
+| Access levels (`none` / `read` / `write` / `read-write`) | product + code |
 | Accessor / AccessorKind (issue #160) | code + admin |
 | PermissionsOverview / KindAccess | admin |
 | PeerIdentity / auth modes (`auto` / `tailnet` / `api-key`) | product + code |
@@ -237,7 +237,7 @@ After the overlap call-outs above, the stable concepts.
 | **Truncated** | Response flag when a list is incomplete upstream (page cap); agents must check before claiming completeness. Independent of `next_cursor` paging (issue #185). | `kind.go` instructions, `internal/kinds` |
 | **next_cursor** | Opaque continue token for `/v1/library/{kind}` pages (`limit` default 100 / max 500). Omitted at end of the filtered set. | `types/page.go` |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` loaded into the same library pipeline; never self-enables or shadows built-ins. Product concept is “user-defined kind”; the file/directory is a schema pack. | `internal/kinds/userdefined_schema.go`, `docs/user-defined-kinds.md` |
-| **Redaction levels** | `freebusy` (events), `summary` (transactions), `city`/`precise` (places) — reduced payloads. | `internal/core/policy/policy.go`, `internal/kinds` |
+| **Disclosure routes** | `freebusy`, `transactions/totals`, `places/city`, `documents/metadata`, … — each serves exactly one reduced shape. | `internal/kinds/<kind>.go` route encoders |
 | **Provider interfaces** | `PlaylistProvider`, `PhotoProvider`, `TransactionProvider`, … implemented by connectors. | `internal/kinds/providers.go` |
 
 ### Access and identity

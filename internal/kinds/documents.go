@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -23,6 +22,12 @@ type documentsKind struct {
 	copies func([]Document)
 }
 
+// Grant keys are routes: the library-relative path (issue #348).
+const (
+	documentsRouteKey         = "documents"
+	documentsMetadataRouteKey = "documents/metadata"
+)
+
 func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
 	k := &documentsKind{h: h, e: e}
 	k.mark, k.copies = Stamps(h, "documents", forEachDocumentSource)
@@ -31,20 +36,30 @@ func newDocumentsKind(h Host, e *Engine, d Deps) Kind {
 		def:      def,
 		provides: providerProvides[DocumentProvider],
 		routes: []Route{
-			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve},
-			// Full text is a separate read: app tokens and metadata-only
-			// surfaces never see it (issue #143).
-			{Pattern: "/v1/library/documents/{service}/{id}/text", Handler: k.serveText},
+			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: documentsRouteKey},
+			{Pattern: "/v1/library/documents/metadata", AppReadable: true, Handler: k.serveMetadata, GrantKey: documentsMetadataRouteKey},
+			// Full text is a read on the documents route: the metadata
+			// route never sees it (issue #143).
+			{Pattern: "/v1/library/documents/{service}/{id}/text", Handler: k.serveText, GrantKey: documentsRouteKey},
 		},
 	}
 	return k
 }
 
-// serve returns the user's documents from every connected source:
+// serve returns the user's documents with list excerpts:
 // GET /v1/library/documents. Query filters: q, tag, after, before (issue
-// #143). Permission key: documents. Access metadata returns titles/dates/
-// tags only.
+// #143).
 func (k *documentsKind) serve(w http.ResponseWriter, r *http.Request) {
+	k.serveShape(w, r, documentsRouteKey, false)
+}
+
+// serveMetadata returns titles, dates, tags, and sources only — no excerpt
+// or text: GET /v1/library/documents/metadata (issue #348).
+func (k *documentsKind) serveMetadata(w http.ResponseWriter, r *http.Request) {
+	k.serveShape(w, r, documentsMetadataRouteKey, true)
+}
+
+func (k *documentsKind) serveShape(w http.ResponseWriter, r *http.Request, grantKey string, metadataOnly bool) {
 	kind := k.def
 	filters := parseDocumentFilters(r)
 	if kind.Search != nil {
@@ -52,22 +67,19 @@ func (k *documentsKind) serve(w http.ResponseWriter, r *http.Request) {
 		// before stay handler-side filters over whatever produced the items.
 		filters.Q = ""
 	}
-	grants, _ := k.h.Grants(r)
-	// Encode-time redaction is a second belt: even if a service returned an
-	// excerpt, metadata-only surfaces must not ship it.
-	metaOnly := policy.IsMetadataAccess(grants.Level(kind.PermType))
 	Aggregate(k.h, k.e, w, r, Spec[Document]{
-		Kind: kind,
+		Kind:     kind,
+		GrantKey: grantKey,
 		Targets: func(r *http.Request) ([]NamedLister[Document], []string) {
-			return documentsProviderTargets(k.h, r, kind.PermType)
+			return documentsProviderTargets(k.h, r, grantKey)
 		},
 		ServiceOf: documentServiceName,
 		SortKey:   DocumentIdentityKey,
 		Merge:     MergeDocuments,
 		Encode: func(items []Document, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			filtered := filterDocuments(items, filters)
-			if metaOnly {
-				filtered = redactDocumentsForLevel(filtered, policy.AccessMetadata)
+			if metadataOnly {
+				filtered = redactDocumentsMetadata(filtered)
 			}
 			pageItems, pr := SlicePage(filtered, page)
 			return DocumentList{
@@ -75,12 +87,9 @@ func (k *documentsKind) serve(w http.ResponseWriter, r *http.Request) {
 				LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		RedactSearch: func(items []Document, r *http.Request) []Document {
-			return searchRedactDocuments(k.h, items, r)
-		},
 		MarkCanonical: k.mark,
 		StampCopies:   k.copies,
-		CacheKey:      "library:documents" + filters.cacheKeySuffix() + "|meta:" + boolKey(metaOnly),
+		CacheKey:      "library:" + grantKey + filters.cacheKeySuffix(),
 	})
 }
 
@@ -103,9 +112,21 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Full text is a read on the documents route (issue #348): a
+	// documents/metadata-only key is denied here.
 	grants, _ := k.h.Grants(r)
-	level := grants.Level(kind.PermType)
-	if !grants.AllowsKindMethod(kind.PermType, r.Method) {
+	level := grants.Level(documentsRouteKey)
+	if !grants.AllowsKindMethod(documentsRouteKey, r.Method) {
+		k.h.RecordAccess(r, AccessEvent{
+			Agent:    agent,
+			Surface:  SurfaceLibrary,
+			Target:   kind.ID,
+			Kind:     kind.ID,
+			Decision: audit.DecisionDeny,
+			Reason:   "data_grant",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
+		})
 		shared.WriteJSONError(w, http.StatusForbidden,
 			"denied: data grant for documents is "+level)
 		return
@@ -117,22 +138,6 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}
-	}
-	// Metadata is list-only: full text requires read (or unrestricted write/full).
-	if !policy.AllowsMethod(level, http.MethodGet) || policy.IsMetadataAccess(level) || policy.DocumentsLevelForResponse(level) == policy.AccessNone {
-		k.h.RecordAccess(r, AccessEvent{
-			Agent:    agent,
-			Surface:  SurfaceLibrary,
-			Target:   kind.ID,
-			Kind:     kind.ID,
-			Decision: audit.DecisionDeny,
-			Reason:   "permission",
-			Method:   r.Method,
-			Status:   http.StatusForbidden,
-		})
-		shared.WriteJSONError(w, http.StatusForbidden,
-			"denied: document text requires documents=read (metadata is list-only)")
-		return
 	}
 
 	connector, ok := k.h.Connectors()[serviceID]
@@ -298,55 +303,23 @@ func redactDocumentMetadata(d Document) Document {
 	return d
 }
 
-func redactDocumentsForLevel(items []Document, level string) []Document {
-	switch policy.DocumentsLevelForResponse(level) {
-	case policy.AccessMetadata:
-		out := make([]Document, len(items))
-		for i, d := range items {
-			out[i] = redactDocumentMetadata(d)
-		}
-		return out
-	case policy.AccessNone:
-		return nil
-	default:
-		return items
+// redactDocumentsMetadata strips excerpt/text from documents while keeping
+// titles, dates, tags, and sources (issue #143).
+func redactDocumentsMetadata(items []Document) []Document {
+	out := make([]Document, len(items))
+	for i, d := range items {
+		out[i] = redactDocumentMetadata(d)
 	}
+	return out
 }
 
-// documentsProviderTargets collects providers, wrapping each target with
-// metadata redaction when the request's grant is metadata-only (issue #143).
-func documentsProviderTargets(h Host, r *http.Request, permType string) ([]NamedLister[Document], []string) {
-	targets, denied := Collect[Document, DocumentProvider](h, r, permType,
+// documentsProviderTargets collects providers; the route's encode owns the
+// disclosure shape (issue #348).
+func documentsProviderTargets(h Host, r *http.Request, grantKey string) ([]NamedLister[Document], []string) {
+	return Collect[Document, DocumentProvider](h, r, grantKey,
 		func(p DocumentProvider) func(context.Context) ([]Document, bool, error) {
 			return p.ListUserDocuments
 		})
-	grants, _ := h.Grants(r)
-	if !policy.IsMetadataAccess(grants.Level(permType)) {
-		return targets, denied
-	}
-	for i := range targets {
-		inner := targets[i].List
-		targets[i].List = func(ctx context.Context) ([]Document, bool, error) {
-			items, truncated, err := inner(ctx)
-			return redactDocumentsForLevel(items, policy.AccessMetadata), truncated, err
-		}
-	}
-	return targets, denied
-}
-
-// searchRedactDocuments re-applies grant-level redaction to index-hydrated
-// documents (issue #178): the index stores owner-tier rows, so the
-// request's level narrows them on the way out.
-func searchRedactDocuments(h Host, items []Document, r *http.Request) []Document {
-	grants, _ := h.Grants(r)
-	return redactDocumentsForLevel(items, policy.DocumentsLevelForResponse(grants.Level("documents")))
-}
-
-func boolKey(v bool) string {
-	if v {
-		return "true"
-	}
-	return "false"
 }
 
 func forEachDocumentSource(item *Document, f func(SourceMut)) {

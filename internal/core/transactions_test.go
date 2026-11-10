@@ -74,15 +74,10 @@ func TestYNABCategories_FromSplits(t *testing.T) {
 	}
 }
 
-func TestValidateGrantMap_SummaryOnlyOnTransactions(t *testing.T) {
-	if err := policy.ValidateGrantMap(policy.GrantMap{"transactions": policy.AccessSummary}); err != nil {
-		t.Fatalf("summary on transactions: %v", err)
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessSummary}); err == nil {
-		t.Fatal("expected summary on tracks rejected")
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"default": policy.AccessSummary}); err == nil {
-		t.Fatal("expected summary on default rejected")
+func TestValidateGrantMap_SummaryTokenRetired(t *testing.T) {
+	// Totals are the transactions/totals route (issue #348).
+	if err := policy.ValidateGrantMap(policy.GrantMap{"transactions": "summary"}); err == nil {
+		t.Fatal("retired summary token must reject")
 	}
 }
 
@@ -139,13 +134,23 @@ func TestHandleLibraryTransactions_AggregateAndSummary(t *testing.T) {
 		t.Fatal("expected summary rollup")
 	}
 
-	// Service-level summary redaction: no line items from that service, and
-	// app-level summary returns totals only.
-	req2 := httptest.NewRequest("GET", "/v1/library/transactions", nil)
+	// The totals route returns the summary and no line items (issue #348).
+	req2 := httptest.NewRequest("GET", "/v1/library/transactions/totals", nil)
+	req2.Header.Set("Authorization", "Bearer test-key")
 	w2 := httptest.NewRecorder()
-	srv.libraryHandler("transactions")(w2, req2)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/transactions/totals"))(w2, req2)
 	if w2.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w2.Code, w2.Body.String())
+	}
+	var totals kinds.TransactionList
+	if err := json.Unmarshal(w2.Body.Bytes(), &totals); err != nil {
+		t.Fatal(err)
+	}
+	if totals.Summary == nil {
+		t.Fatal("totals route must compute the summary")
+	}
+	if len(totals.Transactions) != 0 {
+		t.Fatalf("totals route must not return line items: %+v", totals.Transactions)
 	}
 }
 
@@ -357,17 +362,6 @@ func TestLibraryKindTransactions_Registered(t *testing.T) {
 	}
 	if !strings.Contains(k.SyncRule, "amount_date_merchant") {
 		t.Fatalf("sync rule = %q", k.SyncRule)
-	}
-}
-
-func TestSummaryKinds(t *testing.T) {
-	p := policy.GrantMap{"transactions": policy.AccessSummary, "tracks": policy.AccessRead}
-	got := p.SummaryKinds()
-	if len(got) != 1 || got[0] != "transactions" {
-		t.Fatalf("SummaryKinds = %v", got)
-	}
-	if (&policy.GrantMap{}).SummaryKinds() != nil {
-		t.Fatal("nil map should return nil")
 	}
 }
 

@@ -27,7 +27,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	}
 	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: policy.AccessRead})
 	cfg.SeedDataGrant("events", policy.DataGrant{Default: policy.AccessRead})
-	cfg.SeedDataGrant("places", policy.DataGrant{Default: policy.AccessCity})
+	cfg.SeedDataGrant("places", policy.DataGrant{Default: policy.AccessRead})
 
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
@@ -157,7 +157,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	if !ok {
 		t.Fatal("missing places row")
 	}
-	if places.AgentLevel != policy.AccessCity {
+	if places.AgentLevel != policy.AccessRead {
 		t.Fatalf("places agent = %q", places.AgentLevel)
 	}
 	// Disabled app named photos only — not places. Timeline not mounted.

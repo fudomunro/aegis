@@ -139,7 +139,7 @@ caller may do with each kind*. Admin is never the agent key.
 | Threat | Mitigation |
 |--------|------------|
 | Agent reads kinds the user meant to hide | Kind-owned **data grants**; 403 on deny |
-| Redacted views leak raw content | Disclosure routes (`freebusy`, …) and kind-scoped levels (`summary`, `city`/`precise`, `metadata`) |
+| Redacted views leak raw content | Disclosure routes (`freebusy`, `transactions/totals`, `places/city`, `documents/metadata`, …) — each serves exactly one shape |
 | Places exposed by default | Places default **none**; opt-in |
 | Third-party app exceeds intent | App scopes AND data grants; library read only |
 | Capability listing becomes an attack map | Capabilities are admin/connector metadata, not agent discovery (#119) |

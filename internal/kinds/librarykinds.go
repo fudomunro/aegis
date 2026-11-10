@@ -34,7 +34,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch playlists",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    nil,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name", "description"}, TitleField: "name"},
 	},
@@ -61,7 +60,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch liked tracks",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    nil,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name", "artists", "album"}, TitleField: "name"},
 	},
@@ -84,7 +82,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch albums",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    nil,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name", "artists"}, TitleField: "name"},
 	},
@@ -108,7 +105,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch artists",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    nil,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name"}, TitleField: "name"},
 	},
@@ -130,7 +126,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch contacts",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    nil,
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"name", "emails", "phones", "handles", "organization"}, TitleField: "name"},
 	},
@@ -158,7 +153,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:           "failed to fetch photos",
 		AppReadable:       true,
 		CanonicalAllowed:  true,
-		AllowedLevels:     nil,
 		DefaultNone:       false,
 		ExtraInstructions: "\n" + PhotoSourceDiscipline(),
 		Search:            &SearchSpec{Fields: []string{"filename", "caption", "people"}, TitleField: "filename"},
@@ -184,7 +178,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:           "failed to fetch calendar events",
 		AppReadable:       true,
 		CanonicalAllowed:  true,
-		AllowedLevels:     nil,
 		DefaultNone:       false,
 		ExtraInstructions: " For scheduling or availability-only questions use GET {root}/v1/library/freebusy — busy intervals only (start_at, end_at, all_day); never includes titles or attendees.",
 		Search:            &SearchSpec{Fields: []string{"title", "description", "location", "calendar_name"}, TitleField: "title"},
@@ -211,7 +204,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:           "failed to fetch messages",
 		AppReadable:       true,
 		CanonicalAllowed:  true,
-		AllowedLevels:     nil,
 		DefaultNone:       false,
 		OptimisticCopies:  true,
 		ExtraInstructions: " Find mail on the same list endpoint: GET {root}/v1/library/messages?q=…&from=…&to=…&after=YYYY-MM-DD&before=YYYY-MM-DD&label=…&sort=asc|desc&include_body=1 — q searches subject, snippet, and archived body text; from/to are addresses, never time bounds; use sort=asc for oldest/earliest/first message questions; include_body=1 fills body. Fetch one message with body at GET {root}/v1/library/messages/{sources[].service}/{sources[].id}.",
@@ -243,7 +235,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch transactions",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    []string{"summary"},
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"description", "merchant", "category", "memo"}, TitleField: "description"},
 	},
@@ -275,7 +266,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch places",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    []string{"city", "precise"},
 		DefaultNone:      true,
 		Search:           &SearchSpec{Fields: []string{"place"}, TitleField: "place"},
 	},
@@ -305,7 +295,6 @@ var BuiltinLibraryKinds = []LibraryKind{
 		FailMsg:          "failed to fetch documents",
 		AppReadable:      true,
 		CanonicalAllowed: true,
-		AllowedLevels:    []string{"metadata"},
 		DefaultNone:      false,
 		Search:           &SearchSpec{Fields: []string{"title", "correspondent", "document_type", "tags"}, TitleField: "title"},
 	},
@@ -364,8 +353,12 @@ func IsCanonicalKindID(id string) bool {
 func init() {
 	for _, k := range BuiltinLibraryKinds {
 		shared.RegisterKindRule(k.ID, shared.KindRule{
-			Levels:      k.AllowedLevels,
 			DefaultNone: k.DefaultNone,
 		})
+	}
+	// Opt-in disclosure route keys inherit their kind's DefaultNone
+	// property (issue #348): the default key never opens a places view.
+	for _, id := range []string{placesNamesRouteKey, placesCityRouteKey} {
+		shared.MarkKindDefaultNone(id)
 	}
 }

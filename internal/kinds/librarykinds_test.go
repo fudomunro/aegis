@@ -1,10 +1,7 @@
 package kinds
 
 import (
-	"strings"
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -93,93 +90,38 @@ func TestBuiltinLibraryKinds_PolicyFlags(t *testing.T) {
 			t.Errorf("kind %q should be CanonicalAllowed", k.ID)
 		}
 	}
-	// Type-scoped redaction levels (issue #183).
+	// Opt-in flags only: disclosure is route-based (issue #348), so kinds
+	// declare no level tokens.
 	cases := []struct {
-		id     string
-		levels []string
-		none   bool
+		id   string
+		none bool
 	}{
-		{"events", nil, false},
-		{"transactions", []string{"summary"}, false},
-		{"places", []string{"city", "precise"}, true},
-		{"documents", []string{"metadata"}, false},
-		{"tracks", nil, false},
+		{"events", false},
+		{"transactions", false},
+		{"places", true},
+		{"documents", false},
+		{"tracks", false},
 	}
 	for _, tc := range cases {
 		k := BuiltinKindByID(tc.id)
 		if k == nil {
 			t.Fatalf("missing kind %q", tc.id)
 		}
-		if strings.Join(k.AllowedLevels, ",") != strings.Join(tc.levels, ",") {
-			t.Errorf("%s.AllowedLevels = %v, want %v", tc.id, k.AllowedLevels, tc.levels)
-		}
 		if k.DefaultNone != tc.none {
 			t.Errorf("%s.DefaultNone = %v, want %v", tc.id, k.DefaultNone, tc.none)
 		}
 	}
 
-	// Derived allowlists match AllowedLevels.
-	// The freebusy level is retired — availability is the freebusy route.
-	if shared.KindAllowsLevel("events", "freebusy") {
-		t.Error("events must not declare the retired freebusy level")
-	}
-	if shared.KindAllowsLevel("tracks", "summary") {
-		t.Error("tracks must not allow summary")
-	}
 	if !shared.KindDefaultsNone("places") {
 		t.Error("places should default to none")
 	}
 	if shared.KindDefaultsNone("documents") {
 		t.Error("documents should not default to none")
 	}
-	if got := shared.KindsAllowingLevel("metadata"); strings.Join(got, ",") != "documents" {
-		t.Errorf("KindsAllowingLevel(metadata) = %v, want [documents]", got)
+	// Opt-in disclosure route keys inherit the places flag.
+	if !shared.KindDefaultsNone("places/names") || !shared.KindDefaultsNone("places/city") {
+		t.Error("places route keys must inherit default-none")
 	}
 }
 
 // TestBuiltinLibraryKinds_DerivedLists checks the hand-maintained copies are
-// gone in favor of registry-derived helpers (issue #183).
-func TestBuiltinLibraryKinds_DerivedLists(t *testing.T) {
-	ids := BuiltinKindIDs()
-	if len(ids) != len(BuiltinLibraryKinds) {
-		t.Fatalf("BuiltinKindIDs len %d != registry %d", len(ids), len(BuiltinLibraryKinds))
-	}
-	paths := BuiltinKindPaths()
-	if len(paths) != len(BuiltinLibraryKinds) {
-		t.Fatalf("BuiltinKindPaths len %d != registry %d", len(paths), len(BuiltinLibraryKinds))
-	}
-	for _, id := range CanonicalKindIDs() {
-		if !IsCanonicalKindID(id) {
-			t.Errorf("CanonicalKindIDs has %q but IsCanonicalKindID is false", id)
-		}
-	}
-	// App paths include every AppReadable kind and nothing else from the registry.
-	app := map[string]bool{}
-	for _, p := range AppReadableKindPaths() {
-		app[p] = true
-	}
-	for _, k := range BuiltinLibraryKinds {
-		if k.AppReadable && !app[k.Path] {
-			t.Errorf("AppReadable kind %q path missing from AppReadableKindPaths", k.ID)
-		}
-		if !k.AppReadable && app[k.Path] {
-			t.Errorf("non-AppReadable kind %q path in AppReadableKindPaths", k.ID)
-		}
-	}
-}
-
-// TestKindLevelSeam_AllowedLevelsArePolicyTokens pins the seam: kinds declare AllowedLevels as bare tokens; each must be a
-// canonical policy level or validation would silently reject it.
-func TestKindLevelSeam_AllowedLevelsArePolicyTokens(t *testing.T) {
-	known := map[string]bool{
-		policy.AccessSummary: true,
-		policy.AccessCity:    true, policy.AccessPrecise: true, policy.AccessMetadata: true,
-	}
-	for _, k := range BuiltinLibraryKinds {
-		for _, l := range k.AllowedLevels {
-			if policy.NormalizeAccess(l) != l || !known[l] {
-				t.Errorf("kind %q AllowedLevels entry %q is not a canonical policy level", k.ID, l)
-			}
-		}
-	}
-}

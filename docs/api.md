@@ -171,7 +171,7 @@ GET /v1/library/documents?q=lease&after=2024-01-01
 
 - **Matching:** case-insensitive token AND over the kind's searchable fields (title, artists, tags, …). The final token is prefix-matched (`rain` finds “Raining Blood”). Operator characters are stripped — no phrase or boolean syntax.
 - **Result shape:** the same list envelope as the bare fetch (`total`, `next_cursor`, …). Kind-specific filters (`tag`, `after`, `before`, …) combine with `q`.
-- **Freshness:** `q` reads the local search index, which is written from owner-tier library fetches. The first query for a kind materializes the index from one live fetch at full owner detail; a fetch made under a reduced view (a freebusy-route fetch, a city-level scope) never refreshes it, so those rows always carry the detail the owner would see. A complete list fetch — every source answered and none truncated — also drops rows for items a source no longer returns, so deleted items stop matching `q`. A degraded or truncated fetch only upserts and never deletes. A query may not see provider changes made since the last owner-tier write. Read-path redaction still ensures no caller gets more than its data grants allow.
+- **Freshness:** `q` reads the local search index, which is written from owner-tier library fetches. The first query for a kind materializes the index from one live fetch at full owner detail; a fetch made under a reduced view (a freebusy-route or places/city-route fetch) never refreshes it, so those rows always carry the detail the owner would see. A complete list fetch — every source answered and none truncated — also drops rows for items a source no longer returns, so deleted items stop matching `q`. A degraded or truncated fetch only upserts and never deletes. A query may not see provider changes made since the last owner-tier write. Read-path redaction still ensures no caller gets more than its data grants allow.
 - **Enforcement:** identical to the list surface — data grants, app scopes, and data-scope dataset partitions all apply to search hits. A kind without a search spec answers `q` with `400`.
 - **Storage:** the index holds neutral item metadata (enough to return hits without a refetch) under the data directory; no media bytes.
 - **Messages are the exception:** `q` on `GET /v1/library/messages` is a full-history query (subject, snippet, and archived body text) merged with live provider rows in the same identity space as the list endpoint — not a search-index lookup. See Messages below.
@@ -667,9 +667,9 @@ not a firehose of GPS points. Query filters: `after`, `before`, `locality`,
 }
 ```
 
-**Data-grant ladder (default `none` — opt-in).** See [Data grants](configuration.md).
-Pre-request injection never advertises `places` until a service permission
-names `city`, `read`, or `precise`. Coordinates require `precise`.
+**Disclosure routes (default `none` — opt-in).** See [Data grants](configuration.md).
+`places` (coordinates), `places/names`, and `places/city` are separate grant
+keys; pre-request injection never advertises any of them until named.
 
 ### Photos ↔ places join
 

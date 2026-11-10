@@ -11,23 +11,8 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
-
-func TestPlacesAccessLevels(t *testing.T) {
-	p := policy.GrantMap{"places": policy.AccessCity, "tracks": policy.AccessRead, "events": policy.AccessNone}
-	got := p.PlacesAccessLevels()
-	if got == nil || got["places"] != policy.AccessCity {
-		t.Fatalf("got = %v", got)
-	}
-	if _, ok := got["tracks"]; ok {
-		t.Fatal("tracks must not appear")
-	}
-	if (policy.GrantMap{}).PlacesAccessLevels() != nil {
-		t.Fatal("empty map should be nil")
-	}
-}
 
 func TestNormalizePlaceVisitTime_Variants(t *testing.T) {
 	cases := map[string]string{

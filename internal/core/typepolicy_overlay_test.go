@@ -51,7 +51,7 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 		},
 		"places": {
 			Default:   policy.AccessNone,
-			Providers: map[string]string{"immich": policy.AccessCity},
+			Providers: map[string]string{"immich": policy.AccessRead},
 		},
 	}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
@@ -100,8 +100,8 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	cfgPath := filepath.Join(dir, "aegis.json")
 	mustWriteFile(t, cfgPath, `{
 		"data_grants": {
-			"tracks": {"default": "read", "providers": {"spotify": "none"}},
-			"places": {"default": "none", "providers": {"google-timeline": "city"}}
+			"tracks": {"default": "read"},
+			"places": {"default": "none"}
 		},
 		"services": [
 			{"id": "spotify", "name": "Spotify", "action": "inject"},
@@ -178,8 +178,8 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	cfgPath := filepath.Join(dir, "aegis.json")
 	mustWriteFile(t, cfgPath, `{
 		"data_grants": {
-			"tracks": {"default": "read", "providers": {"spotify": "none"}},
-			"places": {"default": "none", "providers": {"google-timeline": "city"}}
+			"tracks": {"default": "read"},
+			"places": {"default": "none"}
 		},
 		"services": [
 			{"id": "spotify", "name": "Spotify", "action": "inject"},

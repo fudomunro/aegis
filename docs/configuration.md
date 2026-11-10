@@ -139,19 +139,19 @@ Register **all** surface callback URLs on the same OAuth client, e.g.:
 ### Data grants
 
 What you do to let an LLM agent or app use your data is a **data grant**: an
-allow rule on a **kind** at an **access level** (`none`,
-`summary`, `city`, `precise`, `metadata`, `read`, `write`, `read-write`). This is the
-application-layer side of Tailscale-style access — you already use a tailnet
-grant so callers can *reach* Aegis; data grants say what they may *use*.
+allow rule on a **library route** at an **access level** (`none`, `read`,
+`write`, `read-write`). This is the application-layer side of Tailscale-style
+access — you already use a tailnet grant so callers can *reach* Aegis; data
+grants say what they may *use*.
 
 Prefer the glossary terms here ([`docs/glossary.md`](glossary.md)):
 **data grant** is the product idea; **data grants map** is where the grants
 live; **app data grants** scope third-party tokens. JSON/config keys stay
 `data_grants` / `data_grants.json`.
 
-Data grants live with **kinds**, not service providers. Each recognized
-key (agent key, invite token, app token) carries one kind → access-level
-map, and authorization is a single lookup over it: an explicit kind entry
+Data grants live with **routes**, not service providers. Each recognized
+key (agent key, invite token, app token) carries one route → access-level
+map, and authorization is a single lookup over it: an explicit route entry
 wins, else the reserved `default` entry, else `none`.
 
 **Accessors.** Data is not only reached by LLM agents. Aegis also
@@ -176,66 +176,52 @@ Primary (aegis.json `data_grants` or data_grants.json `data_grants`, or admin �
 "data_grants": {
   "tracks": { "default": "read-write" },
   "player": { "default": "none" },
-  "places": { "default": "city" },
+  "freebusy": { "default": "read" },
+  "places/city": { "default": "read" },
   "default": { "default": "read" }
 }
 ```
 
 | Level | Allowed methods |
 |-------|-----------------|
-| `none` | none — 403 for that kind |
-| ~~`freebusy`~~ | Retired as a level — availability access is the `freebusy` route (grant key `freebusy`, `GET /v1/library/freebusy`) |
-| `summary` | `GET`, `HEAD` on `transactions`, but responses reduced to totals by category/month only — no line items |
-| `city` | `GET`, `HEAD` on `places`, reduced to locality, country, and the visit/trip time window |
-| `precise` | `GET`, `HEAD` on `places` with coordinates |
-| `metadata` | `GET`, `HEAD` on `documents`, reduced to titles, dates, tags, correspondents, and sources — no excerpt or text |
+| `none` | none — 403 for that route |
 | `read` | `GET`, `HEAD` |
 | `write` | `POST`, `PUT`, `PATCH`, `DELETE` |
 | `read-write` | both (also accepts `full` / `rw`) |
 
+Narrowed disclosure is **its own route** with its own grant key — never a
+level on the full route:
+
+| Grant key | Route | Returns |
+|-----------|-------|---------|
+| `freebusy` | `GET /v1/library/freebusy` | availability only (`start_at`, `end_at`, `all_day`, `status`) |
+| `transactions/totals` | `GET /v1/library/transactions/totals` | category/month totals only |
+| `transactions/items` | `GET /v1/library/transactions/items` | line items without account identifiers |
+| `documents/metadata` | `GET /v1/library/documents/metadata` | titles, dates, tags, sources — no excerpt |
+| `places/city` | `GET /v1/library/places/city` | locality, country, and the visit window |
+| `places/names` | `GET /v1/library/places/names` | names and addresses, no coordinates |
+
 **Resolution** (uniform deny-by-default):
 
-1. **Explicit kind entry** — `data_grants[kind].default`, normalized.
+1. **Explicit route entry** — `data_grants[route].default`, normalized.
 2. **Reserved `default` key** — the level for kinds not listed, except
  opt-in kinds (below), which never open through `default`.
 3. Otherwise **`none`**. Malformed level tokens deny.
 
 Per-provider entries inside a `DataGrant` (`providers`) are legacy
 migration data and are ignored at request time.
-- **`freebusy` is its own route**, not a level on `events`.
- Scheduling apps see when you are busy without reading titles, attendees,
- locations, or descriptions: a key granted `freebusy: read` may call
- `GET /v1/library/freebusy` (responses keep only `start_at`, `end_at`,
- `all_day`, `status`) and is denied `/v1/library/events`.
-- **`summary` is transactions-only**. Apps can see how much was
- spent by category or month without reading line items or account names.
- Responses keep only `summary` totals (`count`, `total_amount`, `by_category`,
- `by_month`). Prefer `GET /v1/library/transactions` with `summary` access for
- budget dashboards; `read` adds line items with merchant but still strips
- account identifiers. The level is rejected on other kinds and on
- `default`.
-- **`places` is opt-in and uses a city / read / precise ladder**.
- Location history is the most sensitive kind we ship: **default is
- `none`**, and the reserved `default` key never enables it. Name it
- explicitly. Pre-request injection never advertises `places` until it is
- named. Granularity:
- - `city` — locality, country, and the visit/trip window only (enough for
- "was I out of town?"). No names, addresses, coordinates, or raw point IDs.
- - `read` — full place names and addresses, still no coordinates.
- - `precise` — names, addresses, and coordinates (also what `write` /
- `read-write` map to for reads; there is no agent write surface).
- `city` and `precise` are places-only and rejected on other keys. Import
- (Google Timeline) and live (OwnTracks) sources both honor the same ladder.
-- **`metadata` is documents-only**. Life-admin paperwork
- (receipts, warranties, leases, insurance, tax/medical letters) can be listed
- without reading content. Responses keep title, mime_type, created/modified,
- correspondent, document_type, tags[], people[], and sources[] — **no
- excerpt and no text**. `read` (or unrestricted `write` / `read-write`) adds
- a short excerpt on list rows. Full text is only at
- `GET /v1/library/documents/{service}/{id}/text`, which requires `read` —
- metadata access is list-only and cannot fetch text. The level is rejected
- on other kinds and on `default`. Per-tag allow/deny (e.g. hide
- `medical`) is a design spike, not implemented.
+- **The full routes serve their richest shape** (`events`, `transactions`,
+ `documents`, `places` with coordinates). Grant a narrowed route instead of
+ the full one when a caller needs less — a `freebusy`-only key is denied
+ `/v1/library/events` outright, and full text
+ (`GET /v1/library/documents/{service}/{id}/text`) is a read on the
+ `documents` route.
+- **The places family is opt-in**: `places`, `places/names`, and
+ `places/city` stay closed until named — the reserved `default` key never
+ opens location history. Pre-request injection never advertises them until
+ named. Import (Google Timeline) and live (OwnTracks) sources honor the
+ same shapes. Per-tag allow/deny for documents (e.g. hide `medical`) is a
+ design spike, not implemented.
 - **Unknown proxy paths** (not a mapped kind) resolve like any unlisted
  kind: the reserved `default` key, else `none`.
 - Proxy paths are **canonicalized before classification**. Duplicate slashes

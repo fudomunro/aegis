@@ -45,7 +45,7 @@ Config keys stay `services`, `connections`, `connector` is code-only.
 | **Content transport** | `/v1/services/{id}/…` for bytes and local import only | Avoid “ingest transport”; error text may say “content/ingest only” once |
 | **User-defined kind (UDK)** | Schema pack under `user-kinds/` | The extension mechanism, in plain English — it publishes a **library kind**, which stays the registry axis. **Schema pack** is the on-disk artifact (file/dir). Retired: “user-defined type”, “UDT”, “type pack” |
 | **Access level** | See **Data grants** | Strength of a data grant |
-| **Free/busy** | The `freebusy` route: busy intervals only (no titles/attendees) | Its own grant key (`freebusy`), not a level on `events` (issue #348). Sibling views: `summary` (transactions), `city`/`precise` (places) |
+| **Free/busy** | The `freebusy` route: busy intervals only (no titles/attendees) | Its own grant key (`freebusy`), not a level on `events`. Sibling routes: `transactions/totals`, `places/city`, `documents/metadata` |
 
 ### Why not “data type”
 
@@ -65,7 +65,7 @@ axis it is keyed by.
 | Prefer | Means | Notes |
 |--------|-------|-------|
 | **Data grant** | What the user does to allow an LLM agent or app to use their data — an allow rule on a **library kind** at an **access level** | Hero term for product English (`docs/configuration.md` “Data grants”, admin UI, injection). Never “kind grant” |
-| **Access level** | Strength of a data grant: `none` / `summary` / `city` / `precise` / `metadata` / `read` / `write` / `read-write` | The value inside a data grant. The former `freebusy` level is retired — grant the `freebusy` route |
+| **Access level** | Strength of a data grant: `none` / `read` / `write` / `read-write` | The value inside a data grant. Narrowed disclosure is its own route (`freebusy`, `places/city`, …) — the redaction level tokens are retired |
 | **Data grants map** | Where **agent** data grants live (`DataGrant`, `data_grants` in aegis.json / `data_grants.json`) | |
 | **Grant map** | The kind → access-level rule map a recognized key carries at request time (materialized from its `DataGrants`) | `GrantMap` in code. Uniformly deny-by-default: explicit entry → `default` → `none` |
 | **App data grant** | Allow rule for a **third-party app** (scoped app token), e.g. `freebusy:read` | Do not call the one-time `aeg_grant_…` code just “a grant” |

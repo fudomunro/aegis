@@ -55,8 +55,7 @@ func (p GrantMap) Level(kind string) string {
 // knownAccess reports whether level is one of the access-vocabulary values.
 func knownAccess(level string) bool {
 	switch level {
-	case AccessNone, AccessSummary, AccessCity, AccessPrecise,
-		AccessMetadata, AccessRead, AccessWrite, AccessFull:
+	case AccessNone, AccessRead, AccessWrite, AccessFull:
 		return true
 	}
 	return false

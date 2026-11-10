@@ -247,9 +247,9 @@ func TestLibrarySearch_DropsDeniedServiceHits(t *testing.T) {
 	}
 }
 
-func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
+func TestLibrarySearch_MetadataRouteStripsExcerpt(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessMetadata}},
+		typePolicies: policy.DataGrants{"documents/metadata": {Default: policy.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -263,10 +263,10 @@ func TestLibrarySearch_MetadataLevelStripsExcerpt(t *testing.T) {
 		}},
 	}
 
-	req := httptest.NewRequest("GET", "/v1/library/documents?q=medical", nil)
+	req := httptest.NewRequest("GET", "/v1/library/documents/metadata?q=medical", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/metadata"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -471,7 +471,7 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 	}
 	store := testAppStore(t)
 	srv.apps = store
-	_, appToken := createTestApp(t, store, "reader", policy.GrantMap{"documents": policy.AccessMetadata})
+	_, appToken := createTestApp(t, store, "reader", policy.GrantMap{"documents/metadata": policy.AccessRead})
 
 	before := documentsQuery(t, srv, "test-key", "/v1/library/documents?q=medical")
 	if len(before) != 1 || before[0].Excerpt != "sensitive excerpt" {
@@ -480,10 +480,10 @@ func TestLibrarySearch_RedactedAppFetchKeepsOwnerDocumentRows(t *testing.T) {
 
 	// A metadata-scoped app sees titles only; its fetch must not demote the
 	// stored row to that view.
-	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
+	req := httptest.NewRequest("GET", "/v1/library/documents/metadata", nil)
 	req.Header.Set("Authorization", "Bearer "+appToken)
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/metadata"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("app list status = %d body=%s", w.Code, w.Body.String())
 	}

@@ -92,9 +92,11 @@ func TestHandleLibraryDocuments_AggregatesAndFilters(t *testing.T) {
 	}
 }
 
-func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
+func TestHandleLibraryDocuments_MetadataRouteStripsExcerpt(t *testing.T) {
+	// Grant map keys are routes (issue #348): documents/metadata serves
+	// titles/dates/tags only and the full documents route is denied.
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessMetadata}},
+		typePolicies: policy.DataGrants{"documents/metadata": {Default: policy.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -111,6 +113,14 @@ func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("documents status = %d body=%s, want 403", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest("GET", "/v1/library/documents/metadata", nil)
+	req.Header.Set("Authorization", "Bearer test-key")
+	w = httptest.NewRecorder()
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/metadata"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -122,7 +132,7 @@ func TestHandleLibraryDocuments_MetadataStripsExcerpt(t *testing.T) {
 		t.Fatalf("total = %d, want 1", resp.Total)
 	}
 	if resp.Documents[0].Excerpt != "" {
-		t.Fatalf("metadata access leaked excerpt: %q", resp.Documents[0].Excerpt)
+		t.Fatalf("metadata route leaked excerpt: %q", resp.Documents[0].Excerpt)
 	}
 	if resp.Documents[0].Title != "Medical letter" {
 		t.Fatalf("title should survive metadata access: %+v", resp.Documents[0])
@@ -209,9 +219,11 @@ func TestHandleLibraryDocuments_MethodNotAllowed(t *testing.T) {
 	}
 }
 
-func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
+func TestHandleLibraryDocumentText_RouteGate(t *testing.T) {
+	// Full text is a read on the documents route: a documents/metadata-only
+	// key is denied (issue #348).
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"documents": {Default: policy.AccessMetadata}},
+		typePolicies: policy.DataGrants{"documents/metadata": {Default: policy.AccessRead}},
 		Services: []Service{{
 			ID:     "paperless",
 			Name:   "Paperless-ngx",
@@ -229,7 +241,7 @@ func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/{service}/{id}/text"))(w, req)
 	if w.Code != http.StatusForbidden {
-		t.Fatalf("metadata access must not read text: status = %d body=%s", w.Code, w.Body.String())
+		t.Fatalf("metadata-only key must not read text: status = %d body=%s", w.Code, w.Body.String())
 	}
 
 	cfg.typePolicies = policy.DataGrants{"documents": {Default: policy.AccessRead}}
@@ -244,7 +256,7 @@ func TestHandleLibraryDocumentText_RequiresReadNotMetadata(t *testing.T) {
 	w2 := httptest.NewRecorder()
 	srv2.AuthMiddleware(srv2.routeHandler("/v1/library/documents/{service}/{id}/text"))(w2, req2)
 	if w2.Code != http.StatusOK {
-		t.Fatalf("read access should fetch text: status = %d body=%s", w2.Code, w2.Body.String())
+		t.Fatalf("documents key should fetch text: status = %d body=%s", w2.Code, w2.Body.String())
 	}
 	var got kinds.DocumentText
 	if err := json.Unmarshal(w2.Body.Bytes(), &got); err != nil {
@@ -291,24 +303,6 @@ func TestHandleLibraryDocumentText_UnknownServiceAndErrors(t *testing.T) {
 	srv.AuthMiddleware(srv.routeHandler("/v1/library/documents/{service}/{id}/text"))(w3, req3)
 	if w3.Code != http.StatusBadGateway {
 		t.Fatalf("upstream error status = %d", w3.Code)
-	}
-}
-
-func TestValidateGrantMap_MetadataDocumentsOnly(t *testing.T) {
-	if err := policy.ValidateGrantMap(policy.GrantMap{"documents": policy.AccessMetadata}); err != nil {
-		t.Fatalf("documents metadata should validate: %v", err)
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"tracks": policy.AccessMetadata}); err == nil {
-		t.Fatal("metadata must be rejected on tracks")
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"default": policy.AccessMetadata}); err == nil {
-		t.Fatal("metadata must be rejected on default")
-	}
-	if !policy.IsMetadataAccess(policy.AccessMetadata) || policy.IsMetadataAccess(policy.AccessRead) {
-		t.Fatal("IsMetadataAccess")
-	}
-	if policy.DocumentsLevelForResponse(policy.AccessFull) != policy.AccessRead {
-		t.Fatal("full should respond at read (excerpt ok)")
 	}
 }
 

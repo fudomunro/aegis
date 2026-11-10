@@ -17,7 +17,7 @@ func TestLevel_DenyByDefault(t *testing.T) {
 		{"default opens unlisted", GrantMap{DefaultKey: AccessRead}, "playlists", AccessRead},
 		{"explicit beats default", GrantMap{DefaultKey: AccessRead, "playlists": AccessWrite}, "playlists", AccessWrite},
 		{"opt-in kind not opened by default", GrantMap{DefaultKey: AccessFull}, "places", AccessNone},
-		{"opt-in kind explicit entry", GrantMap{DefaultKey: AccessFull, "places": AccessCity}, "places", AccessCity},
+		{"opt-in kind explicit entry", GrantMap{DefaultKey: AccessFull, "places": AccessRead}, "places", AccessRead},
 		{"empty kind is unlisted", GrantMap{DefaultKey: AccessRead}, "", AccessRead},
 		{"malformed entry denies", GrantMap{"playlists": "bogus"}, "playlists", AccessNone},
 		{"malformed default denies", GrantMap{DefaultKey: "bogus"}, "playlists", AccessNone},
