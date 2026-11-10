@@ -1,9 +1,9 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
 )
 
 func TestHasContactProviders_GoogleContacts(t *testing.T) {

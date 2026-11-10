@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/links"
@@ -181,7 +182,7 @@ type Server struct {
 	apertureURL string
 	// apps is the third-party application registry (issue #131). May be nil
 	// in tests that never exercise app tokens.
-	apps *AppStore
+	apps *apps.Store
 	// scopes resolves data-scope API keys to principal → dataset partitions
 	// (docs/data-scopes.md). May be nil (legacy single-user).
 	scopes *scopes.Store
@@ -189,7 +190,7 @@ type Server struct {
 	// surface (issue #217). See demo.go.
 	demoMode bool
 	// grants holds short-lived consent codes from the authorize page.
-	grants *GrantStore
+	grants *apps.GrantStore
 	// csrfTokens holds single-use consent-page CSRF tokens (issue #182).
 	csrfTokens *shared.StateStore
 	// udks holds user-defined kind schemas loaded from the user-kinds
@@ -270,7 +271,7 @@ func (s *Server) AuthMiddleware(next http.HandlerFunc) http.HandlerFunc {
 				s.deny(w, r, nil, "app token not permitted on this endpoint")
 				return
 			}
-			next(w, withAuthKind(withAppIdentity(r, app), authKindApp))
+			next(w, withAuthKind(apps.WithAppIdentity(r, app), authKindApp))
 			return
 		}
 
@@ -450,7 +451,7 @@ func (s *Server) AdminMiddleware(next http.HandlerFunc) http.HandlerFunc {
 // authenticateApp resolves Authorization/X-Api-Key to a registered app token.
 // Returns nil when the credential is missing, unknown, or disabled — callers
 // fall through to normal auth (the same header may be the shared API key).
-func (s *Server) authenticateApp(r *http.Request) *App {
+func (s *Server) authenticateApp(r *http.Request) *apps.App {
 	if s == nil || s.apps == nil {
 		return nil
 	}
@@ -462,7 +463,7 @@ func (s *Server) authenticateApp(r *http.Request) *App {
 	if token == "" {
 		token = strings.TrimSpace(r.Header.Get("X-Api-Key"))
 	}
-	if token == "" || !strings.HasPrefix(token, appTokenPrefix) {
+	if token == "" || !strings.HasPrefix(token, apps.TokenPrefix) {
 		return nil
 	}
 	return s.apps.FindByToken(token)

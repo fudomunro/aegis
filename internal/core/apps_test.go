@@ -8,115 +8,26 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
-func testAppStore(t *testing.T) *AppStore {
+func testAppStore(t *testing.T) *apps.Store {
 	t.Helper()
-	store, err := NewAppStore(filepath.Join(t.TempDir(), "apps.json"))
+	store, err := apps.NewStore(filepath.Join(t.TempDir(), "apps.json"))
 	if err != nil {
-		t.Fatalf("NewAppStore: %v", err)
+		t.Fatalf("apps.NewStore: %v", err)
 	}
 	return store
 }
 
-func createTestApp(t *testing.T, store *AppStore, id string, scopes policy.Permissions) (view AppView, token string) {
+func createTestApp(t *testing.T, store *apps.Store, id string, scopes policy.Permissions) (view apps.AppView, token string) {
 	t.Helper()
-	view, token, err := store.Create(AppCreateRequest{ID: id, Name: id, Scopes: scopes})
+	view, token, err := store.Create(apps.AppCreateRequest{ID: id, Name: id, Scopes: scopes})
 	if err != nil {
 		t.Fatalf("Create(%s): %v", id, err)
 	}
 	return view, token
-}
-
-func TestAppStore_CreateReturnsTokenOnce(t *testing.T) {
-	store := testAppStore(t)
-	view, token, err := store.Create(AppCreateRequest{
-		ID:     "eco",
-		Name:   "Event Coordinator",
-		Scopes: policy.Permissions{"events": policy.AccessFreeBusy},
-	})
-	if err != nil {
-		t.Fatalf("Create: %v", err)
-	}
-	if !strings.HasPrefix(token, appTokenPrefix) {
-		t.Fatalf("token prefix = %q", token)
-	}
-	if view.TokenHint == "" || view.TokenHint == token {
-		t.Fatalf("hint should be short and non-secret: %q", view.TokenHint)
-	}
-	if strings.Contains(view.TokenHint, token[len(appTokenPrefix):]) {
-		t.Fatalf("hint too long: %q", view.TokenHint)
-	}
-	// List/get never return plaintext.
-	list := store.List()
-	if len(list) != 1 {
-		t.Fatalf("list = %+v", list)
-	}
-	if list[0].TokenHint != view.TokenHint {
-		t.Fatalf("list hint mismatch")
-	}
-	got, ok := store.Get("eco")
-	if !ok || got.Scopes["events"] != policy.AccessFreeBusy {
-		t.Fatalf("get = %+v ok=%v", got, ok)
-	}
-	// Scopes default to deny-all when not listed.
-	if got.Scopes[policy.PermissionDefaultKey] != policy.AccessNone {
-		t.Fatalf("default scope = %q, want none", got.Scopes[policy.PermissionDefaultKey])
-	}
-}
-
-func TestAppStore_FindByTokenAndRotate(t *testing.T) {
-	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessRead})
-	if store.FindByToken(token) == nil {
-		t.Fatal("expected token to resolve")
-	}
-	if store.FindByToken(appTokenPrefix+"nope") != nil {
-		t.Fatal("unknown token should not resolve")
-	}
-
-	_, newToken, err := store.Rotate("eco")
-	if err != nil {
-		t.Fatalf("Rotate: %v", err)
-	}
-	if store.FindByToken(token) != nil {
-		t.Fatal("old token should be invalid after rotate")
-	}
-	if store.FindByToken(newToken) == nil {
-		t.Fatal("new token should resolve")
-	}
-}
-
-func TestAppStore_DeleteAndDisable(t *testing.T) {
-	store := testAppStore(t)
-	_, token := createTestApp(t, store, "eco", policy.Permissions{"events": policy.AccessRead})
-	disabled := true
-	if _, err := store.Update("eco", AppUpdateRequest{Disabled: &disabled}); err != nil {
-		t.Fatalf("Update disabled: %v", err)
-	}
-	if store.FindByToken(token) != nil {
-		t.Fatal("disabled app must not authenticate")
-	}
-	if err := store.Delete("eco"); err != nil {
-		t.Fatalf("Delete: %v", err)
-	}
-	if _, ok := store.Get("eco"); ok {
-		t.Fatal("app should be gone")
-	}
-}
-
-func TestAppStore_CreateRejectsBadIDAndScopes(t *testing.T) {
-	store := testAppStore(t)
-	if _, _, err := store.Create(AppCreateRequest{ID: "bad id", Scopes: policy.Permissions{"events": policy.AccessRead}}); err == nil {
-		t.Fatal("expected bad id rejected")
-	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.Permissions{"tracks": policy.AccessFreeBusy}}); err == nil {
-		t.Fatal("expected freebusy on tracks rejected")
-	}
-	if _, _, err := store.Create(AppCreateRequest{ID: "ok", Scopes: policy.Permissions{"events": "write-only-oops"}}); err == nil {
-		t.Fatal("expected unknown level rejected")
-	}
 }
 
 func TestAuthMiddleware_AppTokenLibraryOnly(t *testing.T) {
@@ -265,8 +176,8 @@ func TestAdminApps_CRUD(t *testing.T) {
 		t.Fatalf("create status = %d body = %s", w.Code, w.Body.String())
 	}
 	var created struct {
-		App   AppView `json:"app"`
-		Token string  `json:"token"`
+		App   apps.AppView `json:"app"`
+		Token string       `json:"token"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
 		t.Fatalf("decode create: %v", err)
@@ -352,7 +263,7 @@ func TestAppPathAllowed(t *testing.T) {
 
 func TestAgentForRequest_AppIdentity(t *testing.T) {
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
-	req = withAppIdentity(req, &App{ID: "eco", Name: "E Co", Scopes: policy.Permissions{"events": policy.AccessRead}})
+	req = apps.WithAppIdentity(req, &apps.App{ID: "eco", Name: "E Co", Scopes: policy.Permissions{"events": policy.AccessRead}})
 	if got := agentForRequest(req); got != "app:eco" {
 		t.Fatalf("agent = %q", got)
 	}

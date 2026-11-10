@@ -256,7 +256,7 @@ After the overlap call-outs above, the stable concepts.
 | **Auth modes** | `auto`, `tailnet`, `api-key`. | `SECURITY.md`, `run.go` |
 | **Admin principal** | Who may change policy: admin API key (`-admin-api-key`) or allowed tailnet login (`-admin-logins`). Agent credentials are never admin. | `SECURITY.md`, `handler.go`, `identity.go` |
 | **CSRF / Origin protection** | State-changing browser routes require same-origin `Origin` / `Sec-Fetch-Site` (plus a single-use consent CSRF token on app authorize). API-key and app-token writes skip the Origin check. | `SECURITY.md`, `handler.go`, `csrf` state store |
-| **App token** | Scoped third-party credential; never a provider OAuth token. Carries **app data grants** (`scopes`). | `apps.go`, `apps_grant.go` |
+| **App token** | Scoped third-party credential; never a provider OAuth token. Carries **app data grants** (`scopes`). | `core/apps/`, `apps_grant.go` |
 | **Audit log** | Durable access log (`agent`, `surface`, `decision`, …) with retention cap. | `audit.go`, README “Access audit log” |
 
 ### Runtime and connectors

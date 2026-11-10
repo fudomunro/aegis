@@ -8,35 +8,15 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/policy"
 )
-
-func TestParseScopeList(t *testing.T) {
-	entries, err := parseScopeList("events:freebusy, contacts:read")
-	if err != nil {
-		t.Fatalf("parse: %v", err)
-	}
-	if len(entries) != 2 || entries[0].Type != "events" || entries[0].Level != policy.AccessFreeBusy {
-		t.Fatalf("entries = %+v", entries)
-	}
-	if _, err := parseScopeList("tracks:freebusy"); err == nil {
-		t.Fatal("expected freebusy-on-tracks rejected")
-	}
-	if _, err := parseScopeList(""); err == nil {
-		t.Fatal("expected empty scopes rejected")
-	}
-	// bare type means read
-	entries, err = parseScopeList("events")
-	if err != nil || entries[0].Level != policy.AccessRead {
-		t.Fatalf("bare = %+v err=%v", entries, err)
-	}
-}
 
 func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{Services: []Service{}}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	// GET consent page is public.
 	req := httptest.NewRequest("GET",
@@ -129,7 +109,7 @@ func TestAppAuthorize_TokenExchangeFlow(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &tok); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if !strings.HasPrefix(tok.AccessToken, appTokenPrefix) {
+	if !strings.HasPrefix(tok.AccessToken, apps.TokenPrefix) {
 		t.Fatalf("token = %q", tok.AccessToken)
 	}
 
@@ -168,7 +148,7 @@ func TestAppAuthorize_RejectsBadRedirect(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	req := httptest.NewRequest("GET",
 		"/v1/apps/authorize?client_id=eco&scopes=events:freebusy&redirect_uri=https://evil.example.com/",
@@ -198,7 +178,7 @@ func TestAppAuthorize_JSONGrantAndAppTokenDenied(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"events:freebusy","redirect_uri":"/demo/third-party","state":"s1"}`
 	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
@@ -242,7 +222,7 @@ func TestHandleAppToken_Errors(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	req := httptest.NewRequest("POST", "/v1/apps/token", strings.NewReader(`{}`))
 	req.Header.Set("Content-Type", "application/json")
@@ -276,28 +256,11 @@ func TestHandleAppToken_Errors(t *testing.T) {
 	}
 }
 
-func TestGrantStore_Expires(t *testing.T) {
-	g := NewGrantStore()
-	code, err := g.issue(GrantCode{AppID: "eco", Scopes: policy.Permissions{"events": policy.AccessRead}})
-	if err != nil {
-		t.Fatalf("issue: %v", err)
-	}
-	// Force expiry.
-	g.mu.Lock()
-	c := g.byCode[code]
-	c.Expires = c.Expires.Add(-2 * grantCodeTTL)
-	g.byCode[code] = c
-	g.mu.Unlock()
-	if _, ok := g.consume(code); ok {
-		t.Fatal("expired code must not consume")
-	}
-}
-
 func TestAppRevoke_DisconnectToggle(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	body := `{"client_id":"eco-demo","name":"Event Coordinator","scopes":"events:freebusy","redirect_uri":"/demo/third-party"}`
 	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))

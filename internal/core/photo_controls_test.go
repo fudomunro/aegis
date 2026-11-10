@@ -1,14 +1,14 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"bytes"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func preRequestWithMessage(t *testing.T, srv *Server, userMessage string) GuardrailResponse {

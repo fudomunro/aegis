@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
@@ -134,7 +135,7 @@ func TestAdminMiddleware_WrongKeyIs401(t *testing.T) {
 func TestAdminMiddleware_AppTokenNeverAdmin(t *testing.T) {
 	srv := adminSplitServer(t)
 	srv.apps = mustAppStore(t)
-	_, token, err := srv.apps.Create(AppCreateRequest{
+	_, token, err := srv.apps.Create(apps.AppCreateRequest{
 		ID:     "evil-app",
 		Name:   "evil-app",
 		Scopes: policy.Permissions{"tracks": policy.AccessRead},
@@ -342,9 +343,9 @@ func TestIsAdminIdentity_DefaultAndAllowlist(t *testing.T) {
 	}
 }
 
-func mustAppStore(t *testing.T) *AppStore {
+func mustAppStore(t *testing.T) *apps.Store {
 	t.Helper()
-	st, err := NewAppStore(t.TempDir() + "/apps.json")
+	st, err := apps.NewStore(t.TempDir() + "/apps.json")
 	if err != nil {
 		t.Fatalf("app store: %v", err)
 	}

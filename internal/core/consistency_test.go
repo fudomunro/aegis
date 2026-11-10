@@ -1,13 +1,13 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/shared"
-
 	"log/slog"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestWithPeerLog_IncludesIdentity(t *testing.T) {

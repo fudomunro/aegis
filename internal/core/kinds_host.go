@@ -7,6 +7,7 @@ import (
 	"sort"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -14,7 +15,7 @@ import (
 
 // kindsHost adapts the hub onto the kinds.Host seam (issue #312). The
 // pipeline lives in internal/kinds; this file is the only bridge — narrow
-// and neutral, no *Service, *Config, or *AppIdentity crosses it.
+// and neutral, no *Service, *Config, or *apps.AppIdentity crosses it.
 
 // Connectors implements kinds.Host.
 func (s *Server) Connectors() map[string]any {
@@ -76,7 +77,7 @@ func (s *Server) OwnerLevel(serviceID, kind string) string {
 // what crosses the seam; allowance and cache partitioning derive from it
 // in the kinds package.
 func (s *Server) AppLevel(r *http.Request, kind string) (string, bool) {
-	app := AppIdentityFrom(r)
+	app := apps.AppIdentityFrom(r)
 	if app == nil {
 		return "", false
 	}

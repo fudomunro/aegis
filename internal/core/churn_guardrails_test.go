@@ -59,6 +59,13 @@ var allowedImports = map[string][]string{
 		"github.com/fudomunro/aegis/internal/kinds",
 		"github.com/fudomunro/aegis/internal/shared",
 	},
+	// the apps registry mints and verifies third-party app tokens; scope
+	// vocabulary comes from policy, owner-view markers from kinds.
+	"internal/core/apps": {
+		"github.com/fudomunro/aegis/internal/core/policy",
+		"github.com/fudomunro/aegis/internal/kinds",
+		"github.com/fudomunro/aegis/internal/shared",
+	},
 	"internal/kinds": {
 		"github.com/fudomunro/aegis/internal/shared",
 		"github.com/fudomunro/aegis/internal/core/policy",

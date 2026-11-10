@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/scopes"
@@ -18,7 +19,7 @@ func agentForRequest(r *http.Request) string {
 			// the shared agent-key label (issue #253).
 			return "scope:" + sc.ID
 		}
-		if app := AppIdentityFrom(r); app != nil && app.ID != "" {
+		if app := apps.AppIdentityFrom(r); app != nil && app.ID != "" {
 			return "app:" + app.ID
 		}
 		if id := PeerIdentityFrom(r); id != nil && id.LoginName != "" {

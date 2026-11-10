@@ -1,10 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/kinds"
-	"github.com/fudomunro/aegis/internal/shared"
-
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -15,8 +11,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 // gmailPayloadJSON builds a minimal format=full Gmail message body.

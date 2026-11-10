@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/audit"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/links"
@@ -292,7 +293,7 @@ func Run() {
 		os.Exit(1)
 	}
 
-	apps, err := NewAppStore(paths.Apps)
+	appStore, err := apps.NewStore(paths.Apps)
 	if err != nil {
 		slog.Error("failed to load app registry", "path", paths.Apps, "error", err)
 		os.Exit(1)
@@ -460,10 +461,10 @@ func Run() {
 		metrics:       metrics.NewAccessMetrics(0),
 		links:         linkStore,
 		ownership:     ownership,
-		apps:          apps,
+		apps:          appStore,
 		scopes:        scopes,
 		demoMode:      *demoMode,
-		grants:        NewGrantStore(),
+		grants:        apps.NewGrantStore(),
 		csrfTokens:    shared.NewStateStore(),
 		copyLedger:    copyLedger,
 		syncJobs:      syncStore,

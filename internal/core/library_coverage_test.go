@@ -1,9 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/shared"
-
 	"context"
 	"encoding/json"
 	"errors"
@@ -13,9 +10,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestLibraryHandlers_MethodNotAllowed(t *testing.T) {

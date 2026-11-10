@@ -1,19 +1,15 @@
 package core
 
 import (
-	"crypto/rand"
 	_ "embed"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
-	"time"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -24,180 +20,6 @@ var appAuthorizeHTML string
 var thirdPartyDemoHTML string
 
 // grantCodeTTL bounds how long a consent code may be exchanged for an app token.
-const grantCodeTTL = 10 * time.Minute
-
-// grantCodeMax is a loose cap on unredeemed codes (crash safety).
-const grantCodeMax = 256
-
-// GrantCode is a short-lived, single-use authorization code from the consent
-// page (issue #131). Redeeming it issues (or rotates) a third-party app token.
-type GrantCode struct {
-	Code       string
-	AppID      string
-	AppName    string
-	Scopes     policy.Permissions
-	RedirectTo string
-	State      string
-	Expires    time.Time
-}
-
-// GrantStore holds pending consent codes in memory only.
-type GrantStore struct {
-	mu     sync.Mutex
-	byCode map[string]GrantCode
-}
-
-func NewGrantStore() *GrantStore {
-	return &GrantStore{byCode: make(map[string]GrantCode)}
-}
-
-func (g *GrantStore) issue(c GrantCode) (string, error) {
-	raw := make([]byte, 24)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	c.Code = "aeg_grant_" + base64.RawURLEncoding.EncodeToString(raw)
-	c.Expires = time.Now().Add(grantCodeTTL)
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if len(g.byCode) >= grantCodeMax {
-		for k, v := range g.byCode {
-			if time.Now().After(v.Expires) {
-				delete(g.byCode, k)
-			}
-		}
-	}
-	g.byCode[c.Code] = c
-	return c.Code, nil
-}
-
-func (g *GrantStore) consume(code string) (GrantCode, bool) {
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	c, ok := g.byCode[code]
-	if !ok {
-		return GrantCode{}, false
-	}
-	delete(g.byCode, code)
-	if time.Now().After(c.Expires) {
-		return GrantCode{}, false
-	}
-	return c, true
-}
-
-// authorizeQuery is the consent request from a third-party "Connect Aegis"
-// button (issue #131). Mirrors a tiny subset of OAuth authorize params.
-type authorizeQuery struct {
-	ClientID    string
-	Name        string
-	Scopes      string // comma or space separated: events:freebusy, contacts:read
-	RedirectURI string
-	State       string
-}
-
-func parseAuthorizeQuery(q url.Values) (authorizeQuery, []PermissionEntry, error) {
-	req := authorizeQuery{
-		ClientID:    strings.TrimSpace(q.Get("client_id")),
-		Name:        strings.TrimSpace(q.Get("name")),
-		Scopes:      strings.TrimSpace(q.Get("scopes")),
-		RedirectURI: strings.TrimSpace(q.Get("redirect_uri")),
-		State:       strings.TrimSpace(q.Get("state")),
-	}
-	if req.ClientID == "" {
-		return req, nil, fmt.Errorf("client_id is required")
-	}
-	if err := validateAppID(req.ClientID); err != nil {
-		return req, nil, err
-	}
-	entries, err := parseScopeList(req.Scopes)
-	if err != nil {
-		return req, nil, err
-	}
-	return req, entries, nil
-}
-
-// PermissionEntry is one "type:level" pair from a scopes query parameter.
-type PermissionEntry struct {
-	Type  string
-	Level string
-}
-
-func parseScopeList(s string) ([]PermissionEntry, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return nil, fmt.Errorf("scopes is required (e.g. events:freebusy)")
-	}
-	fields := strings.FieldsFunc(s, func(r rune) bool {
-		return r == ',' || r == ' ' || r == ';' || r == '+'
-	})
-	var out []PermissionEntry
-	for _, f := range fields {
-		f = strings.TrimSpace(f)
-		if f == "" {
-			continue
-		}
-		// Accept "events:freebusy" or bare "events" → read.
-		typ, level := f, policy.AccessRead
-		if i := strings.IndexByte(f, ':'); i >= 0 {
-			typ = strings.TrimSpace(f[:i])
-			level = strings.TrimSpace(f[i+1:])
-		}
-		if typ == "" {
-			return nil, fmt.Errorf("invalid scope %q", f)
-		}
-		out = append(out, PermissionEntry{Type: typ, Level: level})
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("scopes is required (e.g. events:freebusy)")
-	}
-	perms := policy.Permissions{}
-	for _, e := range out {
-		perms[e.Type] = e.Level
-	}
-	if err := policy.ValidatePermissions(perms); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func scopesFromEntries(entries []PermissionEntry) policy.Permissions {
-	p := policy.Permissions{policy.PermissionDefaultKey: policy.AccessNone}
-	for _, e := range entries {
-		p[e.Type] = policy.NormalizeAccess(e.Level)
-	}
-	return p
-}
-
-// isSafeRedirectURI keeps the demo/grant redirect on this Aegis origin or an
-// explicit path. Full OAuth would use a registered allowlist (issue #131).
-func isSafeRedirectURI(raw string) bool {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return true // stay on the authorize page's own origin
-	}
-	if strings.HasPrefix(raw, "/") && !strings.HasPrefix(raw, "//") {
-		return true
-	}
-	return false
-}
-
-func redirectWithCode(raw, code, state string) string {
-	if raw == "" {
-		raw = "/demo/third-party"
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "/demo/third-party?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(state)
-	}
-	q := u.Query()
-	q.Set("code", code)
-	if state != "" {
-		q.Set("state", state)
-	}
-	u.RawQuery = q.Encode()
-	return u.String()
-}
-
 // HandleAppAuthorize shows the consent page (GET) or records a grant (POST).
 //
 // GET  /v1/apps/authorize?client_id=&name=&scopes=&redirect_uri=&state=
@@ -208,11 +30,11 @@ func (s *Server) HandleAppAuthorize(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		q := r.URL.Query()
-		if _, _, err := parseAuthorizeQuery(q); err != nil {
+		if _, _, err := apps.ParseAuthorizeQuery(q); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if !isSafeRedirectURI(q.Get("redirect_uri")) {
+		if !apps.IsSafeRedirectURI(q.Get("redirect_uri")) {
 			shared.WriteJSONError(w, http.StatusBadRequest, "redirect_uri must be a path on this host")
 			return
 		}
@@ -265,29 +87,29 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	req, entries, err := parseAuthorizeQuery(q)
+	req, entries, err := apps.ParseAuthorizeQuery(q)
 	if err != nil {
 		shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	if !isSafeRedirectURI(req.RedirectURI) {
+	if !apps.IsSafeRedirectURI(req.RedirectURI) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "redirect_uri must be a path on this host")
 		return
 	}
-	scopes := scopesFromEntries(entries)
+	scopes := apps.ScopesFromEntries(entries)
 	if req.Name == "" {
 		req.Name = req.ClientID
 	}
 
 	// Persist/refresh the app registration and mint a fresh token for this grant.
-	ensure := AppCreateRequest{ID: req.ClientID, Name: req.Name, Scopes: scopes}
+	ensure := apps.AppCreateRequest{ID: req.ClientID, Name: req.Name, Scopes: scopes}
 	if _, ok := s.apps.Get(req.ClientID); ok {
 		name := req.Name
 		if err := s.apps.Enable(req.ClientID); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if _, err := s.apps.Update(req.ClientID, AppUpdateRequest{Name: &name, Scopes: &scopes}); err != nil {
+		if _, err := s.apps.Update(req.ClientID, apps.AppUpdateRequest{Name: &name, Scopes: &scopes}); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -298,9 +120,9 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		}
 	}
 	if s.grants == nil {
-		s.grants = NewGrantStore()
+		s.grants = apps.NewGrantStore()
 	}
-	code, err := s.grants.issue(GrantCode{
+	code, err := s.grants.Issue(apps.GrantCode{
 		AppID:      req.ClientID,
 		AppName:    req.Name,
 		Scopes:     scopes,
@@ -323,11 +145,11 @@ func (s *Server) handleAppAuthorizeGrant(w http.ResponseWriter, r *http.Request)
 		})
 		return
 	}
-	target := redirectWithCode(req.RedirectURI, code, req.State)
+	target := apps.RedirectWithCode(req.RedirectURI, code, req.State)
 	http.Redirect(w, r, target, http.StatusFound)
 }
 
-func mustAppView(store *AppStore, id string) AppView {
+func mustAppView(store *apps.Store, id string) apps.AppView {
 	v, _ := store.Get(id)
 	return v
 }
@@ -360,7 +182,7 @@ func (s *Server) HandleAppToken(w http.ResponseWriter, r *http.Request) {
 		shared.WriteJSONError(w, http.StatusBadRequest, "code is required")
 		return
 	}
-	grant, ok := s.grants.consume(code)
+	grant, ok := s.grants.Consume(code)
 	if !ok {
 		shared.WriteJSONError(w, http.StatusBadRequest, "invalid or expired grant code")
 		return
@@ -400,7 +222,7 @@ func (s *Server) HandleAppRevoke(w http.ResponseWriter, r *http.Request) {
 	if token == "" {
 		token = strings.TrimSpace(r.Header.Get("X-Api-Key"))
 	}
-	if token == "" || !strings.HasPrefix(token, appTokenPrefix) {
+	if token == "" || !strings.HasPrefix(token, apps.TokenPrefix) {
 		shared.WriteJSONError(w, http.StatusUnauthorized, "app token required")
 		return
 	}
