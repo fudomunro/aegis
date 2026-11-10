@@ -139,42 +139,32 @@ func AllowsMethod(level, method string) bool {
 
 // DataGrant is the stored form of one kind's agent data grant (issue #148).
 // At request time it materializes to a single level via DataGrants.Levels;
-// authorization never reads this struct directly. Per-provider overrides
-// are legacy migration data — Levels ignores them.
+// authorization never reads this struct directly. The former per-provider
+// overrides are gone with the route-grants collapse — `providers` keys in
+// old files are ignored on load.
 //
 // The access vocabulary is none / read / write / read-write — narrowed
 // disclosure is its own route (issue #348).
 type DataGrant struct {
-	// Default is the access level for the kind. Empty means unrestricted
-	// for legacy entries (opt-in kinds stay none until named).
+	// Default is the access level for the kind. Empty or malformed
+	// resolves to none at lookup time.
 	Default string `json:"default,omitempty"`
-	// Providers are legacy per-connector tighten-only overrides. Kept for
-	// on-disk compat; ignored by the collapsed model.
-	Providers map[string]string `json:"providers,omitempty"`
 }
 
 // DataGrants maps kind / permission keys to their stored agent policy.
 type DataGrants map[string]DataGrant
 
-// ValidateDataGrants checks every data grant entry (default + provider
-// overrides) against the access vocabulary and type-scoped redaction rules.
+// ValidateDataGrants checks every data grant entry against the access
+// vocabulary.
 func ValidateDataGrants(policies DataGrants) error {
 	for kind, policy := range policies {
 		if kind == "" {
 			return fmt.Errorf("data grants: empty kind key")
 		}
-		// Empty default is allowed (DefaultAccessType / opt-in none).
+		// Empty default is allowed (it resolves to none at lookup time).
 		if policy.Default != "" {
 			if err := ValidateGrantMap(GrantMap{kind: policy.Default}); err != nil {
 				return fmt.Errorf("data grant %q: %w", kind, err)
-			}
-		}
-		for provider, level := range policy.Providers {
-			if provider == "" {
-				return fmt.Errorf("data grant %q: empty provider key", kind)
-			}
-			if err := ValidateGrantMap(GrantMap{kind: level}); err != nil {
-				return fmt.Errorf("data grant %q provider %q: %w", kind, provider, err)
 			}
 		}
 	}

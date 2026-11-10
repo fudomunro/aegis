@@ -137,7 +137,7 @@ resolves through the same `GrantMap.Level` rule:
 | Type absent, no `default` key | `none` |
 | Type absent, `default` key present | the `default` key's level |
 | `{"music": {}}` (listed, empty) | `none` — a listed kind must state its own level |
-| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider entries are legacy and ignored; grant via the kind's `default` level |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — `providers` keys are removed and ignored on load; grant via the route's `default` level |
 | `{"default": {"default": "read"}, "music": {...}}` with `music.default` empty | `none` for `music` — the `default` key covers **unlisted** kinds only; listing a kind is an explicit act |
 
 The owner key is the single exception to "starts empty": when no grants are

@@ -383,10 +383,6 @@
   .accessor-level.read { background: rgba(88,166,255,0.15); color: var(--accent); }
   .accessor-level.write { background: rgba(210,153,34,0.15); color: var(--orange); }
   .accessor-level.read-write { background: rgba(63,185,80,0.15); color: var(--green); }
-  .accessor-level.freebusy,
-  .accessor-level.summary,
-  .accessor-level.city,
-  .accessor-level.precise { background: rgba(210,153,34,0.15); color: var(--orange); }
   .accessor-disabled { opacity: 0.55; }
   .perm-row {
     display: grid; grid-template-columns: minmax(120px, 1fr) minmax(140px, 180px);
@@ -1971,10 +1967,6 @@
     const v = normalizeAccess(level);
     const label = {
       none: "Off",
-      freebusy: "Free/busy",
-      summary: "Totals",
-      city: "City",
-      precise: "Precise",
       read: "Available",
       write: "Write",
       "read-write": "Editable",

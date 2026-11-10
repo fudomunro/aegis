@@ -51,7 +51,7 @@ func TestAllowsKindMethod(t *testing.T) {
 func TestLevels_MaterializesRuleMap(t *testing.T) {
 	legacy := DataGrants{
 		"tracks":    {Default: "rw"},
-		"playlists": {Default: "ro", Providers: map[string]string{"spotify": AccessNone}},
+		"playlists": {Default: "ro"},
 		"places":    {Default: ""},
 		"events":    {},
 		DefaultKey:  {Default: "read"},
@@ -72,9 +72,7 @@ func TestLevels_MaterializesRuleMap(t *testing.T) {
 			t.Fatalf("Levels()[%q] = %q, want %q", k, got[k], v)
 		}
 	}
-	if level := got.Level("playlists"); level != AccessRead {
-		t.Fatalf("materialized map must drop provider overrides, got %q", level)
-	}
+
 }
 
 func TestLevels_EmptyIsDenyAll(t *testing.T) {

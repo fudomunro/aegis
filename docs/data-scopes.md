@@ -102,7 +102,7 @@ regardless of levels.
 | Type absent, no `default` key | `none` |
 | Type absent, `default` key present | the `default` key's level |
 | `{"music": {}}` (listed, empty) | `none` — a listed kind must state its own level |
-| `{"music": {"providers": {"spotify": "read"}}}` | `none` — provider entries are legacy and ignored; a listed kind must state its own `default` level |
+| `{"music": {"providers": {"spotify": "read"}}}` | `none` — `providers` keys are removed and ignored on load; a listed key must state its own `default` level |
 | `{"default": {"default": "read"}, "music": {}}` | `none` for `music` — the `default` key covers unlisted kinds only |
 
 This is the single `GrantMap.Level` rule every key resolves through —

@@ -789,7 +789,7 @@ GET /v1/admin/library/{kind} — admin Library tab preview (; not counted as age
 GET /v1/admin/search/status — search index health: enabled, path, per-kind searchable flag + indexed doc counts
 GET /v1/admin/permissions — kind-centric data grants editor model: agent level + relevant apps/sync per kind
 GET /v1/admin/data-grants — agent data-grant map (primary,)
-PUT /v1/admin/data-grants — replace data grants {"types":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}
+PUT /v1/admin/data-grants — replace data grants {"data_grants":{"tracks":{"default":"read"}}}
 GET /v1/admin/ownership — per-kind data-ownership status (confirmed state, sources under management, unused routes, copy freshness)
 POST /v1/admin/ownership/{kind} — confirm the kind is complete {"note":"…"}; answers with the refreshed status
 DELETE /v1/admin/ownership/{kind} — reopen the kind (clear the confirmation; the note is kept)

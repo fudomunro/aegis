@@ -208,8 +208,8 @@ level on the full route:
  opt-in kinds (below), which never open through `default`.
 3. Otherwise **`none`**. Malformed level tokens deny.
 
-Per-provider entries inside a `DataGrant` (`providers`) are legacy
-migration data and are ignored at request time.
+`providers` keys inside a `DataGrant` are removed and ignored on load
+(they were per-connector tighten-only overrides in the two-policy era).
 - **The full routes serve their richest shape** (`events`, `transactions`,
  `documents`, `places` with coordinates). Grant a narrowed route instead of
  the full one when a caller needs less — a `freebusy`-only key is denied
