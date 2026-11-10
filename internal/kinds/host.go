@@ -9,6 +9,22 @@ import (
 	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/fudomunro/aegis/internal/core/policy"
+)
+
+// Principal says which kind of key a request presented. It decides only
+// who the rule map belongs to; allowance and redaction come from the map.
+type Principal int
+
+const (
+	// PrincipalOwner is the agent key, a tailnet peer, or an internal
+	// owner-tier fetch.
+	PrincipalOwner Principal = iota
+	// PrincipalApp is a third-party app token.
+	PrincipalApp
+	// PrincipalScope is an invite token or scoped API key.
+	PrincipalScope
 )
 
 // ServiceView is the neutral service fact the pipeline needs. No
@@ -77,15 +93,16 @@ type Host interface {
 	Service(id string) (ServiceView, bool)
 	// Services returns every configured service view.
 	Services() []ServiceView
-	// RequestLevel is the effective access level for kind on a service
-	// for this request: owner policy tightened by scope grants.
-	RequestLevel(r *http.Request, serviceID, kind string) string
-	// OwnerLevel is the owner-tier access level for kind on a service.
-	OwnerLevel(serviceID, kind string) string
-	// AppLevel returns the third-party app's scope level for kind and
-	// whether the request carries an app identity. App allowance and
-	// cache partitioning derive from the level in this package.
-	AppLevel(r *http.Request, kind string) (level string, isApp bool)
+	// Grants is the single authorization lookup: the rule map (kind →
+	// access level) carried by the request's recognized key, plus which
+	// kind of key it is. The map is deny-by-default; allowance is
+	// AllowsKindMethod and redaction follows Level. App scopes, data-scope
+	// grants, and the owner map all resolve here — there is no second
+	// policy layer to merge at request time.
+	Grants(r *http.Request) (policy.Permissions, Principal)
+	// OwnerGrants is the owner-tier rule map: the view used for internal
+	// fetches and for what a reduced principal is being narrowed from.
+	OwnerGrants() policy.Permissions
 	// RecordAccess records one redacted access event.
 	RecordAccess(r *http.Request, ev AccessEvent)
 	// Logger returns the request-scoped logger for a named handler.
@@ -101,8 +118,8 @@ type Host interface {
 }
 
 // ownerViewKey marks an internal owner-tier fetch (issue #272). One owner
-// only: core's AppIdentityFrom and requestLevel consult kinds.OwnerView so
-// a reduced caller's cold-index bootstrap still stores full rows.
+// only: core's Grants consults kinds.OwnerView so a reduced caller's
+// cold-index bootstrap still stores full rows.
 type ownerViewKey struct{}
 
 // OwnerViewRequest returns the request view used to materialize the search

@@ -100,13 +100,21 @@ func apiRouteAllowed(method, path string) bool {
 		return method == http.MethodGet || method == http.MethodHead ||
 			method == http.MethodPost
 	case strings.HasPrefix(path, "/v1/library/"):
-		// Library reads. Writes (mirror, photo share, entity-link
-		// mutations) are admin-side by method. Merge review and the copy
-		// ledger expose owner-internal maintenance state that kind
-		// grants do not filter, so they stay admin-side too — the deny
-		// list stays explicit. The allow side derives from the kind Route
+		// Library writes are grant-decided: mirror, photo share, and
+		// entity-link mutations join the API surface and the request
+		// key's write data grant authorizes them. Merge review and the
+		// copy ledger expose owner-internal maintenance state that kind
+		// grants do not filter, so they stay admin-side — the deny list
+		// stays explicit. The read allow side derives from the kind Route
 		// declarations (issue #312); an unlisted multi-segment path is
 		// not an agent route.
+		switch {
+		case path == "/v1/library/mirror" && method == http.MethodPost,
+			path == "/v1/library/photos/share" && method == http.MethodPost,
+			path == "/v1/library/links" && method == http.MethodPost,
+			strings.HasPrefix(path, "/v1/library/links/") && method == http.MethodDelete:
+			return true
+		}
 		if method != http.MethodGet && method != http.MethodHead {
 			return false
 		}

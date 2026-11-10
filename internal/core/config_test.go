@@ -237,8 +237,8 @@ func TestGetService_ReturnsSnapshot(t *testing.T) {
 	if live.Endpoint != "" {
 		t.Fatalf("Endpoint leaked to store: %q", live.Endpoint)
 	}
-	if live.GrantLimits.For("player") != policy.AccessNone {
-		t.Fatalf("Permissions mutated via snapshot: %q", live.GrantLimits.For("player"))
+	if live.GrantLimits.Level("player") != policy.AccessNone {
+		t.Fatalf("Permissions mutated via snapshot: %q", live.GrantLimits.Level("player"))
 	}
 
 	if !cfg.updateService("spotify", func(s *Service) { s.Endpoint = "https://mock.example" }) {
@@ -294,7 +294,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 				return
 			}
 			_ = svc.GrantLimits.AllowsRead("tracks")
-			_ = svc.GrantLimits.AccessForKind("")
+			_ = svc.GrantLimits.Level("")
 			_ = svc.Endpoint
 		}
 	}()
@@ -317,7 +317,7 @@ func TestConfig_ConcurrentSetServicePermissionsAndReads(t *testing.T) {
 		for i := 0; i < iterations; i++ {
 			matched := cfg.FindMatchingServices("play something on spotify")
 			for _, svc := range matched {
-				_ = svc.GrantLimits.For("player")
+				_ = svc.GrantLimits.Level("player")
 			}
 			_ = cfg.ServiceCount()
 		}

@@ -502,47 +502,6 @@ func ServiceVisible(dataset string, sc *Scope) bool {
 	return sc.Dataset == dataset
 }
 
-// Allows reports whether the request's data scope grants the method on
-// a kind. Deny-by-default: an unlisted type resolves to none. The owner
-// principal (no scope) is unrestricted here — owner-tier policy is enforced
-// separately so the two layers never drift into each other.
-func Allows(r *http.Request, kind, method string) bool {
-	sc := From(r)
-	if sc == nil {
-		return true
-	}
-	return policy.AllowsMethod(policy.ScopeGrantsAccess(sc.Grants, kind, ""), method)
-}
-
-// CacheSuffix namespaces library cache entries per principal so one
-// scope cannot read another's cached page: the dataset partition plus a
-// fingerprint of the scope's grants (two principals with different grants
-// see different responses even inside one dataset).
-func CacheSuffix(sc *Scope) string {
-	if sc == nil {
-		return ""
-	}
-	suffix := ""
-	if sc.Dataset != "" {
-		suffix += "|ds:" + sc.Dataset
-	}
-	return suffix + "|sg:" + grantsFingerprint(sc.Grants)
-}
-
-// grantsFingerprint is a stable short digest of a grant map (json.Marshal
-// sorts map keys). Empty grants share the reserved "none" fingerprint.
-func grantsFingerprint(g policy.DataGrants) string {
-	if len(g) == 0 {
-		return "none"
-	}
-	raw, err := json.Marshal(g)
-	if err != nil {
-		return "invalid"
-	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:8])
-}
-
 // ForceReadOnlyAll marks every data scope read-only (demo lockdown).
 func (s *Store) ForceReadOnlyAll() {
 	if s == nil {

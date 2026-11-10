@@ -486,49 +486,6 @@ func TestScopeGrants_TypeAllowList(t *testing.T) {
 // TestScopeGrants_ProviderOverrideTightens proves provider entries only narrow
 // a stated type level: the overridden connector disappears from the aggregate
 // while the other still answers.
-func TestScopeGrants_ProviderOverrideTightens(t *testing.T) {
-	srv := scopeServer(t, []scopes.Scope{
-		{ID: "house", APIKey: "YOUR_HOUSE_KEY", Grants: policy.DataGrants{
-			"contacts": {
-				Default:   policy.AccessRead,
-				Providers: map[string]string{"sample-library-gondor": policy.AccessNone},
-			},
-		}},
-	})
-	// Shared services (no dataset) so one principal sees both connectors.
-	srv.config.Services[0].Dataset = ""
-	srv.config.Services[1].Dataset = ""
-
-	body := callLibrary(t, srv, "YOUR_HOUSE_KEY", "/v1/library/contacts")
-	if !strings.Contains(body, "shire") {
-		t.Fatalf("granted provider missing: %s", body)
-	}
-	if strings.Contains(body, "gondor") {
-		t.Fatalf("provider override did not tighten: %s", body)
-	}
-}
-
-// TestScopeGrants_NeverExceedsOwnerDataGrants proves the two layers AND: a
-// scope grant cannot open a kind the owner tier closed.
-func TestScopeGrants_NeverExceedsOwnerDataGrants(t *testing.T) {
-	srv := scopeServer(t, []scopes.Scope{
-		{ID: "house", Dataset: "shire", APIKey: "YOUR_HOUSE_KEY",
-			Grants: policy.DataGrants{"contacts": {Default: policy.AccessFull}}},
-	})
-	for i := range srv.config.Services {
-		srv.config.Services[i].GrantLimits = policy.Permissions{"contacts": policy.AccessNone}
-	}
-
-	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("contacts"))(w, scopeRequest("YOUR_HOUSE_KEY", "/v1/library/contacts"))
-	if w.Code != http.StatusForbidden {
-		t.Fatalf("owner denial must survive a granting scope: status = %d body=%s", w.Code, w.Body.String())
-	}
-	if !strings.Contains(w.Body.String(), "denied") {
-		t.Fatalf("expected a denial body: %s", w.Body.String())
-	}
-}
-
 // TestScopeGrants_RedactionLevelAndCache: two principals on one dataset with
 // different event levels must see differently redacted responses — and the
 // cache must not hand the full-read page to the freebusy-only principal.

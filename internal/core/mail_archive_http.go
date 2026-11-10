@@ -8,7 +8,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -31,11 +30,11 @@ func (s *Server) mailReadable() bool {
 	return s.libraryReadableFor(mailPermType)
 }
 
-// mailReadableFor reports whether the request may use the mail archive: the
-// principal's scope grants messages (deny-by-default) and the owner tier
-// allows message reads.
+// mailReadableFor reports whether the request may use the mail archive:
+// the request key's data grant allows message reads and the owner tier
+// has readable message sources.
 func (s *Server) mailReadableFor(r *http.Request) bool {
-	if !scopes.Allows(r, mailPermType, http.MethodGet) {
+	if !s.requestGrants(r).AllowsKindMethod(mailPermType, http.MethodGet) {
 		return false
 	}
 	return s.mailReadable()

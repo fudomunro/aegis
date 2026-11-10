@@ -67,18 +67,18 @@ func TestPlacesLevelForResponse(t *testing.T) {
 
 func TestPermissions_PlacesDefaultNone(t *testing.T) {
 	var nilPerm policy.Permissions
-	if got := nilPerm.For("places"); got != policy.AccessNone {
+	if got := nilPerm.Level("places"); got != policy.AccessNone {
 		t.Fatalf("nil map places = %q, want none", got)
 	}
 	p := policy.Permissions{"default": policy.AccessFull, "tracks": policy.AccessRead}
-	if got := p.For("places"); got != policy.AccessNone {
+	if got := p.Level("places"); got != policy.AccessNone {
 		t.Fatalf("default key must not enable places: %q", got)
 	}
 	if p.AllowsRead("places") {
 		t.Fatal("places must not be readable by default")
 	}
 	enabled := policy.Permissions{"places": policy.AccessCity}
-	if got := enabled.For("places"); got != policy.AccessCity {
+	if got := enabled.Level("places"); got != policy.AccessCity {
 		t.Fatalf("explicit places = %q, want city", got)
 	}
 	if !enabled.AllowsRead("places") {
@@ -138,11 +138,10 @@ func TestPhotosPlacesJoinDemo(t *testing.T) {
 
 func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"places": {Default: policy.AccessPrecise}},
 		Services: []Service{
-			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: policy.Permissions{"places": policy.AccessPrecise}},
-			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject",
-				GrantLimits: policy.Permissions{"places": policy.AccessRead}},
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
+			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -188,9 +187,9 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 
 func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"places": {Default: policy.AccessCity}},
 		Services: []Service{
-			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: policy.Permissions{"places": policy.AccessCity}},
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -223,9 +222,9 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 
 func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"places": {Default: policy.AccessRead}},
 		Services: []Service{
-			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: policy.Permissions{"places": policy.AccessRead}},
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
@@ -258,9 +257,9 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 
 func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"places": {Default: policy.AccessPrecise}},
 		Services: []Service{
-			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject",
-				GrantLimits: policy.Permissions{"places": policy.AccessPrecise}},
+			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

@@ -2,8 +2,6 @@ package kinds
 
 import (
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func testPlace(name, locality string, lat, lng float64, start string, trip bool) PlaceVisit {
@@ -78,23 +76,5 @@ func TestRedactPlaceVisitRead_OmitsCoordinates(t *testing.T) {
 	}
 	if r.Place.Lat != 0 || r.Place.Lng != 0 {
 		t.Fatalf("read leaked coordinates: %+v", r.Place)
-	}
-}
-
-func TestTighterPlacesLevel(t *testing.T) {
-	cases := []struct {
-		a, b, want string
-	}{
-		{policy.AccessCity, policy.AccessPrecise, policy.AccessCity},
-		{policy.AccessPrecise, policy.AccessCity, policy.AccessCity},
-		{policy.AccessRead, policy.AccessCity, policy.AccessCity},
-		{policy.AccessPrecise, policy.AccessRead, policy.AccessRead},
-		{policy.AccessNone, policy.AccessRead, policy.AccessNone},
-		{"", policy.AccessRead, policy.AccessNone},
-	}
-	for _, c := range cases {
-		if got := tighterPlacesLevel(c.a, c.b); got != c.want {
-			t.Fatalf("tighter(%q,%q)=%q want %q", c.a, c.b, got, c.want)
-		}
 	}
 }

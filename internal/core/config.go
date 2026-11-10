@@ -45,9 +45,9 @@ type Config struct {
 	// dataGrantsPath is the admin data-grant overlay file (data_grants.json).
 	// Admin data-grant saves always write here — never aegis.json.
 	dataGrantsPath string
-	// typePolicies is the primary type-owned agent-access policy (issue #148).
-	// Enforcement resolves type default → provider override → legacy service
-	// permissions (tighten-only). See policy.EffectiveAccess.
+	// typePolicies is the agent data-grant map (issue #148). It
+	// materializes to the owner key's rule map via DataGrants.Levels;
+	// request authorization is one lookup over that map.
 	typePolicies policy.DataGrants
 	// serviceLimits is the loaded overlay map (service id → permissions;
 	// present key with nil value means explicitly cleared). Service maps are
@@ -470,34 +470,4 @@ func (c *Config) SeedDataGrant(kind string, grant policy.DataGrant) {
 		return
 	}
 	c.typePolicies[kind] = grant
-}
-
-// EffectivePermissions returns the resolved service-scoped permission map
-// for a provider: data grant first, then service grant_limits tightened
-// on top (issue #148).
-func (c *Config) EffectivePermissions(serviceID string) policy.Permissions {
-	// Hold the read lock across the whole resolution: typePolicies and the
-	// service's GrantLimits map are live references, and policy.* only reads
-	// them. The result is a fresh map (or a clone), so nothing escapes.
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	var legacy policy.Permissions
-	if svc := c.serviceByID(serviceID); svc != nil {
-		legacy = svc.GrantLimits
-	}
-	return policy.EffectivePermissions(c.typePolicies, legacy, serviceID)
-}
-
-// EffectiveAccess resolves one kind for a provider. Unclassified paths
-// pass kind == "" and get the Strictest view (issue #94).
-func (c *Config) EffectiveAccess(serviceID, kind string) string {
-	// Same reasoning as EffectivePermissions: read the live maps under the
-	// lock rather than handing them to an unlocked caller.
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	var legacy policy.Permissions
-	if svc := c.serviceByID(serviceID); svc != nil {
-		legacy = svc.GrantLimits
-	}
-	return policy.EffectiveAccess(c.typePolicies, legacy, kind, serviceID)
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 )
 
@@ -28,6 +27,7 @@ func Collect[T any, P any](
 	lister func(P) func(ctx context.Context) ([]T, bool, error),
 ) (targets []NamedLister[T], denied []string) {
 	scope := scopes.From(r)
+	grants, _ := h.Grants(r)
 	for id, connector := range h.Connectors() {
 		svc, ok := h.Service(id)
 		if !ok || svc.Action == "block" {
@@ -40,7 +40,7 @@ func Collect[T any, P any](
 		if !ok {
 			continue
 		}
-		if !policy.AllowsMethod(h.RequestLevel(r, id, kind), http.MethodGet) {
+		if !grants.AllowsKindMethod(kind, http.MethodGet) {
 			denied = append(denied, id)
 			continue
 		}

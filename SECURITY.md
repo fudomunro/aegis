@@ -16,7 +16,7 @@ Aegis serves **two listeners with different perimeters**:
 | Listener | Perimeter | Exposure |
 |----------|-----------|----------|
 | **API listener** (`/v1/library/*`, pre-request, content transport, mail agent routes, app-token endpoints) | **The credential** when external access is enabled; the tailnet when it is not | May be public behind TLS |
-| **Admin listener** (`/v1/admin/*`, `/metrics`, OAuth flows, app consent, mirror/link writes, mail sync) | **The tailnet** — Tailscale identity or the admin API key | In-tailnet / loopback only. Never public |
+| **Admin listener** (`/v1/admin/*`, `/metrics`, OAuth flows, app consent, mail sync) | **The tailnet** — Tailscale identity or the admin API key | In-tailnet / loopback only. Never public |
 
 ### Tailnet perimeter (admin listener, tailnet-only API)
 
@@ -107,9 +107,9 @@ traffic on the API listener, policy on the admin listener (in-tailnet).
 
 | Principal | Credentials | May call |
 |-----------|-------------|----------|
-| **Agent** | Agent API key (`-api-key`), tagged devices, third-party app tokens, allowed tailnet logins, invite tokens | Library reads, pre-request hook, content transport (`/v1/services/*`), mail search/status, `GET /v1/auth/status` |
+| **Agent** | Agent API key (`-api-key`), tagged devices, third-party app tokens, allowed tailnet logins, invite tokens | Library reads and writes (writes require a **write** data grant), pre-request hook, content transport (`/v1/services/*`), mail search/status, `GET /v1/auth/status` |
 | **External** | Invite token (data-scope key) | Same agent surface, narrowed to the scope's **granted** kinds and dataset; never admin |
-| **Admin** | Admin API key (`-admin-api-key`) or a tailnet **user** login that passes admin rules, on the admin listener | Everything agents can, plus `/v1/admin/*`, data-grant writes, app minting (`POST /v1/apps/authorize`), mirror / photo-share / entity-link writes, mail sync, OAuth revoke, `/metrics` |
+| **Admin** | Admin API key (`-admin-api-key`) or a tailnet **user** login that passes admin rules, on the admin listener | Everything agents can, plus `/v1/admin/*`, data-grant writes, app minting (`POST /v1/apps/authorize`), mail sync, OAuth revoke, `/metrics` |
 
 **Default on a solo tailnet:** admin = allowed user logins (your browser
 session through Tailscale Serve); agents = tagged nodes and the API key. Tagged

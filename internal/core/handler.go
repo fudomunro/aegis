@@ -834,7 +834,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		// Skip services that deny every kind — nothing useful to inject.
-		if allDataDenied(s.requestPermissions(r, &svc)) {
+		if allDataDenied(s.requestGrants(r)) {
 			logger.Info("skipping inject: all kinds denied by permission", "service", svc.ID)
 			continue
 		}
@@ -850,7 +850,7 @@ func (s *Server) HandlePreRequest(w http.ResponseWriter, r *http.Request) {
 			)
 			instructions = append(instructions, instruction)
 		}
-		if notice := permissionNotice(s.requestPermissions(r, &svc)); notice != "" {
+		if notice := permissionNotice(s.requestGrants(r)); notice != "" {
 			instructions = append(instructions, notice)
 		}
 	}

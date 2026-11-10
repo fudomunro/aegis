@@ -56,7 +56,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 	// Bootstrap from aegis.json still applies when overlay is empty.
-	if got := cfg.GetService("spotify").GrantLimits.For("tracks"); got != policy.AccessRead {
+	if got := cfg.GetService("spotify").GrantLimits.Level("tracks"); got != policy.AccessRead {
 		t.Fatalf("bootstrap tracks = %q, want read", got)
 	}
 
@@ -105,7 +105,7 @@ func TestPermissionsOverlay_PersistsWithoutTouchingAegisJSON(t *testing.T) {
 	if svc == nil {
 		t.Fatal("spotify missing after reload")
 	}
-	if svc.GrantLimits.For("player") != policy.AccessNone || svc.GrantLimits.For("tracks") != policy.AccessRead {
+	if svc.GrantLimits.Level("player") != policy.AccessNone || svc.GrantLimits.Level("tracks") != policy.AccessRead {
 		t.Fatalf("reloaded permissions = %+v", svc.GrantLimits)
 	}
 
@@ -166,14 +166,14 @@ func TestPermissionsOverlay_BootstrapUnchangedWhenAbsentFromOverlay(t *testing.T
 		t.Fatal(err)
 	}
 	// spotify not in overlay → bootstrap.
-	if got := fresh.GetService("spotify").GrantLimits.For("player"); got != policy.AccessNone {
+	if got := fresh.GetService("spotify").GrantLimits.Level("player"); got != policy.AccessNone {
 		t.Fatalf("spotify player = %q, want none from bootstrap", got)
 	}
 	// immich in overlay → overlay wins.
-	if got := fresh.GetService("immich").GrantLimits.For("contacts"); got != policy.AccessNone {
+	if got := fresh.GetService("immich").GrantLimits.Level("contacts"); got != policy.AccessNone {
 		t.Fatalf("immich contacts = %q, want none from overlay default", got)
 	}
-	if got := fresh.GetService("immich").GrantLimits.For("photos"); got != policy.AccessRead {
+	if got := fresh.GetService("immich").GrantLimits.Level("photos"); got != policy.AccessRead {
 		t.Fatalf("immich photos = %q, want read", got)
 	}
 }
@@ -190,7 +190,7 @@ func TestPermissionsOverlay_MissingFileIsEmpty(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("missing overlay should not fail: %v", err)
 	}
-	if got := cfg.GetService("spotify").GrantLimits.For("player"); got != policy.AccessNone {
+	if got := cfg.GetService("spotify").GrantLimits.Level("player"); got != policy.AccessNone {
 		t.Fatalf("player = %q, want none from bootstrap", got)
 	}
 }
@@ -218,7 +218,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.GetService("spotify").GrantLimits.For("tracks"); got != policy.AccessNone {
+	if got := cfg.GetService("spotify").GrantLimits.Level("tracks"); got != policy.AccessNone {
 		t.Fatalf("overlay tracks = %q, want none", got)
 	}
 
@@ -228,7 +228,7 @@ func TestPermissionsOverlay_ReloadReappliesOverlay(t *testing.T) {
 		t.Fatalf("Reload: %v", err)
 	}
 	// Overlay still wins for default.
-	if got := cfg.GetService("spotify").GrantLimits.For("tracks"); got != policy.AccessNone {
+	if got := cfg.GetService("spotify").GrantLimits.Level("tracks"); got != policy.AccessNone {
 		t.Fatalf("after reload tracks = %q, want none from overlay", got)
 	}
 }

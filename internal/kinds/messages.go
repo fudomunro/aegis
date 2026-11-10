@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/shared"
 )
@@ -194,40 +193,29 @@ func (k *messagesKind) serveOne(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appLevel, isApp := k.h.AppLevel(r, kind.PermType)
-	if isApp && !appAllows(appLevel, kind.PermType, r.Method) {
-		shared.WriteJSONError(w, http.StatusForbidden,
-			"denied: app data grant for messages is "+appLevel)
-		return
-	}
-	// Data-scope grants are deny-by-default (issue #253), mirroring the
-	// collection endpoint.
-	if !scopes.Allows(r, kind.PermType, r.Method) {
+	// One authorization lookup over the request key's rule map, mirroring
+	// the collection endpoint.
+	grants, _ := k.h.Grants(r)
+	if !grants.AllowsKindMethod(kind.PermType, r.Method) {
+		k.h.RecordAccess(r, AccessEvent{
+			Agent:    agent,
+			Surface:  SurfaceLibrary,
+			Target:   kind.ID,
+			Kind:     kind.ID,
+			Decision: audit.DecisionDeny,
+			Reason:   "data_grant",
+			Method:   r.Method,
+			Status:   http.StatusForbidden,
+		})
 		shared.WriteJSONError(w, http.StatusForbidden, kind.DenyMsg)
 		return
 	}
 
-	level := policy.DefaultAccessType
 	svc, known := k.h.Service(serviceID)
 	if known {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
 		if !scopes.ServiceVisible(svc.Dataset, scopes.From(r)) {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
-			return
-		}
-		level = k.h.RequestLevel(r, serviceID, kind.PermType)
-		if !policy.AllowsMethod(level, http.MethodGet) {
-			k.h.RecordAccess(r, AccessEvent{
-				Agent:    agent,
-				Surface:  SurfaceLibrary,
-				Target:   kind.ID,
-				Kind:     kind.ID,
-				Decision: audit.DecisionDeny,
-				Reason:   "permission",
-				Method:   r.Method,
-				Status:   http.StatusForbidden,
-			})
-			shared.WriteJSONError(w, http.StatusForbidden, kind.DenyMsg)
 			return
 		}
 	}

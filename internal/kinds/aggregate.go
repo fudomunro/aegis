@@ -111,44 +111,26 @@ func AnyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
 	return false
 }
 
-// appCacheSuffix namespaces cache entries by app scope level so a
-// freebusy-only app never reads a full-events cache entry (and vice versa).
-func appCacheSuffix(level string, isApp bool) string {
-	if !isApp {
-		return ""
+// grantsCacheSuffix namespaces library cache entries per request key: the
+// rule map fingerprint plus the dataset partition, so one key never reads
+// another's cached response (keys with different grants see different
+// responses even inside one dataset).
+func grantsCacheSuffix(r *http.Request, g policy.Permissions) string {
+	suffix := "|g:" + g.Fingerprint()
+	if ds := scopes.Dataset(r); ds != "" {
+		suffix += "|ds:" + ds
 	}
-	return "|app|" + policy.NormalizeAccess(level)
-}
-
-// appAllows reports whether an app at the given scope level may call the
-// endpoint for kind under method.
-func appAllows(level, kind, method string) bool {
-	return policy.AllowsMethod(policy.NormalizeAccess(level), method)
+	return suffix
 }
 
 // indexWriteable reports whether this request's fetch is already at the
-// partition's owner-tier view and may therefore write the search index.
-// App scopes and scope-grant tightening can redact or drop items below that
-// view; storing those would overwrite fuller rows with reduced ones, and
-// only another unredacted fetch would restore them (issue #272).
-func indexWriteable(h Host, r *http.Request, kind string) bool {
-	if _, isApp := h.AppLevel(r, kind); isApp {
-		return false
-	}
-	sc := scopes.From(r)
-	if sc == nil {
-		return true
-	}
-	for _, svc := range h.Services() {
-		if !scopes.ServiceVisible(svc.Dataset, sc) {
-			continue
-		}
-		owner := policy.NormalizeAccess(h.OwnerLevel(svc.ID, kind))
-		if policy.NormalizeAccess(h.RequestLevel(r, svc.ID, kind)) != owner {
-			return false
-		}
-	}
-	return true
+// owner-tier view and may therefore write the search index. App and data
+// scope keys carry narrower maps; storing their reduced rows would
+// overwrite fuller rows, and only another unredacted fetch would restore
+// them (issue #272).
+func indexWriteable(h Host, r *http.Request) bool {
+	_, p := h.Grants(r)
+	return p == PrincipalOwner
 }
 
 // Aggregate is the shared GET /v1/library/{kind} pipeline: method check,
@@ -174,11 +156,13 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		return
 	}
 
-	// Third-party apps are scope-limited even when service grant_limits
-	// would allow more (issue #131).
-	appLevel, isApp := h.AppLevel(r, kind.PermType)
-	if isApp && !appAllows(appLevel, kind.PermType, r.Method) {
-		logger.Info("library "+kind.ID+" denied by app scope", "scope", appLevel)
+	// One authorization lookup: the rule map carried by the request's key
+	// decides this call — app scopes, data-scope grants, and the owner map
+	// all resolve to the same check.
+	grants, _ := h.Grants(r)
+	level := grants.Level(kind.PermType)
+	if !grants.AllowsKindMethod(kind.PermType, r.Method) {
+		logger.Info("library "+kind.ID+" denied by data grant", "grant", level)
 		h.RecordAccess(r, AccessEvent{
 			Agent:    agent,
 			Surface:  SurfaceLibrary,
@@ -186,51 +170,29 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 			Kind:     kind.ID,
 			Cache:    CacheMiss,
 			Decision: audit.DecisionDeny,
-			Reason:   "app_scope",
+			Reason:   "data_grant",
 			Method:   r.Method,
 			Status:   http.StatusForbidden,
 		})
 		shared.WriteJSONError(w, http.StatusForbidden,
-			fmt.Sprintf("denied: app data grant for %s is %q", kind.ID, appLevel))
-		return
-	}
-
-	// Data-scope grants are deny-by-default (issue #253): an unlisted kind
-	// is none for the principal, mirroring the app-scope gate above.
-	if sc := scopes.From(r); sc != nil && !scopes.Allows(r, kind.PermType, r.Method) {
-		level := policy.ScopeGrantsAccess(sc.Grants, kind.PermType, "")
-		logger.Info("library "+kind.ID+" denied by scope grant", "scope", sc.ID, "grant", level)
-		h.RecordAccess(r, AccessEvent{
-			Agent:    agent,
-			Surface:  SurfaceLibrary,
-			Target:   kind.ID,
-			Kind:     kind.ID,
-			Cache:    CacheMiss,
-			Decision: audit.DecisionDeny,
-			Reason:   "scope_grant",
-			Method:   r.Method,
-			Status:   http.StatusForbidden,
-		})
-		shared.WriteJSONError(w, http.StatusForbidden,
-			fmt.Sprintf("denied: data scope grant for %s is %q", kind.ID, level))
+			fmt.Sprintf("denied: data grant for %s is %q", kind.ID, level))
 		return
 	}
 
 	if q != "" && !spec.QAsFilter {
-		runSearch(h, e, w, r, spec, q, pageReq, agent, appLevel, isApp)
+		runSearch(h, e, w, r, spec, q, pageReq, agent)
 		return
 	}
 
 	// One cached merged aggregate per kind+view (issue #273): pages are
 	// sliced from it, so paging through N pages costs one provider fan-out
-	// instead of N. The key keeps the app and data-scope suffixes and adds
+	// instead of N. The key keeps the request-key suffix and adds
 	// "|agg" so it never collides with a page-shaped or search key.
 	aggKey := kind.CacheKey()
 	if spec.CacheKey != "" {
 		aggKey = spec.CacheKey
 	}
-	aggKey += appCacheSuffix(appLevel, isApp)
-	aggKey += scopes.CacheSuffix(scopes.From(r))
+	aggKey += grantsCacheSuffix(r, grants)
 	aggKey += "|agg"
 	if cached, ok := e.cache.Get(aggKey); ok {
 		var agg Fetch[T]
@@ -275,7 +237,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		// may write — a reduced (app/clamped) view would store rows below
 		// the detail the owner's query expects (issue #272). Kinds that
 		// own their free-text (QAsFilter) never read the index and skip it.
-		if !spec.QAsFilter && kind.Search != nil && e.search.Enabled() && indexWriteable(h, r, kind.PermType) {
+		if !spec.QAsFilter && kind.Search != nil && e.search.Enabled() && indexWriteable(h, r) {
 			indexAsync(h, e, spec, scopes.Dataset(r), fetched)
 		}
 		return fetched, nil
@@ -283,8 +245,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 	fetched := val.(Fetch[T])
 
 	for _, id := range fetched.Denied {
-		perm := h.RequestLevel(r, id, kind.PermType)
-		logger.Info("library "+kind.ID+" denied by permission", "service", id, "permission", perm)
+		logger.Info("library "+kind.ID+" denied by data grant", "service", id, "grant", level)
 		// Per-service denial for the audit trail (issue #105). Even when
 		// other providers still answer the aggregate request.
 		h.RecordAccess(r, AccessEvent{
@@ -454,7 +415,7 @@ func fetch[T any](h Host, e *Engine, r *http.Request, spec Spec[T], logger *slog
 // #178). A cold index (nothing materialized for this kind+dataset) is
 // bootstrapped from one live fetch first, so results are correct from the
 // first query. Hits pass the same per-service read gate as the aggregate.
-func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request, spec Spec[T], q string, pageReq PageRequest, agent string, appLevel string, isApp bool) {
+func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request, spec Spec[T], q string, pageReq PageRequest, agent string) {
 	kind := spec.Kind
 	logger := h.Logger(r, "library_"+kind.ID+"_search")
 
@@ -501,8 +462,8 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 	}
 
 	cacheKey := kind.CacheKey() + "|q=" + q
-	cacheKey += appCacheSuffix(appLevel, isApp)
-	cacheKey += scopes.CacheSuffix(scopes.From(r))
+	grants, _ := h.Grants(r)
+	cacheKey += grantsCacheSuffix(r, grants)
 	cacheKey += pageReq.CacheSuffix()
 	if cached, ok := e.cache.Get(cacheKey); ok {
 		logger.Debug("search cache hit")

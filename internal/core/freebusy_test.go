@@ -59,30 +59,17 @@ func TestPermissions_FreeBusyAllowsReadNotWrite(t *testing.T) {
 	if p.AllowsWrite("events") {
 		t.Fatal("expected write denied")
 	}
-	if policy.IsFreeBusyAccess(p.For("events")) != true {
+	if policy.IsFreeBusyAccess(p.Level("events")) != true {
 		t.Fatal("expected freebusy level")
 	}
 }
 
-func TestStrictest_FreeBusyAloneDeniesUnknownPaths(t *testing.T) {
-	p := policy.Permissions{"events": policy.AccessFreeBusy}
-	if got := p.Strictest(); got != policy.AccessNone {
-		t.Fatalf("Strictest = %q, want none (cannot redact unknown paths)", got)
-	}
-	mixed := policy.Permissions{"events": policy.AccessFreeBusy, "tracks": policy.AccessRead}
-	if got := mixed.Strictest(); got != policy.AccessRead {
-		t.Fatalf("Strictest mixed = %q, want read", got)
-	}
-}
-
 func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
-	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessFreeBusy},
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}},
+		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
-	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
 	req := httptest.NewRequest("GET", "/v1/library/freebusy", nil)
@@ -109,13 +96,11 @@ func TestHandleLibraryFreeBusy_ReturnsBusyOnly(t *testing.T) {
 }
 
 func TestHandleLibraryEvents_FreeBusyRedactsService(t *testing.T) {
-	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessFreeBusy},
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}},
+		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
-	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 
 	req := httptest.NewRequest("GET", "/v1/library/events", nil)
@@ -214,13 +199,11 @@ func TestHandleLibraryFreeBusy_FailOpenPartial(t *testing.T) {
 }
 
 func TestEventsProviderTargets_Collects(t *testing.T) {
-	svc := &Service{
-		ID:          "google-calendar",
-		Name:        "Google Calendar",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"events": policy.AccessFreeBusy},
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"events": {Default: policy.AccessFreeBusy}},
+		Services:     []Service{{ID: "google-calendar", Name: "Google Calendar", Action: "inject"}},
 	}
-	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["google-calendar"] = &fakeCalendarEventProvider{events: freeBusyTestEvents()}
 	targets, denied := kinds.Collect[kinds.CalendarEvent, kinds.CalendarEventProvider](srv,
 		httptest.NewRequest(http.MethodGet, "/v1/library/freebusy", nil), "events",

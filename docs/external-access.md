@@ -66,7 +66,7 @@ Public internet ──► │  API listener (route allowlist)        │
                     ┌─ tailnet perimeter (never public) ─────┐
 Tailnet ──────────► │  Admin listener                        │
   (Serve / WhoIs)   │  admin tier: /v1/admin/* · /metrics ·  │
-  or admin key      │    OAuth · consent · sync · mirror/…   │
+  or admin key      │    OAuth · consent · sync              │
                     │  agent tier: same API routes, for      │
                     │    tailnet agents (ambient identity    │
                     │    or agent key) — no migration for    │
@@ -77,7 +77,7 @@ Tailnet ──────────► │  Admin listener                   
 | Listener | Serves | Auth | Exposure |
 |----------|--------|------|----------|
 | **API** | **Allowlist only**: `POST /v1/pre-request`, `/v1/library/*`, `/v1/services/*`, `GET /v1/auth/status`, `POST /v1/apps/token`, `POST /v1/apps/revoke`, `/healthz`, `/readyz` | **Invite token, app token only** under external access. No ambient identity, no agent key | May be public behind TLS |
-| **Admin** | Admin tier: `/v1/admin` and `/v1/admin/*` (API + SPA shell), the admin SPA routes (`/`, `/home`, `/library`, `/services`, `/advanced`), `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, mail ingest (`/v1/admin/mail/*`), mirror / photo-share / entity-link writes. **Plus the agent-tier routes above**, for tailnet callers | Tailnet identity (existing admin rules) or admin API key for admin tier; tailnet identity or agent key for agent tier | Tailnet or loopback only |
+| **Admin** | Admin tier: `/v1/admin` and `/v1/admin/*` (API + SPA shell), the admin SPA routes (`/`, `/home`, `/library`, `/services`, `/advanced`), `/metrics`, `/v1/auth/*` OAuth login/callback, `GET`/`POST /v1/apps/authorize`, mail ingest (`/v1/admin/mail/*`). **Plus the agent-tier routes above**, for tailnet callers | Tailnet identity (existing admin rules) or admin API key for admin tier; tailnet identity or agent key for agent tier | Tailnet or loopback only |
 
 **The API listener route set is an allowlist, not a blocklist.** A route that
 is not listed answers **404** there and is served only by the admin listener.

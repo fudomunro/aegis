@@ -48,14 +48,12 @@ func (k *eventsKind) serve(w http.ResponseWriter, r *http.Request) {
 		Kind: kind,
 		Targets: func(r *http.Request) ([]NamedLister[CalendarEvent], []string) {
 			targets, denied := eventsProviderTargets(k.h, r, kind.PermType)
-			appLevel, isApp := k.h.AppLevel(r, kind.PermType)
-			appFreeBusy := isApp && policy.IsFreeBusyAccess(appLevel)
+			grants, _ := k.h.Grants(r)
+			if !policy.IsFreeBusyAccess(grants.Level(kind.PermType)) {
+				return targets, denied
+			}
 			for i := range targets {
-				id := targets[i].ID
 				inner := targets[i].List
-				if !appFreeBusy && !policy.IsFreeBusyAccess(k.h.RequestLevel(r, id, kind.PermType)) {
-					continue
-				}
 				targets[i].List = func(ctx context.Context) ([]CalendarEvent, bool, error) {
 					events, truncated, err := inner(ctx)
 					return RedactCalendarEventsFreeBusy(events), truncated, err
@@ -107,29 +105,15 @@ func eventsProviderTargets(h Host, r *http.Request, permType string) ([]NamedLis
 		})
 }
 
-// searchRedactEvents re-applies per-source freebusy redaction to
-// index-hydrated events (issue #178): a freebusy-only surface must never
-// see titles or descriptions from a stored payload.
+// searchRedactEvents re-applies freebusy redaction to index-hydrated
+// events (issue #178): a freebusy-only surface must never see titles or
+// descriptions from a stored payload.
 func searchRedactEvents(h Host, items []CalendarEvent, r *http.Request) []CalendarEvent {
-	appLevel, isApp := h.AppLevel(r, "events")
-	appFreeBusy := isApp && policy.IsFreeBusyAccess(appLevel)
-	out := make([]CalendarEvent, 0, len(items))
-	for _, e := range items {
-		redact := appFreeBusy
-		for _, src := range e.Sources {
-			if _, ok := h.Service(src.Service); !ok {
-				continue
-			}
-			if policy.IsFreeBusyAccess(h.RequestLevel(r, src.Service, "events")) {
-				redact = true
-			}
-		}
-		if redact {
-			e = RedactCalendarEventsFreeBusy([]CalendarEvent{e})[0]
-		}
-		out = append(out, e)
+	grants, _ := h.Grants(r)
+	if !policy.IsFreeBusyAccess(grants.Level("events")) {
+		return items
 	}
-	return out
+	return RedactCalendarEventsFreeBusy(items)
 }
 
 // calendarEventServiceName returns the first source service name for

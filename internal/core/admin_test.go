@@ -377,7 +377,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 	}
 
 	// In-memory updated.
-	if cfg.GetService("spotify").GrantLimits.For("player") != policy.AccessNone {
+	if cfg.GetService("spotify").GrantLimits.Level("player") != policy.AccessNone {
 		t.Fatal("in-memory player permission not applied")
 	}
 
@@ -387,7 +387,7 @@ func TestConfig_SetServicePermissions_Persists(t *testing.T) {
 		t.Fatalf("reload: %v", err)
 	}
 	svc := fresh.GetService("spotify")
-	if svc == nil || svc.GrantLimits.For("player") != policy.AccessNone || svc.GrantLimits.For("tracks") != policy.AccessRead {
+	if svc == nil || svc.GrantLimits.Level("player") != policy.AccessNone || svc.GrantLimits.Level("tracks") != policy.AccessRead {
 		t.Fatalf("disk permissions = %+v", svc)
 	}
 
@@ -442,11 +442,11 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if cfg.GetService("spotify").GrantLimits.For("player") != policy.AccessNone {
+	if cfg.GetService("spotify").GrantLimits.Level("player") != policy.AccessNone {
 		t.Fatal("permissions not applied via admin route")
 	}
 	// Mirror adapters are not agent "Editable" — playlists write is clamped on save.
-	if got := cfg.GetService("spotify").GrantLimits.For("playlists"); got != policy.AccessRead {
+	if got := cfg.GetService("spotify").GrantLimits.Level("playlists"); got != policy.AccessRead {
 		t.Fatalf("playlists permission = %q, want read (clamped; not agent-writable)", got)
 	}
 	// Search is read-only on the connector — write levels are clamped to read.
@@ -458,7 +458,7 @@ func TestHandleAdminServiceGrantLimits_PutAndGet(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("clamp put status = %d, body=%s", w.Code, w.Body.String())
 	}
-	if got := cfg.GetService("spotify").GrantLimits.For("search"); got != policy.AccessRead {
+	if got := cfg.GetService("spotify").GrantLimits.Level("search"); got != policy.AccessRead {
 		t.Fatalf("search permission = %q, want read (clamped; no agent write path)", got)
 	}
 	if _, ok := srv.cache.Get("library:tracks"); ok {

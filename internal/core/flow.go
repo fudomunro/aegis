@@ -410,7 +410,7 @@ func (s *Server) buildFlowTopology(window time.Duration, windowLabel string) Flo
 		// Library fan-in edge for each kind this non-blocked service can provide.
 		if !strings.EqualFold(svc.Action, "block") {
 			for _, kindID := range node.Providers {
-				if !s.effectivePermissions(&svc).AllowsRead(kindID) {
+				if !s.ownerGrants().AllowsRead(kindID) {
 					continue
 				}
 				kind := LibraryKindByID(kindID)

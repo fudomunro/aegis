@@ -48,12 +48,12 @@ func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 		// before/account/currency stay handler-side filters.
 		filters.Q = ""
 	}
-	appLevel, _ := k.h.AppLevel(r, kind.PermType)
-	summaryOnly := policy.IsSummaryAccess(appLevel)
+	grants, _ := k.h.Grants(r)
+	summaryOnly := policy.IsSummaryAccess(grants.Level(kind.PermType))
 	Aggregate(k.h, k.e, w, r, Spec[Transaction]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]NamedLister[Transaction], []string) {
-			return transactionsProviderTargets(k.h, r, kind.PermType, appLevel)
+			return transactionsProviderTargets(k.h, r, kind.PermType)
 		},
 		ServiceOf: TransactionServiceName,
 		SortKey:   TransactionIdentityKey,
@@ -83,75 +83,35 @@ func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// transactionsProviderTargets collects providers, applying per-service and
-// app-level summary/read redaction so a summary-only surface never
-// contributes line items or account identifiers (issue #141).
-func transactionsProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[Transaction], []string) {
+// transactionsProviderTargets collects providers, wrapping each target
+// with summary/read redaction so a reduced grant never contributes line
+// items or account identifiers (issue #141).
+func transactionsProviderTargets(h Host, r *http.Request, permType string) ([]NamedLister[Transaction], []string) {
 	targets, denied := Collect[Transaction, TransactionProvider](h, r, permType,
 		func(p TransactionProvider) func(context.Context) ([]Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
-	appSummary := policy.IsSummaryAccess(appLevel)
-	appRead := appLevel != "" && policy.NormalizeAccess(appLevel) == policy.AccessRead
+	grants, _ := h.Grants(r)
+	level := policy.NormalizeAccess(grants.Level(permType))
+	if !policy.IsSummaryAccess(level) && level != policy.AccessRead {
+		return targets, denied
+	}
 	for i := range targets {
-		id := targets[i].ID
 		inner := targets[i].List
-		level := ""
-		if _, ok := h.Service(id); ok {
-			level = h.RequestLevel(r, id, permType)
-		}
-		effective := level
-		if appSummary {
-			effective = policy.AccessSummary
-		} else if appRead {
-			effective = policy.AccessRead
-		}
-		if effective == level && !policy.IsSummaryAccess(level) && policy.NormalizeAccess(level) != policy.AccessRead {
-			continue
-		}
 		targets[i].List = func(ctx context.Context) ([]Transaction, bool, error) {
 			items, truncated, err := inner(ctx)
-			return redactTransactionsForLevel(items, effective), truncated, err
+			return redactTransactionsForLevel(items, level), truncated, err
 		}
 	}
 	return targets, denied
 }
 
-// searchRedactTransactions re-applies per-source summary/read redaction to
-// index-hydrated transactions (issue #178). Applying every source's level
-// in turn settles on the most restrictive one (never under-redact).
+// searchRedactTransactions re-applies grant-level summary/read redaction to
+// index-hydrated transactions (issue #178): the index stores owner-tier
+// rows, so the request's level narrows them on the way out.
 func searchRedactTransactions(h Host, items []Transaction, r *http.Request) []Transaction {
-	appLevel, isApp := h.AppLevel(r, "transactions")
-	if !isApp {
-		appLevel = ""
-	}
-	out := make([]Transaction, 0, len(items))
-	for _, t := range items {
-		skip := false
-		for _, src := range t.Sources {
-			if _, ok := h.Service(src.Service); !ok {
-				continue
-			}
-			level := h.RequestLevel(r, src.Service, "transactions")
-			red := redactTransactionsForLevel([]Transaction{t}, level)
-			if len(red) == 0 {
-				skip = true
-				break
-			}
-			t = red[0]
-		}
-		if skip {
-			continue
-		}
-		switch {
-		case policy.IsSummaryAccess(appLevel):
-			t = redactTransactionsForLevel([]Transaction{t}, policy.AccessSummary)[0]
-		case appLevel != "" && policy.NormalizeAccess(appLevel) == policy.AccessRead:
-			t = redactTransactionsForLevel([]Transaction{t}, policy.AccessRead)[0]
-		}
-		out = append(out, t)
-	}
-	return out
+	grants, _ := h.Grants(r)
+	return redactTransactionsForLevel(items, grants.Level("transactions"))
 }
 
 func filterTransactions(in []Transaction, f TransactionFilters) []Transaction {

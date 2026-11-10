@@ -111,7 +111,7 @@ POST /v1/library/links {"kind":"playlist","sources":[{"service":"spotify","id":"
 DELETE /v1/library/links/{id}
 ```
 
-Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` under the [data directory](configuration.md) (`-link-file` overrides).
+Linked playlists merge even when names differ (`match: "link"`). Links persist in `entity_links.json` under the [data directory](configuration.md) (`-link-file` overrides). Creating and deleting links is a library write: the calling key needs a write data grant for the linked kind.
 
 **Merge review:** `GET /v1/library/review` lists multi-source entities joined by **name only** (no shared ISRC/UPC/MBID/link) so they can be checked or explicitly linked.
 
@@ -349,9 +349,10 @@ Connectors opt in by implementing `PhotoProvider` (`ListUserPhotos`).
 Permission key: `photos` (paths `/photos/*`, `/mediaItems/*`, `/picker/*`, and
 `/me/photos` on the service proxy).
 
-**Photo share (admin):** `POST /v1/library/photos/share` publishes one photo
+**Photo share:** `POST /v1/library/photos/share` publishes one photo
 to a share target (for example Bluesky) and returns a PoC ownership claim.
-This is an admin surface — the agent key is refused. See
+Library writes are authorized by the calling key's data grant — sharing
+requires a `photos` write grant. See
 [bluesky.md](connect/bluesky.md) for the request shape.
 
 ```json

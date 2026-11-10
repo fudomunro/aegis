@@ -30,7 +30,7 @@ func (s *Server) ServiceConfig(serviceID string) *connectors.ServiceInfo {
 		Endpoint:     svc.Endpoint,
 		Headers:      svc.Headers,
 		CacheTTL:     svc.CacheTTL.Duration,
-		GrantLimits:  s.effectivePermissions(svc),
+		GrantLimits:  s.ownerGrants(),
 		CanonicalFor: append([]string(nil), svc.CanonicalFor...),
 	}
 }

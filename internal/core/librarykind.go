@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -80,7 +79,7 @@ func (s *Server) libraryReadableFor(permType string) bool {
 		if svc.Action == "block" {
 			continue
 		}
-		if s.effectivePermissions(&svc).AllowsRead(permType) {
+		if s.ownerGrants().AllowsRead(permType) {
 			return true
 		}
 	}
@@ -89,7 +88,7 @@ func (s *Server) libraryReadableFor(permType string) bool {
 
 // libraryHintsForMessage returns instruction blocks for every library kind
 // that matches a service-less user question and is readable for this request
-// (owner grants AND scope grants). Used by the pre-request hook.
+// (the request key's data grant). Used by the pre-request hook.
 func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 	var out []string
 	for _, k := range s.allLibraryKinds() {
@@ -99,7 +98,7 @@ func (s *Server) libraryHintsForMessage(r *http.Request, msg string) []string {
 		if !kindHasProviders(k.ID, s) || !kindReadable(k.ID, s) {
 			continue
 		}
-		if !scopes.Allows(r, k.PermType, http.MethodGet) {
+		if !s.requestGrants(r).AllowsKindMethod(k.PermType, http.MethodGet) {
 			continue
 		}
 		if schema, ok := s.udkSchemaForKind(k.ID); ok {

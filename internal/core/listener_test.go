@@ -11,8 +11,10 @@ import (
 
 func TestAPIRouteAllowed(t *testing.T) {
 	// The API listener is an allowlist (docs/external-access.md "Model"):
-	// agent/external surfaces only; admin tier, demo harnesses, and every
-	// write stay off it and default to the admin listener.
+	// agent/external surfaces only; admin tier, demo harnesses, and
+	// maintenance reads stay off it and default to the admin listener.
+	// Library writes join the surface: the request key's write data grant
+	// authorizes them.
 	allowed := []struct {
 		method string
 		path   string
@@ -32,6 +34,11 @@ func TestAPIRouteAllowed(t *testing.T) {
 		{http.MethodGet, "/v1/auth/status"},
 		{http.MethodPost, "/v1/apps/token"},
 		{http.MethodPost, "/v1/apps/revoke"},
+		// Grant-decided library writes.
+		{http.MethodPost, "/v1/library/mirror"},
+		{http.MethodPost, "/v1/library/photos/share"},
+		{http.MethodPost, "/v1/library/links"},
+		{http.MethodDelete, "/v1/library/links/abc"},
 	}
 	for _, tc := range allowed {
 		if !apiRouteAllowed(tc.method, tc.path) {
@@ -57,13 +64,9 @@ func TestAPIRouteAllowed(t *testing.T) {
 		{http.MethodPost, "/v1/apps/authorize"},
 		{http.MethodGet, "/v1/auth/spotify"},
 		{http.MethodGet, "/v1/auth/spotify/callback"},
-		// Admin-tier writes sharing agent prefixes.
+		// Owner-internal maintenance reads stay admin-side.
 		{http.MethodGet, "/v1/library/review"},
 		{http.MethodGet, "/v1/library/copies"},
-		{http.MethodPost, "/v1/library/mirror"},
-		{http.MethodPost, "/v1/library/photos/share"},
-		{http.MethodPost, "/v1/library/links"},
-		{http.MethodDelete, "/v1/library/links/abc"},
 		// Mail retrieval retired with /v1/mail (issue #311): unlisted.
 		{http.MethodGet, "/v1/mail/search"},
 		{http.MethodGet, "/v1/mail/status"},

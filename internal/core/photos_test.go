@@ -85,12 +85,13 @@ func TestHandleLibraryPhotos_NoProviders(t *testing.T) {
 }
 
 func TestHandleLibraryPhotos_DeniedByPermission(t *testing.T) {
-	cfg := &Config{Services: []Service{{
-		ID:          "google-photos",
-		Name:        "Google Photos",
-		Action:      "inject",
-		GrantLimits: policy.Permissions{"photos": policy.AccessNone},
-	}}}
+	cfg := &Config{
+		typePolicies: policy.DataGrants{"photos": {Default: policy.AccessNone}},
+		Services: []Service{{
+			ID:     "google-photos",
+			Name:   "Google Photos",
+			Action: "inject",
+		}}}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors = map[string]connectors.ServiceConnector{
 		"google-photos": &fakePhotoProvider{photos: []kinds.Photo{

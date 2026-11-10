@@ -59,17 +59,6 @@ func TestPermissions_RedactionLists(t *testing.T) {
 	}
 }
 
-func TestPermissions_AccessForKind(t *testing.T) {
-	p := Permissions{"tracks": AccessNone, "default": AccessRead}
-	if got := p.AccessForKind("tracks"); got != AccessNone {
-		t.Fatalf("classified tracks = %q", got)
-	}
-	// Unclassified uses Strictest (none), never default.
-	if got := p.AccessForKind(""); got != AccessNone {
-		t.Fatalf("unclassified = %q, want strictest none", got)
-	}
-}
-
 func TestValidatePermissions_RedactionScoping(t *testing.T) {
 	if err := ValidatePermissions(Permissions{"events": AccessFreeBusy}); err != nil {
 		t.Fatalf("events freebusy: %v", err)
@@ -130,50 +119,12 @@ func TestAllowsMethod_Levels(t *testing.T) {
 	}
 }
 
-func TestNormalizeAccessAndDataGrant(t *testing.T) {
+func TestNormalizeAccess(t *testing.T) {
 	if NormalizeAccess("READ") != AccessRead {
 		t.Fatal("NormalizeAccess READ")
 	}
 	if NormalizeAccess("") != "" {
 		t.Fatal("empty stays empty")
-	}
-	tp := DataGrant{Default: AccessRead, Providers: map[string]string{"spotify": AccessNone}}
-	if tp.For("spotify") != AccessNone || tp.For("other") != AccessRead {
-		t.Fatalf("DataGrant.For = %+v", tp)
-	}
-	if (DataGrants{"a": {Default: AccessWrite}}).For("a").Default != AccessWrite {
-		t.Fatal("DataGrants.For")
-	}
-}
-
-func TestStrictestAndForDefaults(t *testing.T) {
-	var empty Permissions
-	if empty.Strictest() != DefaultAccessType {
-		t.Fatalf("empty strictest = %q", empty.Strictest())
-	}
-	if empty.For("tracks") != DefaultAccessType {
-		t.Fatalf("empty For = %q", empty.For("tracks"))
-	}
-	// Mixed read/write on unknown path must deny.
-	mixed := Permissions{"tracks": AccessRead, "playlists": AccessWrite}
-	if mixed.Strictest() != AccessNone {
-		t.Fatalf("mixed strictest = %q", mixed.Strictest())
-	}
-	// Single tight level wins.
-	if (Permissions{"tracks": AccessNone}).Strictest() != AccessNone {
-		t.Fatal("none strictest")
-	}
-	if (Permissions{"tracks": AccessRead}).Strictest() != AccessRead {
-		t.Fatal("read strictest")
-	}
-	// opt-in places: default key never enables.
-	p := Permissions{PermissionDefaultKey: AccessFull}
-	if p.For("places") != AccessNone {
-		t.Fatalf("places default = %q", p.For("places"))
-	}
-	p2 := Permissions{"places": AccessCity}
-	if p2.For("places") != AccessCity {
-		t.Fatalf("places named = %q", p2.For("places"))
 	}
 }
 

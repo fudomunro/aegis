@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/links"
+	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/kinds"
 )
 
@@ -87,5 +88,45 @@ func TestHandleEntityLinks_HTTP(t *testing.T) {
 	}
 	if _, err := os.Stat(path); err != nil {
 		t.Fatalf("link file should persist: %v", err)
+	}
+}
+
+func TestHandleEntityLinks_WriteGrantDecides(t *testing.T) {
+	dir := t.TempDir()
+	st, err := links.NewStore(filepath.Join(dir, "links.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := &Config{typePolicies: policy.DataGrants{"playlists": {Default: policy.AccessRead}}}
+	srv := testServerWithBase(cfg, "https://aegis.example.com")
+	srv.links = st
+
+	body := `{"kind":"playlist","sources":[{"service":"spotify","id":"p1"},{"service":"youtube-music","id":"P1"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
+	w := httptest.NewRecorder()
+	srv.HandleEntityLinks(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("read-only grant must deny link create: status = %d body=%s", w.Code, w.Body.String())
+	}
+
+	cfg.typePolicies = policy.DataGrants{"playlists": {Default: policy.AccessFull}}
+	req = httptest.NewRequest(http.MethodPost, "/v1/library/links", strings.NewReader(body))
+	w = httptest.NewRecorder()
+	srv.HandleEntityLinks(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("write grant must allow link create: status = %d body=%s", w.Code, w.Body.String())
+	}
+	var created links.Link
+	if err := json.Unmarshal(w.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+
+	// The write grant governs delete too (kind comes from the stored link).
+	cfg.typePolicies = policy.DataGrants{"playlists": {Default: policy.AccessRead}}
+	req = httptest.NewRequest(http.MethodDelete, "/v1/library/links/"+created.ID, nil)
+	w = httptest.NewRecorder()
+	srv.HandleEntityLinks(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("read-only grant must deny link delete: status = %d body=%s", w.Code, w.Body.String())
 	}
 }

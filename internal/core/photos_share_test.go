@@ -57,18 +57,20 @@ func (f *fakePhotoShareTarget) SharePhoto(_ context.Context, req kinds.PhotoShar
 
 func testPhotoShareServer(t *testing.T, sourceWrite, targetWrite bool) (*Server, *fakePhotoBytesProvider, *fakePhotoShareTarget) {
 	t.Helper()
-	srcPerms := policy.Permissions{"default": policy.AccessRead, "photos": policy.AccessRead}
-	if !sourceWrite {
-		srcPerms = policy.Permissions{"default": policy.AccessRead, "photos": policy.AccessNone}
-	}
-	dstPerms := policy.Permissions{"default": policy.AccessRead, "photos": policy.AccessFull}
-	if !targetWrite {
-		dstPerms = policy.Permissions{"default": policy.AccessRead, "photos": policy.AccessRead}
+	// One rule map per key (the collapsed model): a write-only level denies
+	// the source read, a read-only level denies the share write.
+	level := policy.AccessFull
+	switch {
+	case !sourceWrite:
+		level = policy.AccessWrite
+	case !targetWrite:
+		level = policy.AccessRead
 	}
 	cfg := &Config{
+		typePolicies: policy.DataGrants{"photos": {Default: level}},
 		Services: []Service{
-			{ID: "immich", Name: "Immich", Action: "inject", GrantLimits: srcPerms},
-			{ID: "bluesky", Name: "Bluesky", Action: "inject", GrantLimits: dstPerms},
+			{ID: "immich", Name: "Immich", Action: "inject"},
+			{ID: "bluesky", Name: "Bluesky", Action: "inject"},
 		},
 	}
 	srv := testServerWithBase(cfg, "https://aegis.example.com")

@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -11,6 +12,19 @@ import (
 	"github.com/fudomunro/aegis/internal/kinds"
 	"github.com/fudomunro/aegis/internal/shared"
 )
+
+// linkGrantKey maps entity-link kind labels ("playlist", "track") onto the
+// data-grant vocabulary ("playlists", "tracks"). Unknown labels pass through
+// and resolve against the grant map as-is.
+func linkGrantKey(kind string) string {
+	switch kind {
+	case "playlist":
+		return "playlists"
+	case "track":
+		return "tracks"
+	}
+	return kind
+}
 
 // HandleEntityLinks manages explicit cross-service identity links:
 //
@@ -45,6 +59,12 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		if body.Kind == "" {
 			body.Kind = "playlist"
 		}
+		grants := s.requestGrants(r)
+		if !grants.AllowsKindMethod(linkGrantKey(body.Kind), r.Method) {
+			shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf(
+				"denied: data grant for %s is %q", linkGrantKey(body.Kind), grants.Level(linkGrantKey(body.Kind))))
+			return
+		}
 		link, err := s.links.Add(body.Kind, body.Sources, body.Note)
 		if err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, err.Error())
@@ -54,6 +74,23 @@ func (s *Server) HandleEntityLinks(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		json.NewEncoder(w).Encode(link)
 	case path != "" && r.Method == http.MethodDelete:
+		var linkKind string
+		for _, link := range s.links.List() {
+			if link.ID == path {
+				linkKind = link.Kind
+				break
+			}
+		}
+		if linkKind == "" {
+			shared.WriteJSONError(w, http.StatusNotFound, "link not found")
+			return
+		}
+		grants := s.requestGrants(r)
+		if !grants.AllowsKindMethod(linkGrantKey(linkKind), r.Method) {
+			shared.WriteJSONError(w, http.StatusForbidden, fmt.Sprintf(
+				"denied: data grant for %s is %q", linkGrantKey(linkKind), grants.Level(linkGrantKey(linkKind))))
+			return
+		}
 		if !s.links.Delete(path) {
 			shared.WriteJSONError(w, http.StatusNotFound, "link not found")
 			return

@@ -100,10 +100,11 @@ func (r *mirrorRunner) Run(ctx context.Context, job syncjobs.SyncJob) (syncjobs.
 	if p.SourceService == p.TargetService {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: source_service and target_service must differ", syncjobs.ErrSyncTerminal)
 	}
-	if err := s.requireMirrorWritable(p.TargetService, p.Kind); err != nil {
+	// Background sync runs at owner tier: no request key is in play.
+	if err := s.requireMirrorWritable(s.ownerGrants(), p.TargetService, p.Kind); err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
-	if err := s.requireMirrorReadable(p.SourceService, p.Kind); err != nil {
+	if err := s.requireMirrorReadable(s.ownerGrants(), p.SourceService, p.Kind); err != nil {
 		return syncjobs.SyncStep{}, fmt.Errorf("%w: %v", syncjobs.ErrSyncTerminal, err)
 	}
 	src, err := s.mirrorSourceFor(p.SourceService, p.Kind)

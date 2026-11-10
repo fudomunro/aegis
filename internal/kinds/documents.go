@@ -52,14 +52,14 @@ func (k *documentsKind) serve(w http.ResponseWriter, r *http.Request) {
 		// before stay handler-side filters over whatever produced the items.
 		filters.Q = ""
 	}
-	appLevel, _ := k.h.AppLevel(r, kind.PermType)
+	grants, _ := k.h.Grants(r)
 	// Encode-time redaction is a second belt: even if a service returned an
 	// excerpt, metadata-only surfaces must not ship it.
-	metaOnly := policy.IsMetadataAccess(appLevel)
+	metaOnly := policy.IsMetadataAccess(grants.Level(kind.PermType))
 	Aggregate(k.h, k.e, w, r, Spec[Document]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]NamedLister[Document], []string) {
-			return documentsProviderTargets(k.h, r, kind.PermType, appLevel)
+			return documentsProviderTargets(k.h, r, kind.PermType)
 		},
 		ServiceOf: documentServiceName,
 		SortKey:   DocumentIdentityKey,
@@ -103,14 +103,13 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	appLevel, isApp := k.h.AppLevel(r, kind.PermType)
-	if isApp && !appAllows(appLevel, kind.PermType, r.Method) {
+	grants, _ := k.h.Grants(r)
+	level := grants.Level(kind.PermType)
+	if !grants.AllowsKindMethod(kind.PermType, r.Method) {
 		shared.WriteJSONError(w, http.StatusForbidden,
-			"denied: app data grant for documents is "+appLevel)
+			"denied: data grant for documents is "+level)
 		return
 	}
-
-	level := policy.DefaultAccessType
 	svc, known := k.h.Service(serviceID)
 	if known {
 		// Data-scope isolation: foreign partitions look missing (docs/data-scopes.md).
@@ -118,9 +117,6 @@ func (k *documentsKind) serveText(w http.ResponseWriter, r *http.Request) {
 			shared.WriteJSONError(w, http.StatusNotFound, "unknown service "+serviceID)
 			return
 		}
-		level = k.h.RequestLevel(r, serviceID, kind.PermType)
-	} else if isApp {
-		level = appLevel
 	}
 	// Metadata is list-only: full text requires read (or unrestricted write/full).
 	if !policy.AllowsMethod(level, http.MethodGet) || policy.IsMetadataAccess(level) || policy.DocumentsLevelForResponse(level) == policy.AccessNone {
@@ -317,71 +313,33 @@ func redactDocumentsForLevel(items []Document, level string) []Document {
 	}
 }
 
-// documentsProviderTargets collects providers, applying per-service and
-// app-level metadata/read redaction so a metadata-only surface never
-// contributes excerpts (issue #143).
-func documentsProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[Document], []string) {
+// documentsProviderTargets collects providers, wrapping each target with
+// metadata redaction when the request's grant is metadata-only (issue #143).
+func documentsProviderTargets(h Host, r *http.Request, permType string) ([]NamedLister[Document], []string) {
 	targets, denied := Collect[Document, DocumentProvider](h, r, permType,
 		func(p DocumentProvider) func(context.Context) ([]Document, bool, error) {
 			return p.ListUserDocuments
 		})
-	appMeta := policy.IsMetadataAccess(appLevel)
+	grants, _ := h.Grants(r)
+	if !policy.IsMetadataAccess(grants.Level(permType)) {
+		return targets, denied
+	}
 	for i := range targets {
-		id := targets[i].ID
 		inner := targets[i].List
-		level := ""
-		if _, ok := h.Service(id); ok {
-			level = h.RequestLevel(r, id, permType)
-		}
-		effective := level
-		if appMeta {
-			effective = policy.AccessMetadata
-		}
-		if effective == level && !policy.IsMetadataAccess(level) {
-			continue
-		}
 		targets[i].List = func(ctx context.Context) ([]Document, bool, error) {
 			items, truncated, err := inner(ctx)
-			return redactDocumentsForLevel(items, effective), truncated, err
+			return redactDocumentsForLevel(items, policy.AccessMetadata), truncated, err
 		}
 	}
 	return targets, denied
 }
 
-// searchRedactDocuments re-applies per-source metadata redaction to
-// index-hydrated documents (issue #178). Redactions only remove data, so
-// applying every source's level in turn settles on the most restrictive
-// one (mixed-source hits may over-redact; never under-redact).
+// searchRedactDocuments re-applies grant-level redaction to index-hydrated
+// documents (issue #178): the index stores owner-tier rows, so the
+// request's level narrows them on the way out.
 func searchRedactDocuments(h Host, items []Document, r *http.Request) []Document {
-	appLevel, isApp := h.AppLevel(r, "documents")
-	if !isApp {
-		appLevel = ""
-	}
-	out := make([]Document, 0, len(items))
-	for _, d := range items {
-		skip := false
-		for _, src := range d.Sources {
-			if _, ok := h.Service(src.Service); !ok {
-				// Local/import sources gate their own content.
-				continue
-			}
-			level := h.RequestLevel(r, src.Service, "documents")
-			red := redactDocumentsForLevel([]Document{d}, policy.DocumentsLevelForResponse(level))
-			if len(red) == 0 {
-				skip = true
-				break
-			}
-			d = red[0]
-		}
-		if skip {
-			continue
-		}
-		if policy.IsMetadataAccess(appLevel) {
-			d = redactDocumentMetadata(d)
-		}
-		out = append(out, d)
-	}
-	return out
+	grants, _ := h.Grants(r)
+	return redactDocumentsForLevel(items, policy.DocumentsLevelForResponse(grants.Level("documents")))
 }
 
 func boolKey(v bool) string {

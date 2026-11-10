@@ -61,10 +61,10 @@ func rewriteConfig(t *testing.T, path string, i int) {
 	}
 }
 
-// EffectivePermissions/EffectiveAccess used to read typePolicies and the
-// service's GrantLimits map after RUnlock, handing live map references to an
-// unlocked caller. Reload replaces those maps, so a reload racing a read was
-// a data race. Run under -race: this is the regression test.
+// DataGrants used to hand live map references past RUnlock, so a reload
+// racing a read was a data race. It now copies under the lock and the
+// materialized rule map is derived from the copy. Run under -race: this is
+// the regression test.
 func TestEffectiveAccessors_SafeUnderReload(t *testing.T) {
 	cfg, path := hygieneConfig(t)
 	cfg.SeedDataGrant("tracks", policy.DataGrant{Default: "read"})
@@ -81,16 +81,15 @@ func TestEffectiveAccessors_SafeUnderReload(t *testing.T) {
 					return
 				default:
 				}
-				_ = cfg.EffectivePermissions("spotify")
-				_ = cfg.EffectiveAccess("spotify", "tracks")
-				_ = cfg.EffectiveAccess("spotify", "")
+				_ = cfg.DataGrants().Levels().Level("tracks")
+				_ = cfg.DataGrants().Levels().Level("")
 			}
 		}()
 	}
 	// SeedDataGrant mutates typePolicies in place — the one writer that is not
 	// replace-on-write. Hammering it concurrently with the readers above is
-	// what makes the map escape in EffectiveAccessors observable: if those
-	// readers hold the map reference across RUnlock, -race fires here.
+	// what makes a live map escape observable: if those readers hold the map
+	// reference across RUnlock, -race fires here.
 	for i := 0; i < 4; i++ {
 		wg.Add(1)
 		go func(base int) {

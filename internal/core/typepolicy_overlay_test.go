@@ -57,17 +57,13 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
-		t.Fatalf("spotify tracks = %q, want none", got)
+	// Provider overrides are legacy migration data: the collapsed rule map
+	// takes each kind's default level and ignores per-provider entries.
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
+		t.Fatalf("tracks = %q, want full (provider override ignored)", got)
 	}
-	if got := cfg.EffectiveAccess("immich", "tracks"); got != policy.AccessFull {
-		t.Fatalf("immich tracks = %q, want full", got)
-	}
-	if got := cfg.EffectiveAccess("immich", "places"); got != policy.AccessCity {
-		t.Fatalf("immich places = %q, want city", got)
-	}
-	if got := cfg.EffectiveAccess("spotify", "places"); got != policy.AccessNone {
-		t.Fatalf("spotify places = %q, want none", got)
+	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
+		t.Fatalf("places = %q, want none (provider opt-in is gone)", got)
 	}
 
 	// Persisted as v3 data_grants.
@@ -94,12 +90,12 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 	if err := fresh.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore reload: %v", err)
 	}
-	if got := fresh.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
-		t.Fatalf("reloaded spotify tracks = %q", got)
+	if got := fresh.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
+		t.Fatalf("reloaded tracks = %q", got)
 	}
 }
 
-func TestDataGrantsOverlay_ServiceLimitsOnlyTighten(t *testing.T) {
+func TestDataGrantsOverlay_ServiceLimitsIgnoredByResolution(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, "aegis.json")
 	permsPath := filepath.Join(dir, "data_grants.json")
@@ -121,20 +117,19 @@ func TestDataGrantsOverlay_ServiceLimitsOnlyTighten(t *testing.T) {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 
-	// Service map cannot grant above the type default.
+	// Service maps are legacy migration data with no runtime effect: only
+	// the data grant decides.
 	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": policy.AccessFull}); err != nil {
 		t.Fatalf("SetServicePermissions: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessRead {
-		t.Fatalf("legacy cannot loosen: %q", got)
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+		t.Fatalf("service map must not grant: %q", got)
 	}
-
-	// Service map can tighten.
 	if err := cfg.SetServicePermissions("spotify", policy.Permissions{"tracks": policy.AccessNone}); err != nil {
 		t.Fatalf("SetServicePermissions: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
-		t.Fatalf("legacy tightens: %q", got)
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+		t.Fatalf("service map must not tighten either: %q", got)
 	}
 }
 
@@ -155,11 +150,11 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
-		t.Fatalf("bootstrap provider tighten = %q", got)
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+		t.Fatalf("bootstrap tracks = %q (provider tighten is legacy)", got)
 	}
-	if got := cfg.EffectiveAccess("google-timeline", "places"); got != policy.AccessCity {
-		t.Fatalf("bootstrap places opt-in = %q", got)
+	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
+		t.Fatalf("bootstrap places = %q (provider opt-in is legacy)", got)
 	}
 
 	// Overlay types replace bootstrap when present.
@@ -168,7 +163,7 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(permsPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessFull {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
 		t.Fatalf("overlay types win = %q", got)
 	}
 }
@@ -211,8 +206,8 @@ func TestHandleAdminDataGrants(t *testing.T) {
 	if resp.DataGrants["tracks"].Default != policy.AccessRead {
 		t.Fatalf("data_grants.tracks = %+v", resp.DataGrants["tracks"])
 	}
-	if got := srv.config.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
-		t.Fatalf("effective = %q", got)
+	if got := srv.config.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+		t.Fatalf("effective = %q (provider tighten is legacy)", got)
 	}
 }
 
@@ -234,11 +229,11 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessNone {
-		t.Fatalf("bootstrap data_grants provider tighten = %q", got)
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
+		t.Fatalf("bootstrap tracks = %q (provider tighten is legacy)", got)
 	}
-	if got := cfg.EffectiveAccess("google-timeline", "places"); got != policy.AccessCity {
-		t.Fatalf("bootstrap grant_limits places = %q", got)
+	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
+		t.Fatalf("bootstrap places = %q (grant_limits and provider opt-in are legacy)", got)
 	}
 
 	// Overlay file is data_grants.json with v3 keys.
@@ -247,7 +242,7 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 	if err := cfg.InitDataGrantsStore(ovPath); err != nil {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
-	if got := cfg.EffectiveAccess("spotify", "tracks"); got != policy.AccessFull {
+	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
 		t.Fatalf("overlay data_grants win = %q", got)
 	}
 

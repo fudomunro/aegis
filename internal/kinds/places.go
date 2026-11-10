@@ -50,11 +50,10 @@ func (k *placesKind) HasProviders(h Host) bool {
 func (k *placesKind) serve(w http.ResponseWriter, r *http.Request) {
 	kind := k.def
 	filters := ParsePlaceVisitFilters(r)
-	appLevel, _ := k.h.AppLevel(r, kind.PermType)
 	Aggregate(k.h, k.e, w, r, Spec[PlaceVisit]{
 		Kind: kind,
 		Targets: func(r *http.Request) ([]NamedLister[PlaceVisit], []string) {
-			return placesProviderTargets(k.h, r, kind.PermType, appLevel)
+			return placesProviderTargets(k.h, r, kind.PermType)
 		},
 		ServiceOf: PlaceVisitServiceName,
 		SortKey:   PlaceIdentityKey,
@@ -75,79 +74,35 @@ func (k *placesKind) serve(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// placesProviderTargets collects providers, applying per-service and
-// app-level city/read/precise redaction so a city-only surface never
-// contributes place names or coordinates (issue #142).
-func placesProviderTargets(h Host, r *http.Request, permType string, appLevel string) ([]NamedLister[PlaceVisit], []string) {
+// placesProviderTargets collects providers, wrapping each target with
+// city/read redaction so a reduced grant never contributes place names or
+// coordinates (issue #142).
+func placesProviderTargets(h Host, r *http.Request, permType string) ([]NamedLister[PlaceVisit], []string) {
 	targets, denied := Collect[PlaceVisit, PlaceVisitProvider](h, r, permType,
 		func(p PlaceVisitProvider) func(context.Context) ([]PlaceVisit, bool, error) {
 			return p.ListUserPlaceVisits
 		})
-	appPlaces := policy.PlacesLevelForResponse(appLevel)
+	grants, _ := h.Grants(r)
+	level := policy.PlacesLevelForResponse(grants.Level(permType))
+	if level != policy.AccessCity && level != policy.AccessRead {
+		return targets, denied
+	}
 	for i := range targets {
-		id := targets[i].ID
 		inner := targets[i].List
-		level := ""
-		if _, ok := h.Service(id); ok {
-			level = h.RequestLevel(r, id, permType)
-		}
-		effective := policy.PlacesLevelForResponse(level)
-		if appPlaces != "" && appPlaces != policy.AccessNone {
-			// App scope is an additional clamp: take the tighter of the two.
-			effective = tighterPlacesLevel(appPlaces, effective)
-		}
-		if effective == policy.PlacesLevelForResponse(level) && effective != policy.AccessCity && effective != policy.AccessRead {
-			continue
-		}
 		targets[i].List = func(ctx context.Context) ([]PlaceVisit, bool, error) {
 			items, truncated, err := inner(ctx)
-			return redactPlaceVisitsForLevel(items, effective), truncated, err
+			return redactPlaceVisitsForLevel(items, level), truncated, err
 		}
 	}
 	return targets, denied
 }
 
-// searchRedactPlaceVisits re-applies per-source city/read/precise redaction
-// to index-hydrated visits (issue #178). Applying every source's level in
-// turn settles on the most restrictive one (never under-redact); the app
-// scope is an additional clamp, matching the fetch path.
+// searchRedactPlaceVisits re-applies grant-level city/read/precise redaction
+// to index-hydrated visits (issue #178): the index stores owner-tier rows,
+// so the request's level narrows them on the way out.
 func searchRedactPlaceVisits(h Host, items []PlaceVisit, r *http.Request) []PlaceVisit {
-	appLevel, isApp := h.AppLevel(r, "places")
-	appPlaces := ""
-	if isApp {
-		appPlaces = policy.PlacesLevelForResponse(appLevel)
-	}
-	out := make([]PlaceVisit, 0, len(items))
-	for _, v := range items {
-		skip := false
-		for _, src := range v.Sources {
-			if _, ok := h.Service(src.Service); !ok {
-				continue
-			}
-			level := policy.PlacesLevelForResponse(h.RequestLevel(r, src.Service, "places"))
-			if appPlaces != "" && appPlaces != policy.AccessNone {
-				level = tighterPlacesLevel(appPlaces, level)
-			}
-			red := redactPlaceVisitsForLevel([]PlaceVisit{v}, level)
-			if len(red) == 0 {
-				skip = true
-				break
-			}
-			v = red[0]
-		}
-		if skip {
-			continue
-		}
-		if appPlaces != "" && appPlaces != policy.AccessNone {
-			red := redactPlaceVisitsForLevel([]PlaceVisit{v}, appPlaces)
-			if len(red) == 0 {
-				continue
-			}
-			v = red[0]
-		}
-		out = append(out, v)
-	}
-	return out
+	grants, _ := h.Grants(r)
+	return redactPlaceVisitsForLevel(items, policy.PlacesLevelForResponse(grants.Level("places")))
 }
 
 func filterPlaceVisits(in []PlaceVisit, f PlaceVisitFilters) []PlaceVisit {
@@ -216,28 +171,6 @@ func redactPlaceVisitsForLevel(items []PlaceVisit, level string) []PlaceVisit {
 		// precise: full detail including coordinates.
 		return items
 	}
-}
-
-// tighterPlacesLevel returns the more restrictive of two places levels.
-func tighterPlacesLevel(a, b string) string {
-	rank := map[string]int{
-		policy.AccessNone:    0,
-		policy.AccessCity:    1,
-		policy.AccessRead:    2,
-		policy.AccessPrecise: 3,
-	}
-	ra, okA := rank[policy.PlacesLevelForResponse(a)]
-	rb, okB := rank[policy.PlacesLevelForResponse(b)]
-	if !okA {
-		ra = 0
-	}
-	if !okB {
-		rb = 0
-	}
-	if ra <= rb {
-		return policy.PlacesLevelForResponse(a)
-	}
-	return policy.PlacesLevelForResponse(b)
 }
 
 func forEachPlaceVisitSource(item *PlaceVisit, f func(SourceMut)) {
