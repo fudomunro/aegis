@@ -49,22 +49,6 @@ func TestNormalizePlaceVisitKindAndMode(t *testing.T) {
 	}
 }
 
-func TestPlacesLevelForResponse(t *testing.T) {
-	cases := map[string]string{
-		policy.AccessNone:    policy.AccessNone,
-		policy.AccessCity:    policy.AccessCity,
-		policy.AccessRead:    policy.AccessRead,
-		policy.AccessPrecise: policy.AccessPrecise,
-		policy.AccessWrite:   policy.AccessPrecise,
-		policy.AccessFull:    policy.AccessPrecise,
-	}
-	for in, want := range cases {
-		if got := policy.PlacesLevelForResponse(in); got != want {
-			t.Fatalf("policy.PlacesLevelForResponse(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestPermissions_PlacesDefaultNone(t *testing.T) {
 	var nilPerm policy.GrantMap
 	if got := nilPerm.Level("places"); got != policy.AccessNone {
@@ -77,30 +61,12 @@ func TestPermissions_PlacesDefaultNone(t *testing.T) {
 	if p.AllowsRead("places") {
 		t.Fatal("places must not be readable by default")
 	}
-	enabled := policy.GrantMap{"places": policy.AccessCity}
-	if got := enabled.Level("places"); got != policy.AccessCity {
-		t.Fatalf("explicit places = %q, want city", got)
+	enabled := policy.GrantMap{"places": policy.AccessRead}
+	if got := enabled.Level("places"); got != policy.AccessRead {
+		t.Fatalf("explicit places = %q, want read", got)
 	}
 	if !enabled.AllowsRead("places") {
 		t.Fatal("city should allow reads")
-	}
-}
-
-func TestValidateGrantMap_CityPreciseOnlyForPlaces(t *testing.T) {
-	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessCity}); err != nil {
-		t.Fatalf("places city: %v", err)
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessPrecise}); err != nil {
-		t.Fatalf("places precise: %v", err)
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"events": policy.AccessCity}); err == nil {
-		t.Fatal("city on events should be rejected")
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"places": "freebusy"}); err == nil {
-		t.Fatal("freebusy on places should be rejected")
-	}
-	if err := policy.ValidateGrantMap(policy.GrantMap{"places": policy.AccessSummary}); err == nil {
-		t.Fatal("summary on places should be rejected")
 	}
 }
 
@@ -138,7 +104,7 @@ func TestPhotosPlacesJoinDemo(t *testing.T) {
 
 func TestHandleLibraryPlaces_Aggregate(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places": {Default: policy.AccessPrecise}},
+		typePolicies: policy.DataGrants{"places": {Default: policy.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 			{ID: connectors.OwnTracksServiceID, Name: "OwnTracks", Action: "inject"},
@@ -187,7 +153,7 @@ func TestHandleLibraryPlaces_DeniedByDefault(t *testing.T) {
 
 func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places": {Default: policy.AccessCity}},
+		typePolicies: policy.DataGrants{"places/city": {Default: policy.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
@@ -196,10 +162,10 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places", nil)
+	req := httptest.NewRequest("GET", "/v1/library/places/city", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/places/city"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -220,9 +186,9 @@ func TestHandleLibraryPlaces_CityRedaction(t *testing.T) {
 	}
 }
 
-func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
+func TestHandleLibraryPlaces_NamesOmitsCoords(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places": {Default: policy.AccessRead}},
+		typePolicies: policy.DataGrants{"places/names": {Default: policy.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},
@@ -231,10 +197,10 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	srv.connectors = map[string]connectors.ServiceConnector{
 		connectors.TimelineServiceID: &fakePlaceProvider{visits: samplePlaces()[:1]},
 	}
-	req := httptest.NewRequest("GET", "/v1/library/places", nil)
+	req := httptest.NewRequest("GET", "/v1/library/places/names", nil)
 	req.Header.Set("Authorization", "Bearer test-key")
 	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("places"))(w, req)
+	srv.AuthMiddleware(srv.routeHandler("/v1/library/places/names"))(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d body=%s", w.Code, w.Body.String())
 	}
@@ -255,9 +221,9 @@ func TestHandleLibraryPlaces_ReadOmitsCoords(t *testing.T) {
 	}
 }
 
-func TestHandleLibraryPlaces_PreciseKeepsCoords(t *testing.T) {
+func TestHandleLibraryPlaces_FullKeepsCoords(t *testing.T) {
 	cfg := &Config{
-		typePolicies: policy.DataGrants{"places": {Default: policy.AccessPrecise}},
+		typePolicies: policy.DataGrants{"places": {Default: policy.AccessRead}},
 		Services: []Service{
 			{ID: connectors.TimelineServiceID, Name: "Google Timeline", Action: "inject"},
 		},

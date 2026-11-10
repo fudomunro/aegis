@@ -14,6 +14,6 @@ API base (`…/api`) and a token:
 }
 ```
 
-Use `documents: "metadata"` in a data grant to let agents
+Use the `documents/metadata` route grant to let agents
 browse titles/tags without excerpts or full text.
 

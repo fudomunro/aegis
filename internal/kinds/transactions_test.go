@@ -2,8 +2,6 @@ package kinds
 
 import (
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestBuildTransactionSummary(t *testing.T) {
@@ -89,19 +87,12 @@ func TestFilterTransactions(t *testing.T) {
 	}
 }
 
-func TestRedactTransactionsForLevel(t *testing.T) {
+func TestRedactTransactionsRead(t *testing.T) {
 	items := []Transaction{
 		{Amount: "-1.00", Merchant: "A", Account: &TransactionAccount{Name: "X"}},
 	}
-	if got := redactTransactionsForLevel(items, policy.AccessSummary); got != nil {
-		t.Fatalf("summary should drop line items, got %v", got)
-	}
-	read := redactTransactionsForLevel(items, policy.AccessRead)
+	read := redactTransactionsRead(items)
 	if len(read) != 1 || read[0].Account != nil || read[0].Merchant != "A" {
 		t.Fatalf("read redaction = %+v", read)
-	}
-	full := redactTransactionsForLevel(items, policy.AccessFull)
-	if full[0].Account == nil {
-		t.Fatal("full should keep account")
 	}
 }

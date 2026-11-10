@@ -91,9 +91,9 @@ func (s *Server) AllowDataPermission(w http.ResponseWriter, r *http.Request, svc
 // kinds so agents do not waste turns on blocked endpoints. Also warns
 // when a type is free/busy only (issue #128).
 // permissionNotice derives the agent-facing data-grant notice from the
-// request key's grant map. Deny-by-default maps (unlisted kinds closed) are
+// request key's grant map. Deny-by-default maps (unlisted keys closed) are
 // announced as an allow list; maps with a permissive default announce their
-// explicit denials. Redaction-limited kinds get their explanation either way.
+// explicit denials. Narrowed routes get their explanation either way.
 func permissionNotice(p policy.GrantMap) string {
 	var parts []string
 	if p.Level("") == policy.AccessNone {
@@ -110,9 +110,9 @@ func permissionNotice(p policy.GrantMap) string {
 			"(start_at, end_at, all_day, status) — prefer it for scheduling; never request titles, "+
 			"attendees, locations, or descriptions")
 	}
-	if limited := p.SummaryKinds(); len(limited) > 0 {
-		parts = append(parts, strings.Join(limited, ", ")+
-			" is totals-only — responses include count, total_amount, by_category, and by_month; never request line items, merchants, or account identifiers.")
+	if p.AllowsKindMethod("transactions/totals", http.MethodGet) {
+		parts = append(parts, "the totals route (/v1/library/transactions/totals) returns category and month totals only "+
+			"(count, total_amount, by_category, by_month) — never request line items, merchants, or account identifiers from it")
 	}
 	if len(parts) == 0 {
 		return ""

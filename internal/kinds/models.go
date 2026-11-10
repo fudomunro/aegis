@@ -713,7 +713,7 @@ type TransactionSource struct {
 	Extra map[string]any `json:"extra,omitempty"`
 }
 
-// TransactionSummary is the reduced money view for AccessSummary consumers
+// TransactionSummary is the reduced money view for the totals route
 // (issue #141): totals only, no line items, no account identifiers.
 type TransactionSummary struct {
 	// Count is the number of underlying line items rolled into the totals.

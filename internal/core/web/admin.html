@@ -528,7 +528,7 @@
         </div>
         <p class="meta" style="margin:0.55rem 0 0.35rem">
           Kind-owned agent access.
-          <code>places</code> stays off until you name it (city / read / precise).
+          <code>places</code> stays off until you name it — the places family is <code>places</code>, <code>places/names</code>, <code>places/city</code>.
           Other accessors under a kind are read-only — edit app scopes with <code>/v1/admin/apps</code>.
         </p>
         <div id="data-grant-list" class="perm-list"></div>
@@ -1899,33 +1899,35 @@
     messages: "Messages",
     transactions: "Transactions",
     places: "Places",
+    freebusy: "Freebusy route (availability only)",
+    "transactions/totals": "Transactions — totals only",
+    "transactions/items": "Transactions — no account identifiers",
+    "documents/metadata": "Documents — titles and tags only",
+    "places/city": "Places — city and window only",
+    "places/names": "Places — names without coordinates",
   };
-  // User-facing access options. Backend still stores none/freebusy/summary/city/precise/read/write/read-write.
+  // User-facing access options. Narrowed disclosure is its own route with
+  // its own grant key (issue #348), not a level.
   const ACCESS_CHOICES = [
     { value: "read", label: "Available" },
-    { value: "summary", label: "Totals only" },
-    { value: "freebusy", label: "Free/busy only" },
-    { value: "city", label: "City only" },
-    { value: "precise", label: "Precise" },
     { value: "read-write", label: "Editable" },
     { value: "none", label: "Off" },
   ];
-  // freebusy redaction is events-only (issue #128).
-  const FREEBUSY_TYPES = new Set(["events"]);
-  // summary redaction is transactions-only (issue #141).
-  const SUMMARY_TYPES = new Set(["transactions"]);
-  // city/precise redaction is places-only (issue #142).
-  const PLACES_TYPES = new Set(["places"]);
+  // Disclosure routes: each narrowed view is its own grant key.
+  const DISCLOSURE_ROUTES = [
+    "freebusy",
+    "transactions/totals",
+    "transactions/items",
+    "documents/metadata",
+    "places/city",
+    "places/names",
+  ];
   // Per-service Advanced disclosure under the permissions form (issue #69).
   const openAdvanced = new Set();
 
   function normalizeAccess(level) {
     const v = String(level || "").toLowerCase();
     if (v === "none" || v === "deny" || v === "off" || v === "false") return "none";
-    if (v === "freebusy" || v === "fb" || v === "busy" || v === "busy-only" || v === "free-busy") return "freebusy";
-    if (v === "summary" || v === "totals" || v === "totals-only" || v === "sum") return "summary";
-    if (v === "city" || v === "locality" || v === "city-only" || v === "metro") return "city";
-    if (v === "precise" || v === "coordinates" || v === "coords" || v === "gps" || v === "exact" || v === "full-places") return "precise";
     if (v === "read" || v === "ro" || v === "readonly" || v === "read-only") return "read";
     if (v === "write" || v === "wo" || v === "writeonly" || v === "write-only" || v === "mutate") return "write";
     if (v === "read-write" || v === "full" || v === "rw" || v === "readwrite" || v === "read_write") return "read-write";
@@ -1943,9 +1945,6 @@
     const display = (!allowWrite && (cur === "read-write" || cur === "write")) ? "read" : cur;
     const options = ACCESS_CHOICES.filter((o) => {
       if (o.value === "read-write" && !allowWrite) return false;
-      if (o.value === "freebusy" && !FREEBUSY_TYPES.has(name)) return false;
-      if (o.value === "summary" && !SUMMARY_TYPES.has(name)) return false;
-      if ((o.value === "city" || o.value === "precise") && !PLACES_TYPES.has(name)) return false;
       return true;
     });
     if (options.every((o) => o.value !== display) && display) {
@@ -2009,35 +2008,28 @@
         api("/v1/admin/data-grants"),
         api("/v1/admin/permissions"),
       ]);
-      const types = policyData.types || {};
+      const types = policyData.data_grants || {};
       const othersByKey = {};
       (overview.types || []).forEach((row) => {
         othersByKey[row.id] = row.accessors || [];
       });
-      root.innerHTML = LIBRARY_DATA_TYPES.map((key) => {
+      const rows = LIBRARY_DATA_TYPES.concat(DISCLOSURE_ROUTES);
+      root.innerHTML = rows.map((key) => {
         const policy = types[key] || {};
-        const level = policy.default != null && policy.default !== "" ? policy.default : (key === "places" ? "none" : "read-write");
-        const allowWrite = true;
-        const providers = policy.providers || {};
-        const providerKeys = Object.keys(providers).sort();
-        const providerRows = providerKeys.map((pid) =>
-          '<div class="perm-row" data-provider-row="' + escapeHtml(key) + '|' + escapeHtml(pid) + '">' +
-            '<label><span class="perm-type-label">↳ ' + escapeHtml(pid) + " (tighten only)</span></label>" +
-            '<select data-provider-key="' + escapeHtml(key) + '" data-provider-id="' + escapeHtml(pid) + '" aria-label="Override for ' + escapeHtml(pid) + '">' +
-            ["inherit", "none", "freebusy", "summary", "city", "precise", "read", "read-write"].map((v) =>
-              '<option value="' + v + '"' + (v === "inherit" && !providers[pid] ? " selected" : "") + ">" + v + "</option>"
-            ).join("") +
-            "</select></div>"
-        ).join("");
+        // Unset kinds display as Available (the common owner case); the
+        // opt-in places family and the disclosure routes display as Off —
+        // deny-by-default means unset is denied there.
+        const isRoute = DISCLOSURE_ROUTES.indexOf(key) !== -1;
+        const unsetDefault = (key === "places" || isRoute) ? "none" : "read-write";
+        const level = policy.default != null && policy.default !== "" ? policy.default : unsetDefault;
         return '<div class="type-access-row" data-type-access="' + escapeHtml(key) + '">' +
           '<div class="type-access-head">' +
             '<label for="data-grant-' + escapeHtml(key) + '">' +
             dataTypeIconHTML(key) +
             '<span class="perm-type-label">' + escapeHtml(dataTypeLabel(key)) + "</span></label>" +
-            accessSelect(key, level, allowWrite).replace("<select ", '<select id="data-grant-' + escapeHtml(key) + '" data-grant-default="' + escapeHtml(key) + '" ') +
+            accessSelect(key, level, true).replace("<select ", '<select id="data-grant-' + escapeHtml(key) + '" data-grant-default="' + escapeHtml(key) + '" ') +
           "</div>" +
           typeOtherAccessorsHTML(othersByKey[key]) +
-          providerRows +
           "</div>";
       }).join("");
     } catch (err) {
@@ -2062,29 +2054,17 @@
       const key = sel.getAttribute("data-grant-default");
       if (!key) return;
       const level = sel.value;
+      const isRoute = DISCLOSURE_ROUTES.indexOf(key) !== -1;
+      const unsetDefault = (key === "places" || isRoute) ? "none" : "read-write";
       // Unset display defaults need not be persisted unless places (opt-in).
-      if (key !== "places" && level === "read-write") return;
-      if (key === "places" && level === "none") {
-        types[key] = { default: "none" };
-        return;
-      }
+      if (key !== "places" && level === unsetDefault) return;
       types[key] = { default: level };
-    });
-    root.querySelectorAll("select[data-provider-key]").forEach((sel) => {
-      const key = sel.getAttribute("data-provider-key");
-      const pid = sel.getAttribute("data-provider-id");
-      if (!key || !pid) return;
-      const level = sel.value;
-      if (level === "inherit") return;
-      if (!types[key]) types[key] = { default: "" };
-      if (!types[key].providers) types[key].providers = {};
-      types[key].providers[pid] = level;
     });
     try {
       await api("/v1/admin/data-grants", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ types: types }),
+        body: JSON.stringify({ data_grants: types }),
       });
       if (status) {
         status.textContent = "Saved.";

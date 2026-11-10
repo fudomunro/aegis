@@ -6,19 +6,25 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 // transactionsKind owns the financial-transactions aggregate (issue #141):
-// summary/read redaction per source, list filters, and category/month
-// summaries over the full filtered set.
+// three disclosure routes over one dataset (issue #348) — totals, line
+// items without account identifiers, and full rows — plus filters and
+// category/month summaries.
 type transactionsKind struct {
 	providerKind
 	h    Host
 	e    *Engine
 	mark func([]Transaction, string)
 }
+
+// Grant keys are routes: the library-relative path (issue #348).
+const (
+	transactionsRouteKey       = "transactions"
+	transactionsItemsRouteKey  = "transactions/items"
+	transactionsTotalsRouteKey = "transactions/totals"
+)
 
 func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
 	k := &transactionsKind{h: h, e: e}
@@ -27,20 +33,47 @@ func newTransactionsKind(h Host, e *Engine, d Deps) Kind {
 	k.providerKind = providerKind{
 		def:      def,
 		provides: providerProvides[TransactionProvider],
-		routes: []Route{{
-			Pattern:     def.Path,
-			AppReadable: def.AppReadable,
-			Handler:     k.serve,
-		}},
+		routes: []Route{
+			{Pattern: def.Path, AppReadable: def.AppReadable, Handler: k.serve, GrantKey: transactionsRouteKey},
+			{Pattern: "/v1/library/transactions/items", AppReadable: true, Handler: k.serveItems, GrantKey: transactionsItemsRouteKey},
+			{Pattern: "/v1/library/transactions/totals", AppReadable: true, Handler: k.serveTotals, GrantKey: transactionsTotalsRouteKey},
+		},
 	}
 	return k
 }
 
-// serve returns the user's financial transactions from every connected
-// source: GET /v1/library/transactions. Query filters: after, before,
-// account, q, currency (issue #141). Permission key: transactions.
-// AccessSummary returns totals only.
+// transactionShape selects what a route returns (issue #348).
+type transactionShape int
+
+const (
+	// transactionFull is line items with account identifiers.
+	transactionFull transactionShape = iota
+	// transactionItems is line items without account identifiers.
+	transactionItems
+	// transactionTotals is category/month totals only — no line items.
+	transactionTotals
+)
+
+// serve returns full line items, including account identifiers:
+// GET /v1/library/transactions. Query filters: after, before, account, q,
+// currency (issue #141).
 func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
+	k.serveShape(w, r, transactionsRouteKey, transactionFull)
+}
+
+// serveItems returns line items with account identifiers stripped:
+// GET /v1/library/transactions/items.
+func (k *transactionsKind) serveItems(w http.ResponseWriter, r *http.Request) {
+	k.serveShape(w, r, transactionsItemsRouteKey, transactionItems)
+}
+
+// serveTotals returns category/month totals only:
+// GET /v1/library/transactions/totals.
+func (k *transactionsKind) serveTotals(w http.ResponseWriter, r *http.Request) {
+	k.serveShape(w, r, transactionsTotalsRouteKey, transactionTotals)
+}
+
+func (k *transactionsKind) serveShape(w http.ResponseWriter, r *http.Request, grantKey string, shape transactionShape) {
 	kind := k.def
 	filters := ParseTransactionFilters(r)
 	if kind.Search != nil {
@@ -48,25 +81,28 @@ func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 		// before/account/currency stay handler-side filters.
 		filters.Q = ""
 	}
-	grants, _ := k.h.Grants(r)
-	summaryOnly := policy.IsSummaryAccess(grants.Level(kind.PermType))
 	Aggregate(k.h, k.e, w, r, Spec[Transaction]{
-		Kind: kind,
+		Kind:     kind,
+		GrantKey: grantKey,
 		Targets: func(r *http.Request) ([]NamedLister[Transaction], []string) {
-			return transactionsProviderTargets(k.h, r, kind.PermType)
+			return transactionsProviderTargets(k.h, r, grantKey)
 		},
 		ServiceOf: TransactionServiceName,
 		SortKey:   TransactionIdentityKey,
 		Merge:     MergeTransactions,
 		Encode: func(items []Transaction, page PageRequest, bySvc map[string]LibraryServiceStatus) any {
 			filtered := filterTransactions(items, filters)
-			// Summary covers the full filtered set, not the current page.
+			// Totals cover the full filtered fetch, not the current page —
+			// and are computed before any line-item stripping.
 			summary := buildTransactionSummary(filtered)
-			if summaryOnly {
+			if shape == transactionTotals {
 				return TransactionList{
 					Summary:         summary,
 					LibraryListMeta: MetaForPage(PageResult{Total: 0}, true, AnyServiceTruncated(bySvc), bySvc),
 				}
+			}
+			if shape == transactionItems {
+				filtered = redactTransactionsRead(filtered)
 			}
 			pageItems, pr := SlicePage(filtered, page)
 			return TransactionList{
@@ -75,43 +111,28 @@ func (k *transactionsKind) serve(w http.ResponseWriter, r *http.Request) {
 				LibraryListMeta: MetaForPage(pr, true, AnyServiceTruncated(bySvc), bySvc),
 			}
 		},
-		RedactSearch: func(items []Transaction, r *http.Request) []Transaction {
-			return searchRedactTransactions(k.h, items, r)
-		},
 		MarkCanonical: k.mark,
-		CacheKey:      "library:transactions" + filters.CacheKeySuffix() + "|summary:" + strconv.FormatBool(summaryOnly),
+		CacheKey:      "library:" + grantKey + filters.CacheKeySuffix(),
 	})
 }
 
-// transactionsProviderTargets collects providers, wrapping each target
-// with summary/read redaction so a reduced grant never contributes line
-// items or account identifiers (issue #141).
-func transactionsProviderTargets(h Host, r *http.Request, permType string) ([]NamedLister[Transaction], []string) {
-	targets, denied := Collect[Transaction, TransactionProvider](h, r, permType,
+// transactionsProviderTargets collects providers; the route's encode owns
+// the disclosure shape (issue #348).
+func transactionsProviderTargets(h Host, r *http.Request, grantKey string) ([]NamedLister[Transaction], []string) {
+	return Collect[Transaction, TransactionProvider](h, r, grantKey,
 		func(p TransactionProvider) func(context.Context) ([]Transaction, bool, error) {
 			return p.ListUserTransactions
 		})
-	grants, _ := h.Grants(r)
-	level := policy.NormalizeAccess(grants.Level(permType))
-	if !policy.IsSummaryAccess(level) && level != policy.AccessRead {
-		return targets, denied
-	}
-	for i := range targets {
-		inner := targets[i].List
-		targets[i].List = func(ctx context.Context) ([]Transaction, bool, error) {
-			items, truncated, err := inner(ctx)
-			return redactTransactionsForLevel(items, level), truncated, err
-		}
-	}
-	return targets, denied
 }
 
-// searchRedactTransactions re-applies grant-level summary/read redaction to
-// index-hydrated transactions (issue #178): the index stores owner-tier
-// rows, so the request's level narrows them on the way out.
-func searchRedactTransactions(h Host, items []Transaction, r *http.Request) []Transaction {
-	grants, _ := h.Grants(r)
-	return redactTransactionsForLevel(items, grants.Level("transactions"))
+// redactTransactionsRead strips account identifiers from line items while
+// keeping merchant/description for agent reasoning (issue #141).
+func redactTransactionsRead(items []Transaction) []Transaction {
+	out := make([]Transaction, len(items))
+	for i, t := range items {
+		out[i] = redactTransactionRead(t)
+	}
+	return out
 }
 
 func filterTransactions(in []Transaction, f TransactionFilters) []Transaction {
@@ -132,22 +153,6 @@ func filterTransactions(in []Transaction, f TransactionFilters) []Transaction {
 func redactTransactionRead(t Transaction) Transaction {
 	t.Account = nil
 	return t
-}
-
-func redactTransactionsForLevel(items []Transaction, level string) []Transaction {
-	switch policy.NormalizeAccess(level) {
-	case policy.AccessSummary:
-		// No line items at all.
-		return nil
-	case policy.AccessRead:
-		out := make([]Transaction, len(items))
-		for i, t := range items {
-			out[i] = redactTransactionRead(t)
-		}
-		return out
-	default:
-		return items
-	}
 }
 
 // buildTransactionSummary totals filtered line items by category and month.

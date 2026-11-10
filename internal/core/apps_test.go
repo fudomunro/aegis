@@ -10,7 +10,6 @@ import (
 
 	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func testAppStore(t *testing.T) *apps.Store {
@@ -125,44 +124,9 @@ func TestAuthMiddleware_AppTokenFreeBusyRouteOnly(t *testing.T) {
 	}
 }
 
-func TestLibraryCache_AppScopeIsolated(t *testing.T) {
-	store := testAppStore(t)
-	_, metaToken := createTestApp(t, store, "eco-meta", policy.GrantMap{"documents": policy.AccessMetadata})
-	_, roToken := createTestApp(t, store, "eco-ro", policy.GrantMap{"documents": policy.AccessRead})
-	svc := &Service{
-		ID:     "paperless",
-		Name:   "Paperless-ngx",
-		Action: "inject",
-	}
-	srv := testServerWithBase(&Config{Services: []Service{*svc}}, "https://aegis.example.com")
-	srv.apps = store
-	srv.connectors["paperless"] = &fakeDocumentProvider{documents: []kinds.Document{{
-		Title:   "Lease",
-		Excerpt: "full lease text",
-		Sources: []kinds.DocumentSource{{Service: "paperless", ID: "d1"}},
-	}}}
-
-	// Prime cache with a full-read app response (excerpt present).
-	req := httptest.NewRequest("GET", "/v1/library/documents", nil)
-	req.Header.Set("Authorization", "Bearer "+roToken)
-	w := httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
-	if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "full lease text") {
-		t.Fatalf("read app: %d %s", w.Code, w.Body.String())
-	}
-
-	// Metadata app must not receive the cached full response.
-	req = httptest.NewRequest("GET", "/v1/library/documents", nil)
-	req.Header.Set("Authorization", "Bearer "+metaToken)
-	w = httptest.NewRecorder()
-	srv.AuthMiddleware(srv.libraryHandler("documents"))(w, req)
-	if w.Code != http.StatusOK {
-		t.Fatalf("meta app: %d %s", w.Code, w.Body.String())
-	}
-	if strings.Contains(w.Body.String(), "full lease text") {
-		t.Fatalf("cache leaked full documents to metadata app: %s", w.Body.String())
-	}
-}
+// Route-fixed disclosure shapes isolate cache entries by construction
+// (issue #348): each route has its own cache key, and two keys reaching the
+// same route receive identical shapes.
 
 func TestAdminApps_CRUD(t *testing.T) {
 	store := testAppStore(t)

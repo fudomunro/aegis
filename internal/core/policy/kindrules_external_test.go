@@ -20,9 +20,4 @@ func TestBuiltinKindRulesRegistered(t *testing.T) {
 	if !shared.KindDefaultsNone("places") {
 		t.Fatal("places must register as default-none")
 	}
-	// The freebusy level is retired — availability access is the freebusy
-	// route (issue #348).
-	if shared.KindAllowsLevel("events", "freebusy") {
-		t.Fatal("events must not declare the retired freebusy level")
-	}
 }

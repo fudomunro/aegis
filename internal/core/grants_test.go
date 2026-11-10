@@ -239,21 +239,21 @@ func TestPermissionNotice_DerivesFromGrantMap(t *testing.T) {
 
 	// Deny-by-default: the map is a complete allow list.
 	closed := policy.GrantMap{
-		"contacts":     policy.AccessRead,
-		"playlists":    policy.AccessFull,
-		"transactions": policy.AccessSummary,
+		"contacts":            policy.AccessRead,
+		"playlists":           policy.AccessFull,
+		"transactions/totals": policy.AccessRead,
 	}
 	notice = permissionNotice(closed)
 	if !strings.Contains(notice, "only these library routes are available") {
 		t.Fatalf("positive mode missing: %s", notice)
 	}
-	for _, k := range []string{"contacts", "playlists", "transactions"} {
+	for _, k := range []string{"contacts", "playlists", "transactions/totals"} {
 		if !strings.Contains(notice, k) {
 			t.Fatalf("allow list missing %q: %s", k, notice)
 		}
 	}
-	if !strings.Contains(notice, "totals-only") {
-		t.Fatalf("summary limit missing: %s", notice)
+	if !strings.Contains(notice, "totals route") {
+		t.Fatalf("totals note missing: %s", notice)
 	}
 
 	if permissionNotice(nil) != "" {

@@ -32,61 +32,21 @@ func TestPermissions_AllowsAndClone(t *testing.T) {
 	}
 }
 
-func TestPermissions_RedactionLists(t *testing.T) {
-	p := GrantMap{
-		"transactions": AccessSummary,
-		"places":       AccessCity,
-		"tracks":       AccessRead,
-	}
-	if got := p.SummaryKinds(); len(got) != 1 || got[0] != "transactions" {
-		t.Fatalf("SummaryKinds = %v", got)
-	}
-	if got := p.PlacesAccessLevels(); got["places"] != AccessCity {
-		t.Fatalf("PlacesAccessLevels = %v", got)
-	}
-	if !IsSummaryAccess(AccessSummary) || IsSummaryAccess(AccessRead) {
-		t.Fatal("IsSummaryAccess")
-	}
-	if got := PlacesLevelForResponse(AccessCity); got != AccessCity {
-		t.Fatalf("PlacesLevelForResponse city = %q", got)
+func TestValidateGrantMap_RedactionTokensRetired(t *testing.T) {
+	// Narrowed disclosure is its own route (issue #348) — the redaction
+	// level tokens reject everywhere.
+	for _, tok := range []string{"freebusy", "summary", "city", "precise", "metadata"} {
+		if err := ValidateGrantMap(GrantMap{"events": tok}); err == nil {
+			t.Fatalf("retired token %q must reject", tok)
+		}
 	}
 }
 
-func TestValidateGrantMap_RedactionScoping(t *testing.T) {
-	// The freebusy level is retired — availability access is the freebusy
-	// route (issue #348). The token rejects everywhere.
-	if err := ValidateGrantMap(GrantMap{"events": "freebusy"}); err == nil {
-		t.Fatal("retired freebusy token must reject")
-	}
-	if err := ValidateGrantMap(GrantMap{"tracks": "freebusy"}); err == nil {
-		t.Fatal("retired freebusy token must reject")
-	}
-	if err := ValidateGrantMap(GrantMap{"places": AccessCity}); err != nil {
-		t.Fatalf("places city: %v", err)
-	}
-	if err := ValidateGrantMap(GrantMap{"tracks": AccessCity}); err == nil {
-		t.Fatal("city must reject non-places")
-	}
-}
-
-func TestValidateGrantMap_KindLevels(t *testing.T) {
-	if err := ValidateGrantMap(GrantMap{"places": AccessPrecise}); err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateGrantMap(GrantMap{"places": AccessSummary}); err == nil {
-		t.Fatal("summary on places")
-	}
-	if err := ValidateGrantMap(GrantMap{"transactions": AccessSummary}); err != nil {
-		t.Fatal(err)
-	}
-	if err := ValidateGrantMap(GrantMap{"transactions": AccessCity}); err == nil {
-		t.Fatal("city on transactions")
-	}
-	if err := ValidateGrantMap(GrantMap{"documents": AccessMetadata}); err != nil {
-		t.Errorf("metadata on documents should pass: %v", err)
-	}
-	if err := ValidateGrantMap(GrantMap{"tracks": AccessSummary}); err == nil {
-		t.Error("summary on tracks should fail validation")
+func TestValidateGrantMap_Levels(t *testing.T) {
+	for _, tok := range []string{"none", "read", "write", "read-write"} {
+		if err := ValidateGrantMap(GrantMap{"places": tok}); err != nil {
+			t.Fatalf("valid token %q: %v", tok, err)
+		}
 	}
 	if err := ValidateGrantMap(GrantMap{"": AccessRead}); err == nil {
 		t.Fatal("empty key")
@@ -117,20 +77,5 @@ func TestNormalizeAccess(t *testing.T) {
 	}
 	if NormalizeAccess("") != "" {
 		t.Fatal("empty stays empty")
-	}
-}
-
-func TestPlacesLevelForResponse_Levels(t *testing.T) {
-	if PlacesLevelForResponse(AccessPrecise) != AccessPrecise {
-		t.Fatal("precise keeps precise")
-	}
-	if PlacesLevelForResponse(AccessRead) != AccessRead {
-		t.Fatal("read keeps names")
-	}
-	if PlacesLevelForResponse(AccessFull) != AccessPrecise {
-		t.Fatal("full is precise for places")
-	}
-	if PlacesLevelForResponse(AccessCity) != AccessCity {
-		t.Fatal("city")
 	}
 }

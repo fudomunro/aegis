@@ -2,8 +2,6 @@ package kinds
 
 import (
 	"testing"
-
-	"github.com/fudomunro/aegis/internal/core/policy"
 )
 
 func TestDocumentFilters_Match(t *testing.T) {
@@ -47,13 +45,7 @@ func TestRedactDocumentMetadata_StripsExcerpt(t *testing.T) {
 	if got.Title != "Lease" || len(got.Tags) != 1 {
 		t.Fatalf("metadata fields should survive: %+v", got)
 	}
-	if got := redactDocumentsForLevel([]Document{d}, policy.AccessMetadata); got[0].Excerpt != "" {
-		t.Fatal("metadata level should strip excerpt")
-	}
-	if got := redactDocumentsForLevel([]Document{d}, policy.AccessRead); got[0].Excerpt != "secret text" {
-		t.Fatal("read level should keep excerpt")
-	}
-	if got := redactDocumentsForLevel([]Document{d}, policy.AccessNone); got != nil {
-		t.Fatal("none should return no items")
+	if got := redactDocumentsMetadata([]Document{d}); got[0].Excerpt != "" {
+		t.Fatal("metadata route should strip excerpt")
 	}
 }

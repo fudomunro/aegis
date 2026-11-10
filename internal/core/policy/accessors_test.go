@@ -22,17 +22,17 @@ func TestAgentOverviewLevels_DefaultsAndOptIn(t *testing.T) {
 	kinds := []string{"tracks", "places", "events"}
 	got := AgentOverviewLevels(DataGrants{
 		"events": {Default: AccessRead},
-		"places": {Default: AccessCity},
+		"places": {Default: AccessRead},
 		"tracks": {Default: AccessRead},
 	}, kinds)
 	if got["tracks"] != AccessRead {
 		t.Fatalf("tracks = %q, want read", got["tracks"])
 	}
-	if got["places"] != AccessCity {
-		t.Fatalf("places = %q, want city", got["places"])
+	if got["places"] != AccessRead {
+		t.Fatalf("places = %q, want read", got["places"])
 	}
 	if got["events"] != AccessRead {
-		t.Fatalf("events = %q, want freebusy", got["events"])
+		t.Fatalf("events = %q, want read", got["events"])
 	}
 
 	got = AgentOverviewLevels(DataGrants{}, kinds)
@@ -59,14 +59,14 @@ func TestAppOverviewLevels_FailClosedAndExplicit(t *testing.T) {
 	levels, explicit = AppOverviewLevels(GrantMap{
 		DefaultKey: AccessNone,
 		"events":   AccessRead,
-		"places":   AccessPrecise,
+		"places":   AccessRead,
 		"tracks":   AccessRead,
 	}, kinds)
 	if levels["events"] != AccessRead {
-		t.Fatalf("events = %q, want freebusy", levels["events"])
+		t.Fatalf("events = %q, want read", levels["events"])
 	}
-	if levels["places"] != AccessPrecise {
-		t.Fatalf("places = %q, want precise", levels["places"])
+	if levels["places"] != AccessRead {
+		t.Fatalf("places = %q, want read", levels["places"])
 	}
 	if !explicit["events"] || !explicit["places"] || !explicit["tracks"] {
 		t.Fatalf("explicit = %v", explicit)
