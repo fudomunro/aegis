@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -217,7 +218,7 @@ func TestWriteRoutes_CrossOriginFormAndTextPlain(t *testing.T) {
 	srv.authMode = AuthModeTailnet
 	srv.identity = fakeIdentity{login: "user@example.com"}
 	srv.apps = testAppStore(t)
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	type writeRoute struct {
 		method, path, contentType, body string
@@ -270,7 +271,7 @@ func TestAppAuthorize_FormCSRFRequired(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	// Render consent page and capture the per-render token.
 	req := httptest.NewRequest("GET",
@@ -344,7 +345,7 @@ func TestAppAuthorize_JSONGrantStillWorksWithAPIKey(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 
 	body := `{"client_id":"eco","name":"eco","scopes":"events:freebusy","redirect_uri":"/demo/third-party"}`
 	req := httptest.NewRequest("POST", "/v1/apps/authorize", strings.NewReader(body))
@@ -361,7 +362,7 @@ func TestAppAuthorize_TailnetSameOriginFormWithCSRF(t *testing.T) {
 	store := testAppStore(t)
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
 	srv.apps = store
-	srv.grants = NewGrantStore()
+	srv.grants = apps.NewGrantStore()
 	srv.authMode = AuthModeTailnet
 	srv.identity = fakeIdentity{login: "user@example.com"}
 

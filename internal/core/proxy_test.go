@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -316,7 +317,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
 		prom:        metrics.NewPromMetrics("", ""),
 		csrfTokens:  shared.NewStateStore(),
-		grants:      NewGrantStore(),
+		grants:      apps.NewGrantStore(),
 	}
 	// kindEngine is built lazily (libraryEngine) so fixtures can set
 	// srv.search after construction.

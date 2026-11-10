@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -37,7 +38,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			var req AppCreateRequest
+			var req apps.AppCreateRequest
 			if err := json.Unmarshal(body, &req); err != nil {
 				shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 				return
@@ -107,7 +108,7 @@ func (s *Server) HandleAdminApps(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		var req AppUpdateRequest
+		var req apps.AppUpdateRequest
 		if err := json.Unmarshal(body, &req); err != nil {
 			shared.WriteJSONError(w, http.StatusBadRequest, "invalid JSON body")
 			return

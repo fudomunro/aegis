@@ -1,10 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/core/policy"
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"bytes"
 	"context"
 	"encoding/json"
@@ -13,6 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/policy"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func TestPlacesAccessLevels(t *testing.T) {

@@ -8,12 +8,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/fudomunro/aegis/internal/kinds"
-
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
+	"github.com/fudomunro/aegis/internal/kinds"
 )
 
 func searchTestServer(t *testing.T, contacts ...kinds.Contact) *Server {

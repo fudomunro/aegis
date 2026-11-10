@@ -1,8 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-
 	"encoding/json"
 	"io"
 	"net/http"
@@ -10,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 )
 

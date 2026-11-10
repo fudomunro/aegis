@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/apps"
 	"github.com/fudomunro/aegis/internal/core/copies"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
@@ -31,11 +32,11 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	srv := testServerWithBase(cfg, "https://aegis.example.com")
 	srv.connectors["spotify"] = connectors.NewSpotifyConnector(srv)
 
-	apps, err := NewAppStore(filepath.Join(dir, "apps.json"))
+	appStore, err := apps.NewStore(filepath.Join(dir, "apps.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := apps.Create(AppCreateRequest{
+	if _, _, err := appStore.Create(apps.AppCreateRequest{
 		ID:   "eco-demo",
 		Name: "Event Coordinator",
 		Scopes: policy.Permissions{
@@ -46,7 +47,7 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := apps.Create(AppCreateRequest{
+	if _, _, err := appStore.Create(apps.AppCreateRequest{
 		ID:     "disabled-app",
 		Name:   "Disabled App",
 		Scopes: policy.Permissions{"photos": policy.AccessRead},
@@ -54,10 +55,10 @@ func TestPermissionsOverview_TypeCentricRelevantAccessors(t *testing.T) {
 		t.Fatal(err)
 	}
 	disabled := true
-	if _, err := apps.Update("disabled-app", AppUpdateRequest{Disabled: &disabled}); err != nil {
+	if _, err := appStore.Update("disabled-app", apps.AppUpdateRequest{Disabled: &disabled}); err != nil {
 		t.Fatal(err)
 	}
-	srv.apps = apps
+	srv.apps = appStore
 
 	mailArch, err := mail.Open(filepath.Join(dir, "mail-archive.db"))
 	if err != nil {

@@ -1,9 +1,6 @@
 package core
 
 import (
-	"github.com/fudomunro/aegis/internal/connectors"
-	"github.com/fudomunro/aegis/internal/shared"
-
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,9 +8,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/mail"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
+	"github.com/fudomunro/aegis/internal/shared"
 )
 
 func TestCache_SnapshotStatsClear(t *testing.T) {

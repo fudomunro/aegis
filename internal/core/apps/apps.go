@@ -1,4 +1,4 @@
-package core
+package apps
 
 import (
 	"context"
@@ -24,9 +24,9 @@ import (
 // appsFileVersion is the on-disk schema version for apps.json.
 const appsFileVersion = 1
 
-// appTokenPrefix marks third-party app tokens so they cannot be confused
+// TokenPrefix marks third-party app tokens so they cannot be confused
 // with the shared API key in logs or config.
-const appTokenPrefix = "aeg_app_"
+const TokenPrefix = "aeg_app_"
 
 // App is a registered third-party client (issue #131). Tokens are stored as
 // SHA-256 hashes; the plaintext is returned once at create/rotate.
@@ -55,18 +55,18 @@ type appsFile struct {
 	Apps    []App `json:"apps"`
 }
 
-// AppStore is a mutex-guarded registry of third-party app credentials.
-type AppStore struct {
+// Store is a mutex-guarded registry of third-party app credentials.
+type Store struct {
 	mu     sync.RWMutex
 	path   string
 	byID   map[string]*App
 	byHash map[string]*App // hex sha256 → app
 }
 
-// NewAppStore loads apps.json (empty when missing). path is required in
+// NewStore loads apps.json (empty when missing). path is required in
 // production; tests may pass a temp path.
-func NewAppStore(path string) (*AppStore, error) {
-	s := &AppStore{
+func NewStore(path string) (*Store, error) {
+	s := &Store{
 		path:   path,
 		byID:   make(map[string]*App),
 		byHash: make(map[string]*App),
@@ -77,7 +77,7 @@ func NewAppStore(path string) (*AppStore, error) {
 	return s, nil
 }
 
-func (s *AppStore) reload() error {
+func (s *Store) reload() error {
 	if s.path == "" {
 		return fmt.Errorf("apps path is required")
 	}
@@ -119,7 +119,7 @@ func (s *AppStore) reload() error {
 	return nil
 }
 
-func (s *AppStore) persistLocked() error {
+func (s *Store) persistLocked() error {
 	if s.path == "" {
 		return fmt.Errorf("apps path is empty; cannot save")
 	}
@@ -148,7 +148,7 @@ func generateAppToken() (token, hash, hint string, err error) {
 	if _, err := rand.Read(raw); err != nil {
 		return "", "", "", err
 	}
-	token = appTokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
+	token = TokenPrefix + base64.RawURLEncoding.EncodeToString(raw)
 	return token, hashAppToken(token), appTokenHint(token), nil
 }
 
@@ -207,7 +207,7 @@ func appView(a *App) AppView {
 }
 
 // List returns apps sorted by id (admin view).
-func (s *AppStore) List() []AppView {
+func (s *Store) List() []AppView {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	ids := make([]string, 0, len(s.byID))
@@ -223,7 +223,7 @@ func (s *AppStore) List() []AppView {
 }
 
 // Get returns one app view.
-func (s *AppStore) Get(id string) (AppView, bool) {
+func (s *Store) Get(id string) (AppView, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	a, ok := s.byID[id]
@@ -234,7 +234,7 @@ func (s *AppStore) Get(id string) (AppView, bool) {
 }
 
 // Create registers an app and returns the one-time plaintext token.
-func (s *AppStore) Create(req AppCreateRequest) (AppView, string, error) {
+func (s *Store) Create(req AppCreateRequest) (AppView, string, error) {
 	id := strings.TrimSpace(req.ID)
 	if id == "" {
 		return AppView{}, "", fmt.Errorf("app id is required")
@@ -298,7 +298,7 @@ func (s *AppStore) Create(req AppCreateRequest) (AppView, string, error) {
 }
 
 // Update patches name/scopes/disabled.
-func (s *AppStore) Update(id string, req AppUpdateRequest) (AppView, error) {
+func (s *Store) Update(id string, req AppUpdateRequest) (AppView, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	app, ok := s.byID[id]
@@ -336,7 +336,7 @@ func (s *AppStore) Update(id string, req AppUpdateRequest) (AppView, error) {
 }
 
 // Rotate replaces the app token and returns the new plaintext once.
-func (s *AppStore) Rotate(id string) (AppView, string, error) {
+func (s *Store) Rotate(id string) (AppView, string, error) {
 	token, hash, hint, err := generateAppToken()
 	if err != nil {
 		return AppView{}, "", err
@@ -362,7 +362,7 @@ func (s *AppStore) Rotate(id string) (AppView, string, error) {
 }
 
 // Delete removes an app (revoke).
-func (s *AppStore) Delete(id string) error {
+func (s *Store) Delete(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	app, ok := s.byID[id]
@@ -379,7 +379,7 @@ func (s *AppStore) Delete(id string) error {
 // RevokeByToken disables the app that owns token and clears the token so the
 // credential cannot be reused. Used by POST /v1/apps/revoke (issue #131
 // disconnect toggle). Returns the app id that was revoked.
-func (s *AppStore) RevokeByToken(token string) (string, error) {
+func (s *Store) RevokeByToken(token string) (string, error) {
 	if token == "" {
 		return "", fmt.Errorf("token is required")
 	}
@@ -406,7 +406,7 @@ func (s *AppStore) RevokeByToken(token string) (string, error) {
 }
 
 // Enable re-activates a disabled app (authorize after disconnect).
-func (s *AppStore) Enable(id string) error {
+func (s *Store) Enable(id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	app, ok := s.byID[id]
@@ -421,7 +421,7 @@ func (s *AppStore) Enable(id string) error {
 // FindByToken resolves a plaintext app token to its app. Returns nil when
 // the token does not match any enabled app. Comparison is constant-time on
 // the hash.
-func (s *AppStore) FindByToken(token string) *App {
+func (s *Store) FindByToken(token string) *App {
 	if token == "" {
 		return nil
 	}
@@ -444,7 +444,7 @@ func (s *AppStore) FindByToken(token string) *App {
 }
 
 // Path is the on-disk apps.json location.
-func (s *AppStore) Path() string {
+func (s *Store) Path() string {
 	if s == nil {
 		return ""
 	}
@@ -478,7 +478,7 @@ type AppIdentity struct {
 	Scopes policy.Permissions
 }
 
-func withAppIdentity(r *http.Request, app *App) *http.Request {
+func WithAppIdentity(r *http.Request, app *App) *http.Request {
 	id := &AppIdentity{ID: app.ID, Name: app.Name, Scopes: app.Scopes}
 	return r.WithContext(context.WithValue(r.Context(), appIdentityKey{}, id))
 }
