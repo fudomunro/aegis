@@ -45,9 +45,7 @@ func seedLibraryAggregate[T any](t *testing.T, srv *Server, kindID string, items
 	if err != nil {
 		t.Fatal(err)
 	}
-	req := httptest.NewRequest(http.MethodGet, "/v1/library/"+kindID, nil)
-	g, _ := srv.Grants(req)
-	srv.cache.Set("library:"+kindID+"|g:"+g.Fingerprint()+"|agg", string(raw), time.Minute)
+	srv.cache.Set("library:"+kindID+"|agg", string(raw), time.Minute)
 }
 
 func TestLibraryTracks_CacheHit(t *testing.T) {

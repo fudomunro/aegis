@@ -20,6 +20,36 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **Authorization is one lookup over one grant map (issue #347).** Every
+  recognized key — agent key, invite token, app token — carries one
+  kind → access-level map, and every request resolves through a single
+  deny-by-default `GrantMap.Level` lookup: explicit entry → `default` →
+  `none`, with opt-in kinds (places) never opened by `default`. The owner
+  key ships prefilled with a permissive `default` entry when unconfigured,
+  which is the only remnant of "omit = unrestricted". The two-policy
+  runtime AND (owner data grants × scope grants), per-provider
+  tighten-only overrides, and legacy service `grant_limits` are deleted
+  from runtime, config, and the admin UI; library writes (mirror, photo
+  share, entity-link mutations) are authorized by a write grant instead
+  of the admin credential, and join the published API surface. The rule
+  map type is `policy.GrantMap`; the admin editor's save-key mismatch
+  (`types` vs `data_grants`, silently wiping grants on every save since
+  the v3 rename) is fixed.
+- **Data grants name routes; redaction levels are retired (issue #348).**
+  A grant key is the route: `freebusy`, `events`, `transactions/totals`,
+  `transactions/items`, `documents/metadata`, `places/city`,
+  `places/names`, and their full-route siblings. Each route serves
+  exactly one disclosure shape — its encode owns the narrowing — so a
+  `freebusy`-only key is denied `/v1/library/events` outright instead of
+  receiving a redacted page. The access vocabulary is `none` / `read` /
+  `write` / `read-write`; the `freebusy` / `summary` / `city` /
+  `precise` / `metadata` level tokens are rejected at load and the level
+  machinery is gone (type-scoped validation, `AllowedLevels` kind rules,
+  per-source search re-redaction, proxy-side freebusy shaping). The
+  totals route fixes the old summary wrapper dropping line items before
+  totals were computed. Old files' `providers` and `service_limits` keys
+  are ignored on load.
+
 - **The maintenance scanner and ticket surface join the tool.** Following
   the dashboard out of the application code (issue #335), the rest of the
   loop's outside-the-application phases now live in `cmd/aegis-dashboard`:

@@ -1,10 +1,6 @@
 package policy
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"encoding/json"
-
 	"github.com/fudomunro/aegis/internal/shared"
 )
 
@@ -81,21 +77,6 @@ func (p GrantMap) PrefillDefault() GrantMap {
 	}
 	out[DefaultKey] = DefaultAccessType
 	return out
-}
-
-// Fingerprint is a stable short digest of the rule map (json.Marshal sorts
-// map keys), for partitioning caches per request key. Distinct maps must
-// not share cached responses. Empty maps share the reserved "none" mark.
-func (p GrantMap) Fingerprint() string {
-	if len(p) == 0 {
-		return "none"
-	}
-	raw, err := json.Marshal(p)
-	if err != nil {
-		return "invalid"
-	}
-	sum := sha256.Sum256(raw)
-	return hex.EncodeToString(sum[:8])
 }
 
 // Levels materializes a kind-keyed DataGrants map as the rule map a key

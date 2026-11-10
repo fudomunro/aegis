@@ -45,25 +45,18 @@ func TestDataGrantsOverlay_Primary(t *testing.T) {
 
 	// Data grant is primary: tracks default full, spotify tightens to none.
 	if err := cfg.SetDataGrants(policy.DataGrants{
-		"tracks": {
-			Default:   policy.AccessFull,
-			Providers: map[string]string{"spotify": policy.AccessNone},
-		},
-		"places": {
-			Default:   policy.AccessNone,
-			Providers: map[string]string{"immich": policy.AccessRead},
-		},
+		"tracks": {Default: policy.AccessFull},
+		"places": {Default: policy.AccessNone},
 	}); err != nil {
 		t.Fatalf("SetDataGrants: %v", err)
 	}
 
-	// Provider overrides are legacy migration data: the collapsed rule map
-	// takes each kind's default level and ignores per-provider entries.
+	// The rule map takes each kind's default level.
 	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessFull {
-		t.Fatalf("tracks = %q, want full (provider override ignored)", got)
+		t.Fatalf("tracks = %q, want full", got)
 	}
 	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
-		t.Fatalf("places = %q, want none (provider opt-in is gone)", got)
+		t.Fatalf("places = %q, want none", got)
 	}
 
 	// Persisted as v3 data_grants.
@@ -113,10 +106,10 @@ func TestLoadConfig_DataGrantsBootstrap(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
-		t.Fatalf("bootstrap tracks = %q (provider tighten is legacy)", got)
+		t.Fatalf("bootstrap tracks = %q", got)
 	}
 	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
-		t.Fatalf("bootstrap places = %q (provider opt-in is legacy)", got)
+		t.Fatalf("bootstrap places = %q", got)
 	}
 
 	// Overlay types replace bootstrap when present.
@@ -143,7 +136,7 @@ func TestHandleAdminDataGrants(t *testing.T) {
 		t.Fatalf("InitDataGrantsStore: %v", err)
 	}
 
-	body := `{"data_grants":{"tracks":{"default":"read","providers":{"spotify":"none"}}}}`
+	body := `{"data_grants":{"tracks":{"default":"read"}}}`
 	req := httptest.NewRequest("PUT", "/v1/admin/data-grants", strings.NewReader(body))
 	req.Header.Set("X-Api-Key", "test-key")
 	w := httptest.NewRecorder()
@@ -169,7 +162,7 @@ func TestHandleAdminDataGrants(t *testing.T) {
 		t.Fatalf("data_grants.tracks = %+v", resp.DataGrants["tracks"])
 	}
 	if got := srv.config.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
-		t.Fatalf("effective = %q (provider tighten is legacy)", got)
+		t.Fatalf("effective = %q", got)
 	}
 }
 
@@ -192,7 +185,7 @@ func TestDataGrants_BootstrapKeyAndOverlayFile(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	if got := cfg.DataGrants().Levels().Level("tracks"); got != policy.AccessRead {
-		t.Fatalf("bootstrap tracks = %q (provider tighten is legacy)", got)
+		t.Fatalf("bootstrap tracks = %q", got)
 	}
 	if got := cfg.DataGrants().Levels().Level("places"); got != policy.AccessNone {
 		t.Fatalf("bootstrap places = %q (grant_limits and provider opt-in are legacy)", got)

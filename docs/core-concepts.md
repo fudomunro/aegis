@@ -245,7 +245,7 @@ After the overlap call-outs above, the stable concepts.
 | Concept | Definition | Key files |
 |---------|------------|-----------|
 | **Data grant** | What the user does to allow an LLM agent or app to use a library kind at an access level. Hero product term. | `docs/glossary.md`, `docs/configuration.md` “Data grants”, `SECURITY.md` |
-| **DataGrant** | Stored agent data grant per kind: `Default` level (per-provider entries are legacy and ignored). | `internal/core/policy/policy.go` |
+| **DataGrant** | Stored agent data grant per route key: `Default` level. `providers`/`service_limits` keys in old files are ignored on load. | `internal/core/policy/policy.go` |
 | **Access levels** | `none`, `freebusy`, `summary`, `city`, `precise`, `read`, `write`, `read-write`. Resolution is deny-by-default (explicit → `default` → `none`). | `internal/core/policy/grants.go` |
 | **Accessor** | Principal-level allowed access per library kind (issue #160) — distinct from data grant. | `internal/core/policy/accessors.go` |
 | **PeerIdentity** | Resolved caller identity (tailnet peer / Aperture login / API key). | `identity.go:17`, `SECURITY.md` |

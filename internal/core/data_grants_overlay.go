@@ -127,16 +127,8 @@ func (c *Config) setDataGrantsLocked(policies policy.DataGrants) error {
 }
 
 func cloneDataGrant(p policy.DataGrant) policy.DataGrant {
-	out := policy.DataGrant{Default: policy.NormalizeAccess(p.Default)}
 	if p.Default == "" {
-		out.Default = ""
+		return policy.DataGrant{}
 	}
-	if len(p.Providers) == 0 {
-		return out
-	}
-	out.Providers = make(map[string]string, len(p.Providers))
-	for k, v := range p.Providers {
-		out.Providers[k] = policy.NormalizeAccess(v)
-	}
-	return out
+	return policy.DataGrant{Default: policy.NormalizeAccess(p.Default)}
 }

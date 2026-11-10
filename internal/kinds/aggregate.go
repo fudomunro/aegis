@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
-	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/scopes"
 	"github.com/fudomunro/aegis/internal/core/search"
 	"github.com/fudomunro/aegis/internal/shared"
@@ -63,11 +62,6 @@ type Spec[T any] struct {
 	// page walks share one fan-out without caching response detail. Nil
 	// leaves items untouched.
 	Finalize func(items []T) []T
-	// RedactSearch re-applies access-level redaction to index-hydrated
-	// items (issue #178). Fetch-time provider redaction never sees stored
-	// payloads, so level-sensitive kinds must redact again on the search
-	// path. Nil skips (kinds without access levels).
-	RedactSearch func(items []T, r *http.Request) []T
 	// GrantKey names this route in a data grant (issue #348): the
 	// library-relative route path, e.g. "freebusy". Empty means the kind's
 	// PermType.
@@ -125,16 +119,16 @@ func AnyServiceTruncated(bySvc map[string]LibraryServiceStatus) bool {
 	return false
 }
 
-// grantsCacheSuffix namespaces library cache entries per request key: the
-// rule map fingerprint plus the dataset partition, so one key never reads
-// another's cached response (keys with different grants see different
-// responses even inside one dataset).
-func grantsCacheSuffix(r *http.Request, g policy.GrantMap) string {
-	suffix := "|g:" + g.Fingerprint()
-	if ds := scopes.Dataset(r); ds != "" {
-		suffix += "|ds:" + ds
+// datasetCacheSuffix namespaces library cache entries per dataset
+// partition. Disclosure shapes are fixed per route (issue #348), so
+// responses depend only on the route and the dataset — two keys reaching
+// the same route and partition share cache safely.
+func datasetCacheSuffix(r *http.Request) string {
+	ds := scopes.Dataset(r)
+	if ds == "" {
+		return ""
 	}
-	return suffix
+	return "|ds:" + ds
 }
 
 // indexWriteable reports whether this request's fetch is already at the
@@ -207,7 +201,7 @@ func Aggregate[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 	if spec.CacheKey != "" {
 		aggKey = spec.CacheKey
 	}
-	aggKey += grantsCacheSuffix(r, grants)
+	aggKey += datasetCacheSuffix(r)
 	aggKey += "|agg"
 	if cached, ok := e.cache.Get(aggKey); ok {
 		var agg Fetch[T]
@@ -481,8 +475,7 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		base = spec.CacheKey
 	}
 	cacheKey := base + "|q=" + q
-	grants, _ := h.Grants(r)
-	cacheKey += grantsCacheSuffix(r, grants)
+	cacheKey += datasetCacheSuffix(r)
 	cacheKey += pageReq.CacheSuffix()
 	if cached, ok := e.cache.Get(cacheKey); ok {
 		logger.Debug("search cache hit")
@@ -509,7 +502,7 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 		// Cold index: materialize from one live fetch, then query. The
 		// fetch runs at owner tier (issue #272) so a reduced caller's
 		// first query still fills the index with the fullest rows;
-		// RedactSearch narrows them on the way out.
+		// The route's encode narrows them on the way out.
 		fetched := fetch(h, e, OwnerViewRequest(r), spec, logger, agent)
 		if err := indexDocuments(e, spec, dataset, fetched); err != nil {
 			logger.Warn("search index bootstrap failed", "error", err)
@@ -541,9 +534,6 @@ func runSearch[T any](h Host, e *Engine, w http.ResponseWriter, r *http.Request,
 			st.Count++
 			bySvc[svc] = st
 		}
-	}
-	if spec.RedactSearch != nil {
-		hits = spec.RedactSearch(hits, r)
 	}
 	EnrichStatuses(h, kind.ID, spec.Status, bySvc)
 
