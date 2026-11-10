@@ -107,10 +107,11 @@ Agent → Aegis library / content transport / admin → provider APIs
 | Admin permissions overlay | `internal/core` hub | `data_grants.json` v3: `data_grants` (primary DataGrant); admin saves never rewrite aegis.json |
 | Data scopes (principal → dataset) | `internal/core/scopes/`, `docs/data-scopes.md` | `data_scopes.json` (0600): API key → dataset partition + optional tightened grants. Isolation seam for multi-user / demo. Scope grants are deny-by-default for invite tokens |
 | External access (listeners, invite tokens) | `docs/external-access.md`, `SECURITY.md` | Split listeners: API (publishable, credential perimeter) vs admin (in-tailnet). Contract for issue #149 multi-user |
-| Pre-request injection | `internal/core` hub | `allow` / `block` / `modify`; structured `Operation` contract |
+| Pre-request injection | `internal/core/inject` (engine: wire-shape detection + JSON surgery), `internal/core` hub (`handler.go` hook) | `allow` / `block` / `modify`; structured `Operation` contract |
+| Hook-health engine | `internal/core/hookhealth/` (engine), `internal/core` hub (`hookhealth.go` wrapper, admin handlers) | Ring of redacted hook observations + Aperture config checks (`/v1/admin/hook-health`); `hook_skip.go` stays in the hub |
 | ServiceConnector interface | `internal/connectors/host.go` | `Capabilities` + `SystemInstructions` + `HandleProxy`; the hub wires the registry |
 | Generic/shared content transport | `internal/connectors` (upstream transport), `internal/core` hub (token injection/cache), `internal/shared` (HTTP client) | Prefer shared helpers over copy-paste `do*Request`; `IsAgentContentPath` gates agent-facing `/v1/services` paths |
-| Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial constructors/accessors only (the `kindrules.go` test), no domain behavior, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
+| Shared plumbing + seam vocabulary (HTTP client, page cap, JSON writers, URL/JSON/math/file/path utils, kind-rule table, body-shape tokens; capability/onboarding/mail-ingest/ownership seam shapes) | `internal/shared` | Stdlib-only imports. One owner: plumbing and the shapes two internal packages exchange to agree on a contract — shapes and trivial constructors/accessors only (the `kindrules.go` test), no domain behavior, no `Host`, no service registries, no provider paths (issue #280, amended #325). Do not re-grow twins in `core` or `connectors` |
 | Tokens / OAuth / CSRF | `internal/core/tokens/`, `internal/shared` (state store), `internal/core` hub (flows) | AES-256-GCM + PBKDF2; refresh singleflight |
 | Sync job queue / worker / schedules | `internal/core/syncjobs/` (engine), `internal/core` hub (`syncjobs_admin.go`, `syncrunner_*.go` runners) | Durable SQLite-backed jobs (issue #227). The engine takes a `SyncMetrics` seam; hub wiring and runners stay in core |
 | Access + Prometheus metrics engines | `internal/core/metrics/` (engines), `internal/core` hub (`metrics.go` handlers/derivation) | `AccessMetrics` ring + `PromMetrics` text export. The hub feeds them from request handlers; `PromMetrics` satisfies `syncjobs.SyncMetrics` |
@@ -326,10 +327,10 @@ go test -count=1 ./...
 go test -v -count=1 -run TestName ./...
 
 # Fuzz hostile-input parsers (issue #107). Seeds always run as unit tests;
-# -fuzz mutates them. Targets live in ./internal/core and ./internal/connectors
-# (the repo root package has no test files). Use a longer -fuzztime locally
-# when hunting bugs.
-go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s ./internal/core
+# -fuzz mutates them. Targets live in ./internal/core, ./internal/core/inject
+# and ./internal/connectors (the repo root package has no test files). Use a
+# longer -fuzztime locally when hunting bugs.
+go test -run='^$' -fuzz='^FuzzInjectRequestInstructions$' -fuzztime=30s ./internal/core/inject
 go test -run='^$' -fuzz='^FuzzMergeTracksSync$' -fuzztime=30s ./internal/core
 go test -run='^$' -fuzz='^FuzzParseTakeoutMessage$' -fuzztime=30s ./internal/connectors
 go test -run='^$' -fuzz='^FuzzWalkMboxFrom$' -fuzztime=30s ./internal/connectors

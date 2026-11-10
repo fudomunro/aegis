@@ -10,6 +10,7 @@ import (
 
 	"github.com/fudomunro/aegis/internal/connectors"
 	"github.com/fudomunro/aegis/internal/core/apps"
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
@@ -316,7 +317,7 @@ func testServerWithBase(cfg *Config, baseURL string) *Server {
 		oauthStates: shared.NewStateStore(),
 		connectors:  make(map[string]connectors.ServiceConnector),
 		metrics:     metrics.NewAccessMetrics(0),
-		hookHealth:  NewHookHealth(defaultHookObservationCapacity),
+		hookHealth:  hookhealth.NewHookHealth(hookhealth.DefaultObservationCapacity),
 		prom:        metrics.NewPromMetrics("", ""),
 		csrfTokens:  shared.NewStateStore(),
 		grants:      apps.NewGrantStore(),

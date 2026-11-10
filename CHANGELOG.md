@@ -205,6 +205,22 @@ issue numbers; this file is where that context lives.
   visible behavior change; the mail archive / Google Takeout pair is
   explicitly out of scope for this move.
 
+- **Hook-health and injection engines leave the hub (issue #346).** Two
+  self-contained extractions from `internal/core`, no product behavior
+  change. The Aperture hook-health engine (`HookHealth` ring, report
+  derivation, `analyzeApertureConfig` / `expectedApertureHookConfig`)
+  moves to `internal/core/hookhealth`; `CheckApertureConfig` stays as a
+  thin `*Server` wrapper and `hook_skip.go` stays in the hub. The
+  pre-request injection block (`injectRequestInstructions`,
+  `detectBodyShape`, and the per-shape carriers — pure JSON surgery with
+  no `*Server` / `*Config` refs) moves to `internal/core/inject` with
+  its unit and fuzz tests. The request body-shape tokens (`chat` /
+  `anthropic` / `responses` / `unknown`) are the vocabulary both
+  engines exchange, so they land in `internal/shared` beside the other
+  seam shapes. The optional HTTP-helper extraction (`clientip.go` /
+  `httphardening.go`) is not done: its stated precondition (a
+  `websec`-style package wanted for other reasons) does not hold.
+
 ### Fixed
 
 - **Search index no longer stores reduced views or keeps deleted items

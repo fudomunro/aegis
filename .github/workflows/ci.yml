@@ -86,16 +86,23 @@ jobs:
       # Short CI fuzz runs over the hostile-input parsers (issue #107).
       # Seeds in f.Add / testdata/fuzz always run as ordinary tests in the
       # Test job; this job spends a bounded budget mutating them.
-      # Targets live in ./internal/core and ./internal/connectors — the repo
-      # root package has no test files, so fuzzing `.` exits 0 with
-      # "[no test files]" and mutates nothing. Keep these lists in sync with
-      # `go test -run='^$' -list='^Fuzz' ./internal/core ./internal/connectors`.
+      # Targets live in ./internal/core, ./internal/core/inject and
+      # ./internal/connectors — the repo root package has no test files, so
+      # fuzzing `.` exits 0 with "[no test files]" and mutates nothing. Keep
+      # these lists in sync with
+      # `go test -run='^$' -list='^Fuzz' ./internal/core ./internal/core/inject ./internal/connectors`.
       - name: Fuzz parsers
         run: |
           set -euo pipefail
-          core_targets=(
+          inject_targets=(
             FuzzInjectRequestInstructions
             FuzzDetectBodyShape
+          )
+          for t in "${inject_targets[@]}"; do
+            echo "==> ${t}"
+            go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/core/inject
+          done
+          core_targets=(
             FuzzNormalizeIdentityKey
             FuzzCleanYouTubeTitle
             FuzzTrackIdentityKey

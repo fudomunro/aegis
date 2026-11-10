@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/fudomunro/aegis/internal/connectors"
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/policy"
 	"github.com/fudomunro/aegis/internal/core/tokens"
 	"github.com/fudomunro/aegis/internal/kinds"
@@ -375,7 +376,7 @@ func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		rep := s.hookHealth.Snapshot(s.baseURL)
-		sortHookIssues(rep.Issues)
+		hookhealth.SortIssues(rep.Issues)
 		shared.WriteJSON(w, rep)
 	case http.MethodPost:
 		body, ok := shared.ReadBodyLimited(w, r, maxAdminBodyBytes)
@@ -387,7 +388,7 @@ func (s *Server) HandleAdminHookHealth(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		rep := s.CheckApertureConfig(body)
-		sortHookIssues(rep.Issues)
+		hookhealth.SortIssues(rep.Issues)
 		shared.WriteJSON(w, rep)
 	default:
 		shared.WriteJSONError(w, http.StatusMethodNotAllowed, "method not allowed")

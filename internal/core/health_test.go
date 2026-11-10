@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/fudomunro/aegis/internal/core/audit"
+	"github.com/fudomunro/aegis/internal/core/hookhealth"
 	"github.com/fudomunro/aegis/internal/core/metrics"
 )
 
@@ -181,8 +182,8 @@ func TestDeny_RecordsAuthAuditAndProm(t *testing.T) {
 
 func TestRecordHook_IncrementsProm(t *testing.T) {
 	srv := testServerWithBase(&Config{}, "https://aegis.example.com")
-	srv.recordHook(HookObservation{Action: "allow"})
-	srv.recordHook(HookObservation{Action: "parse_fail"})
+	srv.recordHook(hookhealth.HookObservation{Action: "allow"})
+	srv.recordHook(hookhealth.HookObservation{Action: "parse_fail"})
 	text := srv.prom.PromText()
 	if !strings.Contains(text, `aegis_hook_outcomes_total{action="allow"} 1`) {
 		t.Fatalf("missing allow hook counter:\n%s", text)
@@ -192,7 +193,7 @@ func TestRecordHook_IncrementsProm(t *testing.T) {
 	}
 	// Nil-safe.
 	var nilSrv *Server
-	nilSrv.recordHook(HookObservation{Action: "allow"})
+	nilSrv.recordHook(hookhealth.HookObservation{Action: "allow"})
 }
 
 func TestHandleMetrics_MethodAndNilProm(t *testing.T) {
