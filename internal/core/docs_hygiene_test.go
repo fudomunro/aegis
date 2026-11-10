@@ -258,11 +258,11 @@ func lineCommentIndex(line string) int {
 }
 
 func TestAdminHTMLVisibleText_NoIssueRefsOrAvoidTerms(t *testing.T) {
-	// admin.html and the maintenance dashboard templates are the visible
+	// admin.html and the maintenance dashboard template are the visible
 	// operator UI: copy rules apply to all of them.
 	for _, rel := range []string{
 		filepath.Join("internal", "core", "web", "admin.html"),
-		filepath.Join("internal", "core", "web", "maintenance_dashboard.html"),
+		filepath.Join("cmd", "aegis-dashboard", "maintenance_dashboard.html"),
 	} {
 		path := filepath.Join(repoRoot(t), rel)
 		raw, err := os.ReadFile(path)

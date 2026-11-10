@@ -1,4 +1,4 @@
-package core
+package main
 
 import (
 	"context"
@@ -38,7 +38,7 @@ func TestMatchServiceInTitle_RealManifest(t *testing.T) {
 	}
 }
 
-func TestGhIssueTracker_ListIssues(t *testing.T) {
+func TestIssueScraper_ListIssues(t *testing.T) {
 	evidenceBody := "<!-- aegis-signature: spotify|canary|terminal|shape -->\n\n" +
 		"### Evidence\n\n<!-- aegis-evidence:start -->\n" +
 		"```json\n{\"signature\":\"spotify|canary|terminal|shape\",\"service\":\"spotify\",\"repro_state\":\"ready\",\"first_seen\":\"2026-11-03T13:00:00Z\"}\n```\n" +
@@ -67,7 +67,7 @@ func TestGhIssueTracker_ListIssues(t *testing.T) {
 		}
 		return "", errors.New("unexpected: " + strings.Join(args, " "))
 	}}
-	g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+	g := &issueScraper{repo: "example/repo", run: rec.run}
 
 	got, err := g.ListIssues(context.Background())
 	if err != nil {
@@ -77,7 +77,7 @@ func TestGhIssueTracker_ListIssues(t *testing.T) {
 		t.Fatalf("records = %+v, want 2", got)
 	}
 	ticket := got[0]
-	if !ticket.IsTicket || ticket.TicketService != "spotify" || ticket.ReproState != ReproStateReady {
+	if !ticket.IsTicket || ticket.TicketService != "spotify" || ticket.ReproState != reproStateReady {
 		t.Fatalf("ticket record = %+v", ticket)
 	}
 	if ticket.State != "closed" || ticket.StateReason != "completed" {
@@ -113,11 +113,11 @@ func TestIsFixPR(t *testing.T) {
 	}
 }
 
-func TestGhIssueTracker_ListIssuesErrors(t *testing.T) {
+func TestIssueScraper_ListIssuesErrors(t *testing.T) {
 	rec := &recordingRun{respond: func([]string) (string, error) {
 		return "", errors.New("gh: auth required")
 	}}
-	g := &ghIssueTracker{repo: "example/repo", run: rec.run}
+	g := &issueScraper{repo: "example/repo", run: rec.run}
 	if _, err := g.ListIssues(context.Background()); err == nil {
 		t.Fatal("want transport error")
 	}
@@ -125,7 +125,7 @@ func TestGhIssueTracker_ListIssuesErrors(t *testing.T) {
 	rec = &recordingRun{respond: func([]string) (string, error) {
 		return "not json", nil
 	}}
-	g = &ghIssueTracker{repo: "example/repo", run: rec.run}
+	g = &issueScraper{repo: "example/repo", run: rec.run}
 	if _, err := g.ListIssues(context.Background()); err == nil {
 		t.Fatal("want parse error")
 	}
@@ -142,7 +142,7 @@ func TestIssueRecord_SignatureMarkerFallback(t *testing.T) {
 	if !rec.IsTicket || rec.TicketService != "youtube" {
 		t.Fatalf("marker fallback = %+v", rec)
 	}
-	if rec.ReproState != ReproStateNeedsFixture {
+	if rec.ReproState != reproStateNeedsFixture {
 		t.Fatalf("repro state = %q", rec.ReproState)
 	}
 	if rec.State != "open" {

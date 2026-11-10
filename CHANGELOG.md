@@ -20,6 +20,17 @@ issue numbers; this file is where that context lives.
 
 ### Changed
 
+- **The maintenance dashboard is a separate tool, not application code.**
+  `cmd/aegis-dashboard` now owns the whole static-site build — model,
+  scoring, rendering, the gh issue-record scrape, and signal-bundle reading
+  — and collects its data from the repo's issue record, the committed
+  services manifest, captured bundle files (new `-bundles` flag), and the
+  connector metadata catalog. The service owes it nothing beyond artifacts
+  it already writes (signal captures for the scanner, the ticket contract,
+  the maturity declarations). `POST /v1/admin/maintenance/dashboard`
+  retires with the move: instance views are built by running the tool over
+  `<data-dir>/maintenance` (`-private` for the 0600/0700 posture,
+  `-allow-scrape-failure` for the old fail-open scrape). Issue #335.
 - **Mail retrieval unifies on the library API.** `GET /v1/library/messages`
   is now the one agent surface for reading messages. It takes the full
   history query set (`q`, `from`, `to`, `after`, `before`, `label`,

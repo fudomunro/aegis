@@ -79,7 +79,6 @@ func TestAPIAllowlist_MatchesRoutes(t *testing.T) {
 		{"GET", "/v1/admin/mail/status"},
 		{"POST", "/v1/admin/mail/sync"},
 		{"GET", "/v1/admin/maintenance/signals"},
-		{"GET", "/v1/admin/maintenance/dashboard"},
 		{"GET", "/v1/admin/hook-health"},
 		{"GET", "/v1/admin/search/status"},
 		{"GET", "/v1/admin/services/spotify/grant-limits"},

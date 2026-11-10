@@ -1,31 +1,25 @@
-package core
+package main
 
 import (
-	"encoding/json"
-	"errors"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/fudomunro/aegis/internal/core/syncjobs"
 )
 
 func dashTime(h int) time.Time {
 	return time.Date(2026, 1, 2, h, 0, 0, 0, time.UTC)
 }
 
-func dashBundle(at time.Time, counts map[string]syncjobs.SyncCounts, failures []MaintenanceFailure) MaintenanceSignals {
-	sig := MaintenanceSignals{CapturedAt: at, Version: "dev", Commit: "none"}
+func dashBundle(at time.Time, counts map[string]SyncCounts, failures []BundleFailure) SignalBundle {
+	sig := SignalBundle{CapturedAt: at, Version: "dev", Commit: "none"}
 	if counts != nil {
-		sig.Sync = &MaintenanceSync{Enabled: true, ByService: counts}
+		sig.Sync = &BundleSync{Enabled: true, ByService: counts}
 	}
 	if failures != nil {
 		if sig.Sync == nil {
-			sig.Sync = &MaintenanceSync{Enabled: true}
+			sig.Sync = &BundleSync{Enabled: true}
 		}
 		sig.Sync.Failures = failures
 	}
@@ -34,13 +28,13 @@ func dashBundle(at time.Time, counts map[string]syncjobs.SyncCounts, failures []
 
 func TestBuildMaintenanceDashboard_RecordMarks(t *testing.T) {
 	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
-	series := []MaintenanceSignals{
-		dashBundle(dashTime(0), map[string]syncjobs.SyncCounts{
+	series := []SignalBundle{
+		dashBundle(dashTime(0), map[string]SyncCounts{
 			"spotify": {Succeeded: 10},
 		}, nil),
-		dashBundle(dashTime(6), map[string]syncjobs.SyncCounts{
+		dashBundle(dashTime(6), map[string]SyncCounts{
 			"spotify": {Succeeded: 15, Failed: 1},
-		}, []MaintenanceFailure{
+		}, []BundleFailure{
 			{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(3)},
 		}),
 	}
@@ -112,15 +106,15 @@ func TestScoreDashboardRecord_QuietnessAndDepth(t *testing.T) {
 }
 
 func TestBuildMaintenanceDashboard_CounterResetAndDedup(t *testing.T) {
-	series := []MaintenanceSignals{
-		dashBundle(dashTime(0), map[string]syncjobs.SyncCounts{
+	series := []SignalBundle{
+		dashBundle(dashTime(0), map[string]SyncCounts{
 			"spotify": {Succeeded: 30, Failed: 2},
-		}, []MaintenanceFailure{
+		}, []BundleFailure{
 			{ID: "j1", Service: "spotify", JobType: "ingest", UpdatedAt: dashTime(0), Error: "boom"},
 		}),
-		dashBundle(dashTime(6), map[string]syncjobs.SyncCounts{
+		dashBundle(dashTime(6), map[string]SyncCounts{
 			"spotify": {Succeeded: 5},
-		}, []MaintenanceFailure{
+		}, []BundleFailure{
 			// Same job, later re-failure: one event, latest time wins.
 			{ID: "j1", Service: "spotify", JobType: "ingest", UpdatedAt: dashTime(6), Error: "boom again"},
 		}),
@@ -154,7 +148,7 @@ func TestBuildMaintenanceDashboard_IssueMapping(t *testing.T) {
 		{
 			Number: 10, URL: "u/10", Title: "spotify canary failed: shape drift",
 			State: "open", IsTicket: true, TicketService: "spotify",
-			ReproState: ReproStateReady, CreatedAt: dashTime(1),
+			ReproState: reproStateReady, CreatedAt: dashTime(1),
 		},
 		{
 			Number: 11, URL: "u/11", Title: "spotify ingest failed: 502",
@@ -311,10 +305,10 @@ func TestServicePageFile(t *testing.T) {
 
 func TestWriteMaintenanceDashboard(t *testing.T) {
 	data := BuildMaintenanceDashboard(
-		[]MaintenanceSignals{
-			dashBundle(dashTime(0), map[string]syncjobs.SyncCounts{
+		[]SignalBundle{
+			dashBundle(dashTime(0), map[string]SyncCounts{
 				"spotify": {Succeeded: 2, Failed: 1},
-			}, []MaintenanceFailure{
+			}, []BundleFailure{
 				{ID: "j1", Service: "spotify", JobType: "canary", UpdatedAt: dashTime(0),
 					Error: `boom <script>alert(1)</script>`},
 			}),
@@ -398,108 +392,8 @@ func TestWriteMaintenanceDashboard(t *testing.T) {
 	}
 }
 
-func TestHandleAdminMaintenanceDashboard_Build(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.dataDir = t.TempDir()
-	srv.syncJobs = testJobStore(t)
-	srv.config.EnsureService(Service{
-		ID: "spotify", Name: "Spotify", Endpoint: "http://localhost:8080" + fakeUpstreamMount,
-	})
-	mustEnqueue(t, srv.syncJobs, syncjobs.SyncEnqueue{Kind: "tracks", JobType: "canary", Service: "spotify"})
-	srv.maintenanceIssues = &fakeIssueTracker{records: []MaintenanceIssueRecord{
-		{Number: 7, URL: "https://github.com/example/repo/issues/7", Title: "spotify canary failed",
-			State: "closed", StateReason: "completed", IsTicket: true, TicketService: "spotify",
-			CreatedAt: dashTime(0), ClosedAt: dashTime(1)},
-	}}
-
-	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("status = %d, body %s", w.Code, w.Body.String())
-	}
-	var got MaintenanceDashboardResult
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if !strings.HasPrefix(got.Path, filepath.Join(srv.dataDir, "maintenance")) {
-		t.Fatalf("dashboard path = %q, want under data dir", got.Path)
-	}
-	if _, err := os.Stat(got.Index); err != nil {
-		t.Fatalf("index missing: %v", err)
-	}
-	if len(got.Services) == 0 || got.Services[0] != "spotify" {
-		t.Fatalf("services = %v, want spotify", got.Services)
-	}
-	if got.Fixes != 1 {
-		t.Fatalf("fixes = %d, want 1", got.Fixes)
-	}
-	if got.Captures != 1 {
-		t.Fatalf("captures = %d, want the live snapshot", got.Captures)
-	}
-	svcPage := filepath.Join(got.Path, "services", "spotify.html")
-	raw, err := os.ReadFile(svcPage)
-	if err != nil {
-		t.Fatalf("read service page: %v", err)
-	}
-	if !strings.Contains(string(raw), "Failure injection") {
-		t.Fatal("configured fake-upstream service must carry the failure-injection note")
-	}
-}
-
-func TestHandleAdminMaintenanceDashboard_FixHistoryFailOpen(t *testing.T) {
-	srv := adminSplitServer(t)
-	srv.dataDir = t.TempDir()
-	srv.maintenanceIssues = &fakeIssueTracker{listErr: errors.New("gh unavailable")}
-
-	req := adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
-
-	if w.Code != http.StatusOK {
-		t.Fatalf("scrape failure must fail open, got %d: %s", w.Code, w.Body.String())
-	}
-	var got MaintenanceDashboardResult
-	if err := json.Unmarshal(w.Body.Bytes(), &got); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if got.FixHistoryError == "" {
-		t.Fatal("fix_history_error must report the scrape failure")
-	}
-	if _, err := os.Stat(got.Index); err != nil {
-		t.Fatalf("index missing despite scrape failure: %v", err)
-	}
-}
-
-func TestHandleAdminMaintenanceDashboard_MethodAndAuth(t *testing.T) {
-	srv := adminSplitServer(t)
-
-	req := adminRequest(http.MethodGet, "/v1/admin/maintenance/dashboard", "admin-key", "")
-	w := httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
-	if w.Code != http.StatusMethodNotAllowed {
-		t.Fatalf("GET status = %d, want 405", w.Code)
-	}
-
-	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "admin-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
-	if w.Code != http.StatusInternalServerError {
-		t.Fatalf("POST without data dir = %d, want 500", w.Code)
-	}
-
-	srv.dataDir = t.TempDir()
-	req = adminRequest(http.MethodPost, "/v1/admin/maintenance/dashboard", "agent-key", "")
-	w = httptest.NewRecorder()
-	srv.AdminMiddleware(srv.HandleAdminMaintenanceDashboard)(w, req)
-	if w.Code == http.StatusOK {
-		t.Fatalf("agent credentials must not build the dashboard: %d", w.Code)
-	}
-}
-
 func TestBuildMaintenanceDashboard_Maturity(t *testing.T) {
-	cat := MaturityByService()
+	cat := maturityByService()
 	spotify, ok := cat["spotify"]
 	if !ok {
 		t.Fatal("catalog has no spotify entry")
@@ -535,7 +429,7 @@ func TestBuildMaintenanceDashboard_Maturity(t *testing.T) {
 }
 
 func TestWriteMaintenanceDashboard_Maturity(t *testing.T) {
-	cat := MaturityByService()
+	cat := maturityByService()
 	data := BuildMaintenanceDashboard(nil,
 		[]DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}}, nil, cat, dashTime(1))
 	dir := t.TempDir()
@@ -562,5 +456,63 @@ func TestWriteMaintenanceDashboard_Maturity(t *testing.T) {
 		if !strings.Contains(string(page), want) {
 			t.Errorf("spotify.html missing %q", want)
 		}
+	}
+}
+
+func TestLoadSignalBundles(t *testing.T) {
+	dir := t.TempDir()
+	bundle := `{"captured_at":"2026-01-02T03:00:00Z","hostname":"box","version":"dev","commit":"none",
+		"sync":{"enabled":true,"counts":{"succeeded":3},"by_service":{"spotify":{"succeeded":3}},
+		"failures":[{"id":"j1","job_type":"canary","service":"spotify","state":"failed","attempts":1}]},
+		"freshness":[{"kind":"tracks","in_sync":2,"stale":1}]}`
+	if err := os.WriteFile(filepath.Join(dir, "signals-20260102T030000Z.json"), []byte(bundle), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Not a bundle: ignored.
+	if err := os.WriteFile(filepath.Join(dir, "other.json"), []byte("{}"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := loadSignalBundles(dir)
+	if err != nil {
+		t.Fatalf("loadSignalBundles: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("bundles = %d, want 1", len(got))
+	}
+	b := got[0]
+	if !b.CapturedAt.Equal(time.Date(2026, 1, 2, 3, 0, 0, 0, time.UTC)) || b.Hostname != "box" {
+		t.Fatalf("bundle = %+v", b)
+	}
+	if b.Sync == nil || b.Sync.ByService["spotify"].Succeeded != 3 || len(b.Sync.Failures) != 1 {
+		t.Fatalf("sync slice = %+v", b.Sync)
+	}
+	if len(b.Freshness) != 1 || b.Freshness[0].Stale != 1 {
+		t.Fatalf("freshness = %+v", b.Freshness)
+	}
+	if _, err := loadSignalBundles(filepath.Join(t.TempDir(), "missing")); err == nil {
+		t.Fatal("want error for a directory with no bundles")
+	}
+	empty := t.TempDir()
+	if _, err := loadSignalBundles(empty); err == nil {
+		t.Fatal("want error for an empty bundle directory")
+	}
+}
+
+// A fail-open scrape leaves the gap noted on the index (the
+// -allow-scrape-failure posture) instead of dropping history.
+func TestWriteMaintenanceDashboard_FixHistoryError(t *testing.T) {
+	data := BuildMaintenanceDashboard(nil,
+		[]DashboardServiceMeta{{ID: "spotify", Name: "Spotify"}}, nil, nil, dashTime(0))
+	data.FixHistoryError = "gh unavailable"
+	dir := t.TempDir()
+	if _, err := WriteMaintenanceDashboard(dir, data, DashboardPublishedFileMode, DashboardPublishedDirMode); err != nil {
+		t.Fatalf("WriteMaintenanceDashboard: %v", err)
+	}
+	raw, err := os.ReadFile(filepath.Join(dir, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), "Maintenance record unavailable: gh unavailable") {
+		t.Fatalf("index missing the fail-open note:\n%s", raw)
 	}
 }

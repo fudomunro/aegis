@@ -333,11 +333,14 @@ The loop's work should be visible, not implied (issue #239). The dashboard is
 an **entirely build-time generated** static site — no scripts, no live
 queries — with one page per service connection showing history and the
 success / stability / confidence marks, and it is **published as part of
-every release** (merge to main, for now). The Pages workflow runs
-`cmd/aegis-dashboard`, which scrapes the repo's issue record with the same
-`gh` transport as the ticket surface and writes the pages next to the
-marketing site (`site/maintenance/`), linked from the site nav. History
-therefore grows with the project: each release publishes an updated view.
+every release** (merge to main, for now). It is a **separate tool that
+analyzes the progress of the project** (issue #335), not part of the
+application code: `cmd/aegis-dashboard` collects its data from the gh CLI
+(the same transport as the ticket surface), the committed services
+manifest, captured signal bundle files, and the connector metadata catalog,
+and writes the pages next to the marketing site (`site/maintenance/`),
+linked from the site nav. History therefore grows with the project: each
+release publishes an updated view.
 
 The **evidence is the issue record** — the loop's `sync-failure` tickets in
 full lifecycle (open with `needs-fixture`/`ready`, or fixed once closed
@@ -402,14 +405,24 @@ Two inputs shape the published build:
   fails the release build rather than publishing an empty record over a good
   one.
 
-The instance view stays on the admin surface: `POST
-/v1/admin/maintenance/dashboard` builds the same pages from that instance's
-signal bundles plus its own issue scrape (`-maintenance-repo`), including
-capture-history tables and scrubbed failure events where bundles exist. It
-is fail-open on scrape errors — the instance build degrades to a noted gap
-instead of a failed request. Signal bundles carry a `by_service` rollup so
-per-service history is attributable from bundles alone, keeping the
-"scanner reads paths" seam intact.
+The instance view is the same tool over captured data, not an application
+surface (issue #335): instance-level **captures** stay on the admin surface
+(`POST /v1/admin/maintenance/signals` writes bundles under
+`<data-dir>/maintenance/`), and the tool builds the pages from them —
+
+```bash
+go run ./cmd/aegis-dashboard -repo owner/name \
+  -bundles "$DATA/maintenance" -out "$DATA/maintenance/dashboard" -private
+```
+
+including capture-history tables and scrubbed failure events where bundles
+exist, plus the instance's own issue scrape (`-repo`). `-private` writes the
+0600/0700 posture for output under a data directory; the default is the
+world-readable posture the Pages upload needs. A scrape failure fails the
+build rather than publishing an empty record over a good one;
+`-allow-scrape-failure` degrades to a noted gap instead. Signal bundles
+carry a `by_service` rollup so per-service history is attributable from
+bundles alone, keeping the "scanner reads paths" seam intact.
 
 ## Non-goals
 
