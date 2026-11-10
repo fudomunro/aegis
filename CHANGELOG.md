@@ -25,8 +25,10 @@ issue numbers; this file is where that context lives.
   change can reach them: Test skips structurally inert diffs (binary blobs,
   non-workflow `.github` metadata), Lint and Build run on Go changes, and
   each fuzz group runs when the code its targets exercise changed. The
-  fuzz pass is split into three parallel jobs (inject, core, connectors) so
-  the wall clock is the longest group instead of the sum. Nothing is taken
+  fuzz pass is split into three parallel jobs (inject, core, connectors)
+  behind an aggregate `Fuzz` check — the required status check name is
+  unchanged — so the wall clock is the longest group instead of the sum.
+  Nothing is taken
   on faith — unknown scope, an empty diff, an undecidable base, or a
   workflow-file edit all run the full battery, and whenever the Test job
   runs it is still the full suite with the 80% coverage floor.

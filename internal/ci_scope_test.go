@@ -1,4 +1,8 @@
-package core
+// Package internal holds repo-level CI hygiene tests (issue #355): they read
+// .github/workflows/ci.yml and keep its hand-listed fuzz scope in sync with
+// the sources. Parked here for now rather than in the hub, which owns runtime
+// wiring only.
+package internal
 
 import (
 	"go/ast"
@@ -11,6 +15,27 @@ import (
 	"strings"
 	"testing"
 )
+
+// repoRoot walks up from the test's working directory to the module root.
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	for i := 0; i < 8; i++ {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
+	t.Fatal("go.mod not found from test working directory")
+	return ""
+}
 
 // CI lists fuzz targets and per-group watch paths by hand (issue #355). This
 // test keeps those lists honest: each group's targets must match the Fuzz

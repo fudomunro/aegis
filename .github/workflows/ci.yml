@@ -50,7 +50,7 @@ jobs:
           # group's own package plus the internal packages its Fuzz bodies
           # call into. Keep these in sync with the target lists in the Fuzz
           # jobs and the imports of each *_fuzz_test.go; TestCIFuzzScope in
-          # internal/core enforces the sync.
+          # internal enforces the sync.
           fuzz_inject_watch='internal/core/inject/*|internal/shared/*|testdata/*'
           fuzz_core_watch='internal/kinds/*|internal/core/links/*|internal/shared/*|internal/core/match_fuzz_test.go|internal/core/testdata/*'
           fuzz_connectors_watch='internal/connectors/*|internal/kinds/*|internal/shared/*'
@@ -316,6 +316,32 @@ jobs:
           for t in "${connectors_targets[@]}"; do
             echo "==> ${t}"
             go test -run='^$' -fuzz="^${t}$" -fuzztime=30s ./internal/connectors
+          done
+
+  # Branch protection requires a check named exactly "Fuzz". The three scoped
+  # groups report under their own names, so this aggregate keeps that contract:
+  # it passes when every group passed or was out of scope, and fails on any
+  # real failure. It must not use the implicit success() gate — a skipped group
+  # would then skip this job and a failed group would report as neutral.
+  fuzz:
+    name: Fuzz
+    needs: [fuzz-inject, fuzz-core, fuzz-connectors]
+    if: ${{ always() && !cancelled() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require the fuzz groups
+        run: |
+          set -uo pipefail
+          inject='${{ needs.fuzz-inject.result }}'
+          core='${{ needs.fuzz-core.result }}'
+          connectors='${{ needs.fuzz-connectors.result }}'
+          echo "fuzz groups: inject=$inject core=$core connectors=$connectors"
+          for r in "$inject" "$core" "$connectors"; do
+            if [ "$r" != "success" ] && [ "$r" != "skipped" ]; then
+              echo "fuzz group did not pass: $r"
+              exit 1
+            fi
           done
 
   build:
